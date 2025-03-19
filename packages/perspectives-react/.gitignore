@@ -1,0 +1,10 @@
+.git
+.idea
+node_modules
+package-lock.json
+npm-debug.log
+dist
+stats.json
+chat.webpack.config.js
+chat.html
+proxystub.js

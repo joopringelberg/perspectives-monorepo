@@ -1,0 +1,125 @@
+Date : 2025-03-05 11:45:51
+Directory : /Users/joopringelberg/Code/perspectives-react
+Total : 87 files,  10076 codes, 1578 comments, 1111 blanks, all 12765 lines
+
+Languages
++--------------------+------------+------------+------------+------------+------------+
+| language           | files      | code       | comment    | blank      | total      |
++--------------------+------------+------------+------------+------------+------------+
+| TypeScript JSX     |         42 |      6,434 |      1,119 |        625 |      8,178 |
+| JavaScript         |         22 |      2,403 |        334 |        231 |      2,968 |
+| Markdown           |          2 |        438 |          0 |        169 |        607 |
+| TypeScript         |         13 |        418 |        116 |         65 |        599 |
+| JSON               |          4 |        321 |          0 |          2 |        323 |
+| CSS                |          1 |         29 |          3 |          7 |         39 |
+| JSON with Comments |          1 |         22 |          0 |          1 |         23 |
+| Shell Script       |          2 |         11 |          6 |         11 |         28 |
++--------------------+------------+------------+------------+------------+------------+
+
+Directories
++---------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                  | files      | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                     |         87 |     10,076 |      1,578 |      1,111 |     12,765 |
+| . (Files)                                                                             |          9 |        700 |          9 |        185 |        894 |
+| src                                                                                   |         78 |      9,376 |      1,569 |        926 |     11,871 |
+| src (Files)                                                                           |         59 |      7,062 |      1,271 |        720 |      9,053 |
+| src/lang                                                                              |          2 |        172 |          0 |          0 |        172 |
+| src/lang/en                                                                           |          1 |         86 |          0 |          0 |         86 |
+| src/lang/nl                                                                           |          1 |         86 |          0 |          0 |         86 |
+| src/notinuse                                                                          |         17 |      2,142 |        298 |        206 |      2,646 |
++---------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++---------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| filename                                                                              | language           | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| /Users/joopringelberg/Code/perspectives-react/.eslintrc.js                            | JavaScript         |         39 |          1 |          1 |         41 |
+| /Users/joopringelberg/Code/perspectives-react/README.md                               | Markdown           |        292 |          0 |        110 |        402 |
+| /Users/joopringelberg/Code/perspectives-react/bumpVersions.sh                         | Shell Script       |          5 |          5 |          4 |         14 |
+| /Users/joopringelberg/Code/perspectives-react/createPerspectivesLinks.sh              | Shell Script       |          6 |          1 |          7 |         14 |
+| /Users/joopringelberg/Code/perspectives-react/documentation.md                        | Markdown           |        146 |          0 |         59 |        205 |
+| /Users/joopringelberg/Code/perspectives-react/package.json                            | JSON               |         78 |          0 |          1 |         79 |
+| /Users/joopringelberg/Code/perspectives-react/package.template.json                   | JSON               |         71 |          0 |          1 |         72 |
+| /Users/joopringelberg/Code/perspectives-react/rollup.config.js                        | JavaScript         |         41 |          2 |          1 |         44 |
+| /Users/joopringelberg/Code/perspectives-react/src/PSharedFile.ts                      | TypeScript         |         22 |         15 |          4 |         41 |
+| /Users/joopringelberg/Code/perspectives-react/src/actiondropdown.tsx                  | TypeScript JSX     |         64 |         20 |          7 |         91 |
+| /Users/joopringelberg/Code/perspectives-react/src/adorningComponentWrapper.tsx        | TypeScript JSX     |         58 |         10 |          8 |         76 |
+| /Users/joopringelberg/Code/perspectives-react/src/adornwithbehaviour.tsx              | TypeScript JSX     |         52 |          8 |         10 |         70 |
+| /Users/joopringelberg/Code/perspectives-react/src/alert.tsx                           | TypeScript JSX     |         27 |         29 |          5 |         61 |
+| /Users/joopringelberg/Code/perspectives-react/src/arcViewer.tsx                       | TypeScript JSX     |         76 |         26 |         18 |        120 |
+| /Users/joopringelberg/Code/perspectives-react/src/asyncImage.tsx                      | TypeScript JSX     |         71 |          2 |         12 |         85 |
+| /Users/joopringelberg/Code/perspectives-react/src/binarymodal.tsx                     | TypeScript JSX     |         36 |         19 |          4 |         59 |
+| /Users/joopringelberg/Code/perspectives-react/src/button.tsx                          | TypeScript JSX     |         41 |          0 |          3 |         44 |
+| /Users/joopringelberg/Code/perspectives-react/src/cardbehaviour.tsx                   | TypeScript JSX     |        400 |         88 |         41 |        529 |
+| /Users/joopringelberg/Code/perspectives-react/src/chat.js                             | JavaScript         |         16 |         19 |          6 |         41 |
+| /Users/joopringelberg/Code/perspectives-react/src/chatcomponent.tsx                   | TypeScript JSX     |        587 |        101 |         51 |        739 |
+| /Users/joopringelberg/Code/perspectives-react/src/components.css                      | CSS                |         29 |          3 |          7 |         39 |
+| /Users/joopringelberg/Code/perspectives-react/src/contextInstance.tsx                 | TypeScript JSX     |         63 |          0 |          7 |         70 |
+| /Users/joopringelberg/Code/perspectives-react/src/createContextDropdown.tsx           | TypeScript JSX     |         89 |         20 |         10 |        119 |
+| /Users/joopringelberg/Code/perspectives-react/src/cuid.ts                             | TypeScript         |          6 |          6 |          2 |         14 |
+| /Users/joopringelberg/Code/perspectives-react/src/externalrole.tsx                    | TypeScript JSX     |         72 |          2 |          8 |         82 |
+| /Users/joopringelberg/Code/perspectives-react/src/filedropzone.tsx                    | TypeScript JSX     |         96 |          2 |         10 |        108 |
+| /Users/joopringelberg/Code/perspectives-react/src/formcontrols.tsx                    | TypeScript JSX     |        193 |         27 |         14 |        234 |
+| /Users/joopringelberg/Code/perspectives-react/src/formpasterole.tsx                   | TypeScript JSX     |        128 |         26 |         13 |        167 |
+| /Users/joopringelberg/Code/perspectives-react/src/getLanguage.ts                      | TypeScript         |         15 |          0 |          3 |         18 |
+| /Users/joopringelberg/Code/perspectives-react/src/globals.d.ts                        | TypeScript         |          3 |          0 |          0 |          3 |
+| /Users/joopringelberg/Code/perspectives-react/src/importTransaction.ts                | TypeScript         |         48 |          3 |          3 |         54 |
+| /Users/joopringelberg/Code/perspectives-react/src/lang/en/preact.json                 | JSON               |         86 |          0 |          0 |         86 |
+| /Users/joopringelberg/Code/perspectives-react/src/lang/nl/preact.json                 | JSON               |         86 |          0 |          0 |         86 |
+| /Users/joopringelberg/Code/perspectives-react/src/maproleverbstobehaviours.ts         | TypeScript         |         86 |         28 |          4 |        118 |
+| /Users/joopringelberg/Code/perspectives-react/src/markdownWidget.tsx                  | TypeScript JSX     |         85 |         30 |         19 |        134 |
+| /Users/joopringelberg/Code/perspectives-react/src/microphoneButton.tsx                | TypeScript JSX     |         26 |          0 |          5 |         31 |
+| /Users/joopringelberg/Code/perspectives-react/src/modelDependencies.ts                | TypeScript         |         14 |          0 |          1 |         15 |
+| /Users/joopringelberg/Code/perspectives-react/src/mysystem.tsx                        | TypeScript JSX     |         52 |          0 |          7 |         59 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/cards.js                   | JavaScript         |        118 |         65 |         15 |        198 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/contextofrole.js           | JavaScript         |         85 |          4 |          8 |         97 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/createcontext.js           | JavaScript         |         67 |         10 |         10 |         87 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/createcontext_.js          | JavaScript         |         69 |         11 |         10 |         90 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/importContexts.js          | JavaScript         |         48 |          1 |          2 |         51 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/invitation.js              | JavaScript         |        154 |          4 |         15 |        173 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/localrolespecialisation.js | JavaScript         |         53 |          4 |          6 |         63 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/noinstancesswitcher.js     | JavaScript         |         38 |          4 |          4 |         46 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/perspectivescontainer.js   | JavaScript         |         97 |         20 |         16 |        133 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/removeBinding.js           | JavaScript         |         42 |          3 |          6 |         51 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/rol.js                     | JavaScript         |         45 |          3 |          4 |         52 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/roleInstanceIterator.js    | JavaScript         |        226 |         22 |         14 |        262 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/roleform.js                | JavaScript         |        105 |          7 |         12 |        124 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/roleinstances.js           | JavaScript         |        286 |         37 |         20 |        343 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/roletable.js               | JavaScript         |        572 |         92 |         44 |        708 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/setboolascheckbox.js       | JavaScript         |         27 |          5 |          6 |         38 |
+| /Users/joopringelberg/Code/perspectives-react/src/notinuse/setproperty.js             | JavaScript         |        110 |          6 |         14 |        130 |
+| /Users/joopringelberg/Code/perspectives-react/src/openpublicresource.tsx              | TypeScript JSX     |         78 |         23 |         13 |        114 |
+| /Users/joopringelberg/Code/perspectives-react/src/page-lifecycle.d.ts                 | TypeScript         |         24 |          0 |          4 |         28 |
+| /Users/joopringelberg/Code/perspectives-react/src/perspectivebasedform.tsx            | TypeScript JSX     |        208 |         47 |         20 |        275 |
+| /Users/joopringelberg/Code/perspectives-react/src/perspectiveform.tsx                 | TypeScript JSX     |         65 |         30 |          7 |        102 |
+| /Users/joopringelberg/Code/perspectives-react/src/perspectives-markdown.ts            | TypeScript         |         75 |          8 |         19 |        102 |
+| /Users/joopringelberg/Code/perspectives-react/src/perspectives-react-components.ts    | TypeScript         |         40 |          1 |          1 |         42 |
+| /Users/joopringelberg/Code/perspectives-react/src/perspectivesComponent.tsx           | TypeScript JSX     |         78 |         13 |         14 |        105 |
+| /Users/joopringelberg/Code/perspectives-react/src/perspectivesFile.tsx                | TypeScript JSX     |        692 |         72 |         47 |        811 |
+| /Users/joopringelberg/Code/perspectives-react/src/perspectivesshape.d.ts              | TypeScript         |         18 |          8 |          5 |         31 |
+| /Users/joopringelberg/Code/perspectives-react/src/perspectivestabs.tsx                | TypeScript JSX     |         40 |         19 |          7 |         66 |
+| /Users/joopringelberg/Code/perspectives-react/src/perspectivetable.tsx                | TypeScript JSX     |        226 |         17 |         21 |        264 |
+| /Users/joopringelberg/Code/perspectives-react/src/ppsharedfilestorage.ts              | TypeScript         |         61 |         26 |         17 |        104 |
+| /Users/joopringelberg/Code/perspectives-react/src/reactcontexts.tsx                   | TypeScript JSX     |        112 |         34 |         16 |        162 |
+| /Users/joopringelberg/Code/perspectives-react/src/removeRol.tsx                       | TypeScript JSX     |         49 |          1 |          5 |         55 |
+| /Users/joopringelberg/Code/perspectives-react/src/roleDropzone.tsx                    | TypeScript JSX     |        148 |         26 |         16 |        190 |
+| /Users/joopringelberg/Code/perspectives-react/src/roleinstance.tsx                    | TypeScript JSX     |        230 |         16 |         18 |        264 |
+| /Users/joopringelberg/Code/perspectives-react/src/screen.tsx                          | TypeScript JSX     |        296 |         33 |         33 |        362 |
+| /Users/joopringelberg/Code/perspectives-react/src/screendefinitioninterpreter.tsx     | TypeScript JSX     |        402 |         33 |         15 |        450 |
+| /Users/joopringelberg/Code/perspectives-react/src/smartfieldcontrol.tsx               | TypeScript JSX     |        413 |         71 |         28 |        512 |
+| /Users/joopringelberg/Code/perspectives-react/src/smartfieldcontrolgroup.tsx          | TypeScript JSX     |         64 |         49 |          8 |        121 |
+| /Users/joopringelberg/Code/perspectives-react/src/standardscreen.tsx                  | TypeScript JSX     |        201 |         27 |         15 |        243 |
+| /Users/joopringelberg/Code/perspectives-react/src/tablecell.tsx                       | TypeScript JSX     |        219 |         62 |         21 |        302 |
+| /Users/joopringelberg/Code/perspectives-react/src/tablecontrols.tsx                   | TypeScript JSX     |        195 |         29 |         13 |        237 |
+| /Users/joopringelberg/Code/perspectives-react/src/tableform.tsx                       | TypeScript JSX     |         43 |          0 |          4 |         47 |
+| /Users/joopringelberg/Code/perspectives-react/src/tablepasterole.tsx                  | TypeScript JSX     |        159 |         23 |         13 |        195 |
+| /Users/joopringelberg/Code/perspectives-react/src/tablerow.tsx                        | TypeScript JSX     |         77 |         27 |          7 |        111 |
+| /Users/joopringelberg/Code/perspectives-react/src/urifunctions.tsx                    | TypeScript JSX     |         97 |         13 |         13 |        123 |
+| /Users/joopringelberg/Code/perspectives-react/src/userMessaging.tsx                   | TypeScript JSX     |        126 |         44 |         19 |        189 |
+| /Users/joopringelberg/Code/perspectives-react/src/utilities.ts                        | TypeScript         |          6 |         21 |          2 |         29 |
+| /Users/joopringelberg/Code/perspectives-react/src/view.js                             | JavaScript         |        152 |         13 |         13 |        178 |
+| /Users/joopringelberg/Code/perspectives-react/src/views.js                            | JavaScript         |         13 |          1 |          4 |         18 |
+| /Users/joopringelberg/Code/perspectives-react/tsconfig.json                           | JSON with Comments |         22 |          0 |          1 |         23 |
+| Total                                                                                 |                    |     10,076 |      1,578 |      1,111 |     12,765 |
++---------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+

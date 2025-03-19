@@ -1,0 +1,24 @@
+ce7d58c - 7 hours ago, Forgot a break in a switch
+c308b3c - 8 hours ago, Hyperlinks in MarkDown now open by default in a new tab or window.
+f30eb03 - 8 hours ago, Finalised the chatcomponent.
+f753bfb - 8 hours ago, Updated import relations
+bd221cd - 23 hours ago, Fixed statuscode problems
+287d90b - 23 hours ago, UnBoundMarkDownWIdget
+9fe0360 - 3 days ago, Fixed small error in the ppsharedfilestorage.
+a4a2d75 - 9 days ago, ppstorage. A courtesy storage that can be used to upload files to a limited number of times.
+6cf90fc - 2 weeks ago, The paste icon is now hidden when a filled role is selected in a table or form.
+028ddb0 - 2 weeks ago, A warning in case no role type could be found that the end user fills in the context she tries to put on the screen. Usually, this is a modelling error.
+9dacd03 - 4 weeks ago, No paste from clipboard on a form for a calculated role.
+c95b207 - 4 weeks ago, When a property field is cleared, its value is now deleted from the role rather than that an empty string is stored.
+2c88ca6 - 5 weeks ago, Fixed check on filler in TablePasteRole.
+49a643b - 5 weeks ago, No contextremoval allowed without RemoveContext or DeleteContext verbs.
+2eb8584 - 5 weeks ago, ScreenDefinitionInterpreter now only returns a ChatComponent when there is an instance of the role with messages and media.
+599a6c3 - 5 weeks ago, Unsubscribe to visibilitychange was overwritten for screen. Fixed.
+4fbd33d - 5 weeks ago, ChatComponent now extends PerspectivesComponent and adds unsubscribers. This prevents updates on unmounted components. Also added super.componentWillUnmount to asyncimage.js
+4079319 - 6 weeks ago, ChatComponent incorporated into the ScreenDefinitionInterpreter.
+7bcc144 - 6 weeks ago, Finalising the proxy calls.
+fd9c32a - 6 weeks ago, Participants with their avatars. Time shown on messages.
+e3f340a - 6 weeks ago, adopt the media type from the mediaRecorder for the new file.
+9a992e3 - 6 weeks ago, Reading sharedStorageId and storageType from the PDR.
+a32fc04 - 6 weeks ago, Audio recording. Generalizing over storage types (making room for other services than just Mega).
+7d86009 - 6 weeks ago, First version of ChatComponent.

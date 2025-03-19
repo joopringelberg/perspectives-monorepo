@@ -1,0 +1,39 @@
+/* Custom styles for Perspectives React components */
+.mediumDotted{
+  border-width: medium!important;
+  border-style: dotted!important;
+}
+
+/* These color codes are taken from bootstrap. See https://getbootstrap.com/docs/5.0/utilities/colors/#variables
+for a discussion about variables and sass. */
+
+.failure:focus{
+  outline: none;
+  box-shadow: 0 0 0 5px #dc3545; /* $red */
+}
+
+.dropHere{
+  outline: none;
+  box-shadow: 0 0 0 5px #0dcaf0; /* $cyan */
+}
+
+.card:focus, .dropzone:focus {
+	outline-color: rgb(0, 95, 204);
+	outline-style: auto;
+	outline-width: 1px;
+}
+
+.navbarCard {
+  padding-top: 4px!important;
+  padding-bottom: 4px!important;
+}
+
+.widget {
+  flex-grow: 1;
+}
+
+.disabledIcon {
+  opacity: 0.5; /* Make the icon appear faded */
+  pointer-events: none; /* Prevent user interactions */
+  cursor: not-allowed; /* Change the cursor to indicate the icon is disabled */
+}
