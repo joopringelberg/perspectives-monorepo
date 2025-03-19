@@ -1,0 +1,26 @@
+{
+  "name": "perspectives-apitypes",
+  "version": "3.0.0",
+  "description": "Types to use for communicating over TCP with Perspectives-core.",
+  "main": "src/perspectivesApiTypes.purs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joopringelberg/perspectives-apitypes.git"
+  },
+  "keywords": [
+    "perspectives, api"
+  ],
+  "author": "Joop Ringelberg <joop.ringelberg@gmail.com>",
+  "license": "MIT",
+  "private": true,
+  "bugs": {
+    "url": "https://github.com/joopringelberg/perspectives-apitypes/issues"
+  },
+  "homepage": "https://github.com/joopringelberg/perspectives-apitypes#readme",
+  "dependencies": {},
+  "devDependencies": {
+  }
+}

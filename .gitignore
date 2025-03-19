@@ -1,0 +1,7 @@
+.git
+.psc-package
+output
+.psci_modules
+.psc-ide-port
+.spago
+.purs-repl
