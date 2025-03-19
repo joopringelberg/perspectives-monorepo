@@ -1,0 +1,21 @@
+{
+  "name": "purescript-avar-monadask",
+  "description": "AVar in MonadAsk provides shared memory for parallel asynchronous processes.",
+  "version": "3.0.0",
+  "publisher": "ringelberg",
+  "author": {
+    "name": "Joop Ringelberg"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joopringelberg/purescript-avar-monadask.git"
+  },
+  "bugs": {
+    "url": "https://github.com/joopringelberg/purescript-avar-monadask.git/issues"
+  },
+  "homepage": "https://github.com/joopringelberg/purescript-avar-monadask.git",
+  "license": "MIT",
+  "main": "src/avarMonadAsk.purs",
+  "scripts": {
+  }
+}
