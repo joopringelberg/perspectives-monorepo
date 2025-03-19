@@ -11,7 +11,8 @@
     "idb-keyval": "^6.2.1",
     "js-yaml": "^4.1.0",
     "lru-cache": "^11.0.1",
-    "pouchdb-browser": "^9.0.0"
+    "pouchdb-browser": "^9.0.0",
+    "purescript-yoga-subtlecrypto": "github:rowtype-yoga/purescript-yoga-subtlecrypto"
   },
   "peerDependencies": {
     "events": "^3.3.0",

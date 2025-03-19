@@ -164,6 +164,9 @@ importers:
       pouchdb-browser:
         specifier: ^9.0.0
         version: 9.0.0
+      purescript-yoga-subtlecrypto:
+        specifier: github:rowtype-yoga/purescript-yoga-subtlecrypto
+        version: purescript-yoga-subtlecrypto.git@https://codeload.github.com/rowtype-yoga/purescript-yoga-subtlecrypto/tar.gz/044f10d2cd4de4ac6e55ba748dc8c55a02a65d22
     devDependencies:
       '@rollup/plugin-commonjs':
         specifier: ^28.0.3
@@ -3670,6 +3673,10 @@ packages:
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
+
+  purescript-yoga-subtlecrypto.git@https://codeload.github.com/rowtype-yoga/purescript-yoga-subtlecrypto/tar.gz/044f10d2cd4de4ac6e55ba748dc8c55a02a65d22:
+    resolution: {tarball: https://codeload.github.com/rowtype-yoga/purescript-yoga-subtlecrypto/tar.gz/044f10d2cd4de4ac6e55ba748dc8c55a02a65d22}
+    version: 0.0.0
 
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
@@ -7809,6 +7816,8 @@ snapshots:
   punycode.js@2.3.1: {}
 
   punycode@2.3.1: {}
+
+  purescript-yoga-subtlecrypto.git@https://codeload.github.com/rowtype-yoga/purescript-yoga-subtlecrypto/tar.gz/044f10d2cd4de4ac6e55ba748dc8c55a02a65d22: {}
 
   queue-microtask@1.2.3: {}
 
