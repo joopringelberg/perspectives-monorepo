@@ -1,0 +1,30 @@
+{
+  "extends": "@4c/tsconfig/web.json",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "skipLibCheck": true,
+    "strict": true,
+    "jsx": "react",
+    "jsxFactory": "React.createElement",
+    "jsxFragmentFactory": "React.Fragment",
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "outDir": "dist",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "noUnusedLocals": false, // Disable errors for unused local variables
+    "noUnusedParameters": false, // Disable errors for unused parameters
+    "preserveSymlinks": true,
+    "paths": {
+      "perspectives-core": ["/Users/joopringelberg/Code/perspectives-core/dist/perspectives-core.js"],
+      "/perspectives-core.js": ["/Users/joopringelberg/Code/perspectives-core/dist/perspectives-core.js"],
+      "perspectives-pageworker": ["/Users/joopringelberg/Code/perspectives-pageworker/dist/perspectives-pageworker.d.ts"],
+      "perspectives-sharedworker": ["/Users/joopringelberg/Code/perspectives-sharedworker/dist/perspectives-sharedworker.js"],
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,1 @@
+declare const __MYCONTEXTS_VERSION__ : string;
