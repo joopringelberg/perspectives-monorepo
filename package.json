@@ -1,0 +1,87 @@
+{
+  "name": "perspectives-react",
+  "version": "0.26.5",
+  "description": "React components to build a GUI based on the perspectives-protocol (hides connection to perspectives-core).",
+  "main": "dist/perspectives-react-components.js",
+  "module": "dist/perspectives-react-components.js",
+  "type": "module",
+  "types": "dist/perspectives-react-components.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "watch": "rollup -c -w",
+    "build": "rollup -c",
+    "lint": "eslint 'src/**/*.{js,jsx,ts,tsx}'",
+    "lint:fix": "eslint 'src/**/*.{js,jsx,ts,tsx}' --fix",
+    "symlinks": "./createPerspectivesLinks.sh",
+    "stats": "webpack --json > stats.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joopringelberg/perspectives-react.git"
+  },
+  "keywords": [
+    "perspectives",
+    "react"
+  ],
+  "author": "Joop Ringelberg <joop.ringelberg@gmail.com>",
+  "license": "MIT",
+  "private": true,
+  "bugs": {
+    "url": "https://github.com/joopringelberg/perspectives-react/issues"
+  },
+  "homepage": "https://github.com/joopringelberg/perspectives-react#readme",
+  "peerDependencies": {
+    "@primer/octicons-react": "^19.15.0",
+    "events": "^3.3.0",
+    "i18next": "^24.2.1",
+    "perspectives-proxy": "workspace:*",
+    "pouchdb-browser": "^9.0.0",
+    "prop-types": "^15.8.1",
+    "react": "^18.3.1",
+    "react-bootstrap": "^2.10.5",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.2",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@rollup/plugin-replace": "^6.0.2",
+    "@rollup/plugin-typescript": "^12.1.2",
+    "@types/pouchdb-browser": "^6.1.5",
+    "@types/prop-types": "^15.7.14",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@typescript-eslint/eslint-plugin": "^8.26.0",
+    "@typescript-eslint/parser": "^8.26.0",
+    "eslint": "^9.21.0",
+    "eslint-plugin-react": "^7.37.4",
+    "rollup": "^4.34.9",
+    "rollup-plugin-copy": "^3.5.0",
+    "rollup-plugin-delete": "^3.0.0",
+    "rollup-plugin-dts": "^6.1.1",
+    "rollup-plugin-postcss": "^4.0.2",
+    "rollup-plugin-visualizer": "^5.14.0",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "@chatscope/chat-ui-kit-react": "^2.0.3",
+    "@chatscope/chat-ui-kit-styles": "^1.4.0",
+    "@dicebear/collection": "^9.2.2",
+    "@dicebear/core": "^9.2.2",
+    "@fortawesome/fontawesome-svg-core": "^6.7.2",
+    "@fortawesome/free-solid-svg-icons": "^6.7.2",
+    "@fortawesome/react-fontawesome": "^0.2.2",
+    "@paralleldrive/cuid2": "^2.2.2",
+    "@primer/octicons-react": "^19.15.0",
+    "@types/markdown-it": "^14.1.2",
+    "@types/markdown-it-link-attributes": "^3.0.5",
+    "classnames": "^2.5.1",
+    "highlight.js": "^11.11.1",
+    "markdown-it": "^14.1.0",
+    "markdown-it-link-attributes": "^4.0.1",
+    "megajs": "^1.3.5",
+    "page-lifecycle": "^0.1.2",
+    "perspectives-highlightjs": "workspace:*",
+    "regenerator-runtime": "^0.14.1"
+  }
+}

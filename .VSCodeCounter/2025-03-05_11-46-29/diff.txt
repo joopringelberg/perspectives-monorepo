@@ -1,0 +1,38 @@
+Date : 2025-03-05 11:46:29
+Directory : /Users/joopringelberg/Code/perspectives-react/src
+Total : 9 files,  -700 codes, -9 comments, -185 blanks, all -894 lines
+
+Languages
++--------------------+------------+------------+------------+------------+------------+
+| language           | files      | code       | comment    | blank      | total      |
++--------------------+------------+------------+------------+------------+------------+
+| Shell Script       |          2 |        -11 |         -6 |        -11 |        -28 |
+| JSON with Comments |          1 |        -22 |          0 |         -1 |        -23 |
+| JavaScript         |          2 |        -80 |         -3 |         -2 |        -85 |
+| JSON               |          2 |       -149 |          0 |         -2 |       -151 |
+| Markdown           |          2 |       -438 |          0 |       -169 |       -607 |
++--------------------+------------+------------+------------+------------+------------+
+
+Directories
++--------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                     | files      | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                        |          9 |       -700 |         -9 |       -185 |       -894 |
+| ..                                                                       |          9 |       -700 |         -9 |       -185 |       -894 |
++--------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++--------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| filename                                                                 | language           | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| /Users/joopringelberg/Code/perspectives-react/.eslintrc.js               | JavaScript         |        -39 |         -1 |         -1 |        -41 |
+| /Users/joopringelberg/Code/perspectives-react/README.md                  | Markdown           |       -292 |          0 |       -110 |       -402 |
+| /Users/joopringelberg/Code/perspectives-react/bumpVersions.sh            | Shell Script       |         -5 |         -5 |         -4 |        -14 |
+| /Users/joopringelberg/Code/perspectives-react/createPerspectivesLinks.sh | Shell Script       |         -6 |         -1 |         -7 |        -14 |
+| /Users/joopringelberg/Code/perspectives-react/documentation.md           | Markdown           |       -146 |          0 |        -59 |       -205 |
+| /Users/joopringelberg/Code/perspectives-react/package.json               | JSON               |        -78 |          0 |         -1 |        -79 |
+| /Users/joopringelberg/Code/perspectives-react/package.template.json      | JSON               |        -71 |          0 |         -1 |        -72 |
+| /Users/joopringelberg/Code/perspectives-react/rollup.config.js           | JavaScript         |        -41 |         -2 |         -1 |        -44 |
+| /Users/joopringelberg/Code/perspectives-react/tsconfig.json              | JSON with Comments |        -22 |          0 |         -1 |        -23 |
+| Total                                                                    |                    |       -700 |         -9 |       -185 |       -894 |
++--------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+

@@ -1,0 +1,45 @@
+SETTERS
+Hoe implementeren we setters? D.w.z. de mogelijkheid om vanuit de GUI de waarde van
+properties enz. te zetten.
+
+1. We zetten geen state in React. Alle data komt naar de React componenten als props.
+2. Laten we een voorbeeld nemen: SetProperty. We hebben dan nodig:
+  - een rolID
+  - een propertyName
+  - een (string) value.
+  Waar komen die vandaan?
+3. Een View element heeft een attribuut 'role' en een attribuut 'viewname'. Hierdoor worden
+bepaalde properties beschikbaar op de props van componenten die in een View zijn
+ingebed. Welke properties? Degenen die op de View gedefinieerd zijn.
+4. Kunnen we dan een component in View inbedden die beschikt over de waarde van
+'role'? Als we die component dan een attribuut 'propertyname' geven, hoeven we alleen
+nog maar de value uit een html (input) element te vissen om de APIcall te kunnen doen om
+de property in Perspectives een waarde te geven.
+5. Stel we maken een component SetProperty:
+  - in te bedden in een View;
+  - heeft attribuut 'propertyname' met een waarde die een property van de betreffende
+    View moet zijn;
+  - krijgt op props een prop 'rolename'.
+6. Zo'n component wordt de omhullende van een door de schermprogrammeur gemaakte
+display component, die het html input element (of checkbox, enz.) op het scherm zet.
+Deze component krijgt als props:
+  - value: de huidige waarde van de property;
+  - setValue: een callback die, aangeroepen met een waarde, deze waarde doorgeeft aan Perspectives.
+
+7. Voorbeeld van zo'n display component:
+
+  function GebruikerVoornaamInput (props)
+  {
+    return <fieldset>
+            <legend>Verander de gebruikers' voornaam in:</legend>
+            <input value={props.value}
+                 onChange={e => props.setValue(e.target.value)} />
+          </fieldset>
+  }
+Naamgevingsconventie: <RolNaam><PropertyNaam>Input
+
+8. Hoe komen attributes van een component beschikbaar? Wordt een attribute een prop? Ja.
+
+DEBUGGEN
+1. I Couchdb vind ik: model:User$MijnSysteem$gebruiker_1
+Maar in de debugger zie ik dat het subject is: "model:Systeem$Systeem$gebruiker"

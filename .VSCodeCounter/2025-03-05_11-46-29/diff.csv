@@ -1,0 +1,11 @@
+"filename", "language", "JSON", "JSON with Comments", "Shell Script", "JavaScript", "Markdown", "comment", "blank", "total"
+"/Users/joopringelberg/Code/perspectives-react/.eslintrc.js", "JavaScript", 0, 0, 0, -39, 0, -1, -1, -41
+"/Users/joopringelberg/Code/perspectives-react/README.md", "Markdown", 0, 0, 0, 0, -292, 0, -110, -402
+"/Users/joopringelberg/Code/perspectives-react/bumpVersions.sh", "Shell Script", 0, 0, -5, 0, 0, -5, -4, -14
+"/Users/joopringelberg/Code/perspectives-react/createPerspectivesLinks.sh", "Shell Script", 0, 0, -6, 0, 0, -1, -7, -14
+"/Users/joopringelberg/Code/perspectives-react/documentation.md", "Markdown", 0, 0, 0, 0, -146, 0, -59, -205
+"/Users/joopringelberg/Code/perspectives-react/package.json", "JSON", -78, 0, 0, 0, 0, 0, -1, -79
+"/Users/joopringelberg/Code/perspectives-react/package.template.json", "JSON", -71, 0, 0, 0, 0, 0, -1, -72
+"/Users/joopringelberg/Code/perspectives-react/rollup.config.js", "JavaScript", 0, 0, 0, -41, 0, -2, -1, -44
+"/Users/joopringelberg/Code/perspectives-react/tsconfig.json", "JSON with Comments", 0, -22, 0, 0, 0, 0, -1, -23
+"Total", "-", -149, -22, -11, -80, -438, -9, -185, -894
