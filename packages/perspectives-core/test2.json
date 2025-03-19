@@ -1,0 +1,175 @@
+{
+  "contents": {
+    "timeStamp": 1656676231345,
+    "deltas": [
+      {
+        "contents": {
+          "encryptedDelta": {
+            "contents": {
+              "subject": {
+                "contents": "model:User$prod2$User",
+                "tag": "UserInstance"
+              },
+              "roleType": "model:System$PerspectivesSystem$External",
+              "roleInstances": [
+                "model:User$prod2$External"
+              ],
+              "id": "model:User$prod2",
+              "deltaType": {
+                "tag": "ConstructExternalRole"
+              },
+              "authorizedRole": null
+            },
+            "tag": "UniverseRoleDelta"
+          },
+          "author": "model:User$prod2$User"
+        },
+        "tag": "SignedDelta"
+      },
+      {
+        "contents": {
+          "encryptedDelta": {
+            "contents": {
+              "subject": {
+                "contents": "model:User$prod2$User",
+                "tag": "UserInstance"
+              },
+              "id": "model:User$prod2",
+              "deltaType": {
+                "tag": "ConstructEmptyContext"
+              },
+              "contextType": "model:System$PerspectivesSystem"
+            },
+            "tag": "UniverseContextDelta"
+          },
+          "author": "model:User$prod2$User"
+        },
+        "tag": "SignedDelta"
+      },
+      {
+        "contents": {
+          "encryptedDelta": {
+            "contents": {
+              "subject": {
+                "contents": "model:User$prod2$User",
+                "tag": "UserInstance"
+              },
+              "roleType": "model:System$PerspectivesSystem$User",
+              "roleInstances": [
+                "model:User$prod2$User"
+              ],
+              "id": "model:User$prod2",
+              "deltaType": {
+                "tag": "ConstructEmptyRole"
+              },
+              "authorizedRole": null
+            },
+            "tag": "UniverseRoleDelta"
+          },
+          "author": "model:User$prod2$User"
+        },
+        "tag": "SignedDelta"
+      },
+      {
+        "contents": {
+          "encryptedDelta": {
+            "contents": {
+              "subject": {
+                "contents": "model:User$prod2$User",
+                "tag": "UserInstance"
+              },
+              "roleType": "model:System$PerspectivesSystem$User",
+              "roleInstance": "model:User$prod2$User",
+              "destinationContext": null,
+              "deltaType": {
+                "tag": "AddRoleInstancesToContext"
+              },
+              "contextInstance": "model:User$prod2"
+            },
+            "tag": "ContextDelta"
+          },
+          "author": "model:User$prod2$User"
+        },
+        "tag": "SignedDelta"
+      },
+      {
+        "contents": {
+          "encryptedDelta": {
+            "contents": {
+              "values": [
+                "prod2"
+              ],
+              "subject": {
+                "contents": {
+                  "contents": "model:System$PerspectivesSystem$User",
+                  "tag": "ENR"
+                },
+                "tag": "UserType"
+              },
+              "property": "model:System$PerspectivesSystem$User$FirstName",
+              "id": "model:User$prod2$User",
+              "deltaType": {
+                "tag": "AddProperty"
+              }
+            },
+            "tag": "RolePropertyDelta"
+          },
+          "author": "model:User$prod2$User"
+        },
+        "tag": "SignedDelta"
+      },
+      {
+        "contents": {
+          "encryptedDelta": {
+            "contents": {
+              "values": [
+                "producer2"
+              ],
+              "subject": {
+                "contents": {
+                  "contents": "model:System$PerspectivesSystem$User",
+                  "tag": "ENR"
+                },
+                "tag": "UserType"
+              },
+              "property": "model:System$PerspectivesSystem$User$LastName",
+              "id": "model:User$prod2$User",
+              "deltaType": {
+                "tag": "AddProperty"
+              }
+            },
+            "tag": "RolePropertyDelta"
+          },
+          "author": "model:User$prod2$User"
+        },
+        "tag": "SignedDelta"
+      },
+      {
+        "contents": {
+          "encryptedDelta": {
+            "contents": {
+              "subject": {
+                "contents": {
+                  "contents": "model:BrokerServices$BrokerContract$Guest",
+                  "tag": "CR"
+                },
+                "tag": "UserType"
+              },
+              "oldFiller": null,
+              "filler": "model:User$prod2$User",
+              "filled": "model:User$cb969a050_0ab7_4cde_ac08_ad0409b360c2$AccountHolder_0000",
+              "deltaType": {
+                "tag": "SetFirstBinding"
+              }
+            },
+            "tag": "RoleBindingDelta"
+          },
+          "author": "model:User$prod2$User"
+        },
+        "tag": "SignedDelta"
+      }
+    ],
+    "author": "model:User$prod2$User"
+  },
+  "tag": "TransactionForPeer"
+}

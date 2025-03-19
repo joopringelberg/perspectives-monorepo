@@ -1,0 +1,11 @@
+UserData
+
+import model:Test as tst
+
+tst:TestCaseInCouchdb usr:MyTestCase
+	$Self -> model:System$Me
+	$ARole => ()
+	$NestedContext3 =>
+		$SubCase3 usr:MySubcase
+			$Self -> model:System$Me
+			$RoleToInspect => ()

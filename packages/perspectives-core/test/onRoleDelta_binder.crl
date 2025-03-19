@@ -1,0 +1,13 @@
+UserData
+
+import model:Test as tst
+
+tst:TestCaseRoleDelta_binder usr:MyTestCase
+	$UberSelf -> model:System$Me
+	$AnotherRole => ()
+		$Prop4 = true
+	$NestedContext2 => ()
+	$SourceRole2 =>
+		$SubCase2 usr:MySubcase
+			$Self -> model:System$Me
+			$RoleToInspect => ()

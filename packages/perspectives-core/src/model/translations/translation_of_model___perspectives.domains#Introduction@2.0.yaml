@@ -1,0 +1,85 @@
+model://perspectives.domains#Introduction:
+  contexts:
+    IntroductionApp:
+      translations:
+        en: Introduction app
+        nl: Introductie app
+      users:
+        Manager:
+          translations:
+            en: Manager
+            nl: Beheerder
+          titles:
+            0:
+              translations:
+                orig: Introductions
+                en: Introductions
+                nl: Introducties
+            1:
+              translations:
+                orig: My Introductions
+                en: My Introductions
+                nl: Mijn introducties
+            2:
+              translations:
+                orig: Introductions started by others
+                en: Introductions sent to me
+                nl: Ontvangen introducties
+      contextroles:
+        IncomingIntroductions:
+          translations:
+            en: Introductions by others
+            nl: Ontvangen introducties
+        Introductions:
+          translations:
+            en: Introductions by myself
+            nl: Introducties door mijzelf
+    Introduction:
+      translations:
+        en: Introduction
+        nl: Introductie
+      external:
+        properties:
+          Title:
+            translations:
+              en: Title
+              nl: Titel
+      users:
+        Introducee:
+          translations:
+            en: Introducee
+            nl: Introducee
+          actions:
+            model://perspectives.domains#Introduction$Introduction$Introducee:
+              StartConversation:
+                translations:
+                  en: Start conversation
+                  nl: Begin gesprek
+        Introducer:
+          translations:
+            en: Introducer
+            nl: Introducer
+          actions:
+            model://perspectives.domains#Introduction$Introduction$Introducer:
+              StartConversation:
+                translations:
+                  en: Start conversation
+                  nl: Begin gesprek
+        Guest:
+          translations:
+            en: Guest
+            nl: Gast
+      things:
+        Conversation:
+          translations:
+            en: Conversation
+            nl: Conversatie
+          properties:
+            Media:
+              translations:
+                en: Media
+                nl: Media
+            Messages:
+              translations:
+                en: Messages
+                nl: Berichten

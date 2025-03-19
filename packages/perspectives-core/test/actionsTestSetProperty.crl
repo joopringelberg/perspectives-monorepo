@@ -1,0 +1,8 @@
+UserData
+
+import model:Test as tst
+
+tst:TestCaseSetProp usr:MyTestCase
+	$Self -> model:System$Me
+	$ARole11 => ()
+		$Prop4 = "aap","noot"

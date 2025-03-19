@@ -1,0 +1,46 @@
+{
+  "name": "perspectives-core",
+  "version": "0.26.7",
+  "description": "Core functionality of Perspectives",
+  "license": "GPL-3.0-or-later",
+  "author": "Joop Ringelberg <joop.ringelberg@gmail.com>",
+  "dependencies": {
+    "@paralleldrive/cuid2": "^2.2.2",
+    "@stomp/stompjs": "^7.0.0",
+    "fuzzysort": "^3.1.0",
+    "idb-keyval": "^6.2.1",
+    "js-yaml": "^4.1.0",
+    "lru-cache": "^11.0.1",
+    "pouchdb-browser": "^9.0.0"
+  },
+  "peerDependencies": {
+    "events": "^3.3.0",
+    "eventsource": "^2.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joopringelberg/perspectives-core.git"
+  },
+  "main": "dist/perspectives-core.js",
+  "type": "module",
+  "homepage": "https://github.com/joopringelberg/perspectives-core#readme",
+  "scripts": {
+    "symlinks": "./createPerspectivesLinks.sh",
+    "docs": "./gendocs.sh",
+    "stats": "webpack --json > stats.json",
+    "copyCore": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com/remotetest",
+    "copyCoreToRoot": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com",
+    "copyCoreToWWW": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com/www",
+    "build": "rollup -c"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.3",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@rollup/plugin-replace": "^6.0.2",
+    "@rollup/plugin-url": "^8.0.2",
+    "rollup": "^2.79.2",
+    "rollup-plugin-delete": "^3.0.1",
+    "rollup-plugin-sourcemaps": "^0.6.3"
+  }
+}
