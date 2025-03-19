@@ -1,0 +1,51 @@
+
+.full-height {
+  height: calc(100vh - 2 * var(--navbar-height));
+}
+
+.full-mobile-height {
+  height: calc(100vh - 2 * var(--navbar-height) - var(--tabs-height));
+}
+
+.full-www-content-height {
+  height: calc(100vh - 2 * var(--navbar-height) - var(--who-header-height));
+}
+
+/* Define the slide-in-from-right animation */
+@keyframes slide-in-from-right {
+  from {
+    transform: translateX(+100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Apply the slide-in-from-right animation */
+.slide-in-from-right {
+  animation: slide-in-from-right 1s ease-out forwards;
+}
+
+/* Define the slide-out-to-right animation */
+@keyframes slide-out-to-right {
+  from {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(+100%);
+    opacity: 1;
+  }
+}
+
+/* Apply the slide-out-to-right animation */
+.slide-out-to-right {
+  animation: slide-out-to-right 1s ease-out forwards;
+}
+
+/* Hide the caret icon for the NavDropdown toggle, but only in the top NavBar */
+#top-navbar .dropdown-toggle::after {
+  display: none;
+}
