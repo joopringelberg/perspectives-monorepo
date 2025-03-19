@@ -1,0 +1,30 @@
+package:
+  dependencies:
+  - console
+  - effect
+  - either
+  - foreign
+  # - foreign-generic
+  - foreign-object
+  - maybe
+  - newtype
+  - partial
+  - perspectives-utilities
+  - prelude
+  - serializablenonemptyarray
+  - simple-json
+  - transformers
+  - unsafe-coerce
+  name: perspectives-apitypes
+workspace:
+  extra_packages:
+    perspectives-utilities:
+      path: ../perspectives-utilities
+      # git: https://github.com/joopringelberg/perspectives-utilities.git
+      # ref: v2.0.0
+    serializablenonemptyarray:
+      path: ../serialisable-nonempty-arrays
+      # git: https://github.com/joopringelberg/serialisable-nonempty-arrays.git
+      # ref: v2.0.0
+  packageSet:
+    registry: 60.6.0
