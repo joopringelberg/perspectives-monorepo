@@ -11,9 +11,10 @@
     "dev": "pnpm --recursive run dev"
   },
   "devDependencies": {
-    "typescript": "^5.8.2",
     "eslint": "^9.22.0",
-    "pnpm": "^10.6.4"
+    "pnpm": "^10.6.4",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.2"
   },
   "keywords": [],
   "author": "",

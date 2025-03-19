@@ -29,8 +29,8 @@
 //// STORING PORTS SENT BY CLIENT PAGES
 ////////////////////////////////////////////////////////////////////////////////
 // An array of MessageChannel ports.
-const channels = {};
-let channelIndex = 1;
+var channels = {};
+var channelIndex = 1;
 
 ////////////////////////////////////////////////////////////////////////////////
 //// PORT TO PAGE THAT HOSTS PDR
@@ -38,83 +38,96 @@ let channelIndex = 1;
 //// This function is passed on by the client in the call configurePDRProxy({pageHostingPDRPort: pageHostingPDRPort})
 //// This function returns a MessagePort as documented here: https://developer.mozilla.org/en-US/docs/Web/API/MessagePort.
 ////////////////////////////////////////////////////////////////////////////////
-export default function pageHostingPDRPort(pdr) {
+function pageHostingPDRPort(pdr) {
   // Create a channel.
-  const channel = new MessageChannel();
-  let weHost = false;
-
+  var channel = new MessageChannel();
+  var weHost = false;
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(
-      'perspectives-pagedispatcher.js',
-      {
-        scope: './'
-      }).then(function (registration) {
-        var serviceWorker;
-        if (registration.installing) {
-          serviceWorker = registration.installing;
-        } else if (registration.waiting) {
-          serviceWorker = registration.waiting;
-        } else if (registration.active) {
-          serviceWorker = registration.active;
-        }
-        if (serviceWorker) {
-          // Listen to messages coming in from the serviceWorker.
-          // Notice that all pages that are not the first will never handle a message.
-          // Notice that this handler is on the ServiceWorkerContainer of the page; NOT IN THE SERVICEWORKER ITSELF!
-          navigator.serviceWorker.addEventListener('message', function (event) {
-            switch (event.data.messageType) {
-              case "youHost":
-                // This message only arrives to the very first page visiting InPlace.
-                weHost = true;
-                // We've sent ourselves a port.
+    navigator.serviceWorker.register('perspectives-pagedispatcher.js', {
+      scope: './'
+    }).then(function (registration) {
+      var serviceWorker;
+      if (registration.installing) {
+        serviceWorker = registration.installing;
+      } else if (registration.waiting) {
+        serviceWorker = registration.waiting;
+      } else if (registration.active) {
+        serviceWorker = registration.active;
+      }
+      if (serviceWorker) {
+        // Listen to messages coming in from the serviceWorker.
+        // Notice that all pages that are not the first will never handle a message.
+        // Notice that this handler is on the ServiceWorkerContainer of the page; NOT IN THE SERVICEWORKER ITSELF!
+        navigator.serviceWorker.addEventListener('message', function (event) {
+          switch (event.data.messageType) {
+            case "youHost":
+              // This message only arrives to the very first page visiting InPlace.
+              weHost = true;
+              // We've sent ourselves a port.
+              channels[channelIndex] = event.data.port;
+              // Return the channelIndex.
+              channels[channelIndex].postMessage({
+                serviceWorkerMessage: "channelId",
+                channelId: 1000000 * channelIndex
+              });
+              // start listening to the new channel, handle requests.
+              // This page must host the PDR.
+              channels[channelIndex].onmessage = function (request) {
+                return pdr.handleClientRequest(pdr, channels, request);
+              };
+              channelIndex = channelIndex + 1;
+              break;
+            case "relayPort":
+              // If we are the host, save the port; otherwise ignore.
+              if (weHost) {
+                // the new client (page) sends a port. This is a MessagePort.
                 channels[channelIndex] = event.data.port;
                 // Return the channelIndex.
-                channels[channelIndex].postMessage({ serviceWorkerMessage: "channelId", channelId: 1000000 * channelIndex });
+                channels[channelIndex].postMessage({
+                  serviceWorkerMessage: "channelId",
+                  channelId: 1000000 * channelIndex
+                });
                 // start listening to the new channel, handle requests.
-                // This page must host the PDR.
-                channels[channelIndex].onmessage = request => pdr.handleClientRequest(pdr, channels, request);
+                channels[channelIndex].onmessage = function (request) {
+                  return pdr.handleClientRequest(pdr, channels, request);
+                };
                 channelIndex = channelIndex + 1;
-                break;
-              case "relayPort":
-                // If we are the host, save the port; otherwise ignore.
-                if (weHost) {
-                  // the new client (page) sends a port. This is a MessagePort.
-                  channels[channelIndex] = event.data.port;
-                  // Return the channelIndex.
-                  channels[channelIndex].postMessage({ serviceWorkerMessage: "channelId", channelId: 1000000 * channelIndex });
-                  // start listening to the new channel, handle requests.
-                  channels[channelIndex].onmessage = request => pdr.handleClientRequest(pdr, channels, request);
-                  channelIndex = channelIndex + 1;
-                }
-                break;
-            }
-          });
-          if (navigator.serviceWorker.controller) {
-            console.log("navigator heeft controler direct na registreren - stuur relayport nu.")
-            navigator.serviceWorker.controller.postMessage({ messageType: "relayPort", port: channel.port2 }, [channel.port2]);
+              }
+              break;
           }
-        }
-        else {
-          console.log("Could not get serviceWorker from registration for an unknown reason.");
-        }
-        navigator.serviceWorker.addEventListener("controllerchange", () => {
-          // Send the port to the serviceWorker, to relay it to the page hosting the PDR.
-          // Only the serviceworker knows how many clients it has. If there is but one, it will immediately
-          // return a "youhost" message to this listener, which will set 'wehost' to true. 
-          // See: https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorker/postMessage
-          console.log("Controller change. Stuur relayport nu.")
-          navigator.serviceWorker.controller.postMessage({ messageType: "relayPort", port: channel.port2 }, [channel.port2]);
         });
-
-      }).catch(function (error) {
-        // Something went wrong during registration. The service-worker.js file
-        // might be unavailable or contain a syntax error.
-        console.log(error);
+        if (navigator.serviceWorker.controller) {
+          console.log("navigator heeft controler direct na registreren - stuur relayport nu.");
+          navigator.serviceWorker.controller.postMessage({
+            messageType: "relayPort",
+            port: channel.port2
+          }, [channel.port2]);
+        }
+      } else {
+        console.log("Could not get serviceWorker from registration for an unknown reason.");
+      }
+      navigator.serviceWorker.addEventListener("controllerchange", function () {
+        // Send the port to the serviceWorker, to relay it to the page hosting the PDR.
+        // Only the serviceworker knows how many clients it has. If there is but one, it will immediately
+        // return a "youhost" message to this listener, which will set 'wehost' to true. 
+        // See: https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorker/postMessage
+        console.log("Controller change. Stuur relayport nu.");
+        navigator.serviceWorker.controller.postMessage({
+          messageType: "relayPort",
+          port: channel.port2
+        }, [channel.port2]);
       });
-  }
-  else {
+    })["catch"](function (error) {
+      // Something went wrong during registration. The service-worker.js file
+      // might be unavailable or contain a syntax error.
+      console.log(error);
+    });
+  } else {
     console.log("This browser does not support service workers.");
   }
   // Use port1 in the SharedWorkerChannel.
   return channel.port1;
 }
+
+export { pageHostingPDRPort as default };
+//# sourceMappingURL=perspectives-pageworker.js.map
