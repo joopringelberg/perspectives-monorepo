@@ -1,0 +1,40 @@
+{
+  "name": "perspectives-pageworker",
+  "version": "0.16.5",
+  "description": "A 'worker' that actually runs in a webpage, simulating the SharedWorker used in browsers that support it.",
+  "main": "dist/perspectives-pageworker.js",
+  "module": "dist/perspectives-pageworker.js",
+  "type": "module",
+  "types": "dist/perspectives-pageworker.d.ts",
+  "typings": "dist/perspectives-pageworker.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "webpack",
+    "watch": "webpack --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joopringelberg/perspectives-pageworker1.git"
+  },
+  "keywords": [
+    "perspectives"
+  ],
+  "author": "Joop Ringelberg <joop.ringelberg@gmail.com>",
+  "license": "MIT",
+  "private": true,
+  "bugs": {
+    "url": "https://github.com/joopringelberg/perspectives-pageworker1/issues"
+  },
+  "homepage": "https://github.com/joopringelberg/perspectives-pageworker1#readme",
+  "devDependencies": {
+    "@babel/core": "^7.25.8",
+    "@babel/preset-env": "^7.25.8",
+    "babel-loader": "^9.2.1",
+    "clean-webpack-plugin": "^4.0.0",
+    "copy-webpack-plugin": "^12.0.2",
+    "eslint": "^9.13.0",
+    "eslint-plugin-react": "^7.37.1",
+    "webpack": "^5.95.0",
+    "webpack-cli": "^5.1.4"
+  }
+}
