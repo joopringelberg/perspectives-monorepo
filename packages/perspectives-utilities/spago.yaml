@@ -1,0 +1,18 @@
+package:
+  dependencies:
+    - arrays
+    - console
+    - effect
+    - foldable-traversable
+    - foreign-object
+    - maybe
+    - ordered-collections
+    - prelude
+    - record
+    - transformers
+    - tuples
+  name: perspective-utilities
+workspace:
+  extraPackages: {}
+  packageSet:
+    registry: 60.6.0
