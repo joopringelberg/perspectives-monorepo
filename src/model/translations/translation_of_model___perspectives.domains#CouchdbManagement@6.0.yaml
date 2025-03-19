@@ -1,0 +1,782 @@
+model://perspectives.domains#CouchdbManagement:
+  contexts:
+    CouchdbManagementApp:
+      translations:
+        nl: Repository en database beheer
+      users:
+        Manager:
+          translations:
+            en: Manager
+            nl: Beheerder
+          actions:
+            model://perspectives.domains#CouchdbManagement$CouchdbManagementApp:
+              CreateServer:
+                translations:
+                  en: Create server
+                  nl: Maak server
+            model://perspectives.domains#System$RootContext:
+              CreateServer:
+                translations:
+                  en: Create server
+                  nl: Maak server
+          titles:
+            0:
+              translations:
+                orig: Couchdb Server Administration
+                en: Couchdb Server Administration
+                nl: Couchdb Server Beheer
+      contextroles:
+        CouchdbServers:
+          translations:
+            en: Couchdb servers
+            nl: Couchdb servers
+          properties:
+            AdminUserName:
+              translations:
+                en: Administrator user name
+                nl: Beheerder gebruikersnaam
+            AdminPassword:
+              translations:
+                en: Administrator password
+                nl: Beheerder paswoord
+            CouchdbPort:
+              translations:
+                en: Couchdb port
+                nl: Couchdb poort
+            Url:
+              translations:
+                en: Couchdb URL
+                nl: Couchdb URL
+    CouchdbServer:
+      translations:
+        en: Couchdb server
+        nl: Couchdb server
+      external:
+        notifications:
+          0:
+            translations:
+              orig: You now have an account with CouchdbServer $1
+              en: You now have an account with CouchdbServer $1.
+              nl: Je bent nu ingeschreven bij CouchdbServer $1.
+        properties:
+          Name:
+            translations:
+              en: Name
+              nl: Naam
+          CouchdbPort:
+            translations:
+              en: Couchdb port
+              nl: Couchdb poort
+          ServerUrl:
+            translations:
+              en: Couchdb URL
+              nl: Couchdb URL
+      users:
+        Visitor:
+          translations:
+            en: Visitor
+            nl: Bezoeker
+          titles:
+            0:
+              translations:
+                orig: Couchdb Server
+                en: Couchdb Server
+                nl: Couchdb Server
+            1:
+              translations:
+                orig: This server
+                en: This server
+                nl: Deze server
+            2:
+              translations:
+                orig: Repositories
+                en: Repositories
+                nl: Repositories
+        Accounts:
+          translations:
+            en: Accounts
+            nl: Inschrijvingen
+          notifications:
+            0:
+              translations:
+                orig: You now have an account with CouchdbServer $1
+                en: You now have an account with CouchdbServer $1.
+                nl: Je bent nu ingeschreven bij CouchdbServer $1.
+          actions:
+            model://perspectives.domains#System$ContextWithNotification$NotifiedUser:
+              DeleteNotifications:
+                translations:
+                  en: Delete notifications
+                  nl: Verwijder meldingen
+            model://perspectives.domains#CouchdbManagement$CouchdbServer$Accounts:
+              RequestDatabase:
+                translations:
+                  en: Request your own database
+                  nl: Vraag je eigen database aan
+          titles:
+            0:
+              translations:
+                orig: Couchdb Server
+                en: Couchdb Server
+                nl: Couchdb Server
+            1:
+              translations:
+                orig: The server
+                en: The server
+                nl: De server
+            2:
+              translations:
+                orig: Admins
+                en: Admins
+                nl: Beheerders
+            3:
+              translations:
+                orig: Repositories
+                en: Repositories
+                nl: Repositories
+            4:
+              translations:
+                orig: My databases
+                en: My databases
+                nl: Mijn databases
+        Admin:
+          translations:
+            en: Administrator
+            nl: Beheerder
+          actions:
+            model://perspectives.domains#System$ContextWithNotification$NotifiedUser:
+              DeleteNotifications:
+                translations:
+                  en: Delete notifications
+                  nl: Verwijder meldingen
+            model://perspectives.domains#CouchdbManagement$CouchdbServer$Admin:
+              CreateRepository:
+                translations:
+                  en: Create a repository
+                  nl: Maak een repository
+          titles:
+            0:
+              translations:
+                orig: Couchdb Server
+                en: Couchdb Server
+                nl: Couchdb Server
+            1:
+              translations:
+                orig: The server
+                en: The server
+                nl: De server
+            2:
+              translations:
+                orig: Admins
+                en: Admins
+                nl: Beheerders
+            3:
+              translations:
+                orig: Repositories
+                en: Repositories
+                nl: Repositories
+            4:
+              translations:
+                orig: Accounts
+                en: Accounts
+                nl: Inschrijvingen
+            5:
+              translations:
+                orig: Bespoke databases
+                en: Bespoke databases
+                nl: Eigen databases
+        VisitorProxy:
+          translations:
+            en: 
+            nl: 
+      contextroles:
+        MyBespokeDatabases:
+          translations:
+            en: My own databases
+            nl: Mijn eigen databases
+        BespokeDatabases:
+          translations:
+            en: Owned databases
+            nl: Database in eigendom
+        Repositories:
+          translations:
+            en: App stores
+            nl: App stores
+          properties:
+            HasDatabases:
+              translations:
+                en: Databases have been created
+                nl: Databases zijn aangemaakt
+            NameSpace:
+              translations:
+                en: Namespace
+                nl: Namespace
+            AdminEndorses:
+              translations:
+                en: Administrator endorses
+                nl: Goedgekeurd door beheerder
+        PublicRepositories:
+          translations:
+            en: Public App stores
+            nl: Openbare App stores
+    BespokeDatabase:
+      translations:
+        en: Owned database
+        nl: Database in eigendom
+      external:
+        properties:
+          Public:
+            translations:
+              en: Public
+              nl: Openbaar
+          Description:
+            translations:
+              en: Description
+              nl: Beschrijving
+          OwnerName:
+            translations:
+              en: Name of owner
+              nl: Naam van eigenaar
+          BaseUrl:
+            translations:
+              en: Base URL
+              nl: Basis URL
+          Endorsed:
+            translations:
+              en: Endorsed
+              nl: Goedgekeurd
+          DatabaseName:
+            translations:
+              en: Database name
+              nl: Database naam
+          DatabaseLocation:
+            translations:
+              en: Database location
+              nl: Database locatie
+      users:
+        CBAdmin:
+          translations:
+            en: 
+            nl: 
+        Owner:
+          translations:
+            en: Owner
+            nl: Eigenaar
+          properties:
+            BespokeDatabaseUrl:
+              translations:
+                en: URL of owned database
+                nl: URL van database in eigendom
+    Repository:
+      translations:
+        en: App Store
+        nl: App Store
+      external:
+        properties:
+          RepoHasDatabases:
+            translations:
+              en: App Store has databases
+              nl: App Store heeft databases
+          AdminLastName:
+            translations:
+              en: Last name of administrator
+              nl: Achternaam van beheerder
+          RepositoryUrl:
+            translations:
+              en: URL of App Store
+              nl: URL van App Store
+          ServerUrl:
+            translations:
+              en: Server URL
+              nl: Server URL
+          InstancesDatabase:
+            translations:
+              en: Database for instances
+              nl: Database voor instanties
+          ModelsDatabase:
+            translations:
+              en: Database for models
+              nl: Database voor modellen
+          NameSpace:
+            translations:
+              en: Namespace
+              nl: Namespace
+          IsPublic:
+            translations:
+              en: Is public
+              nl: Is openbaar
+      users:
+        Visitor:
+          translations:
+            en: Visitor
+            nl: Bezoeker
+          titles:
+            0:
+              translations:
+                orig: Repository
+                en: Repository
+                nl: Repository
+            1:
+              translations:
+                orig: Repository information
+                en: Repository information
+                nl: Repository informatie
+            2:
+              translations:
+                orig: Manifests
+                en: Manifests
+                nl: Manifesten
+        Accounts:
+          translations:
+            en: Accounts
+            nl: Lidmaadschappen
+        Authors:
+          translations:
+            en: Authors
+            nl: Auteurs
+          markdowns:
+            0:
+              translations:
+                orig: "## Add a manifest\n
+                  Add a manifest by clicking the `plus` button on the table toolbar.\n
+                  Enter the *unqualified* name of the model in the column `LocalModelName`.\n
+                  For the domain 'model://perspectives.domains#System' for example, this is 'System'."
+                en: "## Add a manifest\n
+                  Add a manifest by clicking the `plus` button on the table toolbar.\n
+                  Enter the *unqualified* name of the model in the column `LocalModelName`.\n
+                  For the domain 'model://perspectives.domains#System' for example, this is 'System'."
+                nl: "## Voeg een manifest toe\n
+                  Voeg een manifest toe door op de `plus` knop in de tabel toolbar te klikken.\n
+                  Vul de *ongekwalificeerde* naam van het model in in de kolom `LocalModelName`.\n
+                  Voor het domein 'model://perspectives.domains#System' bijvoorbeeld, is dit 'System'."
+          titles:
+            0:
+              translations:
+                orig: Repository
+                en: Repository
+                nl: Repository
+            1:
+              translations:
+                orig: This repository
+                en: This repository
+                nl: Deze repository
+            2:
+              translations:
+                orig: Repository information
+                en: Repository information
+                nl: Repository informatie
+            3:
+              translations:
+                orig: Authors
+                en: Authors
+                nl: Auteurs
+            4:
+              translations:
+                orig: Manifests
+                en: Manifests
+                nl: Manifesten
+        Admin:
+          translations:
+            en: Administrator
+            nl: Beheerder
+          actions:
+            model://perspectives.domains#System$ContextWithNotification$NotifiedUser:
+              DeleteNotifications:
+                translations:
+                  en: Delete notifications
+                  nl: Verwijder meldingen
+            model://perspectives.domains#CouchdbManagement$Repository$Admin:
+              CompileRepositoryModels:
+                translations:
+                  en: Compile models in repository
+                  nl: Compileer modellen in repository
+          markdowns:
+            0:
+              translations:
+                orig: "## Add a manifest\n
+                  Add a manifest by clicking the `plus` button on the table toolbar.\n
+                  Enter the *unqualified* name of the model in the column `LocalModelName`.\n
+                  For the domain 'model://perspectives.domains#System' for example, this is 'System'."
+                en: "## Add a manifest\n
+                  Add a manifest by clicking the `plus` button on the table toolbar.\n
+                  Enter the *unqualified* name of the model in the column `LocalModelName`.\n
+                  For the domain 'model://perspectives.domains#System' for example, this is 'System'."
+                nl: "## Voeg een manifest toe\n
+                  Voeg een manifest toe door op de `plus` knop in de tabel toolbar te klikken.\n
+                  Vul de *ongekwalificeerde* naam van het model in in de kolom `LocalModelName`.\n
+                  Voor het domein 'model://perspectives.domains#System' bijvoorbeeld, is dit 'System'."
+          titles:
+            0:
+              translations:
+                orig: Repository
+                en: Repository
+                nl: Repository
+            1:
+              translations:
+                orig: This repository
+                en: This repository
+                nl: Deze repository
+            2:
+              translations:
+                orig: Repository information
+                en: Repository information
+                nl: Repository informatie
+            3:
+              translations:
+                orig: Administrator
+                en: Administrator
+                nl: Beheerder
+            4:
+              translations:
+                orig: Manifests
+                en: Manifests
+                nl: Manifesten
+            5:
+              translations:
+                orig: Authors
+                en: Authors
+                nl: Auteurs
+        ServerAdmin:
+          translations:
+            en: Server administrator
+            nl: Server beheerder
+        VisitorProxy:
+          translations:
+            en: 
+            nl: 
+      contextroles:
+        Manifests:
+          translations:
+            en: Manifests
+            nl: Manifesten
+    ModelManifest:
+      translations:
+        en: Model manifest
+        nl: Model manifest
+      external:
+        properties:
+          RecomputeVersionToInstall:
+            translations:
+              en: Recompute version to install
+              nl: Herbereken de te installeren versie
+          VersionToInstall:
+            translations:
+              en: Version to install
+              nl: Versie om te installeren
+          RecommendedVersion:
+            translations:
+              en: Recommended version
+              nl: Aanbevolen versie
+          HighestVersion:
+            translations:
+              en: Highest version
+              nl: Hoogste versie
+          PublicUrl:
+            translations:
+              en: Public URL
+              nl: Openbare URL
+          RepositoryUrl:
+            translations:
+              en: App Store URL
+              nl: App Store URL
+          ModelURI:
+            translations:
+              en: Model URI
+              nl: Model URI
+      users:
+        Visitor:
+          translations:
+            en: Visitor
+            nl: Bezoeker
+          titles:
+            0:
+              translations:
+                orig: Model Manifest
+                en: Model Manifest
+                nl: Model Manifest
+            1:
+              translations:
+                orig: This Manifest
+                en: This Manifest
+                nl: Dit Manifest
+            2:
+              translations:
+                orig: Model versions
+                en: Model versions
+                nl: Model versies
+        Author:
+          translations:
+            en: Author
+            nl: Auteur
+          actions:
+            model://perspectives.domains#CouchdbManagement$ModelManifest$Author:
+              CreateVersion:
+                translations:
+                  en: Create a version
+                  nl: Maak een versie
+          markdowns:
+            0:
+              translations:
+                orig: "## Add a version\n
+                  In order to add a version of your manifest, use the action `CreateVersion` from the top toolbar.\n
+                  Add a version number in the row that appears. A version should be of the form \"Major.Minor\" where both\n
+                  components should be integers. For example: \"1.0\" or \"2.11\"."
+                en: "## Add a version\n
+                  In order to add a version of your manifest, use the action `CreateVersion` from the top toolbar.\n
+                  Add a version number in the row that appears. A version should be of the form \"Major.Minor\" where both\n
+                  components should be integers. For example: \"1.0\" or \"2.11\"."
+                nl: "## Voeg een versie toe\n
+                  Om een versie van je manifest toe te voegen, gebruik de actie `CreateVersion` van de toolbar bovenaan.\n
+                  Voeg een versienummer toe in de rij die verschijnt. Een versie moet van de vorm \"Major.Minor\" zijn waarbij beide\n
+                  componenten gehele getallen moeten zijn. Bijvoorbeeld: \"1.0\" of \"2.11\"."
+          titles:
+            0:
+              translations:
+                orig: Model Manifest
+                en: Model Manifest
+                nl: Model Manifest
+            1:
+              translations:
+                orig: Versions
+                en: Versions
+                nl: Versies
+            2:
+              translations:
+                orig: This Manifest
+                en: This Manifest
+                nl: Dit Manifest
+            3:
+              translations:
+                orig: Available Versions
+                en: Available Versions
+                nl: Beschikbare Versies
+            4:
+              translations:
+                orig: Authors
+                en: Authors
+                nl: Auteurs
+        VisitorProxy:
+          translations:
+            en: 
+            nl: 
+          actions:
+            model://perspectives.domains#CouchdbManagement$ModelManifest:
+              StartUsing:
+                translations:
+                  en: Start using
+                  nl: Neem in gebruik
+              UpdateModel:
+                translations:
+                  en: Update app
+                  nl: Actualiseer app
+              UpdateModelWithDependencies:
+                translations:
+                  en: Update app and its dependencies
+                  nl: Actualiseer app en de apps die erop voortbouwen
+            model://perspectives.domains#System$ModelManifest:
+              StartUsing:
+                translations:
+                  en: Start using
+                  nl: Neem in gebruik
+              UpdateModel:
+                translations:
+                  en: Update app
+                  nl: Actualiseer app
+              UpdateModelWithDependencies:
+                translations:
+                  en: Update app and its dependencies
+                  nl: Actualiseer app en de apps die erop voortbouwen
+            model://perspectives.domains#System$RootContext:
+              StartUsing:
+                translations:
+                  en: Start using
+                  nl: Neem in gebruik
+              UpdateModel:
+                translations:
+                  en: Update app
+                  nl: Actualiseer app
+              UpdateModelWithDependencies:
+                translations:
+                  en: Update app and its dependencies
+                  nl: Actualiseer app en de apps die erop voortbouwen
+      contextroles:
+        Versions:
+          translations:
+            en: Versions
+            nl: Versies
+        Repository:
+          translations:
+            en: App Store
+            nl: App Store
+    VersionedModelManifest:
+      translations:
+        en: Version of model manifest
+        nl: Versie van model manifest
+      external:
+        notifications:
+          0:
+            translations:
+              orig: Version $1 (build $3 ) has been uploaded to the repository for $5 .
+              en: Version $1 (build $3 ) has been uploaded to the repository for $5.
+              nl: Versie $1 (build $3 ) is ge-upload naar de repository voor $5.
+        properties:
+          AutoUpload:
+            translations:
+              en: Auto upload
+              nl: Upload automatisch
+          MustUpload:
+            translations:
+              en: Must be uploaded
+              nl: Moet worden geuploaded
+          LastUpload:
+            translations:
+              en: Last upload
+              nl: Laatste upload
+          LastChangeDT:
+            translations:
+              en: Date time of last change
+              nl: Datum en tijd van laatste verandering
+          IsRecommended:
+            translations:
+              en: Is recommended
+              nl: Is aanbevolen
+          PublicUrl:
+            translations:
+              en: Public URL
+              nl: Public URL
+          ArcFeedback:
+            translations:
+              en: Parser feedback
+              nl: Parser feedback
+          ArcSource:
+            translations:
+              en: Model source text
+              nl: Brontekst van model
+          ArcFile:
+            translations:
+              en: Model file
+              nl: Bronbestand met model
+          VersionedModelURI:
+            translations:
+              en: Versioned model URI
+              nl: Model URI met versie
+          ModelURI:
+            translations:
+              en: Model URI
+              nl: Model URI
+      users:
+        Visitor:
+          translations:
+            en: Visitor
+            nl: Bezoeker
+          titles:
+            0:
+              translations:
+                orig: Model version
+                en: Model version
+                nl: Model versie
+            1:
+              translations:
+                orig: This version
+                en: This version
+                nl: Deze versie
+            2:
+              translations:
+                orig: All versions
+                en: All versions
+                nl: Alle versies
+        Author:
+          translations:
+            en: Author
+            nl: Auteur
+          actions:
+            model://perspectives.domains#System$ContextWithNotification$NotifiedUser:
+              DeleteNotifications:
+                translations:
+                  en: Delete notifications
+                  nl: Verwijder meldingen
+          markdowns:
+            0:
+              translations:
+                orig: "## Compile your model\n
+                  Select the `ArcFile` control and press enter. Then upload your file. It's domain declaration *must* be in \n
+                  the repository NameSpace (if you are not sure about that: move back to the Repositories tab of the CouchdbServer)\n
+                  and its local name *must* equal what you entered on creating the manifest (move back to the Manifests tab of the Repository).\n
+                  Compiling will take some time. Watch the `ArcFeedback` field for possible errors and correct them.\n
+                  On succes, the compiled model is uploaded automatically to the repository.\n
+                  Don't forget to update the model in your local installation!"
+                en: "## Compile your model\n
+                  Select the `ArcFile` control and press enter. Then upload your file. It's domain declaration *must* be in \n
+                  the repository NameSpace (if you are not sure about that: move back to the Repositories tab of the CouchdbServer)\n
+                  and its local name *must* equal what you entered on creating the manifest (move back to the Manifests tab of the Repository).\n
+                  Compiling will take some time. Watch the `ArcFeedback` field for possible errors and correct them.\n
+                  On succes, the compiled model is uploaded automatically to the repository.\n
+                  Don't forget to update the model in your local installation!"
+                nl: "## Compileer je model\n
+                  Selecteer de `ArcFile` control en sla enter aan. Upload dan je bestand. De domein declaratie daarin *moet* in \n
+                  de repository NameSpace vallen (als je daar niet zeker over bent, kun je het nakijken op de Repositories tab van de CouchdbServer). \n
+                  De lokale naam *moet* gelijk zijn aan wat je ingevuld hebt bij het maken van het manifest (ga terug naar de Manifests tab van de Repository\n
+                  om na te kijken). Het duurt even voordat de compilatie is voltooid. Let op het `ArcFeedback` veld voor mogelijke fouten en herstel die.\n
+                  Als compilatie slaagt wordt het resultaat automatisch geupload naar de repository.\n
+                  Vergeet niet om het model in je eigen installatie te actualiseren!"
+            1:
+              translations:
+                orig: "## Translate your model\n
+                  Start by downloading the `TranslationYaml` file. Edit in a simple text editor. Supply translations and take care to preserve \n
+                  indentation (only use 'soft tabs'. A tab should be two spaces).\n
+                  To upload your augmented translation, select the `TranslationYaml` control and press enter. Then upload your file."
+                en: "## Translate your model\n
+                  Start by downloading the `TranslationYaml` file. Edit in a simple text editor. Supply translations and take care to preserve \n
+                  indentation (only use 'soft tabs'. A tab should be two spaces).\n
+                  To upload your augmented translation, select the `TranslationYaml` control and press enter. Then upload your file."
+                nl: "## Vertaal je model\n
+                  Begin met het downloaden van het `TranslationYaml` bestand. Bewerk het in een eenvoudige tekst editor. Voeg vertalingen toe en let erop dat je \n
+                  de inspringing behoudt (gebruik alleen 'soft tabs'. Een tab moet twee spaties zijn).\n
+                  Om je aangevulde vertaling te uploaden, selecteer de `TranslationYaml` control en sla enter aan. Upload dan je bestand."
+          titles:
+            0:
+              translations:
+                orig: Model version
+                en: Model version
+                nl: Model versie
+            1:
+              translations:
+                orig: Version
+                en: Version
+                nl: Versie
+            2:
+              translations:
+                orig: Authors
+                en: Authors
+                nl: Auteurs
+        VisitorProxy:
+          translations:
+            en: 
+            nl: 
+      things:
+        Translation:
+          translations:
+            en: Translation
+            nl: Vertaling
+          properties:
+            TranslationYaml:
+              translations:
+                en: Yaml translation file
+                nl: Yaml vertaalbestand
+            ModelTranslation:
+              translations:
+                en: Model translation
+                nl: Model vertaling
+            LastYamlChangeDT:
+              translations:
+                en: Date time of last yaml file change
+                nl: Datum en tijdstip van laatste yaml file verandering
+            GenerateYaml:
+              translations:
+                en: Generate yaml automatically
+                nl: Genereer yaml automatisch
+      contextroles:
+        Manifest:
+          translations:
+            en: Manifest
+            nl: Manifest

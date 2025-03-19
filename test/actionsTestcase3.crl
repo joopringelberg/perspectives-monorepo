@@ -1,0 +1,12 @@
+UserData
+
+import model:Test as tst
+
+tst:TestCase3 usr:MyTestCase
+	$Self -> model:System$Me
+		$Prop1 = true
+	$Nested1 =>
+		$NestedContext $MyNested1
+			$ARole => ()
+	$Nested2 =>
+		$NestedContext $MyNested2

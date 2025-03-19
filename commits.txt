@@ -1,0 +1,66 @@
+9251b2fa - 8 hours ago, Introduction text in markdown for SharedFileStorage when no service is configured.
+cc23fb37 - 8 hours ago, Fixed perspectives for Introduction. SharedFileStorage now counts number of uploaded files.
+a1107f8b - 30 hours ago, ChatDef was compiled with messagesProperty for mediaProperty.
+05dc3c12 - 3 days ago, Various improvements to Couchdb management.
+1b5791ed - 3 days ago, Filling user roles with PerspectivesUsers rather than SocialMe.
+64eea37b - 3 days ago, Fixed issues with SharedFileServerKey.
+d9be1e0b - 3 days ago, BrokerServices: beter state management around creating a contract. New link to the default BrokerService (a public resource).
+874ca5c7 - 3 days ago, Just in time loading of the SharedFileServices model must be triggered explicitly.
+faa09627 - 3 days ago, Arguments to checkbinding were switched.
+3b894fc0 - 3 days ago, Actions that are performed on behalf of the own user when resources go through a state transition that is triggered by an incoming transaction, should lead to deltas that must be shared with peers. Before this commit, none of these were shared.
+c794d95a - 3 days ago, On executing property functions while handling an incoming transaction, we created NEW deltas instead of storing the incoming deltas.
+f818099f - 9 days ago, fixed the __MYCONTEXTS__ constant (https instead of http!).
+557bf275 - 9 days ago, Fixed expression grouping for filter.
+7d0a875f - 9 days ago, Fixed racing condition in saveCachedEntiteit.
+c157e212 - 10 days ago, Fixed perspective on self test.
+a00babd4 - 2 weeks ago, Compiler check on selfonly properties.
+7d307e3c - 2 weeks ago, Compiler check on authoronly properties.
+3f533ae2 - 2 weeks ago, A serialised perspective now includes the filler of the role instances. This is necessary so we can hide the paste tool on filled role instances in tables and forms.
+2a295248 - 2 weeks ago, Fixed self-perspectives. We now add the PublicKey property to any self-perspective. This ensures the receiving user actually gets the full role telescope.
+baa90c50 - 2 weeks ago, selfOnly en authorOnly for properties
+6f22c05d - 3 weeks ago, Fixed the implementation of selfonly.
+1b90c453 - 3 weeks ago, Version 0.25.5 peeronly is now authoronly Compiler check on selfonly: only for selfperspectives. added authoronly data upgrade.
+cbec7815 - 3 weeks ago, Missed DeleteContext and RemoveContext from all roleverbs
+2aab1457 - 3 weeks ago, Added a missing case in computing the context from a perspective object.
+207ef39d - 3 weeks ago, Improved error messages for type incompatibility.
+18cd28f6 - 3 weeks ago, Connection to BrokerService now based on ContractInUse Detaching and re-attaching ModelsInUse.
+8818d094 - 3 weeks ago, 'contextinstance' and 'roleinstance' unary operators to construct an instance from a string calculated by a query.
+9b567040 - 4 weeks ago, Better test on type compatibility when performing an equals test on expressions.
+9a8a6a42 - 4 weeks ago, Adapted incomingPost to the new reality where the BrokerContract$AccountHolder is filled with PerspectivesUsers instances rather than SocialMe.
+fc6da19b - 4 weeks ago, Fixed error in delta filtering in removeProperty.
+67b100e3 - 4 weeks ago, A patch for the change in domeinFIle shape and a missing role verb in SimpleChat.
+30d15b91 - 4 weeks ago, peerOnly and a new implementation for selfOnly. Untested.
+c94f2645 - 4 weeks ago, In three cases, we filled a user role with sys:SocialMe, where PerspectivesUsers was required. It is better to fill with PerspectivesUsers.
+13e17ad0 - 4 weeks ago, Improved error message for role filling.
+4b3b4613 - 5 weeks ago, makeTypeTimeOnlyRoleStep needed an extra case (SUM)
+9ebc6c6c - 5 weeks ago, New role verbs: RemoveContext, DeleteContext
+1e56626b - 5 weeks ago, GetChatParticipants now logs dependencies so the screen updates on changes.
+857d6626 - 5 weeks ago, Serialising screens with ChatDef
+8b4ed1f6 - 5 weeks ago, First: an error in getPropertyValues caused dependency paths to contain just the first and last role; Second: I had switched roles in addBindingDelta, meaning we missed all bindingdeltas...
+ed401ecf - 5 weeks ago, On removing a context, we now synchronize this to all users in that context. This solves the issue that they play a role in that context, but have no perspective on the contextrole that is filled by it.
+3fa98fbf - 6 weeks ago, getPropertyValues ignored aspect properties.
+47dcda73 - 6 weeks ago, Parsing the new chat language construct.
+aeb84bbc - 6 weeks ago, Computing FileShareDependencies.
+116cb35f - 6 weeks ago, Some logging statements in runMonadPerspectivesTransaction, and we now remove models only just prior to the final execution of queries.
+abb5d698 - 6 weeks ago, filledByCombinator internally flipped arguments.
+662a7989 - 6 weeks ago, API.GetMeInContext, API.GetChatParticipants, API.AddProperty All necessary for Chat.
+b174befb - 7 weeks ago, Fixed setProperty. it did not store a delta.
+5a271ed3 - 7 weeks ago, Easing delta checks on sync a little to accept AddProperty deltas that were made with a SetPropertyValue perspective.
+00e81358 - 7 weeks ago, Initializer needs AddProperty for PublicKey
+0d15dd62 - 7 weeks ago, SetProperty is now a 'native' operation instead of being built out of first removing and then adding a value.
+d722df34 - 7 weeks ago, uploadToRepository no longer requires the entire DomeinFile from the Repository prior to uploading a new version. This enables us to recompile a model on the repository when the shape of the DomeinFile has changed. Previously, we could only recompile all models at the repository at once.
+23f47735 - 7 weeks ago, Patching local models
+5b74705b - 7 weeks ago, Refactoring ADT normalisation
+181229fc - 8 weeks ago, We don't need an indexed role for sys:Me in tests - at least not in all tests.
+7d231bd6 - 8 weeks ago, Fixed remaining error with compiling external roles.
+53db53c1 - 9 weeks ago, Added many properties, some verbs and some role verbs to perspectives. The new statement checker found they were missing.
+903bc625 - 9 weeks ago, Compiler checks on statements
+e08b0650 - 9 weeks ago, Due to compiler checks on statements, I had to extend the perspectives of the Installer role in System. Also had to adapt the initialisation sequence.
+4bc1287c - 9 weeks ago, Fixed parsing context without any embellishment.
+b318c7b9 - 9 weeks ago, Handle postponed state qualified parts that build perspectives before the other parts (that refer to those perspectives).
+b655086b - 9 weeks ago, PerspectivesSystem$Installer should be allowed to Remove StartContexts, IndexedContexts and IndexedRoles.
+dcf962ce - 9 weeks ago, Fixed duplicate actions in dropdown menus.
+33ca9297 - 9 weeks ago, Improved instructions for Signing up
+8fb25c53 - 9 weeks ago, Restore the VersionToInstall na verwijderen van een Version.
+8a789590 - 9 weeks ago, On looking up filled roles, we should push an assumption even if no instances are found.
+fe8be866 - 9 weeks ago, DataUpgrade for version v0.25.0

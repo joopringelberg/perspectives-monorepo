@@ -1,0 +1,1 @@
+export function getAttachmentsImpl(r) { return r._attachments}

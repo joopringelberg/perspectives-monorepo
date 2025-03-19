@@ -1,0 +1,7 @@
+UserData
+
+import model:Test as tst
+
+tst:TestCase1 usr:MyTestCase
+	$Self -> model:System$Me
+	$ARole => ()

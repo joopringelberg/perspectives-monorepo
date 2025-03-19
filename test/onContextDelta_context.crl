@@ -1,0 +1,9 @@
+UserData
+
+import model:Test as tst
+
+tst:TestCaseContextDelta_context usr:MyTestCase
+	$Self -> model:System$Me
+	$FillerRole => ()
+	$RoleToInspect => ()
+	$SourceRole -> $FillerRole(1)

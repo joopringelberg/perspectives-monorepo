@@ -1,0 +1,11 @@
+UserData
+
+import model:Test as tst
+
+tst:TestCaseUnbind usr:MyTestCase
+	$Self -> model:System$Me
+	$AnotherRole5 => ()
+	$ARole5 -> $AnotherRole5(1)
+	$Nested5 =>
+		$NestedCase5 $MyNestedCase
+			$ARole5 -> $$AnotherRole5(1)

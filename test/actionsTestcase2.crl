@@ -1,0 +1,6 @@
+UserData
+
+import model:Test as tst
+
+tst:TestCase2 usr:MyTestCase
+	$Self -> model:System$Me

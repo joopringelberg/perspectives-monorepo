@@ -1,0 +1,8 @@
+UserData
+
+import model:ContextAndRole as tst
+
+tst:TestCase usr:MyTestCase
+	$Self => ()
+	$AContextRole =>
+		$NestedCase usr:MyNestedCase
