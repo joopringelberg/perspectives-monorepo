@@ -1,0 +1,16 @@
+{
+  "name": "serialisable-nonempty-arrays",
+  "version": "2.0.0",
+  "description": "A wrapper for Data.Array.NonEmpty with a Decode and Encode instance. Also with a ReadForeign and WriteForeign instance.",
+  "license": "GPL-3.0-or-later",
+  "author": "Joop Ringelberg <joop.ringelberg@gmail.com>",
+  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joopringelberg/serialisable-nonempty-arrays.git"
+  },
+  "main": "src/serialisableNonEmptyArray.purs",
+  "homepage": "https://github.com/joopringelberg/serialisable-nonempty-arrays#readme",
+  "scripts": {},
+  "devDependencies": {}
+}
