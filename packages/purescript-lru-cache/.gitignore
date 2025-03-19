@@ -1,0 +1,13 @@
+# Dependencies
+.spago
+node_modules
+
+# Generated files
+.psci
+output
+generated-docs
+
+# Various
+./psc-ide-port
+.purs-repl
+./package-lock.json

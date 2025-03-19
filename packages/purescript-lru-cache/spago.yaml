@@ -1,0 +1,19 @@
+package:
+  dependencies:
+    - console
+    - effect
+    - foreign
+    - free
+    - functions
+    - js-iterators
+    - maybe
+    - prelude
+    - simple-json
+    - strings
+    - test-unit
+    - tuples
+    - unsafe-coerce
+  name: perspectives-lru-cache
+workspace:
+  packageSet:
+    registry: 60.6.0
