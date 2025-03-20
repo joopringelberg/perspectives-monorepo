@@ -107,36 +107,39 @@ export function toWWW( )
         if (!deviceName)
         {
           // This is an inplace installation, so the upgrade applies.
-          return get("userName").then( username => {
-            if (username)
+          return getUserDocuments().then( userDocuments => {
+            if (userDocuments.length > 0)
+            {
+              // We have a document in the localUsers database.
+              const { userName, password, couchdbUrl, systemIdentifier, perspectivesUser } = userDocuments[0];
+              // The deviceName is the string that remains by subtracting the perspectivesUser as prefix from systemIdentifier.
+              const deviceName = systemIdentifier.substring(perspectivesUser.length);
+              if (userName && password && couchdbUrl)
               {
                 // This is Couchdb installation.
                 // * set key installationComplete to the value "true".
                 set("installationComplete", true);
-                // * set key deviceName to "0".
-                set("deviceName", "0");
+                set("deviceName", deviceName);
                 // * set key perspectivesUserId to the username in CouchDB.
-                set("perspectivesUserId", username);
+                set("perspectivesUserId", userName);
+                // Now set the couchdb url, user name and password.
+                set("couchdbUrl", couchdbUrl);
+                set("userName", userName);
+                set("password", password);
               }
               else
-            {
-              // This is an IndexedDB installation.
-              // * set key installationComplete to the value "true".
-              set("installationComplete", true);
-              // * set key deviceName to an empty string.
-              set("deviceName", "");
-              // * set key perspectivesUserId to the cuid that represents the user.
-              return allUsers().then( users => {
-                if (users.length > 0)
-                {
-                  set("perspectivesUserId", users[0]);
-                }
-              });
-            }
-          });
+              {
+                // This is an IndexedDB installation.
+                // * set key installationComplete to the value "true".
+                set("installationComplete", true);
+                // * set key deviceName to an empty string.
+                set("deviceName", deviceName);
+                // * set key perspectivesUserId to the cuid that represents the user.
+                set("perspectivesUserId", userName);
+              }
+            }});
         }
       });
-    
     }
 })
 }
@@ -149,9 +152,10 @@ import Pouchdb from "pouchdb-browser";
 // The IndexedDB database "localUsers"
 const localUsers = new Pouchdb("localUsers");
 
-// Returns a promise for an array of PerspectivesUsers identifiers (Couchdb user names).
-export function allUsers() : Promise<string[]>
+function getUserDocuments() : Promise<UserDocument[]>
 {
-  return localUsers.allDocs().then((result : QueryResult) => result.rows.map( row => row.id));
+  return localUsers.allDocs({ include_docs: true }).then((data: CouchdbData) => data.rows.map((row: any) => row.doc));
 }
-type QueryResult = { rows : { id : string }[] };
+type UserDocument = { userName : string, password : string, couchdbUrl : string, systemIdentifier : string, perspectivesUser : string }; 
+
+type CouchdbData = { rows: UserDocument[] };

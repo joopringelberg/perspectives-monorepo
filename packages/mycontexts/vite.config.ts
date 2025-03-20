@@ -47,10 +47,10 @@ export default defineConfig({
       },
       plugins: [
         del({ targets: 'dist/*' }), // Add this line to clear the dist directory
-        visualizer({
-          filename: './dist/stats.html',
-          open: true
-        })
+        // visualizer({
+        //   filename: './dist/stats.html',
+        //   open: true
+        // })
       ]
     }
   },
