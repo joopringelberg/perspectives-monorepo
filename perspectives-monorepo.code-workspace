@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "packages/perspectives-core"
+		},
+		{
+			"path": "packages/mycontexts"
+		},
+		{
+			"path": "packages/perspectives-react"
+		},
+		{
+			"path": "packages/perspectives-proxy"
+		}
+	],
+	"settings": {}
+}
