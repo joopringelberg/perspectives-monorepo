@@ -114,7 +114,15 @@ export function toWWW( )
               const { userName, password, couchdbUrl, systemIdentifier, perspectivesUser } = userDocuments[0];
               // The deviceName is the string that remains by subtracting the perspectivesUser as prefix from systemIdentifier.
               const deviceName = systemIdentifier.substring(perspectivesUser.length);
-              if (userName && password && couchdbUrl)
+              // couchdbUrl actually is the combination of scheme, host and port.
+              const matches = couchdbUrl.match(/(https.*):(\d+)/);
+              let host, port;
+              if (matches)
+              {
+                host = matches[1];
+                port = matches[2];
+              }
+              if (userName && password && couchdbUrl && host && port)
               {
                 // This is Couchdb installation.
                 // * set key installationComplete to the value "true".
@@ -123,7 +131,8 @@ export function toWWW( )
                 // * set key perspectivesUserId to the username in CouchDB.
                 set("perspectivesUserId", userName);
                 // Now set the couchdb url, user name and password.
-                set("couchdbUrl", couchdbUrl);
+                set("couchdbUrl", host);
+                set("couchdbPort", port);
                 set("userName", userName);
                 set("password", password);
               }
