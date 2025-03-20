@@ -15,9 +15,9 @@ export default defineConfig({
     port: 5177, // Set a fixed port
     fs: {
       allow: [
-        '..', 
+        '..', // Allow serving files from one level up to the project root
         '/Users/joopringelberg/Code/perspectives-monorepo/node_modules'
-      ] // Allow serving files from one level up to the project root
+      ] 
     }
   },
   plugins: [
@@ -28,8 +28,6 @@ export default defineConfig({
   resolve: {
     alias: {
       'perspectives-core': resolve( __dirname, '../perspectives-core/dist/perspectives-core.js'),
-  //     '/perspectives-core.js': '../perspectives-core/dist/perspectives-core.js',
-  //     'perspectives-pageworker': '../perspectives-pageworker/dist/perspectives-pageworker.js',
       'perspectives-sharedworker': resolve( __dirname, '../perspectives-sharedworker/dist/perspectives-sharedworker.js'),
       '@perspectives/core': resolve( __dirname, '../perspectives-core/src'),
       '@perspectives/proxy': resolve( __dirname, '../perspectives-proxy/src'),
@@ -47,19 +45,8 @@ export default defineConfig({
         main: './index.html',
         manage: './manage.html'
       },
-      // external: [
-      //   '/Users/joopringelberg/Code/perspectives-core/dist/perspectives-core.js',
-      //   '/Users/joopringelberg/Code/perspectives-pageworker/dist/perspectives-pageworker.js',
-      //   '/Users/joopringelberg/Code/perspectives-sharedworker/dist/perspectives-sharedworker.js'
-      // ],
       plugins: [
         del({ targets: 'dist/*' }), // Add this line to clear the dist directory
-        // postcss({
-        //   extract: true, // Extract CSS to a separate file
-        //   minimize: true, // Minimize the CSS
-        //   sourceMap: true // Generate source maps for the CSS
-        //   }),
-        // json(),
         visualizer({
           filename: './dist/stats.html',
           open: true
