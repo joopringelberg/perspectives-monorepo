@@ -41,7 +41,8 @@ import type {
   PouchdbUser,
   Unsubscriber,
   PRange,
-  InputType
+  InputType,
+  RoleOnClipboard
 } from "./perspectivesshape.d.ts";
 
 export type * from "./perspectivesshape.d.ts";
@@ -663,10 +664,16 @@ export class PerspectivesProxy
     );
   }
 
-  // { request: "GetPerspective", subject: PerspectiveObjectRoleType OPTIONAL, predicate: RoleInstanceOfContext }
-  // No explicit type given for perspectiveObjectRoleType; assume that roleInstanceOfContext has the instance of the role that we want a perspective on.
-  // If a perspectiveObjectRoleType is given, give the perspective on that role type by the users' role in the context.
-  // If not, give the perspective on the role instance itself.
+  /**
+   * Retrieves a perspective based on the provided role instance or the perspective object role type. Returns the perspective of the role the user currently has in the context.
+   *
+   * @param roleInstanceOfContext - The role instance of the context.
+   * @param perspectiveObjectRoleType - The role type of the perspective object. Defaults to an empty string. If not given, the perspective is on the role instance itself.
+   * @param receiveValues - A callback function to receive the perspective values.
+   * @param fireAndForget - A boolean indicating whether the request should be fire-and-forget. Defaults to false.
+   * @param errorHandler - An optional error handler callback function.
+   * @returns The unsubscriber.
+   */
   getPerspective (roleInstanceOfContext : RoleInstanceT, perspectiveObjectRoleType : RoleType = "" as RoleType, receiveValues : PerspectivesReceiver, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
   {
     return this.send(
@@ -780,6 +787,24 @@ export class PerspectivesProxy
       (serialisedParticipants) => receiveValues( serialisedParticipants.map( JSON.parse ) ),
       errorHandler);
   }
+
+    /**
+   * Retrieves the selected role from the clipboard.
+   *
+   * This function sends a request to get the selected role from the clipboard
+   * and returns a promise that resolves with the role instance.
+   *
+   * @returns {Promise<RoleInstanceT>} A promise that resolves with the selected role instance.
+   */
+    subscribeSelectedRoleFromClipboard( receiver: (roleOnClipboard : RoleOnClipboard[]) => void) : Promise<Unsubscriber>
+    {
+      const proxy = this;
+      return proxy.send(
+          { request: "GetSelectedRoleFromClipboard", onlyOnce: false },
+          values => receiver( values.map( JSON.parse ) )
+        );
+    }
+  
   ///////////////////////////////////////////////////////////////////////////////////////
   //// PROMISE RETURNING GETTERS.
   //// These getters, by their nature, return a result only once.
@@ -859,6 +884,82 @@ export class PerspectivesProxy
         rejecter
         );
     })
+  }
+
+  
+  /**
+   * Retrieves the selected role from the clipboard.
+   *
+   * This function sends a request to get the selected role from the clipboard
+   * and returns a promise that resolves with the role instance.
+   *
+   * @returns {Promise<RoleInstanceT>} A promise that resolves with the selected role instance.
+   */
+  getSelectedRoleFromClipboard() : Promise<RoleOnClipboard>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+    {
+      proxy.send(
+        { request: "GetSelectedRoleFromClipboard", onlyOnce: true },
+        ((r : ValueT) => {
+          if (r.length === 0) {
+            rejecter("No role selected on the clipboard.");
+          }
+          else {
+            resolver(JSON.parse( r[0]) );
+          }
+        }),
+        rejecter
+      );
+    });
+  }
+
+  /**
+   * Removes a role instance from the clipboard.
+   *
+   * @param roleInstance - The role instance to be removed from the clipboard.
+   * @returns A promise that resolves to a boolean indicating whether the role instance was successfully removed.
+   */
+  removeRoleFromClipboard(roleInstance : RoleInstanceT) : Promise<boolean>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+    {
+      proxy.send(
+        { request: "RemoveRoleFromClipboard", subject: roleInstance, onlyOnce: true },
+        (r => resolver(r[0])),
+        rejecter
+      );
+    });
+  }
+
+  /**
+   * NOTA BENE: WE MIGHT NOT NEED THIS FUNCTION IF WE CAN SWITCH SELECTED IN THE MODEL!!
+   * CURRENTLY THERE IS NO API FUNCTION AddRoleToClipboard.
+   * THIS FUNCTION IS MODELLED ON BIND
+   * Low level interfact to add a role to the clipboard.
+   * (Note: rather than introducing modeldependencies here, we use those in perspectives-react.
+   * Further: the API function ensures that only this new item is selected.
+   *
+   * @param contextinstance - The context instance to create the role in (should be the system identifier).
+   * @param localRolName - The qualified or local name of the role (should be ItemsOnClipboard).
+   * @param contextType - The type of the context (should be PerspectivesSystem).
+   * @param rolDescription - The description of the role (a RolSerialization).
+   * @param myroletype - The type of the user role.
+   * @returns A promise that resolves to the role instance.
+   */
+  addRoleToClipboard(contextinstance : ContextInstanceT, localRolName : RolName, contextType : ContextType, rolDescription : RolSerialization, myroletype : UserRoleType) : Promise<RoleInstanceT>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        return proxy.send(
+          {request: "AddRoleToClipboard", subject: contextinstance, predicate: localRolName, object: contextType, rolDescription: rolDescription, authoringRole: myroletype, onlyOnce: true },
+          (r => resolver(r[0])),
+          rejecter
+        );
+      });
   }
 
   getAllMyRoleTypes(externalRoleInstance : RoleInstanceT) : Promise<RoleType[]>
@@ -1238,7 +1339,15 @@ export class PerspectivesProxy
       });
   }
 
-  // remove rolID
+  
+  /**
+   * Removes a role instance.
+   *
+   * @param {RolName} rolName - The type of the role instance to be removed.
+   * @param {RoleInstanceT} rolID - The ID of the role instance to be removed.
+   * @param {UserRoleType} myroletype - The type of user role performing the removal.
+   * @returns {Promise<[]>} A promise that resolves to an empty array upon successful removal.
+   */
   removeRol (rolName : RolName, rolID : RoleInstanceT, myroletype  : UserRoleType) : Promise<[]>
   {
     const proxy = this;
@@ -1283,6 +1392,16 @@ export class PerspectivesProxy
       });
   }
 
+  /**
+   * Binds a role to a context instance.
+   *
+   * @param contextinstance - The context instance to create the role in.
+   * @param localRolName - The qualified or local name of the role.
+   * @param contextType - The type of the context.
+   * @param rolDescription - The description of the role (a RolSerialization).
+   * @param myroletype - The type of the user role.
+   * @returns A promise that resolves to the role instance.
+   */
   bind (contextinstance : ContextInstanceT, localRolName : RolName, contextType : ContextType, rolDescription : RolSerialization, myroletype : UserRoleType) : Promise<RoleInstanceT>
   {
     const proxy = this;
@@ -1311,19 +1430,39 @@ export class PerspectivesProxy
 
   // We have room for checkBinding_( <binder>, <binding>, [() -> undefined] )
 
+  /**
+   * Creates a role instance within a given context.
+   *
+   * @param contextinstance - The context instance in which the role is to be created.
+   * @param rolType - The type of role to be created.
+   * @param myroletype - The user role type for the authoring role.
+   * @returns A promise that resolves to the created role instance.
+   */
   createRole (contextinstance : ContextInstanceT, rolType : RoleType, myroletype  : UserRoleType) : Promise<RoleInstanceT>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)
       {
         return proxy.send(
-          {request: "CreateRol", subject: contextinstance, predicate: rolType, authoringRole: myroletype, onlyOnce: true },
+          {request: "CreateRole", subject: contextinstance, predicate: rolType, authoringRole: myroletype, onlyOnce: true },
           (r => resolver(r[0])),
           rejecter
           );
       });
   }
 
+  /**
+   * Creates a role in a context from a RoleSerialization.
+   *
+   * @param contextinstance - The context instance to create the role in.
+   * @param localRolName - The qualified or local name of the role.
+   * @param contextType - The type of the context.
+   * @param rolDescription - The description of the role (a RolSerialization).
+   * @param myroletype - The type of the user role.
+   * @returns A promise that resolves to the role instance.
+   */
+  createRole_ = this.bind;
+  
   setPreferredUserRoleType( externalRoleId : ExternalRoleType, userRoleName : UserRoleType ) : Promise<[]>
   {
     const proxy = this;
@@ -1376,7 +1515,7 @@ type RolName = string;
 type ExternalRoleType = string;
 
 
-type ContextSerializationRecord =
+export type ContextSerializationRecord =
   { id? : string
   , prototype? : ContextID
   , ctype : ContextType
@@ -1384,13 +1523,13 @@ type ContextSerializationRecord =
   , externeProperties : PropertySerialization
 }
 
-type RolSerialization =
+export type RolSerialization =
   { id? : string
   , properties : PropertySerialization
   , binding? : string
   }
 
-type PropertySerialization = { [key: string]: ValueT[] }
+export type PropertySerialization = { [key: string]: ValueT[] }
 
 type ChatParticipantFields = {roleInstance : RoleInstanceT, firstname? : ValueT, lastname? : ValueT, avatar? : PSharedFile} // avatar will be a PSharedFile.
 

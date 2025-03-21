@@ -20,7 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.Sync.HandleTransaction where
+module Perspectives.Sync.HandleTransaction where 
 
 
 import Control.Monad.AvarMonadAsk (gets)

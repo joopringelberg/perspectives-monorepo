@@ -59,10 +59,11 @@ import Perspectives.Fuzzysort (matchIndexedContextNames)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, isTypeUri, typeUri2ModelUri_, typeUri2couchdbFilename)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
+import Perspectives.Instances.Combinators (filter)
 import Perspectives.Instances.Me (getAllMyRoleTypes, getMeInRoleAndContext, getMyType)
 import Perspectives.Instances.ObjectGetters (binding, context, contextType, contextType_, getContextActions, getFilledRoles, getMe, getProperty, getRoleName, roleType, roleType_, siblings)
 import Perspectives.Instances.Values (parsePerspectivesFile)
-import Perspectives.ModelDependencies (actualSharedFileServer, fileShareCredentials, identifiableFirstName, identifiableLastName, mySharedFileServices, sharedFileServices, sysUser)
+import Perspectives.ModelDependencies (actualSharedFileServer, fileShareCredentials, identifiableFirstName, identifiableLastName, itemOnClipboardClipboardData, itemsOnClipboard, mySharedFileServices, selectedClipboardItem, sharedFileServices, sysUser)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, getUserIdentifier, lookupIndexedContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment, toFile)
@@ -440,6 +441,29 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
           res <- (ContextInstance object) ##= getContextActions userRoleType userRoleInstance
           sendResponse (Result corrId (writeJSON <$> res)) setter
 
+    Api.GetSelectedRoleFromClipboard -> do
+      -- Get the SelectedClipboardItem.
+      -- Then get its ClipboardData and return that.
+      mysystem <- getMySystem
+      registerSupportedEffect 
+        corrId 
+        setter 
+        ((getRoleInstances (CR $ CalculatedRoleType selectedClipboardItem)) >=> getPropertyValues (CP $ CalculatedPropertyType itemOnClipboardClipboardData)) 
+        (ContextInstance mysystem)
+        onlyOnce
+    
+    -- { request: "GetRoleFromClipboard", subject: RoleInstance }
+    Api.RemoveRoleFromClipboard -> do
+      mysystem <- getMySystem
+      mrole <- (ContextInstance mysystem) ##> filter 
+        (getRoleInstances (ENR $ EnumeratedRoleType itemsOnClipboard))
+        (binding >=> \rid -> pure (rid == RoleInstance subject))
+      case mrole of
+        Nothing -> sendResponse (Error corrId ("Role not found on clipboard")) setter
+        Just role -> do
+          void $ runMonadPerspectivesTransaction authoringRole $ scheduleRoleRemoval synchronise (RoleInstance subject)
+          sendResponse (Result corrId []) setter
+
     -- { request: "CreateContext"
     -- , subject: contextinstance                       the context instance to add a role instance to.
     -- , predicate: roleType                            the qualified identifier of the role type to create.
@@ -501,7 +525,7 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
     -- {request: "RemoveRol", subject: rolID, predicate: rolName, object: contextType, authoringRole: myroletype}
     -- The context type given in object must be described in a locally installed model.
     -- the predicate is the type of the role to be removed. It is the 'authorizedRole'
-    Api.RemoveRol -> do
+    Api.RemoveRole -> do
       if (isExternalRole subject)
         then do
           (qrolname :: RoleType) <- string2RoleType subject
@@ -538,13 +562,21 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
       void $ runMonadPerspectivesTransaction authoringRole $ removeAllRoleInstances (EnumeratedRoleType subject) (ContextInstance object)
       sendResponse (Result corrId []) setter
     -- subject :: ContextInstance, predicate :: EnumeratedRoleType
-    Api.CreateRol -> do
+    Api.CreateRole -> do
       if isTypeUri predicate
         then do
           -- Notice that createAndAddRoleInstance adds the model describing the eroltype if necessary.
-          (rolInst :: RoleInstance) <- runMonadPerspectivesTransaction authoringRole $ unsafePartial $ fromJust <$> createAndAddRoleInstance (EnumeratedRoleType predicate) subject (RolSerialization {id: Nothing, properties: PropertySerialization empty, binding: Nothing})
+          (rolInst :: RoleInstance) <- runMonadPerspectivesTransaction authoringRole $ unsafePartial $ 
+            fromJust <$> createAndAddRoleInstance 
+              (EnumeratedRoleType predicate) 
+              subject 
+              (RolSerialization {id: Nothing, properties: PropertySerialization empty, binding: Nothing})
           sendResponse (Result corrId [(unwrap rolInst)]) setter
         else sendResponse (Error corrId ("Could not create a role instance for: " <> predicate <> " in " <> subject)) setter
+
+    -- {request: "CreateRole_", subject: contextinstance, predicate: roleType, object: contextType, rolDescription: rolDescription, authoringRole: myroletype },
+    Api.CreateRole_ -> dispatchOnRequest (r {request = Api.Bind}) 
+
     -- {request: "Bind", subject: contextinstance, predicate: roleType, object: contextType, rolDescription: rolDescription, authoringRole: myroletype },
     -- Provide the binding in the rolDescription!
     -- roleType may be a local name.

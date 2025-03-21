@@ -10,6 +10,7 @@ import { Apps } from './apps';
 import ensureExternalRole from './ensureExternalRole';
 import { What } from './what';
 import { Who } from './who';
+import { Clipboard } from './clipboard';
 
 type Section = 'who' | 'what' | 'where';
 
@@ -240,11 +241,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           <Accordion.Item eventKey="0">
             <Accordion.Header>Clipboard</Accordion.Header>
             <Accordion.Body>
-              <ul>
-                <li>Item 1</li>
-                <li>Item 2</li>
-                <li>Item 3</li>
-              </ul>
+              <Clipboard systemuser={component.state.systemUser}/>
             </Accordion.Body>
           </Accordion.Item>
           <Accordion.Item eventKey="1">

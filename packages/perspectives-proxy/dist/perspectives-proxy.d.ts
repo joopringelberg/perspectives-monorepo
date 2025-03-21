@@ -1,4 +1,4 @@
-import type { RoleInstanceT, RoleReceiver, ContextInstanceT, ValueT, PropertyValueReceiver, RoleType, UserRoleType, RoleTypeReceiver, PerspectivesReceiver, ScreenReceiver, TableFormReceiver, PropertyType, ContextType, RoleKind, ContextActions, FileShareCredentials, PSharedFile, PerspectivesFile, RuntimeOptions, PouchdbUser, Unsubscriber, PRange, InputType } from "./perspectivesshape.d.ts";
+import type { RoleInstanceT, RoleReceiver, ContextInstanceT, ValueT, PropertyValueReceiver, RoleType, UserRoleType, RoleTypeReceiver, PerspectivesReceiver, ScreenReceiver, TableFormReceiver, PropertyType, ContextType, RoleKind, ContextActions, FileShareCredentials, PSharedFile, PerspectivesFile, RuntimeOptions, PouchdbUser, Unsubscriber, PRange, InputType, RoleOnClipboard } from "./perspectivesshape.d.ts";
 export type * from "./perspectivesshape.d.ts";
 export declare const PDRproxy: Promise<PerspectivesProxy>;
 type Options = {
@@ -79,6 +79,16 @@ export declare class PerspectivesProxy {
     getRoleBinders(rolID: RoleInstanceT, contextType: ContextType, roleType: RoleType, receiveValues: RoleReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     getMeForContext(externalRoleInstance: RoleInstanceT, receiveValues: RoleTypeReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     getPerspectives(contextInstance: ContextInstanceT, userRoleType: UserRoleType, receiveValues: PerspectivesReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
+    /**
+     * Retrieves a perspective based on the provided role instance or the perspective object role type. Returns the perspective of the role the user currently has in the context.
+     *
+     * @param roleInstanceOfContext - The role instance of the context.
+     * @param perspectiveObjectRoleType - The role type of the perspective object. Defaults to an empty string. If not given, the perspective is on the role instance itself.
+     * @param receiveValues - A callback function to receive the perspective values.
+     * @param fireAndForget - A boolean indicating whether the request should be fire-and-forget. Defaults to false.
+     * @param errorHandler - An optional error handler callback function.
+     * @returns The unsubscriber.
+     */
     getPerspective(roleInstanceOfContext: RoleInstanceT, perspectiveObjectRoleType: RoleType | undefined, receiveValues: PerspectivesReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     getScreen(userRoleType: UserRoleType, contextInstance: ContextInstanceT, contextType: ContextType, receiveValues: ScreenReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     getTableForm(userRoleType: UserRoleType, contextInstance: ContextInstanceT, roleType: RoleType, receiveValues: TableFormReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
@@ -97,9 +107,50 @@ export declare class PerspectivesProxy {
         [key: string]: string;
     }[]) => void, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     getChatParticipants(rolID: RoleInstanceT, propertyId: PropertyType, receiveValues: ((participants: ChatParticipantFields[]) => void), fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
+    /**
+   * Retrieves the selected role from the clipboard.
+   *
+   * This function sends a request to get the selected role from the clipboard
+   * and returns a promise that resolves with the role instance.
+   *
+   * @returns {Promise<RoleInstanceT>} A promise that resolves with the selected role instance.
+   */
+    subscribeSelectedRoleFromClipboard(receiver: (roleOnClipboard: RoleOnClipboard[]) => void): Promise<Unsubscriber>;
     checkBindingP(roleName: RoleType, rolInstance: RoleInstanceT): Promise<boolean>;
     getCouchdbUrl(): Promise<string>;
     getContextActions(myRoleType: UserRoleType, contextInstance: ContextInstanceT): Promise<ContextActions>;
+    /**
+     * Retrieves the selected role from the clipboard.
+     *
+     * This function sends a request to get the selected role from the clipboard
+     * and returns a promise that resolves with the role instance.
+     *
+     * @returns {Promise<RoleInstanceT>} A promise that resolves with the selected role instance.
+     */
+    getSelectedRoleFromClipboard(): Promise<RoleOnClipboard>;
+    /**
+     * Removes a role instance from the clipboard.
+     *
+     * @param roleInstance - The role instance to be removed from the clipboard.
+     * @returns A promise that resolves to a boolean indicating whether the role instance was successfully removed.
+     */
+    removeRoleFromClipboard(roleInstance: RoleInstanceT): Promise<boolean>;
+    /**
+     * NOTA BENE: WE MIGHT NOT NEED THIS FUNCTION IF WE CAN SWITCH SELECTED IN THE MODEL!!
+     * CURRENTLY THERE IS NO API FUNCTION AddRoleToClipboard.
+     * THIS FUNCTION IS MODELLED ON BIND
+     * Low level interfact to add a role to the clipboard.
+     * (Note: rather than introducing modeldependencies here, we use those in perspectives-react.
+     * Further: the API function ensures that only this new item is selected.
+     *
+     * @param contextinstance - The context instance to create the role in (should be the system identifier).
+     * @param localRolName - The qualified or local name of the role (should be ItemsOnClipboard).
+     * @param contextType - The type of the context (should be PerspectivesSystem).
+     * @param rolDescription - The description of the role (a RolSerialization).
+     * @param myroletype - The type of the user role.
+     * @returns A promise that resolves to the role instance.
+     */
+    addRoleToClipboard(contextinstance: ContextInstanceT, localRolName: RolName, contextType: ContextType, rolDescription: RolSerialization, myroletype: UserRoleType): Promise<RoleInstanceT>;
     getAllMyRoleTypes(externalRoleInstance: RoleInstanceT): Promise<RoleType[]>;
     getViewProperties(rolType: RoleType, viewName: string): Promise<PropertyType[]>;
     getContextType(contextID: ContextID): Promise<ContextType>;
@@ -124,12 +175,49 @@ export declare class PerspectivesProxy {
     action(objectRoleInstance: RoleInstanceT, contextInstance: ContextID, perspectiveId: string, actionName: string, authoringRole: string): Promise<[]>;
     contextAction(contextid: ContextInstanceT, myRoleType: UserRoleType, actionName: string): Promise<[]>;
     removeBinding(rolID: RoleInstanceT, myroletype: UserRoleType): Promise<[]>;
+    /**
+     * Removes a role instance.
+     *
+     * @param {RolName} rolName - The type of the role instance to be removed.
+     * @param {RoleInstanceT} rolID - The ID of the role instance to be removed.
+     * @param {UserRoleType} myroletype - The type of user role performing the removal.
+     * @returns {Promise<[]>} A promise that resolves to an empty array upon successful removal.
+     */
     removeRol(rolName: RolName, rolID: RoleInstanceT, myroletype: UserRoleType): Promise<[]>;
     removeContext(rolID: RoleInstanceT, rolName: RolName, myroletype: UserRoleType): Promise<[]>;
     deleteRole(contextID: ContextID, rolName: RolName, myroletype: UserRoleType): Promise<[]>;
+    /**
+     * Binds a role to a context instance.
+     *
+     * @param contextinstance - The context instance to create the role in.
+     * @param localRolName - The qualified or local name of the role.
+     * @param contextType - The type of the context.
+     * @param rolDescription - The description of the role (a RolSerialization).
+     * @param myroletype - The type of the user role.
+     * @returns A promise that resolves to the role instance.
+     */
     bind(contextinstance: ContextInstanceT, localRolName: RolName, contextType: ContextType, rolDescription: RolSerialization, myroletype: UserRoleType): Promise<RoleInstanceT>;
     bind_(filledRole: RoleInstanceT, filler: RoleInstanceT, myroletype: UserRoleType): Promise<[]>;
+    /**
+     * Creates a role instance within a given context.
+     *
+     * @param contextinstance - The context instance in which the role is to be created.
+     * @param rolType - The type of role to be created.
+     * @param myroletype - The user role type for the authoring role.
+     * @returns A promise that resolves to the created role instance.
+     */
     createRole(contextinstance: ContextInstanceT, rolType: RoleType, myroletype: UserRoleType): Promise<RoleInstanceT>;
+    /**
+     * Creates a role in a context from a RoleSerialization.
+     *
+     * @param contextinstance - The context instance to create the role in.
+     * @param localRolName - The qualified or local name of the role.
+     * @param contextType - The type of the context.
+     * @param rolDescription - The description of the role (a RolSerialization).
+     * @param myroletype - The type of the user role.
+     * @returns A promise that resolves to the role instance.
+     */
+    createRole_: (contextinstance: ContextInstanceT, localRolName: RolName, contextType: ContextType, rolDescription: RolSerialization, myroletype: UserRoleType) => Promise<RoleInstanceT>;
     setPreferredUserRoleType(externalRoleId: ExternalRoleType, userRoleName: UserRoleType): Promise<[]>;
     save(): Promise<[]>;
     evaluateRoleState(rolinstance: RoleInstanceT): Promise<[]>;
@@ -142,19 +230,19 @@ type errorHandler = (error: string) => void;
 type ContextID = string;
 type RolName = string;
 type ExternalRoleType = string;
-type ContextSerializationRecord = {
+export type ContextSerializationRecord = {
     id?: string;
     prototype?: ContextID;
     ctype: ContextType;
     rollen: Record<RoleInstanceT, RolSerialization>;
     externeProperties: PropertySerialization;
 };
-type RolSerialization = {
+export type RolSerialization = {
     id?: string;
     properties: PropertySerialization;
     binding?: string;
 };
-type PropertySerialization = {
+export type PropertySerialization = {
     [key: string]: ValueT[];
 };
 type ChatParticipantFields = {

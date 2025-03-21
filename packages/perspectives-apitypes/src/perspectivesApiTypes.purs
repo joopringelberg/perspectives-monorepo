@@ -71,12 +71,16 @@ data RequestType =
   | GetRoleName
   | GetFile
   | GetPublicUrl
+  | GetSelectedRoleFromClipboard
+  | RemoveRoleFromClipboard
+  | AddRoleToClipboard
 
   -- Pure Deltas
   | CreateContext
   | CreateContext_
-  | CreateRol
-  | RemoveRol
+  | CreateRole
+  | CreateRole_
+  | RemoveRole
   | RemoveContext
   | DeleteRole
   | Bind_ -- Formerly SetBinding
@@ -124,6 +128,9 @@ instance decodeRequestType :: ReadForeign RequestType where
     "GetAllMyRoleTypes" -> GetAllMyRoleTypes
     "GetFile" -> GetFile
     "GetPublicUrl" -> GetPublicUrl
+    "GetSelectedRoleFromClipboard" -> GetSelectedRoleFromClipboard
+    "RemoveRoleFromClipboard" -> RemoveRoleFromClipboard
+    "AddRoleToClipboard" -> AddRoleToClipboard
 
 
     "GetSystemIdentifier" -> GetSystemIdentifier
@@ -148,8 +155,9 @@ instance decodeRequestType :: ReadForeign RequestType where
     "GetUnqualifiedRolType" -> GetUnqualifiedRolType
     "CreateContext" -> CreateContext
     "CreateContext_" -> CreateContext_
-    "CreateRol" -> CreateRol
-    "RemoveRol" -> RemoveRol
+    "CreateRole" -> CreateRole
+    "CreateRole_" -> CreateRole_
+    "RemoveRole" -> RemoveRole
     "RemoveContext" -> RemoveContext
     "DeleteRole" -> DeleteRole
     "Bind_" -> Bind_

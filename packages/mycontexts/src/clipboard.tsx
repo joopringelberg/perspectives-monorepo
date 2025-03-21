@@ -1,28 +1,27 @@
-import React, { } from "react";
+import React from "react";
+import { ModelDependencies, PerspectivesComponent, PerspectiveTable } from "perspectives-react";
 import { PDRproxy, RoleInstanceT, Perspective, PropertyType } from "perspectives-proxy";
-import { ModelDependencies, PerspectiveBasedForm, PerspectivesComponent, PerspectiveTable } from "perspectives-react";
 
-interface AppsProps {
+interface ClipboardProps {
   systemuser: RoleInstanceT;
 }
 
-interface AppsState {
+interface ClipboardState {
   perspective: Perspective | undefined;
 }
-
-export class Apps extends PerspectivesComponent<AppsProps, AppsState> {
+export class Clipboard extends PerspectivesComponent<ClipboardProps, ClipboardState> {
   constructor(props: {}) {
     super(props);
     this.state = { perspective: undefined };
   }
 
-  componentDidMount() {
+  componentDidMount(): void {
     const component = this;
-    PDRproxy.then((PDRproxy) => {
-      PDRproxy.getPerspective( this.props.systemuser, ModelDependencies.startContexts , (perspectives: Perspective[]) => {
-        component.setState({ perspective: perspectives[0] });
-      });
-    })
+    PDRproxy.then( pproxy => {
+      pproxy.getPerspective( this.props.systemuser, ModelDependencies.itemsOnClipboard , (perspectives: Perspective[]) => {
+          component.setState({ perspective: perspectives[0] });
+        });
+      })
   }
 
   render() {
@@ -34,4 +33,5 @@ export class Apps extends PerspectivesComponent<AppsProps, AppsState> {
       return <PerspectiveTable perspective={this.state.perspective} showcontrolsandcaption={false}/>;
     }
   }
+
 }

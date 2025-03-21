@@ -542,11 +542,8 @@ compileSimpleStep currentDomain s@(IndexedName pos) = do
     (RDOM r) -> pure $ SQD currentDomain (QF.DataTypeGetter IndexedRoleName) (VDOM PString Nothing) True False
     otherwise -> throwError $ DomainTypeRequired "role or context" currentDomain pos (endOf $ Simple s)
 
-compileSimpleStep currentDomain (Identity _) = do
-  isFunctional <- case currentDomain of
-    RDOM r -> (lift $ lift $ adtIsFunctional r) >>= if _ then pure True else pure False
-    _ -> pure Unknown
-  pure $ SQD currentDomain (QF.DataTypeGetter IdentityF) currentDomain isFunctional True
+-- This is the result of parsing 'this'. It is a reference to the current object, so always functional.
+compileSimpleStep currentDomain (Identity _) = pure $ SQD currentDomain (QF.DataTypeGetter IdentityF) currentDomain True True
 
 compileSimpleStep currentDomain s@(Modelname _) = case currentDomain of
   VDOM _ Nothing -> throwError $ NoPropertyTypeWithValue (startOf (Simple s)) (endOf (Simple s))

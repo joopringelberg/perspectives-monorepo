@@ -35,7 +35,7 @@ import {MarkDownWidget} from './markdownWidget.js';
 import SmartFieldControl from './smartfieldcontrol.js';
 import ChatComponent from './chatcomponent.js';
 import { externalRole } from './urifunctions.js';
-import {  } from './roledata';
+import {  } from 'perspectives-proxy';
 import { mapRoleVerbsToBehaviourNames } from './maproleverbstobehaviours';
 
 interface ScreenDefinitionInterpreterProps

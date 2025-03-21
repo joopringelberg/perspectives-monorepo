@@ -41,4 +41,3 @@ export * from "./freeformscreen";
 export { mapRoleVerbsToBehaviourNames, mapRoleVerbsToBehaviours } from "./maproleverbstobehaviours";
 
 export {getPreact} from "./getLanguage";
-export type * from "./roledata";

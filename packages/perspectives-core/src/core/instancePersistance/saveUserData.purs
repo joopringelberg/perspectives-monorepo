@@ -60,7 +60,7 @@ import Data.Traversable (for, for_, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Foreign.Object (Object, values)
 import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor)
-import Perspectives.Assignment.Update (cacheAndSave, deleteProperty, getSubject)
+import Perspectives.Assignment.Update (cacheAndSave, getSubject)
 import Perspectives.Authenticate (signDelta)
 import Perspectives.CollectAffectedContexts (addDeltasForPerspectiveObjects, usersWithPerspectiveOnRoleBinding, usersWithPerspectiveOnRoleBinding', usersWithPerspectiveOnRoleInstance)
 import Perspectives.ContextAndRole (changeContext_me, context_buitenRol, context_pspType, modifyContext_rolInContext, rol_binding, rol_context, rol_isMe, rol_pspType)
@@ -71,17 +71,17 @@ import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, typeUri2ModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
+import Perspectives.Instances.Clipboard (allItemsOnClipboard, findItemOnClipboardWithRole)
 import Perspectives.Instances.Me (getMyType, isMe)
-import Perspectives.Instances.ObjectGetters (allRoleBinders, context, contextType, contextType_, getRoleOnClipboard, getUnlinkedRoleInstances, roleType_)
-import Perspectives.ModelDependencies (cardClipBoard)
-import Perspectives.Names (findIndexedContextName, findIndexedRoleName, getMySystem, removeIndexedContext, removeIndexedRole)
+import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, context, contextType, contextType_, getUnlinkedRoleInstances, roleType_)
+import Perspectives.Names (findIndexedContextName, findIndexedRoleName, removeIndexedContext, removeIndexedRole)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, tryGetPerspectContext, tryGetPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Context (userRole)
 import Perspectives.Representation.Class.PersistentType (DomeinFileId(..), getContext, getEnumeratedRole)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType, RoleKind(..), RoleType(..), externalRoleType)
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType, RoleKind(..), RoleType(..), externalRoleType)
 import Perspectives.ResourceIdentifiers (isInPublicScheme)
 import Perspectives.RoleAssignment (filledNoLongerPointsTo, filledPointsTo, fillerNoLongerPointsTo, fillerPointsTo, lookForAlternativeMe, roleIsMe, roleIsNotMe)
 import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
@@ -134,14 +134,9 @@ scheduleRoleRemoval sync id = do
             { rolesToExit = rolesToExit `union` [id]
             , scheduledAssignments = scheduledAssignments `union` [RoleRemoval id]
             })
-          clipboard <- lift getRoleOnClipboard
-          case clipboard of 
+          (lift $ findItemOnClipboardWithRole id) >>= case _ of 
             Nothing -> pure unit
-            Just r -> if r == id
-              then do 
-                s <- lift $ getMySystem
-                deleteProperty [RoleInstance $ buitenRol s] (EnumeratedPropertyType cardClipBoard) Nothing
-              else pure unit
+            Just item -> void $ scheduleRoleRemoval false {- do not share with peers-} item
           if sync
             then (lift $ try $ (getPerspectRol id)) >>= handlePerspectRolError' "scheduleRoleRemoval" []
               \role@(PerspectRol{pspType:roleType, context:contextId, binding}) -> do
@@ -191,14 +186,15 @@ scheduleContextRemoval authorizedRole usersWithPerspectiveOnEmbeddingRole id =
         -- Remove the own user
         addDelta $ DeltaInTransaction {users: users <> usersWithPerspectiveOnEmbeddingRole, delta: signedDelta}
 
-        clipboard <- lift getRoleOnClipboard
-        case clipboard of 
-          Just roleOnClipboard -> if isJust $ elemIndex roleOnClipboard allRoleInstances
-            then do 
-              s <- lift $ getMySystem
-              deleteProperty [RoleInstance (buitenRol s)] (EnumeratedPropertyType cardClipBoard) Nothing
-            else pure unit
-          _ -> pure unit
+        -- If one of these roles is on the clipboard, schedule its removal as well.
+        allItems <- lift $ allItemsOnClipboard
+        for_ allItems \item -> do
+          mroleOnClipboard <- lift (item ##> binding)
+          case mroleOnClipboard of 
+            Nothing -> pure unit
+            Just roleOnClipboard -> if isJust $ elemIndex roleOnClipboard allRoleInstances
+              then void $ scheduleRoleRemoval false {-do not share with peers-} item
+              else pure unit
         modify (over Transaction \t@{scheduledAssignments, rolesToExit} -> t
           { scheduledAssignments = scheduledAssignments `union` [(ContextRemoval id authorizedRole)]
           , rolesToExit = nub $ rolesToExit <> allRoleInstances}) 

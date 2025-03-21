@@ -1,12 +1,11 @@
 import React from "react";
-import {PDRproxy, RoleInstanceT, RoleKind} from "perspectives-proxy";
+import {PDRproxy, RoleDataProper, RoleInstanceT, RoleKind} from "perspectives-proxy";
 
 import PerspectivesComponent from "./perspectivesComponent";
 import {externalRole} from "./urifunctions.js";
 import {PSRol, PSRolType, PSContextType} from "./reactcontexts.js";
 import {UserMessagingPromise} from "./userMessaging.js";
 import i18next from "i18next";
-import { RoleDataProper } from "./roledata";
 
 interface ExternalRoleProps
 {

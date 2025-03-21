@@ -6,10 +6,9 @@ import PerspectivesComponent from "./perspectivesComponent.js";
 import { default as ModelDependencies } from "./modelDependencies.js";
 
 // import {PDRproxy} from "perspectives-proxy";
-import {PDRproxy, FIREANDFORGET, RoleInstanceT} from "perspectives-proxy";
+import {PDRproxy, FIREANDFORGET, RoleInstanceT, RoleOnClipboard} from "perspectives-proxy";
 import {UserMessagingPromise} from "./userMessaging.js";
 import i18next from "i18next";
-import { RoleDataProper, RoleOnClipboard } from "./roledata.js";
 
 ////////////////////////////////////////////////////////////////////////////////
 // ROLEDROPZONE
@@ -104,12 +103,9 @@ class RoleDropZone_ extends PerspectivesComponent
                 // bind catches its own errors.
                 .bind( roleData.rolinstance )
                 .then( () =>
-                  // Empty clipboard.
-                  // {request: "DeleteProperty", subject: rolID, predicate: propertyName, authoringRole: myroletype}
-                  PDRproxy.then( pproxy => pproxy.deleteProperty(
-                    component.props.systemExternalRole,
-                    ModelDependencies.cardClipBoard,
-                    ModelDependencies.sysUser) )
+                  PDRproxy.then( pproxy =>
+                    pproxy.removeRoleFromClipboard(roleData.rolinstance)
+                  )
                   .catch(e => UserMessagingPromise.then( um => 
                     um.addMessageForEndUser(
                       { title: i18next.t("clipboardEmpty_title", { ns: 'preact' }) 
@@ -138,13 +134,14 @@ class RoleDropZone_ extends PerspectivesComponent
     switch(event.code){
       case "Enter": // Enter
       case "Space": // space
-      component.readClipBoard( function( roleDataAndBehaviour : RoleOnClipboard | null )
-        {
-          if (roleDataAndBehaviour)
+        PDRproxy.then( pproxy => pproxy.getSelectedRoleFromClipboard().then(
+          function( roleDataAndBehaviour : RoleOnClipboard | null )
           {
-            component.tryToBind( roleDataAndBehaviour );
-          }
-        });
+            if (roleDataAndBehaviour)
+            {
+              component.tryToBind( roleDataAndBehaviour );
+            }
+          }));
         event.preventDefault();
       }
   }

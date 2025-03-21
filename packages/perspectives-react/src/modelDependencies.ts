@@ -3,6 +3,9 @@ import { ContextType, PropertyType, RoleType } from "perspectives-proxy";
 interface ModelDependenciesT
 {
   cardClipBoard: PropertyType;
+  itemsOnClipboard: RoleType;
+  itemOnClipboardClipboardData: PropertyType;
+  itemOnClipboardSelected: PropertyType;
   currentLanguage: PropertyType;
   sysUser: RoleType;
   startContexts: RoleType;
@@ -18,6 +21,9 @@ interface ModelDependenciesT
 
 const ModelDependencies =
 { cardClipBoard: "model://perspectives.domains#System$PerspectivesSystem$External$CardClipBoard" as PropertyType
+, itemsOnClipboard: "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard"
+, itemOnClipboardSelected: "model://perspectives.domains#System$PerspectivesSystem$ItemOnClipboard$Selected"
+, itemOnClipboardClipboardData: "model://perspectives.domains#System$PerspectivesSystem$ItemOnClipboard$ClipboardData"
 , currentLanguage: "model://perspectives.domains#System$PerspectivesSystem$External$CurrentLanguage" as PropertyType
 , sysUser: "model://perspectives.domains#System$PerspectivesSystem$User" as RoleType
 , startContexts: "model://perspectives.domains#System$PerspectivesSystem$StartContexts" as RoleType

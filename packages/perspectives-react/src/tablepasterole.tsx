@@ -21,7 +21,7 @@
 import React, { createRef } from 'react';
 import {string} from "prop-types";
 
-import {ContextInstanceT, ContextType, PDRproxy, RoleInstanceT, RoleType} from "perspectives-proxy";
+import {ContextInstanceT, ContextType, PDRproxy, RoleInstanceT, RoleOnClipboard, RoleType} from "perspectives-proxy";
 import PerspectivesComponent from "./perspectivesComponent";
 import {PSRoleInstances} from "./reactcontexts.js";
 import { default as ModelDependencies } from "./modelDependencies.js";
@@ -30,7 +30,6 @@ import {UserMessagingPromise} from "./userMessaging.js";
 import i18next from "i18next";
 
 import {OverlayTrigger, Tooltip} from "react-bootstrap";
-import { RoleOnClipboard } from './roledata';
 import { OverlayInjectedProps } from 'react-bootstrap/esm/Overlay';
 
 interface TablePasteRoleProps
@@ -70,30 +69,18 @@ export default class TablePasteRole extends PerspectivesComponent<TablePasteRole
       function(pproxy)
       {
         component.addUnsubscriber(
-          pproxy.getProperty(
-            component.props.systemexternalrole,
-            ModelDependencies.cardClipBoard,
-            ModelDependencies.systemExternal,
-            function (valArr)
+          pproxy.subscribeSelectedRoleFromClipboard(
+            function (clipboardContents : RoleOnClipboard[])
             {
-              if ( valArr[0] )
-              {
-                clipboardContent = JSON.parse( valArr[0]);
-                if  ( clipboardContent.roleData && 
-                      clipboardContent.roleData.rolinstance && 
-                      clipboardContent.roleData.rolinstance != component.state.roleOnClipboard 
-                    )
+              const clipboardContent = clipboardContents[0];
+              if ( clipboardContent && clipboardContent.roleData && clipboardContent.roleData.rolinstance && clipboardContent.roleData.rolinstance != component.state.roleOnClipboard  )
                 {
                   // checkBinding( <(QUALIFIED)RolName>, <binding>, [() -> undefined] )
                   PDRproxy.then( pproxy => pproxy.checkBindingP( component.props.roletype, clipboardContent.roleData.rolinstance )
                     .then( compatibleRole => component.setState({compatibleRole, roleOnClipboard: clipboardContent.roleData.rolinstance})));
                 }
               }
-              else
-              {
-                component.setState({compatibleRole: false, roleOnClipboard: undefined})
-              }
-            }));
+            ));
       });
   }
 

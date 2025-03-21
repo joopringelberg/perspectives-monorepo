@@ -98,6 +98,17 @@ installer = "model://perspectives.domains#System$PerspectivesSystem$Installer"
 baseRepository :: String
 baseRepository = "model://perspectives.domains#System$PerspectivesSystem$BaseRepository"
 
+itemsOnClipboard :: String
+itemsOnClipboard = "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard"
+
+itemOnClipboardSelected :: String
+itemOnClipboardSelected = "model://perspectives.domains#System$PerspectivesSystem$ItemOnClipboard$Selected"
+
+itemOnClipboardClipboardData :: String
+itemOnClipboardClipboardData = "model://perspectives.domains#System$PerspectivesSystem$ItemOnClipboard$ClipboardData"
+
+selectedClipboardItem :: String
+selectedClipboardItem = "model://perspectives.domains#System$PerspectivesSystem$SelectedClipboardItem"
 ------------------------------------------------------------------------------------
 -- ROOTCONTEXT
 ------------------------------------------------------------------------------------

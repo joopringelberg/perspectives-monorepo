@@ -48,10 +48,10 @@ export default [
           { src: 'src/components.css', dest: 'dist/types' }
         ]
       }),
-      visualizer({
-        filename: 'bundle-analysis.html',
-        open: true
-      })  
+      // visualizer({
+      //   filename: 'bundle-analysis.html',
+      //   open: true
+      // })  
     ],
     external: [
       'react',

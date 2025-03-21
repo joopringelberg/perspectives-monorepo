@@ -297,6 +297,12 @@ domain model://perspectives.domains#System
           callEffect cdb:ClearAndFillInvertedQueriesDatabase()
       perspective on SocialEnvironment
         only (CreateAndFill, Fill)
+      
+      perspective on ItemsOnClipboard
+        only (Create, Fill, Remove, Delete)
+        props (Selected, ClipboardData) verbs (SetPropertyValue, Consult)
+      perspective on SelectedClipboardItem
+        props (ClipboardData) verbs (Consult)
 
       screen "Home"
         tab "System"
@@ -439,6 +445,27 @@ domain model://perspectives.domains#System
     context SystemCaches (mandatory) filledBy Caches
 
     aspect thing sys:ContextWithNotification$Notifications
+
+    -- PDRDEPENDENCY
+    -- Notice we do not have a restriction on the filler. This is because we want to be able to fill it with any role kind and type.
+    thing ItemsOnClipboard (relational)
+      state IsSelected = Selected
+        on entry
+          do for User
+            letA
+              -- We have to filter, because when there actually was another item that is selected, right now there are two!
+              -- LET OP: ZODRA WE MODELLEN IN DE WWW GUI COMPILEREN (MET DE NIEUWE PDR) KAN DE CONSTRUCTIE MET >>= first VERVALLEN.
+              previousselected <- filter context >> SelectedClipboardItem with not (this >>= first == origin)
+            in
+              Selected = false for previousselected
+
+    -- PDRDEPENDENCY
+      property Selected (Boolean)
+    -- PDRDEPENDENCY
+      property ClipboardData (String)
+    
+    -- PDRDEPENDENCY
+    thing SelectedClipboardItem = filter ItemsOnClipboard with Selected
 
   -- A Collection of System Caches.
   case Caches

@@ -4,7 +4,7 @@ import PerspectivesComponent from "./perspectivesComponent";
 
 import {PSRol, PSRolType, DefaultPSRol} from "./reactcontexts";
 
-import {RoleDataProper} from "./roledata";
+import {RoleDataProper} from "perspectives-proxy";
 
 import {PDRproxy, FIREANDFORGET, ContextInstanceT, RoleInstanceT, RoleType, RoleKind, ContextType} from "perspectives-proxy";
 

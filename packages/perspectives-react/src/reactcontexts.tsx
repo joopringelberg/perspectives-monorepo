@@ -1,5 +1,5 @@
 import React, {createContext} from "react";
-import { RoleDataProper, RoleOnClipboard } from "./roledata";
+import { RoleDataProper, RoleOnClipboard } from "perspectives-proxy";
 import { ContextInstanceT, ContextType, PropertyType, RoleInstanceT, RoleKind, RoleType, ValueT } from "perspectives-proxy";
 
 // Two contexts, PSRol and PSRoleInstances, have the functions bind, bind_ and checkBinding. 

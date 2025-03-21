@@ -46,23 +46,23 @@ import Data.Maybe (Maybe(..))
 import Data.Traversable (for, for_)
 import Effect.Class.Console (log)
 import Foreign.Object (mapWithKey)
-import Perspectives.Assignment.Update (cacheAndSave, deleteProperty)
+import Perspectives.Assignment.Update (cacheAndSave)
 import Perspectives.ContextAndRole (changeContext_me, context_me, removeRol_gevuldeRollen, rol_binding, rol_gevuldeRollen, setRol_gevuldeRollen)
 import Perspectives.ContextStateCompiler (evaluateContextState)
 import Perspectives.CoreTypes (MonadPerspectives, ResourceToBeStored(..), MonadPerspectivesTransaction)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError')
-import Perspectives.Identifiers (buitenRol)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol)
-import Perspectives.Instances.ObjectGetters (Filler_(..), context2roleFromDatabase_, contextType_, filled2fillerFromDatabase_, filler2filledFromDatabase_, getRoleOnClipboard, role2contextFromDatabase_, roleType_)
-import Perspectives.ModelDependencies (cardClipBoard, sysUser)
-import Perspectives.Names (getMySystem)
+import Perspectives.Instances.Clipboard (findItemOnClipboardWithRole)
+import Perspectives.Instances.ObjectGetters (Filler_(..), context2roleFromDatabase_, contextType_, filled2fillerFromDatabase_, filler2filledFromDatabase_, role2contextFromDatabase_, roleType_)
+import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, saveMarkedResources)
 import Perspectives.PerspectivesState (transactionLevel)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
+import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RoleAssignment (filledNoLongerPointsTo) as RA
 import Perspectives.RoleStateCompiler (evaluateRoleState)
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary)
+import Perspectives.SaveUserData (scheduleRoleRemoval)
 import Perspectives.Types.ObjectGetters (contextGroundState, roleGroundState)
 
 fixReferences :: ResourceToBeStored -> MonadPerspectives Unit
@@ -134,11 +134,13 @@ fixRoleReferences roleId = do
   fillerRoles <- filled2fillerFromDatabase_ roleId
   for_ fillerRoles 
     \({filler, filledContextType, filledRoleType}) -> (fillerNoLongerPointsTo filler roleId filledContextType filledRoleType)
-  -- Now check the clipboard. It may hold a reference to the role that can no longer be found.
-  clearClipboard
   -- Now recompute the states of these roles.
   runEmbeddedIfNecessary doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
     (do 
+      -- Now check the clipboard. It may hold a reference to the role that can no longer be found.
+      (lift $ findItemOnClipboardWithRole roleId) >>= case _ of 
+        Nothing -> pure unit
+        Just item -> void $ scheduleRoleRemoval doNotShareWithPeers item
       for_ (filledRoles <> (_.filler <$> fillerRoles)) reEvaluateRoleStates
       for_ ctxts reEvaluateContextStates
     )
@@ -162,18 +164,6 @@ fixRoleReferences roleId = do
   removeFromContext (PerspectContext ct@{rolInContext}) = PerspectContext ct {rolInContext = 
     mapWithKey (\rtype roles -> delete roleId roles) rolInContext}
   
-  clearClipboard :: MonadPerspectives Unit
-  clearClipboard = do
-    clipboard <- getRoleOnClipboard
-    case clipboard of 
-      Nothing -> pure unit
-      Just r -> if r == roleId
-        then do 
-          s <- getMySystem
-          runEmbeddedIfNecessary doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
-            (deleteProperty [RoleInstance $ buitenRol s] (EnumeratedPropertyType cardClipBoard) Nothing)
-        else pure unit
-
 -- This version only changes the administration in the filler; the full version in Perspectives.RoleAssignment changes both sides.
 fillerNoLongerPointsTo :: RoleInstance -> RoleInstance -> ContextType -> EnumeratedRoleType -> MonadPerspectives Unit
 fillerNoLongerPointsTo fillerId filledId filledContextType filledRoleType = (try $ getPerspectRol fillerId) >>=

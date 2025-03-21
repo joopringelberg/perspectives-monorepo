@@ -26,7 +26,6 @@ import Control.Monad.Error.Class (try)
 import Control.Monad.Writer (WriterT, execWriterT, lift, tell)
 import Control.Plus (empty) as Plus
 import Data.Array (catMaybes, concat, cons, elemIndex, filter, findIndex, foldM, foldMap, head, index, length, nub, null, singleton, union)
-import Data.Either (Either(..))
 import Data.FoldableWithIndex (foldWithIndexM)
 import Data.Map (Map, lookup) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
@@ -47,17 +46,16 @@ import LRUCache (rvalues)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ContextAndRole (context_id, context_me, context_preferredUserRoleType, context_pspType, context_publicUrl, context_rolInContext, context_rolInContext_, rol_allTypes, rol_binding, rol_context, rol_gevuldeRol, rol_gevuldeRollen, rol_id, rol_properties, rol_pspType)
 import Perspectives.ContextRolAccessors (getContextMember, getRolMember)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MonadPerspectives, runMonadPerspectivesQuery, (##>))
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MonadPerspectives, runMonadPerspectivesQuery)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Error.Boundaries (handlePerspectContextError', handlePerspectRolError')
-import Perspectives.Identifiers (LocalName, buitenRol, deconstructBuitenRol, qualifyWith, typeUri2LocalName, typeUri2ModelUri)
+import Perspectives.Identifiers (LocalName, deconstructBuitenRol, qualifyWith, typeUri2LocalName, typeUri2ModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..), externalRole, states) as IP
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.InstanceRepresentation.PublicUrl (PublicUrl)
 import Perspectives.Instances.Combinators (orElse)
-import Perspectives.ModelDependencies (cardClipBoard, perspectivesUsers)
+import Perspectives.ModelDependencies (perspectivesUsers)
 import Perspectives.ModelTranslation (translateType)
-import Perspectives.Names (getMySystem)
 import Perspectives.Persistence.API (Keys(..), getViewOnDatabase)
 import Perspectives.Persistent (entitiesDatabaseName, getPerspectContext, getPerspectRol)
 import Perspectives.PerspectivesState (contextCache, roleCache)
@@ -74,7 +72,6 @@ import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedP
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, isInPublicScheme, takeGuid)
 import Perspectives.SetupCouchdb (context2RoleFilter, filler2filledFilter, filled2fillerFilter, roleFromContextFilter, role2ContextFilter)
 import Prelude (class Show, Unit, append, bind, discard, eq, flip, identity, join, map, pure, show, ($), (&&), (*>), (<#>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>))
-import Simple.JSON (readJSON)
 
 -----------------------------------------------------------
 -- FUNCTIONS FROM CONTEXT
@@ -607,20 +604,6 @@ indexedRoleName = roleType >=> \rType -> ArrayT $ do
   case r.indexedRole of 
     Nothing -> pure []
     Just i -> pure [Value $ unwrap i]
-
-getRoleOnClipboard :: MonadPerspectives (Maybe RoleInstance)
-getRoleOnClipboard = do
-  s <- getMySystem
-  mserializedClipboard <- (RoleInstance $ buitenRol s) ##> getProperty (EnumeratedPropertyType cardClipBoard)
-  case mserializedClipboard of
-    Nothing -> pure Nothing
-    Just (Value serializedClipboard) -> case readJSON serializedClipboard of 
-      -- Clipboard content is unreadable, should not happen, but there is nothing we can do with it.
-      -- Should we remove it?
-      Left e -> pure Nothing
-      Right (x :: RoleOnClipboard) -> pure $ Just $ RoleInstance x.roleData.rolinstance
-
-type RoleOnClipboard = { roleData :: { rolinstance :: String}}
 
 -----------------------------------------------------------
 -- TRANSFORM THE AUTHOR OF A DELTA INTO A RESOURCEIDENTIFIER

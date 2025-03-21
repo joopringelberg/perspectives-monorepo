@@ -1,11 +1,10 @@
 // import {PDRproxy} from "perspectives-proxy";
 
-import {PDRproxy, FIREANDFORGET, RoleInstanceT, PropertyType, RoleType, ValueT} from "perspectives-proxy";
-import {isQualifiedName} from "./urifunctions";
+import {PDRproxy, FIREANDFORGET, RoleInstanceT, PropertyType, RoleType, ValueT, PropertySerialization, ContextInstanceT, RoleOnClipboard} from "perspectives-proxy";
+import {deconstructContext, isQualifiedName} from "./urifunctions";
 import { default as ModelDependencies } from "./modelDependencies";
 import {UserMessagingPromise} from "./userMessaging.js";
 import i18next from "i18next";
-import { RoleOnClipboard } from "./roledata";
 import { PSRolType } from "./reactcontexts";
 import { t } from "i18next";
 import React from 'react';
@@ -146,19 +145,7 @@ export const addOpenContextOrRoleForm : BehaviourAdder = (domEl, component) => {
 export const addFillWithRole : BehaviourAdder = (domEl: HTMLElement, component: BehaviourComponent) => {
   function readClipBoard(receiveResults: (data: RoleOnClipboard | null) => void) {
     PDRproxy.then(function (pproxy) {
-      pproxy.getProperty(
-        component.props.systemExternalRole,
-        ModelDependencies.cardClipBoard,
-        ModelDependencies.systemExternal,
-        function (valArr: string[]) {
-          if (valArr[0]) {
-            receiveResults(JSON.parse(valArr[0]));
-          } else {
-            receiveResults(null);
-          }
-        },
-        FIREANDFORGET
-      );
+      pproxy.getSelectedRoleFromClipboard().then( receiveResults );
     });
   }
 
@@ -183,12 +170,7 @@ export const addFillWithRole : BehaviourAdder = (domEl: HTMLElement, component: 
         if (bindingAllowed) {
           component.context.bind_(roleData);
           PDRproxy.then((pproxy) =>
-            pproxy.deleteProperty(
-              component.props.systemExternalRole,
-              ModelDependencies.cardClipBoard,
-              ModelDependencies.sysUser
-            )
-          ).catch((e) =>
+            pproxy.removeRoleFromClipboard(roleData.rolinstance) ).catch((e) =>
             UserMessagingPromise.then((um) =>
               um.addMessageForEndUser({
                 title: i18next.t("clipboardEmpty_title", { ns: "preact" }),
@@ -262,24 +244,21 @@ export const addFillARole : BehaviourAdder = (domEl, component, title) => {
 
   function copy(event: Event) {
       navigator.clipboard.writeText(component.context.rolinstance!);
-      PDRproxy.then((pproxy) =>
-        pproxy
-          .setProperty(
-            component.props.systemExternalRole,
-            ModelDependencies.cardClipBoard,
-            JSON.stringify({
-              roleData: {
-                rolinstance: component.context.rolinstance,
-                cardTitle: title || "No title",
-                roleType: component.context.roltype,
-                contextType: component.context.contexttype,
-              },
-              addedBehaviour: component.addedBehaviour,
-              myroletype: component.props.myroletype,
-            }) as ValueT,
-            component.props.myroletype
-          )
-          .catch((e) =>
+      addRoleToClipboard(
+        component.context.rolinstance!, 
+        {
+          roleData: {
+            rolinstance: component.context.rolinstance!,
+            cardTitle: title || "No title",
+            roleType: component.context.roltype,
+            contextType: component.context.contexttype,
+          },
+          addedBehaviour: component.addedBehaviour,
+          myroletype: component.props.myroletype,
+        },
+        component.props.systemExternalRole,
+        component.props.myroletype
+        ).catch((e) =>
             UserMessagingPromise.then((um) =>
               um.addMessageForEndUser({
                 title: i18next.t("clipboardSet_title", { ns: "preact" }),
@@ -287,8 +266,7 @@ export const addFillARole : BehaviourAdder = (domEl, component, title) => {
                 error: e.toString(),
               })
             )
-          )
-      );
+          );
     event.preventDefault();
     event.stopPropagation();
   }
@@ -477,3 +455,26 @@ const behaviourMap: { [key: string]: BehaviourAdder } = {
 export function getBehaviourAdder(name: string): BehaviourAdder {
   return behaviourMap[name];
 }
+
+////////////////////////////////////////
+// ADD A ROLE TO CLIPBOARD
+////////////////////////////////////////
+function addRoleToClipboard(roleInstance : RoleInstanceT, roleData: RoleOnClipboard,systemExternalRole : RoleInstanceT, myroletype : RoleType) : Promise<RoleInstanceT | void>
+{
+  let properties: PropertySerialization = {};
+  properties[ModelDependencies.itemOnClipboardSelected] =  ["true" as ValueT ];
+  properties[ModelDependencies.itemOnClipboardClipboardData] = [JSON.stringify(roleData) as ValueT];
+  const itemOnClipboard = 
+    { id : undefined // We let the core create an id for the item.
+    , properties
+    , binding: roleInstance
+    }
+  return PDRproxy.then((pproxy) => {
+      pproxy.bind( deconstructContext(systemExternalRole) as ContextInstanceT,
+      ModelDependencies.itemsOnClipboard,
+      ModelDependencies.system,
+      itemOnClipboard,
+      myroletype
+    )
+    });
+  }

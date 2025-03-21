@@ -1,0 +1,65 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build mycontexts",
+      "type": "shell",
+      "command": "pnpm run build",
+      "options": {
+        "cwd": "${workspaceFolder}/packages/mycontexts"
+      },
+      "group": {
+        "kind": "build",
+      },
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build perspectives-react",
+      "type": "shell",
+      "command": "pnpm run build",
+      "options": {
+        "cwd": "${workspaceFolder}/packages/perspectives-react"
+      },
+      "group": {
+        "kind": "build",
+      },
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build perspectives-proxy",
+      "type": "shell",
+      "command": "pnpm run build",
+      "options": {
+        "cwd": "${workspaceFolder}/packages/perspectives-proxy"
+      },
+      "group": {
+        "kind": "build",
+      },
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build perspectives-core",
+      "type": "shell",
+      "command": "spago build",
+      "options": {
+        "cwd": "${workspaceFolder}/packages/perspectives-core"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "build perspectives-apitypes",
+      "type": "shell",
+      "command": "spago build",
+      "options": {
+        "cwd": "${workspaceFolder}/packages/perspectives-apitypes"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    }
+  ]
+}
