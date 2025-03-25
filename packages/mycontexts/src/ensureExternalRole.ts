@@ -1,8 +1,10 @@
-import { FIREANDFORGET, PDRproxy, RoleInstanceT, ValueT } from "perspectives-proxy";
-import { externalRole, isExternalRole, RoleInstance } from "perspectives-react";
+import { FIREANDFORGET, PDRproxy, RoleInstanceT, ContextInstanceT } from "perspectives-proxy";
+import { ContextInstance, externalRole, isExternalRole, RoleInstance } from "perspectives-react";
+
+type ExternalRoleMatches = { tag: "RoleInstance", value: RoleInstanceT } | {tag : "Choices", value: Record<string, ContextInstanceT>};
 
 /**
- * Ensures that the provided role identifier is an external role.
+ * Tries to map the provided input string with a valid external role. It need not be a qualified role identifier.
  * 
  * This function performs the following steps:
  * - If the role identifier is already an external role, it resolves immediately.
@@ -18,11 +20,11 @@ import { externalRole, isExternalRole, RoleInstance } from "perspectives-react";
  * @returns A promise that resolves to the external role instance.
  * @throws An error if the role identifier cannot be resolved to an external role.
  */
-export default function ensureExternalRole(s : string) : Promise<RoleInstanceT>
+export default function ensureExternalRole(s : string) : Promise<ExternalRoleMatches>
 {
   if ( isExternalRole( s ) )
   {
-    return Promise.resolve( s as RoleInstanceT);
+    return Promise.resolve( { tag: "RoleInstance", value: s as RoleInstanceT} );
   }
   else
   {
@@ -31,19 +33,23 @@ export default function ensureExternalRole(s : string) : Promise<RoleInstanceT>
       new Promise( function( resolve, reject )
         {
           proxy.matchContextName( s, 
-            function (serialisedtables : { [key: string]: string }[])
+            function (serialisedtables : Record<string, ContextInstanceT>[])
               {
                 const table = serialisedtables[0];
-                if (table[s])
+                if ( Object.values( table ).length > 0 )
                 {
-                  resolve( externalRole( table[s] ))
-                }
-                else if (Object.values(table).length == 1)
-                {
-                  resolve( externalRole( Object.values(table)[0]) );
+                  if ( table[s] !== undefined )
+                  {
+                    resolve( { tag: "RoleInstance", value: externalRole( table[s] ) } );
+                  }
+                  else
+                  {
+                    resolve( { tag: "Choices", value: table } );
+                  }
                 }
                 else
                 {
+                  // No match. Try to get the filler.
                   proxy.getBinding( s as RoleInstanceT,
                     function (bindingIds)
                       {
@@ -51,12 +57,14 @@ export default function ensureExternalRole(s : string) : Promise<RoleInstanceT>
                         {
                           if ( isExternalRole (bindingIds[0]))
                           {
-                            resolve( bindingIds[0] );
+                            // If the filler is an external role, resolve with the filler.
+                            resolve( {tag: "RoleInstance", value: bindingIds[0] } );
                           }
                           else
                           {
+
                             proxy.getRolContext( bindingIds[0] ).then(
-                              contextArr => resolve( externalRole( contextArr[0] ))
+                              contextArr => resolve( {tag: "RoleInstance", value: externalRole( contextArr[0] )} ),
                             )
                           }
                         }
@@ -77,3 +85,4 @@ export default function ensureExternalRole(s : string) : Promise<RoleInstanceT>
         }));
   }
 }
+

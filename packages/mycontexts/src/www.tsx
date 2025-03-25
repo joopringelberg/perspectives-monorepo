@@ -3,7 +3,7 @@ import { Accordion, Col, Container, Nav, Navbar, NavDropdown, Offcanvas, Row, Ta
 import './www.css';
 import i18next from 'i18next';
 import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, What as WhatDef } from 'perspectives-proxy';
-import {AppContext, deconstructContext, deconstructLocalName, externalRole, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise} from 'perspectives-react';
+import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, isSchemedResourceIdentifier, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
 import { Me } from './me';
 import { Apps } from './apps';
@@ -27,6 +27,8 @@ interface WWWComponentState {
   openContextType?: ContextType
   openContextUserType?: RoleType
   screen?: ScreenDefinition;
+  endUserMessage: UserMessagingMessage;
+  choiceMessage: ChoiceMessage;
 }
 
 class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
@@ -34,6 +36,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
 
   constructor(props: {}) {
     super(props);
+    const component = this;
     this.state = 
       { isSmallScreen: false
       , title: 'MyContexts'
@@ -44,9 +47,24 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
       , systemIdentifier: '' as ContextInstanceT
       , systemUser: '' as RoleInstanceT
       , screen: undefined
+      , endUserMessage: {title: ''}
+      , choiceMessage: {title: '', choices: {}, chosen: () => {}}
     };
     this.checkScreenSize = this.checkScreenSize.bind(this);
     this.screenUnsubscriber = undefined;
+    initUserMessaging(
+      function ( message )
+        {
+          const p = new Promise(function(resolve)
+            { 
+              message.acknowledge = resolve
+            });
+          component.setState( {endUserMessage: message});
+          return p.then( function()
+          {
+            component.setState( { endUserMessage: {title: '', message: ''}} );
+          })
+        });
   }
 
   componentDidMount() {
@@ -64,6 +82,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               { systemIdentifier
               , systemUser: systemIdentifier + "$" + deconstructLocalName( ModelDependencies.sysUser) as RoleInstanceT
               })
+            component.prepareMyContextsScreen();
           }
           );})});
     window.addEventListener('resize', this.checkScreenSize);
@@ -100,44 +119,68 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
       }
     };
 
-    function listenToOpenContext(e: CustomEvent)
-    {
-      e.stopPropagation();
-      ensureExternalRole( e.detail )
-        .then(
-          function(erole)
-          {
-            if (component.state.openContext !== erole)
-            {
-              PDRproxy.then( function( pproxy )
-                {
-                  pproxy.getRoleName( erole, function (nameArr)
-                    {
-                      document.title = nameArr[0];
-                      history.pushState({ selectedContext: erole, title: nameArr[0] }, "");
-                    },
-                    FIREANDFORGET);
-                });
-              // console.log("Pushing context state " + e.detail);
-              component.setState(
-                { openContext: erole, leftPanelContent: false });
-            }
-          })
-        .catch(err => UserMessagingPromise.then( um => 
-          um.addMessageForEndUser(
-            { title: i18next.t("app_opencontext_title", { ns: 'mycontexts' }) 
-            , message: i18next.t("app_opencontext_message", {context: e.detail, ns: 'mycontexts'})
-            , error: err.toString()
-          })));
-      e.stopPropagation();
-    }
-    document.body.addEventListener('OpenContext', listenToOpenContext as EventListener, false);
+    document.body.addEventListener(
+      'OpenContext', 
+      (e : CustomEvent) => {
+        e.stopPropagation();
+        component.tryToOpenContext(e.detail);  
+      }, 
+      false);
   }
 
   componentDidUpdate(prevProps: Readonly<{}>, prevState: Readonly<WWWComponentState>, snapshot?: any): void {
     if (this.state.openContext !== prevState.openContext) {
       this.getScreen(this.state.openContext!);
     }
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener('resize', this.checkScreenSize);
+  }
+
+  tryToOpenContext( s : string)
+  {
+    const component = this;
+    ensureExternalRole( s )
+      .then(
+        function(result)
+        {
+          switch (result.tag)
+          {
+            case "RoleInstance":
+              const erole = result.value;
+              if (component.state.openContext !== erole)
+              {
+                PDRproxy.then( function( pproxy )
+                  {
+                    pproxy.getRoleName( erole, function (nameArr)
+                      {
+                        document.title = nameArr[0];
+                        history.pushState({ selectedContext: erole, title: nameArr[0] }, "");
+                      },  
+                      FIREANDFORGET);
+                  });
+                // console.log("Pushing context state " + e.detail);
+                component.setState(
+                  { openContext: erole, leftPanelContent: false });
+              }
+              break;
+            case "Choices":
+              component.setState( 
+                {choiceMessage:
+                  { title: ""
+                  , message: i18next.t("app_opencontext_title", { ns: 'mycontexts' })
+                  , choices: result.value
+                  , chosen: (choice) => component.setState({openContext: choice as RoleInstanceT})
+                  }} );
+            break;
+          }})
+      .catch(err => UserMessagingPromise.then( um => 
+        um.addMessageForEndUser(
+          { title: i18next.t("app_opencontext_title", { ns: 'mycontexts' }) 
+          , message: i18next.t("app_opencontext_message", {context: s, ns: 'mycontexts'})
+          , error: err.toString()
+        })));
   }
 
   checkScreenSize(){
@@ -155,8 +198,27 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
       { isSmallScreen: window.innerWidth < 768 });
   }
 
-  componentWillUnmount() {
-    window.removeEventListener('resize', this.checkScreenSize);
+  prepareMyContextsScreen( )
+  {
+    const component = this;
+    const params = new URLSearchParams(document.location.search.substring(1));
+    
+    if (params.get("opencontext"))
+    {
+      this.tryToOpenContext( decodeURIComponent( params.get("opencontext")!) );
+    }
+    else {
+      component.openWelcomePage( );
+    }
+  }
+
+  openWelcomePage()
+  {
+    const component = this;
+    const mycontextStartPage = __STARTPAGE__ as RoleInstanceT; 
+    document.title = "Welcome to MyContexts";
+    history.pushState({ selectedContext: mycontextStartPage, title: "Welcome to MyContexts" }, "");
+    component.setState( {openContext: mycontextStartPage } );
   }
 
   getScreen (externalRole : RoleInstanceT)
@@ -330,7 +392,9 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           <i className="bi bi-arrow-up"></i>
         </Navbar.Brand>
     </Navbar>
-    </Container>
+    <EndUserNotifier message={component.state.endUserMessage}/>
+    <UserChoice message={component.state.choiceMessage}/>
+  </Container>
     );
   }
 
@@ -399,6 +463,8 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           <i className="bi bi-arrow-up"></i>
         </Navbar.Brand>
       </Navbar>
+      <EndUserNotifier message={component.state.endUserMessage}/>
+      <UserChoice message={component.state.choiceMessage}/>
     </Container>);
   }
 

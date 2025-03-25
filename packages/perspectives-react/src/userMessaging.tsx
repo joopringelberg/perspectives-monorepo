@@ -32,41 +32,40 @@
 
 import React from "react";
 import { Button, Card, Modal } from "react-bootstrap";
-import {shape, string, func} from "prop-types";
 import PerspectivesComponent from "./perspectivesComponent.js";
 
-interface Message {
+export interface UserMessagingMessage {
   title: string;
-  message: string;
+  message?: string;
   acknowledge?: (value: boolean) => void;
   error?: string;
 }
 
-type NotifyFunction = (message: Message) => Promise<void>;
+export type NotifyFunction = (message: UserMessagingMessage) => Promise<void>;
 
 class UserMessaging
 {
-    oldMessages: Message[];
-    newMessages: Message[];
+    oldMessages: UserMessagingMessage[];
+    newMessages: UserMessagingMessage[];
     notifyEndUser: NotifyFunction;
-    notifyDeveloper: NotifyFunction;
+    notifyDeveloper?: NotifyFunction;
     showing: boolean;
 
-    constructor(notifyEndUser: NotifyFunction, notifyDeveloper: NotifyFunction) {
+    constructor(notifyEndUser: NotifyFunction, notifyDeveloper?: NotifyFunction) {
       // A history of messages.
       this.oldMessages = [];
       this.newMessages = [];
       // A function that accepts a message and that somehow notifies the end user.
       // The function should return a promise whose fulfillment signals that the user has acknowledged the message.
       this.notifyEndUser = notifyEndUser;
-      this.notifyDeveloper = notifyDeveloper;
+      notifyDeveloper ? this.notifyDeveloper = notifyDeveloper : null;
       // A state variable. If true, showMessages is still waiting for the acknowledgement of the user of a message.
       this.showing = false;
     }
 
 
   // Add a message for the end user to be notified with.
-  addMessageForEndUser (m : Message)
+  addMessageForEndUser (m : UserMessagingMessage)
   {
     this.newMessages.push(m)
     if (!this.showing)
@@ -78,7 +77,7 @@ class UserMessaging
   showMessages()
   {
     const component = this;
-    let next : Message | undefined;
+    let next : UserMessagingMessage | undefined;
     if (this.newMessages.length > 0)
     {
       this.showing = true;
@@ -101,10 +100,10 @@ let messagingResolver: (value: UserMessaging) => void;
 // Use this function in the constructor of the application component. 
 // It should be applied only once!
 interface InitUserMessaging {
-  (notifyEndUser: NotifyFunction, notifyDeveloper: NotifyFunction): void;
+  (notifyEndUser: NotifyFunction, notifyDeveloper?: NotifyFunction): void;
 }
 
-export const initUserMessaging: InitUserMessaging = (notifyEndUser, notifyDeveloper) => {
+export const initUserMessaging: InitUserMessaging = (notifyEndUser, notifyDeveloper?) => {
   messagingResolver(new UserMessaging(notifyEndUser, notifyDeveloper));
 };
 
@@ -127,7 +126,7 @@ interface EndUserNotifierState {
 }
 
 interface EndUserNotifierProps {
-  message: Message;
+  message: UserMessagingMessage;
 }
 
 export class EndUserNotifier extends PerspectivesComponent<EndUserNotifierProps, EndUserNotifierState>
@@ -151,9 +150,9 @@ export class EndUserNotifier extends PerspectivesComponent<EndUserNotifierProps,
     const acknowledge = component.props.message.acknowledge ? component.props.message.acknowledge : () => undefined;
     return <Modal
       backdrop="static"
-      show={!!component.props.message.message}>
+      show={component.props.message.message !== undefined}>
       <Modal.Header closeButton>
-        <Modal.Title>{component.props.message.title}</Modal.Title>
+        <Modal.Title>{component.props.message.title || "A message"}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <Card>
@@ -178,12 +177,3 @@ export class EndUserNotifier extends PerspectivesComponent<EndUserNotifierProps,
     </Modal>
   }
 }
-
-EndUserNotifier.propTypes = 
-  { message: shape(
-    { title: string
-    , message: string
-    , acknowledge: func
-    , error: string
-    }
-  )};

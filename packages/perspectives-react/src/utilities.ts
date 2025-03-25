@@ -24,5 +24,5 @@ export function thisAppsLocation()
 {
   const segments = location.pathname.split("/");
   segments.pop();
-  return location.origin +  segments.join("/")
+  return location.origin +  segments.join("/") + "/";
 }

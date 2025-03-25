@@ -829,10 +829,10 @@ class PerspectivesProxy {
      * @param {UserRoleType} myroletype - The type of user role performing the removal.
      * @returns {Promise<[]>} A promise that resolves to an empty array upon successful removal.
      */
-    removeRol(rolName, rolID, myroletype) {
+    removeRole(rolName, rolID, myroletype) {
         const proxy = this;
         return new Promise(function (resolver, rejecter) {
-            return proxy.send({ request: "RemoveRol", subject: rolID, predicate: rolName, authoringRole: myroletype, onlyOnce: true }, resolver, rejecter);
+            return proxy.send({ request: "RemoveRole", subject: rolID, predicate: rolName, authoringRole: myroletype, onlyOnce: true }, resolver, rejecter);
         });
     }
     //{request: "RemoveContext", subject: rolID, predicate: rolName, authoringRole: myroletype}

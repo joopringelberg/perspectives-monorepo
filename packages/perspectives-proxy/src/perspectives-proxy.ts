@@ -767,7 +767,7 @@ export class PerspectivesProxy
    * @param errorHandler - A function to handle errors.
    * @returns A promise for an array of context identifiers.
    */
-  matchContextName(name: string, receiveValues: (value: { [key: string]: string }[]) => void, fireAndForget: SubscriptionType = false, errorHandler?: errorHandler) {
+  matchContextName(name: string, receiveValues: (value: Record<string, ContextInstanceT>[]) => void, fireAndForget: SubscriptionType = false, errorHandler?: errorHandler) {
     return this.send(
       { request: "MatchContextName", subject: name, onlyOnce: fireAndForget },
       function (values) {
@@ -1348,13 +1348,13 @@ export class PerspectivesProxy
    * @param {UserRoleType} myroletype - The type of user role performing the removal.
    * @returns {Promise<[]>} A promise that resolves to an empty array upon successful removal.
    */
-  removeRol (rolName : RolName, rolID : RoleInstanceT, myroletype  : UserRoleType) : Promise<[]>
+  removeRole (rolName : RolName, rolID : RoleInstanceT, myroletype  : UserRoleType) : Promise<[]>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)
       {
         return proxy.send(
-          {request: "RemoveRol", subject: rolID, predicate: rolName, authoringRole: myroletype, onlyOnce: true},
+          {request: "RemoveRole", subject: rolID, predicate: rolName, authoringRole: myroletype, onlyOnce: true},
           resolver,
           rejecter
           );

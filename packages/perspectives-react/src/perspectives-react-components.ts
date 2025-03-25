@@ -39,5 +39,6 @@ export { ArcViewer } from "./arcViewer";
 export { UnboundMarkDownWidget } from "./markdownWidget";
 export * from "./freeformscreen";
 export { mapRoleVerbsToBehaviourNames, mapRoleVerbsToBehaviours } from "./maproleverbstobehaviours";
+export {ChoiceMessage, UserChoice} from "./userChoice";
 
 export {getPreact} from "./getLanguage";

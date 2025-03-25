@@ -190,7 +190,7 @@ export default class RoleInstance extends PerspectivesComponent<RoleInstanceProp
         function (pproxy)
         {
           pproxy
-            .removeRol(
+            .removeRole(
               component.state.roltype,
               component.state.rolinstance!,
               component.props.myroletype)

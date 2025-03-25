@@ -103,9 +103,7 @@ export declare class PerspectivesProxy {
      * @param errorHandler - A function to handle errors.
      * @returns A promise for an array of context identifiers.
      */
-    matchContextName(name: string, receiveValues: (value: {
-        [key: string]: string;
-    }[]) => void, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
+    matchContextName(name: string, receiveValues: (value: Record<string, ContextInstanceT>[]) => void, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     getChatParticipants(rolID: RoleInstanceT, propertyId: PropertyType, receiveValues: ((participants: ChatParticipantFields[]) => void), fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     /**
    * Retrieves the selected role from the clipboard.
@@ -183,7 +181,7 @@ export declare class PerspectivesProxy {
      * @param {UserRoleType} myroletype - The type of user role performing the removal.
      * @returns {Promise<[]>} A promise that resolves to an empty array upon successful removal.
      */
-    removeRol(rolName: RolName, rolID: RoleInstanceT, myroletype: UserRoleType): Promise<[]>;
+    removeRole(rolName: RolName, rolID: RoleInstanceT, myroletype: UserRoleType): Promise<[]>;
     removeContext(rolID: RoleInstanceT, rolName: RolName, myroletype: UserRoleType): Promise<[]>;
     deleteRole(contextID: ContextID, rolName: RolName, myroletype: UserRoleType): Promise<[]>;
     /**

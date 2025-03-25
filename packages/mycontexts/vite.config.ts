@@ -56,8 +56,6 @@ export default defineConfig({
   },
   define: {
     __MYCONTEXTS_VERSION__: JSON.stringify(thepackage.version),
-    __PPSTORAGELIMIT__: JSON.stringify(10),
-    __PPWARNINGLEVEL__: JSON.stringify(5),
-    __PPSTORAGEURL__: JSON.stringify("https://mycontexts.com/ppsfs/uploadfile")
+    __STARTPAGE__: JSON.stringify("pub:https://perspectives.domains/cw_j4qovsczpm/#bxjprzq9q6$External")
   }
 })
