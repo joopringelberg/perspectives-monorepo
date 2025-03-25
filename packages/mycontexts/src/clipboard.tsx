@@ -18,7 +18,7 @@ export class Clipboard extends PerspectivesComponent<ClipboardProps, ClipboardSt
   componentDidMount(): void {
     const component = this;
     PDRproxy.then( pproxy => {
-      pproxy.getPerspective( this.props.systemuser, ModelDependencies.itemsOnClipboard , (perspectives: Perspective[]) => {
+      pproxy.getPerspectiveForUser( this.props.systemuser, ModelDependencies.itemsOnClipboard, ModelDependencies.WWWUser, (perspectives: Perspective[]) => {
           component.setState({ perspective: perspectives[0] });
         });
       })

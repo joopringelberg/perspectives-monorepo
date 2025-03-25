@@ -92,6 +92,17 @@ export declare class PerspectivesProxy {
      * @returns The unsubscriber.
      */
     getPerspective(roleInstanceOfContext: RoleInstanceT, perspectiveObjectRoleType: RoleType | undefined, receiveValues: PerspectivesReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
+    /**
+     * Retrieves a perspective based on the provided role instance or the perspective object role type. Returns the perspective of the provided user role type, iff the user actually has that role in it.
+     *
+     * @param roleInstanceOfContext - The role instance of the context.
+     * @param perspectiveObjectRoleType - The role type of the perspective object. Defaults to an empty string. If not given, the perspective is on the role instance itself.
+     * @param receiveValues - A callback function to receive the perspective values.
+     * @param fireAndForget - A boolean indicating whether the request should be fire-and-forget. Defaults to false.
+     * @param errorHandler - An optional error handler callback function.
+     * @returns The unsubscriber.
+     */
+    getPerspectiveForUser(roleInstanceOfContext: RoleInstanceT, perspectiveObjectRoleType: RoleType | undefined, userRoleType: RoleType, receiveValues: PerspectivesReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     getScreen(userRoleType: UserRoleType, contextInstance: ContextInstanceT, contextType: ContextType, receiveValues: ScreenReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     getTableForm(userRoleType: UserRoleType, contextInstance: ContextInstanceT, roleType: RoleType, receiveValues: TableFormReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     getLocalRoleSpecialisation(localAspectName: string, contextInstance: ContextInstanceT, receiveValues: RoleTypeReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;

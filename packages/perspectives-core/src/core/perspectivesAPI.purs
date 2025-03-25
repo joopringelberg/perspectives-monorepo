@@ -398,6 +398,25 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
               contextInstance
               onlyOnce
 
+    -- { request: "GetPerspectiveForUser", subject: PerspectiveObjectRoleType OPTIONAL, predicate: RoleInstanceOfContext, object: UserRoleType }
+    Api.GetPerspectiveForUser -> do 
+      contextInstance <- (RoleInstance predicate) ##>> context
+      (objectRoleType :: RoleType) <- if subject == ""
+        -- No explicit type given for the perspective object; assume that the predicate has the instance of the role that we want a perspective on.
+        then ENR <$> ((RoleInstance predicate) ##>> roleType)
+        -- Type has been given in subject. 
+        else string2RoleType subject
+      userRoleType <- string2RoleType object
+      muserRoleInstance <- contextInstance ##> getRoleInstances userRoleType
+      case muserRoleInstance of
+        Nothing -> sendResponse (Error corrId ("There is no user role instance for role type '" <> subject <> "' in context instance '" <> object <> "'!")) setter
+        Just userRoleInstance -> registerSupportedEffect
+          corrId
+          setter
+          (perspectiveForContextAndUser userRoleInstance userRoleType objectRoleType)
+          contextInstance
+          onlyOnce
+
     -- { request: "GetScreen", subject: UserRoleType, predicate: ContextType, object: ContextInstance }
     Api.GetScreen -> do
       userRoleType <- getRoleType subject

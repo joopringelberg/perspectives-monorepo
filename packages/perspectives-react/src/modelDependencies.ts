@@ -8,6 +8,7 @@ interface ModelDependenciesT
   itemOnClipboardSelected: PropertyType;
   currentLanguage: PropertyType;
   sysUser: RoleType;
+  WWWUser: RoleType;
   startContexts: RoleType;
   system: ContextType;
   systemExternal: RoleType;
@@ -26,6 +27,7 @@ const ModelDependencies =
 , itemOnClipboardClipboardData: "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard$ClipboardData"
 , currentLanguage: "model://perspectives.domains#System$PerspectivesSystem$External$CurrentLanguage" as PropertyType
 , sysUser: "model://perspectives.domains#System$PerspectivesSystem$User" as RoleType
+, WWWUser: "model://perspectives.domains#System$PerspectivesSystem$WWWUser" as RoleType
 , startContexts: "model://perspectives.domains#System$PerspectivesSystem$StartContexts" as RoleType
 , system: "model://perspectives.domains#System$PerspectivesSystem" as ContextType
 , systemExternal: "model://perspectives.domains#System$PerspectivesSystem$External" as RoleType

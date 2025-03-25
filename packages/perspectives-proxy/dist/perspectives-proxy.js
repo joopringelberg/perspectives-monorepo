@@ -441,6 +441,26 @@ class PerspectivesProxy {
             return receiveValues(perspectiveStrings.map(JSON.parse));
         }, errorHandler);
     }
+    /**
+     * Retrieves a perspective based on the provided role instance or the perspective object role type. Returns the perspective of the provided user role type, iff the user actually has that role in it.
+     *
+     * @param roleInstanceOfContext - The role instance of the context.
+     * @param perspectiveObjectRoleType - The role type of the perspective object. Defaults to an empty string. If not given, the perspective is on the role instance itself.
+     * @param receiveValues - A callback function to receive the perspective values.
+     * @param fireAndForget - A boolean indicating whether the request should be fire-and-forget. Defaults to false.
+     * @param errorHandler - An optional error handler callback function.
+     * @returns The unsubscriber.
+     */
+    getPerspectiveForUser(roleInstanceOfContext, perspectiveObjectRoleType = "", userRoleType, receiveValues, fireAndForget = false, errorHandler) {
+        return this.send({ request: "GetPerspectiveForUser",
+            subject: perspectiveObjectRoleType,
+            predicate: roleInstanceOfContext,
+            object: userRoleType,
+            onlyOnce: fireAndForget
+        }, function (perspectiveStrings) {
+            return receiveValues(perspectiveStrings.map(JSON.parse));
+        }, errorHandler);
+    }
     // { request: "GetScreen", subject: UserRoleType, predicate: ContextType, object: ContextInstance }
     getScreen(userRoleType, contextInstance, contextType, receiveValues, fireAndForget = false, errorHandler) {
         return this.send({ request: "GetScreen",

@@ -20,7 +20,7 @@ export class Me extends PerspectivesComponent<MeProps, MeState> {
   componentDidMount() {
     const component = this;
     PDRproxy.then((PDRproxy) => {
-      PDRproxy.getPerspective( this.props.systemuser, ModelDependencies.sysUser, (perspectives: Perspective[]) => {
+      PDRproxy.getPerspectiveForUser( this.props.systemuser, ModelDependencies.sysUser, ModelDependencies.WWWUser, (perspectives: Perspective[]) => {
         component.setState({ perspective: perspectives[0] });
       });
     })

@@ -363,6 +363,13 @@ domain model://perspectives.domains#System
       perspective on SocialEnvironment
         only (CreateAndFill, Fill)
 
+    user WWWUser = sys:Me
+      perspective on User
+        props (FirstName, LastName) verbs (Consult, SetPropertyValue)
+      perspective on ItemsOnClipboard
+        props (Name) verbs (Consult)
+        props (Selected) verbs (SetPropertyValue, Consult)
+    
     context OutgoingInvitations (relational) filledBy Invitation
 
     context BaseRepository filledBy ManifestCollection
