@@ -300,6 +300,7 @@ domain model://perspectives.domains#System
       
       perspective on ItemsOnClipboard
         only (Create, Fill, Remove, Delete)
+        props (Name) verbs (Consult)
         props (Selected, ClipboardData) verbs (SetPropertyValue, Consult)
       perspective on SelectedClipboardItem
         props (ClipboardData) verbs (Consult)
@@ -463,6 +464,7 @@ domain model://perspectives.domains#System
       property Selected (Boolean)
     -- PDRDEPENDENCY
       property ClipboardData (String)
+      property Name = callExternal util:SelectR( "\"cardTitle\":\"(.+?)\"", ClipboardData ) returns String
     
     -- PDRDEPENDENCY
     thing SelectedClipboardItem = filter ItemsOnClipboard with Selected

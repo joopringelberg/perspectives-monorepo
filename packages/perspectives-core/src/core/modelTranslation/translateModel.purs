@@ -514,7 +514,9 @@ instance Translation Translations where
       ts -> pure ts
     void $ for translations'
       \(Tuple lang translation) -> do
-        tell (i indent tab lang colonSpace translation nl)
+        -- We write the translations in quotes. Some characters such as ':' and parentheses 
+        -- will otherwise be seen as delimiters by the yaml parser.
+        tell (i indent tab lang colonSpace doubleQuote translation doubleQuote nl)
   addTranslations _ t = t 
 
 instance Translation NotificationsTranslation where
@@ -852,6 +854,9 @@ colonSpace = ": "
 
 colonNl :: String
 colonNl = ":\n"
+
+doubleQuote :: String
+doubleQuote = "\""
 
 nl :: String
 nl = "\n"

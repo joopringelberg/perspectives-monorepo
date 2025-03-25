@@ -171,9 +171,9 @@ model://perspectives.domains#System:
                 nl: Beheer nieuwe modellen
             5:
               translations:
-                orig: Default (Base) Repository
-                en: Default (Base) repository
-                nl: Basis repository
+                orig: "Default (Base) Repository"
+                en: "Default (Base) repository"
+                nl: "Basis repository"
             6:
               translations:
                 orig: Other repositories
@@ -227,6 +227,10 @@ model://perspectives.domains#System:
               translations:
                 en: Selected
                 nl: Geselecteerd
+            Name:
+              translations:
+                en: Item
+                nl: Item
         AllNotifications:
           translations:
             en: All notifications
@@ -512,9 +516,9 @@ model://perspectives.domains#System:
                 nl: Uitnodiging
             1:
               translations:
-                orig: You are invited by:
-                en: You are invited by:
-                nl: Je bent uitgenodigd door:
+                orig: "You are invited by:"
+                en: "You are invited by:"
+                nl: "Je bent uitgenodigd door:"
             2:
               translations:
                 orig: Message from the inviter
@@ -537,9 +541,9 @@ model://perspectives.domains#System:
                 nl: Uitnodiging
             1:
               translations:
-                orig: You are invited by:
-                en: You are invited by:
-                nl: Je bent uitgenodigd door:
+                orig: "You are invited by:"
+                en: "You are invited by:"
+                nl: "Je bent uitgenodigd door:"
             2:
               translations:
                 orig: Message

@@ -102,13 +102,13 @@ itemsOnClipboard :: String
 itemsOnClipboard = "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard"
 
 itemOnClipboardSelected :: String
-itemOnClipboardSelected = "model://perspectives.domains#System$PerspectivesSystem$ItemOnClipboard$Selected"
+itemOnClipboardSelected = "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard$Selected"
 
 itemOnClipboardClipboardData :: String
-itemOnClipboardClipboardData = "model://perspectives.domains#System$PerspectivesSystem$ItemOnClipboard$ClipboardData"
+itemOnClipboardClipboardData = "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard$ClipboardData"
 
 selectedClipboardItem :: String
-selectedClipboardItem = "model://perspectives.domains#System$PerspectivesSystem$SelectedClipboardItem"
+selectedClipboardItem = "model://perspectives.domains#System$PerspectivesSystem$SelectedClipboardItem" 
 ------------------------------------------------------------------------------------
 -- ROOTCONTEXT
 ------------------------------------------------------------------------------------
