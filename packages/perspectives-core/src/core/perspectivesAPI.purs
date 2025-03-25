@@ -45,7 +45,7 @@ import Foreign (Foreign, ForeignError, unsafeToForeign)
 import Foreign.Object (empty)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ApiEffect, RequestType(..)) as Api
-import Perspectives.ApiTypes (ContextSerialization(..), ContextsSerialisation(..), PropertySerialization(..), RecordWithCorrelationidentifier(..), Request(..), RequestRecord, Response(..), RolSerialization(..), mkApiEffect, showRequestRecord)
+import Perspectives.ApiTypes (ContextSerialization(..), ContextsSerialisation(..), PropertySerialization(..), RecordWithCorrelationidentifier(..), Request(..), RequestRecord, Response(..), ResponseWithWarnings(..), RolSerialization(..), ApiEffect, mkApiEffect, showRequestRecord)
 import Perspectives.Assignment.Update (RoleProp(..), addProperty, deleteProperty, getPropertyBearingRoleInstance, saveFile, setPreferredUserRoleType, setProperty)
 import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
 import Perspectives.CompileAssignment (compileAssignment)
@@ -69,7 +69,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment, toFile)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (getPerspectRol, saveMarkedResources)
-import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, pushFrame, restoreFrame)
+import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getWarnings, pushFrame, resetWarnings, restoreFrame)
 import Perspectives.Proxy (createRequestEmitter, retrieveRequestEmitter)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter, getDynamicPropertyGetterFromLocalName, getPropertyFromTelescope, getPropertyValues, getPublicUrl, getRoleFunction, getRoleInstances)
 import Perspectives.Representation.ADT (ADT)
@@ -783,7 +783,8 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
     Api.WrongRequest -> sendResponse (Error corrId subject) setter
     _ -> sendResponse (Error corrId ("Perspectives could not handle this request: '" <> (showRequestRecord r) <> "'")) (mkApiEffect reactStateSetter)
   where
-    setter = (mkApiEffect reactStateSetter)
+    setter :: ApiEffect
+    setter = (mkApiEffect reactStateSetter) 
 
     -- The identifier in the ContextType must be fully qualified.
     -- The model describing the ContextType must be locally installed.
@@ -825,7 +826,14 @@ type QueryUnsubscriber e = Effect Unit
 
 -- | Apply an ApiEffect to a Response, in effect sending it through the API to the caller.
 sendResponse :: Response -> Api.ApiEffect -> MonadPerspectives Unit
-sendResponse r ae = liftEffect $ ae r
+sendResponse (Result correlationIdentifier values) ae = do 
+  warnings <- getWarnings
+  resetWarnings
+  liftEffect $ ae (ResultWithWarnings correlationIdentifier values warnings)
+sendResponse (Error correlationIdentifier message) ae = do 
+  warnings <- getWarnings
+  resetWarnings
+  liftEffect $ ae (ErrorWithWarnings correlationIdentifier message warnings)
 
 newtype ChatParticipant = ChatParticipant String
 derive instance Newtype ChatParticipant _

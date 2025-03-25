@@ -22,11 +22,13 @@ type ErrorResponse = {
     responseType: "APIerror";
     corrId: number;
     error: string;
+    warnings: string[];
 };
 type ResultResponse = {
     responseType: "APIresult";
     corrId: number;
     result: string[];
+    warnings: string[];
 };
 type WorkerResponse = {
     responseType: "WorkerResponse";

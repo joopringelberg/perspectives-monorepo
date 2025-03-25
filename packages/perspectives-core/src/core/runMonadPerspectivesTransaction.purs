@@ -53,7 +53,7 @@ import Perspectives.Instances.ObjectGetters (Filler_(..), context, contextType, 
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistent (tryRemoveEntiteit)
-import Perspectives.PerspectivesState (addBinding, clearPublicRolesJustLoaded, decreaseTransactionLevel, getPublicRolesJustLoaded, increaseTransactionLevel, nextTransactionNumber, pushFrame, restoreFrame, transactionFlag, transactionLevel)
+import Perspectives.PerspectivesState (addBinding, addWarning, clearPublicRolesJustLoaded, decreaseTransactionLevel, getPublicRolesJustLoaded, increaseTransactionLevel, nextTransactionNumber, pushFrame, restoreFrame, transactionFlag, transactionLevel)
 import Perspectives.Query.QueryTypes (Calculation(..))
 import Perspectives.Query.UnsafeCompiler (context2propertyValue, getCalculatedRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
@@ -148,7 +148,9 @@ phase1 share authoringRole r = do
       lift $ addBinding "currentcontext" [unwrap ctxt]
       -- Error boundary.
       catchError (void $ runSharing share authoringRole (for states (enteringState ctxt)))
-        \e -> logPerspectivesError $ Custom ("Cannot enter context state for " <> show ctxt <>  ", because " <> show e)
+        \e -> do 
+          lift $ addWarning (show e)
+          logPerspectivesError $ Custom ("Cannot enter context state for " <> show ctxt <>  ", because " <> show e)
       lift $ restoreFrame oldFrame
   -- Enter the rootState of roles that are created.
   void $ for createdRoles
@@ -159,7 +161,9 @@ phase1 share authoringRole r = do
       lift $ addBinding "currentcontext" [unwrap ctxt]
       -- Error boundary.
       catchError (void $ runSharing share authoringRole (for states (enteringRoleState rid)))
-        \e -> logPerspectivesError $ Custom ("Cannot enter role state, because " <> show e)
+        \e -> do 
+          lift $ addWarning (show e)
+          logPerspectivesError $ Custom ("Cannot enter role state, because " <> show e)
       lift $ restoreFrame oldFrame
   -- Exit the rootState of roles that are scheduled to be removed, unless we did so before.
   rolesThatHaveNotExited <- lift $ filterA (\rid -> rid ##>> exists' getActiveRoleStates) rolesToExit
@@ -181,6 +185,7 @@ phase1 share authoringRole r = do
             -- Error boundary.
             catchError (void $ for states (exitingRoleState rid))
               \e -> do 
+                lift $ addWarning (show e)
                 logPerspectivesError $ Custom ("Cannot exit role state for " <> show rid <> ", because " <> show e)
                 lift $ restoreFrame oldFrame
                 throwError e
@@ -398,7 +403,9 @@ exitContext (ContextRemoval ctxt authorizedRole) = do
       lift $ addBinding "currentcontext" [unwrap ctxt]
       -- Error boundary.
       catchError (void $ for states (exitingState ctxt))
-        \e -> logPerspectivesError $ Custom ("Cannot exit state, because " <> show e)
+        \e -> do 
+          lift $ addWarning (show e)
+          logPerspectivesError $ Custom ("Cannot exit state, because " <> show e)
       lift $ restoreFrame oldFrame
   -- Adds a RemoveExternalRoleInstance to the current transaction.
   -- Severes the link between the roles and their fillers.
@@ -434,7 +441,7 @@ evaluateStates stateEvaluations' =
         \e -> do 
           setInActiveContextState stateId contextId 
           logPerspectivesError $ Custom ("Cannot evaluate context state, because " <> show e)
-          -- Misschien moet ik de fout nu doorzetten? Of de melding ergens opslaan en dan uiteindelijk doorgeven aan de client?
+          lift $ addWarning (show e)
       lift $ restoreFrame oldFrame
     RoleStateEvaluation stateId roleId -> do
       cid <- lift (roleId ##>> context)
@@ -448,7 +455,7 @@ evaluateStates stateEvaluations' =
         \e -> do 
           logPerspectivesError $ Custom ("Cannot evaluate role state, because " <> show e)
           setInActiveRoleState stateId roleId 
-          -- Misschien moet ik de fout nu doorzetten? Of de melding ergens opslaan en dan uiteindelijk doorgeven aan de client?
+          lift $ addWarning (show e)
       lift $ restoreFrame oldFrame
 
 -- | Run and discard the transaction.

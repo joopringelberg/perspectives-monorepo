@@ -153,12 +153,14 @@ type ErrorResponse = {
   responseType: "APIerror";
   corrId: number;
   error: string;
+  warnings: string[];
 };
 
 type ResultResponse = {
   responseType: "APIresult";
   corrId: number;
   result: string[];
+  warnings: string[];
 };
 
 type WorkerResponse = {
@@ -540,11 +542,22 @@ export class PerspectivesProxy
         console.warn( "This request:\n" + JSON.stringify(req) + "\n results in this error: \n" + response.error );
         if (errorHandler)
         {
+          if (response.warnings.length > 0)
+          {
+            errorHandler( response.error + "\n\n" + response.warnings );
+          }
           errorHandler( response.error )
         }
       }
       else if (response.responseType === "APIresult")
       {
+        if (response.warnings.length > 0)
+        {
+          if (errorHandler)
+          {
+            errorHandler( response.warnings.toString() );
+          }
+        }
         receiveValues(response.result);
       }
     };

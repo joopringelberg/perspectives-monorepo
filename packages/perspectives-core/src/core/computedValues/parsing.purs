@@ -60,7 +60,7 @@ import Perspectives.ModelTranslation (ModelTranslation, augmentModelTranslation,
 import Perspectives.ModelTranslation (ModelTranslation, emptyTranslationTable)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, addDocument, deleteDocument, fromBlob, getAttachment, getDocument, retrieveDocumentVersion, toFile, tryGetDocument_)
-import Perspectives.PerspectivesState (getWarnings, resetWarnings)
+import Perspectives.PerspectivesState (getWarnings, resetWarnings, setWarnings)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedRoleType(..), RoleType(..))
@@ -79,6 +79,7 @@ parseAndCompileArc domeinFileName_ arcSource_ _ = try
     _, Nothing -> pure $ Value "No arc source given!"
     Just domeinFileName, Just arcSource -> catchError
       do
+        previousWarnings <- lift $ lift $ getWarnings
         lift $ lift $ resetWarnings
         r <- lift $ lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType sysUser) (loadAndCompileArcFile_ (DomeinFileId domeinFileName) arcSource)
         case r of
@@ -86,6 +87,7 @@ parseAndCompileArc domeinFileName_ arcSource_ _ = try
           -- Als er meldingen zijn, geef die dan terug.
           Right _ -> do
             warnings <- lift $ lift $ getWarnings
+            lift $ lift $ setWarnings previousWarnings
             pure $ Value $ intercalate "\n" (cons "OK" warnings)
       \e -> ArrayT $ pure [Value (show e)])
   >>= handleExternalFunctionError "model://perspectives.domains#Parsing$ParseAndCompileArc"

@@ -24,6 +24,7 @@ module Perspectives.PerspectivesState where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Trans.Class (lift)
+import Data.Array (cons)
 import Data.Map (empty) as Map
 import Data.Maybe (Maybe(..))
 import Data.Nullable (null)
@@ -242,6 +243,12 @@ resetCaches = do
 
 resetWarnings :: MonadPerspectives Unit
 resetWarnings = modify \s -> s { warnings = []}
+
+setWarnings :: Array String -> MonadPerspectives Unit
+setWarnings ws = modify \s -> s { warnings = ws}
+
+addWarning :: String -> MonadPerspectives Unit
+addWarning w = modify \s -> s { warnings = cons w s.warnings }
 -----------------------------------------------------------
 -- FUNCTIONS TO HANDLE VARIABLE BINDINGS
 -----------------------------------------------------------

@@ -37,7 +37,7 @@ import Data.Tuple (Tuple(..))
 import Effect.Class (liftEffect)
 import Foreign.Object (Object, insert, lookup, singleton, values)
 import Persistence.Attachment (class Attachment)
-import Perspectives.ApiTypes (ApiEffect, Response(..), CorrelationIdentifier)
+import Perspectives.ApiTypes (ApiEffect, CorrelationIdentifier, ResponseWithWarnings(..))
 import Perspectives.CoreTypes (class Persistent, type (~~>), ArrayWithoutDoubles, Assumption, InformedAssumption(..), MP, assumption, runMonadPerspectivesQuery, (###=))
 import Perspectives.GlobalUnsafeStrMap (GLStrMap, newMap, peek, poke, delete) as GLS
 import Perspectives.ModelDependencies (indexedContextFuzzies)
@@ -102,7 +102,7 @@ registerSupportedEffect corrId ef q arg onlyOnce = do
           (moldSupports :: Maybe SupportedEffect) <- pure $ GLS.peek activeSupportedEffects (show corrId)
           -- The original request may be retracted by the client.
           case moldSupports of
-            Nothing -> liftEffect $ ef (Result corrId (map unwrap result))
+            Nothing -> liftEffect $ ef (ResultWithWarnings corrId (map unwrap result) [])
             Just x -> do
               (oldSupports :: Array Assumption) <- pure x.assumptions
               -- (oldSupports :: Array Assumption) <- pure <<< unsafePartial $ (fromJust moldSupports).assumptions
@@ -114,13 +114,13 @@ registerSupportedEffect corrId ef q arg onlyOnce = do
               {no: vanished} <- pure $ partition ((maybe false (const true)) <<< flip elemIndex assumptions) oldSupports
               for_ vanished (deregisterDependency corrId)
               -- (Re-)run the effect
-              liftEffect $ ef (Result corrId (map unwrap result))
+              liftEffect $ ef (ResultWithWarnings corrId (map unwrap result) [])
               pure unit
         else do
           -- Remove this effect and
           unregisterSupportedEffect corrId
           -- send an empty result (for the last time).
-          liftEffect $ ef (Result corrId [])
+          liftEffect $ ef (ResultWithWarnings corrId [] [] )
 
 unregisterSupportedEffect :: CorrelationIdentifier -> MP Unit
 unregisterSupportedEffect corrId = do

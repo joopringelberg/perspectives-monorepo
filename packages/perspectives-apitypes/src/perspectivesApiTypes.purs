@@ -28,7 +28,7 @@ type ContextID = String
 -- APIEFFECT 
 -----------------------------------------------------------
 -- | The type of functions that are passed on as callbacks through the API.
-type ApiEffect = Response -> Effect Unit
+type ApiEffect = ResponseWithWarnings -> Effect Unit
 
 mkApiEffect :: Maybe Foreign -> ApiEffect
 mkApiEffect f = (unsafeCoerce $ unsafePartial $ fromJust f) <<< convertResponse
@@ -225,12 +225,12 @@ type Object = String
 
 data Response = Result CorrelationIdentifier (Array String) | Error CorrelationIdentifier String
 
-instance WriteForeign Response where
-  writeImpl = convertResponse
+type Warnings = Array String
+data ResponseWithWarnings = ResultWithWarnings CorrelationIdentifier (Array String) Warnings | ErrorWithWarnings CorrelationIdentifier String Warnings
 
-convertResponse :: Response -> Foreign
-convertResponse (Result i s) = unsafeToForeign {responseType: "APIresult", corrId: i, result: s}
-convertResponse (Error i s) = unsafeToForeign {responseType: "APIerror", corrId: i, error: s}
+convertResponse :: ResponseWithWarnings -> Foreign
+convertResponse (ResultWithWarnings i s warnings) = unsafeToForeign {responseType: "APIresult", corrId: i, result: s, warnings}
+convertResponse (ErrorWithWarnings i s warnings) = unsafeToForeign {responseType: "APIerror", corrId: i, error: s, warnings}
 
 -----------------------------------------------------------
 -- SERIALIZATION OF CONTEXTS AND ROLES ON THE API
