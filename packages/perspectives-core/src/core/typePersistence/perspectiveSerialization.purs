@@ -216,6 +216,8 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyVerbs'
     computeContextFromPerspectiveObject qfd = case unsnoc qfd of 
       Just {query, lastStep} -> case queryFunction lastStep of 
         DataTypeGetterWithParameter FilledByF _ -> pure $ makeComposition qfd (SQD (range qfd) (DataTypeGetter ContextF) (CDOM (roleInContext2Context <$> unsafePartial roleRange qfd)) True True)
+        -- If the last step is to get role instances from a context, we have to remove that step. The previous step ends with the context we want.
+        DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF _ -> pure query
         DataTypeGetter FillerF -> pure $ makeComposition qfd (SQD (range qfd) (DataTypeGetter ContextF) (CDOM (roleInContext2Context <$> unsafePartial roleRange qfd)) True True)
         DataTypeGetterWithParameter FillerF _ -> pure $ makeComposition qfd (SQD (range qfd) (DataTypeGetter ContextF) (CDOM (roleInContext2Context <$> unsafePartial roleRange qfd)) True True)
         FilledF _ ctxt -> pure $ makeComposition qfd (SQD (range qfd) (DataTypeGetter ContextF) (CDOM $ UET ctxt) True True)
