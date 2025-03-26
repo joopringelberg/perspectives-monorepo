@@ -38,7 +38,7 @@ import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.FunctorWithIndex (mapWithIndex)
 import Data.Interpolate (i)
-import Data.Maybe (Maybe(..), fromJust, isNothing, maybe)
+import Data.Maybe (Maybe(..), fromJust, isJust, isNothing, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Nullable (Nullable, notNull, null, toMaybe) as NULL
 import Data.Set (toUnfoldable) as SET
@@ -918,12 +918,15 @@ translationOf :: String -> String -> MonadPerspectives String
 translationOf domain text = do
   language <- getCurrentLanguage
   mtable <- getTranslationTable domain
+  defaultTranslation <- if isJust $ typeUri2ModelUri text
+    then pure $ typeUri2LocalName_ text
+    else pure text
   case mtable of 
-    Nothing -> pure text
+    Nothing -> pure defaultTranslation
     Just (TranslationTable table) -> case lookup text table of 
-      Nothing -> pure text
+      Nothing -> pure defaultTranslation
       Just (Translations translations) -> case lookup language translations of 
-        Nothing -> pure text
+        Nothing -> pure defaultTranslation
         Just translation -> pure translation
 
 translateType :: String -> MonadPerspectives String
