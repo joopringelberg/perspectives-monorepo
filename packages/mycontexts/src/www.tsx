@@ -62,7 +62,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           component.setState( {endUserMessage: message});
           return p.then( function()
           {
-            component.setState( { endUserMessage: {title: '', message: ''}} );
+            component.setState( { endUserMessage: {title: '', message: undefined}} );
           })
         });
   }
@@ -468,7 +468,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
     </Container>);
   }
 
-  render() {
+  render() { 
     const component = this;
     return ( 
           <AppContext.Provider value={

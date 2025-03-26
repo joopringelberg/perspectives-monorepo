@@ -67,7 +67,7 @@ if (!window.$perspectives_entry_point_for_markdown$)
       event.preventDefault();
       event.stopPropagation();
       // NOTICE dependency on MyContexts App.js! Instead, put handlers in the screen component.
-      (document.getElementById('__MyContextsContainer__') as HTMLElement).dispatchEvent(new CustomEvent('OpenContext', { detail: roleIdentifier, bubbles: true }));
+      (document.getElementById(__MyContextsContainer__) as HTMLElement).dispatchEvent(new CustomEvent('OpenContext', { detail: roleIdentifier, bubbles: true }));
     },
     runaction: function(event: Event, actionName: string, contextid: ContextInstanceT, myroletype: RoleType) {
       event.preventDefault();
