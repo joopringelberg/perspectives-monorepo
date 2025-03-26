@@ -23,10 +23,10 @@ import
   { Row
   , Col
   , Container,
-  Badge,
   Button
   } from "react-bootstrap";
 
+import 'bootswatch/dist/lumen/bootstrap.min.css';
 import './splash.css';
 
 import {thisAppsLocation} from "perspectives-react";
@@ -63,18 +63,6 @@ export default function ManageScreen()
                 </Col>
               </Row>
               <Row>
-                <Col className="alert alert-secondary">
-                  Create more installations, delete one or more, or reset an installation.
-                  This will take you to a page that offers a lot of functionality to manage installations.
-                  This is also the place to go if you want to create an installation that stores information
-                  in an instance of Couchdb that you might have running on your local machine, or, indeed, an 
-                  account somewhere on the web.
-                </Col>
-                <Col className="d-flex align-items-center">
-                  <a className="badge badge-pill badge-secondary p-3" href={appLocation + "?manualaccountcreation=true"}>Extended installation creation</a>
-                </Col>
-              </Row>
-              <Row>
                 <Col className="alert alert-success">
                   Recompile all your models. As MyContexts is under active development, it may occur that the <em>form</em> of the models
                   that you have copied into your local storage are no longer compatible with the version of MyContexts that comes from
@@ -82,16 +70,7 @@ export default function ManageScreen()
                   facility just in case. It is harmless to run this operation when your models are still compatible.
                 </Col>
                 <Col className="d-flex align-items-center">
-                  <a className="badge badge-pill badge-success p-3" href={appLocation + "?recompilelocalmodels=true"}>Recompile local models</a>
-                </Col>
-              </Row>
-              <Row>
-                <Col className="alert alert-danger">
-                  Remove all data (contexts and roles) and re-create the initial instances on the base of the versions of the basic models stored locally. &nbsp;
-                  <em>NOTE:</em> this is a very destructive operation! All your data will be lost.
-                </Col>
-                <Col className="d-flex align-items-center">
-                  <a className="badge badge-pill badge-danger p-3" href={appLocation + "?recreateinstances=true"}>Remove all data and recreate initial contexts and roles</a>
+                <Button variant="success" onClick={recompileLocalModels}>Recompile local models</Button>
                 </Col>
               </Row>
               <Row>
@@ -142,4 +121,13 @@ function deleteAccount()
         });
       }
     );
+  }
+
+  function recompileLocalModels()
+  {
+    startPDR();
+    getInstallationData().then( data => {
+      const user = constructPouchdbUser(data);
+      PDRHandler.then( pdrHandler => pdrHandler.recompileLocalModels(user));
+    });
   }
