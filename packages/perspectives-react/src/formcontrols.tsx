@@ -181,7 +181,7 @@ export default class FormControls extends PerspectivesComponent<FormControlsProp
   mayCreateContext()
   {
     const perspective = this.props.perspective;
-    return !this.props.roleinstance &&
+    return !this.props.roleinstance && perspective.roleKind == "ContextRole" &&
       perspective.verbs?.includes("CreateAndFill");
   }
 

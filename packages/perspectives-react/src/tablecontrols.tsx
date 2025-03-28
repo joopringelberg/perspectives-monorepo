@@ -165,7 +165,7 @@ export default class TableControls extends PerspectivesComponent<TableControlsPr
   mayCreateContext()
   {
     const perspective = this.props.perspective;
-    return !perspective.isCalculated && perspective.verbs.includes("CreateAndFill");
+    return !perspective.isCalculated && perspective.roleKind == "ContextRole" && perspective.verbs.includes("CreateAndFill");
   }
 
   render ()

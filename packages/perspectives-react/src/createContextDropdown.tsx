@@ -67,6 +67,8 @@ export default class CreateContextDropDown extends Component<CreateContextDropDo
       return  <div
                 className="ml-3 mr-3"
                 tabIndex={0}
+                // Note that the parameter passed to create is ignored. In this case, this component was handed a create function that only creates a role.
+                onClick={ () => component.props.create("JustTheRole" as ContextType) }
               >
                 <PlusIcon aria-label="Click to add a row" size='medium'/>
               </div>

@@ -467,7 +467,7 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
       registerSupportedEffect 
         corrId 
         setter 
-        ((getRoleInstances (CR $ CalculatedRoleType selectedClipboardItem)) >=> getPropertyValues (CP $ CalculatedPropertyType itemOnClipboardClipboardData)) 
+        ((getRoleInstances (CR $ CalculatedRoleType selectedClipboardItem)) >=> getPropertyValues (ENP $ EnumeratedPropertyType itemOnClipboardClipboardData)) 
         (ContextInstance mysystem)
         onlyOnce
     
