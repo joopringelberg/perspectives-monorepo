@@ -508,10 +508,13 @@ export const SharedWorkerChannelPromise: Promise<SharedWorkerChannel> = new Prom
 ////////////////////////////////////////////////////////////////////////////////
 //// PERSPECTIVESPROXY
 ////////////////////////////////////////////////////////////////////////////////
+type UserMessageChannel = (message : string) => void;
+
 export class PerspectivesProxy
 {
   channel: SharedWorkerChannel;
   cursor: Cursor;
+  userMessageChannel?: UserMessageChannel;
 
   constructor (channel : SharedWorkerChannel)
   {
@@ -531,6 +534,7 @@ export class PerspectivesProxy
   send (req: RequestRecord, receiveValues : valueReceiver, errorHandler? : errorHandler) : Promise<Unsubscriber>
   {
     const cursor = this.cursor;
+    const proxy = this;
     // Handle errors here. Use `errorHandler` if provided by the PerspectivesProxy method.
     // Log errors to the console anyway for the developer.
     const handleErrors = function(response : Response) // response = PerspectivesApiTypes.ResponseRecord
@@ -553,9 +557,9 @@ export class PerspectivesProxy
       {
         if (response.warnings.length > 0)
         {
-          if (errorHandler)
+          if (proxy.userMessageChannel)
           {
-            errorHandler( response.warnings.toString() );
+            proxy.userMessageChannel( response.warnings.toString() );
           }
         }
         receiveValues(response.result);
@@ -580,6 +584,11 @@ export class PerspectivesProxy
   unsubscribe (req : RequestRecord)
   {
     this.channel.unsubscribe(req);
+  }
+
+  setUserMessageChannel( channel : UserMessageChannel )
+  {
+    this.userMessageChannel = channel;
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

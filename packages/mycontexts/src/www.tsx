@@ -65,6 +65,13 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             component.setState( { endUserMessage: {title: '', message: undefined}} );
           })
         });
+        // Add a way for the proxy to inform the user of warnings that consist of caught errors that did not lead to a crash.
+    PDRproxy.then( pproxy => pproxy.setUserMessageChannel( (message : string) => UserMessagingPromise.then( um => 
+      um.addMessageForEndUser(
+        { title: i18next.t("app_opencontext_title", { ns: 'mycontexts' }) 
+        , message: message
+        , error: undefined
+      }))));
   }
 
   componentDidMount() {

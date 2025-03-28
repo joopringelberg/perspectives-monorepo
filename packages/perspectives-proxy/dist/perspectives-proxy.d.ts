@@ -66,13 +66,16 @@ declare class SharedWorkerChannel {
     send(req: RequestRecord): Promise<Unsubscriber>;
 }
 export declare const SharedWorkerChannelPromise: Promise<SharedWorkerChannel>;
+type UserMessageChannel = (message: string) => void;
 export declare class PerspectivesProxy {
     channel: SharedWorkerChannel;
     cursor: Cursor;
+    userMessageChannel?: UserMessageChannel;
     constructor(channel: SharedWorkerChannel);
     close(): void;
     send(req: RequestRecord, receiveValues: valueReceiver, errorHandler?: errorHandler): Promise<Unsubscriber>;
     unsubscribe(req: RequestRecord): void;
+    setUserMessageChannel(channel: UserMessageChannel): void;
     getRol(contextID: ContextID, rolName: RolName, receiveValues: RoleReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     getUnqualifiedRol(contextID: ContextID, localRolName: RolName, receiveValues: RoleReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     getProperty(rolID: RoleInstanceT, propertyName: PropertyType, roleType: RoleType, receiveValues: PropertyValueReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;

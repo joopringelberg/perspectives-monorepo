@@ -315,12 +315,10 @@ const SharedWorkerChannelPromise = new Promise(function (resolve /*, reject*/) {
     sharedWorkerChannelResolver = resolve;
     // sharedWorkerChannelRejecter = reject;
 });
-////////////////////////////////////////////////////////////////////////////////
-//// PERSPECTIVESPROXY
-////////////////////////////////////////////////////////////////////////////////
 class PerspectivesProxy {
     channel;
     cursor;
+    userMessageChannel;
     constructor(channel) {
         this.channel = channel;
         this.cursor = new Cursor();
@@ -334,6 +332,7 @@ class PerspectivesProxy {
     // that can be used by the caller to unsubscribe from the core dependency network.
     send(req, receiveValues, errorHandler) {
         const cursor = this.cursor;
+        const proxy = this;
         // Handle errors here. Use `errorHandler` if provided by the PerspectivesProxy method.
         // Log errors to the console anyway for the developer.
         const handleErrors = function (response) {
@@ -350,8 +349,8 @@ class PerspectivesProxy {
             }
             else if (response.responseType === "APIresult") {
                 if (response.warnings.length > 0) {
-                    if (errorHandler) {
-                        errorHandler(response.warnings.toString());
+                    if (proxy.userMessageChannel) {
+                        proxy.userMessageChannel(response.warnings.toString());
                     }
                 }
                 receiveValues(response.result);
@@ -372,6 +371,9 @@ class PerspectivesProxy {
     // unsubscribe from the channel.
     unsubscribe(req) {
         this.channel.unsubscribe(req);
+    }
+    setUserMessageChannel(channel) {
+        this.userMessageChannel = channel;
     }
     ///////////////////////////////////////////////////////////////////////////////////////
     //// GETTERS.
