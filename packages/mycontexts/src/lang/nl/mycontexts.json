@@ -81,4 +81,9 @@
   , "leftPanel_me": "Mijzelf"
   , "leftPanel_apps": "Apps"
   , "leftPanel_settings": "Instellingen"
+  , "userMessagingPanel_title": "Non-fatale fout"
+  , "userMessagingPanel_message": "Er heeft zich een fout voorgedaan die verder gebruik niet in de weg staat. De fout is: {{- error}}."
+  , "www_who": "Wie"
+  , "www_what": "Wat"
+  , "www_where": "Waar"
 }

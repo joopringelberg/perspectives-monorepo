@@ -82,4 +82,9 @@
   , "leftPanel_me": "Me"
   , "leftPanel_apps": "Apps"
   , "leftPanel_settings": "Settings"
+  , "userMessagingPanel_title": "Non-critical failure notification"
+  , "userMessagingPanel_message": "An error has occurred that does not prevent further use. The error is: {{- error}}."
+  , "www_who": "Who"
+  , "www_what": "What"
+  , "www_where": "Where"
 }

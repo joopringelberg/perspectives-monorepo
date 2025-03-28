@@ -68,8 +68,8 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
         // Add a way for the proxy to inform the user of warnings that consist of caught errors that did not lead to a crash.
     PDRproxy.then( pproxy => pproxy.setUserMessageChannel( (message : string) => UserMessagingPromise.then( um => 
       um.addMessageForEndUser(
-        { title: i18next.t("app_opencontext_title", { ns: 'mycontexts' }) 
-        , message: message
+        { title: i18next.t("userMessagingPanel_title", { ns: 'mycontexts' }) 
+        , message: i18next.t("userMessagingPanel_message", {error: message, ns: 'mycontexts'})
         , error: undefined
       }))));
   }
@@ -374,14 +374,14 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           }}
         fill
         >
-        <Tab eventKey="who" title="Wie" className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
+        <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
           { this.state.screen?.whoWhatWhereScreen ?
             <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "who"}/>
             :
             <p className='bg-light-subtle'>Ga ergens heen</p>
           }
         </Tab>
-        <Tab eventKey="what" title="Wat" className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
+        <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
           { this.state.screen?.whoWhatWhereScreen ? 
             (<PSContext.Provider value={{contextinstance: deconstructContext( this.state.openContext!) as ContextInstanceT, contexttype: this.state.openContextType!, myroletype: this.state.openContextUserType!}}>
               <What screenelements={  this.state.screen.whoWhatWhereScreen.what }/> 
@@ -390,7 +390,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             <div>Ga ergens heen.</div>
           }
         </Tab>
-        <Tab eventKey="where" title="Waar" className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
+        <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
           <p className='bg-light-subtle'>Weergave van de perspectieven op waar.</p>
         </Tab>
       </Tabs>
@@ -427,8 +427,8 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           className='bg-info full-height' 
           xs={ this.state.doubleSection === "who" ? 6 : 3} 
           style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
-            <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}><h4 className='text-center'>Wie</h4></Row>
-            <Row className='px-1 full-www-content-height'>
+            <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}><h4 className='text-center'>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h4></Row>
+            <Row className='px-1 full-www-content-height scrollable-content'>
               { this.state.screen?.whoWhatWhereScreen ?
                 <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "who"}/>
                 :
@@ -440,10 +440,10 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           className='bg-info' 
           xs={ this.state.doubleSection === "what" ? 6 : 3} 
           style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
-          <Row onClick={() => component.setState( {'doubleSection': "what"} )}  ><h4 className='text-center'>Wat</h4></Row>
+          <Row onClick={() => component.setState( {'doubleSection': "what"} )}  ><h4 className='text-center'>{ i18next.t("www_what", {ns: 'mycontexts'}) }</h4></Row>
           {/* In the desktop, MSComponent will render a row with px-1 */}
           {/* Here we render either an arbitrary screen: {tag: "FreeFormScreen", elements: MainScreenElements}, or all TableFormDef elements in the {tag: "TableForms", elements: TableFormDef[]} variant of What. */}
-          <Row className="full-www-content-height">
+          <Row className="full-www-content-height scrollable-content">
           {this.state.screen?.whoWhatWhereScreen ? 
               (<PSContext.Provider value={{contextinstance: deconstructContext( this.state.openContext!) as ContextInstanceT, contexttype: this.state.openContextType!, myroletype: this.state.openContextUserType!}}>
                 <What screenelements={  this.state.screen.whoWhatWhereScreen.what }/> 
@@ -457,8 +457,8 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           className='bg-info' 
           xs={ this.state.doubleSection === "where" ? 6 : 3} 
           style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
-          <Row onClick={() => component.setState( {'doubleSection': "where"} )}  ><h4 className='text-center'>Waar</h4></Row>  
-          <Row className='px-1 className="full-www-content-height"'>
+          <Row onClick={() => component.setState( {'doubleSection': "where"} )}  ><h4 className='text-center'>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h4></Row>  
+          <Row className="px-1 full-www-content-height scrollable-content" style={{overflow: 'auto'}}>
             <p className='bg-light-subtle'>Here we render all TableFormDef elements that make up the Whereto part of the screen (representing the context roles), as Master-Slave components. </p>
             <p className='bg-light-subtle'>Rendering of the recent contexts.</p>
             <p className='bg-light-subtle'>Rendering of the pinned contexts.</p>

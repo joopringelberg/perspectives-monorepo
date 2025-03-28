@@ -149,7 +149,6 @@ export class EndUserNotifier extends PerspectivesComponent<EndUserNotifierProps,
     const component = this;
     const acknowledge = component.props.message.acknowledge ? component.props.message.acknowledge : () => undefined;
     return <Modal
-      backdrop="static"
       show={component.props.message.message !== undefined}>
       <Modal.Header closeButton>
         <Modal.Title>{component.props.message.title || "A message"}</Modal.Title>
@@ -170,7 +169,12 @@ export class EndUserNotifier extends PerspectivesComponent<EndUserNotifierProps,
         </Button>
         {
           component.props.message.error ?
-          <Button variant="secondary" onClick={ () => component.toggleShow()}>{component.state.showErrorMessage ? "Hide details" : "Show details"}</Button>
+          <Button 
+            variant="secondary" 
+            onClick={ () => component.toggleShow()}
+            >
+              {component.state.showErrorMessage ? "Hide details" : "Show details"}
+            </Button>
           : null
         }
       </Modal.Footer>
