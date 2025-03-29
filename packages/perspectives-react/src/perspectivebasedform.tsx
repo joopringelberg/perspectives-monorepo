@@ -32,6 +32,7 @@ import {UserMessagingPromise} from "./userMessaging.js";
 import i18next from "i18next";
 import { CardProperties } from "./cardbehaviour.js";
 import { cardWithConfigurableBehaviour } from "./adorningComponentWrapper.js";
+import { isEqual } from 'lodash';
 
 ////////////////////////////////////////////////////////////////////////////////
 // PERSPECTIVEBASEDFORM
@@ -65,6 +66,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
   }
 
   // Possibly returns an object with this shape: roleinstancewithprops (see perspectivesshape.js).
+  // It is either the roleinstance passed in the props, or the first roleinstance
   computeRoleInstanceWithProps() : Roleinstancewithprops | undefined
   {
     const component = this;
@@ -121,13 +123,12 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
     }
   }
 
-  componentDidUpdate()
-  {
+  componentDidUpdate() {
     const component = this;
     const roleInstanceWithProps = component.computeRoleInstanceWithProps();
-    if (roleInstanceWithProps?.roleId !== component.state.roleInstanceWithProps?.roleId)
-    {
-      component.setState({ roleInstanceWithProps  }); 
+    
+    if (!isEqual(roleInstanceWithProps, component.state.roleInstanceWithProps)) {
+      component.setState({ roleInstanceWithProps });
     }
   }
 
