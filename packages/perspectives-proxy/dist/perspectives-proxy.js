@@ -543,7 +543,7 @@ class PerspectivesProxy {
     checkBindingP(roleName, rolInstance) {
         const proxy = this;
         return new Promise(function (resolver, rejecter) {
-            proxy.send({ request: "CheckBinding", predicate: roleName, object: rolInstance, onlyOnce: true }, (r => resolver(r[0])), rejecter);
+            proxy.send({ request: "CheckBinding", predicate: roleName, object: rolInstance, onlyOnce: true }, (r => resolver(r[0] === "true")), rejecter);
         });
     }
     // matchContextName( name )
@@ -617,7 +617,7 @@ class PerspectivesProxy {
     removeRoleFromClipboard(roleInstance) {
         const proxy = this;
         return new Promise(function (resolver, rejecter) {
-            proxy.send({ request: "RemoveRoleFromClipboard", subject: roleInstance, onlyOnce: true }, (r => resolver(r[0])), rejecter);
+            proxy.send({ request: "RemoveRoleFromClipboard", subject: roleInstance, onlyOnce: true }, (r => resolver(r[0] == "true")), rejecter);
         });
     }
     /**

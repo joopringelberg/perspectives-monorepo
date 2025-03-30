@@ -870,7 +870,7 @@ export class PerspectivesProxy
       {
         proxy.send(
           {request: "CheckBinding", predicate: roleName, object: rolInstance, onlyOnce: true}
-          , (r => resolver(r[0]))
+          , (r => resolver(r[0] === "true"))
           , rejecter
         );
       });
@@ -977,7 +977,7 @@ export class PerspectivesProxy
     {
       proxy.send(
         { request: "RemoveRoleFromClipboard", subject: roleInstance, onlyOnce: true },
-        (r => resolver(r[0])),
+        (r => resolver(r[0] == "true")),
         rejecter
       );
     });
