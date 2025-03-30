@@ -33,8 +33,7 @@ import {default as perspectivesarc} from "perspectives-highlightjs";
 import i18next from "i18next";
 import {UserMessagingPromise} from "./userMessaging.js";
 
-// Import a stylesheet
-import "highlight.js/styles/base16/solar-flare.css";
+import "./highlight.css";
 
 // Register the language, so it can be used as a value for the language prop.
 hljs.registerLanguage("perspectives-arc", perspectivesarc); 
@@ -67,6 +66,9 @@ export class ArcViewer extends Component<ArcViewerProps, ArcViewerState>
   componentDidMount()
   {
     const component = this;
+      // Dynamically load the highlight.js CSS
+    // this.loadHighlightjsStyles();
+
     component.retrieveFile()
       .then( file => component.changeText(file));
 
@@ -80,6 +82,24 @@ export class ArcViewer extends Component<ArcViewerProps, ArcViewerState>
           , message: i18next.t("retrieveFile_message", {ns: 'preact'})
           , error: e.toString()
           }))), 400)
+  }
+
+  loadHighlightjsStyles() {
+    // Check if style is already loaded by another instance
+    if (!document.getElementById('highlightjs-styles')) {
+      const link = document.createElement('link');
+      link.id = 'highlightjs-styles';
+      link.rel = 'stylesheet';
+      link.type = 'text/css';
+      
+      // You can use a CDN URL for development and production
+      // link.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/base16/solar-flare.min.css';
+      
+      // Or use a relative path to your bundled CSS
+      link.href = './highlight.css';
+      
+      document.head.appendChild(link);
+    }
   }
 
   changeText(file : File)

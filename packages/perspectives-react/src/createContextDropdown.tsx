@@ -105,7 +105,7 @@ const CustomToggle = forwardRef<HTMLAnchorElement, CustomToggleProps>(({ childre
   <a
     href=""
     ref={ref}
-    className={disabled ? "disabledIconStyle" : "iconStyle"}
+    className={disabled ? "disabledIcon" : "iconStyle"}
     onClick={(e) => {
       e.preventDefault();
       if (!disabled)

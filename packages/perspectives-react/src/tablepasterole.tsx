@@ -31,6 +31,7 @@ import i18next from "i18next";
 
 import {OverlayTrigger, Tooltip} from "react-bootstrap";
 import { OverlayInjectedProps } from 'react-bootstrap/esm/Overlay';
+import "./components.css";
 
 interface TablePasteRoleProps
 {
@@ -174,7 +175,7 @@ export default class TablePasteRole extends PerspectivesComponent<TablePasteRole
                     >
                     <PasteIcon
                       aria-label={ i18next.t("tablePasteRole_Alt", {ns: "preact"}) }
-                      className={component.state.compatibleRole ? "iconStyle" : "disabledIconStyle"}
+                      className={component.state.compatibleRole ? "iconStyle" : "disabledIcon"}
                       size="medium"
                     />
                     </div>

@@ -37,7 +37,7 @@ export default [
         __PPSTORAGEURL__: JSON.stringify("https://mycontexts.com/ppsfs/uploadfile")
       }),
       postcss({
-        extract: true, // Extract CSS to a separate file
+        extract: false, // Extract CSS to a separate file
         minimize: true, // Minimize the CSS
         sourceMap: true // Generate source maps for the CSS
       }),
@@ -45,7 +45,13 @@ export default [
       copy({
         targets: [
           { src: 'src/roledata.d.ts', dest: 'dist/types' },
-          { src: 'src/components.css', dest: 'dist/types' }
+          { src: 'src/components.css', dest: 'dist/types' },
+          { 
+            src: 'src/highlight.css', 
+            dest: 'dist/types', 
+            rename: 'highlight.css' 
+          }
+
         ]
       }),
       // visualizer({
