@@ -336,7 +336,7 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
   }
 }
 
-export function buildTable(table : TableElementDef, showControls : boolean = true)
+export function buildTable(table : TableElementDef, showControls : boolean = true, showAsAccordionItem : boolean = false)
 {
   const perspective = table.fields.perspective;
   // const title = widgetCommonFields.title;
@@ -346,6 +346,7 @@ export function buildTable(table : TableElementDef, showControls : boolean = tru
       //roleRepresentation
       perspective={perspective}
       showcontrolsandcaption={showControls}
+      showAsAccordionItem={showAsAccordionItem}
       />);
 }
 export function buildForm(form : FormElementDef, showControls : boolean = true, roleInstance? : RoleInstanceT)

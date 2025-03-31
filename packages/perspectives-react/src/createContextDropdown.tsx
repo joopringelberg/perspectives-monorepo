@@ -65,12 +65,18 @@ export default class CreateContextDropDown extends Component<CreateContextDropDo
     if (Object.keys( component.props.contexts ).length == 0)
     {
       return  <div
-                className="ml-3 mr-3"
+                className="btn btn-link p-0 me-2"
                 tabIndex={0}
                 // Note that the parameter passed to create is ignored. In this case, this component was handed a create function that only creates a role.
                 onClick={ () => component.props.create("JustTheRole" as ContextType) }
               >
-                <PlusIcon aria-label="Click to add a row" size='medium'/>
+                <i 
+                  className="bi bi-plus-circle" 
+                  style={{ 
+                    fontSize: '1.1rem',
+                    color: 'var(--bs-primary)'
+                  }}
+                ></i>
               </div>
     }
     else
@@ -81,7 +87,13 @@ export default class CreateContextDropDown extends Component<CreateContextDropDo
                 focusFirstItemOnShow={false}
                 onSelect={ contextType => component.props.create( contextType as ContextType) }>
                 <Dropdown.Toggle as={CustomToggle} id="CreateContext_Toggle" disabled={Object.keys(component.props.contexts).length == 0}>
-                  <PlusIcon aria-label="Contexts to create" size="medium"/>
+                  <i 
+                    className="bi bi-plus-circle" 
+                    style={{ 
+                      fontSize: '1.1rem',
+                      color: 'var(--bs-primary)'
+                    }}
+                  ></i>
                 </Dropdown.Toggle>
                   <Dropdown.Menu>{ items }</Dropdown.Menu>
               </Dropdown>;
@@ -108,6 +120,7 @@ const CustomToggle = forwardRef<HTMLAnchorElement, CustomToggleProps>(({ childre
     className={disabled ? "disabledIcon" : "iconStyle"}
     onClick={(e) => {
       e.preventDefault();
+      e.stopPropagation()
       if (!disabled)
       {
         onClick(e);

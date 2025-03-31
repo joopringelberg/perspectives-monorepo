@@ -37,3 +37,31 @@ for a discussion about variables and sass. */
   pointer-events: none; /* Prevent user interactions */
   cursor: not-allowed; /* Change the cursor to indicate the icon is disabled */
 }
+
+/************
+  * Accordion styles
+  * These styles are used to customize the appearance of the accordion component as generated in PerspectivesTable.
+*************/
+
+/* Position the caret to the right edge */
+.accordion-button::after {
+  margin-left: auto;
+}
+
+/* When the accordion header contains our custom component */
+.accordion-button > div {
+  flex: 1;
+  margin-right: 15px; /* Space between our content and the caret */
+}
+
+/* Make sure the button doesn't get bootstrap's hover styles */
+.accordion-button .btn-link:hover,
+.accordion-button .btn-link:focus {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* For when the accordion item is open. */
+.accordion-button:not(.collapsed) {
+  --bs-accordion-active-bg: var(--bs-dark-bg-subtle) !important;
+}

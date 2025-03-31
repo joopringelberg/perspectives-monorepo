@@ -1,20 +1,20 @@
-import React, { Component, createRef } from "react"; // 2
+import React, { createRef } from "react";
 import PerspectivesComponent from "./perspectivesComponent";
-import {PSRol} from "./reactcontexts.js";
-import {mapRoleVerbsToBehaviourNames, mapRoleVerbsToBehaviours} from "./maproleverbstobehaviours.js";
+import {mapRoleVerbsToBehaviourNames} from "./maproleverbstobehaviours.js";
 import TableRow from "./tablerow.js";
 import TableControls from "./tablecontrols.js";
 import i18next from "i18next";
 
 import
   { Table
-  , Form
+  , Form,
+  Accordion
   } from "react-bootstrap";
 import "./components.css";
-import { CardProperties, InnerCardProperties } from "./cardbehaviour";
+import { CardProperties } from "./cardbehaviour";
 import { CardWithFixedBehaviour, WithOutBehavioursProps } from "./adorningComponentWrapper";
-import { RoleInstanceT, Perspective, SerialisedProperty } from "perspectives-proxy";
-import RoleInstance from "./roleinstance";
+import { RoleInstanceT, Perspective, SerialisedProperty, PDRproxy, ContextType } from "perspectives-proxy";
+import { AccordionHeaderWithAddButton } from "./accordionHeaderWithAddButton";
 
 ////////////////////////////////////////////////////////////////////////////////
 // CARD
@@ -47,11 +47,13 @@ const RoleCard: React.FC<CardProperties> = ({title, tabIndex, onClick, ...rest})
  * @property {Perspective} perspective - The perspective data to be displayed in the table.
  * @property {string} cardcolumn? - The name of the column that contains card data. If omitted, the identifying property of the perspective is used.
  * @property {boolean}   , showcontrolsandcaption?: boolean? - Whether to show the table controls and caption. Default is true.
+ * @property {boolean}   , showAsAccordion?: boolean? - Whether to show the table as an accordion. In that case, no controls, nor caption. Default is false.
  */
 interface PerspectiveTableProps
   { perspective: Perspective
   , cardcolumn?: string
   , showcontrolsandcaption?: boolean
+  , showAsAccordionItem?: boolean
   }
 
 interface PerspectiveTableState
@@ -219,58 +221,83 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
       }
   }
 
+  constructTable ()
+  {
+    const component = this,
+      perspective = component.props.perspective;
+    return <Table
+            responsive
+            striped
+            bordered
+            hover
+            size="sm"
+            className="mb-0">
+            {component.props.showcontrolsandcaption !== false ? <caption>{ i18next.t("table_subscriptionLeader", {ns: 'preact'}) }{ perspective.displayName }</caption> : null}
+            <thead>
+              <tr>
+              { component.propertyNames.map( pn =>
+                <th key={pn}>
+                  { (perspective.properties[pn]) ? perspective.properties[pn].displayName : null }
+                </th>) }
+              </tr>
+            </thead>
+            <tbody
+              ref={component.eventDiv}
+              onKeyDown={ component.handleKeyDown }
+            >
+              {
+                Object.keys(perspective.roleInstances).map( (roleId) =>
+                  <TableRow
+                    key={roleId}
+                    roleinstance={roleId as RoleInstanceT}
+                    isselected={ roleId == component.state.row }
+                    myroletype={component.props.perspective.userRoleType}
+                    column={component.state.column}
+                    cardcolumn = {perspective.identifyingProperty}
+                    roleRepresentation={component.roleRepresentation}
+                    roleinstancewithprops={perspective.roleInstances[roleId]}
+                    perspective={component.props.perspective}
+                    orderedProperties={component.orderedProperties}
+                    />)
+              }
+            </tbody>
+          </Table>
+  }
+
   render()
   {
     const component = this,
       perspective = component.props.perspective;
-
-    return (
-        component.stateIsComplete(["row"]) ?
-        <>
-        <Table
-          responsive
-          striped
-          bordered
-          hover
-          size="sm"
-          className="mb-0">
-          {component.props.showcontrolsandcaption !== false ? <caption>{ i18next.t("table_subscriptionLeader", {ns: 'preact'}) }{ perspective.displayName }</caption> : null}
-          <thead>
-            <tr>
-            { component.propertyNames.map( pn =>
-              <th key={pn}>
-                { (perspective.properties[pn]) ? perspective.properties[pn].displayName : null }
-              </th>) }
-            </tr>
-          </thead>
-          <tbody
-            ref={component.eventDiv}
-            onKeyDown={ component.handleKeyDown }
-          >
-            {
-              Object.keys(perspective.roleInstances).map( (roleId) =>
-                <TableRow
-                  key={roleId}
-                  roleinstance={roleId as RoleInstanceT}
-                  isselected={ roleId == component.state.row }
-                  myroletype={component.props.perspective.userRoleType}
-                  column={component.state.column}
-                  cardcolumn = {perspective.identifyingProperty}
-                  roleRepresentation={component.roleRepresentation}
-                  roleinstancewithprops={perspective.roleInstances[roleId]}
-                  perspective={component.props.perspective}
-                  orderedProperties={component.orderedProperties}
-                  />)
-            }
-          </tbody>
-        </Table>
-        { component.props.showcontrolsandcaption !== false ? <TableControls
-          perspective={ perspective}
-          selectedroleinstance={component.state.row}
-        /> : null}
-      </>
-      :
-        null
-      );
+    if (component.stateIsComplete(["row"])){    
+      return (
+          component.props.showAsAccordionItem ?
+            <Accordion.Item eventKey={perspective.id} key={perspective.id}>
+              <Accordion.Header>
+                <AccordionHeaderWithAddButton
+                  perspective={perspective}
+                  onAddItem={() => {
+                    // Handle add item action
+                    console.log(`Add item to ${perspective.displayName}`);
+                  }}/>
+                </Accordion.Header>
+              <Accordion.Body>{
+              component.constructTable()}
+              </Accordion.Body>
+            </Accordion.Item>
+            :
+            (<>
+              { component.props.showcontrolsandcaption !== false ? 
+                <TableControls
+                  perspective={ perspective}
+                  selectedroleinstance={component.state.row}
+                /> 
+                : 
+                null}
+              {component.constructTable()}
+            </>))}
+        else {
+          return null;
+        }
   }
 }
+
