@@ -12,7 +12,7 @@ import { What } from './what';
 import { Who } from './who';
 import { Clipboard } from './clipboard';
 
-type Section = 'who' | 'what' | 'where';
+type Section = 'who' | 'what' | 'where' | 'none';
 
 interface WWWComponentState {
   isSmallScreen: boolean;
@@ -191,6 +191,22 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
   }
 
   checkScreenSize(){
+    function computeDoubleSection( )
+    {
+      if (window.innerWidth < 768)
+      {
+        return "none";
+      }
+      else if (component.state.isSmallScreen)
+      {
+        return "what";
+      }
+      else
+      {
+        return component.state.doubleSection;
+      }
+    }
+    const component = this;
     const navbar = document.querySelector('#top-navbar');
     const mobileTabs = document.querySelector('#mobile-tabs');
     const whoHeader = document.querySelector('#whoHeader');
@@ -202,7 +218,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
     document.documentElement.style.setProperty('--tabs-height', `${mobileTabsHeight}px`); 
     document.documentElement.style.setProperty('--who-header-height', `${whoHeader ? (whoHeader as HTMLElement).offsetHeight : 0}px`);  
     this.setState(
-      { isSmallScreen: window.innerWidth < 768 });
+      { isSmallScreen: window.innerWidth < 768, doubleSection: computeDoubleSection() } );
   }
 
   prepareMyContextsScreen( )
@@ -379,7 +395,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             >
             <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
               { this.state.screen?.whoWhatWhereScreen ?
-                <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "who"}/>
+                <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "who"}/>
                 :
                 <p className='bg-light-subtle'>Ga ergens heen</p>
               }
@@ -387,7 +403,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
               { this.state.screen?.whoWhatWhereScreen ? 
                 (<PSContext.Provider value={{contextinstance: deconstructContext( this.state.openContext!) as ContextInstanceT, contexttype: this.state.openContextType!, myroletype: this.state.openContextUserType!}}>
-                  <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "what"}/>
+                  <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "what"}/>
                 </PSContext.Provider>)
                 : 
                 <div>Ga ergens heen.</div>
