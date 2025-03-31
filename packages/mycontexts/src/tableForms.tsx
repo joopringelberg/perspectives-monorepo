@@ -2,7 +2,7 @@ import React from "react";
 import { FormElementDef, RoleInstanceT, TableFormDef } from "perspectives-proxy";
 import { buildForm, buildTable } from "perspectives-react";
 import { Component } from "react";
-import { Container, Row } from "react-bootstrap";
+import { Accordion, Container, Row } from "react-bootstrap";
 import MSComponent, { SlidingPanelContentProps } from "./mscomponent";
 
 interface TableFormsProps {
@@ -15,12 +15,14 @@ export class TableForms extends Component<TableFormsProps> {
     const forms = this.props.screenelements.map(({ form }) => form);
     return (
       <MSComponent isMobile={!this.props.showTablesAndForm} className='bg-light-subtle'>
-        <Container fluid>
-          {this.props.screenelements.map(({table, form}, index) => {
-            return <Row className="pb-3" key={table.fields.perspective.id}>{buildTable(table, false)}</Row>;
+        <Accordion defaultActiveKey="0" flush>
+          {
+          this.props.screenelements.map(({table, form}, index) => {
+            // No TableControls, show as Accordion item.
+            return buildTable(table, false, true);
+            })
           }
-          )}
-        </Container>
+        </Accordion>
         <SelectedForm forms={forms} />
     </MSComponent>)
   }
