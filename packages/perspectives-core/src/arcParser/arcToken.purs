@@ -234,6 +234,11 @@ perspectDef = LanguageDef
                   , "chat"
                   , "messages"
                   , "media"
+                  , "who"
+                  , "what"
+                  , "where"
+                  , "master"
+                  , "detail"
 
                   ]
                 , caseSensitive:   true

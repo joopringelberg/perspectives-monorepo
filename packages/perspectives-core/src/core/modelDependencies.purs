@@ -107,6 +107,9 @@ itemOnClipboardSelected = "model://perspectives.domains#System$PerspectivesSyste
 itemOnClipboardClipboardData :: String
 itemOnClipboardClipboardData = "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard$ClipboardData"
 
+itemOnClipboardName :: String
+itemOnClipboardName = "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard$Name"
+
 selectedClipboardItem :: String
 selectedClipboardItem = "model://perspectives.domains#System$PerspectivesSystem$SelectedClipboardItem" 
 ------------------------------------------------------------------------------------

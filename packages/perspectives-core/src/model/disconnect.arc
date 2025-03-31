@@ -46,6 +46,27 @@ domain model://joopringelberg.nl#Disconnect
         all roleverbs
       perspective on IncomingDisconnections
         props (Peer) verbs (Consult)
+      perspective on Manager
+        props (FirstName, LastName) verbs (Consult)
+      screen
+        who
+          Manager
+            master "Master"
+              props (FirstName) verbs (Consult)
+            detail
+              props (FirstName, LastName) verbs (Consult)
+        what
+          DisconnectedPeers
+            master "Disconnected peers"
+              props (Peer) verbs (Consult)
+            detail
+              props (Peer, Disconnected) verbs (Consult)
+        where
+          DisconnectedPeers
+            master "Disconnected peers"
+              props (Peer) verbs (Consult)
+            detail
+              props (Peer, Disconnected) verbs (Consult)
 
     context DisconnectedPeers (relational) filledBy DisconnectedPeer
       state GiveMeARole = exists binding

@@ -35,14 +35,13 @@ import Data.List.NonEmpty (head) as LNE
 import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.String.Regex (test)
-import Type.Proxy (Proxy(..))
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, fromFoldable, insert, union)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
 import Perspectives.Identifiers (Namespace, isTypeUri, newModelRegex, qualifyWith, typeUri2typeNameSpace_)
-import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), PropertyE(..), PropertyMapping(..), PropertyPart(..), RoleE(..), RoleIdentification(..), RolePart(..), ScreenE(..), StateE(..), StateSpecification(..), ViewE(..))
+import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), FreeFormScreenE(..), PropertyE(..), PropertyMapping(..), PropertyPart(..), RoleE(..), RoleIdentification(..), RolePart(..), ScreenE(..), StateE(..), StateSpecification(..), ViewE(..), WhoWhatWhereScreenE(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.ExpandPrefix (expandPrefix)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..))
@@ -63,6 +62,7 @@ import Perspectives.Representation.TypeIdentifiers (ContextType(..), DomeinFileI
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as TI
 import Perspectives.Representation.View (View(..)) as VIEW
 import Prelude (bind, discard, pure, show, void, ($), (&&), (<$>), (<<<), (<>), (==), (>>=), (||))
+import Type.Proxy (Proxy(..))
 
 -------------------
 traverseDomain :: ContextE -> PhaseTwo DomeinFile
@@ -335,12 +335,14 @@ traverseEnumeratedRoleE_ role@(EnumeratedRole{id:rn, kindOfRole}) roleParts = do
       pure e
 
     -- SCREENE
-    handleParts roleName e@(EnumeratedRole roleUnderConstruction@{kindOfRole:kind}) (Screen s@(ScreenE{start, end})) = if kind == TI.UserRole || kind == TI.PublicProxy
+    handleParts roleName e@(EnumeratedRole roleUnderConstruction@{kindOfRole:kind}) (Screen s) = if kind == TI.UserRole || kind == TI.PublicProxy
       then do
         screen' <- expandPrefix s
         void $ lift $ modify \st@{screens} -> st {screens = Cons screen' screens}
         pure e
-      else throwError (ScreenForUserRoleOnly start end)
+      else case s of 
+        WWW (WhoWhatWhereScreenE {start, end}) -> throwError (ScreenForUserRoleOnly start end)
+        ClassicScreen (FreeFormScreenE {start, end}) -> throwError (ScreenForUserRoleOnly start end)
 
     handleParts roleName e@(EnumeratedRole roleUnderConstruction@{}) (PublicUrl calc) = do 
       expandedCalc <- expandPrefix calc
@@ -458,12 +460,15 @@ traverseCalculatedRoleE_ role@(CalculatedRole{id:roleName, kindOfRole}) rolePart
       pure (CalculatedRole $ roleUnderConstruction {views = cons viewType views})
 
     -- SCREENE
-    handleParts e@(CalculatedRole roleUnderConstruction@{kindOfRole:kind}) (Screen s@(ScreenE{start, end})) = if kind == TI.UserRole || kind == TI.Public
+    handleParts e@(CalculatedRole roleUnderConstruction@{kindOfRole:kind}) (Screen s) = if kind == TI.UserRole || kind == TI.Public
       then do
         screen' <- expandPrefix s
         void $ lift $ modify \st@{screens} -> st {screens = Cons screen' screens}
         pure e
-      else throwError (ScreenForUserRoleOnly start end)
+      else case s of 
+        WWW (WhoWhatWhereScreenE {start, end}) -> throwError (ScreenForUserRoleOnly start end)
+        ClassicScreen (FreeFormScreenE {start, end}) -> throwError (ScreenForUserRoleOnly start end)
+
 
     handleParts crole (PublicUrl _) = pure crole
 

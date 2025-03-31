@@ -28,7 +28,7 @@ import Data.Traversable (traverse)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.Identifiers (isTypeUri, typeUri2typeNameSpace)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), FormE(..), MarkDownE(..), NotificationE(..), PropertyVerbE(..), PropsOrView(..), RoleIdentification(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..), TabE(..), TableE(..), WidgetCommonFields)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyVerbE(..), PropsOrView(..), RoleIdentification(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..), TabE(..), TableE(..), TableFormE(..), WhatE(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), PureLetStep(..), SimpleStep(..), Step(..), UnaryStep(..), VarBinding(..))
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo, expandNamespace)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetABinding(..), LetStep(..), Statements(..))
@@ -296,8 +296,38 @@ instance containsPrefixesCalculation :: ScanSymbols Calculation where
   scan q@(Q _) = pure q
 
 instance containsPrefixesScreenE :: ScanSymbols ScreenE where
-  scan (ScreenE rec@{tabs, rows, columns, subject}) = do
-    subject' <- scan subject
+  scan s = case s of 
+    (WWW (WhoWhatWhereScreenE r@{who, what, whereTo, subject, start, end})) -> do
+      who' <- traverse scan who
+      what' <- scan what
+      whereTo' <- traverse scan whereTo
+      subject' <- scan subject
+      pure (WWW (WhoWhatWhereScreenE r {who = who', what = what', whereTo = whereTo', subject = subject'}))
+    (ClassicScreen (FreeFormScreenE rec@{tabs, rows, columns, subject})) -> do
+      subject' <- scan subject
+      tabs' <- case tabs of 
+        Nothing -> pure Nothing
+        Just tbs -> Just <$> traverse scan tbs
+      rows' <- case rows of
+        Nothing -> pure Nothing
+        Just rws -> Just <$> traverse scan rws
+      columns' <- case columns of
+        Nothing -> pure Nothing
+        Just cols -> Just <$> traverse scan cols
+      pure $ ClassicScreen $ FreeFormScreenE rec {rows = rows', columns = columns', subject = subject', tabs = tabs'}
+
+instance ScanSymbols TableFormE where
+  scan (TableFormE table form) = do
+    table' <- scan table
+    form' <- scan form
+    pure $ TableFormE table' form'
+
+instance ScanSymbols WhatE where
+  scan (TableForms t) = TableForms <$> traverse scan t
+  scan (FreeFormScreen c) = FreeFormScreen <$> scan c
+
+instance ScanSymbols FreeFormScreenE where
+  scan (FreeFormScreenE r@{tabs, rows, columns, subject}) = do
     tabs' <- case tabs of 
       Nothing -> pure Nothing
       Just tbs -> Just <$> traverse scan tbs
@@ -307,7 +337,8 @@ instance containsPrefixesScreenE :: ScanSymbols ScreenE where
     columns' <- case columns of
       Nothing -> pure Nothing
       Just cols -> Just <$> traverse scan cols
-    pure $ ScreenE rec {rows = rows', columns = columns', subject = subject', tabs = tabs'}
+    subject' <- scan subject
+    pure $ FreeFormScreenE r {tabs = tabs', rows = rows', columns = columns', subject = subject'}
 
 instance containsPrefixesTableE :: ScanSymbols TableE where
   scan (TableE wcf)= TableE <$> expandPrefixWidgetCommonFields wcf

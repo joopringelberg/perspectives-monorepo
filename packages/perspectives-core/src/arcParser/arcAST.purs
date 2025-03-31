@@ -32,7 +32,7 @@ import Data.Maybe (Maybe, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple)
-import Foreign (unsafeToForeign) 
+import Foreign (unsafeToForeign)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Parsing.Arc.Expression.AST (Step)
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
@@ -44,7 +44,6 @@ import Perspectives.Representation.Class.EnumReadForeign (enumReadForeign)
 import Perspectives.Representation.Context (ContextKind)
 import Perspectives.Representation.ExplicitSet (ExplicitSet)
 import Perspectives.Representation.Range (Range)
- 
 import Perspectives.Representation.TypeIdentifiers (ContextType, RoleKind, RoleType, roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb, RoleVerbList)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
@@ -385,7 +384,19 @@ showPath = maybe "" (append "$")
 --------------------------------------------------------------------------------
 ---- SCREEN
 --------------------------------------------------------------------------------
-newtype ScreenE = ScreenE
+data ScreenE = WWW WhoWhatWhereScreenE | ClassicScreen FreeFormScreenE
+
+newtype WhoWhatWhereScreenE = WhoWhatWhereScreenE
+  { who :: (List TableFormE)
+  , what :: WhatE
+  , whereTo :: (List TableFormE) 
+  , subject :: RoleIdentification
+  , context :: ContextType
+  , start :: ArcPosition
+  , end :: ArcPosition 
+  }
+
+newtype FreeFormScreenE = FreeFormScreenE
   { title :: Maybe String
   , tabs :: Maybe (List TabE)
   , rows :: Maybe (List RowE)
@@ -396,6 +407,9 @@ newtype ScreenE = ScreenE
   , end :: ArcPosition
   }
 
+data WhatE = TableForms (List TableFormE) | FreeFormScreen FreeFormScreenE
+
+data TableFormE = TableFormE TableE FormE
 --------------------------------------------------------------------------------
 ---- SCREENELEMENT
 --------------------------------------------------------------------------------
@@ -549,8 +563,20 @@ instance showContextActionElement :: Show ContextActionE where show = genericSho
 derive instance genericViewElement :: Generic ViewE _
 instance showViewElement :: Show ViewE where show = genericShow
 
-derive instance genericScreen :: Generic ScreenE _
-instance showScreen :: Show ScreenE where show = genericShow
+derive instance Generic ScreenE _
+instance Show ScreenE where show = genericShow
+
+derive instance Generic WhoWhatWhereScreenE _
+instance Show WhoWhatWhereScreenE where show = genericShow
+
+derive instance Generic FreeFormScreenE _
+instance Show FreeFormScreenE where show = genericShow
+
+derive instance Generic TableFormE _
+instance Show TableFormE where show = genericShow
+
+derive instance Generic WhatE _
+instance Show WhatE where show = genericShow
 
 derive instance genericScreenElement :: Generic ScreenElement _
 instance showScreenElement :: Show ScreenElement where

@@ -33,7 +33,6 @@ import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (gets) as State
 import Control.Monad.Trans.Class (lift)
 import Data.Array (cons, elemIndex, filter, find, findIndex, foldM, foldl, foldr, fromFoldable, head, index, intercalate, length, nub, null, uncons, union, updateAt)
-import Data.Array.Partial (head) as ARRP
 import Data.Either (Either(..))
 import Data.Foldable (for_, traverse_)
 import Data.Identity as Identity
@@ -46,23 +45,24 @@ import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, insert, keys, lookup, singleton, unions)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (type (~~~>), MP, MonadPerspectives, forceTypeArray, (###=), (###>>), (###>))
+import Perspectives.CoreTypes (type (~~~>), MP, forceTypeArray, (###=), (###>>))
 import Perspectives.Data.EncodableMap (EncodableMap, empty, insert, lookup, keys, addAll) as EM
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (modifyEnumeratedRoleInDomeinFile, removeDomeinFileFromCache, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, UpstreamAutomaticEffect(..), UpstreamStateNotification(..), addUpstreamAutomaticEffect, addUpstreamNotification, indexedContexts, indexedRoles)
-import Perspectives.Identifiers (Namespace, areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_, typeUri2typeNameSpace)
+import Perspectives.Identifiers (Namespace, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_, typeUri2typeNameSpace)
 import Perspectives.InvertedQuery (RelevantProperties(..))
 import Perspectives.InvertedQuery.Storable (StoredQueries)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AutomaticEffectE(..), ColumnE(..), ContextActionE(..), FormE(..), MarkDownE, NotificationE(..), AuthorOnly(..), PropertyVerbE(..), PropsOrView(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..), TabE(..), TableE(..), WidgetCommonFields) as AST
-import Perspectives.Parsing.Arc.AST (ChatE(..), MarkDownE(..), RoleIdentification(..), SegmentedPath, SentenceE(..), SentencePartE(..), StateTransitionE(..), roleIdentification2context)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ContextActionE(..), NotificationE(..), PropertyVerbE(..), RoleVerbE(..), ScreenE, SelfOnly(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..)) as AST
+import Perspectives.Parsing.Arc.AST (RoleIdentification(..), SegmentedPath, SentenceE(..), SentencePartE(..), StateTransitionE(..), roleIdentification2context)
 import Perspectives.Parsing.Arc.AspectInference (inferFromAspectRoles)
 import Perspectives.Parsing.Arc.CheckSynchronization (checkSynchronization) as SYNC
 import Perspectives.Parsing.Arc.ContextualVariables (addContextualBindingsToExpression, addContextualBindingsToStatements, makeContextStep, makeIdentityStep, makeTypeTimeOnlyContextStep, makeTypeTimeOnlyRoleStep)
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
-import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..), VarBinding)
+import Perspectives.Parsing.Arc.Expression.AST (Step, VarBinding)
 import Perspectives.Parsing.Arc.PhaseThree.CheckPerspectivesModifiers (checkPerspectiveModifiers)
 import Perspectives.Parsing.Arc.PhaseThree.PerspectiveContextualisation (addAspectsToExternalRoles, contextualisePerspectives)
+import Perspectives.Parsing.Arc.PhaseThree.Screens (collectPropertyTypes, collectRoles, handleScreens, roleIdentification2Context, roleIdentification2Step)
 import Perspectives.Parsing.Arc.PhaseThree.SetInvertedQueries (setInvertedQueries)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, lift2, modifyDF, runPhaseTwo_', throwError, withDomeinFile, withFrame)
 import Perspectives.Parsing.Arc.Position (ArcPosition, arcParserStartPosition)
@@ -70,7 +70,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspective
 import Perspectives.Persistent (getDomeinFile)
 import Perspectives.Query.ExpressionCompiler (compileAndDistributeStep, compileAndSaveProperty, compileAndSaveRole, compileExpression, compileStep, qualifyLocalContextName, qualifyLocalEnumeratedRoleName, qualifyLocalRoleName)
 import Perspectives.Query.Kinked (completeInversions)
-import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), domain, domain2roleInContext, domain2roleType, functional, mandatory, range, replaceContext, roleInContext2Role, sumOfDomains, traverseQfd)
+import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), domain, domain2roleInContext, domain2roleType, mandatory, range, replaceContext, roleInContext2Role, sumOfDomains, traverseQfd)
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
 import Perspectives.Query.StatementCompiler (compileStatement)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, transform)
@@ -80,22 +80,20 @@ import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedRole, tryGetPerspectType)
-import Perspectives.Representation.Class.Role (Role(..), allProperties, completeExpandedType, displayName, displayNameOfRoleType, getCalculation, getRole, getRoleType, perspectivesOfRoleType, roleADT, roleADTOfRoleType, roleTypeIsFunctional)
+import Perspectives.Representation.Class.Role (Role(..), allProperties, completeExpandedType, displayNameOfRoleType, getCalculation, getRole, getRoleType, roleADT, roleADTOfRoleType)
 import Perspectives.Representation.Context (Context(..)) as CTXT
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
-import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec(..), addProperty, createModificationSummary, expandPropSet, expandVerbs, isMutatingVerbSet, perspectiveMustBeSynchronized, perspectiveSupportsPropertyForVerb, perspectiveSupportsRoleVerbs, stateSpec2StateIdentifier)
+import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec(..), createModificationSummary, expandPropSet, isMutatingVerbSet, perspectiveMustBeSynchronized, stateSpec2StateIdentifier)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.Sentence (Sentence(..)) as Sentence
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..), StateRecord, constructState)
-import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), and, optimistic, pessimistic)
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), ViewType(..), propertytype2string, roletype2string)
+import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), and)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.Representation.UserGraph.Build (buildUserGraph)
-import Perspectives.Representation.Verbs (PropertyVerb, roleVerbList2Verbs)
 import Perspectives.Representation.View (View(..))
-import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, isPerspectiveOnSelf, lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_, roleStates, statesPerProperty, string2RoleType)
+import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, isPerspectiveOnSelf, lookForUnqualifiedPropertyType_, roleStates, statesPerProperty, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
 import Prelude (Unit, append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=))
 
@@ -1282,282 +1280,6 @@ objectMustBeRole qfd start end = case range <$> qfd of
   Nothing -> pure unit
   (Just r) -> throwError (NotARoleDomain r start end)
 
--- | Qualifies incomplete names and changes RoleType constructor to CalculatedRoleType if necessary.
--- | The role type name (parameter `rt`) is always fully qualified, EXCEPT
--- | for the current subject that holds in the body of `perspective of`.
--- | Result contains no double entries.
--- TODO. Nu ook voor perspective on als een enkele identifier is gebruikt!
-collectRoles :: RoleIdentification -> PhaseThree (Array RoleType)
--- A single role type will result from this case, but it may be a calculated role!
-collectRoles (ExplicitRole ctxt rt pos) = do
-  maximallyQualifiedName <- if isTypeUri (roletype2string rt)
-    then pure (roletype2string rt)
-    else pure $ concatenateSegments (unwrap ctxt) (roletype2string rt)
-  r <- qualifyLocalRoleName pos maximallyQualifiedName
-  pure [r]
--- Compile the expression s with respect to context ctxt.
--- This case MUST represent the current object that holds in the body of `perspective on`. Multiple Enumerated role types can result from this case.
-collectRoles (ImplicitRole ctxt s) = compileExpression (CDOM (UET ctxt)) s >>= \qfd ->
-  case range qfd of
-    RDOM adt -> pure $ nub $ map ENR (allLeavesInADT $ roleInContext2Role <$> adt)
-    otherwise -> throwError $ NotARoleDomain otherwise (startOf s) (endOf s)
-
--- We lookup the qualified name of these properties here, for the object of the perspective.
--- The (partial) names for properties used here may be defined outside
--- of the model (due to role filling). So we use functions that rely on the
--- model cache and hence we need the current model to be in that cache, too.
--- Hence the Partial constraint.
-collectPropertyTypes :: Partial =>
-  AST.PropsOrView ->
-  RoleIdentification ->
-  ArcPosition ->
-  PhaseThree (ExplicitSet PropertyType)
-collectPropertyTypes AST.AllProperties _ _ = pure Universal
-collectPropertyTypes (AST.Properties ps) object start = do
-  roleADT <- roleIdentification2rangeADT object
-  PSet <$> for (fromFoldable ps)
-    \localPropertyName -> do
-      candidates <- lift2 (roleADT ###= lookForUnqualifiedPropertyType localPropertyName)
-      case head candidates of
-        Nothing -> throwError $ UnknownProperty start localPropertyName (show roleADT)
-        (Just t) | length candidates == 1 -> pure t
-        _ -> throwError $ NotUniquelyIdentifying start localPropertyName (propertytype2string <$> candidates)
-
-collectPropertyTypes (AST.View view) object start = do
-  if isTypeUri view
-    then do
-      mview <- lift2 $ tryGetPerspectType (ViewType view)
-      case mview of
-        Just (View {propertyReferences}) -> pure $ PSet propertyReferences
-        Nothing -> throwError $ UnknownView start view
-    else do
-      -- If the RoleIdentification is of a single role type (not an expression), add that role
-      -- to the types we get from expanding the role specification as an expression.
-      -- This causes a calculated role type to be included along with the types of its range.
-      -- It does not matter if that added role is still described as Enumerated while it is actually Calculated.
-      roles <- map ENR <$> (allLeavesInADT <$> roleIdentification2rangeADT object)
-      roles' <- case object of
-        ExplicitRole (ContextType ctxt) r pos -> case r of 
-          ENR (EnumeratedRoleType er) -> pure $ nub $ cons (ENR $ EnumeratedRoleType (qualifyWith ctxt er)) roles
-          CR (CalculatedRoleType er) -> pure $ nub $ cons (CR $ CalculatedRoleType (qualifyWith ctxt er)) roles
-        _ -> pure roles
-      (views :: Object View) <- getsDF _.views
-      -- As we have postponed handling these parse tree fragments after
-      -- handling all others, there can be no forward references.
-      -- The property references in Views are, by now, qualified.
-      case filter (areLastSegmentsOf view) (keys views) of
-        noCandidates | null noCandidates -> throwError $ UnknownView start view
-        candidates -> case filter (isViewOfObject roles') candidates of
-          noCandidates' | null noCandidates' -> throwError $ NotAViewOfObject start view
-          candidates' ->
-            case length candidates' of
-              1 -> unsafePartial case lookup (unsafePartial ARRP.head candidates') views of
-                Just (View {propertyReferences}) -> pure $ PSet propertyReferences
-              _ -> throwError $ NotUniquelyIdentifying start view candidates'
-  where
-    isViewOfObject :: Array RoleType -> String -> Boolean
-    -- | "Context" `isLocalNameOf` "model:Perspectives$Context"
-    isViewOfObject roles viewName = isJust $ findIndex (\rType -> viewName `startsWithSegments` (roletype2string rType)) roles
-
-handleScreens :: LIST.List AST.ScreenE -> PhaseThree Unit
-handleScreens screenEs = do
-  df@{id} <- lift $ State.gets _.dfr
-  -- Take the DomeinFile from PhaseTwoState and temporarily store it in the cache.
-  withDomeinFile
-    id
-    (DomeinFile df)
-    handleScreens'
-  where
-    handleScreens' :: PhaseThree Unit
-    handleScreens' = do
-      screenDefs <- foldM screenDefinition EM.empty (fromFoldable screenEs)
-      modifyDF \dfr -> dfr {screens = screenDefs}
-
-    -- `screenDefMap` is the accumulating map of screens.
-    -- This function adds the ScreenDefinition that we construct from
-    -- the ScreenE to that map.
-    screenDefinition :: ScreenMap -> AST.ScreenE -> PhaseThree ScreenMap
-    screenDefinition screenDefMap (AST.ScreenE{title, tabs, rows, columns, subject, context, start, end}) = do
-      -- Add the ScreenDef for each of these roles.
-      -- By construction, the subjects are represented with an
-      -- RoleIdentification.ExplicitRole data constructor.
-      -- This means that a single Enumerated or Calculated role results.
-      -- `collectRoles` will throw an error if it fails, so here we are guaranteed
-      -- to have a RoleType.
-      subjectRoleTypes <- collectRoles subject
-      screenDefinition' (unsafePartial ARRP.head subjectRoleTypes)
-
-      where
-        -- This is how we get `subjectRoleType` in scope for `widgetCommonFields`.
-        screenDefinition' :: RoleType -> PhaseThree ScreenMap
-        screenDefinition' subjectRoleType = do
-          (tabs' :: Maybe (LIST.List TabDef)) <- case tabs of
-            Nothing -> pure Nothing
-            Just ts -> Just <$> traverse tab ts
-          (rows' :: Maybe (LIST.List ScreenElementDef)) <- case rows of
-            Nothing -> pure Nothing
-            Just rs -> Just <$> traverse row rs
-          columns' <- case columns of
-            Nothing -> pure Nothing
-            Just cs -> Just <$> traverse column cs
-          screenDef <- pure $ ScreenDefinition
-            { title
-            , tabs: fromFoldable <$> tabs'
-            , rows: fromFoldable <$> rows'
-            , columns: fromFoldable <$> columns'
-            , whoWhatWhereScreen: Nothing
-            }
-          pure $ EM.insert (ScreenKey context subjectRoleType) screenDef screenDefMap
-
-          where
-            tab :: AST.TabE -> PhaseThree TabDef
-            tab (AST.TabE tabTitle isDefault screenElements) = do
-              screenElementDefs <- traverse screenElementDef screenElements
-              pure $ TabDef {title: tabTitle, isDefault, elements: (fromFoldable screenElementDefs)}
-
-            row :: AST.RowE -> PhaseThree ScreenElementDef
-            row (AST.RowE screenElements) = do
-              screenElementDefs <- traverse screenElementDef screenElements
-              pure $ RowElementD $ RowDef (fromFoldable screenElementDefs)
-
-            column :: AST.ColumnE -> PhaseThree ScreenElementDef
-            column (AST.ColumnE screenElements) = do
-              screenElementDefs <- traverse screenElementDef screenElements
-              pure $ ColumnElementD $ ColumnDef (fromFoldable screenElementDefs)
-
-            screenElementDef :: AST.ScreenElement -> PhaseThree ScreenElementDef
-            screenElementDef (AST.RowElement rowE) = row rowE
-            screenElementDef (AST.ColumnElement colE) = column colE
-            screenElementDef (AST.TableElement tableE) = TableElementD <$> table tableE
-            screenElementDef (AST.FormElement formE) = FormElementD <$> form formE
-            screenElementDef (AST.MarkDownElement markdownE) = MarkDownElementD <$> markdown markdownE
-            screenElementDef (AST.ChatElement chatE) = ChatElementD <$> chat chatE
-
-            functionalWidget :: ThreeValuedLogic
-            functionalWidget = True
-
-            relationalWidget :: ThreeValuedLogic
-            relationalWidget = False
-
-            table :: AST.TableE -> PhaseThree TableDef
-            table (AST.TableE fields) = TableDef <$> widgetCommonFields fields relationalWidget
-
-            form :: AST.FormE -> PhaseThree FormDef
-            form (AST.FormE fields) = FormDef <$> widgetCommonFields fields functionalWidget
-
-            markdown :: AST.MarkDownE -> PhaseThree MarkDownDef
-            markdown (MarkDownConstant { text, condition, context:ctxt}) = do
-              text' <- unsafePartial case text of 
-                Simple (Value _ _ t) -> pure t
-              condition' <- traverse (compileStep (CDOM $ ST ctxt)) condition
-              pure $ MarkDownConstantDef {text: text', condition: condition', domain: unsafePartial typeUri2ModelUri_ $ unwrap ctxt} 
-            markdown (MarkDownPerspective {widgetFields, condition, start:s, end:e}) = do
-              case condition of 
-                Nothing -> do 
-                  widgetFields' <- widgetCommonFields widgetFields Unknown
-                  pure $ MarkDownPerspectiveDef {widgetFields: widgetFields', conditionProperty: Nothing}
-                Just conditionProp -> do 
-                  (objectRoleType :: RoleType) <- unsafePartial ARRP.head <$> collectRoles widgetFields.perspective
-                  mconditionProperty <- lift $ lift (objectRoleType ###> (lookForUnqualifiedPropertyType_ conditionProp))
-                  case mconditionProperty of 
-                    -- The condition property cannot be recognised as a property of the role with the markdown property.
-                    Nothing -> throwError (UnknownMarkDownConditionProperty s e conditionProp objectRoleType)
-                    Just conditionProperty -> do 
-                      -- add the conditionProperty to the widgetFields!
-                      widgetFields' <- widgetCommonFields widgetFields Unknown
-                      pure $ MarkDownPerspectiveDef {widgetFields: widgetFields' {propertyVerbs = (flip (unsafePartial addProperty) conditionProperty) <$> widgetFields'.propertyVerbs}, conditionProperty: Just conditionProperty}
-            markdown (MarkDownExpression {text, condition, context:ctxt, start:start', end:end'}) = do
-              text' <- compileStep (CDOM $ ST ctxt) text
-              -- The resulting QueryFunctionDescription should be functional.
-              if functional text' `eq` True 
-                then do
-                  condition' <- traverse (compileStep (CDOM $ ST ctxt)) condition
-                  pure $ MarkDownExpressionDef {textQuery: text', condition: condition', text: Nothing}
-                else throwError (MarkDownExpressionMustBeFunctional start' end')
-            
-            chat :: ChatE -> PhaseThree ChatDef
-            chat (ChatE {chatRole, messagesProperty, mediaProperty, start:start', end:end'}) = do 
-              (chatRoleType :: RoleType) <- unsafePartial ARRP.head <$> collectRoles chatRole
-              qualifiedMessageProperty <- qualifyProperty chatRoleType messagesProperty
-              qualifiedMediaProperty <- qualifyProperty chatRoleType mediaProperty
-              pure $ ChatDef {chatRole: chatRoleType, chatInstance: Nothing, messageProperty: qualifiedMessageProperty, mediaProperty: qualifiedMediaProperty}
-
-              where 
-              qualifyProperty ::  RoleType -> String -> PhaseThree EnumeratedPropertyType
-              qualifyProperty chatRoleType prop = do 
-                candidates <- lift2 (chatRoleType ###= lookForUnqualifiedPropertyType_ prop )
-                case head candidates of
-                  Nothing -> throwError $ UnknownProperty start' prop (roletype2string chatRoleType)
-                  (Just t) | length candidates == 1 -> case t of
-                    ENP p -> pure p
-                    CP p -> throwError $ PropertyCannotBeCalculated prop start' end'
-                  otherwise -> throwError $ NotUniquelyIdentifying start' prop (map propertytype2string candidates)
-
-
-            widgetCommonFields :: AST.WidgetCommonFields -> ThreeValuedLogic -> PhaseThree WidgetCommonFieldsDef
-            widgetCommonFields {title:title', perspective, propsOrView, propertyVerbs, roleVerbs, start:start', end:end'} isFunctionalWidget = do
-              -- From a RoleIdentification that represents the object,
-              -- find the relevant Perspective.
-              -- A ScreenElement can only be defined for a named Enumerated or Calculated Role. This means that `perspective` is constructed with the
-              -- RoleIdentification.ExplicitRole data constructor: a single RoleType.
-              -- If no role can be found for the given specification, collectRoles throws an error.
-              (objectRoleType :: RoleType) <- unsafePartial ARRP.head <$> collectRoles perspective
-              -- Check the Cardinality
-              (lift2 $ roleTypeIsFunctional objectRoleType) >>= if _
-                -- object is functional
-                then if optimistic isFunctionalWidget 
-                  -- we're ok with either True or Unknown (MarkDownPerspectiveDef).
-                  then pure unit
-                  -- but not with False.
-                  else throwError (WidgetCardinalityMismatch start' end')
-                -- object is relational
-                else if not $ pessimistic isFunctionalWidget
-                  -- we're ok with either True or Unknown (MarkDownPerspectiveDef).
-                  then pure unit
-                  -- but not with False
-                  else throwError (WidgetCardinalityMismatch start' end')
-              -- All properties defined on this object role.
-              allProps <- lift2 ((roleADTOfRoleType objectRoleType >>= allProperties <<< map roleInContext2Role))
-              -- The user must have a perspective on it. This perspective must have that RoleType
-              -- in its member roleTypes.
-              -- So we fetch the user role, get its Perspectives, and find the one that refers to the objectRoleType.
-              perspectives <- lift2 $ perspectivesOfRoleType subjectRoleType
-              case find (\(Perspective{roleTypes}) -> isJust $ elemIndex objectRoleType roleTypes) perspectives of
-                -- This case is probably that the object and user exist, but the latter
-                -- has no perspective on the former!
-                Nothing -> throwError (UserHasNoPerspective subjectRoleType objectRoleType start' end')
-                Just pspve@(Perspective{id:perspectiveId}) -> do
-                  if perspectiveSupportsRoleVerbs pspve (maybe [] roleVerbList2Verbs roleVerbs)
-                    then pure unit
-                    else throwError (UnauthorizedForRole "Auteur" subjectRoleType objectRoleType (maybe [] roleVerbList2Verbs roleVerbs) (Just start') (Just end'))
-                  case propsOrView, propertyVerbs of
-                    -- The modeller has provided no restrictions.
-                    AST.AllProperties, Universal -> pure
-                      { title:title'
-                      , perspectiveId
-                      , perspective: Nothing
-                      , propertyVerbs: Nothing
-                      , roleVerbs: maybe Nothing (Just <<< roleVerbList2Verbs) roleVerbs
-                      , userRole: subjectRoleType
-                      }
-                    pOrV, pVerbs -> do
-                      (propertyTypes :: ExplicitSet PropertyType) <- unsafePartial collectPropertyTypes pOrV perspective start'
-                      checkVerbsAndProps allProps propertyTypes (expandVerbs pVerbs) pspve objectRoleType
-                      pure
-                        { title:title'
-                        , perspectiveId
-                        , perspective: Nothing
-                        , propertyVerbs: Just $ PropertyVerbs propertyTypes pVerbs
-                        , roleVerbs: maybe Nothing (Just <<< roleVerbList2Verbs) roleVerbs
-                        , userRole: subjectRoleType
-                        }
-              where 
-                checkVerbsAndProps :: Array PropertyType -> ExplicitSet PropertyType -> Array PropertyVerb -> Perspective -> RoleType -> PhaseThree Unit
-                checkVerbsAndProps allProps requiredProps propertyVerbs' perspective' objectRoleType = for_ (expandPropSet allProps requiredProps)
-                  \requiredProp -> for propertyVerbs' \requiredVerb ->
-                    if perspectiveSupportsPropertyForVerb perspective' requiredProp requiredVerb
-                      then pure unit
-                      else throwError (UnauthorizedForProperty "Auteur" subjectRoleType objectRoleType requiredProp requiredVerb (Just start') (Just end'))
 
 addUserRoleGraph :: PhaseThree Unit
 addUserRoleGraph = do
@@ -1755,19 +1477,6 @@ statespec2Domain (AST.ContextState ctype _) = pure $ CDOM (UET ctype)
 statespec2Domain (AST.SubjectState roleIdentification _) = range <$> compileStep (CDOM (UET (roleIdentification2Context roleIdentification))) (roleIdentification2Step roleIdentification)
 statespec2Domain (AST.ObjectState roleIdentification _) = range <$> compileStep (CDOM (UET (roleIdentification2Context roleIdentification))) (roleIdentification2Step roleIdentification)
 
-roleIdentification2rangeADT :: RoleIdentification -> PhaseThree (ADT EnumeratedRoleType)
-roleIdentification2rangeADT roleIdentification = map roleInContext2Role <$> unsafePartial domain2roleType <<< range <$> compileStep
-  (CDOM (UET (roleIdentification2Context roleIdentification)))
-  (roleIdentification2Step roleIdentification)
-
--- | Returns a Step that represents an expression that should be evaluated
--- | with respect to the current context (the compiled function should be applied
--- | to an instance of the current context).
-roleIdentification2Step :: RoleIdentification -> Step
-roleIdentification2Step (ExplicitRole ctxt (ENR (EnumeratedRoleType rt)) pos) = Simple $ ArcIdentifier pos rt
-roleIdentification2Step (ExplicitRole ctxt (CR (CalculatedRoleType rt)) pos) = Simple $ ArcIdentifier pos rt
-roleIdentification2Step (ImplicitRole ctxt stp) = stp
-
 roleIdentificationIsEnumerated :: RoleIdentification -> Boolean
 roleIdentificationIsEnumerated (ExplicitRole _ (ENR _) _) = true
 roleIdentificationIsEnumerated _ = false
@@ -1778,23 +1487,6 @@ isQFDofEnumeratedRole (SQD _ (RolGetter rt) _ _ _) = case rt of
   ENR _ -> true
   CR _ -> false
 isQFDofEnumeratedRole _ = false
-
--- | Returns the current context for the RoleIdentification.
--- | This is, for the lexical position of the current subject or object (for which the
--- | RoleIdentification was constructed), the current context.
-roleIdentification2Context :: RoleIdentification -> ContextType
-roleIdentification2Context (ExplicitRole ctxt _ _) = ctxt
-roleIdentification2Context (ImplicitRole ctxt _) = ctxt
-
-roleIdentification2displayName :: RoleIdentification -> MonadPerspectives (Maybe String)
-roleIdentification2displayName (ImplicitRole _ _) = pure Nothing
-roleIdentification2displayName (ExplicitRole _ (ENR rt) _) = getEnumeratedRole rt >>= pure <<< Just <<< displayName
-roleIdentification2displayName (ExplicitRole _ (CR rt) _) = getCalculatedRole rt >>= pure <<< Just <<< displayName
-
-roleIdentification2TypeName :: RoleIdentification -> (Maybe RoleType)
-roleIdentification2TypeName (ImplicitRole _ _) = Nothing
-roleIdentification2TypeName (ExplicitRole _ rt@(ENR _) _) = Just rt
-roleIdentification2TypeName (ExplicitRole _ rt@(CR _) _) = Just rt
 
 -- A QueryFunctionDescription that will compile to const true.
 trueCondition :: Domain -> QueryFunctionDescription

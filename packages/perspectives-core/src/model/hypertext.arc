@@ -43,6 +43,8 @@ domain model://perspectives.domains#HyperContext
         all roleverbs
 
     user Manager filledBy sys:TheWorld$PerspectivesUsers
+      perspective on Manager
+        props (FirstName, LastName) verbs (Consult)
       perspective on Pages
         all roleverbs
         props (Title) verbs (Consult, SetPropertyValue)
@@ -51,10 +53,34 @@ domain model://perspectives.domains#HyperContext
       perspective on PublicPageCollections
         defaults
       screen
-        row
-          table Pages
-        row
-          table PublicPageCollections
+        who
+          Manager
+            master "Manager"
+              props (LastName) verbs (Consult)
+            detail
+              props (FirstName, LastName) verbs (Consult)
+        what
+          Pages
+            master "Pages"
+              props (Title) verbs (Consult)
+            detail
+              props (Title, ShowAllBlocks) verbs (Consult, SetPropertyValue)
+          PublicPageCollections
+            master "Public Page Collections"
+              props (Name) verbs (Consult)
+            detail
+              props (Name) verbs (Consult, SetPropertyValue)
+        where
+          Pages
+            master "Pages"
+              props (Title) verbs (Consult)
+            detail
+              props (Title, ShowAllBlocks) verbs (Consult, SetPropertyValue)
+          PublicPageCollections
+            master "Public Page Collections"
+              props (Name) verbs (Consult)
+            detail
+              props (Name) verbs (Consult, SetPropertyValue)
 
     context Pages (relational) filledBy Page
       state PageAvailable = exists binding

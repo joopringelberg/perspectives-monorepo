@@ -842,7 +842,7 @@ domain model://perspectives.domains#CouchdbManagement
             form "This Manifest" External
           row
             table "Available Versions" Versions
-              only (RemoveContext)
+              only (RemoveContext, Create)
           row
             markdown <## Add a version
                       In order to add a version of your manifest, use the action `CreateVersion` from the top toolbar.

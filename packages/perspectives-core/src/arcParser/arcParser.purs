@@ -46,7 +46,7 @@ import Parsing.Indent (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), FormE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), ViewE(..), WidgetCommonFields)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), ViewE(..), WhatE(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -1372,8 +1372,8 @@ sentenceE = do
 reserved' :: String -> IP String
 reserved' name = token.reserved name *> pure name
 
--- This parser always succeeds with a string.
--- If no reserved word is found, restores the parser state (uses try internally).
+-- | This parser always succeeds with a string.
+-- | If no reserved word is found, restores the parser state (uses try internally).
 scanIdentifier :: IP String
 scanIdentifier = option "" (lookAhead reservedIdentifier)
 
@@ -1386,22 +1386,85 @@ screenE = withPos do
   reserved "screen"
   title <- optionMaybe token.stringLiteral
   keyword <- scanIdentifier
+  if keyword == "who"
+    then do
+      whoWhatWhereScreenE start
+    else do
+      classicScreenE title start
+
+classicScreenE :: Maybe String -> ArcPosition -> IP ScreenE
+classicScreenE title start = do
   subject <- getSubject
   context <- getCurrentContext
+  keyword <- scanIdentifier
   case keyword of
     "tab" -> do
       tabs <- Just <$> nestedBlock tabE
       end <- getPosition
-      pure $ ScreenE {title, tabs, rows: Nothing, columns: Nothing, subject, context, start, end}
+      pure $ ClassicScreen $ FreeFormScreenE  {title, tabs, rows: Nothing, columns: Nothing, subject, context, start, end}
     "row" -> do
       rows <- Just <$> nestedBlock rowE
       end <- getPosition
-      pure $ ScreenE {title, tabs: Nothing, rows, columns: Nothing, subject, context, start, end}
+      pure $ ClassicScreen $ FreeFormScreenE  {title, tabs: Nothing, rows, columns: Nothing, subject, context, start, end}
     "column" -> do
       columns <- Just <$> nestedBlock columnE
       end <- getPosition
-      pure $ ScreenE {title, tabs: Nothing, columns, rows: Nothing, subject, context, start, end}
-    _ -> fail "Only `tab`, `row` and `column` are allowed here. "
+      pure $ ClassicScreen $ FreeFormScreenE {title, tabs: Nothing, columns, rows: Nothing, subject, context, start, end}
+    _ -> fail "Expected: tab, row, column, "
+
+whoWhatWhereScreenE :: ArcPosition -> IP ScreenE
+whoWhatWhereScreenE start = do
+  subject <- getSubject
+  context <- getCurrentContext
+  who <- whoE <?> "who clause is required."
+  what <- whatE <?> "what clause is required."
+  whereTo <- whereE <?> "where clause is required."
+  end <- getPosition
+  pure $ WWW $ WhoWhatWhereScreenE {who, what, whereTo, subject, context, start, end}
+
+whoE :: IP (List TableFormE)
+whoE = option Nil do 
+  _ <- reserved "who"
+  nestedBlock tableFormE
+
+whatE :: IP WhatE
+whatE = do
+  _ <- reserved "what"
+  tableForms <- isTableForms
+  if tableForms
+    then TableForms <$> nestedBlock tableFormE
+    else do
+      start <- getPosition
+      title <- optionMaybe token.stringLiteral
+      subscreen <- classicScreenE title start
+      case subscreen of 
+        ClassicScreen s -> pure $ FreeFormScreen s
+        _ -> fail "Expected ClassicScreen"
+  where
+    isTableForms :: IP Boolean
+    isTableForms = lookAhead do
+      _ <- arcIdentifier
+      keyword <- reservedIdentifier
+      case keyword of
+        "master" -> pure true
+        _ -> pure false
+
+whereE :: IP (List TableFormE)
+whereE = option Nil (reserved "where" *> nestedBlock tableFormE)
+
+tableFormE :: IP TableFormE
+tableFormE = withPos do
+  pos <- getPosition
+  roleName <- arcIdentifier
+  reserved "master"
+  ctxt <- getCurrentContext
+  -- We cannot know, at this point, whether the role is Calculated or Enumerated.
+  -- Like with the filledBy clause, we assume Enumerated and repair that later.
+  perspective <- pure (ExplicitRole ctxt (ENR $ EnumeratedRoleType $ roleName) pos)
+  table <- TableE <$> tableFormFields perspective
+  reserved "detail"
+  form <- FormE <$> tableFormFields perspective
+  pure $ TableFormE table form
 
 tabE :: IP TabE
 tabE = reserved "tab" *> (TabE <$> token.stringLiteral <*> option false (reserved "default" *> pure true) <*> nestedBlock (defer \_ -> screenElementE))
@@ -1436,6 +1499,38 @@ widgetCommonFields = do
   -- We cannot know, at this point, whether the role is Calculated or Enumerated.
   -- Like with the filledBy clause, we assume Enumerated and repair that later.
   perspective <- pure (ExplicitRole ctxt (ENR $ EnumeratedRoleType $ roleName) pos)
+  isIndented' <- isIndented
+  protectObject do
+    setObject perspective
+    if isIndented'
+      then withPos do
+        -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
+        PropertyVerbE r <- propertyVerbs
+        mroleVerbs <- optionMaybe roleVerbs
+        end <- getPosition
+        pure
+          { title
+          , perspective
+          , propsOrView: r.propsOrView
+          , propertyVerbs: r.propertyVerbs
+          , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
+          , start
+          , end}
+      else do
+        end <- getPosition
+        pure
+          { title
+          , perspective
+          , propsOrView: AllProperties
+          , propertyVerbs: Universal
+          , roleVerbs: Nothing
+          , start
+          , end}
+
+tableFormFields :: RoleIdentification -> IP WidgetCommonFields
+tableFormFields perspective = do
+  start <- getPosition
+  title <- optionMaybe token.stringLiteral
   isIndented' <- isIndented
   protectObject do
     setObject perspective
