@@ -304,6 +304,28 @@ domain model://perspectives.domains#System
         props (Selected, ClipboardData) verbs (SetPropertyValue, Consult)
       perspective on SelectedClipboardItem
         props (ClipboardData) verbs (Consult)
+      
+      -- screen "Home"
+      --   who 
+      --     User 
+      --       master "User"
+      --         props (FirstName) verbs (Consult)
+      --       detail
+      --         props (FirstName, LastName, PublicKey) verbs (Consult, SetPropertyValue)
+      --   what
+      --     External
+      --       master "Perspectives system"
+      --         props (MyContextsVersion) verbs (Consult)
+      --       detail
+      --         props (MyContextsVersion, PDRVersion, CurrentDate, CurrentHour) verbs (Consult)
+      --         props (CurrentLanguage) verbs (SetPropertyValue, Consult)
+      --     ModelsInUse 
+      --       master "Models in Use"
+      --         props (ModelName, Version) verbs (Consult)
+      --       detail
+      --         props (Version, Patch, InstalledPatch, Build, InstalledBuild, Description) verbs (Consult)
+      --         props (UpdateOnBuild) verbs (SetPropertyValue, Consult)
+              
 
       screen "Home"
         tab "System"
@@ -367,6 +389,7 @@ domain model://perspectives.domains#System
       perspective on User
         props (FirstName, LastName) verbs (Consult, SetPropertyValue)
       perspective on ItemsOnClipboard
+        only (Create, Fill, Remove)
         props (Name) verbs (Consult)
         props (Selected) verbs (SetPropertyValue, Consult)
     
