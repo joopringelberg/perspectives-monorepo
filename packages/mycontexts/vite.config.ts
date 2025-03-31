@@ -24,7 +24,8 @@ export default defineConfig({
     fs: {
       allow: [
         '..', // Allow serving files from one level up to the project root
-        '/Users/joopringelberg/Code/perspectives-monorepo/node_modules'
+        '/Users/joopringelberg/Code/perspectives-monorepo/node_modules',
+        '/Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/output'
       ] 
     }
   },

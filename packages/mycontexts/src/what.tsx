@@ -1,9 +1,11 @@
 import React from "react";
-import { MainScreenElements, What as WhatDef } from "perspectives-proxy";
+import { MainScreenElements, TableFormDef, What as WhatDef } from "perspectives-proxy";
 import { FreeFormScreen, PerspectivesComponent, PSContext } from "perspectives-react";
+import { TableForms } from "./tableForms";
 
 interface WhatProps {
   screenelements: WhatDef;
+  showTablesAndForm: boolean;
 }
 
 export class What extends PerspectivesComponent<WhatProps>{
@@ -15,7 +17,7 @@ export class What extends PerspectivesComponent<WhatProps>{
   render() {
     switch (this.props.screenelements.tag) {
       case "TableForms":
-        return <p>TableForms come here</p>
+        return <TableForms screenelements={this.props.screenelements.elements as TableFormDef[]} showTablesAndForm={this.props.showTablesAndForm} />;
       case "FreeFormScreen":
         return <PSContext.Consumer>{
           context => <FreeFormScreen 

@@ -269,6 +269,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           return false;})) as Promise<Boolean>;
   }
 
+  // Ends a previous screen subscription for the current user and establishes a new one.
   fetchScreen (contextType : ContextType, userRoleType: RoleType, context: ContextInstanceT )
   {
     const component = this;
@@ -386,7 +387,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
               { this.state.screen?.whoWhatWhereScreen ? 
                 (<PSContext.Provider value={{contextinstance: deconstructContext( this.state.openContext!) as ContextInstanceT, contexttype: this.state.openContextType!, myroletype: this.state.openContextUserType!}}>
-                  <What screenelements={  this.state.screen.whoWhatWhereScreen.what }/> 
+                  <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "what"}/>
                 </PSContext.Provider>)
                 : 
                 <div>Ga ergens heen.</div>
@@ -450,7 +451,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               {/* Here we render either an arbitrary screen: {tag: "FreeFormScreen", elements: MainScreenElements}, or all TableFormDef elements in the {tag: "TableForms", elements: TableFormDef[]} variant of What. */}
               <Row className="full-www-content-height scrollable-content">
               {this.state.screen?.whoWhatWhereScreen ? 
-                    <What screenelements={  this.state.screen.whoWhatWhereScreen.what }/> 
+                    <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "what"}/>
                     : 
                   <div>Ga ergens heen.</div>
                   }
