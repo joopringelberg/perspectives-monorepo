@@ -1,5 +1,5 @@
-import React, { Component, createRef } from "react";
-import {PSContextType, PSRol} from "./reactcontexts.js";
+import React, { Component } from "react";
+import { PSContextType } from "./reactcontexts.js";
 import i18next from "i18next";
 
 import "./components.css";

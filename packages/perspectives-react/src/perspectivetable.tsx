@@ -286,6 +286,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
             </Accordion.Item>
             :
             (<>
+              {component.constructTable()}
               { component.props.showcontrolsandcaption !== false ? 
                 <TableControls
                   perspective={ perspective}
@@ -293,7 +294,6 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
                 /> 
                 : 
                 null}
-              {component.constructTable()}
             </>))}
         else {
           return null;
