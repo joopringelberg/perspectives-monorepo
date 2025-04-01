@@ -304,7 +304,7 @@ class SharedWorkerChannel {
             // send the request through the channel to the service worker.
             proxy.port.postMessage(req);
             // return the elementary data for unsubscribing.
-            return { subject: req.subject, corrId: req.corrId };
+            return { request: "Unsubscribe", subject: req.subject, corrId: req.corrId };
         });
     }
 }
