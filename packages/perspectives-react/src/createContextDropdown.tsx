@@ -68,7 +68,10 @@ export default class CreateContextDropDown extends Component<CreateContextDropDo
                 className="btn btn-link p-0 me-2"
                 tabIndex={0}
                 // Note that the parameter passed to create is ignored. In this case, this component was handed a create function that only creates a role.
-                onClick={ () => component.props.create("JustTheRole" as ContextType) }
+                onClick={ e => {
+                  e.stopPropagation();
+                  component.props.create("JustTheRole" as ContextType)
+                } }
               >
                 <i 
                   className="bi bi-plus-circle" 
@@ -85,7 +88,14 @@ export default class CreateContextDropDown extends Component<CreateContextDropDo
                 id="dropdown-createContext"
                 title="Contexts to create"
                 focusFirstItemOnShow={false}
-                onSelect={ contextType => component.props.create( contextType as ContextType) }>
+                onClick={ e => {
+                  // Keep a click on an item within the Dropdown.
+                  // The action is handled by the onSelect handler of the Dropdown.
+                  e.stopPropagation();
+                }}
+                onSelect={ contextType => {
+                  component.props.create( contextType as ContextType)
+                  } }>
                 <Dropdown.Toggle as={CustomToggle} id="CreateContext_Toggle" disabled={Object.keys(component.props.contexts).length == 0}>
                   <i 
                     className="bi bi-plus-circle" 
