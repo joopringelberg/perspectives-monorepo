@@ -24,12 +24,16 @@ module Perspectives.Representation.ScreenDefinition where
 
 import Prelude
 
+import Data.Array (length, mapWithIndex)
 import Data.Either (Either(..))
 import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe)
+import Data.Maybe (Maybe(..))
+import Data.Newtype (class Newtype)
 import Data.Show.Generic (genericShow)
+import Data.Tuple (Tuple(..))
 import Foreign (F, Foreign, ForeignError(..), fail)
+import Foreign.Object (Object, fromFoldable, lookup, toUnfoldable)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Data.EncodableMap (EncodableMap)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription)
@@ -325,3 +329,36 @@ writeWidgetCommonFields :: WidgetCommonFieldsDef -> Foreign
 writeWidgetCommonFields {title, perspective} = write
   { title: write title
   , perspective: write perspective}
+
+-------------------------------------------------------------------------------
+---- ACTIONS
+-- NOTE: this type is not used, but it may be useful in the future.
+-------------------------------------------------------------------------------
+-- | the keys are the action names as they occur in the model.
+-- | the values are the translations in the currentLanguage.
+newtype Actions = Actions (Object String)
+-- | If an action key in the first operand occurs in the second operand, we disambiguate it by adding its position number to it.
+derive instance Generic Actions _
+derive instance Newtype Actions _
+instance Monoid Actions where
+  mempty = Actions $ fromFoldable []
+instance Semigroup Actions where
+  append (Actions a) (Actions b) = let 
+    b' = toUnfoldable b 
+    n = length b'
+    a' = mapWithIndex 
+      (\i (Tuple key value) -> case lookup key b of
+        Nothing -> Tuple key value
+        Just value' -> Tuple (key <> show (i + n)) value')
+      (toUnfoldable a)
+    in Actions $ fromFoldable $ a' <> b'
+instance ReadForeign Actions where
+  readImpl f = do 
+    actions <- read' f
+    pure $ Actions actions
+instance WriteForeign Actions where
+  writeImpl (Actions actions) = write actions
+instance Show Actions where
+  show (Actions actions) = show actions
+instance Eq Actions where
+  eq (Actions a) (Actions b) = eq a b
