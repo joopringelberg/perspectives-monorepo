@@ -1,9 +1,9 @@
-import React, { Component } from 'react';
-import { Accordion, Col, Container, Nav, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs } from 'react-bootstrap';
+import React from 'react';
+import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider } from 'react-bootstrap';
 import './www.css';
 import i18next from 'i18next';
-import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, What as WhatDef } from 'perspectives-proxy';
-import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, isSchemedResourceIdentifier, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice} from 'perspectives-react';
+import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, What as WhatDef, ScreenElementDefTagged, RowElementDef, ColumnElementDef, TableElementDef, FormElementDef } from 'perspectives-proxy';
+import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
 import { Me } from './me';
 import { Apps } from './apps';
@@ -11,6 +11,7 @@ import ensureExternalRole from './ensureExternalRole';
 import { What } from './what';
 import { Who } from './who';
 import { Clipboard } from './clipboard';
+import { Where } from './where';
 
 type Section = 'who' | 'what' | 'where' | 'none';
 
@@ -29,6 +30,7 @@ interface WWWComponentState {
   screen?: ScreenDefinition;
   endUserMessage: UserMessagingMessage;
   choiceMessage: ChoiceMessage;
+  actions?: Record<string, string>;
 }
 
 class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
@@ -271,7 +273,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                 else
                 {
                   component.fetchScreen(contextType, userRoles[0], context);
-                  }
+                }
               },
               CONTINUOUS)))
           })
@@ -301,7 +303,15 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           , contextType
           , function( screens : ScreenDefinition[] ) 
             {
-              component.setState({screen: screens[0], openContextType: contextType, openContextUserType: userRoleType});
+              pproxy.getContextActions( userRoleType, context)
+                .then( actions => 
+                  component.setState({screen: screens[0], openContextType: contextType, openContextUserType: userRoleType, actions}))
+                .catch(e => UserMessagingPromise.then( um => 
+                  um.addMessageForEndUser(
+                    { title: i18next.t("app_contextactions_title", { ns: 'mycontexts' }) 
+                    , message: i18next.t("app_contextactions_message", {context, ns: 'mycontexts'})
+                    , error: e.toString()
+                  })));
             }
           , CONTINUOUS
           ,function()
@@ -313,6 +323,25 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             component.screenUnsubscriber = unsubscriber;
           });
       });
+  }
+
+  runAction( actionName : string )
+  {
+    const component = this;
+    PDRproxy.then(
+      function (pproxy)
+      {
+          pproxy.contextAction(
+            deconstructContext( component.state.openContext! ) as ContextInstanceT
+            , component.state.openContextUserType!  // authoringRole
+            , actionName)
+          .catch(e => UserMessagingPromise.then( um => 
+            um.addMessageForEndUser(
+              { title: i18next.t("action_title", { ns: 'preact' }) 
+              , message: i18next.t("action_message", {ns: 'preact', action: actionName})
+              , error: e.toString()
+              })));  
+        });
   }
 
   notificationsAndClipboard() {
@@ -402,15 +431,17 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             </Tab>
             <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
               { this.state.screen?.whoWhatWhereScreen ? 
-                (<PSContext.Provider value={{contextinstance: deconstructContext( this.state.openContext!) as ContextInstanceT, contexttype: this.state.openContextType!, myroletype: this.state.openContextUserType!}}>
                   <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "what"}/>
-                </PSContext.Provider>)
-                : 
+                  : 
                 <div>Ga ergens heen.</div>
               }
             </Tab>
             <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
-              <p className='bg-light-subtle'>Weergave van de perspectieven op waar.</p>
+            { this.state.screen?.whoWhatWhereScreen ? 
+              <Where screenelements={  this.state.screen.whoWhatWhereScreen.whereto } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "where"}/>
+              : 
+                <div>Ga ergens heen.</div>
+              }
             </Tab>
           </Tabs>
           <Navbar fixed="bottom" bg="info" expand="xs" className="justify-content-center py-0">
@@ -433,6 +464,12 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'me'})}>Me</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'apps'})}>Apps</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'settings'})}>Settings</NavDropdown.Item>
+        { component.state.actions && Object.keys( component.state.actions ).length > 0 ?
+          <>
+          <DropdownDivider />
+          { Object.keys( component.state.actions ).map( action => <NavDropdown.Item key={action} onClick={() => component.runAction(action)}>{ component.state.actions![action]}</NavDropdown.Item>) }
+          </>
+          : null }
       </NavDropdown>
       <Navbar.Brand href="#home" className='text-light flex-grow-1 d-flex justify-content-center align-items-center'>{this.state.title}</Navbar.Brand>
     </Navbar>);
@@ -479,9 +516,11 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
               <Row onClick={() => component.setState( {'doubleSection': "where"} )}  ><h4 className='text-center'>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h4></Row>  
               <Row className="px-1 full-www-content-height scrollable-content" style={{overflow: 'auto'}}>
-                <p className='bg-light-subtle'>Here we render all TableFormDef elements that make up the Whereto part of the screen (representing the context roles), as Master-Slave components. </p>
-                <p className='bg-light-subtle'>Rendering of the recent contexts.</p>
-                <p className='bg-light-subtle'>Rendering of the pinned contexts.</p>
+              { this.state.screen?.whoWhatWhereScreen ? 
+                <Where screenelements={  this.state.screen.whoWhatWhereScreen.whereto } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "where"}/>
+                : 
+                  <div>Ga ergens heen.</div>
+                }
               </Row>
             </Col>
           </Row>
