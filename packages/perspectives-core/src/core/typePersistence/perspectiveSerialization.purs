@@ -358,7 +358,10 @@ makeSerialisedProperty pt = do
       MaxExclusive s -> pr {maxExclusive = Just s}
       MinExclusive s -> pr {minExclusive = Just s}
       TotalDigits i -> pr {totalDigits = Just i}
-      FractionDigits i -> pr {fractionDigits = Just i})
+      FractionDigits i -> pr {fractionDigits = Just i}
+      MessageProperty -> pr {isMessageProperty = true}
+      MediaProperty -> pr {isMediaProperty = true}
+      )
       { minLength: Nothing
       , maxLength: Nothing
       , pattern: Nothing
@@ -370,6 +373,8 @@ makeSerialisedProperty pt = do
       , minExclusive: Nothing
       , totalDigits: Nothing
       , fractionDigits: Nothing
+      , isMessageProperty: false
+      , isMediaProperty: false
       }
       facets
 

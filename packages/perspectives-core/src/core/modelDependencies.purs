@@ -112,6 +112,9 @@ itemOnClipboardName = "model://perspectives.domains#System$PerspectivesSystem$It
 
 selectedClipboardItem :: String
 selectedClipboardItem = "model://perspectives.domains#System$PerspectivesSystem$SelectedClipboardItem" 
+
+chatAspect :: String
+chatAspect = "model://perspectives.domains#System$Chat" 
 ------------------------------------------------------------------------------------
 -- ROOTCONTEXT
 ------------------------------------------------------------------------------------

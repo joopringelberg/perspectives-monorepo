@@ -97,6 +97,8 @@ type PropertyFacets =
   , minExclusive :: Maybe String
   , totalDigits :: Maybe Int
   , fractionDigits :: Maybe Int
+  , isMessageProperty :: Boolean
+  , isMediaProperty :: Boolean
   }
 
 newtype SerialisedPerspective = SerialisedPerspective String

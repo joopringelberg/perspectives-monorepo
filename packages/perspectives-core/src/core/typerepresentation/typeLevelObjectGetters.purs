@@ -826,3 +826,4 @@ roleGroundState (EnumeratedRoleType id) = StateIdentifier id
 
 contextGroundState :: ContextType -> StateIdentifier
 contextGroundState (ContextType id) = StateIdentifier id
+

@@ -127,15 +127,17 @@ perspectDef = LanguageDef
                   -- PropertyFacets
                   , "minLength"
                   , "maxLength"
-                  , "enumeration"
                   , "pattern"
                   , "whiteSpace"
+                  , "enumeration"
                   , "maxInclusive"
-                  , "maxExclusive"
                   , "minInclusive"
+                  , "maxExclusive"
                   , "minExclusive"
                   , "totalDigits"
                   , "fractionDigits"
+                  , "messageProperty"
+                  , "mediaProperty"
                   , "regexp"
 
                   -- Perspectives

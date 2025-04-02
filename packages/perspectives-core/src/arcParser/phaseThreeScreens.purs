@@ -23,11 +23,11 @@ module Perspectives.Parsing.Arc.PhaseThree.Screens where
 
 import Control.Monad.State (gets) as State
 import Control.Monad.Trans.Class (lift)
-import Data.Array (cons, elemIndex, filter, find, findIndex, foldM, fromFoldable, head, length, nub, null)
+import Data.Array (catMaybes, cons, elemIndex, filter, filterA, find, findIndex, foldM, fromFoldable, head, length, nub, null)
 import Data.Array.Partial (head) as ARRP
 import Data.Foldable (for_)
 import Data.List (List) as LIST
-import Data.Maybe (Maybe(..), isJust, maybe)
+import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Foreign.Object (Object, keys, lookup)
@@ -36,7 +36,8 @@ import Perspectives.CoreTypes (MonadPerspectives, (###=), (###>))
 import Perspectives.Data.EncodableMap (empty, insert) as EM
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_)
-import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), RoleIdentification(..), WhoWhatWhereScreenE(..))
+import Perspectives.ModelDependencies (chatAspect)
+import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), RoleIdentification(..), WhoWhatWhereScreenE(..))
 import Perspectives.Parsing.Arc.AST (ColumnE(..), FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), WhatE(..), WidgetCommonFields) as AST
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -47,16 +48,17 @@ import Perspectives.Query.ExpressionCompiler (compileExpression, compileStep, qu
 import Perspectives.Query.QueryTypes (Domain(..), domain2roleType, functional, range, roleInContext2Role)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getEnumeratedRole, tryGetPerspectType)
+import Perspectives.Representation.Class.Property (hasFacet)
 import Perspectives.Representation.Class.Role (allProperties, displayName, perspectivesOfRoleType, roleADTOfRoleType, roleTypeIsFunctional)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), addProperty, expandPropSet, expandVerbs, perspectiveSupportsPropertyForVerb, perspectiveSupportsRoleVerbs)
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), What(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), What(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optimistic, pessimistic)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), propertytype2string, roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb, roleVerbList2Verbs)
 import Perspectives.Representation.View (View(..))
-import Perspectives.Types.ObjectGetters (lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
-import Prelude (Unit, bind, discard, eq, flip, map, not, pure, show, unit, ($), (<$>), (<<<), (==), (>>=))
+import Perspectives.Types.ObjectGetters (generalisesRoleType_, lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
+import Prelude (Unit, bind, discard, eq, flip, map, not, pure, show, unit, ($), (<$>), (<<<), (==), (>>=), (<#>))
 
 
 handleScreens :: LIST.List AST.ScreenE -> PhaseThree Unit
@@ -85,6 +87,8 @@ handleScreens screenEs = do
         -- This means that a single Enumerated or Calculated role results.
         -- `collectRoles` will throw an error if it fails, so here we are guaranteed
         -- to have a RoleType.
+        -- We use the first role type in the list of roles, because, again by construction, we know the screen 
+        -- is defined on just one user role type.
         subjectRoleTypes <- collectRoles subject
         toScreen scrn (unsafePartial ARRP.head subjectRoleTypes)
       s@(AST.WWW (WhoWhatWhereScreenE{subject})) -> do
@@ -108,13 +112,14 @@ handleScreens screenEs = do
                   ScreenDefinition {tabs, rows, columns} <- freeFormScreen scrn'
                   pure $ FreeFormScreen {tabs, rows, columns}
               whereTo' <- traverse tableForm whereTo
+              chats <- constructChatDefs
               screenDef <- pure $ ScreenDefinition 
                 { title: Nothing
                 , tabs: Nothing
                 , rows: Nothing
                 , columns: Nothing
                 , whoWhatWhereScreen: Just $ WhoWhatWhereScreenDef 
-                  { who: fromFoldable who'
+                  { who: Who {chats, userRoles: fromFoldable who'}
                   , what: what'
                   , whereto: fromFoldable whereTo'}
                 }
@@ -150,6 +155,30 @@ handleScreens screenEs = do
                 , columns: fromFoldable <$> columns'
                 , whoWhatWhereScreen: Nothing
                 }
+
+            constructChatDefs :: PhaseThree (Array ChatDef)
+            constructChatDefs = lift2 do 
+              -- NOTE that we ignore perspectives that the user role's aspects may have!
+              -- These have been added in compile time.
+              (perspectives :: Array Perspective) <- perspectivesOfRoleType subjectRoleType
+              -- Collect all roles the subject role type has a perspective on.
+              (objectRoles :: Array RoleType) <- pure $ perspectives <#> \(Perspective{roleTypes}) -> unsafePartial fromJust $ head roleTypes
+              -- Filter the roles that are not a specialization of the chatAspect role type.
+              chatRoles <- filterA (generalisesRoleType_ (ENR $ EnumeratedRoleType chatAspect)) objectRoles
+              -- For each of these roles, find the properties with the MessageProperty and MediaProperty facets.
+              -- Finally construct a ChatDef for each of those roles, where the chatInstance is Nothing.
+              catMaybes <$> for chatRoles \chatRole -> do 
+                -- Get the properties of the role.
+                allProps <- roleADTOfRoleType chatRole >>= allProperties <<< map roleInContext2Role
+                -- Filter the properties to find the MessageProperty and MediaProperty.
+                messageProperties <- filterA (flip hasFacet MessageProperty) allProps
+                mediaProperties <- filterA (flip hasFacet MediaProperty) allProps
+                case head messageProperties, head mediaProperties of
+                  Just (ENP messageProperty), Just (ENP mediaProperty) -> 
+                    -- Construct a ChatDef for this role.
+                    pure $ Just $ ChatDef {chatRole, chatInstance: Nothing, messageProperty, mediaProperty}
+                  _, _ -> pure Nothing
+
               
 
             tab :: AST.TabE -> PhaseThree TabDef

@@ -86,8 +86,14 @@ data MarkDownDef =
   MarkDownConstantDef {text :: String, condition :: Maybe QueryFunctionDescription, domain :: String} |
   MarkDownPerspectiveDef { widgetFields :: WidgetCommonFieldsDef, conditionProperty :: Maybe PropertyType} |
   MarkDownExpressionDef {textQuery :: QueryFunctionDescription, condition :: Maybe QueryFunctionDescription,  text :: Maybe String}
+
 newtype ChatDef = ChatDef (ChatDefFields (chatRole :: RoleType))
-type ChatDefFields f = { chatInstance :: Maybe RoleInstance, messageProperty :: EnumeratedPropertyType, mediaProperty :: EnumeratedPropertyType | f}
+type ChatDefFields f = 
+  { chatInstance :: Maybe RoleInstance
+  , messageProperty :: EnumeratedPropertyType
+  , mediaProperty :: EnumeratedPropertyType 
+  | f}
+
 -----------------------------------------------------------
 -- WIDGETS
 -----------------------------------------------------------
@@ -116,13 +122,17 @@ newtype FormDef' = FormDef' (WidgetCommonFieldsDefWithoutPerspective ())
 -----------------------------------------------------------
 -- WHOWHATWHERESCREEN
 -----------------------------------------------------------
-newtype WhoWhatWhereScreenDef = WhoWhatWhereScreenDef {who :: Array TableFormDef, what :: What, whereto :: Array TableFormDef}
+newtype WhoWhatWhereScreenDef = WhoWhatWhereScreenDef {who :: Who, what :: What, whereto :: Array TableFormDef}
 
 -----------------------------------------------------------
 -- TABLEFORM
 -----------------------------------------------------------
 newtype TableFormDef = TableFormDef {table :: TableDef, form :: FormDef}
 
+-----------------------------------------------------------
+-- WHO
+-----------------------------------------------------------
+newtype Who = Who {chats :: Array ChatDef, userRoles :: Array TableFormDef}
 -----------------------------------------------------------
 -- WHAT
 -----------------------------------------------------------
@@ -145,6 +155,7 @@ derive instance Generic ChatDef _
 derive instance Generic WhoWhatWhereScreenDef _
 derive instance Generic TableFormDef _
 derive instance Generic What _
+derive instance Generic Who _
 
 -----------------------------------------------------------
 -- SHOW INSTANCES
@@ -161,6 +172,7 @@ instance Show ChatDef where show = genericShow
 instance Show WhoWhatWhereScreenDef where show = genericShow
 instance Show TableFormDef where show = genericShow
 instance Show What where show = genericShow
+instance Show Who where show = genericShow
 
 -----------------------------------------------------------
 -- EQ INSTANCES
@@ -177,6 +189,7 @@ instance Eq ChatDef where eq = genericEq
 instance Eq WhoWhatWhereScreenDef where eq = genericEq
 instance Eq TableFormDef where eq = genericEq
 instance Eq What where eq = genericEq
+instance Eq Who where eq = genericEq
 
 -----------------------------------------------------------
 -- WRITEFOREIGN INSTANCES
@@ -219,6 +232,9 @@ instance WriteForeign TableFormDef where
 
 instance WriteForeign WhoWhatWhereScreenDef where
   writeImpl (WhoWhatWhereScreenDef {who, what, whereto}) = write {tag: "WhoWhatWhereScreenDef", who, what, whereto}
+
+instance WriteForeign Who where
+  writeImpl (Who {chats, userRoles}) = write {tag: "Who", chats, userRoles}
 
 instance WriteForeign What where
   writeImpl (TableForms t) = write {tag: "TableForms", elements: t}
@@ -295,7 +311,7 @@ instance ReadForeign TableFormDef where
 
 instance ReadForeign WhoWhatWhereScreenDef where
   readImpl f = do 
-    ({tag, who, what, whereto} :: {tag :: String, who :: Array TableFormDef, what :: What, whereto :: Array TableFormDef}) <- read' f
+    ({tag, who, what, whereto} :: {tag :: String, who :: Who, what :: What, whereto :: Array TableFormDef}) <- read' f
     case tag of 
       "WhoWhatWhereScreenDef" -> pure $ WhoWhatWhereScreenDef {who, what, whereto}
       _ -> fail (TypeMismatch "WhoWhatWhereScreenDef" tag)
@@ -311,6 +327,13 @@ instance ReadForeign What where
         Right screenElements -> pure $ FreeFormScreen screenElements
         Left err -> fail (ForeignError (show err))
       _ -> fail (TypeMismatch "What" tag)
+
+instance ReadForeign Who where
+  readImpl f = do 
+    ({tag, chats, userRoles} :: {tag :: String, chats :: Array ChatDef, userRoles :: Array TableFormDef}) <- read' f
+    case tag of 
+      "Who" -> pure $ Who {chats, userRoles}
+      _ -> fail (TypeMismatch "Who" tag)
 -------------------------------------------------------------------------------
 ---- SCREENKEY
 ---- A ScreenKey is constructed in PhaseThree based on the lexical context and subject.

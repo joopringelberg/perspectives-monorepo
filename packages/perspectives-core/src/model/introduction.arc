@@ -120,5 +120,4 @@ domain model://perspectives.domains#Introduction
               media Media
       
     thing Conversation
-      property Messages (relational, String)
-      property Media (relational, String)
+      aspect sys:Chat

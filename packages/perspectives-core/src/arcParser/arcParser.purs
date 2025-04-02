@@ -46,7 +46,7 @@ import Parsing.Indent (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), ViewE(..), WhatE(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), ViewE(..), WhatE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -672,11 +672,24 @@ propertyE = do
         case facet of
           "minLength" -> reserved "=" *> (MinLength <$> token.integer)
           "maxLength" -> reserved "=" *> (MaxLength <$> token.integer)
-          "enumeration" -> reserved "=" *> (Enumeration <<< fromFoldable <$> token.parens (token.commaSep1 (unsafePartial typedValue r'')))
           "pattern" -> reserved "=" *> (Pattern <$> regexExpression <*> token.stringLiteral)
+          "whiteSpace" -> reserved "=" *> (WhiteSpace <$> whiteSpaceRegime)
+          "enumeration" -> reserved "=" *> (Enumeration <<< fromFoldable <$> token.parens (token.commaSep1 (unsafePartial typedValue r'')))
           "maxInclusive" -> reserved "=" *> (MaxInclusive <$> boundaryValue r'')
           "minInclusive" -> reserved "=" *> (MinInclusive <$> boundaryValue r'')
+          "maxExclusive" -> reserved "=" *> (MaxExclusive <$> boundaryValue r'')
+          "minExclusive" -> reserved "=" *> (MinExclusive <$> boundaryValue r'')
+          "totalDigits" -> reserved "=" *> (TotalDigits <$> token.integer)
+          "fractionDigits" -> reserved "=" *> (FractionDigits <$> token.integer)
+          "messageProperty" -> pure MessageProperty
+          "mediaProperty" -> pure MediaProperty
           kw -> fail ("Expected `minLength`, `maxLength`, `enumeration` but got: " <> kw <> ". ")
+      
+        where
+          whiteSpaceRegime :: IP WhiteSpaceRegime
+          whiteSpaceRegime = (reserved "preserve" *> pure Preserve)
+            <|> (reserved "replace" *> pure Replace)
+            <|> (reserved "collapse" *> pure Collapse)
 
       -- Partial, because we cannot have File instances in the ARC syntax.
       typedValue :: Partial => Range -> IP String

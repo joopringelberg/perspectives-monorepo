@@ -24,7 +24,8 @@ module Perspectives.Representation.Class.Property where
 
 import Control.Monad.Error.Class (throwError)
 import Control.Plus ((<|>))
-import Data.Maybe (Maybe(..))
+import Data.Array (elemIndex)
+import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (unwrap)
 import Effect.Exception (error)
 import Perspectives.CoreTypes (MonadPerspectives)
@@ -144,3 +145,13 @@ propertyTypeIsCalculated = getProperty >=> (case _ of
 getPropertyType :: String -> MonadPerspectives PropertyType
 getPropertyType s = ((getEnumeratedProperty $ EnumeratedPropertyType s) >>= pure <<< ENP <<< identifier)
   <|> ((getCalculatedProperty $ CalculatedPropertyType s) >>= pure <<< CP <<< identifier)
+
+----------------------------------------------------------------------------------------
+------- HASFACET
+----------------------------------------------------------------------------------------
+hasFacet :: PropertyType -> PropertyFacet -> MonadPerspectives Boolean
+hasFacet (CP _) _ = pure false
+hasFacet (ENP propertyType) facet = do
+  propertyType' <- getEnumeratedProperty propertyType
+  pure $ isJust $ elemIndex facet (constrainingFacets propertyType')
+  

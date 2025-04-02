@@ -146,6 +146,8 @@ data PropertyFacet =
   | MinExclusive String
   | TotalDigits Int
   | FractionDigits Int
+  | MessageProperty
+  | MediaProperty
 
 instance WriteForeign PropertyFacet where
   writeImpl pf = case pf of
@@ -160,6 +162,8 @@ instance WriteForeign PropertyFacet where
     MinExclusive s -> writeImpl {constructor: "MinExclusive", args: writeJSON s}
     TotalDigits i -> writeImpl {constructor: "TotalDigits", args: writeJSON i}
     FractionDigits i -> writeImpl {constructor: "FractionDigits", args: writeJSON i}
+    MessageProperty -> writeImpl "MessageProperty"
+    MediaProperty -> writeImpl "MediaProperty"
 
 instance ReadForeign PropertyFacet where
   readImpl f = do
@@ -179,6 +183,22 @@ instance ReadForeign PropertyFacet where
       "TotalDigits" -> TotalDigits <$> readJSON' args
       "FractionDigits" -> FractionDigits <$> readJSON' args
 
+instance Eq PropertyFacet where
+  eq (MinLength i1) (MinLength i2) = i1 == i2
+  eq (MaxLength i1) (MaxLength i2) = i1 == i2
+  eq (Pattern r1 s1) (Pattern r2 s2) = r1 == r2 && s1 == s2
+  eq (WhiteSpace wsr1) (WhiteSpace wsr2) = wsr1 == wsr2
+  eq (Enumeration ss1) (Enumeration ss2) = ss1 == ss2
+  eq (MaxInclusive s1) (MaxInclusive s2) = s1 == s2
+  eq (MinInclusive s1) (MinInclusive s2) = s1 == s2
+  eq (MaxExclusive s1) (MaxExclusive s2) = s1 == s2
+  eq (MinExclusive s1) (MinExclusive s2) = s1 == s2
+  eq (TotalDigits i1) (TotalDigits i2) = i1 == i2
+  eq (FractionDigits i1) (FractionDigits i2) = i1 == i2
+  eq MessageProperty MessageProperty = true
+  eq MediaProperty MediaProperty = true
+  eq _ _ = false
+
 data WhiteSpaceRegime =
   -- No normalization is done, the value is not changed (this is the behavior required by [XML 1.0 (Second Edition)] for element content)
   Preserve
@@ -189,6 +209,11 @@ data WhiteSpaceRegime =
 
 instance WriteForeign WhiteSpaceRegime where writeImpl = unsafeToForeign <<< show
 instance ReadForeign WhiteSpaceRegime where readImpl = enumReadForeign
+instance Eq WhiteSpaceRegime where
+  eq Preserve Preserve = true
+  eq Replace Replace = true
+  eq Collapse Collapse = true
+  eq _ _ = false
 --------------------------------------------------------------------------------
 ---- STATEQUALIFIEDPART
 --------------------------------------------------------------------------------
