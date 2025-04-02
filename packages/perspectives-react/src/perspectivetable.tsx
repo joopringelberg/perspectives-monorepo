@@ -226,6 +226,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
     const component = this,
       perspective = component.props.perspective;
     return <Table
+            key={perspective.id}
             responsive
             striped
             bordered

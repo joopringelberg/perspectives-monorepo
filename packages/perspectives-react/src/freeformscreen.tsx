@@ -342,6 +342,7 @@ export function buildTable(table : TableElementDef, showControls : boolean = tru
   // const title = widgetCommonFields.title;
   return (
     <PerspectiveTable
+      key={table.fields.perspective.id}
       cardcolumn={ perspective.identifyingProperty }
       //roleRepresentation
       perspective={perspective}
