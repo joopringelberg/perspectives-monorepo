@@ -202,10 +202,15 @@ export type WidgetCommonFields = {
 };
 
 export type WhoWhatWhereScreenDef = {
-  who: TableFormDef[];
+  who: Who;
   what: What;
   whereto: TableFormDef[];
 };
+
+export type Who = {
+  chats: ChatElementDef[];
+  userRoles: TableFormDef[];
+  }
 
 export type TableFormDef = {
   table: TableElementDef;
