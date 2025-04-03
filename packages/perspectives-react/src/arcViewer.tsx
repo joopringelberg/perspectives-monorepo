@@ -110,11 +110,19 @@ export class ArcViewer extends Component<ArcViewerProps, ArcViewerState>
     }
   }
 
-  componentDidUpdate()
-  {
+  componentDidUpdate(prevProps : ArcViewerProps, prevState: ArcViewerState) {
+    // Only re-highlight if the source text has changed
+    if (prevState.sourceText !== this.state.sourceText) {
+      // First, remove the dataset.highlighted attribute if it exists
+      const codeElement = document.querySelector('code.perspectives-arc') as HTMLElement;
+      if (codeElement) {
+        delete codeElement.dataset.highlighted;
+      }
+      
+      // Then highlight
       hljs.highlightAll();
+    }
   }
-
   retrieveFile(): Promise<File>
   {
     const component = this; 
