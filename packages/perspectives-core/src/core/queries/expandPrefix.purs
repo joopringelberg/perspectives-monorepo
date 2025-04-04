@@ -138,54 +138,65 @@ instance containsPrefixesAssignment :: ScanSymbols Assignment where
   scan (RemoveContext r@{roleExpression}) = do
     eroleExpression <- scan roleExpression
     pure $ RemoveContext r{roleExpression = eroleExpression}
-  scan (CreateRole r@{contextExpression, localName}) = do
+  scan (CreateRole r@{contextExpression, roleIdentifier, localName}) = do
+    econtextExpression <- traverse scan contextExpression
+    eroleIdentifier <- f roleIdentifier
+    elocalName <- traverse scan localName
+    pure $ CreateRole r {contextExpression = econtextExpression, roleIdentifier = eroleIdentifier, localName = elocalName}
+  scan (CreateContext r@{contextExpression, contextTypeIdentifier, roleTypeIdentifier, localName}) = do
+    econtextTypeIdentifier <- f contextTypeIdentifier
+    eroleTypeIdentifier <- traverse f roleTypeIdentifier
     econtextExpression <- traverse scan contextExpression
     elocalName <- traverse scan localName
-    pure $ CreateRole r {contextExpression = econtextExpression, localName = elocalName}
-  scan (CreateContext r@{contextExpression, localName}) = do
-    econtextExpression <- traverse scan contextExpression
-    elocalName <- traverse scan localName
-    pure $ CreateContext r {contextExpression = econtextExpression, localName = elocalName}
-  scan (CreateContext_ r@{roleExpression}) = do
+    pure $ CreateContext r {contextExpression = econtextExpression, localName = elocalName, contextTypeIdentifier = econtextTypeIdentifier, roleTypeIdentifier = eroleTypeIdentifier}  
+  scan (CreateContext_ r@{roleExpression, contextTypeIdentifier}) = do
     eroleExpression <- scan roleExpression
-    pure $ CreateContext_ r {roleExpression = eroleExpression}
+    econtextTypeIdentifier <- f contextTypeIdentifier
+    pure $ CreateContext_ r {roleExpression = eroleExpression, contextTypeIdentifier = econtextTypeIdentifier}
   scan (Move r@{roleExpression, contextExpression}) = do
     econtextExpression <- traverse scan contextExpression
     eroleExpression <- scan roleExpression
     pure $ Move r{roleExpression = eroleExpression, contextExpression = econtextExpression}
-  scan (Bind r@{bindingExpression, contextExpression}) = do
+  scan (Bind r@{bindingExpression, contextExpression, roleIdentifier}) = do
+    eroleIdentifier <- f roleIdentifier
     ebindingExpression <- scan bindingExpression
     econtextExpression <- traverse scan contextExpression
-    pure $ Bind r {bindingExpression = ebindingExpression, contextExpression = econtextExpression}
+    pure $ Bind r {bindingExpression = ebindingExpression, contextExpression = econtextExpression, roleIdentifier = eroleIdentifier}
   scan (Bind_ r@{bindingExpression, binderExpression}) = do
     ebindingExpression <- scan bindingExpression
     ebinderExpression <- scan binderExpression
     pure $ Bind_ r {binderExpression = ebinderExpression, bindingExpression = ebindingExpression}
-  scan (Unbind r@{bindingExpression}) = do
+  scan (Unbind r@{bindingExpression, roleIdentifier}) = do
+    eroleIdentifier <- traverse f roleIdentifier
     ebindingExpression <- scan bindingExpression
-    pure $ Unbind r {bindingExpression = ebindingExpression}
+    pure $ Unbind r {bindingExpression = ebindingExpression, roleIdentifier = eroleIdentifier}
   scan (Unbind_ r@{bindingExpression, binderExpression}) = do
     ebindingExpression <- scan bindingExpression
     ebinderExpression <- scan binderExpression
     pure $ Unbind_ r {bindingExpression = ebindingExpression, binderExpression = ebinderExpression}
-  scan (DeleteRole r@{contextExpression}) = do
+  scan (DeleteRole r@{contextExpression, roleIdentifier}) = do
+    eroleIdentifier <- f roleIdentifier
     econtextExpression <- traverse scan contextExpression
-    pure $ DeleteRole r{contextExpression = econtextExpression}
-  scan (DeleteContext r@{contextExpression}) = do
+    pure $ DeleteRole r{contextExpression = econtextExpression, roleIdentifier = eroleIdentifier}
+  scan (DeleteContext r@{contextExpression, contextRoleIdentifier}) = do
+    econtextRoleIdentifier <- f contextRoleIdentifier
     econtextExpression <- traverse scan contextExpression
-    pure $ DeleteContext r{contextExpression = econtextExpression}
-  scan (DeleteProperty r@{roleExpression}) = do
+    pure $ DeleteContext r{contextExpression = econtextExpression, contextRoleIdentifier = econtextRoleIdentifier}
+  scan (DeleteProperty r@{roleExpression, propertyIdentifier}) = do
+    epropertyIdentifier <- f propertyIdentifier
     eroleExpression <- traverse scan roleExpression
-    pure $ DeleteProperty r{roleExpression = eroleExpression}
-  scan (PropertyAssignment r@{valueExpression, roleExpression}) = do
+    pure $ DeleteProperty r{roleExpression = eroleExpression, propertyIdentifier = epropertyIdentifier}
+  scan (PropertyAssignment r@{valueExpression, roleExpression, propertyIdentifier}) = do
+    epropertyIdentifier <- f propertyIdentifier
     eroleExpression <- traverse scan roleExpression
     evalueExpression <- scan valueExpression
-    pure $ PropertyAssignment r {valueExpression = evalueExpression, roleExpression = eroleExpression}
-  scan (CreateFile r@{roleExpression, fileNameExpression, contentExpression}) = do
+    pure $ PropertyAssignment r {valueExpression = evalueExpression, roleExpression = eroleExpression, propertyIdentifier = epropertyIdentifier}
+  scan (CreateFile r@{roleExpression, propertyIdentifier, fileNameExpression, contentExpression}) = do
     eRoleExpression <- traverse scan roleExpression
+    epropertyIdentifier <- f propertyIdentifier
     eContentExpression <- scan contentExpression
     eFileNameExpression <- scan fileNameExpression
-    pure $ CreateFile r {roleExpression = eRoleExpression, fileNameExpression = eFileNameExpression, contentExpression = eContentExpression}
+    pure $ CreateFile r {roleExpression = eRoleExpression, fileNameExpression = eFileNameExpression, contentExpression = eContentExpression, propertyIdentifier = epropertyIdentifier}
   scan (ExternalEffect r@{effectName, arguments}) = do
     eeffectName <- f effectName
     earguments <- traverse scan arguments
