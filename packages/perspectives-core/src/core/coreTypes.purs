@@ -42,10 +42,16 @@ module Perspectives.CoreTypes
   , InformedAssumption(..)
   , IntegrityFix(..)
   , JustInTimeModelLoad(..)
+  , LibEffect1
+  , LibEffect2
+  , LibEffect3
+  , LibFunc1
+  , LibFunc2
+  , LibFunc3
   , MP
   , MPQ
   , MPT
-  , MonadPerspectives 
+  , MonadPerspectives
   , MonadPerspectivesQuery
   , MonadPerspectivesTransaction
   , ObjectsGetter
@@ -61,8 +67,8 @@ module Perspectives.CoreTypes
   , RuntimeOptions
   , StorageScheme(..)
   , TrackingObjectsGetter
-  , Translations(..)
   , TranslationTable(..)
+  , Translations(..)
   , TypeLevelGetter
   , TypeLevelResults
   , Updater
@@ -79,6 +85,12 @@ module Perspectives.CoreTypes
   , forceArray
   , forceTypeArray
   , liftToInstanceLevel
+  , mkLibEffect1
+  , mkLibEffect2
+  , mkLibEffect3
+  , mkLibFunc1
+  , mkLibFunc2
+  , mkLibFunc3
   , removeInternally
   , representInternally
   , resourceIdToBeStored
@@ -124,6 +136,7 @@ import Perspectives.ApiTypes (CorrelationIdentifier)
 import Perspectives.Couchdb.Revision (class Revision)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DomeinFile (DomeinFile)
+import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
 import Perspectives.Instances.Environment (Environment)
 import Perspectives.InvertedQuery (InvertedQuery)
@@ -132,6 +145,7 @@ import Perspectives.Persistent.ChangesFeed (EventSource)
 import Perspectives.Repetition (Duration)
 import Perspectives.Representation.Class.Identifiable (class Identifiable, identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value)
+import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic)
 import Perspectives.Representation.TypeIdentifiers (ContextType, DomeinFileId(..), EnumeratedPropertyType, EnumeratedRoleType, ResourceType, RoleType, StateIdentifier)
 import Perspectives.ResourceIdentifiers.Parser (pouchdbDatabaseName)
 import Perspectives.Sync.Transaction (Transaction)
@@ -642,3 +656,32 @@ instance Semigroup Translations where
 newtype TranslationTable = TranslationTable (Object Translations)
 derive newtype instance ReadForeign TranslationTable
 derive newtype instance WriteForeign TranslationTable
+
+
+-------------------------------------------------------------------------------
+---- LIBRARY FUNCTION TYPES
+-------------------------------------------------------------------------------
+
+type LibEffect1 = Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
+mkLibEffect1 :: String -> ThreeValuedLogic -> LibEffect1 -> Tuple String HiddenFunctionDescription
+mkLibEffect1 name isFunctional f = Tuple name {func: unsafeCoerce f, nArgs: 1, isFunctional, isEffect: true}
+
+type LibFunc1 = Array String -> (RoleInstance ~~> Value)
+mkLibFunc1 :: String -> ThreeValuedLogic -> LibFunc1 -> Tuple String HiddenFunctionDescription
+mkLibFunc1 name isFunctional f = Tuple name {func: unsafeCoerce f, nArgs: 1, isFunctional, isEffect: false}
+
+type LibEffect2 = Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
+mkLibEffect2 :: String -> ThreeValuedLogic -> LibEffect2 -> Tuple String HiddenFunctionDescription
+mkLibEffect2 name isFunctional f = Tuple name {func: unsafeCoerce f, nArgs: 2, isFunctional, isEffect: true}
+
+type LibFunc2 =  Array String -> Array String -> (RoleInstance ~~> Value)
+mkLibFunc2 :: String -> ThreeValuedLogic -> LibFunc2 -> Tuple String HiddenFunctionDescription
+mkLibFunc2 name isFunctional f = Tuple name {func: unsafeCoerce f, nArgs: 2, isFunctional, isEffect: false}
+
+type LibEffect3 = Array String -> Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
+mkLibEffect3 :: String -> ThreeValuedLogic -> LibEffect3 -> Tuple String HiddenFunctionDescription
+mkLibEffect3 name isFunctional f = Tuple name {func: unsafeCoerce f, nArgs: 3, isFunctional, isEffect: true}
+
+type LibFunc3 = Array String -> Array String -> Array String -> (RoleInstance ~~> Value)
+mkLibFunc3 :: String -> ThreeValuedLogic -> LibFunc3 -> Tuple String HiddenFunctionDescription
+mkLibFunc3 name isFunctional f = Tuple name {func: unsafeCoerce f, nArgs: 3, isFunctional, isEffect: false}

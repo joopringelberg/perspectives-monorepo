@@ -44,7 +44,7 @@ import Perspectives.DataUpgrade.PatchModels (patchModels)
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ErrorLogging (logPerspectivesError)
-import Perspectives.Extern.Couchdb (updateModel)
+import Perspectives.Extern.Couchdb (updateModel_)
 import Perspectives.Extern.Utilities (pdrVersion)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.ModelDependencies (sysUser)
@@ -180,50 +180,50 @@ updateModels0250 = runMonadPerspectivesTransaction'
   false
   (ENR $ EnumeratedRoleType sysUser)
   do
-    updateModel ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#BodiesWithAccounts@1.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#CouchdbManagement@2.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#BodiesWithAccounts@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#CouchdbManagement@2.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
 
 updateModels0254 :: MonadPerspectives Unit
 updateModels0254 = runMonadPerspectivesTransaction'
   false
   (ENR $ EnumeratedRoleType sysUser)
   do
-    updateModel ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#CouchdbManagement@2.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#CouchdbManagement@2.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
 
 updateModels0260 :: MonadPerspectives Unit
 updateModels0260 = runMonadPerspectivesTransaction'
   false
   (ENR $ EnumeratedRoleType sysUser)
   do
-    updateModel ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#BodiesWithAccounts@1.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#CouchdbManagement@3.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#BodiesWithAccounts@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#CouchdbManagement@3.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
 
 updateModels0266 :: MonadPerspectives Unit
 updateModels0266 = runMonadPerspectivesTransaction'
   false
   (ENR $ EnumeratedRoleType sysUser)
   do
-    updateModel ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#CouchdbManagement@6.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#CouchdbManagement@6.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
 
 updateModels0267 :: MonadPerspectives Unit
 updateModels0267 = runMonadPerspectivesTransaction'
   false
   (ENR $ EnumeratedRoleType sysUser)
   do
-    updateModel ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#BodiesWithAccounts@1.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#CouchdbManagement@6.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#Disconnect@1.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#HyperContext@1.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#Introduction@2.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#SharedFileServices@1.0"] ["false"] (RoleInstance "")
-    updateModel ["model://perspectives.domains#SimpleChat@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#BodiesWithAccounts@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#CouchdbManagement@6.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#Disconnect@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#HyperContext@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#Introduction@2.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#SharedFileServices@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#SimpleChat@1.0"] ["false"] (RoleInstance "")

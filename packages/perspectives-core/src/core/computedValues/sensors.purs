@@ -37,11 +37,11 @@ import Effect.Class (liftEffect)
 import Effect.Now (nowDateTime)
 import LRUCache (size)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (MonadPerspectivesQuery, MonadPerspectives)
+import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesQuery, mkLibFunc2)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
-import Perspectives.Representation.InstanceIdentifiers (RoleInstance)
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Simple.JSON (write)
@@ -98,12 +98,12 @@ cacheSize device sensor = show <$> case device, sensor of
     liftEffect $ size cache
 
 -- | Read a value from a Sensor on a Device.
-readSensor :: Array Device -> Array Sensor -> RoleInstance -> MonadPerspectivesQuery String
+readSensor :: Array Device -> Array Sensor -> RoleInstance -> MonadPerspectivesQuery Value
 readSensor device' sensor' _ = try 
   (case head device', head sensor' of
     Just device, Just sensor -> ArrayT case lookup (Tuple device sensor) sensorFunctions of
       Nothing -> pure []
-      Just f -> lift $ singleton <$> f device sensor
+      Just f -> lift $ singleton <<< Value <$> f device sensor
     _, _ -> ArrayT $ pure [])
   >>= handleExternalFunctionError "model://perspectives.domains#Sensor$ReadSensor"
 
@@ -111,5 +111,5 @@ readSensor device' sensor' _ = try
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
 externalFunctions =
-  [ Tuple "model://perspectives.domains#Sensor$ReadSensor" {func: unsafeCoerce readSensor, nArgs: 2, isFunctional: True, isEffect: false}
+  [ mkLibFunc2 "model://perspectives.domains#Sensor$ReadSensor" True readSensor
   ]

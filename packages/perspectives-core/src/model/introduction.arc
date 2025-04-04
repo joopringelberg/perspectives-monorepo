@@ -49,13 +49,29 @@ domain model://perspectives.domains#Introduction
       perspective on Introductions
         only (CreateAndFill, Remove, RemoveContext)
         props (Title) verbs (Consult, SetPropertyValue)
+      perspective on Manager
+        props (FirstName, LastName) verbs (Consult)
       perspective on IncomingIntroductions
         props (Title) verbs (Consult)
-      screen "Introductions"
-        row 
-          table "My Introductions" Introductions
-        row 
-          table "Introductions started by others" IncomingIntroductions
+      screen 
+        who
+          Manager
+            master
+              props (FirstName) verbs (Consult)
+            detail
+              props (FirstName, LastName) verbs (Consult)
+        what
+        where
+          Introductions
+            master 
+              props (Title) verbs (Consult)
+            detail
+              props (Title) verbs (Consult)
+          IncomingIntroductions
+            master 
+              props (Title) verbs (Consult)
+            detail
+              props (Title) verbs (Consult)
 
   case Introduction 
     state NoIntroducer = not exists Introducer
@@ -82,16 +98,19 @@ domain model://perspectives.domains#Introduction
         only (Create, RemoveContext, Remove)
         props (Messages, Media) verbs (AddPropertyValue, Consult)
       screen
-        row
-          column 
-            row 
-              form External
-            row 
-              table Introducee
-          column 
-            chat Conversation
-              messages Messages
-              media Media
+        who
+          Introducee
+            master
+              props (FirstName) verbs (Consult)
+            detail
+              props (FirstName, LastName) verbs (Consult)
+        what
+          External
+            master
+              props (Title) verbs (Consult)
+            detail
+              props (Title) verbs (Consult, SetPropertyValue)
+        where
 
     user Introducee (relational) filledBy sys:TheWorld$PerspectivesUsers
       perspective on extern

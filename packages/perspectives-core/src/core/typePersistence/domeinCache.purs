@@ -249,9 +249,11 @@ storeDomeinFileInCouchdbPreservingAttachments df@(DomeinFile dfr@{id, _attachmen
   newRev <- State.execStateT (addAttachments repositoryUrl documentName attachments) _rev
   setRevision id newRev
   
+
+type AttachmentFiles = Object (Tuple MediaType (Maybe Foreign))
 -- As each attachment that we add will bump the document version, we have to catch it and use it on the
 -- next attachment.
-addAttachments :: String -> String -> Object (Tuple MediaType (Maybe Foreign)) -> State.StateT Revision_ MonadPerspectives Unit
+addAttachments :: String -> String -> AttachmentFiles -> State.StateT Revision_ MonadPerspectives Unit
 addAttachments documentUrl documentName attachments = do 
   forWithIndex_
     attachments 

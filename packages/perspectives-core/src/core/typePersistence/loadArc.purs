@@ -22,6 +22,7 @@
 
 module Perspectives.TypePersistence.LoadArc where
 
+import Control.Alt (void)
 import Control.Monad.Error.Class (catchError)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (delete, null)
@@ -30,10 +31,12 @@ import Data.Foldable (for_)
 import Data.List (List(..))
 import Data.Newtype (unwrap)
 import Data.Tuple (Tuple(..))
+import Data.Unit (unit)
 import Foreign.Object (empty)
+import Parsing (ParseError(..))
 import Perspectives.Checking.PerspectivesTypeChecker (checkDomeinFile)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
-import Perspectives.DomeinCache (retrieveDomeinFile)
+import Perspectives.DomeinCache (retrieveDomeinFile, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.Parsing.Arc (domain)
@@ -46,7 +49,6 @@ import Perspectives.Parsing.Messages (MultiplePerspectivesErrors, PerspectivesEr
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..))
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Prelude (bind, discard, pure, show, ($), (<<<), (==))
-import Parsing (ParseError(..))
 
 -- | The functions in this module load Arc files and parse and compile them to DomeinFiles.
 -- | Some functions expect a CRL file with the same name and add the instances found in them
@@ -62,8 +64,8 @@ type Source = String
 
 -- | Parses and compiles the ARC file to a DomeinFile. Does neither cache nor store the DomeinFile.
 -- | However, will load, cache and store dependencies of the model.
-loadAndCompileArcFile_ :: DomeinFileId -> Source -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple DomeinFile StoredQueries))
-loadAndCompileArcFile_ dfid@(DomeinFileId dfName) text = catchError
+loadAndCompileArcFile_ :: DomeinFileId -> Source -> Boolean -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple DomeinFile StoredQueries))
+loadAndCompileArcFile_ dfid@(DomeinFileId dfName) text saveInCache = catchError
   do
     (r :: Either ParseError ContextE) <- {-pure $ unwrap $-} lift $ lift $ runIndentParser text domain
     case r of
@@ -91,7 +93,9 @@ loadAndCompileArcFile_ dfid@(DomeinFileId dfName) text = catchError
                         , arc = text
                         , _id = takeGuid $ unwrap id
                         }
-                      -- void $ lift $ storeDomeinFileInCache id df
+                      if saveInCache 
+                        then void $ lift $ storeDomeinFileInCache id df
+                        else pure unit
                       pure $ Right $ Tuple df invertedQueries
                     else pure $ Left typeCheckErrors
         else pure $ Left [(DomeinFileIdIncompatible dfid (DomeinFileId sourceDfid) pos)]

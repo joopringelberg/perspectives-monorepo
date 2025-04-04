@@ -31,6 +31,7 @@ module Perspectives.ContextStateCompiler where
 import Prelude
 
 import Control.Monad.AvarMonadAsk (gets, modify)
+import Control.Monad.Error.Class (catchError)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (cons, elemIndex, filterA, foldMap, null)
 import Data.Array.NonEmpty (fromArray)
@@ -60,7 +61,7 @@ import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), contextType, filledBy, getActiveStates_)
 import Perspectives.ModelDependencies (contextWithNotification, notificationMessage, notifications)
 import Perspectives.Names (getMySystem)
-import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, pushFrame, restoreFrame, transactionLevel)
+import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, pushFrame, restoreFrame, transactionLevel)
 import Perspectives.Query.QueryTypes (Calculation(..))
 import Perspectives.Query.UnsafeCompiler (context2propertyValue, getRoleInstances, roleFunctionFromQfd)
 import Perspectives.Representation.Action (AutomaticAction(..))
@@ -173,7 +174,10 @@ enteringState contextId stateId = do
       oldFrame <- lift pushFrame
       -- no need to add currentcontext for context states; a binding has been added compile time.
       lift $ addBinding "currentactor" (unwrap <$> currentactors)
-      updater cid
+      catchError
+        (updater cid)
+        (\e -> do
+          lift $ addWarning (padding <> "Error in automatic action in state: " <> show stateId <> " of context instance " <> show contextId <> ": " <> show e))
       lift $ restoreFrame oldFrame
 
   forWithIndex_ notifyOnEntry \(allowedUser :: RoleType) (compiledSentence :: Updater ContextInstance) -> whenRightUser 

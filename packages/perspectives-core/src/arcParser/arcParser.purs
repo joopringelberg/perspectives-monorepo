@@ -1443,10 +1443,11 @@ whoE = option Nil do
 whatE :: IP WhatE
 whatE = do
   _ <- reserved "what"
-  tableForms <- isTableForms
+  tableForms <- option false isTableForms
   if tableForms
     then TableForms <$> nestedBlock tableFormE
-    else do
+    -- If neither tableForms, nor a classic screen, return empty TableForms.
+    else option (TableForms Nil) do
       start <- getPosition
       title <- optionMaybe token.stringLiteral
       subscreen <- classicScreenE title start

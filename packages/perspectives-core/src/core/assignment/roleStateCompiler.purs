@@ -31,6 +31,7 @@ module Perspectives.RoleStateCompiler where
 import Prelude
 
 import Control.Monad.AvarMonadAsk (gets, modify)
+import Control.Monad.Error.Class (catchError)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (cons, elemIndex, filterA, foldMap, index, null)
 import Data.Array.NonEmpty (fromArray)
@@ -61,7 +62,7 @@ import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), contextType, filledBy, getActiveRoleStates_)
 import Perspectives.ModelDependencies (contextWithNotification, notificationMessage, notifications)
 import Perspectives.Names (getMySystem)
-import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, pushFrame, restoreFrame, transactionLevel)
+import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, pushFrame, restoreFrame, transactionLevel)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), domain, range)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances, role2context, role2propertyValue)
 import Perspectives.Representation.Action (AutomaticAction(..))
@@ -183,7 +184,11 @@ enteringRoleState roleId stateId = do
       -- no need to add currentcontext for context states; a binding has been added compile time.
       lift $ addBinding "currentcontext" [(unwrap cid)]
       lift $ addBinding "currentactor" (unwrap <$> currentactors)
-      updater rid
+      catchError
+        (updater rid)
+        \e -> 
+          -- setInActiveRoleState stateId roleId 
+          lift $ addWarning (padding <> "Error in automatic action in state " <> show stateId <> " of role instance " <> show roleId <> ": " <> show e)
       lift $ restoreFrame oldFrame
 
   forWithIndex_ notifyOnEntry \(allowedUser :: RoleType) ({contextGetter, updater} :: CompiledNotification) -> whenRightUser 

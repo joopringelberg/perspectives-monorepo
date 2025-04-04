@@ -87,7 +87,7 @@ recompileModelsAtUrl modelsDb manifestsDb = do
     recompileModelAtUrl model@(UninterpretedDomeinFile{namespace, _id, _rev, arc, _attachments}) =
       do
         log ("Recompiling " <> namespace)
-        r <- lift $ loadAndCompileArcFile_ (DomeinFileId namespace) arc
+        r <- lift $ loadAndCompileArcFile_ (DomeinFileId namespace) arc false
         case r of
           Left m -> logPerspectivesError $ Custom ("recompileModelsAtUrl: " <> show m)
           Right (Tuple df@(DomeinFile dfr@{id}) invertedQueries) -> lift $ lift do
@@ -117,7 +117,7 @@ recompileModel :: UninterpretedDomeinFile -> ExceptT MultiplePerspectivesErrors 
 recompileModel model@(UninterpretedDomeinFile{_rev, _id, namespace, arc, _attachments}) =
   do
     log ("Recompiling " <> namespace)
-    r <- lift $ loadAndCompileArcFile_ (DomeinFileId namespace) arc
+    r <- lift $ loadAndCompileArcFile_ (DomeinFileId namespace) arc false
     case r of
       Left m -> logPerspectivesError $ Custom ("recompileModel: " <> show m)
       Right (Tuple df@(DomeinFile drf@{invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects}) invertedQueries) -> lift $ lift do
@@ -131,14 +131,14 @@ recompileModel model@(UninterpretedDomeinFile{_rev, _id, namespace, arc, _attach
         forWithIndex_ upstreamStateNotifications
           \domainName notifications -> do
             (try $ getDomeinFile (DomeinFileId domainName)) >>=
-              handleDomeinFileError "addModelToLocalStore'"
+              handleDomeinFileError "recompileModel"
               \(DomeinFile dfr) -> do
                 (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ notifications addDownStreamNotification) dfr))
         -- Distribute upstream automatic effects over the other domains.
         forWithIndex_ upstreamAutomaticEffects
           \domainName automaticEffects -> do
             (try $ getDomeinFile (DomeinFileId domainName)) >>=
-              handleDomeinFileError "addModelToLocalStore'"
+              handleDomeinFileError "recompileModel"
               \(DomeinFile dfr) -> do
                 (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ automaticEffects addDownStreamAutomaticEffect) dfr))
     pure model

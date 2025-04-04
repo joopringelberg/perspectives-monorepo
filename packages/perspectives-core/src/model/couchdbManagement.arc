@@ -954,6 +954,11 @@ domain model://perspectives.domains#CouchdbManagement
       -- This must be writerOnly.
       -- The property will have no value in a new installation, effectively preventing upload on receiving a new Version
       property AutoUpload (Boolean)
+      -- Whether the model is stored in the local store or in the repository, or not at all.
+      property Store (String)
+        enumeration = ("Not", "Locally", "Repository")
+      -- Whether the model is loaded internally immediately. 
+      property ApplyInSession (Boolean)
 
       on exit
         do for Author
@@ -979,19 +984,44 @@ domain model://perspectives.domains#CouchdbManagement
             LastChangeDT = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime
             MustUpload = true
 
-      -- NOTE. This state triggers GenerateYaml.
-      -- Why not roll up both states into one? I hope this design ensures that the required files are available.!
-      state UploadToRepository = (ArcFeedback matches regexp "^OK") and MustUpload
-        on entry
-          do for Author
-            -- This will upload an empty Translations table, too.
-            callEffect p:UploadToRepository( VersionedModelManifest$External$VersionedModelURI, 
-              callExternal util:ReplaceR( "bind publicrole.*in sys:MySystem", "", ArcSource ) returns String)
-            Build = Build + 1
-            MustUpload = false
-            GenerateYaml = true for context >> Translation
-          notify Author
-            "Version {External$Version} (build {Build}) has been uploaded to the repository for {binder Versions >> context >> Repository >> NameSpace >>= first}."
+      state AfterSuccesfulParse = (ArcFeedback matches regexp "^OK") and MustUpload
+        -- NOTE. This state triggers GenerateYaml.
+        -- Why not roll up both states into one? I hope this design ensures that the required files are available.!
+        state UploadToRepository = Store == "Repository"
+          on entry
+            do for Author
+              -- This will upload an empty Translations table, too.
+              callEffect p:UploadToRepository( VersionedModelManifest$External$VersionedModelURI, 
+                callExternal util:ReplaceR( "bind publicrole.*in sys:MySystem", "", ArcSource ) returns String)
+              Build = Build + 1
+              MustUpload = false
+              GenerateYaml = true for context >> Translation
+            notify Author
+              "Version {External$Version} (build {Build}) has been uploaded to the repository for {binder Versions >> context >> Repository >> NameSpace >>= first}."
+        
+        state StoreInLocalDatabase = Store == "Locally"
+          on entry
+            do for Author
+              callEffect p:StoreModelLocally( VersionedModelManifest$External$VersionedModelURI, ArcSource )
+              Build = Build + 1
+              MustUpload = false
+            notify Author
+              "Version {External$Version} (build {Build}) has been stored in the local store."
+
+        state ApplyImmediately = ApplyInSession
+          on entry
+            do for Author
+              callEffect p:ApplyImmediately( ModelURI, ArcSource )
+              MustUpload = false
+            notify Author
+              "Version {External$Version} (build {Build}) has been applied to the current session."
+        
+        state NoAction = not ApplyInSession
+          on entry
+            do for Author
+              MustUpload = false
+            notify Author
+              "Version {External$Version} (build {Build}) has not been stored in the local store or applied to the current session."
       
     thing Translation
       property GenerateYaml (Boolean)
@@ -1033,7 +1063,7 @@ domain model://perspectives.domains#CouchdbManagement
       aspect sys:ContextWithNotification$NotifiedUser
       perspective on extern
         props (DomeinFileName, Version, ArcSource, LastUpload) verbs (Consult)
-        props (ArcFile, ArcFeedback, Description, IsRecommended, Build, Patch, LastChangeDT, MustUpload, AutoUpload) verbs (Consult, SetPropertyValue)
+        props (ArcFile, ArcFeedback, Description, IsRecommended, Build, Patch, LastChangeDT, MustUpload, AutoUpload, Store, ApplyInSession) verbs (Consult, SetPropertyValue)
       perspective on Translation
         only (Create, Remove, Delete)
         props (TranslationYaml, GenerateYaml, LastYamlChangeDT) verbs (Consult, SetPropertyValue)

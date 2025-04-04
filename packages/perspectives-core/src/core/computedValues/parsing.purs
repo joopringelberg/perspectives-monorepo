@@ -44,13 +44,14 @@ import Foreign (Foreign, unsafeToForeign)
 import Foreign.Object (Object, empty)
 import Main.RecompileBasicModels (recompileModelsAtUrl)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction)
+import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibFunc2, mkLibEffect2, mkLibFunc1, mkLibEffect1)
 import Perspectives.Couchdb (DeleteCouchdbDocument(..), DocWithAttachmentInfo(..))
 import Perspectives.Couchdb.Revision (Revision_, changeRevision)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Extern.Couchdb (retrieveModelFromRepository, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (DomeinFileName, ModelUri, isModelUri, modelUri2ModelUrl, unversionedModelUri)
@@ -60,8 +61,9 @@ import Perspectives.ModelTranslation (ModelTranslation, augmentModelTranslation,
 import Perspectives.ModelTranslation (ModelTranslation, emptyTranslationTable)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, addDocument, deleteDocument, fromBlob, getAttachment, getDocument, retrieveDocumentVersion, toFile, tryGetDocument_)
-import Perspectives.PerspectivesState (getWarnings, resetWarnings, setWarnings)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
+import Perspectives.Persistent (getDomeinFile, modelDatabaseName)
+import Perspectives.PerspectivesState (addWarning, getWarnings, resetWarnings, setWarnings)
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
@@ -72,16 +74,17 @@ import Unsafe.Coerce (unsafeCoerce)
 -- | Read the .arc file, parse it and try to compile it. Does neither cache nor store.
 -- | However, will load, cache and store dependencies of the model.
 -- | The DomeinFileName should be unversioned.
-parseAndCompileArc :: Array DomeinFileName -> Array ArcSource -> (ContextInstance ~~> Value)
+parseAndCompileArc :: Array DomeinFileName -> Array ArcSource -> (RoleInstance ~~> Value)
 parseAndCompileArc domeinFileName_ arcSource_ _ = try
   (case head domeinFileName_, head arcSource_ of
-    Nothing, _ -> pure $ Value "No model name given!"
+    Nothing, _-> pure $ Value "No model name given!"
     _, Nothing -> pure $ Value "No arc source given!"
     Just domeinFileName, Just arcSource -> catchError
       do
         previousWarnings <- lift $ lift $ getWarnings
         lift $ lift $ resetWarnings
-        r <- lift $ lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType sysUser) (loadAndCompileArcFile_ (DomeinFileId domeinFileName) arcSource)
+        r <- lift $ lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType sysUser) 
+          (loadAndCompileArcFile_ (DomeinFileId domeinFileName) arcSource false)
         case r of
           Left errs -> ArrayT $ pure (Value <<< show <$> errs) 
           -- Als er meldingen zijn, geef die dan terug.
@@ -91,6 +94,21 @@ parseAndCompileArc domeinFileName_ arcSource_ _ = try
             pure $ Value $ intercalate "\n" (cons "OK" warnings)
       \e -> ArrayT $ pure [Value (show e)])
   >>= handleExternalFunctionError "model://perspectives.domains#Parsing$ParseAndCompileArc"
+
+applyImmediately :: Array DomeinFileName -> Array ArcSource -> RoleInstance -> MonadPerspectivesTransaction Unit
+applyImmediately domeinFileName_ arcSource_ _ = try
+  (case head domeinFileName_, head arcSource_ of
+    Nothing, _-> lift $ addWarning "Parsing$applyImmediately: no model name given!"
+    _, Nothing -> lift $ addWarning "Parsing$applyImmediately: no arc source given!"
+    Just domeinFileName, Just arcSource -> catchError
+      do
+        r <- lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType sysUser) 
+          (loadAndCompileArcFile_ (DomeinFileId domeinFileName) arcSource true)
+        case r of
+          Left errs -> lift $ addWarning ("Error in Parsing$applyImmediately: " <> show errs)
+          Right _ -> pure unit
+      \e -> lift $ addWarning ("Error in Parsing$applyImmediately: " <> show e))
+  >>= handleExternalStatementError "model://perspectives.domains#Parsing$ApplyImmediately"
 
 type ArcSource = String
 type CrlSource = String
@@ -102,11 +120,11 @@ type Url = String
 uploadToRepository ::
   Array DomeinFileName -> 
   Array ArcSource ->
-  Array RoleInstance -> MonadPerspectivesTransaction Unit
+  RoleInstance -> MonadPerspectivesTransaction Unit
 uploadToRepository domeinFileName_ arcSource_ _ = try
   (case head domeinFileName_, head arcSource_ of
     Just domeinFileName, Just arcSource -> do
-      r <- loadAndCompileArcFile_ (DomeinFileId $ unversionedModelUri domeinFileName) arcSource
+      r <- loadAndCompileArcFile_ (DomeinFileId $ unversionedModelUri domeinFileName) arcSource false
       case r of
         Left m -> logPerspectivesError $ Custom ("uploadToRepository: " <> show m)
         -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries.
@@ -167,7 +185,7 @@ uploadToRepository_ splitName (DomeinFile df) invertedQueries = do
 
 removeFromRepository :: 
   Array ModelUri ->
-  Array RoleInstance -> MonadPerspectivesTransaction Unit
+  RoleInstance -> MonadPerspectivesTransaction Unit
 removeFromRepository modelUris _ = try 
   (case head modelUris of
     Just modelUri -> if isModelUri modelUri
@@ -184,12 +202,45 @@ removeFromRepository modelUris _ = try
 compileRepositoryModels ::
   Array Url ->
   Array Url -> 
-  Array RoleInstance -> MonadPerspectivesTransaction Unit
+  RoleInstance -> MonadPerspectivesTransaction Unit
 compileRepositoryModels modelsurl_ manifestsurl_ _ = try
   (case head modelsurl_, head manifestsurl_ of
     Just modelsurl, Just manifestsurl -> recompileModelsAtUrl modelsurl manifestsurl
     _, _ -> logPerspectivesError $ Custom ("compileRepositoryModels lacks arguments"))
   >>= handleExternalStatementError "model://perspectives.domains#Parsing$CompileRepositoryModels"
+
+-------------------------------------------------------------------------------
+---- PARSE AND STORE LOCALLY ONLY
+------------------------------------------------------------------------------- 
+-- | Parse and compile the Arc file. Store in the local model database. Does not cache.
+-- | If the file is not valid, nothing happens.
+-- | The DomeinFileName should be versioned (e.g. model://perspectives.domains#System@1.0).
+-- | Attachments are taken from the Repository and stored locally, 
+-- | where the StoredQueries that result from model compilation overwrite those from the Repository. 
+-- | The translation is that of the Repository, though.
+storeModelLocally_ ::
+  Array DomeinFileName -> 
+  Array ArcSource ->
+  RoleInstance -> MonadPerspectivesTransaction Unit
+storeModelLocally_ domeinFileName_ arcSource_ _ = try
+  (case head domeinFileName_, head arcSource_ of
+    Just domeinFileName, Just arcSource -> do
+      r <- loadAndCompileArcFile_ (DomeinFileId $ unversionedModelUri domeinFileName) arcSource false
+      case r of
+        Left m -> logPerspectivesError $ Custom ("storeModelLocally: " <> show m)
+        -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries.
+        Right (Tuple (DomeinFile dfr@{id, namespace}) invertedQueries) -> do
+          (Tuple _ attachments) <- retrieveModelFromRepository id
+          updateModel true {-with dependencies-} true {-install for first time if necessary-} id (Tuple dfr attachments) invertedQueries
+          -- Finally, save the invertedQueries as a local replacement of the storedQueries.json attachment.
+          theFile <- liftEffect $ toFile "storedQueries.json" "application/json" (unsafeToForeign $ writeJSON invertedQueries)
+          -- We need to get the local database, the local document name and its revision.
+          (DomeinFile {_id, _rev}) <- lift $ getDomeinFile id
+          db <- lift modelDatabaseName
+          lift $ void $ addAttachment db _id _rev "storedQueries.json" theFile (MediaType "application/json")
+
+    _, _ -> logPerspectivesError $ Custom ("storeModelLocally lacks arguments"))
+  >>= handleExternalStatementError "model://perspectives.domains#Parsing$storeModelLocally"
 
 -------------------------------------------------------------------------------
 ---- MODEL TRANSLATION
@@ -292,13 +343,16 @@ augmentModelTranslation translation_ domeinFileName_ _ = case head translation_,
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
 externalFunctions =
-  [ Tuple "model://perspectives.domains#Parsing$ParseAndCompileArc" {func: unsafeCoerce parseAndCompileArc, nArgs: 2, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Parsing$UploadToRepository" {func: unsafeCoerce uploadToRepository, nArgs: 2, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Parsing$RemoveFromRepository" {func: unsafeCoerce removeFromRepository, nArgs: 1, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Parsing$CompileRepositoryModels" {func: unsafeCoerce compileRepositoryModels, nArgs: 2, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Parsing$GenerateFirstTranslation" {func: unsafeCoerce generateFirstTranslation, nArgs: 1, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Parsing$GetTranslationYaml" {func: unsafeCoerce getTranslationYaml, nArgs: 1, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Parsing$ParseYamlTranslation" {func: unsafeCoerce parseYamlTranslation, nArgs: 1, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Parsing$GenerateTranslationTable" {func: unsafeCoerce generateTranslationTable, nArgs: 2, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Parsing$AugmentModelTranslation" {func: unsafeCoerce augmentModelTranslation, nArgs: 2, isFunctional: True, isEffect: false}
+  [ mkLibFunc2 "model://perspectives.domains#Parsing$ParseAndCompileArc" True parseAndCompileArc
+  , mkLibEffect2 "model://perspectives.domains#Parsing$ApplyImmediately" True applyImmediately
+  , mkLibEffect2 "model://perspectives.domains#Parsing$UploadToRepository" True uploadToRepository
+  , mkLibEffect2 "model://perspectives.domains#Parsing$StoreModelLocally" True storeModelLocally_
+  , mkLibEffect1 "model://perspectives.domains#Parsing$RemoveFromRepository" True removeFromRepository
+  , mkLibEffect2 "model://perspectives.domains#Parsing$CompileRepositoryModels" True compileRepositoryModels
+  , mkLibEffect2 "model://perspectives.domains#Parsing$CompileRepositoryModels" True compileRepositoryModels
+  , mkLibFunc1 "model://perspectives.domains#Parsing$GenerateFirstTranslation" True generateFirstTranslation
+  , mkLibFunc1 "model://perspectives.domains#Parsing$GetTranslationYaml" True getTranslationYaml
+  , mkLibFunc1 "model://perspectives.domains#Parsing$ParseYamlTranslation" True parseYamlTranslation
+  , mkLibEffect2 "model://perspectives.domains#Parsing$GenerateTranslationTable" True generateTranslationTable
+  , mkLibFunc2 "model://perspectives.domains#Parsing$AugmentModelTranslation" True augmentModelTranslation
 ]

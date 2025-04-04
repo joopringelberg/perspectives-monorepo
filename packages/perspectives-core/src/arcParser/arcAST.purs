@@ -162,8 +162,8 @@ instance WriteForeign PropertyFacet where
     MinExclusive s -> writeImpl {constructor: "MinExclusive", args: writeJSON s}
     TotalDigits i -> writeImpl {constructor: "TotalDigits", args: writeJSON i}
     FractionDigits i -> writeImpl {constructor: "FractionDigits", args: writeJSON i}
-    MessageProperty -> writeImpl "MessageProperty"
-    MediaProperty -> writeImpl "MediaProperty"
+    MessageProperty -> writeImpl {constructor: "MessageProperty", args: writeJSON ""}
+    MediaProperty -> writeImpl {constructor: "MediaProperty", args: writeJSON ""}
 
 instance ReadForeign PropertyFacet where
   readImpl f = do
@@ -182,6 +182,8 @@ instance ReadForeign PropertyFacet where
       "MinExclusive" -> MinExclusive <$> readJSON' args
       "TotalDigits" -> TotalDigits <$> readJSON' args
       "FractionDigits" -> FractionDigits <$> readJSON' args
+      "MessageProperty" -> pure MessageProperty
+      "MediaProperty" -> pure MediaProperty
 
 instance Eq PropertyFacet where
   eq (MinLength i1) (MinLength i2) = i1 == i2

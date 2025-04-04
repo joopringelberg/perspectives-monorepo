@@ -37,7 +37,6 @@ import Effect.Aff.AVar (new, put, take, tryRead)
 import Effect.Class.Console (log)
 import Effect.Exception (error)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.Assignment.Update (setInActiveContextState, setInActiveRoleState)
 import Perspectives.CollectAffectedContexts (reEvaluatePublicFillerChanges)
 import Perspectives.ContextStateCompiler (enteringState, evaluateContextState, exitingState)
 import Perspectives.CoreTypes (MPT, MonadPerspectives, MonadPerspectivesTransaction, liftToInstanceLevel, (##=), (##>), (##>>))
@@ -436,12 +435,7 @@ evaluateStates stateEvaluations' =
       -- Provide a new frame for the current context variable binding.
       oldFrame <- lift pushFrame
       lift $ addBinding "currentcontext" [unwrap contextId]
-      -- Error boundary.
-      catchError (evaluateContextState contextId stateId)
-        \e -> do 
-          setInActiveContextState stateId contextId 
-          logPerspectivesError $ Custom ("Cannot evaluate context state, because " <> show e)
-          lift $ addWarning (show e)
+      (evaluateContextState contextId stateId)
       lift $ restoreFrame oldFrame
     RoleStateEvaluation stateId roleId -> do
       cid <- lift (roleId ##>> context)
@@ -451,11 +445,7 @@ evaluateStates stateEvaluations' =
       lift $ addBinding "currentcontext" [unwrap cid]
       -- TODO. add binding for "currentobject" or "currentsubject"?!
       -- `stateId` points the way: stateFulObject (StateFulObject) tells us whether it is subject- or object state.
-      catchError (evaluateRoleState roleId stateId) 
-        \e -> do 
-          logPerspectivesError $ Custom ("Cannot evaluate role state, because " <> show e)
-          setInActiveRoleState stateId roleId 
-          lift $ addWarning (show e)
+      evaluateRoleState roleId stateId
       lift $ restoreFrame oldFrame
 
 -- | Run and discard the transaction.

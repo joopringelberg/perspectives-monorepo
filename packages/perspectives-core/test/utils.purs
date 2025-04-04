@@ -9,7 +9,7 @@ import Effect.Aff (Aff, error, throwError, try)
 import Effect.Class.Console (log)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
 import Perspectives.DomeinCache (cascadeDeleteDomeinFile)
-import Perspectives.Extern.Couchdb (addModelToLocalStore, addModelToLocalStore')
+import Perspectives.Extern.Couchdb (addModelToLocalStore, isInitialLoad)
 import Perspectives.Persistence.API (createDatabase, deleteDatabase)
 import Perspectives.Persistence.State (getCouchdbBaseURL)
 import Perspectives.Persistent (entitiesDatabaseName, postDatabaseName)
@@ -109,7 +109,7 @@ withModel' m@(DomeinFileId id) a = do
   mcdbUrl <- getCouchdbBaseURL
   case mcdbUrl of
     Just cdbUrl -> do
-      void $ runSterileTransaction (addModelToLocalStore' (DomeinFileId $ cdbUrl <> "repository/" <> id))
+      void $ runSterileTransaction (addModelToLocalStore (DomeinFileId $ cdbUrl <> "repository/" <> id) isInitialLoad)
       result <- try a
       void $ cascadeDeleteDomeinFile m
       case result of

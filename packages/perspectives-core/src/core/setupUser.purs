@@ -27,7 +27,7 @@ import Data.Maybe (Maybe(..))
 import Data.Newtype (over)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinFile (DomeinFile(..))
-import Perspectives.Extern.Couchdb (addModelToLocalStore', createInitialInstances)
+import Perspectives.Extern.Couchdb (addModelToLocalStore, createInitialInstances, isInitialLoad)
 import Perspectives.ModelDependencies (bodiesWithAccountsModelName, couchdbManagementModelName, sysUser, systemModelName)
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, invertedQueryDatabaseName, modelDatabaseName)
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedRoleType(..), RoleType(..))
@@ -64,7 +64,7 @@ setupUser uninterpretedIdentityDoc = do
     (ENR $ EnumeratedRoleType sysUser) 
     (do 
       modify (over Transaction \t -> t { identityDocument = uninterpretedIdentityDoc })
-      addModelToLocalStore' (DomeinFileId systemModelName)
+      addModelToLocalStore (DomeinFileId systemModelName) isInitialLoad
     )
 
 setupInvertedQueryDatabase :: MonadPerspectives Unit

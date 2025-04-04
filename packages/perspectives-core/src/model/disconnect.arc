@@ -56,11 +56,6 @@ domain model://joopringelberg.nl#Disconnect
             detail
               props (FirstName, LastName) verbs (Consult)
         what
-          DisconnectedPeers
-            master "Disconnected peers"
-              props (Peer) verbs (Consult)
-            detail
-              props (Peer, Disconnected) verbs (Consult)
         where
           DisconnectedPeers
             master "Disconnected peers"
@@ -84,18 +79,38 @@ domain model://joopringelberg.nl#Disconnect
       property Peer = context >> Disconnected >> LastName
       property Disconnected = context >> Disconnected >> Cancelled
 
+    aspect thing sys:Chat
+
     user Disconnecter filledBy sys:TheWorld$PerspectivesUsers
       perspective on Disconnecter
         props (FirstName, LastName) verbs (Consult)
       perspective on Disconnected
         only (Create, Fill)
         props (FirstName, LastName) verbs (Consult)
-        props (Cancelled, Reconnect) verbs (SetPropertyValue)
+        props (Cancelled, Reconnect) verbs (Consult, SetPropertyValue)
+      perspective on sys:Chat
+        only (Create, RemoveContext, Remove)
+        props (Messages, Media) verbs (AddPropertyValue, Consult)
       action Disconnect
         Cancelled = true for Disconnected
       action Reconnect
         Cancelled = false for Disconnected
         Reconnect = true for Disconnected
+      screen 
+        who
+          Disconnecter
+            master
+              props (FirstName) verbs (Consult)
+            detail
+              props (FirstName, LastName) verbs (Consult)
+          Disconnected
+            master
+              props (FirstName) verbs (Consult)
+            detail
+              props (FirstName, LastName, Cancelled) verbs (Consult)
+        what
+        where
+
     
     user Disconnected filledBy sys:TheWorld$PerspectivesUsers
       property Reconnect (Boolean)
@@ -114,4 +129,8 @@ domain model://joopringelberg.nl#Disconnect
 
       perspective on Disconnected
         props (FirstName, LastName, Reconnect) verbs (Consult)
+
+      perspective on sys:Chat
+        only (Create, RemoveContext, Remove)
+        props (Messages, Media) verbs (AddPropertyValue, Consult)
         

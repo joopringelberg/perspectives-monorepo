@@ -42,7 +42,6 @@ import Data.MediaType (MediaType(..))
 import Data.Newtype (over, unwrap)
 import Data.Nullable (toMaybe)
 import Data.String (Replacement(..), replace, Pattern(..))
-import Data.String.Regex (test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (traverse)
@@ -62,22 +61,21 @@ import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.Assignment.Update (withAuthoringRole)
 import Perspectives.Authenticate (getMyPublicKey)
 import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_id)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectives, MonadPerspectivesTransaction, (##=))
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectivesTransaction, mkLibEffect2, mkLibEffect3)
 import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.Deltas (addCreatedContextToTransaction)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
-import Perspectives.DomeinCache (addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
-import Perspectives.DomeinFile (DomeinFile(..), addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
+import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
+import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError, handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
-import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, newModelRegex, typeUri2LocalName_, unversionedModelUri)
+import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, typeUri2LocalName_, unversionedModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext)
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance, createAndAddRoleInstance_)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
-import Perspectives.Instances.ObjectGetters (getEnumeratedRoleInstances)
-import Perspectives.InvertedQuery.Storable (getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries, clearInvertedQueriesDatabase)
+import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesDatabase, getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries)
 import Perspectives.ModelDependencies (identifiableLastName, perspectivesUsersPublicKey, theWorldInitializer)
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Names (getMySystem)
@@ -91,8 +89,6 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (UserName, Password)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit)
 import Perspectives.PerspectivesState (clearQueryCache, contextCache, getPerspectivesUser, modelsDatabaseName, removeTranslationTable, roleCache)
-import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter)
-import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, perspectivesUser2RoleInstance)
@@ -104,7 +100,7 @@ import Perspectives.SaveUserData (scheduleContextRemoval)
 import Perspectives.SetupCouchdb (contextViewFilter, roleViewFilter, setContext2RoleView, setContextView, setCredentialsView, setFiller2FilledView, setFilled2FillerView, setPendingInvitationView, setRoleFromContextView, setRoleView, setRole2ContextView)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer(..))
-import Prelude (Unit, bind, const, discard, eq, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=))
+import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>>=))
 import Simple.JSON (read_)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -161,7 +157,15 @@ pendingInvitations _ = try
     pure $ filledRolesInDatabase `union` filledRolesInCache)
   >>= handleExternalFunctionError "model://perspectives.domains#Couchdb$PendingInvitations"
   
--- | Overwrites the model currently residing in the local models database.
+isUpdate :: Boolean
+isUpdate = false
+
+isInitialLoad :: Boolean
+isInitialLoad = true
+
+
+-- | Adds the model to the local models database if it is not yet there. 
+-- | Overwrites a model currently residing in the local models database.
 -- | Takes care of inverted queries in Couchdb.
 -- | Clears the query cache in PerspectivesState.
 -- | Clears compiled states from cache.
@@ -169,89 +173,127 @@ pendingInvitations _ = try
 -- | The second argument should contain the string representation of a boolean value.
 -- | The third argument is an array with an instance of the role ModelsInuse.
 -- | If no SemVer is given, will try to load the unversioned model (if any).
-updateModel :: Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
-updateModel arrWithModelName arrWithDependencies _ = try 
+ensureLatestModel_ :: Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
+ensureLatestModel_ arrWithModelName arrWithDependencies _ = try 
   (case head arrWithModelName of
     -- fail silently
     Nothing -> pure unit
     -- TODO: add a check on the form of the modelName.
     Just modelName -> if isModelUri modelName 
-      then updateModel' (maybe false (eq "true") (head arrWithDependencies)) (DomeinFileId modelName)
+      then updateModel' (DomeinFileId modelName) (maybe false (eq "true") (head arrWithDependencies)) true
       else throwError (error $ "This is not a well-formed domain name: " <> modelName))
   >>= handleExternalStatementError "model://perspectives.domains#UpdateModel"
 
-  where
-    updateModel' :: Boolean -> DomeinFileId -> MonadPerspectivesTransaction Unit
-    updateModel' withDependencies dfid@(DomeinFileId modelName) = do
-      {repositoryUrl, documentName} <- pure $ unsafePartial modelUri2ModelUrl modelName
-      unversionedModelname <- pure $ unversionedModelUri modelName
-      (lift $ tryGetPerspectEntiteit (DomeinFileId unversionedModelname)) >>= case _ of 
-        -- If we have not installed this model, do nothing.
-        Nothing -> pure unit
-        Just (DomeinFile{upstreamStateNotifications, upstreamAutomaticEffects, referredModels}) -> do
-          -- Remove the inverted queries, upstream notifications and automatic effects of the OLD version of the model!
-          if withDependencies
-            then for_ referredModels (updateModel' withDependencies)
-            else pure unit
-          -- Remove the inverted queries contributed by this model.
-          lift $ removeInvertedQueriesContributedByModel dfid
-          -- Get the inverted queries from the repository,
-          -- and add the inverted queries to the local database.
-          lift (getInvertedQueriesOfModel repositoryUrl documentName >>= saveInvertedQueries)
+-- | Takes care of inverted queries in Couchdb.
+-- | Clears the query cache in PerspectivesState.
+-- | Clears compiled states from cache.
+-- | The first argument should contain the model name ("model://some.domain#Something@<SemVer>"), 
+-- | The second argument should contain the string representation of a boolean value.
+-- | The third argument is an array with an instance of the role ModelsInuse.
+-- | If no SemVer is given, will try to load the unversioned model (if any).
+updateModel_ :: Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
+updateModel_ arrWithModelName arrWithDependencies _ = try 
+  (case head arrWithModelName of
+    -- fail silently
+    Nothing -> pure unit
+    -- TODO: add a check on the form of the modelName.
+    Just modelName -> if isModelUri modelName 
+      then updateModel' (DomeinFileId modelName) (maybe false (eq "true") (head arrWithDependencies)) true
+      else throwError (error $ "This is not a well-formed domain name: " <> modelName))
+  >>= handleExternalStatementError "model://perspectives.domains#UpdateModel"
 
-          forWithIndex_ upstreamStateNotifications
-            \domainName notifications -> do
-              (lift $ try $ getDomeinFile (DomeinFileId domainName)) >>=
-                handleDomeinFileError "updateModel'"
-                \(DomeinFile dfr) -> do
-                  lift (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ notifications removeDownStreamNotification) dfr))
-          forWithIndex_ upstreamAutomaticEffects
-            \domainName automaticEffects -> do
-              (lift $ try $ getDomeinFile (DomeinFileId domainName)) >>=
-                handleDomeinFileError "updateModel'"
-                \(DomeinFile dfr) -> do
-                  lift (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ automaticEffects removeDownStreamAutomaticEffect) dfr))
-          -- Clear the caches of compiled states.
-          void $ pure $ clearModelStates (DomeinFileId unversionedModelname)
-          -- Install the new model, taking care of outgoing InvertedQueries.
-          addModelToLocalStore (DomeinFileId modelName) isUpdate
-          -- The model is now decached, but the translations table is still in cache.
-          -- It will be loaded when a new type lookup is performed.
-          lift $ removeTranslationTable modelName
-          lift $ fetchTranslations dfid
+updateModel' :: DomeinFileId -> Boolean -> Boolean -> MonadPerspectivesTransaction Unit
+updateModel' dfid@(DomeinFileId modelName) withDependencies install = do
+  {repositoryUrl, documentName} <- pure $ unsafePartial modelUri2ModelUrl modelName
+  storedQueries <- lift $ getInvertedQueriesOfModel repositoryUrl documentName
+  domeinFileAndAttachents <- retrieveModelFromRepository (DomeinFileId modelName)
+  updateModel withDependencies false (DomeinFileId modelName) domeinFileAndAttachents storedQueries 
+
+updateModel :: Boolean -> Boolean -> DomeinFileId -> (Tuple DomeinFileRecord AttachmentFiles) -> StoredQueries -> MonadPerspectivesTransaction Unit
+updateModel withDependencies install dfid@(DomeinFileId modelName) domeinFileAndAttachents storedQueries= do
+  unversionedModelname <- pure $ unversionedModelUri modelName
+  (lift $ tryGetPerspectEntiteit (DomeinFileId unversionedModelname)) >>= case _ of 
+    -- Not installed.
+    Nothing -> if install
+      -- Not installed, but want to install: install it.
+      then installModelLocally domeinFileAndAttachents isInitialLoad
+      -- Not installed, and do not want to install: do nothing.
+      else pure unit
+    Just (DomeinFile{upstreamStateNotifications, upstreamAutomaticEffects, referredModels}) -> do
+      -- Remove the inverted queries, upstream notifications and automatic effects of the OLD version of the model!
+      if withDependencies
+        then for_ referredModels \dependency -> updateModel' dependency withDependencies false
+        else pure unit
+      -- Remove the inverted queries contributed by this model.
+      lift $ removeInvertedQueriesContributedByModel dfid
+
+      -- Get the inverted queries from the repository,
+      -- and add the inverted queries to the local database.
+      lift (saveInvertedQueries storedQueries)
+      -- As we have the new definitions of invertedQueries in place in the database, we should now clear the cache in PerspectivesState
+      -- to prevent old versions of being used.
+      lift clearQueryCache
+
+      forWithIndex_ upstreamStateNotifications
+        \domainName notifications -> do
+          (lift $ try $ getDomeinFile (DomeinFileId domainName)) >>=
+            handleDomeinFileError "updateModel"
+            \(DomeinFile dfr) -> do
+              lift (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ notifications removeDownStreamNotification) dfr))
+      forWithIndex_ upstreamAutomaticEffects
+        \domainName automaticEffects -> do
+          (lift $ try $ getDomeinFile (DomeinFileId domainName)) >>=
+            handleDomeinFileError "updateModel"
+            \(DomeinFile dfr) -> do
+              lift (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ automaticEffects removeDownStreamAutomaticEffect) dfr))
+      -- Clear the caches of compiled states.
+      void $ pure $ clearModelStates (DomeinFileId unversionedModelname)
+      -- Install the new model, taking care of outgoing InvertedQueries.
+      addModelToLocalStore (DomeinFileId modelName) isUpdate
+      -- The model is now decached, but the translations table is still in cache.
+      -- It will be loaded when a new type lookup is performed.
+      lift $ removeTranslationTable modelName
+      lift $ fetchTranslations dfid
     
-    allModelsInUse :: MonadPerspectives (Array DomeinFileId)
-    allModelsInUse = do
-      system <- getMySystem
-      propGetter <- getDynamicPropertyGetter DEP.modelURI (UET (EnumeratedRoleType DEP.modelsInUse))
-      values <- (ContextInstance system) ##= (getEnumeratedRoleInstances (EnumeratedRoleType DEP.modelsInUse) >=> propGetter)
-      pure $ DomeinFileId <<< unwrap <$> values
-
-
 -- | Retrieve the model(s) from the modelName(s) and add them to the local couchdb installation.
 -- | Load the dependencies first.
 -- | This function is applied with `callEffect`. Accordingly, it will get the ContextInstance of the Action as second parameter.
 -- | Requires the right to write to the Repository database (SERVERADMIN, DATABASEADMIN, WRITINGMEMBER)
 addModelToLocalStore_ :: Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
-addModelToLocalStore_ modelNames _ = try (for_ modelNames (addModelToLocalStore' <<< DomeinFileId))
+addModelToLocalStore_ modelNames _ = try (for_ modelNames (flip addModelToLocalStore isInitialLoad <<< DomeinFileId))
   >>= handleExternalStatementError "model://perspectives.domains#AddModelToLocalStore"
-
-addModelToLocalStore' :: DomeinFileId -> MonadPerspectivesTransaction Unit
-addModelToLocalStore' dfid@(DomeinFileId domeinFileName) = if test newModelRegex domeinFileName 
-  then addModelToLocalStore dfid isInitialLoad
-  else throwError (error $ "Not a valid model name: " <> domeinFileName)
-
-isUpdate :: Boolean
-isUpdate = false
-
-isInitialLoad :: Boolean
-isInitialLoad = true
 
 -- | Parameter `isUpdate` should be true iff the model has been added to the local installation before.
 -- | Attachments are fetched from the repository and stored locally.
 -- | Invariant: the model is not in cache when this function returns.
 addModelToLocalStore :: DomeinFileId -> Boolean -> MonadPerspectivesTransaction Unit
 addModelToLocalStore dfid@(DomeinFileId modelname) isInitialLoad' = do
+  domeinFileAndAttachments <- retrieveModelFromRepository dfid
+  installModelLocally domeinFileAndAttachments isInitialLoad'
+
+retrieveModelFromRepository :: DomeinFileId -> MonadPerspectivesTransaction (Tuple DomeinFileRecord AttachmentFiles)
+retrieveModelFromRepository dfid@(DomeinFileId modelname) = do
+  {versionedModelName} <- computeVersionedAndUnversiondName dfid
+  {repositoryUrl, documentName} <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
+  (DomeinFile dfile@{_attachments}) <- lift $ getDocument repositoryUrl documentName
+
+  attachments <- case _attachments of
+    Nothing -> pure empty
+    Just atts ->  lift $ traverseWithIndex
+      (\attName {content_type} -> Tuple (MediaType content_type) <$> getAttachment repositoryUrl documentName attName)
+      atts
+  pure (Tuple dfile attachments)
+
+type NameAndVersion = 
+  { patch :: String
+  , build :: String
+  , versionedModelName :: String
+  , unversionedModelname :: String
+  , versionedModelManifest :: Maybe RoleInstance
+  }
+
+computeVersionedAndUnversiondName :: DomeinFileId -> MonadPerspectivesTransaction NameAndVersion
+computeVersionedAndUnversiondName (DomeinFileId modelname) = do
   unversionedModelname <- pure $ unversionedModelUri modelname
   x :: (Maybe {semver :: String, versionedModelManifest :: RoleInstance}) <- lift $ getVersionToInstall (DomeinFileId unversionedModelname)
   {patch, build} <- case x of 
@@ -268,23 +310,12 @@ addModelToLocalStore dfid@(DomeinFileId modelname) isInitialLoad' = do
     else pure version'
   -- If we can find a version at all, this is it.
   versionedModelName <- pure (unversionedModelname <> (maybe "" ((<>) "@") version))
-  {repositoryUrl, documentName} <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
-  DomeinFile dfrecord@
-    { id
-    -- , indexedRoles
-    -- , indexedContexts
-    , referredModels
-    , invertedQueriesInOtherDomains
-    , upstreamStateNotifications
-    , upstreamAutomaticEffects
-    , _attachments} <- lift $ getDocument repositoryUrl documentName
+  pure {patch, build, versionedModelName, unversionedModelname, versionedModelManifest: _.versionedModelManifest <$> x}
 
-  attachments <- case _attachments of
-    Nothing -> pure empty
-    Just atts ->  lift $ traverseWithIndex
-      (\attName {content_type} -> Tuple (MediaType content_type) <$> getAttachment repositoryUrl documentName attName)
-      atts
 
+installModelLocally :: (Tuple DomeinFileRecord AttachmentFiles) -> Boolean -> MonadPerspectivesTransaction Unit
+installModelLocally (Tuple dfrecord@{id, referredModels, invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects, _attachments} attachmentFiles) isInitialLoad' = do
+  {patch, build, versionedModelName, unversionedModelname, versionedModelManifest} <- computeVersionedAndUnversiondName id
   -- Store the model in Couchdb, that is: in the local store of models.
   -- Save it with the revision of the local version that we have, if any (do not use the repository version).
   {documentName:unversionedDocumentName} <- lift $ resourceIdentifier2WriteDocLocator unversionedModelname
@@ -294,25 +325,20 @@ addModelToLocalStore dfid@(DomeinFileId modelname) isInitialLoad' = do
 
   if isInitialLoad'
     then do 
-      createInitialInstances unversionedModelname versionedModelName patch build (_.versionedModelManifest <$> x)
-            -- Add new dependencies.
+      createInitialInstances unversionedModelname versionedModelName patch build versionedModelManifest
+      -- Add new dependencies.
       for_ referredModels \dfid' -> do
         mmodel <- lift $ tryGetPerspectEntiteit dfid'
         case mmodel of
-          Nothing -> addModelToLocalStore' dfid'
+          Nothing -> addModelToLocalStore dfid' isInitialLoad
           Just _ -> pure unit
     else pure unit
-
-  lift (getInvertedQueriesOfModel repositoryUrl documentName >>= saveInvertedQueries)
-  -- As we have the new definitions of invertedQueries in place in the database, we should now clear the cache in PerspectivesState
-  -- to prevent old versions of being used.
-  lift clearQueryCache
 
   -- Distribute upstream state notifications over the other domains.
   forWithIndex_ upstreamStateNotifications
     \domainName notifications -> do
       (lift $ try $ getDomeinFile (DomeinFileId domainName)) >>=
-        handleDomeinFileError "addModelToLocalStore'"
+        handleDomeinFileError "addModelToLocalStore"
         \(DomeinFile dfr) -> do
           lift (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ notifications addDownStreamNotification) dfr))
 
@@ -320,7 +346,7 @@ addModelToLocalStore dfid@(DomeinFileId modelname) isInitialLoad' = do
   forWithIndex_ upstreamAutomaticEffects
     \domainName automaticEffects -> do
       (lift $ try $ getDomeinFile (DomeinFileId domainName)) >>=
-        handleDomeinFileError "addModelToLocalStore'"
+        handleDomeinFileError "addModelToLocalStore"
         \(DomeinFile dfr) -> do
           lift (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ automaticEffects addDownStreamAutomaticEffect) dfr))
 
@@ -329,7 +355,7 @@ addModelToLocalStore dfid@(DomeinFileId modelname) isInitialLoad' = do
   -- First make sure the DomeinFile has been saved:
   lift $ forceSaveDomeinFile id
   (DomeinFile {_rev}) <- lift $ getDomeinFile id
-  void $ lift $ execStateT (addAttachments dbName unversionedDocumentName attachments) _rev
+  void $ lift $ execStateT (addAttachments dbName unversionedDocumentName attachmentFiles) _rev
   -- Now uncache the DomeinFile, as it no longer holds the right revision, neither has the attachments.
   lift $ decache id
 
@@ -762,14 +788,14 @@ externalFunctions :: Array (Tuple String HiddenFunctionDescription)
 externalFunctions =
   [ 
   -- SERVERADMIN
-    Tuple "model://perspectives.domains#Couchdb$CreateCouchdbDatabase" {func: unsafeCoerce createCouchdbDatabase, nArgs: 2, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Couchdb$CreateEntitiesDatabase" {func: unsafeCoerce createEntitiesDatabase, nArgs: 3, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Couchdb$DeleteCouchdbDatabase" {func: unsafeCoerce deleteCouchdbDatabase, nArgs: 2, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Couchdb$CreateUser" {func: unsafeCoerce createUser, nArgs: 3, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Couchdb$DeleteUser" {func: unsafeCoerce deleteUser, nArgs: 2, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Couchdb$ResetPassword" {func: unsafeCoerce resetPassword, nArgs: 3, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Couchdb$MakeWritingMemberOf" {func: unsafeCoerce makeWritingMemberOf, nArgs: 3, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Couchdb$RemoveAsWritingMemberOf" {func: unsafeCoerce removeAsWritingMemberOf, nArgs: 3, isFunctional: True, isEffect: true}
+    mkLibEffect2 "model://perspectives.domains#Couchdb$CreateCouchdbDatabase" True createCouchdbDatabase
+  , mkLibEffect3 "model://perspectives.domains#Couchdb$CreateEntitiesDatabase" True createEntitiesDatabase
+  , mkLibEffect2 "model://perspectives.domains#Couchdb$DeleteCouchdbDatabase" True deleteCouchdbDatabase
+  , mkLibEffect3 "model://perspectives.domains#Couchdb$CreateUser" True createUser
+  , mkLibEffect2 "model://perspectives.domains#Couchdb$DeleteUser" True deleteUser
+  , mkLibEffect3 "model://perspectives.domains#Couchdb$ResetPassword" True resetPassword
+  , mkLibEffect3 "model://perspectives.domains#Couchdb$MakeWritingMemberOf" True makeWritingMemberOf
+  , mkLibEffect3 "model://perspectives.domains#Couchdb$RemoveAsWritingMemberOf" True removeAsWritingMemberOf
   -- DATABASEADMIN
   , Tuple "model://perspectives.domains#Couchdb$MakeDatabasePublic" {func: unsafeCoerce makeDatabasePublic, nArgs: 2, isFunctional: True, isEffect: true}
   , Tuple "model://perspectives.domains#Couchdb$MakeDatabaseWriteProtected" {func: unsafeCoerce makeDatabaseWriteProtected, nArgs: 2, isFunctional: True, isEffect: true}
@@ -785,7 +811,7 @@ externalFunctions =
   -- Requires writing to the users model database.
   , Tuple "model://perspectives.domains#Couchdb$AddModelToLocalStore" {func: unsafeCoerce addModelToLocalStore_, nArgs: 1, isFunctional: True, isEffect: true}
   , Tuple "model://perspectives.domains#Couchdb$RemoveModelFromLocalStore" {func: unsafeCoerce removeModelFromLocalStore, nArgs: 1, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Couchdb$UpdateModel" {func: unsafeCoerce updateModel, nArgs: 2, isFunctional: True, isEffect: true}
+  , Tuple "model://perspectives.domains#Couchdb$UpdateModel" {func: unsafeCoerce updateModel_, nArgs: 2, isFunctional: True, isEffect: true}
 
   -- These functions require read access to the users instances databases.
   , Tuple "model://perspectives.domains#Couchdb$RoleInstances" {func: unsafeCoerce roleInstancesFromCouchdb, nArgs: 1, isFunctional: Unknown, isEffect: false}

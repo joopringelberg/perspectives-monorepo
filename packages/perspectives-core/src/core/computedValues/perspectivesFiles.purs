@@ -11,9 +11,9 @@ import Data.Newtype (unwrap)
 import Data.String.Regex (match)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
-import Data.Tuple (Tuple(..))
+import Data.Tuple (Tuple)
 import Foreign (Foreign)
-import Perspectives.CoreTypes (MonadPerspectivesQuery, MonadPerspectives)
+import Perspectives.CoreTypes (type (~~>), MonadPerspectives, mkLibFunc1)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
@@ -21,17 +21,17 @@ import Perspectives.Identifiers (typeUri2couchdbFilename)
 import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.Persistence.API (fromBlob, getAttachment)
 import Perspectives.Persistent (entitiesDatabaseName)
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Unsafe.Coerce (unsafeCoerce)
 
-fileText :: Array String -> String -> MonadPerspectivesQuery String
+fileText :: Array String -> (RoleInstance ~~> Value)
 fileText fileInfo_ _ = try
   (ArrayT $ case head fileInfo_ of
     Just v -> do 
       mText <- lift $ getPFileTextValue v
       case mText of 
         Nothing -> pure []
-        Just text -> pure [text]
+        Just text -> pure [Value text]
     Nothing -> pure [])
   >>= handleExternalFunctionError "model://perspectives.domains#Files$FileText"
 
@@ -55,5 +55,5 @@ getPFileTextValue v = case parsePerspectivesFile v of
 
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
 externalFunctions =
-  [ Tuple "model://perspectives.domains#Files$FileText" {func: unsafeCoerce fileText, nArgs: 1, isFunctional: True, isEffect: false}
+  [ mkLibFunc1 "model://perspectives.domains#Files$FileText" True fileText
   ]
