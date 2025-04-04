@@ -20,7 +20,7 @@ import {FileShareCredentials, PDRproxy, PropertyType, PStorageType, RoleInstance
 import PropTypes from "prop-types"
 import React from "react";
 
-import { MainContainer, ChatContainer, MessageList, MessageInput, ConversationHeader, Avatar, VoiceCallButton, VideoCallButton, InfoButton, TypingIndicator, MessageSeparator, SendButton, AttachmentButton, AvatarGroup, ExpansionPanel, Message } from '@chatscope/chat-ui-kit-react';
+import { MainContainer, ChatContainer, MessageList, MessageInput, ConversationHeader, Avatar, VoiceCallButton, VideoCallButton, InfoButton, TypingIndicator, MessageSeparator, SendButton, AttachmentButton, AvatarGroup, ExpansionPanel, Message as MessageComponent } from '@chatscope/chat-ui-kit-react';
 
 
 import { createAvatar } from '@dicebear/core';
@@ -100,7 +100,7 @@ interface MessagePayload {
   sentTime: number;
 }
 
-export default class ChatComponent extends PerspectivesComponent<ChatComponentProps, ChatComponentState>
+export class ChatComponent extends PerspectivesComponent<ChatComponentProps, ChatComponentState>
 {
   sharedFileStore: { [key: string]: ObjectUrl };
   constructor(props: any)
@@ -586,34 +586,34 @@ export default class ChatComponent extends PerspectivesComponent<ChatComponentPr
     const component = this;
     if (typeof message.payload == 'string')
     {
-      return (<Message key={i} model={message} type='text'>
-          <Message.Header sentTime={message.sentTime}/>
+      return (<MessageComponent key={i} model={message} type='text'>
+          <MessageComponent.Header sentTime={message.sentTime}/>
           <Avatar name={message.sender} size="sm" src={component.getAvatar(message.sender) as string}/>
-        </Message>);
+        </MessageComponent>);
     }
     if (typeof message.payload == 'object')
     {
       // Now payload.mimeType **MUST** exist.
       if (message.payload.mimeType.match(/^audio/))
       {
-        return (<Message key= {i} model={{
+        return (<MessageComponent key= {i} model={{
                   direction: message.direction,
                   type: "custom",
                   position: message.position,
                 }}>
                   <Avatar name={message.sender} size="sm" src={component.getAvatar(message.sender) as string}/>
-                  <Message.CustomContent>
+                  <MessageComponent.CustomContent>
                     <audio controls>
                       <source src={message.payload.src as string} type={message.payload.mimeType}/>
                     </audio>
-                  </Message.CustomContent>
-                </Message>)
+                  </MessageComponent.CustomContent>
+                </MessageComponent>)
       }
       else if (message.payload.mimeType.match(/^image/))
       {
-        return (<Message key={i} model={message} type='image'>
+        return (<MessageComponent key={i} model={message} type='image'>
             <Avatar name={message.sender} size="sm" src={component.getAvatar(message.sender) as string}/>
-          </Message>);
+          </MessageComponent>);
       }
     }
   }
@@ -669,6 +669,7 @@ export default class ChatComponent extends PerspectivesComponent<ChatComponentPr
                 </ConversationHeader.Actions>
             </ConversationHeader>
             <MessageList>{ component.buildMessageList()}</MessageList>
+            {/* Probably this div generates a warning: Warning: Failed prop type: "div" is not a valid child for ChatContainer2. Allowed types: ConversationHeader2, , MessageInput, InputToolbox2 */}
             <div style={{display:"flex", flexDirection:"row", borderTop: "1px dashed #d1dbe4"}}>
               <MessageInput
                 placeholder="Type message here" 

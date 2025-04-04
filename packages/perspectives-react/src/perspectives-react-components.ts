@@ -1,3 +1,4 @@
+
 // No items are included from the folder notinuse.
 export { ViewOnExternalRole } from "./views";
 export { default as importTransaction } from "./importTransaction";
@@ -40,5 +41,6 @@ export { UnboundMarkDownWidget } from "./markdownWidget";
 export * from "./freeformscreen";
 export { mapRoleVerbsToBehaviourNames, mapRoleVerbsToBehaviours } from "./maproleverbstobehaviours";
 export {ChoiceMessage, UserChoice} from "./userChoice";
+export {ChatComponent} from "./chatcomponent";
 
 export {getPreact} from "./getLanguage";

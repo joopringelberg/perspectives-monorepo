@@ -33,7 +33,7 @@ import i18next from "i18next";
 import {Tab, Container, Card, Row, Col} from "react-bootstrap";
 import {MarkDownWidget} from './markdownWidget.js';
 import SmartFieldControl from './smartfieldcontrol.js';
-import ChatComponent from './chatcomponent.js';
+import {ChatComponent} from './chatcomponent.js';
 import { externalRole } from './urifunctions.js';
 import {  } from 'perspectives-proxy';
 import { mapRoleVerbsToBehaviourNames } from './maproleverbstobehaviours';
