@@ -40,7 +40,7 @@
     {
       "label": "build perspectives-core",
       "type": "shell",
-      "command": "spago build",
+      "command": "spago build && pnpm run build",
       "options": {
         "cwd": "${workspaceFolder}/packages/perspectives-core"
       },
