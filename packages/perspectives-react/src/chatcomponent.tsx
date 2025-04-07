@@ -20,7 +20,7 @@ import {FileShareCredentials, PDRproxy, PropertyType, PStorageType, RoleInstance
 import PropTypes from "prop-types"
 import React from "react";
 
-import { MainContainer, ChatContainer, MessageList, MessageInput, ConversationHeader, Avatar, VoiceCallButton, VideoCallButton, InfoButton, TypingIndicator, MessageSeparator, SendButton, AttachmentButton, AvatarGroup, ExpansionPanel, Message as MessageComponent } from '@chatscope/chat-ui-kit-react';
+import { MainContainer, ChatContainer, MessageList, MessageInput, ConversationHeader, Avatar, VoiceCallButton, VideoCallButton, InfoButton, TypingIndicator, MessageSeparator, SendButton, AttachmentButton, AvatarGroup, ExpansionPanel, Message as MessageComponent, InputToolbox } from '@chatscope/chat-ui-kit-react';
 
 
 import { createAvatar } from '@dicebear/core';
@@ -518,8 +518,8 @@ export class ChatComponent extends PerspectivesComponent<ChatComponentProps, Cha
     return Promise.all( messages.map( (messageString, i) => 
     {
       const message = JSON.parse(messageString) as Message;
-      const previousMessage = JSON.parse (messages[i-1]) as Message;
-      const nextMessage = JSON.parse (messages[i+1]) as Message;
+      const previousMessage = messages[i-1] ? JSON.parse (messages[i-1]) as Message : undefined;
+      const nextMessage = messages[i+1] ? JSON.parse (messages[i+1]) as Message : undefined;
       // Make time readable
       message.sentTime = new Date(message.sentTime).toLocaleTimeString();
       // Set direction.
@@ -669,32 +669,31 @@ export class ChatComponent extends PerspectivesComponent<ChatComponentProps, Cha
                 </ConversationHeader.Actions>
             </ConversationHeader>
             <MessageList>{ component.buildMessageList()}</MessageList>
-            {/* Probably this div generates a warning: Warning: Failed prop type: "div" is not a valid child for ChatContainer2. Allowed types: ConversationHeader2, , MessageInput, InputToolbox2 */}
-            <div style={{display:"flex", flexDirection:"row", borderTop: "1px dashed #d1dbe4"}}>
-              <MessageInput
-                placeholder="Type message here" 
-                sendButton={false}
-                attachButton={false}
-                onSend={text => component.handleSend(text)}
-                style={{ flexGrow: 1, borderTop: 0, flexShrink:"initial",  }} />
-              <SendButton style={{fontSize:"1.2em", marginLeft:0, paddingLeft: "0.2em", paddingRight:"0.2em"}} />
-              <AttachmentButton 
-                disabled={!audioAvailabe}
-                onClick={ () => document.getElementById('__fileupload__')!.click()} style={{fontSize:"1.2em", paddingLeft: "0.2em", paddingRight:"0.2em"}} 
-              />
-              <OverlayTrigger
-                  placement="left"
-                  delay={{ show: 250, hide: 400 }}
-                  overlay={renderTooltip}
-                >
-                <MicrophoneButton 
+            <MessageInput
+              placeholder="Type message here" 
+              sendButton={true}
+              attachButton={false}
+              onSend={text => component.handleSend(text)}
+              style={{ flexGrow: 1, borderTop: 0, flexShrink:"initial",  }} />
+            <InputToolbox style={{display:"flex", flexDirection:"row", borderTop: "1px dashed #d1dbe4"}}>
+              {/* <SendButton style={{fontSize:"1.2em", marginLeft:0, paddingLeft: "0.2em", paddingRight:"0.2em"}} /> */}
+                <AttachmentButton 
                   disabled={!audioAvailabe}
-                  onMouseDown={ (ev : React.MouseEvent<HTMLButtonElement>) => component.startRecording(ev)}
-                  onMouseUp={ (ev : React.MouseEvent<HTMLButtonElement>) => component.stopRecording(ev)}
-                  style={{fontSize:"1.2em", paddingLeft: "0.2em", paddingRight:"0.2em"}}  
-                  />
-              </OverlayTrigger>
-            </div>
+                  onClick={ () => document.getElementById('__fileupload__')!.click()} style={{fontSize:"1.2em", paddingLeft: "0.2em", paddingRight:"0.2em"}} 
+                />
+                <OverlayTrigger
+                    placement="left"
+                    delay={{ show: 250, hide: 400 }}
+                    overlay={renderTooltip}
+                  >
+                  <MicrophoneButton 
+                    disabled={!audioAvailabe}
+                    onMouseDown={ (ev : React.MouseEvent<HTMLButtonElement>) => component.startRecording(ev)}
+                    onMouseUp={ (ev : React.MouseEvent<HTMLButtonElement>) => component.stopRecording(ev)}
+                    style={{fontSize:"1.2em", paddingLeft: "0.2em", paddingRight:"0.2em"}}  
+                    />
+                </OverlayTrigger>
+            </InputToolbox>
           </ChatContainer>
           {
             (component.state.warningLevelReached && !component.state.limitReached) ? 
