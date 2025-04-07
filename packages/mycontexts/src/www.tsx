@@ -529,9 +529,15 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               </Row>
             </Col>
           </Row>
-          <Navbar fixed="bottom" bg="info" expand="xs" className="justify-content-center py-0">
+            <Navbar fixed="bottom" bg="info" expand="xs" className="justify-content-between py-0 px-3">
+            <Navbar.Brand onClick={() => window.history.back()}>
+              <i className="bi bi-arrow-left"></i>
+            </Navbar.Brand>
             <Navbar.Brand onClick={() => component.setState({ showNotifications: true })}>
               <i className="bi bi-arrow-up"></i>
+            </Navbar.Brand>
+            <Navbar.Brand onClick={() => window.history.forward()}>
+              <i className="bi bi-arrow-right"></i>
             </Navbar.Brand>
           </Navbar>
           <EndUserNotifier message={component.state.endUserMessage}/>
