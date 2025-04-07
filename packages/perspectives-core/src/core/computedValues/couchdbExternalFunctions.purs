@@ -249,7 +249,7 @@ updateModel withDependencies install dfid@(DomeinFileId modelName) domeinFileAnd
       -- Clear the caches of compiled states.
       void $ pure $ clearModelStates (DomeinFileId unversionedModelname)
       -- Install the new model, taking care of outgoing InvertedQueries.
-      addModelToLocalStore (DomeinFileId modelName) isUpdate
+      installModelLocally domeinFileAndAttachents isUpdate
       -- The model is now decached, but the translations table is still in cache.
       -- It will be loaded when a new type lookup is performed.
       lift $ removeTranslationTable modelName

@@ -231,7 +231,7 @@ storeModelLocally_ domeinFileName_ arcSource_ _ = try
         -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries.
         Right (Tuple (DomeinFile dfr@{id, namespace}) invertedQueries) -> do
           (Tuple _ attachments) <- retrieveModelFromRepository id
-          updateModel true {-with dependencies-} true {-install for first time if necessary-} id (Tuple dfr attachments) invertedQueries
+          updateModel false {-with dependencies-} true {-install for first time if necessary-} id (Tuple dfr attachments) invertedQueries
           -- Finally, save the invertedQueries as a local replacement of the storedQueries.json attachment.
           theFile <- liftEffect $ toFile "storedQueries.json" "application/json" (unsafeToForeign $ writeJSON invertedQueries)
           -- We need to get the local database, the local document name and its revision.
