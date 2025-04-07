@@ -57,7 +57,7 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optim
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), propertytype2string, roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb, roleVerbList2Verbs)
 import Perspectives.Representation.View (View(..))
-import Perspectives.Types.ObjectGetters (generalisesRoleType_, lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
+import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_, lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
 import Prelude (Unit, bind, discard, eq, flip, map, not, pure, show, unit, ($), (<$>), (<<<), (==), (>>=), (<#>))
 
 
@@ -164,7 +164,7 @@ handleScreens screenEs = do
               -- Collect all roles the subject role type has a perspective on.
               (objectRoles :: Array RoleType) <- pure $ perspectives <#> \(Perspective{roleTypes}) -> unsafePartial fromJust $ head roleTypes
               -- Filter the roles that are not a specialization of the chatAspect role type.
-              chatRoles <- filterA (generalisesRoleType_ (ENR $ EnumeratedRoleType chatAspect)) objectRoles
+              chatRoles <- filterA (equalsOrGeneralisesRoleType_ (ENR $ EnumeratedRoleType chatAspect)) objectRoles
               -- For each of these roles, find the properties with the MessageProperty and MediaProperty facets.
               -- Finally construct a ChatDef for each of those roles, where the chatInstance is Nothing.
               catMaybes <$> for chatRoles \chatRole -> do 

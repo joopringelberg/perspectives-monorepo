@@ -48,7 +48,7 @@ import Perspectives.Representation.CNF (CNF, DPROD(..), DSUM(..), toConjunctiveN
 import Perspectives.Representation.ExpandedADT (ExpandedADT(..), foldMapExpandedADT)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 import Prelude (class Applicative, class Bind, class Eq, class Functor, class HeytingAlgebra, class Monoid, class Ord, class Show, disj, flip, map, not, pure, show, ($), (&&), (/=), (<#>), (<$>), (<<<), (<>), (>>=), (==), bind)
-import Simple.JSON (class ReadForeign, class WriteForeign, writeImpl, writeJSON, read', readJSON')
+import Simple.JSON (class ReadForeign, class WriteForeign, writeImpl, writeJSON, read', readJSON') 
 
 --------------------------------------------------------------------------------------------------
 ---- ADT
@@ -283,6 +283,7 @@ equalsOrSpecialises adt1 adt2 = let
   equalsOrSpecialises_ adt1' adt2'
 
 -- | left `equalsOrSpecialises_` right
+-- | (left => right)
 -- | From the technical documentation:
 -- | * under `R specialises X` we take to understand `R => X`
 -- | * R => X iff

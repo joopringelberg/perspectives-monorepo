@@ -54,7 +54,7 @@ import Perspectives.Persistence.API (Keys(..), getViewOnDatabase)
 import Perspectives.Persistent (modelDatabaseName)
 import Perspectives.Persistent.PublicStore (PublicStore)
 import Perspectives.Query.QueryTypes (Calculation, QueryFunctionDescription, RoleInContext(..), domain2roleType, queryFunction, range, roleInContext2Role, roleRange, secondOperand)
-import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, computeExpandedBoolean, equalsOrSpecialises_, equals_, generalises_)
+import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, computeExpandedBoolean, equalsOrGeneralises_, equalsOrSpecialises_, equals_, generalises_, specialises_)
 import Perspectives.Representation.Action (Action)
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.Class.Context (contextADT, contextRole, roleInContext, userRole) as ContextClass
@@ -469,6 +469,7 @@ allTypesInContextADT = ArrayT <<< pure <<< allLeavesInADT >=> contextAspectsClos
 -- | t1 `generalisesRoleType` t2 is true, if, for example:
 -- |    * t2 is an (indirect) Aspect of t1 or if both are equal.
 -- |    * t2 fills t1.
+-- \ (Note: t1 `generalisesRoleType` t2 is syntactically different but semantically equal to: generalisesRoleType t1 t2)
 -- | The term 'specialisation' should be applied to the level of terms, not to the extension of instances!
 -- | In that sense, a V b is more specialised (extends) than a.
 -- | We want to use this function as the computation behind the query step `generalisesRoleType`:
@@ -491,6 +492,38 @@ generalisesRoleType_ t1 t2 = do
   (et2 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t2
   pure (et1 `generalises_` et2)
 
+specialisesRoleType :: RoleType -> (RoleType ~~~> Value)
+specialisesRoleType t1 t2 = ArrayT do 
+  x <- (t1 `specialisesRoleType_` t2)
+  pure [Value $ show x]
+
+specialisesRoleType_ :: RoleType -> (RoleType -> MonadPerspectives Boolean)
+specialisesRoleType_ t1 t2 = do 
+  -- expand
+  (et1 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t1
+  (et2 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t2
+  pure (et1 `specialises_` et2)
+
+equalsOrGeneralisesRoleType :: RoleType -> (RoleType ~~~> Value)
+equalsOrGeneralisesRoleType t1 t2 = ArrayT do 
+  x <- (t1 `equalsOrGeneralisesRoleType_` t2)
+  pure [Value $ show x]
+equalsOrGeneralisesRoleType_ :: RoleType -> (RoleType -> MonadPerspectives Boolean)
+equalsOrGeneralisesRoleType_ t1 t2 = do 
+  -- expand
+  (et1 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t1
+  (et2 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t2
+  pure (et1 `equalsOrGeneralises_` et2)
+equalsOrSpecialisesRoleType :: RoleType -> (RoleType ~~~> Value)
+equalsOrSpecialisesRoleType t1 t2 = ArrayT do 
+  x <- (t1 `equalsOrSpecialisesRoleType_` t2)
+  pure [Value $ show x]
+equalsOrSpecialisesRoleType_ :: RoleType -> (RoleType -> MonadPerspectives Boolean)
+equalsOrSpecialisesRoleType_ t1 t2 = do 
+  -- expand
+  (et1 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t1
+  (et2 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t2
+  pure (et1 `equalsOrSpecialises_` et2)
 -----------------------------------------------------------
 ---- EQUALS, EQUALSORGENERALISES, EQUALSORSPECIALISES FOR ROLE IN CONTEXT
 -----------------------------------------------------------
