@@ -75,6 +75,7 @@ domain model://joopringelberg.nl#Disconnect
     -- context IncomingDisconnections = sys:SocialMe >> binder Disconnected >> context >> extern
 
   case DisconnectedPeer
+
     external
       property Peer = context >> Disconnected >> LastName
       property Disconnected = context >> Disconnected >> Cancelled
@@ -96,6 +97,8 @@ domain model://joopringelberg.nl#Disconnect
       action Reconnect
         Cancelled = false for Disconnected
         Reconnect = true for Disconnected
+      action StartChat
+        create role sys:Chat
       screen 
         who
           Disconnecter

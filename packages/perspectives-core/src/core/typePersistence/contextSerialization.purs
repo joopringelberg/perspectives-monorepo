@@ -41,7 +41,7 @@ import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Instances.ObjectGetters (contextType_)
 import Perspectives.ModelDependencies (chatAspect)
-import Perspectives.ModelTranslation (translationOf)
+import Perspectives.ModelTranslation (translateType, translationOf)
 import Perspectives.Query.Interpreter (lift2MPQ)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription)
 import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances)
@@ -234,7 +234,7 @@ makeTableFormDef userRoleType p@{id, displayName} = let
     }
 
 makeChatDef :: SerialisedPerspective' -> Maybe ChatDef
-makeChatDef {id, roleInstances, properties} = let
+makeChatDef {id, roleInstances, properties, displayName} = let
     (props :: Array SerialisedProperty) = values properties
     messageProperties = filter (\{constrainingFacets} -> constrainingFacets.isMessageProperty) props
     mediaProperties = filter (\{constrainingFacets} -> constrainingFacets.isMediaProperty) props
@@ -242,6 +242,7 @@ makeChatDef {id, roleInstances, properties} = let
     case head messageProperties, head mediaProperties of
       Just {id:messageProperty}, Just {id:mediaProperty} -> Just $ ChatDef 
         { chatRole: ENR $ EnumeratedRoleType id
+        , title: Just displayName
         , chatInstance: RoleInstance <<< _.roleId <$> head (values roleInstances)
         , messageProperty: EnumeratedPropertyType messageProperty
         , mediaProperty: EnumeratedPropertyType mediaProperty}
@@ -363,7 +364,8 @@ instance AddPerspectives MarkDownDef where
 instance AddPerspectives ChatDef where
   addPerspectives (ChatDef r@ {chatRole}) user ctxt = do 
     chatRoleInstance <- runArrayT (getRoleInstances chatRole ctxt)
-    pure $ ChatDef r {chatInstance = head chatRoleInstance}
+    title <- lift $ translateType (roletype2string chatRole)
+    pure $ ChatDef r {chatInstance = head chatRoleInstance, title = Just title}
 
 traverseScreenElement :: RoleInstance -> ContextInstance -> ScreenElementDef -> AssumptionTracking (Maybe ScreenElementDef)
 traverseScreenElement user ctxt a = case a of 

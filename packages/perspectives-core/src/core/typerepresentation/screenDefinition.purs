@@ -87,7 +87,7 @@ data MarkDownDef =
   MarkDownPerspectiveDef { widgetFields :: WidgetCommonFieldsDef, conditionProperty :: Maybe PropertyType} |
   MarkDownExpressionDef {textQuery :: QueryFunctionDescription, condition :: Maybe QueryFunctionDescription,  text :: Maybe String}
 
-newtype ChatDef = ChatDef (ChatDefFields (chatRole :: RoleType))
+newtype ChatDef = ChatDef (ChatDefFields (chatRole :: RoleType, title :: Maybe String))
 type ChatDefFields f = 
   { chatInstance :: Maybe RoleInstance
   , messageProperty :: EnumeratedPropertyType
@@ -295,7 +295,7 @@ instance ReadForeign FormDef where
 
 instance ReadForeign ChatDef where
   readImpl f = do
-    ({tag, fields} :: { tag :: String, fields :: ChatDefFields (chatRole :: String)}) <- read' f
+    ({tag, fields} :: { tag :: String, fields :: ChatDefFields (chatRole :: String, title :: Maybe String)}) <- read' f
     case tag of 
       "ChatDef" -> pure $ ChatDef fields {chatRole = ENR $ EnumeratedRoleType fields.chatRole} -- TODO: we weten niet of het een enumerated role is!
       _ -> fail (TypeMismatch "ChatDef" tag)

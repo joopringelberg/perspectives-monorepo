@@ -176,7 +176,7 @@ handleScreens screenEs = do
                 case head messageProperties, head mediaProperties of
                   Just (ENP messageProperty), Just (ENP mediaProperty) -> 
                     -- Construct a ChatDef for this role.
-                    pure $ Just $ ChatDef {chatRole, chatInstance: Nothing, messageProperty, mediaProperty}
+                    pure $ Just $ ChatDef {chatRole, title: Nothing, chatInstance: Nothing, messageProperty, mediaProperty}
                   _, _ -> pure Nothing
 
               
@@ -254,7 +254,7 @@ handleScreens screenEs = do
               (chatRoleType :: RoleType) <- unsafePartial ARRP.head <$> collectRoles chatRole
               qualifiedMessageProperty <- qualifyProperty chatRoleType messagesProperty
               qualifiedMediaProperty <- qualifyProperty chatRoleType mediaProperty
-              pure $ ChatDef {chatRole: chatRoleType, chatInstance: Nothing, messageProperty: qualifiedMessageProperty, mediaProperty: qualifiedMediaProperty}
+              pure $ ChatDef {chatRole: chatRoleType, title: Nothing, chatInstance: Nothing, messageProperty: qualifiedMessageProperty, mediaProperty: qualifiedMediaProperty}
 
               where 
               qualifyProperty ::  RoleType -> String -> PhaseThree EnumeratedPropertyType

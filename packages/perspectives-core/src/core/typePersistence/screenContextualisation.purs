@@ -13,13 +13,13 @@ import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesQuery, (###=)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Instances.ObjectGetters (getActiveRoleStates, getActiveStates)
-import Perspectives.ModelTranslation (translationOf)
+import Perspectives.ModelTranslation (translateType, translationOf)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), WidgetCommonFieldsDef)
-import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..), roletype2string)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
 import Perspectives.Types.ObjectGetters (allEnumeratedRoles, aspectsOfRole)
 
@@ -90,10 +90,11 @@ contextualiseMarkDownDef md = case md of
   _ -> pure $ Just md
 
 contextualiseChatDef :: ChatDef -> InContext (Maybe ChatDef)
-contextualiseChatDef (ChatDef r@{chatRole}) = do 
+contextualiseChatDef (ChatDef r@{chatRole, title}) = do 
   {contextInstance} <- ask
+  title' <- lift $ lift $ lift $ translateType $ roletype2string chatRole
   chatRoleInstance <- lift $ getRoleInstances chatRole contextInstance
-  pure $ Just $ ChatDef r {chatInstance = Just chatRoleInstance}
+  pure $ Just $ ChatDef r {chatInstance = Just chatRoleInstance, title = Just title'}
 
 contextualiseWidgetCommonFields :: WidgetCommonFieldsDef -> InContext (Maybe WidgetCommonFieldsDef)
 contextualiseWidgetCommonFields wc@{title, perspectiveId, propertyVerbs, roleVerbs, userRole} = do

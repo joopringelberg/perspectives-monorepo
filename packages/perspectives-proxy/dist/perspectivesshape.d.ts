@@ -190,6 +190,7 @@ export type ChatElementDef = {
   tag: "ChatDef";
   fields: {
     chatRole: RoleType;
+    title: string;
     chatInstance?: RoleInstanceT;
     messageProperty: PropertyType;
     mediaProperty: PropertyType;
