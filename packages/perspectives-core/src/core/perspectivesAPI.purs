@@ -322,7 +322,8 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
       (\(chatRoleInstance :: RoleInstance) -> ArrayT do 
         chatRoleType <- lift $ roleType_ chatRoleInstance
         chatContextInstance <- runArrayT $ context chatRoleInstance
-        contextType <- ((_.context <<< unwrap) <$> (lift $ getEnumeratedRole chatRoleType))
+        -- We now need the type of the context that the chat role instance is in; not its lexical context type!
+        contextType <- lift $ contextType_ (unsafePartial $ fromJust $ head chatContextInstance)
         userRoleTypes <- lift $ contextType ###= (unsafePartial rolesWithPerspectiveOnRoleAndProperty (ENR chatRoleType) (ENP $ EnumeratedPropertyType predicate))
         userRoles <- foldM
           (\cumulator userRoleType -> do
