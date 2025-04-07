@@ -37,7 +37,7 @@ const SelectedForm: React.FC<SelectedFormProps> = ({ forms, selectedRoleInstance
   {
     const theForm = forms.find(form => form.fields.perspective.roleType === selectedRoleType);
     if (theForm === undefined) {
-      console.error(`No form found for role type ${selectedRoleType}`);
+      // console.error(`No form found for role type ${selectedRoleType}`);
       return null;
     } else {
       return buildForm(theForm, false, selectedRoleInstance);

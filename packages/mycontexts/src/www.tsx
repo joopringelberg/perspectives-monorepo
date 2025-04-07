@@ -478,7 +478,10 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
   renderDesktop() {
     const component = this;
     return (
-      <PSContext.Provider value={{contextinstance: deconstructContext( this.state.openContext!) as ContextInstanceT, contexttype: this.state.openContextType!, myroletype: this.state.openContextUserType!}}>
+      <PSContext.Provider value={
+        { contextinstance: deconstructContext( this.state.openContext!) as ContextInstanceT
+        , contexttype: this.state.openContextType!
+        , myroletype: this.state.openContextUserType!}}>
         <Container fluid className='px-0'>
           {component.renderTopNavBar()}
           <Row className='mx-0'>
@@ -489,7 +492,9 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                 <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}><h4 className='text-center'>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h4></Row>
                 <Row className='px-1 full-www-content-height scrollable-content'>
                   { this.state.screen?.whoWhatWhereScreen ?
-                    <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "who"}/>
+                    <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } 
+                      showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "who"}
+                    />
                     :
                     <p className='bg-light-subtle'>Ga ergens heen</p>
                   }
