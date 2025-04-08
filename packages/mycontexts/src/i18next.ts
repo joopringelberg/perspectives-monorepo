@@ -8,20 +8,9 @@ import {getPreact} from "perspectives-react";
 import LanguageDetector from 'i18next-browser-languagedetector';
 import {get, set} from 'idb-keyval';
 
-export async function initI18next () : Promise<TFunction>
+export async function initI18next () : Promise<void>
 {
   let currentLanguage = await get("currentLanguage");
-
-  i18next.on('initialized', () => {
-    if (!currentLanguage)
-    {
-      set("currentLanguage", i18next.language);
-      currentLanguage = i18next.language;
-    }
-    loadLanguageResources(currentLanguage)
-    .then( () => i18next.loadNamespaces(["mycontexts", "preact"]))
-    .then( () => i18next)
-    });
 
   return i18next
     .use(HttpApi)
@@ -35,7 +24,15 @@ export async function initI18next () : Promise<TFunction>
       ns: [],
       lng: currentLanguage
       })
-    ;
+    .then(() => {
+      if (!currentLanguage)
+        {
+          set("currentLanguage", i18next.language);
+          currentLanguage = i18next.language;
+        }
+      return loadLanguageResources(currentLanguage)
+      .then( () => i18next.loadNamespaces(["mycontexts", "preact"]))
+      });
 }
 
 export function loadLanguageResources (currentLanguage : string) : Promise<any>

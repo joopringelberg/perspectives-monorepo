@@ -33,13 +33,21 @@ export default class App extends Component<{}, AppState>
   }
 
   componentDidMount(): void {
-    getValue('installationComplete')
-    .then((isComplete: boolean) => {
-      if (isComplete) {
-        this.setState({ phase: 'installationExists' });
-      } else {
-        this.setState({ phase: 'prepareInstallation' });
-    }})}
+    const params = new URLSearchParams(document.location.search.substring(1));
+    if (params.get("reinstall") != undefined)
+    {
+      this.setState({ phase: 'prepareInstallation' });
+    }
+    else {
+      getValue('installationComplete')
+        .then((isComplete: boolean) => {
+          if (isComplete) {
+            this.setState({ phase: 'installationExists' });
+          } else {
+            this.setState({ phase: 'prepareInstallation' });
+        }})
+  }
+  }
 
   componentDidUpdate(prevProps: Readonly<{}>, prevState: Readonly<AppState>, snapshot?: any): void {
     let installationData: InstallationData, pouchdbUser: PouchdbUser, couchdbUrl: string | undefined;
