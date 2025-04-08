@@ -488,7 +488,7 @@ class SharedWorkerChannel
         // return the elementary data for unsubscribing.
         return {request: "Unsubscribe", subject: req.subject, corrId: req.corrId};
       }
-    ) as Promise<{ subject: string; corrId: number }>;
+    ) as Promise<{ request: "Unsubscribe", subject: string; corrId: number }>;
   }
 
 }

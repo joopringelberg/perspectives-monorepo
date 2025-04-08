@@ -244,7 +244,7 @@ export type PouchdbUser = {
   couchdbUrl?: string;       // Optional field
 };
 
-export type Unsubscriber = { subject: string; corrId: number };
+export type Unsubscriber = { request: string, subject: string; corrId: number };
 
 ////////////////////////////////////////////
 //// ROLES ETC

@@ -12,6 +12,7 @@ import { What } from './what';
 import { Who } from './who';
 import { Clipboard } from './clipboard';
 import { Where } from './where';
+import { NotificationsDisplayer } from './notifications';
 
 type Section = 'who' | 'what' | 'where' | 'none';
 
@@ -362,11 +363,16 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           <Accordion.Item eventKey="1">
             <Accordion.Header>Notifications</Accordion.Header>
             <Accordion.Body>
-              <ul>
-                <li>Notification 1</li>
-                <li>Notification 2</li>
-                <li>Notification 3</li>
-              </ul>
+            { component.state.openContext ?
+              <NotificationsDisplayer 
+              externalroleid={component.state.openContext}
+              systemcontextinstance={'def:#' + component.state.systemIdentifier + 'def:notifications' as ContextInstanceT}
+              shownotifications={true}
+              navigateto={(state) => component.setState({openContext: state})}
+              />
+              :
+              null
+            }
             </Accordion.Body>
           </Accordion.Item>
         </Accordion>
