@@ -87,9 +87,9 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
 
   componentDidUpdate(prevProps : SmartFieldControlProps)
   {
-    if (prevProps.propertyValues
-        && this.props.propertyValues
-        && prevProps.propertyValues.values[0] != this.props.propertyValues.values[0])
+    if (!prevProps.propertyValues || 
+        (this.props.propertyValues
+        && prevProps.propertyValues.values[0] != this.props.propertyValues.values[0]))
     {
       this.setState({ value: this.valueOnProps()});
     }
