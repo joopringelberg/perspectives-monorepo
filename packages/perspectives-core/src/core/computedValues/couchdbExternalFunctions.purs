@@ -96,7 +96,7 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.RoleAssignment (roleIsMe)
-import Perspectives.SaveUserData (scheduleContextRemoval)
+import Perspectives.SaveUserData (scheduleContextRemoval, setFirstBinding)
 import Perspectives.SetupCouchdb (contextViewFilter, roleViewFilter, setContext2RoleView, setContextView, setCredentialsView, setFiller2FilledView, setFilled2FillerView, setPendingInvitationView, setRoleFromContextView, setRoleView, setRole2ContextView)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer(..))
@@ -480,6 +480,8 @@ initSystem = do
                         })
                         true
                     roleIsMe puser world
+                    -- We need to fill 'me' with the PerspectivesUser that fills sys:SocialMe.
+                    _ <- setFirstBinding me puser Nothing
                     void $ createAndAddRoleInstance_ (EnumeratedRoleType DEP.perspectivesUsers) worldId
                       (RolSerialization 
                         { id: Just "def:#serializationuser"
