@@ -75,15 +75,6 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     this.controlType = this.htmlControlType();
   }
 
-  componentDidMount(): void {
-    if (this.props.isselected)
-    {
-      if (this.props.inputRef)
-      {
-        this.props.inputRef.current?.focus();
-      }
-    }
-  }
 
   componentDidUpdate(prevProps : SmartFieldControlProps)
   {
@@ -93,13 +84,6 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     {
       this.setState({ value: this.valueOnProps()});
     }
-    if (this.props.isselected)
-      {
-        if (this.props.inputRef)
-        {
-          this.props.inputRef.current?.focus();
-        }
-      }
    }
 
   htmlControlType ()

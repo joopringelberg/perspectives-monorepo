@@ -428,21 +428,21 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               }}
             fill
             >
-            <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
+            <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
               { this.state.screen?.whoWhatWhereScreen ?
                 <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "who"}/>
                 : 
                 <p className='bg-light-subtle'>Ga ergens heen</p>
               }
             </Tab>
-            <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
+            <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
               { this.state.screen?.whoWhatWhereScreen ? 
                   <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "what"}/>
                   : 
                 <div>Ga ergens heen.</div>
               }
             </Tab>
-            <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-info full-mobile-height px-2' style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
+            <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2' style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
             { this.state.screen?.whoWhatWhereScreen ? 
               <Where screenelements={  this.state.screen.whoWhatWhereScreen.whereto } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "where"}/>
               : 
@@ -450,7 +450,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               }
             </Tab>
           </Tabs>
-          <Navbar fixed="bottom" bg="info" expand="xs" className="justify-content-center py-0">
+          <Navbar fixed="bottom" bg="primary" expand="xs" className="justify-content-center py-0">
             <Navbar.Brand onClick={() => component.setState({ showNotifications: true })}>
               <i className="bi bi-arrow-up"></i>
             </Navbar.Brand>
@@ -464,8 +464,8 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
 
   renderTopNavBar() {
     const component = this;
-    return (<Navbar bg="info" expand="xs" className="py-0" id="top-navbar">
-      <NavDropdown title={<i className="bi bi-list"></i>} className="me-auto">
+    return (<Navbar bg="primary" expand="xs" className="py-0" id="top-navbar">
+      <NavDropdown title={<i className="bi bi-list text-light"></i>} className="me-auto hide-caret">
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'about'})}>About...</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'me'})}>Me</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'apps'})}>Apps</NavDropdown.Item>
@@ -492,7 +492,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           {component.renderTopNavBar()}
           <Row className='mx-0'>
             <Col 
-              className='bg-info full-height' 
+              className='bg-primary full-height' 
               xs={ this.state.doubleSection === "who" ? 6 : 3} 
               style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
                 <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}><h4 className='text-center'>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h4></Row>
@@ -507,7 +507,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                 </Row>
             </Col>
             <Col 
-              className='bg-info' 
+              className='bg-primary' 
               xs={ this.state.doubleSection === "what" ? 6 : 3} 
               style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
               <Row onClick={() => component.setState( {'doubleSection': "what"} )}  ><h4 className='text-center'>{ i18next.t("www_what", {ns: 'mycontexts'}) }</h4></Row>
@@ -522,7 +522,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               </Row>
             </Col>
             <Col 
-              className='bg-info' 
+              className='bg-primary' 
               xs={ this.state.doubleSection === "where" ? 6 : 3} 
               style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
               <Row onClick={() => component.setState( {'doubleSection': "where"} )}  ><h4 className='text-center'>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h4></Row>  
@@ -535,7 +535,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               </Row>
             </Col>
           </Row>
-            <Navbar fixed="bottom" bg="info" expand="xs" className="justify-content-between py-0 px-3">
+            <Navbar fixed="bottom" bg="primary" expand="xs" className="justify-content-between py-0 px-3">
             <Navbar.Brand onClick={() => window.history.back()}>
               <i className="bi bi-arrow-left"></i>
             </Navbar.Brand>

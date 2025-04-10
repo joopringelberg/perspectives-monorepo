@@ -259,7 +259,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                     aria-label={component.props.propertyname} // deconstructLocalName ( component.props.propertyname )
                     // Other properties to pass on.
                     tabIndex={receiveFocusByKeyboard}
-                    className="shadow bg-info"
+                    className="shadow bg-secondary text-light"
                     onClick={component.handleClick}
                   />
                 ]}

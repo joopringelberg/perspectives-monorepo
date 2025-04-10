@@ -78,7 +78,7 @@ export default function ManageScreen()
                   I have finished here. Just take me to my contexts!
                 </Col>
                 <Col className="d-flex align-items-center">
-                  <a className="badge badge-pill badge-light p-3" href={appLocation + "/"}>Start MyContexts</a>
+                  <Button variant="info" onClick={() => window.location.href = appLocation}>Go to MyContexts</Button>
                 </Col>
               </Row>
               

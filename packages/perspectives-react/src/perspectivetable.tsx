@@ -24,12 +24,13 @@ import { AccordionHeaderWithAddButton } from "./accordionHeaderWithAddButton";
 // Displays the value of prop cardcolumn of RoleTable (a property of the role).
 
 
-const RoleCard: React.FC<CardProperties> = ({title, tabIndex, onClick, ...rest}) => {
+const RoleCard: React.FC<CardProperties> = ({title, tabIndex, onClick, className, ...rest}) => {
+
   return  <Form.Control
             readOnly
             plaintext
+            className={`ps-2 ${className || ''}`}
             value={title}
-            // The rest will be aria-label and className.
             {...rest}
             />;
 }
@@ -274,13 +275,8 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
           component.props.showAsAccordionItem ?
             <Accordion.Item eventKey={perspective.id} key={perspective.id}>
               <Accordion.Header>
-                <AccordionHeaderWithAddButton
-                  perspective={perspective}
-                  onAddItem={() => {
-                    // Handle add item action
-                    console.log(`Add item to ${perspective.displayName}`);
-                  }}/>
-                </Accordion.Header>
+                <AccordionHeaderWithAddButton perspective={perspective}/>
+              </Accordion.Header>
               <Accordion.Body>{
               component.constructTable()}
               </Accordion.Body>
