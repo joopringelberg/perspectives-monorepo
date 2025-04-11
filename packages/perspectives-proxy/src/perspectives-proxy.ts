@@ -1166,6 +1166,19 @@ export class PerspectivesProxy
         );
       })
     }
+  
+  isMe ( roleInstance : RoleInstanceT) : Promise<boolean>
+    {
+      const proxy = this;
+      return new Promise( function( resolver, rejecter )
+      {
+        return proxy.send(
+          {request: "IsMe", subject: roleInstance, onlyOnce: true},
+          (r => resolver(r[0] === "true")),
+          rejecter
+        );
+      })
+    }
 
   // Returns a Promise for {accountName, password, storageType, sharedStorageId}
   getFileShareCredentials () : Promise<FileShareCredentials>
@@ -1512,7 +1525,14 @@ export class PerspectivesProxy
    */
   createRole_ = this.bind;
   
-  setPreferredUserRoleType( externalRoleId : ExternalRoleType, userRoleName : UserRoleType ) : Promise<[]>
+  /**
+   * Sets the preferred user role type for the context identified by a given external role ID.
+   *
+   * @param externalRoleId - The external role type identifier for which the preferred user role type is being set.
+   * @param userRoleName - The user role type to be set as the preferred role.
+   * @returns A promise that resolves to an empty array upon successful completion.
+   */
+  setPreferredUserRoleType( externalRoleId : RoleInstanceT, userRoleName : UserRoleType ) : Promise<[]>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)

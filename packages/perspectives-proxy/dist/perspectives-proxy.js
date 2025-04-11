@@ -719,6 +719,12 @@ class PerspectivesProxy {
             return proxy.send({ request: "GetMeInContext", subject: roleInstance, onlyOnce: true }, resolver, rejecter);
         });
     }
+    isMe(roleInstance) {
+        const proxy = this;
+        return new Promise(function (resolver, rejecter) {
+            return proxy.send({ request: "IsMe", subject: roleInstance, onlyOnce: true }, (r => resolver(r[0] === "true")), rejecter);
+        });
+    }
     // Returns a Promise for {accountName, password, storageType, sharedStorageId}
     getFileShareCredentials() {
         const proxy = this;
@@ -930,6 +936,13 @@ class PerspectivesProxy {
      * @returns A promise that resolves to the role instance.
      */
     createRole_ = this.bind;
+    /**
+     * Sets the preferred user role type for the context identified by a given external role ID.
+     *
+     * @param externalRoleId - The external role type identifier for which the preferred user role type is being set.
+     * @param userRoleName - The user role type to be set as the preferred role.
+     * @returns A promise that resolves to an empty array upon successful completion.
+     */
     setPreferredUserRoleType(externalRoleId, userRoleName) {
         const proxy = this;
         return new Promise(function (resolver, rejecter) {

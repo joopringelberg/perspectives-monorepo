@@ -207,6 +207,7 @@ isOnThingRole {roleKind} = case roleKind of
 isOnUserRole :: SerialisedPerspective' -> Boolean
 isOnUserRole {roleKind} = case roleKind of
   Just UserRole -> true
+  Just Public -> true
   _ -> false
 isOnContextRole :: SerialisedPerspective' -> Boolean
 isOnContextRole {roleKind} = case roleKind of

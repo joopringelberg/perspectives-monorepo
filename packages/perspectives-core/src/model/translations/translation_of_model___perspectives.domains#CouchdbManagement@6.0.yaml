@@ -506,8 +506,8 @@ model://perspectives.domains#CouchdbManagement:
                 nl: Model versies
         Author:
           translations:
-            en: Author
-            nl: Auteur
+            en: Authors
+            nl: Auteurs
           actions:
             model://perspectives.domains#CouchdbManagement$ModelManifest$Author:
               CreateVersion:

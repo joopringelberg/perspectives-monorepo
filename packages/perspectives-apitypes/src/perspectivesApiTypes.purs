@@ -54,6 +54,7 @@ data RequestType =
   | GetViewProperties
   | GetMeForContext
   | GetAllMyRoleTypes
+  | IsMe
   | GetSystemIdentifier
   | GetPerspectivesUser 
   | GetMeInContext
@@ -127,6 +128,7 @@ instance decodeRequestType :: ReadForeign RequestType where
     "GetViewProperties" -> GetViewProperties
     "GetMeForContext" -> GetMeForContext
     "GetAllMyRoleTypes" -> GetAllMyRoleTypes
+    "IsMe" -> IsMe
     "GetFile" -> GetFile
     "GetPublicUrl" -> GetPublicUrl
     "GetSelectedRoleFromClipboard" -> GetSelectedRoleFromClipboard

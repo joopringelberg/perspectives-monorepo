@@ -177,6 +177,7 @@ export declare class PerspectivesProxy {
     getSystemIdentifier(): Promise<ContextInstanceT>;
     getPerspectivesUser(): Promise<RoleInstanceT>;
     getMeInContext(roleInstance: RoleInstanceT): Promise<[RoleInstanceT] | []>;
+    isMe(roleInstance: RoleInstanceT): Promise<boolean>;
     getFileShareCredentials(): Promise<FileShareCredentials>;
     createContext(contextDescription: ContextSerializationRecord, roleType: RoleType, contextIdToAddRoleInstanceTo: ContextInstanceT, myroletype: UserRoleType): Promise<[RoleInstanceT, RoleInstanceT] | [RoleInstanceT]>;
     createContext_(contextDescription: ContextSerializationRecord, roleInstance: RoleInstanceT, myroletype: UserRoleType): Promise<ContextInstanceT>;
@@ -232,7 +233,14 @@ export declare class PerspectivesProxy {
      * @returns A promise that resolves to the role instance.
      */
     createRole_: (contextinstance: ContextInstanceT, localRolName: RolName, contextType: ContextType, rolDescription: RolSerialization, myroletype: UserRoleType) => Promise<RoleInstanceT>;
-    setPreferredUserRoleType(externalRoleId: ExternalRoleType, userRoleName: UserRoleType): Promise<[]>;
+    /**
+     * Sets the preferred user role type for the context identified by a given external role ID.
+     *
+     * @param externalRoleId - The external role type identifier for which the preferred user role type is being set.
+     * @param userRoleName - The user role type to be set as the preferred role.
+     * @returns A promise that resolves to an empty array upon successful completion.
+     */
+    setPreferredUserRoleType(externalRoleId: RoleInstanceT, userRoleName: UserRoleType): Promise<[]>;
     save(): Promise<[]>;
     evaluateRoleState(rolinstance: RoleInstanceT): Promise<[]>;
 }
@@ -243,7 +251,6 @@ type valueReceiver = (value: any) => void;
 type errorHandler = (error: string) => void;
 type ContextID = string;
 type RolName = string;
-type ExternalRoleType = string;
 export type ContextSerializationRecord = {
     id?: string;
     prototype?: ContextID;
