@@ -10,7 +10,7 @@ interface WhereProps {
 export class Where extends Component<WhereProps> {
   render() {
     // TODO: add indexed contexts and recent contexts.
-    return (<><TableForms screenelements={this.props.screenelements} showTablesAndForm={this.props.showTablesAndForm} />
+    return (<><TableForms screenelements={this.props.screenelements} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={false} />
     <p className='bg-light-subtle'>Rendering of the recent contexts.</p>
     <p className='bg-light-subtle'>Rendering of the pinned contexts.</p>
     </>);

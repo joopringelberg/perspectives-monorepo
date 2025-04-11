@@ -66,7 +66,7 @@
 , "formPasteRole_Fill": "Fill the role in this form with the role on the clipboard."
 , "openPublicResource": "Open the public perspective on this role or context."
 , "openContext": "Please wait while this context is being loaded..."
-, "contextDropdown_title": "Just the role"
+, "contextDropdown_title": "Empty role"
 , "chatComponent_recordAudio": "Press and hold to record. Release to stop recording."
 , "ppsharedfilestorage_nofile": "The perspectives sharedfilestorage service did not receive a file."
 , "ppsharedfilestorage_nokey": "The perspectives sharedfilestorage service did not receive a key."
@@ -83,4 +83,8 @@
 , "chatComponent_instruction_body1": "To share files, your installation needs a place to put them in, where others can fetch them from. Currently it uses a cloud service provided by courtesy of the Perspectives project. However, this use is limited and you have {{remainingUploads}} uploads left. [[link:MySharedFileServices|Set up your own storage]] (for free)."
 , "chatComponent_instruction_body2": "You have exhausted the default storage facility provided by courtesy of the Perspectives project. In order to keep sharing files with others, [[link:MySharedFileServices|set up your own storage]] (for free)."
 , "table_subscriptionLeader": "Table for the role "
+, "tableContextMenu_opendetails": "Details"
+, "tableContextMenu_new": "Make a new:"
+, "tableContextMenu_fill": "Fill with the role on the clipboard"
+, "tableContextMenu_takeonthisrole": "Take on this role"
 }

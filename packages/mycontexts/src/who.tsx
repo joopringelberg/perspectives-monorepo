@@ -34,7 +34,7 @@ export class Who extends Component<WhoProps> {
           : null))
         }
         </Accordion>
-        <TableForms screenelements={this.props.screenelements.userRoles} showTablesAndForm={this.props.showTablesAndForm} />
+        <TableForms screenelements={this.props.screenelements.userRoles} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={true} />
       </>
       }</PSContext.Consumer>;
   }

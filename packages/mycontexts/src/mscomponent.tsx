@@ -39,6 +39,7 @@ export interface SlidingPanelContentProps {
 
 interface MSComponentProps {
   isMobile: boolean;
+  doubleclickOpensDetails: boolean;
   children: [React.ReactElement<MainContentProps>, React.ReactElement<SlidingPanelContentProps>];
   className?: string;
 }
@@ -51,13 +52,14 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
   constructor(props: MSComponentProps) {
     super(props);
     this.state = { selectedRoleInstance: undefined, isFormVisible: false, isSliding: false, isTabbable: false };
-    this.setSelectRow = this.setSelectRow.bind(this);
+    this.showDetails = this.showDetails.bind(this);
+    this.conditionallyShowDetails = this.conditionallyShowDetails.bind(this);
     this.containerRef = React.createRef();
     this.slidingPanelRef = React.createRef();
     this.mainPanelRef = React.createRef();
   }
 
-  setSelectRow = (event: RoleInstanceSelectionEvent) => {
+  showDetails = (event: RoleInstanceSelectionEvent) => {
     this.setState(
       { selectedRoleInstance: event.detail.roleInstance
       , selectedRoleType: event.detail.roleType
@@ -75,18 +77,28 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
     , 600);
   };
 
+  conditionallyShowDetails (event: RoleInstanceSelectionEvent) {
+    if (this.props.doubleclickOpensDetails)
+      {
+        this.showDetails(event);
+      }
+  }
   componentDidMount(): void {
     const component = this;
-    if (component.containerRef.current) {
-      component.containerRef.current.addEventListener('SetRow', this.setSelectRow as EventListener, true);
+    if (component.containerRef.current) { 
+      component.containerRef.current.addEventListener('OpenDetails', this.conditionallyShowDetails, true );
+      component.containerRef.current.addEventListener('OpenWhereDetails', this.showDetails, true );
     }
     component.mainPanelRef.current?.focus();
   }
 
   componentDidUpdate(prevProps: MSComponentProps): void {
     if (prevProps.isMobile !== this.props.isMobile && this.containerRef.current) {
-      this.containerRef.current.removeEventListener('SetRow', this.setSelectRow as EventListener, true);
-      this.containerRef.current.addEventListener('SetRow', this.setSelectRow as EventListener, true);
+      // We have to do this because the reference to the containerRef changes when the component is re-rendered for mobile (and vv).
+      this.containerRef.current.removeEventListener('OpenWhereDetails', this.showDetails as EventListener, true);
+      this.containerRef.current.removeEventListener('OpenDetails', this.conditionallyShowDetails, true );
+      this.containerRef.current.addEventListener('OpenDetails', this.conditionallyShowDetails as EventListener, true);
+      this.containerRef.current.addEventListener('OpenWhereDetails', this.showDetails, true );
     }
     if (this.props.isMobile && this.state.isFormVisible && this.slidingPanelRef.current) {
       this.slidingPanelRef.current.focus();
@@ -96,7 +108,8 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
   componentWillUnmount(): void {
     const component = this;
     if (component.containerRef.current) {
-      component.containerRef.current.removeEventListener('SetRow', this.setSelectRow as EventListener, true);
+      component.containerRef.current.removeEventListener('OpenDetails', this.conditionallyShowDetails as EventListener, true);
+      component.containerRef.current.removeEventListener('OpenWhereDetails', this.showDetails as EventListener, true);
     }
   }
 
@@ -132,7 +145,7 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
           {/* Sliding Panel */}
           {this.state.isFormVisible && (
             <div
-              className={`cover-panel ${this.state.isSliding ? 'open' : ''} bg-info`}
+              className={`cover-panel ${this.state.isSliding ? 'open' : ''} bg-secondary`}
               onKeyDown={(e) => component.handleKeyDown(e)}
               ref={this.slidingPanelRef}
               tabIndex={this.state.isTabbable ? 0 : undefined}

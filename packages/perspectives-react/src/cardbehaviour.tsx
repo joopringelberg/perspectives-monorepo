@@ -95,9 +95,11 @@ export const addOpenContextOrRoleForm : BehaviourAdder = (domEl, component) => {
     } 
   }
 
-  function handleClick(e: MouseEvent) {
+  function handleDoubleClick(e: MouseEvent) {
     handle((e.shiftKey || e.altKey));
-    e.stopPropagation();
+    // NOTE: We have to let the event propagate because we want to catch it in TableRow, where it is used to open the details form.
+    // We may later discover situations where we want to stop the propagation but that has to happen higher up.
+    // e.stopPropagation();
   }
 
   function handleKeyDown(e: KeyboardEvent) {
@@ -118,7 +120,7 @@ export const addOpenContextOrRoleForm : BehaviourAdder = (domEl, component) => {
 
   addBehaviour(component, "openContextOrRoleForm", function (component : BehaviourComponent) {
     domEl.addEventListener("keydown", handleKeyDown);
-    domEl.addEventListener("dblclick", handleClick);
+    domEl.addEventListener("dblclick", handleDoubleClick);
 
     if (previousOnDragStart) {
       domEl.ondragstart = function (ev) {

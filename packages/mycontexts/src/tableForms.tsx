@@ -8,13 +8,15 @@ import MSComponent, { SlidingPanelContentProps } from "./mscomponent";
 interface TableFormsProps {
   screenelements: TableFormDef[];
   showTablesAndForm: boolean;
+  doubleclickOpensDetails: boolean;
+
 }
 
 export class TableForms extends Component<TableFormsProps> {
   render() {
     const forms = this.props.screenelements.map(({ form }) => form);
     return (
-      <MSComponent isMobile={!this.props.showTablesAndForm} className='bg-light-subtle'>
+      <MSComponent isMobile={!this.props.showTablesAndForm} className='bg-light-subtle' doubleclickOpensDetails={this.props.doubleclickOpensDetails}>
         <Accordion defaultActiveKey="0" flush>
           {
           this.props.screenelements.map(({table, form}, index) => {

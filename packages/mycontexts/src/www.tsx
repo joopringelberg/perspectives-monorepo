@@ -2,7 +2,7 @@ import React from 'react';
 import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider } from 'react-bootstrap';
 import './www.css';
 import i18next from 'i18next';
-import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, What as WhatDef, ScreenElementDefTagged, RowElementDef, ColumnElementDef, TableElementDef, FormElementDef } from 'perspectives-proxy';
+import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, What as WhatDef, RoleOnClipboard } from 'perspectives-proxy';
 import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
 import { Me } from './me';
@@ -32,6 +32,7 @@ interface WWWComponentState {
   endUserMessage: UserMessagingMessage;
   choiceMessage: ChoiceMessage;
   actions?: Record<string, string>;
+  roleOnClipboard?: RoleOnClipboard;
 }
 
 class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
@@ -81,20 +82,47 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
     const component = this;
     SharedWorkerChannelPromise.then( pdrHandler => {
       getInstallationData().then( installationData => {
-        pdrHandler.runPDR( installationData.perspectivesUserId!, 
-          constructPouchdbUser(installationData), 
-          { isFirstInstallation: true, 
-            useSystemVersion: null,
-            myContextsVersion: __MYCONTEXTS_VERSION__
-          }).then ( succeeded => {
-            const systemIdentifier = "def:#" + installationData.perspectivesUserId! + installationData.deviceName! as ContextInstanceT;
-            this.setState(
-              { systemIdentifier
-              , systemUser: systemIdentifier + "$" + deconstructLocalName( ModelDependencies.sysUser) as RoleInstanceT
+        pdrHandler
+          .runPDR( installationData.perspectivesUserId!, 
+            constructPouchdbUser(installationData), 
+            { isFirstInstallation: true, 
+              useSystemVersion: null,
+              myContextsVersion: __MYCONTEXTS_VERSION__
+            })
+          .then ( () => {
+            PDRproxy.then( pproxy => {
+              pproxy.subscribeSelectedRoleFromClipboard(
+                function (clipBoardContents : RoleOnClipboard[])
+                {
+                  const roleOnClipboard = clipBoardContents[0];
+                  const systemIdentifier = "def:#" + installationData.perspectivesUserId! + installationData.deviceName! as ContextInstanceT;
+                  if (roleOnClipboard && roleOnClipboard !== component.state.roleOnClipboard)
+                  {
+                    // A new role on the clipboard. Add it to the state.
+                    component.setState(
+                      { systemIdentifier
+                      , roleOnClipboard: roleOnClipboard
+                      , systemUser: systemIdentifier + "$" + deconstructLocalName( ModelDependencies.sysUser) as RoleInstanceT
+                      });
+                  }
+                  else if (!roleOnClipboard)
+                  {
+                    // The clipboard is empty. Remove the role from the state.
+                    component.setState(
+                      { systemIdentifier
+                      , systemUser: systemIdentifier + "$" + deconstructLocalName( ModelDependencies.sysUser) as RoleInstanceT
+                      , roleOnClipboard: undefined
+                      });
+                  }
+                  // It is unlikely that another change triggered this subscription. But in case it did, we do not have to re-assert the systemIdentifier 
+                  // or the systemUser.
+                  component.prepareMyContextsScreen();
+                }
+              )
               })
-            component.prepareMyContextsScreen();
-          }
-          );})});
+            }
+          )});
+        })
     window.addEventListener('resize', this.checkScreenSize);
     this.checkScreenSize()
     
@@ -559,6 +587,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               { systemExternalRole: externalRole(component.state.systemIdentifier)
               , systemIdentifier: component.state.systemIdentifier
               , systemUser: component.state.systemUser
+              , roleOnClipboard: component.state.roleOnClipboard
               }}
               >
             { this.state.openContext ? this.state.isSmallScreen ? this.renderMobile() : this.renderDesktop() : null }

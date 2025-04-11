@@ -14,7 +14,7 @@ import "./components.css";
 import { CardProperties } from "./cardbehaviour";
 import { CardWithFixedBehaviour, WithOutBehavioursProps } from "./adorningComponentWrapper";
 import { RoleInstanceT, Perspective, SerialisedProperty, PDRproxy, ContextType } from "perspectives-proxy";
-import { AccordionHeaderWithAddButton } from "./accordionHeaderWithAddButton";
+import { AccordionHeaderWithmenu } from "./accordionHeaderWithAddButton";
 
 ////////////////////////////////////////////////////////////////////////////////
 // CARD
@@ -112,7 +112,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
         {
           const customEvent = e as CustomEvent;
           component.setrow(customEvent.detail.roleInstance);
-          // e.stopPropagation();
+          e.stopPropagation();
         },
         false);
       component.eventDiv.current.addEventListener('SetColumn',
@@ -126,7 +126,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
           e.stopPropagation();
         },
         false);
-      component.eventDiv.current.addEventListener('SetSelectRow',
+      component.eventDiv.current.addEventListener('SelectCardColumn',
         function (e)
         {
           // By definition of row selection, the card column now becomes the current column.
@@ -275,7 +275,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
           component.props.showAsAccordionItem ?
             <Accordion.Item eventKey={perspective.id} key={perspective.id}>
               <Accordion.Header>
-                <AccordionHeaderWithAddButton perspective={perspective}/>
+                <AccordionHeaderWithmenu perspective={perspective} roleinstance={component.state.row}/>
               </Accordion.Header>
               <Accordion.Body>{
               component.constructTable()}

@@ -42,6 +42,8 @@ export type AppContextType =
   , roleId?: RoleInstanceT               // The role identifier of the selected role (OBSOLETE?)
   , myRoleType?: RoleType                // The role type of the users' role in the selected context.
   , couchdbUrl?: string
+
+  , roleOnClipboard?: RoleOnClipboard // The role on the clipboard.
   };
 
 export const AppContext = createContext<AppContextType>(

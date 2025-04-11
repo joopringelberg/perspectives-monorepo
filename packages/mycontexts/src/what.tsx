@@ -17,7 +17,7 @@ export class What extends PerspectivesComponent<WhatProps>{
   render() {
     switch (this.props.screenelements.tag) {
       case "TableForms":
-        return <TableForms screenelements={this.props.screenelements.elements as TableFormDef[]} showTablesAndForm={this.props.showTablesAndForm} />;
+        return <TableForms screenelements={this.props.screenelements.elements as TableFormDef[]} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={true}/>;
       case "FreeFormScreen":
         return <PSContext.Consumer>{
           context => <FreeFormScreen 

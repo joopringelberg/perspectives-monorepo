@@ -46,9 +46,11 @@
 }
 
 /* Hide the caret icon for the NavDropdown toggle, but only in the top NavBar */
-#top-navbar .dropdown-toggle::after {
+.hide-caret .dropdown-toggle::after {
   display: none;
 }
+
+.hide-caret {}
 
 .scrollable-content {
   overflow-y: auto;
@@ -59,4 +61,13 @@
 html body .dropdown-menu .dropdown-item {
   --bs-dropdown-link-color: var(--bs-primary); /* Uses Bootstrap's primary color */
   --bs-dropdown-link-hover-color: var(--bs-info-text);
+}
+
+/* Customize the ring around an element that receives focus */
+:focus {
+  outline-color: var(--bs-light); /* Contrast with your bg-secondary */
+}
+
+.accordion-button:after {
+  display: none;
 }

@@ -66,7 +66,7 @@
 , "formPasteRole_Fill": "Vul de rol in dit formulier met de rol op het klembord."
 , "openPublicResource": "Open het publieke perspectief op deze rol of context."
 , "openContext": "Een moment terwijl de context wordt geopend..."
-, "contextDropdown_title": "Alleen de rol"
+, "contextDropdown_title": "Lege rol"
 , "chatComponent_recordAudio": "Klik en houd vast om op te nemen. Laat los om te stoppen."
 , "ppsharedfilestorage_nofile": "De perspectives sharedfilestorage service ontving geen bestand."
 , "ppsharedfilestorage_nokey": "De perspectives sharedfilestorage service ontving geen sleutel."
@@ -83,4 +83,8 @@
 , "chatComponent_instruction_body1": "Om bestanden te delen, heeft je installatie een plaats nodig om ze op te slaan, waaruit anderen ze kunnen ophalen. Op dit moment gebruikt hij een cloud service die door het Perspectives project beschikbaar wordt gesteld. Maar je kan daar maar beperkt gebruik van maken en je mag nog maar {{remainingUploads}} keer uploaden. [[link:link:MySharedFileServices|Maak je eigen (gratis) opslag aan.]]"
 , "chatComponent_instruction_body2": "Je hebt het aantal bestanden dat je bij de Perspectives Cloud Service mag opslaan, bereikt. Om bestanden te kunnen blijven delen, [[link:MySharedFileServices|maak je je eigen (gratis) opslag aan.]]"
 , "table_subscriptionLeader": "Tabel voor de rol "
+, "tableContextMenu_opendetails": "Details"
+, "tableContextMenu_new": "Maak een nieuw(e):"
+, "tableContextMenu_fill": "Vul met de rol op het clipboard"
+, "tableContextMenu_takeonthisrole": "Neem deze rol aan"
 }

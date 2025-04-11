@@ -49,6 +49,7 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
     super(props);
     this.handleClick = this.handleClick.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
+    this.handleDoubleClick = this.handleDoubleClick.bind(this);
     this.ref = createRef() as React.RefObject<HTMLTableRowElement>;
   }
 
@@ -59,15 +60,25 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
     // Signal to Table that this row is selected.
     this.ref.current?.dispatchEvent( new CustomEvent('SetRow', 
       { detail: 
-        { roleInstance: this.props.roleinstance
-        , roleType: this.props.perspective.roleType }
+        { roleInstance: this.props.roleinstance }
       ,  bubbles: true }
       ) );
     // When shift is held, the card column becomes selected.
     if ( event.shiftKey )
     {
-      this.ref.current?.dispatchEvent( new CustomEvent('SetSelectRow', { bubbles: true }) );
+      this.ref.current?.dispatchEvent( new CustomEvent('SelectCardColumn', { bubbles: true }) );
     }
+  }
+
+  handleDoubleClick (event : React.MouseEvent)
+  {
+    event.stopPropagation();
+    // Signal to Table that this row is selected.
+    this.ref.current?.dispatchEvent( new CustomEvent('OpenDetails', 
+      { detail: 
+        { roleInstance: this.props.roleinstance
+        , roleType: this.props.perspective.roleType }
+      ,  bubbles: true }) );
   }
 
   handleKeyDown (event : React.KeyboardEvent)
@@ -81,14 +92,9 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
           // Signal to Table that this row is selected
           this.ref.current.dispatchEvent( new CustomEvent('SetRow', 
             { detail: 
-              { roleInstance: this.props.roleinstance
-              , roleType: this.props.perspective.roleType }
+              { roleInstance: this.props.roleinstance }
             ,  bubbles: true }) );
-          this.ref.current?.dispatchEvent( new CustomEvent('SetSelectRow', 
-            { detail: 
-              { roleInstance: this.props.roleinstance
-              , roleType: this.props.perspective.roleType}
-              ,  bubbles: true }) );
+          this.ref.current?.dispatchEvent( new CustomEvent('SelectCardColumn', { bubbles: true } ) );
           }
         break;
     }
@@ -100,6 +106,7 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
     const roleInstanceWithProps = component.props.roleinstancewithprops;
     return  <tr
               onClick={component.handleClick}
+              onDoubleClick={component.handleDoubleClick}
               onKeyDown={component.handleKeyDown}
               ref={component.ref}
               key={ roleInstanceWithProps.roleId }

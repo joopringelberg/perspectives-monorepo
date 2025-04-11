@@ -20,8 +20,6 @@
 
 import React, { Component, forwardRef } from "react";
 import {Dropdown} from 'react-bootstrap';
-import {PlusIcon} from '@primer/octicons-react';
-import { func, objectOf, string } from "prop-types";
 import i18next from "i18next";
 import { ContextType } from "perspectives-proxy";
 
@@ -90,20 +88,26 @@ export default class CreateContextDropDown extends Component<CreateContextDropDo
                 focusFirstItemOnShow={false}
                 onClick={ e => {
                   // Keep a click on an item within the Dropdown.
+                  // If the dropdown is embedded in an accordion header, clicking the dropdown will not open or close it.
                   // The action is handled by the onSelect handler of the Dropdown.
                   e.stopPropagation();
                 }}
                 onSelect={ contextType => {
+                  // This is the handler that is carried out on clicking an item in the dropdown.
                   component.props.create( contextType as ContextType)
                   } }>
-                <Dropdown.Toggle as={CustomToggle} id="CreateContext_Toggle" disabled={Object.keys(component.props.contexts).length == 0}>
-                  <i 
-                    className="bi bi-plus-circle" 
-                    style={{ 
-                      fontSize: '1.1rem',
-                      color: 'var(--bs-primary)'
-                    }}
-                  ></i>
+                <Dropdown.Toggle 
+                  as={CustomToggle} 
+                  id="CreateContext_Toggle" 
+                  disabled={Object.keys(component.props.contexts).length == 0}>
+                    {/* This is the actual clickable item shown on screen: */}
+                    <i 
+                      className="bi bi-plus-circle" 
+                      style={{ 
+                        fontSize: '1.1rem',
+                        color: 'var(--bs-primary)'
+                      }}
+                    />
                 </Dropdown.Toggle>
                   <Dropdown.Menu>{ items }</Dropdown.Menu>
               </Dropdown>;
@@ -111,10 +115,6 @@ export default class CreateContextDropDown extends Component<CreateContextDropDo
   }
 }
 
-CreateContextDropDown.propTypes =
-  { create: func
-  , contexts: objectOf(string)
-  };
 
 // eslint-disable-next-line react/display-name, react/prop-types
 interface CustomToggleProps {
@@ -123,6 +123,8 @@ interface CustomToggleProps {
   disabled: boolean;
 }
 
+// This CustomToggle allows us to disble the dropdown toggle button
+// and to prevent the default action of the anchor tag.
 const CustomToggle = forwardRef<HTMLAnchorElement, CustomToggleProps>(({ children, onClick, disabled }, ref) => (
   <a
     href=""
@@ -133,6 +135,9 @@ const CustomToggle = forwardRef<HTMLAnchorElement, CustomToggleProps>(({ childre
       e.stopPropagation()
       if (!disabled)
       {
+        // This is the handler provided by React-Bootstrap
+        // to open the dropdown.
+        // We need to call it, otherwise the dropdown won't open.
         onClick(e);
       }
     }}
