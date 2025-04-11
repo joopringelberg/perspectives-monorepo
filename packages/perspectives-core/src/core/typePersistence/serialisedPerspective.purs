@@ -106,6 +106,7 @@ derive instance newtypeSerialisedPerspective :: Newtype SerialisedPerspective _
 
 type RoleInstanceWithProperties =
   { roleId :: String
+  , isMe :: Boolean
   , objectStateBasedRoleVerbs :: Array String
   -- keys are the string representation of PropertyType,
   -- so this map can be read as one from PropertyType to PropertyVerbs, too.

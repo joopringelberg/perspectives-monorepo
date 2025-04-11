@@ -84,6 +84,7 @@ export type Roleinstancewithprops = {
   objectStateBasedProperties: { type: string; value: PropertyType }[];
   publicUrl?: string;
   filler?: RoleInstanceT;
+  isMe: boolean;
 };
 
 export type PropertyValues = {

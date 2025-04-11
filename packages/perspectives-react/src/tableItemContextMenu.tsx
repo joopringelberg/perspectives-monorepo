@@ -36,7 +36,6 @@ interface TableItemContextMenuProps {
 interface TableItemContextMenuState {
   actions: string[];
   compatibleRole?: boolean;
-  canITakeOnThisRole: boolean;
 }
 
 export default class TableItemContextMenu extends Component<TableItemContextMenuProps, TableItemContextMenuState>
@@ -45,7 +44,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   constructor( props : TableItemContextMenuProps )
   {
     super(props);
-    this.state = {actions: [], canITakeOnThisRole: false};
+    this.state = {actions: []};
     this.ref = React.createRef();
   }
 
@@ -55,9 +54,8 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     {
       PDRproxy.then( pproxy => pproxy.checkBindingP( component.props.perspective.roleType, component.props.roleOnClipboard!.roleData.rolinstance )
       .then( compatibleRole => 
-        PDRproxy.then( pproxy => pproxy.isMe( component.props.roleinstance)
-        .then( canITakeOnThisRole => component.setState({compatibleRole, canITakeOnThisRole})))
-    ))}
+        component.setState({compatibleRole})));
+    }
   }
 
   componentDidUpdate(prevProps: Readonly<TableItemContextMenuProps>, prevState: Readonly<TableItemContextMenuState>, snapshot?: any): void {
@@ -67,9 +65,8 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     {
       PDRproxy.then( pproxy => pproxy.checkBindingP( component.props.perspective.roleType, component.props.roleOnClipboard!.roleData.rolinstance )
       .then( compatibleRole => 
-      PDRproxy.then( pproxy => pproxy.isMe( component.props.roleinstance)
-      .then( canITakeOnThisRole => component.setState({compatibleRole, canITakeOnThisRole})))
-    ))}
+        component.setState({compatibleRole})));
+    }
   }
 
   computeActionItems(): JSX.Element[] 
@@ -283,7 +280,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   
   computeTakeOnThisRoleItem() : JSX.Element[] 
   {
-    if (this.state.canITakeOnThisRole)
+    if (this.props.perspective.roleInstances[this.props.roleinstance].isMe)
     {
       return [<Dropdown.Item
                 key="TakeOnThisRole"
