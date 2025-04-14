@@ -65,7 +65,7 @@ html body .dropdown-menu .dropdown-item {
 
 /* Customize the ring around an element that receives focus */
 :focus {
-  outline-color: var(--bs-light); /* Contrast with your bg-secondary */
+  outline-color: var(--bs-warning); /* Contrast with your bg-secondary */
 }
 
 .accordion-button:after {
