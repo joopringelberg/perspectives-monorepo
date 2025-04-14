@@ -20,6 +20,7 @@ interface WWWComponentState {
   isSmallScreen: boolean;
   title: string;
   doubleSection: Section;
+  whatOnly: boolean;
   showNotifications: boolean;
   leftPanelContent: 'about' | 'me' | 'settings' | 'apps' | false;
   activeSection: Section;
@@ -45,6 +46,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
       { isSmallScreen: false
       , title: 'MyContexts'
       , doubleSection: 'what'
+      , whatOnly: false
       , showNotifications: false
       , leftPanelContent: false
       , activeSection: 'what' 
@@ -492,7 +494,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
 
   renderTopNavBar() {
     const component = this;
-    return (<Navbar bg="primary" expand="xs" className="py-0" id="top-navbar">
+    return (<Navbar bg="primary" expand="xs" className="py-0 ps-2" id="top-navbar">
       <NavDropdown title={<i className="bi bi-list text-light"></i>} className="me-auto hide-caret">
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'about'})}>About...</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'me'})}>Me</NavDropdown.Item>
@@ -520,8 +522,8 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           {component.renderTopNavBar()}
           <Row className='mx-0'>
             <Col 
-              className='bg-primary full-height' 
-              xs={ this.state.doubleSection === "who" ? 6 : 3} 
+              className='bg-primary full-height animated-column' 
+              xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "who" ? 6 : 3 } 
               style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
                 <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}><h4 className='text-center'>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h4></Row>
                 <Row className='px-1 full-www-content-height scrollable-content'>
@@ -535,10 +537,14 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                 </Row>
             </Col>
             <Col 
-              className='bg-primary' 
-              xs={ this.state.doubleSection === "what" ? 6 : 3} 
+              className='bg-primary animated-column' 
+              xs={ this.state.whatOnly ? 10 : this.state.doubleSection === "what" ? 6 : 3} 
               style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
-              <Row onClick={() => component.setState( {'doubleSection': "what"} )}  ><h4 className='text-center'>{ i18next.t("www_what", {ns: 'mycontexts'}) }</h4></Row>
+              <Row onClick={() => component.setState( {'doubleSection': "what"} )}
+                onDoubleClick={() => component.setState( {'whatOnly': !component.state.whatOnly} )}
+              >
+                <h4 className='text-center'>{ i18next.t("www_what", {ns: 'mycontexts'}) }</h4>
+              </Row>
               {/* In the desktop, MSComponent will render a row with px-1 */}
               {/* Here we render either an arbitrary screen: {tag: "FreeFormScreen", elements: MainScreenElements}, or all TableFormDef elements in the {tag: "TableForms", elements: TableFormDef[]} variant of What. */}
               <Row className="full-www-content-height scrollable-content">
@@ -550,8 +556,8 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               </Row>
             </Col>
             <Col 
-              className='bg-primary' 
-              xs={ this.state.doubleSection === "where" ? 6 : 3} 
+              className='bg-primary full-height animated-column'
+              xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "where" ? 6 : 3} 
               style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
               <Row onClick={() => component.setState( {'doubleSection': "where"} )}  ><h4 className='text-center'>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h4></Row>  
               <Row className="px-1 full-www-content-height scrollable-content" style={{overflow: 'auto'}}>
