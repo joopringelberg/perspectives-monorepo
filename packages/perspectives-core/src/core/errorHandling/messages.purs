@@ -128,6 +128,7 @@ data PerspectivesError
     | SelfOnlyNeedsTwoRoles String ArcPosition EnumeratedPropertyType
     | SelfOnlyShouldBeAuthorOnly String ArcPosition EnumeratedPropertyType
     | StateDoesNotExist StateIdentifier ArcPosition ArcPosition
+    | NoNotificationAspect ContextType ArcPosition ArcPosition
 
     | RolErrorBoundary String String
     | ContextErrorBoundary String String
@@ -244,6 +245,7 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (SelfOnlyShouldBeAuthorOnly userRoleName userRoleStart (EnumeratedPropertyType prop)) = "(SelfOnlyShouldBeAuthorOnly) `selfonly` on property '" <> prop <> "' of user '" <> userRoleName <> "' (from " <> show userRoleStart <> ") \
     \ is meaningless because either '" <> userRoleName <> "' is functional or there is no other user role that can change the property. In both cases `authoronly` is more appropriate."
   show (StateDoesNotExist stateId start end) = "(StateDoesNotExist) The state '" <> show stateId <> "' is not modelled (between " <> show start <> " and " <> show end <> ")."
+  show (NoNotificationAspect ctype start end) = "(NoNotificationAspect) The context type '" <> show ctype <> "' has no notification aspect: notifications will not be sent to the user " <> showPosition start end
 
   show (RolErrorBoundary boundaryName err) = "(RolErrorBoundary) ErrorBoundary in '" <> boundaryName <> "' for PerspectRol (" <> err <> ")"
   show (ContextErrorBoundary boundaryName err) = "(ContextErrorBoundary) ErrorBoundary in '" <> boundaryName <> "' for PerspectContext (" <> err <> ")"

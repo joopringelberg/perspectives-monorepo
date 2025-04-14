@@ -280,7 +280,8 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   
   computeTakeOnThisRoleItem() : JSX.Element[] 
   {
-    if (this.props.perspective.roleInstances[this.props.roleinstance].isMe)
+    const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance]; 
+    if (roleInstanceWithProps?.isMe)
     {
       return [<Dropdown.Item
                 key="TakeOnThisRole"
@@ -326,6 +327,44 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
               i18next.t("tableContextMenu_opendetails", { ns: 'preact' }) 
             }</NavDropdown.Item>];
   }
+
+  computeRestoreContextForUserItem() : JSX.Element[]
+  {
+    if (this.props.perspective.roleKind == "UserRole" || this.props.perspective.roleKind == "Public")
+    {
+      return [<Dropdown.Item
+                key="RestoreContextForUser"
+                eventKey="RestoreContextForUser"
+                onClick={ () => this.restoreContextForUser()}
+              >{
+                i18next.t("tableContextMenu_restorecontextforuser", { ns: 'preact' })
+              }</Dropdown.Item>];
+    }
+    else
+    {
+      return [];
+    }
+  }
+
+  restoreContextForUser()
+  {
+    const component = this;
+    PDRproxy.then(
+      function (pproxy)
+      {
+        pproxy.restoreContextForUser(
+          component.props.perspective.contextInstance,
+          component.props.roleinstance,
+          component.props.perspective.roleType);
+      })
+      .catch(e => UserMessagingPromise.then( um =>
+        um.addMessageForEndUser(
+          { title: i18next.t("restoreContextForUser_title", { ns: 'preact' }) 
+          , message: i18next.t("restoreContextForUser_message", {ns: 'preact'})
+          , error: e.toString()
+          })));
+  }
+
   
   render()
   {
@@ -337,7 +376,8 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
       ...this.computeRemovalItems(),
       ...this.computeOpenContextOfFillerItem(),
       ...this.computeActionItems(),
-      ...this.computeTakeOnThisRoleItem()
+      ...this.computeTakeOnThisRoleItem(),
+      ...this.computeRestoreContextForUserItem()
     ];
     {
       return <NavDropdown 

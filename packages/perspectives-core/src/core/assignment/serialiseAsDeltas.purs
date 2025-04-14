@@ -21,13 +21,14 @@
 -- END LICENSE
 
 module Perspectives.Assignment.SerialiseAsDeltas
-( serialisedAsDeltasFor
-, getPropertyValues
-, serialiseDependencies
-, serialiseRoleInstancesAndProperties
-, serialisedAsDeltasForUserType
-)
-where
+  ( getPropertyValues
+  , serialiseDependencies
+  , serialiseRoleInstancesAndProperties
+  , serialisedAsDeltasFor
+  , serialisedAsDeltasForUserType
+  , serialisedAsDeltasFor_
+  )
+  where
 
 import Control.Monad.AvarMonadAsk (get) as AMA
 import Control.Monad.Error.Class (throwError, try)
@@ -117,7 +118,6 @@ serialisedAsDeltasForUserType cid userType = do
           run = do
             void a
             AMA.get
-
 
 liftToMPT :: forall a. MonadPerspectives a -> MonadPerspectivesTransaction a
 liftToMPT = lift

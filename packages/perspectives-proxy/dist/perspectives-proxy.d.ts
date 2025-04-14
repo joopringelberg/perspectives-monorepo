@@ -243,6 +243,21 @@ export declare class PerspectivesProxy {
     setPreferredUserRoleType(externalRoleId: RoleInstanceT, userRoleName: UserRoleType): Promise<[]>;
     save(): Promise<[]>;
     evaluateRoleState(rolinstance: RoleInstanceT): Promise<[]>;
+    /**
+     * Restores the context for a specific user role within a given context instance.
+     *
+     * This function sends a request to restore the context for the specified user role
+     * in the provided context instance. It returns a promise that resolves when the
+     * operation is complete.
+     *
+     * As a result, a transaction is built for the given user according to the perspectives of the user role.
+     *
+     * @param contextInstance - The context instance to restore for the user.
+     * @param userRoleId - The role instance of the user for whom the context is being restored.
+     * @param userRoleType - The type of the user role.
+     * @returns A promise that resolves to an empty array upon successful restoration.
+     */
+    restoreContextForUser(contextInstance: ContextInstanceT, userRoleId: RoleInstanceT, userRoleType: RoleType): Promise<[]>;
 }
 export declare const FIREANDFORGET = true;
 export declare const CONTINUOUS = false;

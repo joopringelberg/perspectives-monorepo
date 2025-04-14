@@ -75,6 +75,7 @@ domain model://joopringelberg.nl#Disconnect
     -- context IncomingDisconnections = sys:SocialMe >> binder Disconnected >> context >> extern
 
   case DisconnectedPeer
+    aspect sys:ContextWithNotification
 
     external
       property Peer = context >> Disconnected >> LastName
@@ -83,6 +84,11 @@ domain model://joopringelberg.nl#Disconnect
     aspect thing sys:Chat
 
     user Disconnecter filledBy sys:TheWorld$PerspectivesUsers
+      state ActionsCanBeTaken = exists binding
+        on entry
+          do
+            create role sys:Chat
+          notify "You can now start a chat with the peer."
       perspective on Disconnecter
         props (FirstName, LastName) verbs (Consult)
       perspective on Disconnected

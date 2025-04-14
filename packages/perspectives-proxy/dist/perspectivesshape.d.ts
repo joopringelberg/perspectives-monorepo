@@ -17,7 +17,7 @@ export type ScreenReceiver = (screen: ScreenDefinition[]) => void;
 export type TableFormReceiver = (tableForm: TableFormDef[]) => void;
 export type PropertyType = string & { readonly brand: unique symbol };
 export type ContextType = string & { readonly brand: unique symbol };
-export type RoleKind = "RoleInContext" | "ContextRole" | "ExternalRole" | "UserRole" | "BotRole"
+export type RoleKind = "RoleInContext" | "ContextRole" | "ExternalRole" | "UserRole" | "Public" | "PublicProxy"
 export type EnumeratedOrCalculatedProperty = {type: "ENP" | "CP", value: PropertyType}
 
 export type ContextActions = Record<ModeledActionName, TranslatedActionName>;

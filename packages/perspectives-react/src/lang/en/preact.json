@@ -87,4 +87,7 @@
 , "tableContextMenu_new": "Make a new:"
 , "tableContextMenu_fill": "Fill with the role on the clipboard"
 , "tableContextMenu_takeonthisrole": "Take on this role"
+, "tableContextMenu_restorecontextforuser": "Restore the context for this user"
+, "restoreContextForUser_title": "Restore context"
+, "restoreContextForUser_message": "Could not restore the context for this user."
 }

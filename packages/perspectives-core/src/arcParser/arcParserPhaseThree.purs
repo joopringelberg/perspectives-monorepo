@@ -53,6 +53,7 @@ import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, UpstreamAutoma
 import Perspectives.Identifiers (Namespace, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_, typeUri2typeNameSpace)
 import Perspectives.InvertedQuery (RelevantProperties(..))
 import Perspectives.InvertedQuery.Storable (StoredQueries)
+import Perspectives.ModelDependencies (contextWithNotification)
 import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ContextActionE(..), NotificationE(..), PropertyVerbE(..), RoleVerbE(..), ScreenE, SelfOnly(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..)) as AST
 import Perspectives.Parsing.Arc.AST (RoleIdentification(..), SegmentedPath, SentenceE(..), SentencePartE(..), StateTransitionE(..), roleIdentification2context)
 import Perspectives.Parsing.Arc.AspectInference (inferFromAspectRoles)
@@ -68,6 +69,7 @@ import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, lift2, modifyD
 import Perspectives.Parsing.Arc.Position (ArcPosition, arcParserStartPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
 import Perspectives.Persistent (getDomeinFile)
+import Perspectives.PerspectivesState (addWarning)
 import Perspectives.Query.ExpressionCompiler (compileAndDistributeStep, compileAndSaveProperty, compileAndSaveRole, compileExpression, compileStep, qualifyLocalContextName, qualifyLocalEnumeratedRoleName, qualifyLocalRoleName)
 import Perspectives.Query.Kinked (completeInversions)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), domain, domain2roleInContext, domain2roleType, mandatory, range, replaceContext, roleInContext2Role, sumOfDomains, traverseQfd)
@@ -93,7 +95,7 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), and)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.Representation.UserGraph.Build (buildUserGraph)
 import Perspectives.Representation.View (View(..))
-import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, isPerspectiveOnSelf, lookForUnqualifiedPropertyType_, roleStates, statesPerProperty, string2RoleType)
+import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, hasContextAspect, isPerspectiveOnSelf, lookForUnqualifiedPropertyType_, roleStates, statesPerProperty, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
 import Prelude (Unit, append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=))
 
@@ -730,6 +732,11 @@ handlePostponedStateQualifiedParts = do
         Nothing -> pure Nothing
         Just qfd -> Just <$> roleIdentificationToQueryFunctionDescription qfd start
       objectMustBeRole objectQfd start end
+      -- roleType ##>>> hasAspect aspect
+      hasNotificationAspect <- lift2 ((roleIdentification2context user) ###>> hasContextAspect (ContextType contextWithNotification))
+      if hasNotificationAspect
+        then pure unit
+        else lift2 $ addWarning $ show $ NoNotificationAspect (roleIdentification2context user) start end 
       modifyAllStates
         (case transition2stateSpec transition of
           AST.ContextState _ _ -> ContextNotification 

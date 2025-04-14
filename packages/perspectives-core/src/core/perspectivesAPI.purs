@@ -46,6 +46,7 @@ import Foreign.Object (empty)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ApiEffect, RequestType(..)) as Api
 import Perspectives.ApiTypes (ContextSerialization(..), ContextsSerialisation(..), PropertySerialization(..), RecordWithCorrelationidentifier(..), Request(..), RequestRecord, Response(..), ResponseWithWarnings(..), RolSerialization(..), ApiEffect, mkApiEffect, showRequestRecord)
+import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor_)
 import Perspectives.Assignment.Update (RoleProp(..), addProperty, deleteProperty, getPropertyBearingRoleInstance, saveFile, setPreferredUserRoleType, setProperty)
 import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
 import Perspectives.CompileAssignment (compileAssignment)
@@ -60,7 +61,7 @@ import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
 import Perspectives.Instances.Combinators (filter)
-import Perspectives.Instances.Me (getAllMyRoleTypes, getMeInRoleAndContext, getMyType)
+import Perspectives.Instances.Me (getAllMyRoleTypes, getMeInRoleAndContext, getMyType, isMe)
 import Perspectives.Instances.ObjectGetters (binding, context, contextType, contextType_, getContextActions, getFilledRoles, getMe, getProperty, getRoleName, roleType, roleType_, siblings)
 import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.ModelDependencies (actualSharedFileServer, fileShareCredentials, identifiableFirstName, identifiableLastName, itemOnClipboardClipboardData, itemsOnClipboard, mySharedFileServices, selectedClipboardItem, sharedFileServices, sysUser)
@@ -287,6 +288,10 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
       case roleKind of
         ContextRole -> registerSupportedEffect corrId setter ((binding >=> context >=> getMe)) (RoleInstance subject) onlyOnce
         _ -> registerSupportedEffect corrId setter ((context >=> getMe)) (RoleInstance subject) onlyOnce
+    Api.IsMe -> registerSupportedEffect corrId setter 
+      (\rid -> ArrayT do
+        b <- lift $ isMe rid
+        pure [Value $ show b]) (RoleInstance subject) onlyOnce 
     Api.GetFileShareCredentials ->  do 
       me <- getUserIdentifier
       registerSupportedEffect 
@@ -797,6 +802,21 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
       (do 
         roleType <- roleType_ (RoleInstance subject)
         void $ runMonadPerspectivesTransaction authoringRole (evaluateRoleState (RoleInstance subject) (StateIdentifier $ unwrap roleType)))
+      \e -> sendResponse (Error corrId (show e)) setter
+
+    Api.RestoreContextForUser -> catchError
+      (do
+        roleType <- getRoleType object
+        kind <- roleKindOfRoleType roleType
+        case kind of 
+          Public -> do
+            proxyInstance <- (ContextInstance subject) ##>> getRoleInstances (ENR $ EnumeratedRoleType (object <> "Proxy"))
+            void $ runMonadPerspectivesTransaction authoringRole (serialisedAsDeltasFor_ (ContextInstance subject) proxyInstance (ENR $ EnumeratedRoleType (object <> "Proxy")))
+            sendResponse (Result corrId []) setter
+          _ -> do
+            void $ runMonadPerspectivesTransaction authoringRole (serialisedAsDeltasFor_ (ContextInstance subject) (RoleInstance predicate) roleType)
+            sendResponse (Result corrId []) setter
+      )
       \e -> sendResponse (Error corrId (show e)) setter
 
     Api.Unsubscribe -> unregisterSupportedEffect corrId

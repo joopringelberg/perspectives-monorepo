@@ -71,3 +71,11 @@ html body .dropdown-menu .dropdown-item {
 .accordion-button:after {
   display: none;
 }
+
+/* Animating column width change for the www screen. */
+.animated-column {
+  transition: 
+    flex-basis 0.6s ease-in-out, 
+    width 0.6s ease-in-out, 
+    padding 0.6s ease-in-out;
+}

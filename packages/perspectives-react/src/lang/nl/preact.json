@@ -87,4 +87,7 @@
 , "tableContextMenu_new": "Maak een nieuw(e):"
 , "tableContextMenu_fill": "Vul met de rol op het clipboard"
 , "tableContextMenu_takeonthisrole": "Neem deze rol aan"
+, "tableContextMenu_restorecontextforuser": "Herstel de context voor deze gebruiker"
+, "restoreContextForUser_title": "Herstel context"
+, "restoreContextForUser_message": "Kon deze context niet herstellen, voor deze gebruiker."
 }

@@ -257,6 +257,9 @@ domain model://perspectives.domains#CouchdbManagement
         props (FirstName, UserName) verbs (Consult)
         props (SpecificUserName, Password) verbs (SetPropertyValue)
         all roleverbs
+      
+      perspective on Visitor
+        props (FirstName, LastName) verbs (Consult)
 
         -- This is currently not very useful, because a Repositories instance will not enter state WithoutManifests 
         -- when its last Manifest is deleted. Negation by failure breaks on removing instances!
@@ -346,6 +349,10 @@ domain model://perspectives.domains#CouchdbManagement
       
       perspective on BespokeDatabases >> binding >> context >> Owner
         only (Fill)
+            
+      perspective on Visitor
+        props (FirstName, LastName) verbs (Consult)
+
 
       action RequestDatabase
         letA
@@ -701,6 +708,9 @@ domain model://perspectives.domains#CouchdbManagement
       
       perspective on Authors
         props (FirstName, LastName, AuthorizedDomain) verbs (Consult)
+      
+      perspective on Visitor
+        props (FirstName, LastName) verbs (Consult)
 
       screen "Repository"
         tab "This repository"

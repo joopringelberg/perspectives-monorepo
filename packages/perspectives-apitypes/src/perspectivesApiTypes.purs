@@ -111,6 +111,7 @@ data RequestType =
   | CheckBinding
   | WrongRequest
   | EvaluateRoleInstance
+  | RestoreContextForUser
 
 derive instance genericRequestType :: Generic RequestType _
 
@@ -178,6 +179,7 @@ instance decodeRequestType :: ReadForeign RequestType where
     "SaveFile" -> SaveFile
     "Save" -> Save
     "EvaluateRoleInstance" -> EvaluateRoleInstance
+    "RestoreContextForUser" -> RestoreContextForUser
     _ -> WrongRequest
 
 instance showRequestType :: Show RequestType where
