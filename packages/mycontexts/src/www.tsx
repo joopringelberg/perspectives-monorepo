@@ -162,6 +162,29 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
       }
     };
 
+    // Add message event listener for ServiceWorker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        console.log('Received message from ServiceWorker:', event.data);
+        if (event.data && event.data.type === 'NOTIFICATION_CLICK') {
+          const roleId = event.data.roleId;
+          if (roleId) {
+            console.log('Opening context from notification click:', roleId);
+            component.tryToOpenContext(roleId);
+          }
+        }
+      });
+      
+      // Register the service worker if not already registered
+      navigator.serviceWorker.register('/www/notification-worker.js')
+        .then(registration => {
+          console.log('ServiceWorker registered from WWW component');
+        })
+        .catch(err => {
+          console.error('Error registering ServiceWorker from WWW component:', err);
+        });
+    }
+
     document.body.addEventListener(
       'OpenContext', 
       (e : CustomEvent) => {
