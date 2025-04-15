@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "prebuild": "node ./src/generateManifest.js",
-    "build": "tsc -b && vite build",
+    "build": "pnpm exec tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "publish": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com/www"
@@ -49,7 +49,6 @@
     "rollup-plugin-delete": "^3.0.1",
     "rollup-plugin-postcss": "^4.0.2",
     "rollup-plugin-visualizer": "^5.14.0",
-    "typescript": "~5.8.2",
     "typescript-eslint": "^8.26.0"
   }
 }

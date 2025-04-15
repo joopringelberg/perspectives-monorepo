@@ -30,10 +30,8 @@
         "@rollup/plugin-node-resolve": "^16.0.0",
         "@rollup/plugin-typescript": "^12.1.2",
         "mocha": "^10.7.3",
-        "rollup": "^4.34.9",
         "rollup-plugin-delete": "^3.0.0",
         "should": "^13.2.3",
-        "typescript": "^5.8.2",
         "tslib": "^2.8.1"
     },
     "dependencies": {
