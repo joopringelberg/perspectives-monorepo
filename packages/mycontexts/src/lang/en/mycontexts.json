@@ -87,4 +87,14 @@
   , "www_who": "Who"
   , "www_what": "What"
   , "www_where": "Where"
-}
+  , "settings_notifications": "Notifications"
+  , "notifications_settings_title": "Notification Settings"
+  , "notifications_current_status": "Current status"
+  , "notifications_status_granted": "Enabled"
+  , "notifications_status_denied": "Blocked"
+  , "notifications_status_default": "Not set"
+  , "notifications_permission_explanation": "Receive a system notification when other users have modified data, a deadline has passed, etc."
+  , "notifications_permission_denied_help": "Notifications are blocked in your browser settings. To enable them, please check your browser settings and allow notifications for this site."
+  , "notifications_request_permission": "Enable Notifications"
+  , "notifications_not_supported": "Your browser doesn't support notifications."
+  }

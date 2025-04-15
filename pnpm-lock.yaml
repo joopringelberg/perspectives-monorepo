@@ -117,6 +117,9 @@ importers:
       globals:
         specifier: ^16.0.0
         version: 16.0.0
+      rollup-plugin-copy:
+        specifier: ^3.5.0
+        version: 3.5.0
       rollup-plugin-delete:
         specifier: ^3.0.1
         version: 3.0.1(rollup@4.36.0)

@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react-swc'
 import tsconfigPaths from 'vite-tsconfig-paths' 
 import commonjs from 'vite-plugin-commonjs'
 import { visualizer } from 'rollup-plugin-visualizer'
+import copy from 'rollup-plugin-copy'
 import del from 'rollup-plugin-delete'
 import { resolve } from 'path';
 import fs from 'fs';
@@ -56,6 +57,12 @@ export default defineConfig({
       },
       plugins: [
         del({ targets: 'dist/*' }), // Add this line to clear the dist directory
+        // Add this plugin to copy assets
+        copy({
+          targets: [
+            { src: 'public/**/*', dest: 'dist' }
+          ]
+        }),
         // visualizer({
         //   filename: './dist/stats.html',
         //   open: true

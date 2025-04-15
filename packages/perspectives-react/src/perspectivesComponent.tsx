@@ -64,13 +64,16 @@ export default class PerspectivesComponent<P = PerspectivesComponentProps, S = P
   // A single component may perform multiple calls through the API. All of these may connect a callback
   // to the dependency network in the core. When the component unmounts, it should inform the core that
   // these callbacks can be unsubscribed. This is what we use the unsubscriber for.
-  addUnsubscriber(unsubscriberPromise: Promise<Unsubscriber>): Promise<void>
+  addUnsubscriber(unsubscriberPromise: Promise<Unsubscriber|void>): Promise<void>
   {
     if (unsubscriberPromise)
     {
       // unsubscriber = {subject: req.subject, corrId: req.corrId}
-      return unsubscriberPromise.then((unsubscriber: Unsubscriber) => {
-        this.unsubscribers.push(unsubscriber);
+      return unsubscriberPromise.then((unsubscriber: Unsubscriber|void) => {
+        if (unsubscriber)
+        {
+          this.unsubscribers.push(unsubscriber);
+        }
         return Promise.resolve();
       });
     }

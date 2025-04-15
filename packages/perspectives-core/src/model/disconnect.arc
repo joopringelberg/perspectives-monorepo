@@ -84,6 +84,7 @@ domain model://joopringelberg.nl#Disconnect
     aspect thing sys:Chat
 
     user Disconnecter filledBy sys:TheWorld$PerspectivesUsers
+      aspect sys:ContextWithNotification$NotifiedUser
       state ActionsCanBeTaken = exists binding
         on entry
           do
@@ -119,7 +120,6 @@ domain model://joopringelberg.nl#Disconnect
               props (FirstName, LastName, Cancelled) verbs (Consult)
         what
         where
-
     
     user Disconnected filledBy sys:TheWorld$PerspectivesUsers
       property Reconnect (Boolean)
@@ -143,3 +143,4 @@ domain model://joopringelberg.nl#Disconnect
         only (Create, RemoveContext, Remove)
         props (Messages, Media) verbs (AddPropertyValue, Consult)
         
+    aspect thing sys:ContextWithNotification$Notifications

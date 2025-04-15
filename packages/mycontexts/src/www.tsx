@@ -13,6 +13,8 @@ import { Who } from './who';
 import { Clipboard } from './clipboard';
 import { Where } from './where';
 import { NotificationsDisplayer } from './notifications';
+import Settings from './settingsPanel';
+import { subscribeToAllNotifications } from './systemNotifications';
 
 type Section = 'who' | 'what' | 'where' | 'none';
 
@@ -116,6 +118,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                       , roleOnClipboard: undefined
                       });
                   }
+                  component.addUnsubscriber(subscribeToAllNotifications(systemIdentifier))
                   // It is unlikely that another change triggered this subscription. But in case it did, we do not have to re-assert the systemIdentifier 
                   // or the systemUser.
                   component.prepareMyContextsScreen();
@@ -396,7 +399,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             { component.state.openContext ?
               <NotificationsDisplayer 
               externalroleid={component.state.openContext}
-              systemcontextinstance={'def:#' + component.state.systemIdentifier + 'def:notifications' as ContextInstanceT}
+              systemcontextinstance={component.state.systemIdentifier}
               shownotifications={true}
               navigateto={(state) => component.setState({openContext: state})}
               />
@@ -425,7 +428,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
         content = <Apps systemuser={component.state.systemUser}/>;
         break;
       case 'settings':
-        content = <p>Settings</p>;
+        content = <Settings/>;
         break;
       default:
         return null;
