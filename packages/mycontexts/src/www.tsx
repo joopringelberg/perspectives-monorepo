@@ -422,8 +422,22 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             { component.state.openContext ?
               <NotificationsDisplayer 
               externalroleid={component.state.openContext}
-              systemcontextinstance={component.state.systemIdentifier}
               shownotifications={true}
+              navigateto={(state) => component.setState({openContext: state})}
+              />
+              :
+              null
+            }
+            </Accordion.Body>
+          </Accordion.Item>
+          <Accordion.Item eventKey="2">
+            <Accordion.Header>All notifications</Accordion.Header>
+            <Accordion.Body>
+            { component.state.openContext ?
+              <NotificationsDisplayer 
+              externalroleid={ externalRole( component.state.systemIdentifier )}
+              shownotifications={true}
+              showAllNavigations={true}
               navigateto={(state) => component.setState({openContext: state})}
               />
               :
@@ -597,13 +611,13 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           </Row>
             <Navbar fixed="bottom" bg="primary" expand="xs" className="justify-content-between py-0 px-3">
             <Navbar.Brand onClick={() => window.history.back()}>
-              <i className="bi bi-arrow-left"></i>
+              <i className="bi bi-arrow-left text-light"></i>
             </Navbar.Brand>
             <Navbar.Brand onClick={() => component.setState({ showNotifications: true })}>
-              <i className="bi bi-arrow-up"></i>
+              <i className="bi bi-arrow-up text-light"></i>
             </Navbar.Brand>
             <Navbar.Brand onClick={() => window.history.forward()}>
-              <i className="bi bi-arrow-right"></i>
+              <i className="bi bi-arrow-right text-light"></i>
             </Navbar.Brand>
           </Navbar>
           <EndUserNotifier message={component.state.endUserMessage}/>

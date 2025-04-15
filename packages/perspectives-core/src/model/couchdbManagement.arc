@@ -642,7 +642,10 @@ domain model://perspectives.domains#CouchdbManagement
       
       perspective on Manifests >> binding >> context >> Author
         only (Create, Fill)
-      
+
+      perspective on Visitor
+        props (FirstName, LastName) verbs (Consult)
+
       -- Moet in staat zijn om een instantie toe te voegen aan Accounts.
       -- perspective on Accounts
 

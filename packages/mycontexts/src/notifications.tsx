@@ -7,9 +7,9 @@ import { ModelDependencies, PerspectivesComponent, PerspectiveTable } from "pers
 
 interface NotificationsDisplayerProps
 {
-  systemcontextinstance: string;
   externalroleid: RoleInstanceT;
   shownotifications: boolean;
+  showAllNavigations?: boolean;
   navigateto: (state: any) => void;
 }
 
@@ -35,9 +35,10 @@ export class NotificationsDisplayer extends PerspectivesComponent<NotificationsD
     const component = this;
     PDRproxy.then( pproxy =>
       // getPerspective (roleInstanceOfContext, perspectiveObjectRoleType /*OPTIONAL*/, receiveValues, fireAndForget, errorHandler)
-      pproxy.getPerspective(
+      pproxy.getPerspectiveForUser(
         component.props.externalroleid,
-        ModelDependencies.notifications,
+        component.props.showAllNavigations ? ModelDependencies.allNotifications : ModelDependencies.notifications,
+        component.props.showAllNavigations ? ModelDependencies.WWWUser : ModelDependencies.sysUser,
         function( perspectiveArray )
         {
           component.setState({perspective: perspectiveArray[0]});
@@ -58,15 +59,16 @@ export class NotificationsDisplayer extends PerspectivesComponent<NotificationsD
           {
             pproxy.send(component.currentContextNotificationsUnsubscriber, function(){});
           }
-          pproxy.getPerspective(
+          pproxy.getPerspectiveForUser(
             component.props.externalroleid,
-            ModelDependencies.notifications,
+            component.props.showAllNavigations ? ModelDependencies.allNotifications : ModelDependencies.notifications,
+            component.props.showAllNavigations ? ModelDependencies.WWWUser : ModelDependencies.sysUser,
             function( perspectiveArray )
             {
               component.setState({perspective: perspectiveArray[0]});
             },
             CONTINUOUS
-          ).then( unsubscriber => component.currentContextNotificationsUnsubscriber = unsubscriber);
+              ).then( unsubscriber => component.currentContextNotificationsUnsubscriber = unsubscriber);
         });
     }
   }

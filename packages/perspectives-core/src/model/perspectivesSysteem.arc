@@ -400,6 +400,8 @@ domain model://perspectives.domains#System
         only (Create, Fill, Remove)
         props (Name) verbs (Consult)
         props (Selected) verbs (SetPropertyValue, Consult)
+      perspective on AllNotifications
+        props (Message) verbs (Consult)
     
     context OutgoingInvitations (relational) filledBy Invitation
 
@@ -479,7 +481,7 @@ domain model://perspectives.domains#System
       property Identifier (mandatory, String)
 
     -- A calculated role representing all available Notifications (from any context).
-    thing AllNotifications = callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithNotification$Notifications" ) returns sys:ContextWithNotification$Notifications
+    context AllNotifications = callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithNotification$Notifications" ) returns sys:ContextWithNotification$Notifications
 
     context SystemCaches (mandatory) filledBy Caches
 

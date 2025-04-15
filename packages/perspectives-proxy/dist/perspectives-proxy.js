@@ -448,6 +448,7 @@ class PerspectivesProxy {
      *
      * @param roleInstanceOfContext - The role instance of the context.
      * @param perspectiveObjectRoleType - The role type of the perspective object. Defaults to an empty string. If not given, the perspective is on the role instance itself.
+     * @param userRoleType  - The role type of the user that we want the perspective for.
      * @param receiveValues - A callback function to receive the perspective values.
      * @param fireAndForget - A boolean indicating whether the request should be fire-and-forget. Defaults to false.
      * @param errorHandler - An optional error handler callback function.
