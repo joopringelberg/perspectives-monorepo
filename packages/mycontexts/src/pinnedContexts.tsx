@@ -2,15 +2,15 @@ import React, { } from "react";
 import { PDRproxy, RoleInstanceT, Perspective } from "perspectives-proxy";
 import { ModelDependencies, PerspectivesComponent, PerspectiveTable } from "perspectives-react";
 
-interface AppsProps {
+interface PinnedContextsProps {
   systemuser: RoleInstanceT;
 }
 
-interface AppsState {
+interface PinnedContextsState {
   perspective: Perspective | undefined;
 }
 
-export class Apps extends PerspectivesComponent<AppsProps, AppsState> {
+export class PinnedContexts extends PerspectivesComponent<PinnedContextsProps, PinnedContextsState> {
   constructor(props: {}) {
     super(props);
     this.state = { perspective: undefined };
@@ -19,7 +19,7 @@ export class Apps extends PerspectivesComponent<AppsProps, AppsState> {
   componentDidMount() {
     const component = this;
     PDRproxy.then((PDRproxy) => {
-      PDRproxy.getPerspective( this.props.systemuser, ModelDependencies.startContexts , (perspectives: Perspective[]) => {
+      PDRproxy.getPerspective( this.props.systemuser, ModelDependencies.pinnedContexts , (perspectives: Perspective[]) => {
         component.setState({ perspective: perspectives[0] });
       });
     })

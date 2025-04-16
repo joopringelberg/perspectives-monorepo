@@ -18,6 +18,7 @@ interface ModelDependenciesT
   isOnScreen: PropertyType;
   nrOfUploadedFiles: PropertyType;
   disabled: PropertyType;
+  pinnedContexts: RoleType;
 }
 
 const ModelDependencies =
@@ -37,6 +38,7 @@ const ModelDependencies =
 , isOnScreen: "model://perspectives.domains#System$ContextWithScreenState$External$IsOnScreen" as PropertyType
 , nrOfUploadedFiles: "model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer$NrOfUploadedFiles" as PropertyType
 , disabled: "model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer$Disabled" as PropertyType
+, pinnedContexts: "model://perspectives.domains#System$PerspectivesSystem$PinnedContexts" as RoleType
 } as ModelDependenciesT;
 
 export default ModelDependencies;

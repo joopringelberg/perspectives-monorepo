@@ -67,7 +67,6 @@ import Perspectives.TypePersistence.PerspectiveSerialisation.Data (PropertyFacet
 import Perspectives.Types.ObjectGetters (getContextAspectSpecialisations)
 import Prelude (append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
 import Simple.JSON (writeJSON)
-import Test.Perspectives.Utils (runP)
 
 -- | Get the serialisation of the perspective the user role type has on the object role type,
 -- | in a given context instance.

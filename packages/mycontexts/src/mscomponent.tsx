@@ -137,7 +137,7 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
 
     if (component.props.isMobile) {
       return (
-        <div className="sliding-panels-container" ref={this.containerRef}>
+        <div className="sliding-panels-container pb-2" ref={this.containerRef}>
           {/* Main Panel */}
           <div className="main-panel" ref={this.mainPanelRef} tabIndex={1}>
             {React.cloneElement(mainContent as React.ReactElement<MainContentProps>, { className: this.props.className })}
