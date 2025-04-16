@@ -2,7 +2,7 @@ import React from 'react';
 import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider } from 'react-bootstrap';
 import './www.css';
 import i18next from 'i18next';
-import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, What as WhatDef, RoleOnClipboard } from 'perspectives-proxy';
+import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization } from 'perspectives-proxy';
 import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
 import { Me } from './me';
@@ -546,9 +546,32 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           { Object.keys( component.state.actions ).map( action => <NavDropdown.Item key={action} onClick={() => component.runAction(action)}>{ component.state.actions![action]}</NavDropdown.Item>) }
           </>
           : null }
+        { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
       <Navbar.Brand href="#home" className='text-light flex-grow-1 d-flex justify-content-center align-items-center'>{this.state.title}</Navbar.Brand>
     </Navbar>);
+  }
+
+  pinContext( externalRole : RoleInstanceT )
+  {
+    const component = this;
+    PDRproxy.then( pproxy => pproxy.bind(
+        component.state.systemIdentifier,
+        ModelDependencies.pinnedContexts,
+        ModelDependencies.system,
+        { id: undefined
+        , properties: {} as PropertySerialization
+        , binding: externalRole
+        },
+        component.state.openContextUserType!
+        ).then( function() {
+          UserMessagingPromise.then( um => 
+            um.addMessageForEndUser(
+              { title: i18next.t("www_pincontext_title", {ns: 'mycontexts'}) 
+              , message: i18next.t("www_pincontext_message", {ns: 'mycontexts'})
+              , error: undefined
+            }));
+    }));
   }
 
   renderDesktop() {
