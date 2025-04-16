@@ -79,6 +79,7 @@ domain model://joopringelberg.nl#Disconnect
 
     external
       property Peer = context >> Disconnected >> LastName
+        readableName
       property Disconnected = context >> Disconnected >> Cancelled
 
     aspect thing sys:Chat

@@ -39,6 +39,7 @@ import Data.String.Regex (Regex)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Tuple (Tuple(..))
+import Data.Unit (Unit, unit)
 import Effect.Class (liftEffect)
 import Parsing (fail, failWithPosition)
 import Parsing.Combinators (between, lookAhead, option, optionMaybe, sepBy, sepBy1, try, (<?>))
@@ -64,7 +65,7 @@ import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.State (NotificationLevel(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), RoleKind(..), RoleType(..))
 import Perspectives.Representation.Verbs (RoleVerb(..), PropertyVerb(..), RoleVerbList(..))
-import Prelude (bind, discard, flip, not, pure, show, ($), (&&), (*>), (<$>), (<*), (<*>), (<<<), (<>), (==), (>>=), (||))
+import Prelude (bind, discard, flip, not, pure, show, ($), (&&), (*>), (<$>), (<*), (<*>), (<<<), (<>), (==), (>>=), (||), (/=))
 
 contextE :: IP ContextPart
 contextE = withPos do
@@ -621,6 +622,7 @@ propertyE = do
       calc <- step
       facets <- option Nil (propertyFacets PString)
       -- Only the role facets are valid.
+      onlyRoleFacets facets
       pure $ PE $ PropertyE
         { id: uname
         , range: Nothing
@@ -663,6 +665,15 @@ propertyE = do
 
           authoronly :: IP PropertyPart
           authoronly = (reserved "authoronly" *> (pure AuthoronlyAttribute))
+
+    onlyRoleFacets :: List PropertyFacet -> IP Unit
+    onlyRoleFacets facets = if filter (case _ of 
+      MessageProperty -> false
+      MediaProperty -> false
+      ReadableNameProperty -> false
+      _ -> true) facets /= Nil
+        then fail ("Only property facets `messageProperty`, `mediaProperty` and `readableName` are allowed in a Calculated Property. ")
+        else pure unit
 
     propertyFacets :: Range -> IP (List PropertyFacet)
     propertyFacets r = nestedBlock (propertyFacet r)

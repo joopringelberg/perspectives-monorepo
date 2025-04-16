@@ -299,6 +299,7 @@ domain model://perspectives.domains#BrokerServices
       property Name = binder Accounts >> context >> extern >> Name
       property FirstNameOfAccountHolder = context >> AccountHolder >> FirstName
       property LastNameOfAccountHolder = context >> AccountHolder >> LastName
+        readableName
       -- We use this on system startup.
       -- PDRDEPENDENCY
       property CurrentQueueName = sys:MySystem >> extern >> binder Queues >> QueueName
