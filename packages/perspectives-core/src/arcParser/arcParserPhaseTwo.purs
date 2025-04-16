@@ -521,14 +521,14 @@ traverseEnumeratedPropertyE (PropertyE {id, range, propertyParts, propertyFacets
 
 -- | Traverse a PropertyE that results in an CalculatedProperty.
 traverseCalculatedPropertyE :: PropertyE -> Namespace -> PhaseTwo Property.Property
-traverseCalculatedPropertyE (PropertyE {id, range, propertyParts, pos}) ns = do
+traverseCalculatedPropertyE (PropertyE {id, range, propertyParts, propertyFacets, pos}) ns = do
   -- TODO. Controleer op dubbele definities.
   (CalculatedProperty property@{calculation}) <- pure $ defaultCalculatedProperty (ns <> "$" <> id) id ns pos
   calculation' <- case head propertyParts of
     -- TODO: fish out the actually parsed calculation and use that!
     (Just (Calculation' c b)) -> expandPrefix c >>= pure <<< \calc -> S calc b
     otherwise -> pure calculation
-  property' <- pure $ Property.C $ CalculatedProperty (property {calculation = calculation'})
+  property' <- pure $ Property.C $ CalculatedProperty (property {calculation = calculation', constrainingFacets = Just $ ARR.fromFoldable propertyFacets})
   modifyDF (\df -> addPropertyToDomeinFile property' df)
   pure property'
 

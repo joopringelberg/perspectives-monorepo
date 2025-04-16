@@ -27,6 +27,7 @@ import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype, over, unwrap)
 import Data.Show.Generic (genericShow)
 import Perspectives.Couchdb.Revision (class Revision, Revision_)
+import Perspectives.Parsing.Arc.AST (PropertyFacet)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Query.QueryTypes (Calculation(..))
@@ -49,8 +50,10 @@ type CalculatedPropertyRecord =
   -- , computation :: Maybe (RoleInContext ~~> Value)
   , role :: EnumeratedRoleType
 
+  , constrainingFacets :: Maybe (Array PropertyFacet)
+
   , pos :: ArcPosition
-  }
+  } 
 
 defaultCalculatedProperty :: String -> String -> String -> ArcPosition -> CalculatedProperty
 defaultCalculatedProperty id dn role pos = CalculatedProperty
@@ -59,6 +62,7 @@ defaultCalculatedProperty id dn role pos = CalculatedProperty
   , displayName: dn
   , calculation: S (Simple $ Identity $ ArcPosition{column: 0, line: 0}) false
   , role: EnumeratedRoleType role
+  , constrainingFacets: Nothing
   , pos: pos}
 
 derive instance genericRepCalculatedProperty :: Generic CalculatedProperty _

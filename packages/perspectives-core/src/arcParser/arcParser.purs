@@ -619,11 +619,13 @@ propertyE = do
       isFunctional <- option false functionalCalculation
       token.reservedOp "="
       calc <- step
+      facets <- option Nil (propertyFacets PString)
+      -- Only the role facets are valid.
       pure $ PE $ PropertyE
         { id: uname
         , range: Nothing
         , propertyParts: Cons (Calculation' calc isFunctional) Nil, pos: pos
-        , propertyFacets: Nil}
+        , propertyFacets: facets}
 
     -- | This parser always succeeds, either with or without consuming part of the input stream.
     enumeratedProperty :: ArcPosition -> String -> IP RolePart
