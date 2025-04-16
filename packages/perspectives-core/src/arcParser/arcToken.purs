@@ -138,6 +138,7 @@ perspectDef = LanguageDef
                   , "fractionDigits"
                   , "messageProperty"
                   , "mediaProperty"
+                  , "readableName"
                   , "regexp"
 
                   -- Perspectives

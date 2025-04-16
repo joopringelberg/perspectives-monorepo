@@ -99,6 +99,7 @@ type PropertyFacets =
   , fractionDigits :: Maybe Int
   , isMessageProperty :: Boolean
   , isMediaProperty :: Boolean
+  , isReadableNameProperty :: Boolean
   }
 
 newtype SerialisedPerspective = SerialisedPerspective String

@@ -148,6 +148,7 @@ data PropertyFacet =
   | FractionDigits Int
   | MessageProperty
   | MediaProperty
+  | ReadableNameProperty
 
 instance WriteForeign PropertyFacet where
   writeImpl pf = case pf of
@@ -164,6 +165,7 @@ instance WriteForeign PropertyFacet where
     FractionDigits i -> writeImpl {constructor: "FractionDigits", args: writeJSON i}
     MessageProperty -> writeImpl {constructor: "MessageProperty", args: writeJSON ""}
     MediaProperty -> writeImpl {constructor: "MediaProperty", args: writeJSON ""}
+    ReadableNameProperty -> writeImpl {constructor: "ReadableNameProperty", args: writeJSON ""}
 
 instance ReadForeign PropertyFacet where
   readImpl f = do
@@ -184,6 +186,7 @@ instance ReadForeign PropertyFacet where
       "FractionDigits" -> FractionDigits <$> readJSON' args
       "MessageProperty" -> pure MessageProperty
       "MediaProperty" -> pure MediaProperty
+      "ReadableNameProperty" -> pure ReadableNameProperty
 
 instance Eq PropertyFacet where
   eq (MinLength i1) (MinLength i2) = i1 == i2
@@ -199,6 +202,7 @@ instance Eq PropertyFacet where
   eq (FractionDigits i1) (FractionDigits i2) = i1 == i2
   eq MessageProperty MessageProperty = true
   eq MediaProperty MediaProperty = true
+  eq ReadableNameProperty ReadableNameProperty = true
   eq _ _ = false
 
 data WhiteSpaceRegime =

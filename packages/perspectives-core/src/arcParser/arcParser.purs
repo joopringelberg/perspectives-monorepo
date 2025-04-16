@@ -683,6 +683,7 @@ propertyE = do
           "fractionDigits" -> reserved "=" *> (FractionDigits <$> token.integer)
           "messageProperty" -> pure MessageProperty
           "mediaProperty" -> pure MediaProperty
+          "readableName" -> pure ReadableNameProperty
           kw -> fail ("Expected `minLength`, `maxLength`, `enumeration` but got: " <> kw <> ". ")
       
         where

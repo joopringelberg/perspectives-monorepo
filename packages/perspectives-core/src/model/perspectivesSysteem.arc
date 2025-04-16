@@ -259,6 +259,8 @@ domain model://perspectives.domains#System
         props (Channel) verbs (Consult)
       perspective on StartContexts
         props (Name) verbs (Consult)
+      perspective on PinnedContexts
+        only (CreateAndFill, Remove, Delete)
       perspective on Contacts
         props (FirstName, LastName) verbs (Consult, SetPropertyValue)
       perspective on OutgoingInvitations
@@ -402,6 +404,7 @@ domain model://perspectives.domains#System
         props (Selected) verbs (SetPropertyValue, Consult)
       perspective on AllNotifications
         props (Message) verbs (Consult)
+      perspective on PinnedContexts
     
     context OutgoingInvitations (relational) filledBy Invitation
 
@@ -482,6 +485,9 @@ domain model://perspectives.domains#System
 
     -- A calculated role representing all available Notifications (from any context).
     context AllNotifications = callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithNotification$Notifications" ) returns sys:ContextWithNotification$Notifications
+
+    -- PDRDEPENDENCY
+    context PinnedContexts (relational)
 
     context SystemCaches (mandatory) filledBy Caches
 
@@ -602,6 +608,7 @@ domain model://perspectives.domains#System
     -- PDRDEPENDENCY
     external
       property Name (mandatory, String)
+        readableName
     -- PDRDEPENDENCY
     user RootUser filledBy sys:TheWorld$PerspectivesUsers
 

@@ -51,7 +51,7 @@ import Perspectives.Query.UnsafeCompiler (context2context, context2role, getDyna
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
-import Perspectives.Representation.Class.Property (class PropertyClass)
+import Perspectives.Representation.Class.Property (class PropertyClass, hasFacet)
 import Perspectives.Representation.Class.Property (getProperty, isCalculated, functional, mandatory, range, Property(..), constrainingFacets) as PROP
 import Perspectives.Representation.Class.Role (allProperties, bindingOfADT, perspectivesOfRoleType, roleKindOfRoleType)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
@@ -67,6 +67,7 @@ import Perspectives.TypePersistence.PerspectiveSerialisation.Data (PropertyFacet
 import Perspectives.Types.ObjectGetters (getContextAspectSpecialisations)
 import Prelude (append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
 import Simple.JSON (writeJSON)
+import Test.Perspectives.Utils (runP)
 
 -- | Get the serialisation of the perspective the user role type has on the object role type,
 -- | in a given context instance.
@@ -141,13 +142,15 @@ serialisePerspective ::
 serialisePerspective contextStates subjectStates cid userRoleType propertyVerbs' roleVerbs' p@(Perspective {id, object, isEnumerated, roleTypes, roleVerbs, propertyVerbs, actions}) = do
   -- All properties available on the object of the perspective.
   (allProps :: Array PropertyType) <- lift $ allProperties (roleInContext2Role <$> (unsafePartial domain2roleType $ range object))
+  readableNameProperties <- lift $ filterA (flip hasFacet ReadableNameProperty) allProps
   -- All PropertyVerbs available on the object of the perspective, given context- and subject state.
   (availablePropertyVerbs :: Array PropertyVerbs) <- pure $ concat (catMaybes $ (flip EM.lookup propertyVerbs) <$> (contextStates <> subjectStates))
   -- All PropertyTypes available for the object of the perspective, given context- and subject state.
   -- Restrict with the given PropertyVerbs.
+  -- Includes the readableNameProperties, if available.
   (availableProperties :: Array PropertyType) <- case propertyVerbs' of
-    Nothing -> pure $ (concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> availablePropertyVerbs)
-    Just (PropertyVerbs restrictedProps _) -> pure $ intersect (expandPropSet allProps restrictedProps) (concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> availablePropertyVerbs)
+    Nothing -> pure $ maybeAddReadableNameProperty readableNameProperties (concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> availablePropertyVerbs)
+    Just (PropertyVerbs restrictedProps _) -> pure $ maybeAddReadableNameProperty readableNameProperties $ intersect (expandPropSet allProps restrictedProps) (concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> availablePropertyVerbs)
   -- Role instances with their property values.
   roleInstances <- roleInstancesWithProperties
     allProps
@@ -238,6 +241,16 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyVerbs'
     maybeAddIdentifier :: Array PropertyType -> Array PropertyType
     maybeAddIdentifier props = if null props then [CP $ CalculatedPropertyType roleWithId] else props
 
+    maybeAddReadableNameProperty :: Array PropertyType -> Array PropertyType -> Array PropertyType
+    maybeAddReadableNameProperty rprops props = let 
+      candidates = intersect rprops props
+      in
+      if null candidates
+        then case head rprops of 
+          Nothing -> props
+          Just rprop -> cons rprop props
+        else props
+
     maybeAddPropertyVerbs :: Array PropertyVerbs -> Array PropertyVerbs
     maybeAddPropertyVerbs pverbs = if null pverbs then [PropertyVerbs (PSet [CP $ CalculatedPropertyType roleWithId]) (PSet [Consult])] else pverbs
 
@@ -252,7 +265,9 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyVerbs'
       Array SerialisedProperty ->
       Array RoleInstanceWithProperties ->
       AssumptionTracking String
-    computeIdentifyingProperty serialisedProps roleInstances = case find (\property -> test nameRegex property.id) serialisedProps of
+    computeIdentifyingProperty serialisedProps roleInstances = case head $ filter (_.isReadableNameProperty <<< _.constrainingFacets) serialisedProps of
+      Just nameGivingProp -> pure nameGivingProp.id
+      Nothing -> case find (\property -> test nameRegex property.id) serialisedProps of
         Just n -> pure n.id
         _ -> if isJust $ find (\property -> property.id == roleWithId) serialisedProps
           then pure roleWithId
@@ -362,6 +377,8 @@ makeSerialisedProperty pt = do
       FractionDigits i -> pr {fractionDigits = Just i}
       MessageProperty -> pr {isMessageProperty = true}
       MediaProperty -> pr {isMediaProperty = true}
+      ReadableNameProperty -> pr {isReadableNameProperty = true}
+      
       )
       { minLength: Nothing
       , maxLength: Nothing
@@ -376,6 +393,7 @@ makeSerialisedProperty pt = do
       , fractionDigits: Nothing
       , isMessageProperty: false
       , isMediaProperty: false
+      , isReadableNameProperty: false
       }
       facets
 
