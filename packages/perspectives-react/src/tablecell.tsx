@@ -29,6 +29,7 @@ import "./components.css";
 import { PropertyType, RoleInstanceT, RoleType, Perspective, PropertyValues, SerialisedProperty } from "perspectives-proxy";
 import { CardProperties } from "./cardbehaviour";
 import { WithOutBehavioursProps } from "./adorningComponentWrapper";
+import ModelDependencies from "./modelDependencies";
 
 ////////////////////////////////////////////////////////////////////////////////
 // NAVIGATING IN A GRID AND A CELL
@@ -74,6 +75,7 @@ interface TableCellProps
   serialisedProperty: SerialisedProperty;
   propertyValues?: PropertyValues;
   perspective: Perspective;
+  readableName: string;
 }
 
 interface TableCellState
@@ -199,6 +201,13 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
 
   values()
   {
+    if (this.props.propertyname == ModelDependencies.roleWithId)
+    {
+      if (this.props.readableName)
+        {
+          return [this.props.readableName];
+        }
+    }
     if (this.props.propertyValues)
     {
       return this.props.propertyValues.values;

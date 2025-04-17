@@ -19,6 +19,7 @@ interface ModelDependenciesT
   nrOfUploadedFiles: PropertyType;
   disabled: PropertyType;
   pinnedContexts: RoleType;
+  roleWithId: PropertyType;
 }
 
 const ModelDependencies =
@@ -39,6 +40,7 @@ const ModelDependencies =
 , nrOfUploadedFiles: "model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer$NrOfUploadedFiles" as PropertyType
 , disabled: "model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer$Disabled" as PropertyType
 , pinnedContexts: "model://perspectives.domains#System$PerspectivesSystem$PinnedContexts" as RoleType
+, roleWithId: "model://perspectives.domains#System$RoleWithId$Id" as PropertyType
 } as ModelDependenciesT;
 
 export default ModelDependencies;

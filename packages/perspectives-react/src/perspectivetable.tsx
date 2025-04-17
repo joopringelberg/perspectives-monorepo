@@ -92,6 +92,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
   orderProperties()
   {
     const perspective = this.props.perspective;
+    // Here we put the identifying property in the front of the list, so it will be the first column.
     const identifyingProperty = perspective.properties[perspective.identifyingProperty];
     this.orderedProperties = Object.values(perspective.properties);
     this.orderedProperties.splice( this.orderedProperties.indexOf( identifyingProperty), 1);

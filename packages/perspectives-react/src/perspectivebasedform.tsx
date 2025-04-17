@@ -225,7 +225,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
                       tabIndex={0}
                       behaviourNames={component.props.behaviours || []}
                       aria-label={component.props.cardtitle} 
-                      title={component.props.perspective.displayName}/> }
+                      title={component.state.roleInstanceWithProps!.readableName}/> }
                   />
                 </RoleDropZone>
               </RoleInstance>;

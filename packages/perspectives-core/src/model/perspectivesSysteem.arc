@@ -48,7 +48,7 @@ domain model://perspectives.domains#System
   -- PDRDEPENDENCY
   aspect user sys:PerspectivesSystem$Installer
 
-  -- Used as model:System$RoleWithId$Id in the PDR code.
+  -- Used as model://perspectives.domains#System$RoleWithId$Id in the PDR code.
   thing RoleWithId
     -- PDRDEPENDENCY
     property Id = callExternal util:RoleIdentifier() returns String

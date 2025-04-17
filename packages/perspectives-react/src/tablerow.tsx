@@ -123,6 +123,7 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
                   isselected = { component.props.isselected && (component.props.column == serialisedProperty.id) }
                   roleRepresentation={component.props.roleRepresentation}
                   perspective={component.props.perspective}
+                  readableName={roleInstanceWithProps.readableName}
                 /> )
             }</tr>;
   }
