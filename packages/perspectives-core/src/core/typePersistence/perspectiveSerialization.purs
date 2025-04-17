@@ -26,10 +26,10 @@ module Perspectives.TypePersistence.PerspectiveSerialisation where
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.State (StateT, evalStateT, get, put)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, concat, cons, elemIndex, filter, filterA, find, findIndex, foldl, head, intersect, modifyAt, nub, null, uncons, union)
+import Data.Array (catMaybes, concat, cons, elemIndex, filter, filterA, findIndex, foldl, head, intersect, modifyAt, nub, null, uncons, union)
 import Data.Maybe (Maybe(..), fromJust, isJust, isNothing, maybe)
 import Data.Newtype (unwrap)
-import Data.String.Regex (Regex, test)
+import Data.String.Regex (Regex)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for, traverse)
@@ -42,20 +42,20 @@ import Perspectives.Data.EncodableMap (lookup) as EM
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Identifiers (isExternalRole, qualifyWith)
 import Perspectives.Instances.Me (isMe)
-import Perspectives.Instances.ObjectGetters (binding_, context, contextType, getActiveRoleStates, getActiveStates, roleType_)
+import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextType, getActiveRoleStates, getActiveStates, roleType_)
 import Perspectives.ModelDependencies (roleWithId)
 import Perspectives.ModelTranslation (translateType)
 import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), domain, domain2roleType, functional, isContextDomain, makeComposition, mandatory, queryFunction, range, roleInContext2Context, roleInContext2Role, roleRange)
-import Perspectives.Query.UnsafeCompiler (context2context, context2role, getDynamicPropertyGetter, getPublicUrl)
+import Perspectives.Query.UnsafeCompiler (context2context, context2role, getDynamicPropertyGetter, getPropertyValues, getPublicUrl)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.Identifiable (identifier)
-import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
+import Perspectives.Representation.Class.PersistentType (EnumeratedRoleType, getEnumeratedRole)
 import Perspectives.Representation.Class.Property (class PropertyClass, hasFacet)
 import Perspectives.Representation.Class.Property (getProperty, isCalculated, functional, mandatory, range, Property(..), constrainingFacets) as PROP
-import Perspectives.Representation.Class.Role (allProperties, bindingOfADT, perspectivesOfRoleType, roleKindOfRoleType)
+import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, allProperties, bindingOfADT, perspectivesOfRoleType, roleKindOfRoleType)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec(..), expandPropSet, expandPropertyVerbs, expandVerbs)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.ScreenDefinition (WidgetCommonFieldsDef)
@@ -65,6 +65,7 @@ import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..), allPro
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, guid)
 import Perspectives.TypePersistence.PerspectiveSerialisation.Data (PropertyFacets, RoleInstanceWithProperties, SerialisedPerspective(..), SerialisedPerspective', SerialisedProperty, ValuesWithVerbs)
 import Perspectives.Types.ObjectGetters (getContextAspectSpecialisations)
+import Perspectives.Utilities (findM)
 import Prelude (append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
 import Simple.JSON (writeJSON)
 
@@ -141,29 +142,40 @@ serialisePerspective ::
 serialisePerspective contextStates subjectStates cid userRoleType propertyVerbs' roleVerbs' p@(Perspective {id, object, isEnumerated, roleTypes, roleVerbs, propertyVerbs, actions}) = do
   -- All properties available on the object of the perspective.
   (allProps :: Array PropertyType) <- lift $ allProperties (roleInContext2Role <$> (unsafePartial domain2roleType $ range object))
-  readableNameProperties <- lift $ filterA (flip hasFacet ReadableNameProperty) allProps
   -- All PropertyVerbs available on the object of the perspective, given context- and subject state.
   (availablePropertyVerbs :: Array PropertyVerbs) <- pure $ concat (catMaybes $ (flip EM.lookup propertyVerbs) <$> (contextStates <> subjectStates))
   -- All PropertyTypes available for the object of the perspective, given context- and subject state.
   -- Restrict with the given PropertyVerbs.
   -- Includes the readableNameProperties, if available.
-  (availableProperties :: Array PropertyType) <- case propertyVerbs' of
-    Nothing -> pure $ maybeAddReadableNameProperty readableNameProperties (concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> availablePropertyVerbs)
-    Just (PropertyVerbs restrictedProps _) -> pure $ maybeAddReadableNameProperty readableNameProperties $ intersect (expandPropSet allProps restrictedProps) (concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> availablePropertyVerbs)
+  (availableProperties' :: Array PropertyType) <- case propertyVerbs' of
+    Nothing -> pure (concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> availablePropertyVerbs)
+    Just (PropertyVerbs restrictedProps _) -> pure $ intersect (expandPropSet allProps restrictedProps) (concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> availablePropertyVerbs)
+  mreadableNameProperty <- computeReadableNameProperty availableProperties' allProps
+  -- Either the property available on the type with facet ReadableNameProperty, or the Id property (the raw identifier of the role) as a last resort.
+  (identifyingProperty :: PropertyType) <- case mreadableNameProperty of 
+    Nothing -> pure $ CP $ CalculatedPropertyType roleWithId
+    Just readableNameProperty -> pure $ readableNameProperty
+  -- Add the identifyingProperty and make sure that it is only once in the list
+  availableProperties <- if isJust $ elemIndex identifyingProperty availableProperties'
+    then pure availableProperties'
+    else pure $ cons identifyingProperty availableProperties'
   -- Role instances with their property values.
   roleInstances <- roleInstancesWithProperties
     allProps
-    (maybeAddIdentifier availableProperties)
-    (verbsPerProperty (maybeAddPropertyVerbs availablePropertyVerbs) (maybeAddIdentifier allProps))
+    -- availableProperties now includes the identifyingProperty...
+    availableProperties
+    -- ... so make sure that verbsPerProperty contains an index for it, too.
+    (ensureIdentifyingProperty identifyingProperty (verbsPerProperty availablePropertyVerbs allProps))
     cid
     p
     (case propertyVerbs' of
       Nothing -> allPropertyVerbs
       Just (PropertyVerbs _ verbs) -> expandVerbs verbs)
+    mreadableNameProperty
   -- Additional properties available on instances given object state.
   additionalPropertiesOnInstances <- pure $ foldl union [] (propertiesInInstance <$> roleInstances)
   -- If no properties are available, we'd like to add roleWithId as property. Otherwise, no table can be built.
-  serialisedProps <- lift $ traverse makeSerialisedProperty ((maybeAddIdentifier availableProperties) <> additionalPropertiesOnInstances)
+  serialisedProps <- lift $ traverse makeSerialisedProperty (availableProperties <> additionalPropertiesOnInstances)
   roleKind <- lift $ traverse roleKindOfRoleType (head roleTypes) 
   -- If the binding of the ADT that is the range of the object QueryFunctionDescription, is an external role,
   -- its context type may be created.
@@ -176,7 +188,6 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyVerbs'
     >>= (\as' -> pure $ nub as')
     >>= (traverse \(ContextType cType) -> Tuple cType <$> translateType cType)
     >>= pure <<< fromFoldable
-  identifyingProperty <- computeIdentifyingProperty serialisedProps roleInstances
   cType <- lift (cid ##>> contextType)
   contextIdToAddRoleInstanceTo <- (unsafePartial computeContextFromPerspectiveObject object) >>= (lift <<< context2context) >>= \f -> lift (cid ##> f)
   -- NOTE: there can be more than one roleType.
@@ -206,7 +217,7 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyVerbs'
     , contextTypesToCreate
     , contextType: cType
     , contextIdToAddRoleInstanceTo
-    , identifyingProperty
+    ,  identifyingProperty: propertytype2string identifyingProperty
     }
   where
 
@@ -237,18 +248,19 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyVerbs'
     unsnoc (BQD _ _ qfd1 qfd2 _ _ _ ) = Just {query: qfd1, lastStep: qfd2}
     unsnoc _ = Nothing
 
-    maybeAddIdentifier :: Array PropertyType -> Array PropertyType
-    maybeAddIdentifier props = if null props then [CP $ CalculatedPropertyType roleWithId] else props
+    ensureIdentifyingProperty :: PropertyType -> Object (Array PropertyVerb) -> Object (Array PropertyVerb)
+    ensureIdentifyingProperty identifyingProperty obj = case lookup (propertytype2string identifyingProperty) obj of
+      Nothing -> insert (propertytype2string identifyingProperty) [Consult] obj
+      Just _ -> obj
 
-    maybeAddReadableNameProperty :: Array PropertyType -> Array PropertyType -> Array PropertyType
-    maybeAddReadableNameProperty rprops props = let 
-      candidates = intersect rprops props
-      in
-      if null candidates
-        then case head rprops of 
-          Nothing -> props
-          Just rprop -> cons rprop props
-        else props
+    computeReadableNameProperty :: Array PropertyType -> Array PropertyType -> AssumptionTracking (Maybe PropertyType)
+    computeReadableNameProperty availableProps allProps = do
+      readableNameProperties <- lift $ filterA (flip hasFacet ReadableNameProperty) allProps
+      case head $ intersect readableNameProperties availableProps of
+        -- In effect add a new property to those available.
+        Nothing -> pure $ head readableNameProperties
+        -- There already was a readableNameProperty available.
+        Just readableNameProperty -> pure $ Just readableNameProperty
 
     maybeAddPropertyVerbs :: Array PropertyVerbs -> Array PropertyVerbs
     maybeAddPropertyVerbs pverbs = if null pverbs then [PropertyVerbs (PSet [CP $ CalculatedPropertyType roleWithId]) (PSet [Consult])] else pverbs
@@ -259,42 +271,6 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyVerbs'
 
     propertiesInInstance :: RoleInstanceWithProperties -> Array PropertyType
     propertiesInInstance = _.objectStateBasedProperties
-
-    computeIdentifyingProperty ::
-      Array SerialisedProperty ->
-      Array RoleInstanceWithProperties ->
-      AssumptionTracking String
-    computeIdentifyingProperty serialisedProps roleInstances = case head $ filter (_.isReadableNameProperty <<< _.constrainingFacets) serialisedProps of
-      Just nameGivingProp -> pure nameGivingProp.id
-      Nothing -> case find (\property -> test nameRegex property.id) serialisedProps of
-        Just n -> pure n.id
-        _ -> if isJust $ find (\property -> property.id == roleWithId) serialisedProps
-          then pure roleWithId
-          else do
-            -- Otherwise, compute the intersection of the props per role instance
-            (commonProps :: Array String) <- case uncons (propNames <$> roleInstances) of
-              Nothing -> pure []
-              Just {head, tail} -> pure $ foldl intersect head tail
-            -- Then find an element that matches "Name"
-            case find (test nameRegex) commonProps of
-              Just n -> pure n
-              -- There may be no property shared by all instances that matches "Name";
-              Nothing -> case head serialisedProps of
-                -- Then we just return the first property that is available because of context- or subject state;
-                Just s -> pure s.id
-                -- Lacking that,
-                Nothing -> case head commonProps of
-                  -- we return the first common property;
-                  Just c -> pure c
-                  -- lacking that we look for the first roleInstance with properties and return the first of those.
-                  -- Notice that other instances may not have that property in scope because of their state.
-                  -- This is no problem; the client will just display an un-editable cell.
-                  Nothing -> case find (not <<< null) (_.objectStateBasedProperties <$> roleInstances) of
-                    Just obj -> pure $ propertytype2string $ unsafePartial fromJust $ head obj
-                    -- Finally, if no role instance has a property, we return the empty string.
-                    -- This perspective will only make it to the client to be shown as a Create button, so we
-                    -- will not miss the identifying property.
-                    Nothing -> pure ""
 
     propNames :: RoleInstanceWithProperties -> Array String
     propNames {objectStateBasedProperties} = propertytype2string <$> objectStateBasedProperties
@@ -408,8 +384,9 @@ roleInstancesWithProperties ::
   ContextInstance ->
   Perspective ->
   Array PropertyVerb ->
+  Maybe PropertyType ->
   AssumptionTracking (Array RoleInstanceWithProperties)
-roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContextStateBasedPropertyVerbs cid (Perspective{object, roleVerbs, propertyVerbs, actions}) restrictingVerbs = do
+roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContextStateBasedPropertyVerbs cid (Perspective{object, roleVerbs, propertyVerbs, actions}) restrictingVerbs mreadableNameProperty = do
   (roleGetter :: ContextInstance ~~> RoleInstance) <- lift $ context2role object
   -- These are all instances of the object of the perspective, regardless of their state.
   (roleInstances :: Array RoleInstance) <- runArrayT $ roleGetter cid
@@ -484,6 +461,7 @@ roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContex
         \actionName -> do 
           translatedActionName <- translateType (qualifyWith (unwrap cType) actionName)
           pure $ Tuple actionName translatedActionName)
+      readableName <- computeReadableName valuesAndVerbs
       pure $ Just
         { roleId: (unwrap roleId)
         , objectStateBasedRoleVerbs
@@ -493,7 +471,46 @@ roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContex
         , publicUrl
         , filler
         , isMe
+        , readableName
       }
+
+      where
+      computeReadableName :: Array (Tuple String ValuesWithVerbs) -> StateT (Object Getter) AssumptionTracking String
+      computeReadableName valuesAndVerbs = case mreadableNameProperty of 
+        Just readableNameProperty -> case head $ filter (eq (propertytype2string readableNameProperty) <<< fst) valuesAndVerbs of
+          Just (Tuple _ {values}) -> case head values of 
+            Just v -> pure v
+            -- The name giving property doesn't yield a value. Fall back on the id (an alternative would be to compute a name on the filler).
+            Nothing -> pure $ unwrap roleId
+          -- This case should not arise. Compute the id.
+          Nothing -> pure $ unwrap roleId
+        Nothing -> do
+          -- The readableNameProperty is not available. We have to look for a property with the ReadableNameProperty facet on the filler.
+          bnds <- lift $ runArrayT $ binding roleId
+          case head bnds of 
+            Nothing -> pure $ unwrap roleId
+            Just bnd -> do
+              bndType <- lift $ lift $ roleType_ bnd
+              lift $ getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST bndType) bnd
+
+      getReadableNameFromTelescope :: (PropertyType -> MonadPerspectives Boolean) -> ADT EnumeratedRoleType -> RoleInstance -> AssumptionTracking String
+      getReadableNameFromTelescope predicate adt rid = do
+            allLocalProps <- lift $ allLocallyRepresentedProperties adt
+            mnameGiver <- lift $ findM predicate allLocalProps
+            case mnameGiver of 
+              Just pt -> do 
+                values <- runArrayT $ getPropertyValues pt rid
+                case head values of 
+                  Nothing -> pure $ unwrap rid
+                  Just (Value v) -> pure v
+              Nothing -> do 
+                bnds <- runArrayT $ binding rid
+                case head bnds of 
+                  Nothing -> pure $ unwrap rid
+                  Just bnd -> do
+                    bndType <- lift $ roleType_ bnd
+                    getReadableNameFromTelescope predicate (ST bndType) bnd
+
 
 -- | The verbs in this type contain both those based on context- and subject state,
 -- | and those based on object state.

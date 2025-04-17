@@ -150,6 +150,7 @@ domain model://perspectives.domains#BrokerServices
           PublicUrl = extern >> binder ManagedBrokers >> StorageLocation for extern
     external
       property Name (mandatory, String)
+        readableName
       -- PDRDEPENDENCY
       property Url (mandatory, String)
         pattern = "^wss://[^\\/]+:[0-9]+\\/ws$" "A url with the wss scheme, ending on a port followed by '/ws'"
@@ -241,6 +242,7 @@ domain model://perspectives.domains#BrokerServices
   -- PDRDEPENDENCY
   case BrokerContract
     aspect sys:Invitation
+    aspect sys:ContextWithNotification
     state NoAdministrator = not exists Administrator
       on entry
         do for sys:Invitation$Guest
@@ -435,6 +437,7 @@ domain model://perspectives.domains#BrokerServices
 
     context Queues (relational) filledBy sys:PerspectivesSystem
       property QueueName (String)
+        readableName
       on exit
         do for BrokerContract$Administrator
           callEffect rabbit:DeleteQueue(
@@ -444,3 +447,5 @@ domain model://perspectives.domains#BrokerServices
             QueueName)
 
     context Service (functional) = extern >> binder Accounts >> context >> extern
+  
+    aspect context sys:ContextWithNotification$Notifications

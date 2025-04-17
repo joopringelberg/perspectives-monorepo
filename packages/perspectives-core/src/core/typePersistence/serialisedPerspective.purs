@@ -123,6 +123,7 @@ type RoleInstanceWithProperties =
   -- If it is a ContextRole, the url of its filler.
   , publicUrl :: Maybe String
   , filler :: Maybe RoleInstance
+  , readableName :: String
   }
 
 type ValuesWithVerbs =

@@ -141,6 +141,11 @@ propertyTypeIsCalculated = getProperty >=> (case _ of
   E r -> pure true
   C r -> pure false)
 
+getPropertyTypeFacets :: PropertyType -> MonadPerspectives (Array PropertyFacet)
+getPropertyTypeFacets = getProperty >=> (case _ of
+  E r -> pure $ constrainingFacets r
+  C r -> pure $ constrainingFacets r)
+
 -----------------------------------------------------------
 -- FUNCTIONS ON STRING
 -----------------------------------------------------------
@@ -152,8 +157,4 @@ getPropertyType s = ((getEnumeratedProperty $ EnumeratedPropertyType s) >>= pure
 ------- HASFACET
 ----------------------------------------------------------------------------------------
 hasFacet :: PropertyType -> PropertyFacet -> MonadPerspectives Boolean
-hasFacet (CP _) _ = pure false
-hasFacet (ENP propertyType) facet = do
-  propertyType' <- getEnumeratedProperty propertyType
-  pure $ isJust $ elemIndex facet (constrainingFacets propertyType')
-  
+hasFacet pt facet = getPropertyTypeFacets pt >>= \facets -> pure $ isJust $ elemIndex facet facets

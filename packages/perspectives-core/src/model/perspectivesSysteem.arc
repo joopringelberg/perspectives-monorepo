@@ -82,6 +82,7 @@ domain model://perspectives.domains#System
   user Identifiable
       -- PDRDEPENDENCY
       property LastName (mandatory, String)
+        readableName
       property FirstName (mandatory, String)
       -- If cancelled, the user's peers will stop synchronizing with him/her.
       -- PDRDEPENDENCY
@@ -462,12 +463,14 @@ domain model://perspectives.domains#System
     context IndexedContexts (mandatory) filledBy sys:RootContext
       -- PDRDEPENDENCY
       property Name (mandatory, String)
+        readableName
 
     -- All role types that have been declared to be 'indexed' have an instance that fills this role.
     -- PDRDEPENDENCY
     thing IndexedRoles (relational)
       -- PDRDEPENDENCY
       property Name (mandatory, String)
+        readableName
 
 
     context Channels = User >> (binder Initiator union binder ConnectedPartner) >> context >> extern
@@ -481,6 +484,7 @@ domain model://perspectives.domains#System
     thing Databases (mandatory, relational)
       -- Name is one of post, data, models.
       property Name (mandatory, String)
+        readableName
       property Identifier (mandatory, String)
 
     -- A calculated role representing all available Notifications (from any context).
@@ -511,6 +515,7 @@ domain model://perspectives.domains#System
     -- PDRDEPENDENCY
       property ClipboardData (String)
       property Name = callExternal util:SelectR( "\"cardTitle\":\"(.+?)\"", ClipboardData ) returns String
+        readableName
     
     -- PDRDEPENDENCY
     thing SelectedClipboardItem = filter ItemsOnClipboard with Selected
@@ -542,6 +547,7 @@ domain model://perspectives.domains#System
 
     thing Cache (relational)
       property Name (String)
+        readableName
       property Size (Number)
 
       state StartReading = context >> extern >> IsOnScreen
@@ -623,6 +629,7 @@ domain model://perspectives.domains#System
       property CompleteMessage = Addressing + Message
       property ConfirmationCode (Number)
       property InviterLastName = context >> Inviter >> LastName
+        readableName
       property IWantToInviteAnUnconnectedUser (Boolean)
       state Message = exists Message
       state CreateInvitation = exists ConfirmationCode
@@ -697,6 +704,7 @@ domain model://perspectives.domains#System
       property NameSpace_ (mandatory, String)
       -- This we show on screen.
       property Domain = NameSpace_ >> callExternal util:Replace( "_", "." ) returns String
+        readableName
     
     context Manifests (relational) filledBy ModelManifest
       -- This is the local name, unqualified, of the model, e.g. "JoopsModel" or "System".
@@ -728,6 +736,7 @@ domain model://perspectives.domains#System
   case VersionedModelManifest
     external
       property ModelName (functional) = binder Versions >> context >> extern >> binder Manifests >> LocalModelName
+        readableName
       property Description (mandatory, String)
         minLength = 81
       -- Notice that we have to register the DomeinFileName on the context role in the collection (ModelManifest$Versions),
