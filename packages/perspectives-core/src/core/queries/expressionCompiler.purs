@@ -376,7 +376,7 @@ compileSimpleStep currentDomain s@(Filler pos membeddingContext) = do
     RDOM (r :: ADT RoleInContext) -> do
       -- The binding of a role is always an ADT RoleInContext.
       (madtOfBinding :: Maybe (ADT RoleInContext)) <- lift2 $ bindingOfADT r
-      unsafePartial case madtOfBinding of
+      case madtOfBinding of
         Just adtOfBinding -> case membeddingContext of
           Nothing -> pure $ SQD currentDomain (QF.DataTypeGetter FillerF) (RDOM adtOfBinding) True False
           -- This is the step type "binding in <context type>".
@@ -390,6 +390,7 @@ compileSimpleStep currentDomain s@(Filler pos membeddingContext) = do
                 Nothing -> throwError $ UnknownContext pos context
                 (Just qn) | length qnames == 1 -> pure $ SQD currentDomain (QF.DataTypeGetterWithParameter FillerF (unwrap qn)) (RDOM $ replaceContext adtOfBinding qn) True False
                 _ -> throwError $ NotUniquelyIdentifying pos context (map unwrap qnames)
+        Nothing -> throwError $ RoleHasNoBinding pos (roleInContext2Role <$> r)
     otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)
 
 compileSimpleStep currentDomain s@(Filled pos binderName membeddingContext) = do
