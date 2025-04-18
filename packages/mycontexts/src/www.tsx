@@ -362,7 +362,12 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             {
               pproxy.getContextActions( userRoleType, context)
                 .then( actions => 
-                  component.setState({screen: screens[0], openContextType: contextType, openContextUserType: userRoleType, actions}))
+                  component.setState(
+                    { screen: screens[0]
+                    , openContextType: contextType
+                    , openContextUserType: userRoleType
+                    , actions
+                    , title: screens[0].title ? screens[0].title : "MyContexts"}))
                 .catch(e => UserMessagingPromise.then( um => 
                   um.addMessageForEndUser(
                     { title: i18next.t("app_contextactions_title", { ns: 'mycontexts' }) 

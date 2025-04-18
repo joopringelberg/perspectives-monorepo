@@ -717,6 +717,8 @@ domain model://perspectives.domains#System
     -- PDRDEPENDENCY
     external
       aspect sys:RootContext$External
+      property Name = binder Manifests >> LocalModelName >>= first
+        readableName
       property Description (mandatory, String)
       property IsLibrary (mandatory, Boolean)
       -- The value of this property will be set automatically by the Couchdb:VersionedModelManifest$Author.
@@ -736,7 +738,6 @@ domain model://perspectives.domains#System
   case VersionedModelManifest
     external
       property ModelName (functional) = binder Versions >> context >> extern >> binder Manifests >> LocalModelName
-        readableName
       property Description (mandatory, String)
         minLength = 81
       -- Notice that we have to register the DomeinFileName on the context role in the collection (ModelManifest$Versions),
@@ -744,6 +745,8 @@ domain model://perspectives.domains#System
       -- PDRDEPENDENCY
       property DomeinFileName (functional) = binder Versions >> context >> extern >> ModelManifest$External$DomeinFileName
       property Version (functional)        = binder Versions >> Versions$Version
+      property VersionName = ModelName + "@" + Version
+        readableName
       -- PDRDEPENDENCY
       property Patch (Number)
       -- PDRDEPENDENCY

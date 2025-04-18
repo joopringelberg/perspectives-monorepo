@@ -493,23 +493,23 @@ roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContex
               bndType <- lift $ lift $ roleType_ bnd
               lift $ getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST bndType) bnd
 
-      getReadableNameFromTelescope :: (PropertyType -> MonadPerspectives Boolean) -> ADT EnumeratedRoleType -> RoleInstance -> AssumptionTracking String
-      getReadableNameFromTelescope predicate adt rid = do
-            allLocalProps <- lift $ allLocallyRepresentedProperties adt
-            mnameGiver <- lift $ findM predicate allLocalProps
-            case mnameGiver of 
-              Just pt -> do 
-                values <- runArrayT $ getPropertyValues pt rid
-                case head values of 
-                  Nothing -> pure $ unwrap rid
-                  Just (Value v) -> pure v
-              Nothing -> do 
-                bnds <- runArrayT $ binding rid
-                case head bnds of 
-                  Nothing -> pure $ unwrap rid
-                  Just bnd -> do
-                    bndType <- lift $ roleType_ bnd
-                    getReadableNameFromTelescope predicate (ST bndType) bnd
+getReadableNameFromTelescope :: (PropertyType -> MonadPerspectives Boolean) -> ADT EnumeratedRoleType -> RoleInstance -> AssumptionTracking String
+getReadableNameFromTelescope predicate adt rid = do
+      allLocalProps <- lift $ allLocallyRepresentedProperties adt
+      mnameGiver <- lift $ findM predicate allLocalProps
+      case mnameGiver of 
+        Just pt -> do 
+          values <- runArrayT $ getPropertyValues pt rid
+          case head values of 
+            Nothing -> pure $ unwrap rid
+            Just (Value v) -> pure v
+        Nothing -> do 
+          bnds <- runArrayT $ binding rid
+          case head bnds of 
+            Nothing -> pure $ unwrap rid
+            Just bnd -> do
+              bndType <- lift $ roleType_ bnd
+              getReadableNameFromTelescope predicate (ST bndType) bnd
 
 
 -- | The verbs in this type contain both those based on context- and subject state,

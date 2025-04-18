@@ -20,18 +20,25 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleIns
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..), roletype2string)
+import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
 import Perspectives.Types.ObjectGetters (allEnumeratedRoles, aspectsOfRole)
 
 type Context = {userRoleInstance :: RoleInstance, contextType :: ContextType, contextInstance :: ContextInstance }
 type InContext = ReaderT Context MonadPerspectivesQuery
 
-contextualiseScreen :: ScreenDefinition -> InContext (Maybe ScreenDefinition)
-contextualiseScreen (ScreenDefinition{title, tabs, rows, columns}) = do
+contextualiseScreen :: ScreenDefinition -> String -> InContext (Maybe ScreenDefinition)
+contextualiseScreen (ScreenDefinition{title, tabs, rows, columns}) computedTitle = do
   tabs' <- emptyArrayToNothing <<< map catMaybes <$> (for tabs (traverse contextualiseTab))
   rows' <- emptyArrayToNothing <<< map catMaybes <$> (for rows (traverse contextualiseScreenElementDef))
   columns' <- (emptyArrayToNothing <<< map catMaybes) <$> (for columns (traverse contextualiseScreenElementDef))
-  pure $ Just $ ScreenDefinition{title, tabs: tabs', rows: rows', columns: columns', whoWhatWhereScreen: Nothing}
+  pure $ Just $ ScreenDefinition
+    { title: if isResourceIdentifier computedTitle then title else Just computedTitle
+    , tabs: tabs'
+    , rows: rows'
+    , columns: columns'
+    , whoWhatWhereScreen: Nothing
+    }
 
 emptyArrayToNothing :: forall a. Maybe (Array a) -> Maybe (Array a)
 emptyArrayToNothing marr = case marr of 

@@ -42,13 +42,18 @@ import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Instances.ObjectGetters (contextType_)
 import Perspectives.ModelDependencies (chatAspect)
 import Perspectives.ModelTranslation (translateType, translationOf)
+import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Query.Interpreter (lift2MPQ)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription)
 import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..), Value(..))
+import Perspectives.Representation.ADT (ADT(..))
+import Perspectives.Representation.Class.Property (hasFacet)
+import Perspectives.Representation.Class.Role (perspectives)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..), Value(..), externalRole)
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), Who(..), WhoWhatWhereScreenDef(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType, DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleKind(..), RoleType(..), roletype2string)
-import Perspectives.TypePersistence.PerspectiveSerialisation (perspectiveForContextAndUser', perspectiveForContextAndUserFromId, perspectivesForContextAndUser')
+import Perspectives.Representation.TypeIdentifiers (ContextType, DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleKind(..), RoleType(..), externalRoleType, roletype2string)
+import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
+import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableNameFromTelescope, perspectiveForContextAndUser', perspectiveForContextAndUserFromId, perspectivesForContextAndUser')
 import Perspectives.TypePersistence.PerspectiveSerialisation.Data (SerialisedPerspective', SerialisedProperty)
 import Perspectives.TypePersistence.ScreenContextualisation (contextualiseScreen, contextualiseTableFormDef)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, generalisesRoleType_, string2RoleType)
@@ -76,11 +81,9 @@ screenForContextAndUser userRoleInstance userRoleType contextType contextInstanc
       case head typesWithScreen of 
         Just typeWithScreen -> case lookup (ScreenKey typeWithScreen userRoleType) df.screens of
           Just s -> do 
-            -- Dit kan dus niet. Wat wel kan is direct een geserialiseerd perspectief aan de WidgetCommonFieldsDef toevoegen.
-            -- dus contextualiseer het perspectief ter plekke en roep dan een variant perspectiveForContextAndUserFromId aan,
-            -- die het gecontextualiseerde perspectief inzet.
-            -- Het resultaat invoegen in WidgetCommonDieldsDef.
-            mscreen <- runReaderT (contextualiseScreen s) {userRoleInstance, contextType, contextInstance} 
+            -- TODO: misschien hier de titel uitrekenen en meegeven.
+            title <- lift $ (getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST $ externalRoleType contextType) (externalRole contextInstance))
+            mscreen <- runReaderT (contextualiseScreen s title) {userRoleInstance, contextType, contextInstance} 
             case mscreen of  
               Nothing -> defaultScreen
               Just contextualisedScreen -> pure $ SerialisedScreen $ writeJSON contextualisedScreen
@@ -102,7 +105,12 @@ screenForContextAndUser userRoleInstance userRoleType contextType contextInstanc
         userRoles <- pure $ makeTableFormDef userRoleType <$> (filter isOnUserRole perspectives) `difference` perspectivesOnChats
         whereto <- pure $ makeTableFormDef userRoleType <$> filter isOnContextRole perspectives
         constructedScreen <- lift $ addPerspectives (ScreenDefinition
-          { title
+          { title: let 
+                mcomputedTitle = computeTitle perspectives
+              in
+                case mcomputedTitle of
+                  Just computedTitle -> if isResourceIdentifier computedTitle then title else Just computedTitle
+                  Nothing -> title
           , tabs: Nothing
           , rows: Nothing
           , columns: Nothing
@@ -120,6 +128,13 @@ screenForContextAndUser userRoleInstance userRoleType contextType contextInstanc
     screenInstance <- lift $ constructDefaultScreen userRoleInstance userRoleType contextInstance
     pure $ SerialisedScreen $ writeJSON screenInstance
     
+computeTitle :: Array SerialisedPerspective' -> Maybe String
+computeTitle perspectives = do 
+  case head $ filter (maybe false (eq ExternalRole) <<< _.roleKind) perspectives of
+    Just {roleInstances} -> case head $ values roleInstances of 
+      Just {readableName} -> Just readableName
+      Nothing -> Nothing
+    Nothing -> Nothing
 
 -- | A screen with a tab for each perspective the user has in this context.
 constructDefaultScreen :: RoleInstance -> RoleType -> ContextInstance -> AssumptionTracking ScreenDefinition
@@ -134,7 +149,7 @@ constructDefaultScreen userRoleInstance userRoleType cid = do
       who <- pure $ makeTableFormDef userRoleType <$> filter isOnUserRole perspectives
       whereto <- pure $ makeTableFormDef userRoleType <$> filter isOnContextRole perspectives
       pure $ ScreenDefinition
-        { title: Nothing
+        { title: computeTitle perspectivesOnChats
         , tabs: Nothing
         , rows: Nothing
         , columns: Nothing
@@ -152,7 +167,7 @@ constructDefaultScreen userRoleInstance userRoleType cid = do
       who <- pure $ makeTableFormDef userRoleType <$> filter isOnUserRole perspectives
       whereto <- pure $ makeTableFormDef userRoleType <$> filter isOnContextRole perspectives
       pure $ ScreenDefinition
-        { title: Nothing
+        { title: computeTitle perspectivesOnChats
         , tabs: Nothing
         , rows: Nothing
         , columns: Nothing

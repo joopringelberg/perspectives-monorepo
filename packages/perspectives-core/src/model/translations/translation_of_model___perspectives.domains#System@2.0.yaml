@@ -669,8 +669,8 @@ model://perspectives.domains#System:
       properties:
         Id:
           translations:
-            en: Identification
-            nl: Identificatie
+            en: Name
+            nl: Naam
     WithCredentials:
       translations:
         en: With credentials

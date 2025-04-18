@@ -40,6 +40,20 @@ data DecomposedResourceIdentifier =
 resourceIdentifierRegEx :: Regex
 resourceIdentifierRegEx = unsafeRegex "^(\\w+):(.*)$" noFlags
 
+isResourceIdentifier :: ResourceIdentifier -> Boolean
+isResourceIdentifier resId = 
+  case match resourceIdentifierRegEx resId of 
+    Nothing -> false
+    Just matches -> case index matches 1 of 
+      Just (Just scheme) -> case scheme of 
+        "def" -> true
+        "loc" -> true
+        "rem" -> true
+        "pub" -> true
+        "model" -> true
+        _ -> false
+      _ -> false
+
 -- TODO: replace the first part of the match by a regex that captures Couchdb database names;
 -- replace the second part by a regex that captures a GUID.
 -- Match an arbitrary string built from word characters, separated by "#" from a
