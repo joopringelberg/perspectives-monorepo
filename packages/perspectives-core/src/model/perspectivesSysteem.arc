@@ -262,6 +262,9 @@ domain model://perspectives.domains#System
         props (Name) verbs (Consult)
       perspective on PinnedContexts
         only (CreateAndFill, Remove, Delete)
+      perspective on RecentContexts
+        only (CreateAndFill, Remove, Delete)
+        props (LastShownOnScreen) verbs (Consult, SetPropertyValue)
       perspective on Contacts
         props (FirstName, LastName) verbs (Consult, SetPropertyValue)
       perspective on OutgoingInvitations
@@ -406,7 +409,10 @@ domain model://perspectives.domains#System
       perspective on AllNotifications
         props (Message) verbs (Consult)
       perspective on PinnedContexts
-    
+      perspective on RecentContexts
+        props (LastShownOnScreen) verbs (Consult)
+      perspective on ActualRecentContexts
+
     context OutgoingInvitations (relational) filledBy Invitation
 
     context BaseRepository filledBy ManifestCollection
@@ -492,6 +498,12 @@ domain model://perspectives.domains#System
 
     -- PDRDEPENDENCY
     context PinnedContexts (relational)
+
+    -- PDRDEPENDENCY
+    context RecentContexts (relational) filledBy sys:RecentContext
+      property LastShownOnScreen (DateTime)
+    
+    context ActualRecentContexts = RecentContexts >> binding
 
     context SystemCaches (mandatory) filledBy Caches
 
@@ -589,6 +601,7 @@ domain model://perspectives.domains#System
       -- PDRDEPENDENCY
       property RelayPort (String)
 
+  case RecentContext
   -- A Channel is shared by just two users.
   -- PDRDEPENDENCY
   case Channel

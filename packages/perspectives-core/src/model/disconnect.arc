@@ -74,6 +74,8 @@ domain model://joopringelberg.nl#Disconnect
       with not (binder DisconnectedPeers >> context >>= first) == dc:DisconnectApp
     -- context IncomingDisconnections = sys:SocialMe >> binder Disconnected >> context >> extern
 
+    context ActualDisconnectedPeers = DisconnectedPeers >> binding
+
   case DisconnectedPeer
     aspect sys:ContextWithNotification
 

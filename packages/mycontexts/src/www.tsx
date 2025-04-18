@@ -519,7 +519,13 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             </Tab>
             <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2' style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
             { this.state.screen?.whoWhatWhereScreen ? 
-              <Where screenelements={  this.state.screen.whoWhatWhereScreen.whereto } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "where"} systemUser={component.state.systemUser}/>
+              <Where 
+                screenelements={ this.state.screen.whoWhatWhereScreen.whereto } 
+                showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "where"} 
+                systemUser={component.state.systemUser}
+                systemIdentifier={component.state.systemIdentifier}
+                openContext={component.state.openContext}
+                />
               : 
                 <div>Ga ergens heen.</div>
               }
@@ -630,7 +636,13 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               <Row onClick={() => component.setState( {'doubleSection': "where"} )}  ><h4 className='text-center'>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h4></Row>  
               <Row className="px-1 full-www-content-height scrollable-content" style={{overflow: 'auto'}}>
               { this.state.screen?.whoWhatWhereScreen ? 
-                <Where screenelements={  this.state.screen.whoWhatWhereScreen.whereto } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "where"} systemUser={component.state.systemUser}/>
+                <Where 
+                  screenelements={  this.state.screen.whoWhatWhereScreen.whereto } 
+                  showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "where"} 
+                  systemUser={component.state.systemUser}
+                  systemIdentifier={component.state.systemIdentifier}
+                  openContext={component.state.openContext}
+                  />
                 : 
                   <div>Ga ergens heen.</div>
                 }
