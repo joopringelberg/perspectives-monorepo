@@ -4,6 +4,7 @@ import { Component } from "react";
 import { TableForms } from "./tableForms";
 import { PinnedContexts } from "./pinnedContexts";
 import { RecentContexts } from "./recentContexts";
+import { Accordion } from "react-bootstrap";
 
 interface WhereProps {
   screenelements: TableFormDef[];
@@ -16,8 +17,10 @@ export class Where extends Component<WhereProps> {
   render() {
     // TODO: add indexed contexts and recent contexts.
     return (<><TableForms screenelements={this.props.screenelements} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={false} />
-    <PinnedContexts systemuser={this.props.systemUser} />
-    <RecentContexts systemuser={this.props.systemUser} openContext={this.props.openContext} systemIdentifier={this.props.systemIdentifier}/>
+    <Accordion defaultActiveKey="0" flush>
+      <PinnedContexts systemuser={this.props.systemUser} />
+      <RecentContexts systemuser={this.props.systemUser} openContext={this.props.openContext} systemIdentifier={this.props.systemIdentifier}/>
+    </Accordion>
     </>);
   }
 }

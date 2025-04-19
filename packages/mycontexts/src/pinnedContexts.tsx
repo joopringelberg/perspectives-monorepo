@@ -19,7 +19,7 @@ export class PinnedContexts extends PerspectivesComponent<PinnedContextsProps, P
   componentDidMount() {
     const component = this;
     PDRproxy.then((PDRproxy) => {
-      PDRproxy.getPerspective( this.props.systemuser, ModelDependencies.pinnedContexts , (perspectives: Perspective[]) => {
+      PDRproxy.getPerspectiveForUser( this.props.systemuser, ModelDependencies.pinnedContexts, ModelDependencies.WWWUser, (perspectives: Perspective[]) => {
         component.setState({ perspective: perspectives[0] });
       });
     })
@@ -31,7 +31,7 @@ export class PinnedContexts extends PerspectivesComponent<PinnedContextsProps, P
     }
     else {
       // We have a perspective, produce a form.
-      return <PerspectiveTable perspective={this.state.perspective} showcontrolsandcaption={false}/>;
+      return <PerspectiveTable perspective={this.state.perspective} showcontrolsandcaption={false} showAsAccordionItem={true}/>;
     }
   }
 }

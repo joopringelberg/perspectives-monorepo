@@ -13,7 +13,7 @@ import
 import "./components.css";
 import { CardProperties } from "./cardbehaviour";
 import { CardWithFixedBehaviour, WithOutBehavioursProps } from "./adorningComponentWrapper";
-import { RoleInstanceT, Perspective, SerialisedProperty, PDRproxy, ContextType } from "perspectives-proxy";
+import { RoleInstanceT, Perspective, SerialisedProperty, PDRproxy, ContextType, PropertyType, Roleinstancewithprops } from "perspectives-proxy";
 import { AccordionHeaderWithmenu } from "./accordionHeaderWithAddButton";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -55,6 +55,8 @@ interface PerspectiveTableProps
   , cardcolumn?: string
   , showcontrolsandcaption?: boolean
   , showAsAccordionItem?: boolean
+  , sortOnHiddenProperty?: PropertyType
+  , sortAscending?: boolean
   }
 
 interface PerspectiveTableState
@@ -101,6 +103,16 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
       this.orderedProperties.unshift(identifyingProperty);
     }
     this.propertyNames = this.orderedProperties.map( p => p.id);
+    // Finally, remove an eventual sort property from the list of properties.
+    if (this.props.sortOnHiddenProperty && this.propertyNames.indexOf(this.props.sortOnHiddenProperty) > -1)
+    {
+      this.propertyNames.splice(this.propertyNames.indexOf(this.props.sortOnHiddenProperty), 1);
+    }
+    // Also remove an eventual sort property from the ordered properties.
+    if (this.props.sortOnHiddenProperty && this.orderedProperties.map( p => p.id).indexOf(this.props.sortOnHiddenProperty) > -1)
+    {
+      this.orderedProperties.splice(this.orderedProperties.map( p => p.id).indexOf(this.props.sortOnHiddenProperty), 1);
+    }
   }
 
   componentDidMount ()
@@ -225,6 +237,32 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
 
   constructTable ()
   {
+    const LESS = -1;
+    const GREATER = 1;
+    const EQUAL = 0;
+    function orderRoleInstances( r1: Roleinstancewithprops, r2: Roleinstancewithprops ) : number
+    {
+      if (component.props.sortOnHiddenProperty && component.props.sortOnHiddenProperty !== undefined)
+      {
+        const value1 = r1.propertyValues[component.props.sortOnHiddenProperty]?.values[0];
+        const value2 = r2.propertyValues[component.props.sortOnHiddenProperty]?.values[0];
+        if ((value1 as any) < (value2 as any))
+        {
+          return component.props.sortAscending ? LESS : GREATER;
+        }
+        else if ((value1 as any) > (value2 as any))
+        {
+          return component.props.sortAscending ? GREATER : LESS;
+        }
+        else
+        {
+          return EQUAL;
+        }
+      }
+      return 0;
+    }
+    {
+    }
     const component = this,
       perspective = component.props.perspective;
     return <Table
@@ -249,7 +287,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
               onKeyDown={ component.handleKeyDown }
             >
               {
-                Object.keys(perspective.roleInstances).map( (roleId) =>
+                Object.values(perspective.roleInstances).sort(orderRoleInstances).map( ({roleId}) =>
                   <TableRow
                     key={roleId}
                     roleinstance={roleId as RoleInstanceT}

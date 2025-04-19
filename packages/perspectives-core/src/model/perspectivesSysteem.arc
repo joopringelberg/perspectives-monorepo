@@ -409,7 +409,9 @@ domain model://perspectives.domains#System
       perspective on AllNotifications
         props (Message) verbs (Consult)
       perspective on PinnedContexts
+        only (Remove)
       perspective on RecentContexts
+        only (Remove)
         props (LastShownOnScreen) verbs (Consult)
       perspective on ActualRecentContexts
 
