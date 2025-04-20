@@ -68,11 +68,39 @@ interface SmartFieldControlGroupProps
   hasFocus?: boolean;
 }
 
-export default class SmartFieldControlGroup extends Component<SmartFieldControlGroupProps>
+interface SmartFieldControlGroupState
 {
+  containerWidth: number;
+}
+
+export default class SmartFieldControlGroup extends Component<SmartFieldControlGroupProps, SmartFieldControlGroupState>
+{
+  private containerRef = React.createRef<HTMLDivElement>();
+  state = { containerWidth: 0 };
+  private resizeObserver: ResizeObserver | null = null;
+
   constructor(props : SmartFieldControlGroupProps)
   {
     super(props);
+  }
+
+  componentDidMount(): void {
+    if (this.containerRef.current) {
+      this.resizeObserver = new ResizeObserver(entries => {
+        if (entries[0]) {
+          this.setState({
+            containerWidth: entries[0].contentRect.width
+          });
+        }
+      });
+      this.resizeObserver.observe(this.containerRef.current);
+    }
+  }
+
+  componentWillUnmount(): void {
+    if (this.resizeObserver ) {
+      this.resizeObserver.disconnect();
+    }
   }
 
   // The property is only consultable when it just has the verb Consult,
@@ -96,25 +124,30 @@ export default class SmartFieldControlGroup extends Component<SmartFieldControlG
   render()
   {
     const component = this;
+    const { containerWidth } = this.state;
+    const isHorizontal = containerWidth > 400;
     return (
-      <Form.Group as={Row}>
-        <Form.Label
-          column
-          sm="3">
-          { component.props.serialisedProperty.displayName }
-        </Form.Label>
-        <Col sm="9">
-          <SmartFieldControl
-            serialisedProperty = { component.props.serialisedProperty }
-            propertyValues = { component.props.propertyValues }
-            roleId = { component.props.roleId }
-            myroletype = { component.props.myroletype }
-            disabled={ component.propertyOnlyConsultable() || !component.props.roleId }
-            isselected={!!component.props.hasFocus}
-            contextinstance={component.props.contextinstance}
-          />
-        </Col>
-      </Form.Group>);
+      <div ref={this.containerRef}>
+        <Form.Group as={ isHorizontal ? Row : 'div'} className="mb-2">
+          <Form.Label
+            column={isHorizontal}
+            className={isHorizontal ? "col-4" : ""}
+            >
+            { component.props.serialisedProperty.displayName }
+          </Form.Label>
+          <div className={isHorizontal ? "col-8" : ""}>
+            <SmartFieldControl
+              serialisedProperty = { component.props.serialisedProperty }
+              propertyValues = { component.props.propertyValues }
+              roleId = { component.props.roleId }
+              myroletype = { component.props.myroletype }
+              disabled={ component.propertyOnlyConsultable() || !component.props.roleId }
+              isselected={!!component.props.hasFocus}
+              contextinstance={component.props.contextinstance}
+            />
+          </div>
+        </Form.Group>
+      </div>);
     }
 }
 
