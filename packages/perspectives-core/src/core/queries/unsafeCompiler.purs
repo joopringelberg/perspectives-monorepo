@@ -63,7 +63,7 @@ import Perspectives.Names (expandDefaultNamespaces, lookupIndexedContext, lookup
 import Perspectives.ObjectGetterLookup (lookupPropertyValueGetterByName, lookupRoleGetterByName, propertyGetterCacheInsert)
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Persistent (getPerspectRol)
-import Perspectives.PerspectivesState (addBinding, getVariableBindings, lookupVariableBinding)
+import Perspectives.PerspectivesState (addBinding, addWarning, getVariableBindings, lookupVariableBinding)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), Range, RoleInContext, domain, domain2PropertyRange, domain2contextType, domain2roleType, range, roleInContext2Role)
 import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
@@ -1029,7 +1029,9 @@ getPublicUrl ctxt = do
         murl <- ctxt ##> urlComputer
         case murl of 
           Just (Value url) -> pure $ Just $ ensureTerminalSlash url
-          Nothing ->  throwError (error $ "Cannot compute a URL to publish to for this user role type and context instance: " <> show r <> " ('" <> show ctxt <> "')")
+          Nothing ->  do 
+            addWarning ("Cannot compute a URL to publish to for this user role type and context instance: " <> show r <> " ('" <> show ctxt <> "')")
+            pure Nothing
       _ -> pure Nothing
 
 ensureTerminalSlash :: String -> String
