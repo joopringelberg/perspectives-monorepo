@@ -15,6 +15,7 @@ import { Where } from './where';
 import { NotificationsDisplayer } from './notifications';
 import Settings from './settingsPanel';
 import { subscribeToAllNotifications } from './systemNotifications';
+import { syncWithCouchDB } from './syncWIthCouchdb';
 
 type Section = 'who' | 'what' | 'where' | 'none';
 
@@ -122,6 +123,8 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                   // It is unlikely that another change triggered this subscription. But in case it did, we do not have to re-assert the systemIdentifier 
                   // or the systemUser.
                   component.prepareMyContextsScreen();
+                  // FOR DEBUGGING ONLY!
+                  syncWithCouchDB( installationData.perspectivesUserId! + installationData.deviceName! + "_entities");
                 }
               )
               })
