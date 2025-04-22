@@ -8,6 +8,12 @@
 
 import PouchDB from "pouchdb-browser";
 
+declare global {
+  interface Window {
+    __pouch_sync_active__?: boolean;
+  }
+}
+
 const accountName = "admin"
 const accountPassword = "admin"
 
@@ -19,9 +25,9 @@ export function syncWithCouchDB( databaseName: string ) {
   const syncHandler = localDB.sync(remoteDB, {
       live: true,
       retry: true,
-    }).on('change', (info) => {
+    }).on('change', (info : any) => {
       console.log('🔄 Change from sync:', info);
-    }).on('error', (err) => {
+    }).on('error', (err : Error) => {
       console.error('❌ Sync error:', err);
     });
 
@@ -32,6 +38,6 @@ export function syncWithCouchDB( databaseName: string ) {
     localDB.sync(remoteDB, {
       live: true,
       retry: true,
-    }).on('change', info => console.log('🔄', info));
+    }).on('change', (info : any) => console.log('🔄', info));
   }
 }

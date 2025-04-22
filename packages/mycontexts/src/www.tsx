@@ -123,8 +123,11 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                   // It is unlikely that another change triggered this subscription. But in case it did, we do not have to re-assert the systemIdentifier 
                   // or the systemUser.
                   component.prepareMyContextsScreen();
-                  // FOR DEBUGGING ONLY!
-                  syncWithCouchDB( installationData.perspectivesUserId! + installationData.deviceName! + "_entities");
+                  // Only sync with CouchDB in development mode
+                  if (import.meta.env.DEV) {
+                    console.log('Development mode: Syncing with CouchDB');
+                    syncWithCouchDB(installationData.perspectivesUserId! + installationData.deviceName! + "_entities");
+                  }
                 }
               )
               })
