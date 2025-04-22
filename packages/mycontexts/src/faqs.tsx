@@ -1,6 +1,6 @@
 import React, { FC } from 'react';
 import { Modal } from 'react-bootstrap';
-import i18next from 'i18next';
+import {i18next} from 'perspectives-react';
 
 export const FAQModal: FC<{ show: boolean; onHide: () => void }> = ({ show, onHide }) => (
   <Modal show={show} onHide={onHide} fullscreen dialogClassName="slide-in-bottom">

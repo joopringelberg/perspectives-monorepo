@@ -5,7 +5,7 @@ import Tooltip from 'react-bootstrap/Tooltip';
 import { set as setValue, del as deleteValue} from 'idb-keyval';
 import {init} from '@paralleldrive/cuid2';
 import { takeCUID } from 'perspectives-react';
-import i18next from 'i18next';
+import {i18next} from 'perspectives-react';
 import { IdentityFile, IdentityFileUploader, KeyPair, KeyPairFileUploader } from './configurationComponents';
 import { FAQModal } from './faqs';
 

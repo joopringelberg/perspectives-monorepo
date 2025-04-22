@@ -161,7 +161,6 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   fillRole()
   {
     const component = this;
-    const {roleOnClipboard} = component.props;
     PDRproxy.then(
       function (pproxy)
       {

@@ -1,6 +1,6 @@
 import React, { FC } from "react";
 import { Container, Row, Col, Button } from "react-bootstrap";
-import i18next from "i18next";
+import {i18next} from 'perspectives-react';
 import { KeyPair } from "./configurationComponents";
 
 export const SaveKeyPair: FC<{keypair : KeyPair, perspectivesuserid: String}> = ({keypair, perspectivesuserid}) => {

@@ -44,3 +44,6 @@ export {ChoiceMessage, UserChoice} from "./userChoice";
 export {ChatComponent} from "./chatcomponent";
 
 export {getPreact} from "./getLanguage";
+
+// We export this instance so the consumer of this library can use it. This prevents double instances of i18next.
+export { default as i18next } from 'i18next';

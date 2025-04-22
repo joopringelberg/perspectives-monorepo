@@ -5,7 +5,7 @@ import { set as setValue, get as getValue } from 'idb-keyval';
 import ConfigureInstallation, { InstallationData, InstallationResult } from './configureInstallation';
 import {initI18next} from "./i18next.js";
 import { SaveKeyPair } from './saveKeypair.js';
-import i18next from 'i18next';
+import {i18next} from 'perspectives-react';
 import { SharedWorkerChannelPromise as PDRHandler, PouchdbUser, RuntimeOptions } from 'perspectives-proxy';
 import { constructPouchdbUser, getInstallationData } from './installationData.js';
 import { startPDR } from './startPDR.js';

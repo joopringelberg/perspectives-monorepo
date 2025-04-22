@@ -1,7 +1,7 @@
 // Create a new file: src/NotificationsSettings.tsx
 import React, { useEffect, useState } from 'react';
 import { Form, Button, Alert, Card } from 'react-bootstrap';
-import i18next from 'i18next';
+import {i18next} from 'perspectives-react';
 
 interface NotificationsSettingsProps {
 }

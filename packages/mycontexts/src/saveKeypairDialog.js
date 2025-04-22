@@ -21,7 +21,7 @@
 import React, { Component } from "react";
 import PropTypes from "prop-types";
 
-import i18next from "i18next";
+import {i18next} from 'perspectives-react'; from "i18next";
 import { Container, Button, Modal, Row, Col } from "react-bootstrap";
 
 // Render in the App. 

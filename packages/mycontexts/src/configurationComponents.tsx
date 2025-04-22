@@ -1,6 +1,6 @@
 import { ChangeEvent, FC } from "react";
 import { set as setValue} from 'idb-keyval';
-import i18next from 'i18next';
+import {i18next} from 'perspectives-react';
 import { Form } from "react-bootstrap";
 import * as React from "react";
 

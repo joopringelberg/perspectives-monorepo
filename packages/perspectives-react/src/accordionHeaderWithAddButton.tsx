@@ -1,11 +1,8 @@
 import React, { Component } from "react";
 import { AppContext, PSContextType } from "./reactcontexts.js";
-import i18next from "i18next";
 
 import "./components.css";
-import { RoleInstanceT, Perspective, PDRproxy, ContextType } from "perspectives-proxy";
-import { UserMessagingPromise } from "./userMessaging";
-import CreateContextDropDown from "./createContextDropdown";
+import { RoleInstanceT, Perspective } from "perspectives-proxy";
 import TableItemContextMenu from "./tableItemContextMenu.js";
 
 interface AccordionHeaderWithMenuProps {
