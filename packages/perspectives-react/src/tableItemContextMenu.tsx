@@ -61,6 +61,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   componentDidUpdate(prevProps: Readonly<TableItemContextMenuProps>, prevState: Readonly<TableItemContextMenuState>, snapshot?: any): void {
     const component = this;
     if (!component.props.perspective.isCalculated && 
+      component.props.roleOnClipboard &&
       (!_.isEqual(component.props.roleOnClipboard, prevProps.roleOnClipboard) || component.props.roleinstance !== prevProps.roleinstance))
     {
       PDRproxy.then( pproxy => pproxy.checkBindingP( component.props.perspective.roleType, component.props.roleOnClipboard!.roleData.rolinstance )

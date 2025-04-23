@@ -238,6 +238,8 @@ export const addFillARole : BehaviourAdder = (domEl, component, title) => {
     switch (event.key) {
       case 'c':
         if (event.ctrlKey) {
+          event.preventDefault();
+          event.stopPropagation();
           copy(event);
         }
     }
@@ -269,8 +271,6 @@ export const addFillARole : BehaviourAdder = (domEl, component, title) => {
               })
             )
           );
-    event.preventDefault();
-    event.stopPropagation();
   }
 
   addBehaviour(component, "fillARole", function (component: BehaviourComponent) {
