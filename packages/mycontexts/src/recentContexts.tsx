@@ -50,8 +50,10 @@ export class RecentContexts extends PerspectivesComponent<RecentContextsProps, R
         PDRproxy.then( pproxy => {
           pproxy.getRoleBinders( this.props.openContext!, ModelDependencies.system, ModelDependencies.recentContexts, (binders: RoleInstanceT[]) => {
             const recentContext = binders[0];
+            if ( recentContext ) {
             pproxy.setProperty( recentContext, ModelDependencies.lastShownOnScreen, new Date().valueOf().toString() as ValueT, ModelDependencies.sysUser );
-          }, FIREANDFORGET);
+            }
+          }, FIREANDFORGET); 
         })
       }
     }

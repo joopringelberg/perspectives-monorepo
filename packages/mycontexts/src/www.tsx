@@ -87,6 +87,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
     const component = this;
     SharedWorkerChannelPromise.then( pdrHandler => {
       getInstallationData().then( installationData => {
+        const systemIdentifier = "def:#" + installationData.perspectivesUserId! + installationData.deviceName! as ContextInstanceT;
         pdrHandler
           .runPDR( installationData.perspectivesUserId!, 
             constructPouchdbUser(installationData), 
@@ -100,7 +101,6 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                 function (clipBoardContents : RoleOnClipboard[])
                 {
                   const roleOnClipboard = clipBoardContents[0];
-                  const systemIdentifier = "def:#" + installationData.perspectivesUserId! + installationData.deviceName! as ContextInstanceT;
                   if (roleOnClipboard && roleOnClipboard !== component.state.roleOnClipboard)
                   {
                     // A new role on the clipboard. Add it to the state.
@@ -119,10 +119,6 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                       , roleOnClipboard: undefined
                       });
                   }
-                  component.addUnsubscriber(subscribeToAllNotifications(systemIdentifier))
-                  // It is unlikely that another change triggered this subscription. But in case it did, we do not have to re-assert the systemIdentifier 
-                  // or the systemUser.
-                  component.prepareMyContextsScreen();
                   // Only sync with CouchDB in development mode
                   if (import.meta.env.DEV) {
                     console.log('Development mode: Syncing with CouchDB');
@@ -130,6 +126,10 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                   }
                 }
               )
+              // Subscribe to all notifications
+              component.addUnsubscriber(subscribeToAllNotifications(systemIdentifier));
+              // Open the default screen or the one specified in the URL.
+              component.prepareMyContextsScreen();
               })
             }
           )});
@@ -191,6 +191,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
         });
     }
 
+    // Add event listener for OpenContext event
     document.body.addEventListener(
       'OpenContext', 
       (e : CustomEvent) => {
@@ -198,6 +199,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
         component.tryToOpenContext(e.detail);  
       }, 
       false);
+
   }
 
   componentDidUpdate(prevProps: Readonly<{}>, prevState: Readonly<WWWComponentState>, snapshot?: any): void {
