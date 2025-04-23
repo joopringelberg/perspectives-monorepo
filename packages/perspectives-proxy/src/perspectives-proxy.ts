@@ -1012,14 +1012,21 @@ export class PerspectivesProxy
       });
   }
 
-  getAllMyRoleTypes(externalRoleInstance : RoleInstanceT) : Promise<UserRoleType[]>
+  getAllMyRoleTypes(externalRoleInstance : RoleInstanceT) : Promise<Record<UserRoleType, string>>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)
       {
         return proxy.send(
           {request: "GetAllMyRoleTypes", subject: externalRoleInstance, onlyOnce: true},
-          resolver,
+          (r : ValueT) => {
+            if (r.length === 0) {
+              resolver({});
+            }
+            else {
+              resolver(JSON.parse(r[0]));
+            }
+          },
           rejecter
         );
       })

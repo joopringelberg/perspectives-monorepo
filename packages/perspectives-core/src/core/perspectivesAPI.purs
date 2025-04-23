@@ -42,7 +42,7 @@ import Effect (Effect)
 import Effect.Aff (catchError, try)
 import Effect.Class (liftEffect)
 import Foreign (Foreign, ForeignError, unsafeToForeign)
-import Foreign.Object (empty)
+import Foreign.Object (empty, fromFoldable)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ApiEffect, RequestType(..)) as Api
 import Perspectives.ApiTypes (ContextSerialization(..), ContextsSerialisation(..), PropertySerialization(..), RecordWithCorrelationidentifier(..), Request(..), RequestRecord, Response(..), ResponseWithWarnings(..), RolSerialization(..), ApiEffect, mkApiEffect, showRequestRecord)
@@ -65,6 +65,7 @@ import Perspectives.Instances.Me (getAllMyRoleTypes, getMeInRoleAndContext, getM
 import Perspectives.Instances.ObjectGetters (binding, context, contextType, contextType_, getContextActions, getFilledRoles, getMe, getProperty, getRoleName, roleType, roleType_, siblings)
 import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.ModelDependencies (actualSharedFileServer, fileShareCredentials, identifiableFirstName, identifiableLastName, itemOnClipboardClipboardData, itemsOnClipboard, mySharedFileServices, selectedClipboardItem, sharedFileServices, sysUser)
+import Perspectives.ModelTranslation (translateType)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, getUserIdentifier, lookupIndexedContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment, toFile)
@@ -80,7 +81,7 @@ import Perspectives.Representation.Class.Role (getRoleType, kindOfRole, rangeOfR
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), ViewType, propertytype2string, roletype2string, toRoleType_, StateIdentifier(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), StateIdentifier(..), ViewType, propertytype2string, roletype2string, toRoleType_)
 import Perspectives.Representation.View (View, propertyReferences)
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, guid, resourceIdentifier2DocLocator)
 import Perspectives.RoleStateCompiler (evaluateRoleState)
@@ -92,7 +93,7 @@ import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUse
 import Perspectives.TypePersistence.PerspectiveSerialisation (perspectiveForContextAndUser, perspectivesForContextAndUser)
 import Perspectives.Types.ObjectGetters (findPerspective, getAction, getContextAction, isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
 import Prelude (Unit, bind, discard, eq, identity, map, negate, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=))
-import Simple.JSON (read, unsafeStringify, writeJSON)
+import Simple.JSON (read, unsafeStringify, write, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -314,7 +315,11 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
     -- ultimately fills an instance of in the corresponding context instance.
     Api.GetAllMyRoleTypes -> do
       allUserRoleTypes <- (RoleInstance subject) ##= (context >=> getAllMyRoleTypes)
-      sendResponse (Result corrId (roletype2string <$> allUserRoleTypes)) setter
+      -- Add translations
+      result <- fromFoldable <$> for allUserRoleTypes \roleType -> do
+        translation <- translateType (roletype2string roleType)
+        pure $ Tuple (roletype2string roleType) translation
+      sendResponse (Result corrId [(writeJSON result)]) setter
     -- { request: "GetLocalRoleSpecialisation", subject: contextInstance, predicate: localAspectName}
     Api.GetLocalRoleSpecialisation -> registerSupportedEffect corrId setter (contextType >=> (liftToInstanceLevel $ localRoleSpecialisation predicate)) (ContextInstance subject) onlyOnce
     -- {request: "matchContextName", subject: name}

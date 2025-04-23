@@ -645,7 +645,14 @@ class PerspectivesProxy {
     getAllMyRoleTypes(externalRoleInstance) {
         const proxy = this;
         return new Promise(function (resolver, rejecter) {
-            return proxy.send({ request: "GetAllMyRoleTypes", subject: externalRoleInstance, onlyOnce: true }, resolver, rejecter);
+            return proxy.send({ request: "GetAllMyRoleTypes", subject: externalRoleInstance, onlyOnce: true }, (r) => {
+                if (r.length === 0) {
+                    resolver({});
+                }
+                else {
+                    resolver(JSON.parse(r[0]));
+                }
+            }, rejecter);
         });
     }
     getViewProperties(rolType, viewName) {

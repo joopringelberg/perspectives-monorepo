@@ -33,7 +33,7 @@ interface MyRoleTypesProps
 
 interface MyRoleTypesState
 {
-  myRoleTypes: UserRoleType[];
+  myRoleTypes: Record<UserRoleType, string>;
 }
 
 export class MyRoleTypes extends PerspectivesComponent<MyRoleTypesProps, MyRoleTypesState>
@@ -41,7 +41,7 @@ export class MyRoleTypes extends PerspectivesComponent<MyRoleTypesProps, MyRoleT
   constructor( props: MyRoleTypesProps )
   {
     super( props);
-    this.state = {myRoleTypes: []};
+    this.state = {myRoleTypes: {}};
   }
 
   componentDidMount()
@@ -111,11 +111,11 @@ export class MyRoleTypes extends PerspectivesComponent<MyRoleTypesProps, MyRoleT
               </thead>
               <tbody>
                 {
-                  component.state.myRoleTypes.map(
-                    function(rt)
+                  Object.keys( component.state.myRoleTypes ).map(
+                    function(rt: UserRoleType)
                     {
                       return  <tr key={rt} onClick={e => component.handleSelect(e, rt)}>
-                                <td>{ deconstructLocalName(rt) } { rt === component.props.currentroletype ? <i className="bi bi-check text-success"></i> : null }</td>
+                                <td>{ component.state.myRoleTypes[rt] } { rt === component.props.currentroletype ? <i className="bi bi-check text-success"></i> : null }</td>
                               </tr>;
                     })
                 }
