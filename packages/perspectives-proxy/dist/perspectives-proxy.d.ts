@@ -166,7 +166,7 @@ export declare class PerspectivesProxy {
      * @returns A promise that resolves to the role instance.
      */
     addRoleToClipboard(contextinstance: ContextInstanceT, localRolName: RolName, contextType: ContextType, rolDescription: RolSerialization, myroletype: UserRoleType): Promise<RoleInstanceT>;
-    getAllMyRoleTypes(externalRoleInstance: RoleInstanceT): Promise<RoleType[]>;
+    getAllMyRoleTypes(externalRoleInstance: RoleInstanceT): Promise<UserRoleType[]>;
     getViewProperties(rolType: RoleType, viewName: string): Promise<PropertyType[]>;
     getContextType(contextID: ContextID): Promise<ContextType>;
     getRolContext(rolID: RoleInstanceT): Promise<ContextInstanceT>;
