@@ -16,6 +16,7 @@ import { NotificationsDisplayer } from './notifications';
 import Settings from './settingsPanel';
 import { subscribeToAllNotifications } from './systemNotifications';
 import { syncWithCouchDB } from './syncWIthCouchdb';
+import { MyRoleTypes } from './myRoleTypes';
 
 type Section = 'who' | 'what' | 'where' | 'none';
 
@@ -25,7 +26,7 @@ interface WWWComponentState {
   doubleSection: Section;
   whatOnly: boolean;
   showNotifications: boolean;
-  leftPanelContent: 'about' | 'me' | 'settings' | 'apps' | false;
+  leftPanelContent: 'about' | 'me' | 'settings' | 'apps' | 'myroles' | false;
   activeSection: Section;
   systemIdentifier: ContextInstanceT;
   systemUser: RoleInstanceT
@@ -480,6 +481,9 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
       case 'settings':
         content = <Settings/>;
         break;
+      case 'myroles':
+        content = <MyRoleTypes externalRoleId={component.state.openContext!} title={component.state.title} currentroletype={component.state.openContextUserType!}/>;
+        break;
       default:
         return null;
     }
@@ -559,6 +563,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'me'})}>Me</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'apps'})}>Apps</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'settings'})}>Settings</NavDropdown.Item>
+        { component.state.openContext ? <NavDropdown.Item onClick={ () => component.setState( {leftPanelContent: 'myroles'} ) }>{ i18next.t("www_myroles", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
         { component.state.actions && Object.keys( component.state.actions ).length > 0 ?
           <>
           <DropdownDivider />
