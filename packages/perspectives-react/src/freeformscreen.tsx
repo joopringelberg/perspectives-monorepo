@@ -36,6 +36,7 @@ import SmartFieldControl from './smartfieldcontrol.js';
 import {ChatComponent} from './chatcomponent.js';
 import { externalRole } from './urifunctions.js';
 import { mapRoleVerbsToBehaviourNames } from './maproleverbstobehaviours';
+import ModelDependencies from './modelDependencies';
 
 interface FreeFormProps
 {
@@ -306,7 +307,12 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
     const component = this;
     const perspective = widgetFields.perspective;
     const conditionProperty = cprop ? cprop.value : undefined;
-    const markDownProperty = Object.keys( perspective.properties ).filter( prop => prop != conditionProperty )[0] as PropertyType;  
+    // The markdown syntax is like this, for perspectives:
+    //    markdown ARole
+    //      props (MD) verbs (Consult, SetPropertyValue)
+    // We assume that a single property has been specified. However, on serializing, we add the identification property.
+    // This must be excluded, too.
+    const markDownProperty = Object.keys( perspective.properties ).filter( prop => prop != conditionProperty  && prop != ModelDependencies.roleWithIdProp )[0] as PropertyType;  
     return  <Container>{
               Object.values( perspective.roleInstances )
                 .filter( roleInstance => !!conditionProperty ? roleInstance.propertyValues[ conditionProperty ].values[0] == "true" : true)

@@ -201,7 +201,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
 
   values()
   {
-    if (this.props.propertyname == ModelDependencies.roleWithId)
+    if (this.props.propertyname == ModelDependencies.roleWithIdProp)
     {
       if (this.props.readableName)
         {

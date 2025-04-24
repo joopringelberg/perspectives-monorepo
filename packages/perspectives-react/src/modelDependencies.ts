@@ -21,7 +21,7 @@ interface ModelDependenciesT
   pinnedContexts: RoleType;
   recentContexts: RoleType;
   actualRecentContexts: RoleType;
-  roleWithId: PropertyType;
+  roleWithIdProp: PropertyType;
   lastShownOnScreen: PropertyType;
 }
 
@@ -45,7 +45,7 @@ const ModelDependencies =
 , pinnedContexts: "model://perspectives.domains#System$PerspectivesSystem$PinnedContexts" as RoleType
 , actualRecentContexts: "model://perspectives.domains#System$PerspectivesSystem$ActualRecentContexts" as RoleType
 , recentContexts: "model://perspectives.domains#System$PerspectivesSystem$RecentContexts" as RoleType
-, roleWithId: "model://perspectives.domains#System$RoleWithId$Id" as PropertyType
+, roleWithIdProp: "model://perspectives.domains#System$RoleWithId$Id" as PropertyType
 , lastShownOnScreen: "model://perspectives.domains#System$PerspectivesSystem$RecentContexts$LastShownOnScreen" as PropertyType
 } as ModelDependenciesT;
 
