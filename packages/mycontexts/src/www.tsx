@@ -120,13 +120,13 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                       , roleOnClipboard: undefined
                       });
                   }
-                  // Only sync with CouchDB in development mode
-                  if (import.meta.env.DEV) {
-                    console.log('Development mode: Syncing with CouchDB');
-                    syncWithCouchDB(installationData.perspectivesUserId! + installationData.deviceName! + "_entities");
-                  }
                 }
               )
+              // Only sync with CouchDB in development mode
+              if (import.meta.env.DEV) {
+                console.log('Development mode: Syncing with CouchDB');
+                syncWithCouchDB(installationData.perspectivesUserId! + installationData.deviceName! + "_entities");
+              }
               // Subscribe to all notifications
               component.addUnsubscriber(subscribeToAllNotifications(systemIdentifier));
               // Open the default screen or the one specified in the URL.
