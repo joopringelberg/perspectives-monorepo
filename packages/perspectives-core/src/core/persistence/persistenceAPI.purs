@@ -56,13 +56,13 @@ import Foreign (F, Foreign, unsafeToForeign)
 import Foreign.Object (Object, delete, empty, insert, lookup)
 import Partial.Unsafe (unsafePartial)
 import Persistence.Attachment (class Attachment)
-import Perspectives.Couchdb (DeleteCouchdbDocument(..), PutCouchdbDocument(..), ViewDocResult(..), ViewDocResultRow(..), ViewResult(..), ViewResultRow(..))
+import Perspectives.Couchdb (DeleteCouchdbDocument(..), PutCouchdbDocument(..), ViewDocResult(..), ViewDocResultRow(..), ViewResult(..), ViewResultRow(..), DocumentConflicts)
 import Perspectives.Couchdb.Revision (class Revision, Revision_)
 import Perspectives.Persistence.Authentication (AuthoritySource(..), ensureAuthentication)
-import Perspectives.Persistence.Errors (handleNotFound, handlePouchError)
+import Perspectives.Persistence.Errors (handleNotFound, handlePouchError, parsePouchError)
 import Perspectives.Persistence.RunEffectAff (runEffectFnAff2, runEffectFnAff3, runEffectFnAff5, runEffectFnAff6)
 import Perspectives.Persistence.State (getCouchdbBaseURL)
-import Perspectives.Persistence.Types (AttachmentName, CouchdbUrl, DatabaseName, DocumentName, DocumentWithRevision, MonadPouchdb, Password, PouchError, PouchdbDatabase, PouchdbExtraState, PouchdbState, PouchdbUser, SystemIdentifier, UserName, ViewName, Url, decodePouchdbUser', encodePouchdbUser', readPouchError)
+import Perspectives.Persistence.Types (AttachmentName, CouchdbUrl, DatabaseName, DocumentName, DocumentWithRevision, MonadPouchdb, Password, PouchdbDatabase, PouchdbExtraState, PouchdbState, PouchdbUser, SystemIdentifier, Url, UserName, ViewName, PouchError, decodePouchdbUser', encodePouchdbUser', readPouchError)
 import Simple.JSON (class ReadForeign, class WriteForeign, read, read', write)
 
 -----------------------------------------------------------
@@ -269,8 +269,18 @@ addDocument dbName doc docName = withDatabase dbName
         case PutCouchdbDocument <$> (read f) of
           Left e -> throwError $ error ("addDocument: error in decoding result: " <> show e)
           Right (PutCouchdbDocument {rev}) -> pure rev
-      -- Promise rejected. Convert the incoming message to a PouchError type.
-      (handlePouchError "addDocument" docName)
+      \e -> do 
+        ({status, message} :: PouchError) <- parsePouchError "addDocument" docName e
+        case status of
+          -- A document update conflict. We handle that by purging the database and adding the document again.
+          -- Perspectives has no concept of a shared database. This means that the only source of truth is the PDR.
+          -- This may not be always true, but it is the best we can do.
+          -- The only exception is when we save documents that are in a public perspective. It may be that
+          -- there are multiple users that contribute to that perspective, and they may not agree on the version.
+          -- However, we resolve that here by just overwriting the document.
+          Just 409 -> resolveDocumentConflict dbName doc docName
+          -- Promise rejected otherwise. Convert the incoming message to a PouchError type.
+          _ -> handlePouchError "addDocument" docName e
 
 -- | Similar to addDocument but without the requirement that d is an instance of Revision.
 addDocument_ :: forall d f. WriteForeign d => DatabaseName -> d -> DocumentName -> MonadPouchdb f Revision_
@@ -285,6 +295,61 @@ addDocument_ dbName doc docName = withDatabase dbName
     (handlePouchError "addDocument_" docName)
 
 foreign import addDocumentImpl :: EffectFn2 PouchdbDatabase Foreign Foreign
+
+resolveDocumentConflict :: forall d f. WriteForeign d => Revision d => DatabaseName -> d -> DocumentName -> MonadPouchdb f Revision_
+resolveDocumentConflict dbName doc docName = withDatabase dbName
+  \db -> do
+    -- Get all document revisions (including conflicts)
+    conflicts <- lift $ fromEffectFnAff $ runEffectFnAff3 getDocumentWithConflictsImpl db docName true
+  
+    -- Delete all conflict revisions
+    case read conflicts of
+      Right ({ _conflicts } :: DocumentConflicts) -> do
+        _ <- traverse 
+          (\rev -> lift $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName rev) 
+          _conflicts
+        pure unit
+      _ -> pure unit
+    
+    -- Now try to add the document
+    catchError
+      do
+        f <- lift $ fromEffectFnAff $ runEffectFnAff2 addDocumentImpl db (write doc)
+        case PutCouchdbDocument <$> (read f) of
+          Left e -> throwError $ error ("resolveDocumentConflict: error: " <> show e)
+          Right (PutCouchdbDocument {rev}) -> pure rev
+      (handlePouchError "resolveDocumentConflict" docName)
+
+foreign import getDocumentWithConflictsImpl :: EffectFn3 PouchdbDatabase DocumentName Boolean Foreign
+
+-----------------------------------------------------------
+-- FORCE CLEAN SAVE.
+-- {ADD A REFERENCE TO POUCHDB DOCS}
+-----------------------------------------------------------
+forceCleanSave :: forall d f. WriteForeign d => DatabaseName -> d -> DocumentName -> MonadPouchdb f Revision_
+forceCleanSave dbName doc docName = withDatabase dbName
+  \db -> do
+    -- First, explicitly try to delete any existing document, ignoring errors
+    _ <- catchError
+      (lift $ void $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName "")
+      (\_ -> pure unit)
+    
+    -- Use PouchDB's internal purge functionality to completely remove document history
+    _ <- catchError
+      (lift $ void $ fromEffectFnAff $ runEffectFnAff3 purgeDocumentImpl db docName Nothing)
+      (\_ -> pure unit)
+    
+    -- Then add the document as new
+    catchError
+      do
+        f <- lift $ fromEffectFnAff $ runEffectFnAff2 addDocumentImpl db (write doc)
+        case PutCouchdbDocument <$> (read f) of
+          Left e -> throwError $ error ("forceCleanSave: error in decoding result: " <> show e)
+          Right (PutCouchdbDocument {rev}) -> pure rev
+      (handlePouchError "forceCleanSave" docName)
+
+-- https://pouchdb.com/api.html#purge
+foreign import purgeDocumentImpl :: EffectFn3 PouchdbDatabase DocumentName Revision_ Foreign
 
 -----------------------------------------------------------
 -- BULK ADD

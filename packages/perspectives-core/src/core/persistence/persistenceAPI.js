@@ -167,7 +167,29 @@ export function databaseInfoImpl ( database ) {
 
 export function addDocumentImpl ( database, doc ) {
   return function (onError, onSuccess) {
-    database.put(doc, function(err, response)
+    database.put(doc, {force: true}, function(err, response)
+      {
+        if (err != null)
+        {
+          onError( convertPouchError(err) ); // invoke the error callback in case of an error
+        }
+        else
+        {
+          onSuccess(response); // invoke the success callback with the reponse
+        }
+      });
+
+    // Return a canceler, which is just another Aff effect.
+    return function (cancelError, cancelerError, cancelerSuccess) {
+      // No way to cancel the request.
+      cancelerSuccess(); // invoke the success callback for the canceler
+    };
+  };
+};
+
+export function purgeDocumentImpl (db, docId, rev) {
+  return function (onError, onSuccess) {
+    db.purge( docId, rev, function(err, response)
       {
         if (err != null)
         {
@@ -271,6 +293,28 @@ catch (e)
       return Buffer.from(b).toString('base64');
     };
 }
+
+export function getDocumentWithConflictsImpl(db, docId, conflicts) {
+  return function (onError, onSuccess) {
+    db.get( docId, {conflicts: conflicts}, function(err, response)
+      {
+        if (err != null)
+        {
+          onError( convertPouchError(err) ); // invoke the error callback in case of an error
+        }
+        else
+        {
+          onSuccess(response); // invoke the success callback with the reponse
+        }
+      });
+
+    // Return a canceler, which is just another Aff effect.
+    return function (cancelError, cancelerError, cancelerSuccess) {
+      // No way to cancel the request.
+      cancelerSuccess(); // invoke the success callback for the canceler
+    };
+  };
+};
 
 // db.putAttachment(docId, attachmentId, [rev], attachment, type, [callback]);
 export function addAttachmentImpl ( database, docName, attachmentId, mrev, attachment, type) {

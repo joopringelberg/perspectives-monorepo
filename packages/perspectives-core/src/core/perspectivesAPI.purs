@@ -93,7 +93,7 @@ import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUse
 import Perspectives.TypePersistence.PerspectiveSerialisation (perspectiveForContextAndUser, perspectivesForContextAndUser)
 import Perspectives.Types.ObjectGetters (findPerspective, getAction, getContextAction, isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
 import Prelude (Unit, bind, discard, eq, identity, map, negate, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=))
-import Simple.JSON (read, unsafeStringify, write, writeJSON)
+import Simple.JSON (read, unsafeStringify, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------

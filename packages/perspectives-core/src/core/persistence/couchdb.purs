@@ -189,6 +189,13 @@ instance revisionDocWithAttachmentInfo :: Revision DocWithAttachmentInfo where
 
 derive newtype instance WriteForeign DocWithAttachmentInfo
 derive newtype instance ReadForeign DocWithAttachmentInfo
+
+-----------------------------------------------------------
+-- CONFLICTS
+-----------------------------------------------------------
+-- | The conflicts field is an array of revision ids that are in conflict with the current revision.
+type DocumentConflicts = {_conflicts :: Array String}
+
 -----------------------------------------------------------
 -- SELECTOROBJECT
 -----------------------------------------------------------
