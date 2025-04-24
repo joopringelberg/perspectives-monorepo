@@ -42,12 +42,12 @@ import Perspectives.Data.EncodableMap (lookup) as EM
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Identifiers (isExternalRole, qualifyWith)
 import Perspectives.Instances.Me (isMe)
-import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextType, getActiveRoleStates, getActiveStates, roleType_)
+import Perspectives.Instances.ObjectGetters (binding, binding_, contextType, getActiveRoleStates, getActiveStates, roleType_)
 import Perspectives.ModelDependencies (roleWithId)
 import Perspectives.ModelTranslation (translateType)
 import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), domain, domain2roleType, functional, isContextDomain, makeComposition, mandatory, queryFunction, range, roleInContext2Context, roleInContext2Role, roleRange)
-import Perspectives.Query.UnsafeCompiler (context2context, context2role, getDynamicPropertyGetter, getPropertyValues, getPublicUrl)
+import Perspectives.Query.UnsafeCompiler (context2context, context2role, getDynamicPropertyGetter, getPropertyValues)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.Class.PersistentType (EnumeratedRoleType, getEnumeratedRole)
@@ -60,9 +60,8 @@ import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(.
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.ScreenDefinition (WidgetCommonFieldsDef)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), PropertyType(..), RoleKind(..), RoleType(..), propertytype2string, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), PropertyType(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..), allPropertyVerbs, roleVerbList2Verbs)
-import Perspectives.ResourceIdentifiers (createPublicIdentifier, guid)
 import Perspectives.TypePersistence.PerspectiveSerialisation.Data (PropertyFacets, RoleInstanceWithProperties, SerialisedPerspective(..), SerialisedPerspective', SerialisedProperty, ValuesWithVerbs)
 import Perspectives.Types.ObjectGetters (getContextAspectSpecialisations)
 import Perspectives.Utilities (findM)
@@ -440,22 +439,6 @@ roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContex
       kind <- lift $ lift (roleType_ roleId >>= roleKindOfRoleType <<< ENR)
       filler <- lift $ lift $ binding_ roleId
       isMe <- lift $ lift $ isMe roleId
-      publicUrl <-  case kind of 
-        -- Only report a result for ContextRole kinds. 
-        ContextRole -> (do
-          meRole <- lift $ lift $ binding_ roleId
-          case meRole of 
-            Nothing -> pure Nothing
-            -- We'll look for public roles in the (type of the) context of the filler of the ContextRole instance.
-            Just erole -> do
-              ctxt <- lift $ lift (erole ##>> context)
-              murl <- lift $ lift $ getPublicUrl ctxt
-              case murl of 
-                Nothing -> pure Nothing
-                Just url -> do 
-                  schemeLess <- lift $ lift $ guid (unwrap erole)
-                  pure $ Just (createPublicIdentifier url schemeLess))
-        _ -> pure Nothing
       cType <- lift $ lift (cid ##>> contextType)
       translatedActions <- lift $ lift (fromFoldable <$> for (nub $ concat (keys <$> (catMaybes $ (flip EM.lookup actions) <$> roleStates)))
         \actionName -> do 
@@ -468,7 +451,6 @@ roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContex
         , propertyValues: fromFoldable valuesAndVerbs
         , actions: translatedActions
         , objectStateBasedProperties
-        , publicUrl
         , filler
         , isMe
         , readableName

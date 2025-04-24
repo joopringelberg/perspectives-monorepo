@@ -82,6 +82,7 @@ export type Roleinstancewithprops = {
   propertyValues: Record<string, PropertyValues>;
   actions: Record<string, string>;
   objectStateBasedProperties: { type: string; value: PropertyType }[];
+  // NOTA BENE: publicUrl is OBSOLETE.
   publicUrl?: string;
   filler?: RoleInstanceT;
   isMe: boolean;

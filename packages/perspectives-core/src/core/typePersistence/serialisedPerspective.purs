@@ -119,9 +119,6 @@ type RoleInstanceWithProperties =
   -- This member is not needed on the client side, but we need it to
   -- compile a complete list of SerialisedProperties.
   , objectStateBasedProperties :: Array PropertyType
-  -- The url of this roleInstance if there is a public perspective on it.
-  -- If it is a ContextRole, the url of its filler.
-  , publicUrl :: Maybe String
   , filler :: Maybe RoleInstance
   , readableName :: String
   }
