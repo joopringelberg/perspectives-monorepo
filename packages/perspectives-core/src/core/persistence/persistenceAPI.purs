@@ -265,7 +265,7 @@ addDocument dbName doc docName = withDatabase dbName
     doc' <- pure $ write doc
     catchError
       do
-        f <- lift $ fromEffectFnAff $ runEffectFnAff2 addDocumentImpl db doc'
+        f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db doc' withoutForce
         case PutCouchdbDocument <$> (read f) of
           Left e -> throwError $ error ("addDocument: error in decoding result: " <> show e)
           Right (PutCouchdbDocument {rev}) -> pure rev
@@ -287,14 +287,14 @@ addDocument_ :: forall d f. WriteForeign d => DatabaseName -> d -> DocumentName 
 addDocument_ dbName doc docName = withDatabase dbName
   \db -> catchError
     do
-      f <- lift $ fromEffectFnAff $ runEffectFnAff2 addDocumentImpl db (write doc)
+      f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withoutForce
       case PutCouchdbDocument <$> (read f) of
         Left e -> throwError $ error ("addDocument: error in decoding result: " <> show e)
         Right (PutCouchdbDocument {rev}) -> pure rev
     -- Promise rejected. Convert the incoming message to a PouchError type.
     (handlePouchError "addDocument_" docName)
 
-foreign import addDocumentImpl :: EffectFn2 PouchdbDatabase Foreign Foreign
+foreign import addDocumentImpl :: EffectFn3 PouchdbDatabase Foreign Boolean Foreign
 
 resolveDocumentConflict :: forall d f. WriteForeign d => Revision d => DatabaseName -> d -> DocumentName -> MonadPouchdb f Revision_
 resolveDocumentConflict dbName doc docName = withDatabase dbName
@@ -306,7 +306,7 @@ resolveDocumentConflict dbName doc docName = withDatabase dbName
     case read conflicts of
       Right ({ _conflicts } :: DocumentConflicts) -> do
         _ <- traverse 
-          (\rev -> lift $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName rev) 
+          (\rev -> lift $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName rev)
           _conflicts
         pure unit
       _ -> pure unit
@@ -314,11 +314,17 @@ resolveDocumentConflict dbName doc docName = withDatabase dbName
     -- Now try to add the document
     catchError
       do
-        f <- lift $ fromEffectFnAff $ runEffectFnAff2 addDocumentImpl db (write doc)
+        f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
         case PutCouchdbDocument <$> (read f) of
           Left e -> throwError $ error ("resolveDocumentConflict: error: " <> show e)
           Right (PutCouchdbDocument {rev}) -> pure rev
       (handlePouchError "resolveDocumentConflict" docName)
+
+withForce :: Boolean
+withForce = true
+
+withoutForce :: Boolean
+withoutForce = false
 
 foreign import getDocumentWithConflictsImpl :: EffectFn3 PouchdbDatabase DocumentName Boolean Foreign
 
@@ -342,7 +348,7 @@ forceCleanSave dbName doc docName = withDatabase dbName
     -- Then add the document as new
     catchError
       do
-        f <- lift $ fromEffectFnAff $ runEffectFnAff2 addDocumentImpl db (write doc)
+        f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
         case PutCouchdbDocument <$> (read f) of
           Left e -> throwError $ error ("forceCleanSave: error in decoding result: " <> show e)
           Right (PutCouchdbDocument {rev}) -> pure rev

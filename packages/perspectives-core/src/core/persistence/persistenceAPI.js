@@ -165,9 +165,9 @@ export function databaseInfoImpl ( database ) {
   };
 };
 
-export function addDocumentImpl ( database, doc ) {
+export function addDocumentImpl ( database, doc, force ) {
   return function (onError, onSuccess) {
-    database.put(doc, {force: true}, function(err, response)
+    database.put(doc, {force: force}, function(err, response)
       {
         if (err != null)
         {
