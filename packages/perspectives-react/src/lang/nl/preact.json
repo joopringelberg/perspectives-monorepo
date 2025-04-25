@@ -90,6 +90,7 @@
 , "tableContextMenu_restorecontextforuser": "Herstel de context voor deze gebruiker"
 , "tableContextMenu_removerole": "Remove this role"
 , "tableContextMenu_removecontext": "Remove this context"
+, "tableContextMenu_opencontextoffiller": "Open de context van de vuller"
 , "restoreContextForUser_title": "Herstel context"
 , "restoreContextForUser_message": "Kon deze context niet herstellen, voor deze gebruiker."
 }

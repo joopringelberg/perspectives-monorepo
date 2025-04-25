@@ -343,9 +343,40 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     });
   }
 
+  // If the role has a filler, we can open the context of the filler.
+  // This item should not be shown when the role is a Contextrole or an ExternalRole.
+  // Neither should it be shown when the role is a calculated role.
   computeOpenContextOfFillerItem() : JSX.Element[] 
   {
-    return [];
+    const component = this;
+    if (this.props.perspective.roleKind == "ContextRole" || this.props.perspective.roleKind == "ExternalRole" || this.props.perspective.isCalculated)
+    {
+      return [];
+    }
+    else if (this.props.perspective.roleInstances[this.props.roleinstance]?.filler)
+    {
+      return [<Dropdown.Item
+                key="OpenContextOfFiller"
+                eventKey="OpenContextOfFiller"
+                onClick={ () => component.openContextOfFiller( component.props.perspective.roleInstances[component.props.roleinstance].filler!)}
+              >{
+                i18next.t("tableContextMenu_opencontextoffiller", { ns: 'preact' })
+              }</Dropdown.Item>];
+    }
+    else
+    {
+      return [];
+    }
+  }
+
+  openContextOfFiller( roleInstance : RoleInstanceT )
+  {
+    const component = this;
+    PDRproxy.then(
+      function (pproxy)
+      {
+        pproxy.getRolContext( roleInstance).then( context => component.ref.current?.dispatchEvent( new CustomEvent( 'OpenContext', { detail: externalRole( context ) , bubbles: true } )))
+      });
   }
   
   computeTakeOnThisRoleItem() : JSX.Element[] 
