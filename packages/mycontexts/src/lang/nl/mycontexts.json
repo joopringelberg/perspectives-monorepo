@@ -101,4 +101,5 @@
   , "notifications_permission_denied_help": "Notificaties zijn geblokkeerd in de instellingen van je browser. Om ze in te schakelen, controleer de instellingen van je browser en sta notificaties toe voor deze site."
   , "notifications_request_permission": "Schakel notificaties in"
   , "notifications_not_supported": "Je browser ondersteunt geen notificaties."
+  , "app_connected_to_amqp_tooltip": "Je staat in verbinding met andere MyContexts gebruikers"
 }

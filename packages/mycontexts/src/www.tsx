@@ -17,6 +17,7 @@ import Settings from './settingsPanel';
 import { subscribeToAllNotifications } from './systemNotifications';
 import { syncWithCouchDB } from './syncWIthCouchdb';
 import { MyRoleTypes } from './myRoleTypes';
+import ConnectedToAMQP from './connectedToAMQP';
 
 type Section = 'who' | 'what' | 'where' | 'none';
 
@@ -573,6 +574,9 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
       <Navbar.Brand href="#home" className='text-light flex-grow-1 d-flex justify-content-center align-items-center'>{this.state.title}</Navbar.Brand>
+      <div className="ms-auto">
+        <ConnectedToAMQP roleinstance={ externalRole( component.state.systemIdentifier ) } />
+      </div>
     </Navbar>);
   }
 
