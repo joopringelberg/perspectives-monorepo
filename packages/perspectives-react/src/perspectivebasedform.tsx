@@ -19,7 +19,7 @@
 // END LICENSE
 
 import React, { PureComponent } from "react";
-import {PDRproxy, PropertyType, RoleInstanceT, Perspective, Roleinstancewithprops} from "perspectives-proxy";
+import {PDRproxy, PropertyType, RoleInstanceT, Perspective, Roleinstancewithprops, RoleVerb} from "perspectives-proxy";
 import RoleDropZone from "./roleDropzone.js";
 import PerspectivesComponent from "./perspectivesComponent";
 import RoleInstance from "./roleinstance.js";
@@ -194,7 +194,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
                 contextinstance={component.props.perspective.contextInstance}
                 contexttype={component.props.perspective.contextType}
                 myroletype={component.props.perspective.userRoleType}
-                allowedtoremovecontext={component.props.perspective.verbs.includes("RemoveContext") || component.props.perspective.verbs.includes("DeleteContext")}
+                allowedtoremovecontext={component.props.perspective.verbs.includes("RemoveContext" as RoleVerb) || component.props.perspective.verbs.includes("DeleteContext")}
               >
                 {/* The default element for the RoleInstance. The controls will have a create button. 
                 When there is no role instance, this will be rendered by the RoleInstance component.

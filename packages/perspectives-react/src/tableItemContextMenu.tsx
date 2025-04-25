@@ -131,12 +131,82 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   }
 
 
-  // Ik ben er niet zeker van dat dit wel nodig is.
-  // CardBehaviour maakt verwijderen mogelijk via het toetsenbord.
-  // Alleen als we de interface geheel met de muis moeten kunnen bedienen, is dit nodit.
+  // Yields one or two items:
+  // - RemoveContext when the roleinstance is a contextrole and when the user is allowed to remove it.
+  // - RemoveRole otherwise
   computeRemovalItems() : JSX.Element[] 
   {
-    return []
+    const component = this;
+    const allowedtoremovecontext = () => component.props.perspective.verbs.includes("RemoveContext") || component.props.perspective.verbs.includes("DeleteContext")
+    const allowedToRemoveRole = () => component.props.perspective.verbs.includes("Remove") || component.props.perspective.verbs.includes("Delete");
+    const removalItems = [];
+    if (allowedToRemoveRole())
+    {
+      removalItems.push( <Dropdown.Item
+                            key="RemoveRole"
+                            eventKey="RemoveRole"
+                            onClick={ () => component.removeWithoutContext()}
+                          >{
+                            i18next.t("tableContextMenu_removerole", { ns: 'preact' }) 
+                          }</Dropdown.Item>);
+    }
+    if (allowedtoremovecontext())
+    {
+      removalItems.push( <Dropdown.Item
+                            key="RemoveContext"
+                            eventKey="RemoveContext"
+                            onClick={ () => component.removeWithContext()}
+                          >{
+                            i18next.t("tableContextMenu_removecontext", { ns: 'preact' })
+                          }</Dropdown.Item>);
+    }
+    return removalItems;
+  }
+
+  removeWithContext() : Promise<void>
+  {
+    const component = this;
+    return PDRproxy.then(
+      function (pproxy)
+      {
+        pproxy
+          .removeContext(
+            component.props.roleinstance,
+            component.props.perspective.roleType,
+            component.props.perspective.userRoleType)
+          .catch(e => UserMessagingPromise.then( um => 
+            {
+              um.addMessageForEndUser(
+                { title: i18next.t("removeContext_title", { ns: 'preact' }) 
+                , message: i18next.t("removeContext_message", {ns: 'preact' })
+                , error: e.toString()
+              });
+            }));
+      });
+  }
+
+  // This function is only called when there is a rolinstance value on the props.
+  removeWithoutContext()
+  {
+    const component = this;
+    return PDRproxy.then(
+        function (pproxy)
+        {
+          pproxy
+            .removeRole(
+              component.props.perspective.roleType,
+              component.props.roleinstance,
+              component.props.perspective.userRoleType)
+            .catch(e => UserMessagingPromise.then( um => 
+              {
+                um.addMessageForEndUser(
+                  { title: i18next.t("removeRole_title", { ns: 'preact' }) 
+                  , message: i18next.t("removeRole_message", {ns: 'preact' })
+                  , error: e.toString()
+                });
+              }))
+        });
+
   }
 
   computeFillItem(): JSX.Element[] 

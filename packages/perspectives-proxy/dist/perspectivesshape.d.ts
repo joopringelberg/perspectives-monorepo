@@ -71,10 +71,23 @@ export type Perspective = {
   identifyingProperty: PropertyType;
   contextInstance: ContextInstanceT;
   roleInstances: Record<string, Roleinstancewithprops>;
-  verbs: string[];
+  verbs: RoleVerb[];
   properties: Record<string, SerialisedProperty>;
   actions: Record<string, string>;
 };
+
+export type RoleVerb = 
+  "Remove"            // Remove a single instance
+  | "RemoveContext"     // Remove a contextrole instance together with its context.
+  | "Delete"            // Remove all instances
+  | "DeleteContext"     // Delete all contextrole instances together with their contexts.
+  | "Create"            // Create an instance
+  | "CreateAndFill"     // CreateAndFill <RoleType> with <roleExpr>
+  | "Fill"              // <functionalRoleExpr> with <functionalRoleExpr>
+  | "Unbind"            // <roleExpr> from <RoleType>, i.e. remove all binders of type <RoleType>
+  | "RemoveFiller"      // <functionalRoleExpr> from <functionalRoleExpr>
+  | "Move"              // Move an instance from one context to another.
+  
 
 export type Roleinstancewithprops = {
   roleId: RoleInstanceT;
@@ -82,6 +95,7 @@ export type Roleinstancewithprops = {
   propertyValues: Record<string, PropertyValues>;
   actions: Record<string, string>;
   objectStateBasedProperties: { type: string; value: PropertyType }[];
+  // NOTA BENE: publicUrl is OBSOLETE.
   publicUrl?: string;
   filler?: RoleInstanceT;
   isMe: boolean;
