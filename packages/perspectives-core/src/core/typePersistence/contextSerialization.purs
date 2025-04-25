@@ -80,7 +80,6 @@ screenForContextAndUser userRoleInstance userRoleType contextType contextInstanc
       case head typesWithScreen of 
         Just typeWithScreen -> case lookup (ScreenKey typeWithScreen userRoleType) df.screens of
           Just s -> do 
-            -- TODO: misschien hier de titel uitrekenen en meegeven.
             title <- lift $ (getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST $ externalRoleType contextType) (externalRole contextInstance))
             mscreen <- runReaderT (contextualiseScreen s title) {userRoleInstance, contextType, contextInstance} 
             case mscreen of  

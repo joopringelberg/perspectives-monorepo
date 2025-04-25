@@ -18,7 +18,7 @@ import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, What(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..), roletype2string)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
@@ -33,12 +33,22 @@ contextualiseScreen (ScreenDefinition{title, tabs, rows, columns}) computedTitle
   rows' <- emptyArrayToNothing <<< map catMaybes <$> (for rows (traverse contextualiseScreenElementDef))
   columns' <- (emptyArrayToNothing <<< map catMaybes) <$> (for columns (traverse contextualiseScreenElementDef))
   pure $ Just $ ScreenDefinition
-    { title: if isResourceIdentifier computedTitle then title else Just computedTitle
-    , tabs: tabs'
-    , rows: rows'
-    , columns: columns'
-    , whoWhatWhereScreen: Nothing
-    }
+    {
+      title: if isResourceIdentifier computedTitle then title else Just computedTitle
+      , tabs: Nothing
+      , rows: Nothing
+      , columns: Nothing
+      -- Moeten we de tabs, rows of columns niet onderbrengen in het what?
+      , whoWhatWhereScreen: Just $ WhoWhatWhereScreenDef 
+        { who: Who {chats: [], userRoles: []}
+        , what: FreeFormScreen 
+          { tabs: tabs'
+          , rows: rows'
+          , columns: columns'
+          }
+        , whereto: []
+        }
+      }
 
 emptyArrayToNothing :: forall a. Maybe (Array a) -> Maybe (Array a)
 emptyArrayToNothing marr = case marr of 
