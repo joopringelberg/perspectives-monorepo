@@ -103,4 +103,6 @@
   , "notifications_request_permission": "Enable Notifications"
   , "notifications_not_supported": "Your browser doesn't support notifications."
   , "app_connected_to_amqp_tooltip": "You are connected to other MyContexts users"
+  , "app_connected_to_internet_tooltip": "You are {{connectionState}}connected to the internet"
+  , "app_connected_to_internet_connected": "not "
   }

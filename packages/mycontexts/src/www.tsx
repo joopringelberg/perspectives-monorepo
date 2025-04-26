@@ -18,6 +18,7 @@ import { subscribeToAllNotifications } from './systemNotifications';
 import { syncWithCouchDB } from './syncWIthCouchdb';
 import { MyRoleTypes } from './myRoleTypes';
 import ConnectedToAMQP from './connectedToAMQP';
+import { InternetConnectivityCheck } from './internetConnectivityCheck';
 
 type Section = 'who' | 'what' | 'where' | 'none';
 
@@ -39,6 +40,7 @@ interface WWWComponentState {
   choiceMessage: ChoiceMessage;
   actions?: Record<string, string>;
   roleOnClipboard?: RoleOnClipboard;
+  isOnline: boolean;
 }
 
 class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
@@ -60,6 +62,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
       , screen: undefined
       , endUserMessage: {title: ''}
       , choiceMessage: {title: '', choices: {}, chosen: () => {}}
+      , isOnline: false
     };
     this.checkScreenSize = this.checkScreenSize.bind(this);
     this.screenUnsubscriber = undefined;
@@ -574,9 +577,8 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
       <Navbar.Brand href="#home" className='text-light flex-grow-1 d-flex justify-content-center align-items-center'>{this.state.title}</Navbar.Brand>
-      <div className="ms-auto">
-        <ConnectedToAMQP roleinstance={ externalRole( component.state.systemIdentifier ) } />
-      </div>
+      <InternetConnectivityCheck reportBack={ (isOnline : boolean) => component.setState({isOnline})}/>
+      <ConnectedToAMQP roleinstance={ externalRole( component.state.systemIdentifier )} isOnline={component.state.isOnline} />
     </Navbar>);
   }
 

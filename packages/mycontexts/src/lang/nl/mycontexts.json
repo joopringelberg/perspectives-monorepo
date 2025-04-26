@@ -102,4 +102,6 @@
   , "notifications_request_permission": "Schakel notificaties in"
   , "notifications_not_supported": "Je browser ondersteunt geen notificaties."
   , "app_connected_to_amqp_tooltip": "Je staat in verbinding met andere MyContexts gebruikers"
+  , "app_connected_to_internet_tooltip": "Je staat {{connectionState}}in verbinding met het internet"
+  , "app_connected_to_internet_connected": "niet "
 }

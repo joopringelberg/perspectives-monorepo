@@ -30,6 +30,7 @@ import { OverlayInjectedProps } from 'react-bootstrap/esm/Overlay';
 
 interface ConnectedToAMQPProps {
   roleinstance: RoleInstanceT
+  isOnline: boolean
 }
 
 export default function ConnectedToAMQP(props : ConnectedToAMQPProps) 
@@ -66,12 +67,17 @@ export default function ConnectedToAMQP(props : ConnectedToAMQPProps)
   const renderTooltip = (props : OverlayInjectedProps) => (
     <Tooltip id="amqp-tooltip" {...props} show={
       props.show}>
-      {i18next.t("app_connected_to_amqp_tooltip", { ns: 'mycontexts', connected: isConnected })}
+      {i18next.t("app_connected_to_amqp_tooltip", 
+        { ns: 'mycontexts'
+        , connectionState: isConnected  && props.isOnline ? 
+          "" :
+          i18next.t("app_connected_to_internet_connected", { ns: 'mycontexts' })
+        })
+        }
     </Tooltip>
   );
 
-  return isConnected ? 
-    <OverlayTrigger
+  return <OverlayTrigger
       placement="left"
       delay={{ show: 250, hide: 400 }}
       overlay={renderTooltip}
@@ -82,12 +88,10 @@ export default function ConnectedToAMQP(props : ConnectedToAMQPProps)
         aria-describedby="amqp-tooltip"
         tabIndex={0}
       >{
-        isConnected ? <span role="img" aria-label="Online" style={{ color: "green", marginRight: "8px" }}>🟢</span> :
+        isConnected  && props.isOnline ? <span role="img" aria-label="Online" style={{ color: "green", marginRight: "8px" }}>🟢</span> :
         <span role="img" aria-label="Offline" style={{ color: "red", marginRight: "8px" }}>🔴</span>
       }
         
       </div>
     </OverlayTrigger>
-    : 
-    <div/>;
-}
+  ;}
