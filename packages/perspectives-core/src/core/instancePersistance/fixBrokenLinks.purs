@@ -39,12 +39,9 @@ where
 
 import Prelude
 
-import Affjax.ResponseFormat (ResponseFormat(..), json)
-import Affjax.Web (get)
 import Control.Monad.Error.Class (try)
 import Control.Monad.Writer (execWriterT, lift, tell)
 import Data.Array (concat, delete)
-import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Traversable (for, for_)
 import Effect.Class.Console (log)
@@ -62,8 +59,6 @@ import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntite
 import Perspectives.PerspectivesState (transactionLevel)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType(..), RoleType(..))
-import Perspectives.ResourceIdentifiers (isInPublicScheme, isInRemoteScheme)
-import Perspectives.ResourceIdentifiers.Parser (ResourceIdentifier)
 import Perspectives.RoleAssignment (filledNoLongerPointsTo) as RA
 import Perspectives.RoleStateCompiler (evaluateRoleState)
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary)
@@ -75,26 +70,6 @@ fixReferences (Ctxt cid) = fixContextReferences cid
 fixReferences (Rle rid) = fixRoleReferences rid
 fixReferences (Dfile did) = pure unit
 
--- If the resource is in a scheme that requires an internet connection, 
--- and the connection is not available, we cannot fix the references.
--- We do not want to throw an exception, as this is a normal situation.
--- Instead, we want to notify the user that, being offline, some resources cannot be accessed.
-unlessOverInternet :: ResourceIdentifier -> MonadPerspectives Unit -> MonadPerspectives Unit
-unlessOverInternet s a = if isInPublicScheme s || isInRemoteScheme s
-  then do 
-    isOffline <- isOffLine
-    if isOffline
-      -- When the channel to communicate with the end user is available, send a message.
-      then do
-        log "Offline: no reason to fix a broken link."
-        pure unit
-      else a
-  else a
-  where
-  isOffLine :: MonadPerspectives Boolean
-  isOffLine = lift $ get json "https://www.google.com/favicon.ico" >>= case _ of
-    Left _ -> pure false
-    Right _ -> pure true
 
 -- | Apply this function when a reference to a context has been found that cannot be retrieved.
 -- | We want all references to this context to be removed.
@@ -102,7 +77,7 @@ unlessOverInternet s a = if isInPublicScheme s || isInRemoteScheme s
 -- | All these roles must be removed, as a role must have a context!
 -- | Notice that we do not synchronize the changes.
 fixContextReferences :: ContextInstance -> MonadPerspectives Unit
-fixContextReferences cid@(ContextInstance c) = unlessOverInternet c do
+fixContextReferences cid@(ContextInstance c) = do
   padding <- transactionLevel
   log (padding <> "fixContextReferences: " <> show cid)
   -- As we look for dangling references in the database only, we should be sure that
@@ -142,7 +117,7 @@ reEvaluateContextStates cid = (lift $ contextType_ cid) >>= evaluateContextState
 -- | Apply this function when a reference to a role has been found that cannot be retrieved.
 -- | All references from other roles and from its context must be removed.
 fixRoleReferences :: RoleInstance -> MonadPerspectives Unit
-fixRoleReferences roleId@(RoleInstance r) = unlessOverInternet r do
+fixRoleReferences roleId@(RoleInstance r) = do
   padding <- transactionLevel
   log (padding <> "fixRoleReferences: " <> show roleId)
 

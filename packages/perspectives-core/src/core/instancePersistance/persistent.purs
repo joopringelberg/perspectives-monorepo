@@ -63,6 +63,8 @@ module Perspectives.Persistent
 
 import Prelude
 
+import Affjax.ResponseFormat (json)
+import Affjax.Web (get)
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (try)
 import Control.Monad.Except (catchError, lift, throwError)
@@ -77,6 +79,7 @@ import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect.Aff.AVar (AVar, put, read, take)
 import Effect.Aff.Class (liftAff)
+import Effect.Class.Console (log)
 import Effect.Exception (error)
 import Persistence.Attachment (class Attachment)
 import Perspectives.CoreTypes (class Persistent, IntegrityFix(..), MP, MonadPerspectives, ResourceToBeStored(..), addPublicResource, dbLocalName, removeInternally, representInternally, resourceToBeStored, retrieveInternally, typeOfInstance)
@@ -93,7 +96,8 @@ import Perspectives.Representation.Class.Cacheable (Revision_, cacheEntity, chan
 import Perspectives.Representation.Class.Identifiable (identifier, identifier_)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..))
-import Perspectives.ResourceIdentifiers (isInPublicScheme, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator)
+import Perspectives.ResourceIdentifiers (isInPublicScheme, isInRemoteScheme, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator)
+import Perspectives.ResourceIdentifiers.Parser (ResourceIdentifier)
 import Simple.JSON (class WriteForeign)
  
 fix :: Boolean
@@ -201,25 +205,42 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
         then logPerspectivesError (Custom ("fetchEntiteit: failed to decode resource " <> unwrap id <> ". Parser message: " <> show e))
         -- Try to fix referential integrity
         else if tryToFix
-          then do 
-            logPerspectivesError 
-              (Custom ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb: " <> show e))
-            missingResourceAVar <- getMissingResource
-            liftAff $ put (Missing $ typeOfInstance id) missingResourceAVar
-            response <- liftAff $ take missingResourceAVar
-            case response of 
-              FixingHotLine av -> do 
-                result <- liftAff $ take av
-                case result of 
-                  FixFailed s -> logPerspectivesError (Custom "fetchEntiteit: cannot fix references.")
-                  FixSucceeded -> logPerspectivesError (Custom "fetchEntiteit: succesfully removed all references to missing resource.")
-                  _ -> logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
-              _ -> logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
+          then internetRequiredButMissing (unwrap id) >>= if _
+            then log ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> ", but there is no internet. Will not try to fix links.")
+            else do 
+              logPerspectivesError 
+                (Custom ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb: " <> show e))
+              missingResourceAVar <- getMissingResource
+              liftAff $ put (Missing $ typeOfInstance id) missingResourceAVar
+              response <- liftAff $ take missingResourceAVar
+              case response of 
+                FixingHotLine av -> do 
+                  result <- liftAff $ take av
+                  case result of 
+                    FixFailed s -> logPerspectivesError (Custom "fetchEntiteit: cannot fix references.")
+                    FixSucceeded -> logPerspectivesError (Custom "fetchEntiteit: succesfully removed all references to missing resource.")
+                    _ -> logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
+                _ -> logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
           else pure unit
       throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
   where
     decodingErrorRegex :: Regex
     decodingErrorRegex = unsafeRegex "error in decoding result" noFlags
+
+-- If the resource is in a scheme that requires an internet connection, 
+-- and the connection is not available, we cannot fix the references.
+-- We do not want to throw an exception, as this is a normal situation.
+-- Instead, we want to notify the user that, being offline, some resources cannot be accessed.
+internetRequiredButMissing :: ResourceIdentifier ->  MonadPerspectives Boolean
+internetRequiredButMissing s = if isInPublicScheme s || isInRemoteScheme s
+  then do 
+    isOffLine
+  else pure false
+  where
+  isOffLine :: MonadPerspectives Boolean
+  isOffLine = lift $ get json "https://www.google.com/favicon.ico" >>= case _ of
+    Left _ -> pure true
+    Right _ -> pure false
 
 -- | Saves a previously cached entity.
 -- | NOTE: the entity may not be saved immediately, due to the scheme of periodic saving.
