@@ -235,6 +235,9 @@ getResourceIdentifierScheme s = case match resourceIdentifierRegEx s of
 isInPublicScheme :: ResourceIdentifier -> Boolean
 isInPublicScheme s = maybe false (eq "pub") (getResourceIdentifierScheme s)
 
+isInRemoteScheme :: ResourceIdentifier -> Boolean
+isInRemoteScheme s = maybe false (eq "rem") (getResourceIdentifierScheme s)
+
 -----------------------------------------------------------
 -- TRANSFORM A SCHEMED RESOURCE IDENTIFIER INTO AN IDENTIFIER IN A DELTA
 -----------------------------------------------------------
