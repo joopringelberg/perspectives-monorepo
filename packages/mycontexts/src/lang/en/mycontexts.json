@@ -102,7 +102,7 @@
   , "notifications_permission_denied_help": "Notifications are blocked in your browser settings. To enable them, please check your browser settings and allow notifications for this site."
   , "notifications_request_permission": "Enable Notifications"
   , "notifications_not_supported": "Your browser doesn't support notifications."
-  , "app_connected_to_amqp_tooltip": "You are connected to other MyContexts users"
+  , "app_connected_to_amqp_tooltip": "You are {{connectionState}}connected to other MyContexts users"
   , "app_connected_to_internet_tooltip": "You are {{connectionState}}connected to the internet"
   , "app_connected_to_internet_connected": "not "
   }
