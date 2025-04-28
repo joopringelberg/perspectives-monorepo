@@ -113,8 +113,13 @@ export const filler2filledView = (function(filled)
 
 // This view is a table [filled; {filler, filledContextType, filledRoleType}].
 // Use it by selecting on filled to obtain the role that fills it.
+// By construction, there will be at most one filler.
 export const filled2fillerView = (function(filler)
 {
+  // Every role in the database will appear as 'filler'. Together they form a table.
+  // This view outputs another table [filled; {filler, filledContextType, filledRoleType}].
+  // We use that table by filtering it with a particular filled role (see getViewOnDatabase).
+  // The end result is the row that represents the role that fills the filled role. 
   // a proxy for being a role:
   if (filler.universeRoleDelta)
   {

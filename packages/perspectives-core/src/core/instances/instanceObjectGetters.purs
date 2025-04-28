@@ -361,6 +361,7 @@ filled2fillerFromDatabase_ :: RoleInstance -> MonadPerspectives (Array FillerInf
 filled2fillerFromDatabase_ rid = try 
   (do
     db <- entitiesDatabaseName
+    -- FillerInfo provides, for a given filler, the type of the filled role and the type of the context.
     fillerRolesInDatabase :: Array FillerInfo <- getViewOnDatabase db "defaultViews/filled2fillerView" (Key $ unwrap rid)
     fillerRoleInCache :: Array FillerInfo <- (do 
       cache <- roleCache
