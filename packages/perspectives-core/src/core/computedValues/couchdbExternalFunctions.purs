@@ -183,7 +183,7 @@ ensureLatestModel_ arrWithModelName arrWithDependencies _ = try
     Just modelName -> if isModelUri modelName 
       then updateModel' (DomeinFileId modelName) (maybe false (eq "true") (head arrWithDependencies)) true
       else throwError (error $ "This is not a well-formed domain name: " <> modelName))
-  >>= handleExternalStatementError "model://perspectives.domains#UpdateModel"
+  >>= handleExternalStatementError "model://perspectives.domains#EnsureLatestModel"
 
 -- | Takes care of inverted queries in Couchdb.
 -- | Clears the query cache in PerspectivesState.

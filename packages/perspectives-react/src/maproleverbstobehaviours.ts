@@ -21,6 +21,7 @@
 import * as Behaviours from "./cardbehaviour.js";
 import { Perspective } from "perspectives-proxy"
 
+
 // Maps the role verbs in the perspective to an array of behaviours.
 export function mapRoleVerbsToBehaviours(perspective : Perspective) : Behaviours.BehaviourAdder[]
 {
@@ -36,6 +37,20 @@ export function mapRoleVerbsToBehaviours(perspective : Perspective) : Behaviours
       return verbs;
     }
   }
+
+  function prioritizeRoleRemoval(verbs : string[])
+  {
+    // if there is a Remove, suppress RemoveContext and DeleteContext are not needed.
+    if (verbs.includes("Remove"))
+    {
+      return verbs.filter( verb => verb !== "RemoveContext" && verb !== "DeleteContext");
+    }
+    else
+    {
+      return verbs;
+    }
+  }
+
   function mapRoleVerb(verb : string)
   {
     switch (verb)
@@ -60,7 +75,7 @@ export function mapRoleVerbsToBehaviours(perspective : Perspective) : Behaviours
   }
   if (perspective)
   {
-    return [...new Set( prioritizeContextRemoval( perspective.verbs! ).map( mapRoleVerb ) )].concat(
+    return [...new Set( prioritizeRoleRemoval( perspective.verbs! ).map( mapRoleVerb ) )].concat(
       [Behaviours.addOpenContextOrRoleForm, Behaviours.addFillARole]);
   }
   else
@@ -83,6 +98,19 @@ export function mapRoleVerbsToBehaviourNames(perspective : Perspective) : string
       return verbs;
     }
   }
+  function prioritizeRoleRemoval(verbs : string[])
+  {
+    // if there is a Remove, suppress RemoveContext and DeleteContext are not needed.
+    if (verbs.includes("Remove"))
+    {
+      return verbs.filter( verb => verb !== "RemoveContext" && verb !== "DeleteContext");
+    }
+    else
+    {
+      return verbs;
+    }
+  }
+
   function mapRoleVerb(verb : string) : string
   {
     switch (verb)
@@ -107,7 +135,7 @@ export function mapRoleVerbsToBehaviourNames(perspective : Perspective) : string
   }
   if (perspective)
   {
-    return [...new Set( prioritizeContextRemoval( perspective.verbs! ).map( mapRoleVerb ) )].concat(
+    return [...new Set( prioritizeRoleRemoval( perspective.verbs! ).map( mapRoleVerb ) )].concat(
       ["addOpenContextOrRoleForm", "addFillARole"]);
   }
   else

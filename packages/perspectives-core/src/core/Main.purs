@@ -188,9 +188,13 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
       void $ forkAff $ runPerspectivesWithState 
         (do
           lift $ delay (Milliseconds 5000.0)
-          entitiesDatabaseName >>= \dbName -> do
+          entities <- entitiesDatabaseName
+          models <- modelsDatabaseName
+          inverted <- invertedQueryDatabaseName
+          post <- postDatabaseName
+          for_ [entities, models, inverted, post] (\dbName -> do
             log $ "Compacting the database " <> dbName
-            compactDatabase dbName)
+            compactDatabase dbName))
         state
 
 
