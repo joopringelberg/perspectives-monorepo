@@ -105,4 +105,7 @@
   , "app_connected_to_amqp_tooltip": "You are {{connectionState}}connected to other MyContexts users"
   , "app_connected_to_internet_tooltip": "You are {{connectionState}}connected to the internet"
   , "app_connected_to_internet_connected": "not "
+  , "notificationsAndClipboard_title": "Notifications and Clipboard"
+  , "clipboard": "Clipboard"
+  , "allNotifications": "All notifications"
   }

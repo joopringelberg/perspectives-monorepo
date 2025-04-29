@@ -104,4 +104,7 @@
   , "app_connected_to_amqp_tooltip": "Je staat {{connectionState}}in verbinding met andere MyContexts gebruikers"
   , "app_connected_to_internet_tooltip": "Je staat {{connectionState}}in verbinding met het internet"
   , "app_connected_to_internet_connected": "niet "
+  , "notificationsAndClipboard_title": "Notificaties en klembord"
+  , "clipboard": "Klembord"
+  , "allNotifications": "Alle notificaties"
 }

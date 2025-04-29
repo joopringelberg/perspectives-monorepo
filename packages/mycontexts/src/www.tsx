@@ -424,18 +424,18 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
     return (
       <Offcanvas show={this.state.showNotifications} onHide={() => component.setState({showNotifications:false})} placement='bottom' scroll={true} style={{ height: '50vh' }}>
         <Offcanvas.Header closeButton>
-          <Offcanvas.Title>Clipboard & Notifications</Offcanvas.Title>
+          <Offcanvas.Title>{ i18next.t("notificationsAndClipboard_title", {ns: 'mycontexts'})}</Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body>
         <Accordion defaultActiveKey="0">
           <Accordion.Item eventKey="0">
-            <Accordion.Header>Clipboard</Accordion.Header>
+            <Accordion.Header>{ i18next.t("clipboard", {ns: 'mycontexts'})}</Accordion.Header>
             <Accordion.Body>
               <Clipboard systemuser={component.state.systemUser}/>
             </Accordion.Body>
           </Accordion.Item>
           <Accordion.Item eventKey="1">
-            <Accordion.Header>Notifications</Accordion.Header>
+            <Accordion.Header>{ i18next.t("settings_notifications", {ns: 'mycontexts'})}</Accordion.Header>
             <Accordion.Body>
             { component.state.openContext ?
               <NotificationsDisplayer 
@@ -449,7 +449,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             </Accordion.Body>
           </Accordion.Item>
           <Accordion.Item eventKey="2">
-            <Accordion.Header>All notifications</Accordion.Header>
+            <Accordion.Header>{ i18next.t("allNotifications", {ns: 'mycontexts'})}</Accordion.Header>
             <Accordion.Body>
             { component.state.openContext ?
               <NotificationsDisplayer 
