@@ -22,7 +22,7 @@
 
 module Perspectives.SetupCouchdb where
 
-import Data.Array (elemIndex)
+import Data.Array (elemIndex, head)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Monoid.Disj (Disj(..))
 import Data.Newtype (unwrap)
@@ -33,6 +33,8 @@ import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
 import Perspectives.Persistence.API (MonadPouchdb, addViewToDatabase, createDatabase, databaseInfo)
 import Perspectives.Persistence.CouchdbFunctions (setSecurityDocument)
 import Perspectives.Persistence.State (withCouchdbUrl)
+import Perspectives.Representation.Class.Cacheable (ContextType(..), EnumeratedRoleType(..))
+import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType)
 import Prelude (Unit, discard, void, ($), (&&), (<>), (==))
@@ -194,13 +196,25 @@ setFilled2FillerView dbname = void $ addViewToDatabase dbname "defaultViews" "fi
 
 foreign import filled2fillerView :: String
 
--- | Is the RoleInstance filled by the PerspectRol?
+-- | Is the RoleInstance rid filled by the PerspectRol role?
 filled2fillerFilter :: RoleInstance -> PerspectRol -> Boolean
 filled2fillerFilter rid role = unwrap (foldMap
     (\ctype filleds -> foldMap 
       (\rtype filleds' -> Disj $ isJust $ elemIndex rid filleds')
       filleds)
     (rol_gevuldeRollen role))
+
+-- | The Attachment instance has no inherent meaning but it is required to be able to use getSafeViewOnDatabase.
+type FillerInfo = {filler :: RoleInstance, filledContextType :: ContextType, filledRoleType :: EnumeratedRoleType}
+
+filled2FillerInfo :: RoleInstance -> PerspectRol -> Maybe FillerInfo
+filled2FillerInfo rid role = head (foldMap
+  (\ctype filleds -> foldMap 
+    (\rtype filleds' -> if isJust $ elemIndex rid filleds'
+      then [{filler: identifier role, filledContextType: ContextType ctype, filledRoleType: EnumeratedRoleType rtype}]
+      else [])
+    filleds)
+  (rol_gevuldeRollen role))
 
 -----------------------------------------------------------
 -- THE VIEW 'CONTEXT2ROLEVIEW'

@@ -26,7 +26,13 @@ module Perspectives.Persistence.RunEffectAff
 where
 
 import Effect.Aff.Compat (EffectFn3, EffectFnAff)
-import Effect.Uncurried (EffectFn2, EffectFn4, EffectFn5, EffectFn6)
+import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn4, EffectFn5, EffectFn6)
+
+-----------------------------------------------------------
+-- RUNEFFECTFNAFF2
+-----------------------------------------------------------
+foreign import runEffectFnAff1 :: forall a r.
+  EffectFn1 a r -> a -> EffectFnAff r
 
 -----------------------------------------------------------
 -- RUNEFFECTFNAFF2

@@ -357,11 +357,13 @@ hasAspectWithLocalName localAspectName roleType = ArrayT do
   aspects <- roleType ###= roleAspectsClosure
   pure [isJust $ findIndex (test (unsafeRegex (localAspectName <> "$") noFlags)) (unwrap <$> aspects)]
 
+-- We gamble here that the roleSpecialisationView is reliable. 
 getRoleAspectSpecialisations :: EnumeratedRoleType  ~~~> EnumeratedRoleType
 getRoleAspectSpecialisations rn = ArrayT $ try (modelDatabaseName >>= \db -> getViewOnDatabase db "defaultViews/roleSpecialisationsView" (Key $ unwrap rn)) >>=
   handlePerspectRolError' "getAspectSpecialisations" []
     \(roles :: Array EnumeratedRoleType) -> pure roles
 
+-- We gamble here that the contextSpecialisationView is reliable. 
 getContextAspectSpecialisations :: ContextType  ~~~> ContextType
 getContextAspectSpecialisations cn = ArrayT $ try (modelDatabaseName >>= \db -> getViewOnDatabase db "defaultViews/contextSpecialisationsView" (Key $ unwrap cn)) >>=
   handlePerspectRolError' "getContextAspectSpecialisations" []

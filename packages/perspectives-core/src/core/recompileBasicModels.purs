@@ -57,11 +57,12 @@ import Perspectives.ExecuteInTopologicalOrder (executeInTopologicalOrder) as TOP
 import Perspectives.InvertedQuery.Storable (saveInvertedQueries)
 import Perspectives.ModelDependencies (domeinFileName, modelManifest, versionToInstall)
 import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
-import Perspectives.Persistence.API (Keys(..), addDocument, documentsInDatabase, getAttachment, getViewOnDatabase, includeDocs)
+import Perspectives.Persistence.API (Keys(..), addDocument, documentsInDatabase, getAttachment, includeDocs)
 import Perspectives.Persistence.Types (Url)
 import Perspectives.Persistent (getDomeinFile, getPerspectRol)
+import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.Representation.Class.Cacheable (setRevision)
-import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedPropertyType(..))
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_)
 import Simple.JSON (class ReadForeign, read, read')
@@ -69,7 +70,7 @@ import Simple.JSON (class ReadForeign, read, read')
 -- | Parse and compile the versions to install of all models found at the URL, e.g. https://perspectives.domains/models_perspectives_domains
 recompileModelsAtUrl :: Url -> Url -> MonadPerspectivesTransaction Unit
 recompileModelsAtUrl modelsDb manifestsDb = do
-  manifests <- lift $ getViewOnDatabase manifestsDb "defaultViews/roleView" (Key modelManifest)
+  manifests :: Array RoleInstance <- lift $ getSafeViewOnDatabase manifestsDb "defaultViews/roleView" (Key modelManifest)
   versionsToCompile <- traverse getVersionedDomeinFileName manifests >>= pure <<< catMaybes
   {rows:allModels} <- lift $ documentsInDatabase modelsDb includeDocs
   uninterpretedDomeinFiles <- for (filter (isJust <<< (flip elemIndex versionsToCompile) <<< _.id) allModels) \({id, doc}) -> case read <$> doc of
@@ -102,9 +103,9 @@ recompileModelsAtUrl modelsDb manifestsDb = do
             newRev <- execStateT (addAttachments modelsDb _id attachments) _rev'
             setRevision id newRev
         pure model
-    getVersionedDomeinFileName :: String -> MonadPerspectivesTransaction (Maybe String)
+    getVersionedDomeinFileName :: RoleInstance -> MonadPerspectivesTransaction (Maybe String)
     getVersionedDomeinFileName rid = do 
-      r <- lift $ getPerspectRol (RoleInstance rid)
+      r <- lift $ getPerspectRol rid
       case head $ rol_property r (EnumeratedPropertyType domeinFileName), head $ rol_property r (EnumeratedPropertyType  versionToInstall) of
         Just (Value dfName), Just (Value version) -> pure $ Just $ (replace (Pattern ".json") (Replacement "") dfName) <> "@" <> version <> ".json"
         _, _ -> pure Nothing

@@ -28,6 +28,7 @@ module Perspectives.Persistence.API
   , module Perspectives.Persistence.API
   , module Perspectives.Persistence.Authentication
   , module Perspectives.Persistence.Types
+  , resetViewIndex
   )
   where
 
@@ -37,6 +38,7 @@ import Control.Alt ((<|>))
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Except (runExcept)
 import Control.Monad.Reader (lift)
+import Control.Promise (Promise, toAffE)
 import Control.Promise as Promise
 import Data.Array.NonEmpty (index)
 import Data.Either (Either(..))
@@ -51,7 +53,7 @@ import Effect (Effect)
 import Effect.Aff (Aff, catchError, error, throwError)
 import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
 import Effect.Class (liftEffect)
-import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn5, EffectFn6, runEffectFn1, runEffectFn2, runEffectFn3)
+import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn6, runEffectFn1, runEffectFn2, runEffectFn3)
 import Foreign (F, Foreign, unsafeToForeign)
 import Foreign.Object (Object, delete, empty, insert, lookup)
 import Partial.Unsafe (unsafePartial)
@@ -60,9 +62,9 @@ import Perspectives.Couchdb (DeleteCouchdbDocument(..), PutCouchdbDocument(..), 
 import Perspectives.Couchdb.Revision (class Revision, Revision_)
 import Perspectives.Persistence.Authentication (AuthoritySource(..), ensureAuthentication)
 import Perspectives.Persistence.Errors (handleNotFound, handlePouchError, parsePouchError)
-import Perspectives.Persistence.RunEffectAff (runEffectFnAff2, runEffectFnAff3, runEffectFnAff5, runEffectFnAff6)
+import Perspectives.Persistence.RunEffectAff (runEffectFnAff1, runEffectFnAff2, runEffectFnAff3, runEffectFnAff6)
 import Perspectives.Persistence.State (getCouchdbBaseURL)
-import Perspectives.Persistence.Types (AttachmentName, CouchdbUrl, DatabaseName, DocumentName, DocumentWithRevision, MonadPouchdb, Password, PouchdbDatabase, PouchdbExtraState, PouchdbState, PouchdbUser, SystemIdentifier, Url, UserName, ViewName, PouchError, decodePouchdbUser', encodePouchdbUser', readPouchError)
+import Perspectives.Persistence.Types (AttachmentName, CouchdbUrl, DatabaseName, DocumentName, DocumentWithRevision, MonadPouchdb, Password, PouchError, PouchdbDatabase, PouchdbExtraState, PouchdbState, PouchdbUser, SystemIdentifier, Url, UserName, ViewName, decodePouchdbUser', encodePouchdbUser', readPouchError)
 import Simple.JSON (class ReadForeign, class WriteForeign, read, read', write)
 
 -----------------------------------------------------------
@@ -220,6 +222,19 @@ databaseInfo dbName = withDatabase dbName
     (handlePouchError "databaseInfo" dbName)
 
 foreign import databaseInfoImpl :: PouchdbDatabase -> EffectFnAff Foreign
+
+-----------------------------------------------------------
+-- COMPACTDATABASE
+-----------------------------------------------------------
+compactDatabase :: forall f. DatabaseName -> MonadPouchdb f Unit
+compactDatabase dbName = withDatabase dbName
+  \db -> do
+    _ <- lift $ fromEffectFnAff $ runEffectFnAff1 compactDatabaseImpl db
+    _ <- lift $ fromEffectFnAff $ runEffectFnAff1 viewCleanupImpl db
+    pure unit
+
+foreign import compactDatabaseImpl :: EffectFn1 PouchdbDatabase Foreign
+foreign import viewCleanupImpl :: EffectFn1 PouchdbDatabase Foreign
 
 -----------------------------------------------------------
 -- DOCUMENTSINDATABASE
@@ -632,31 +647,37 @@ getViewWithDocs dbName viewname keys = withDatabase dbName
   \db -> catchError
     do
       f <- case keys of 
-        NoKey -> lift $ fromEffectFnAff $ runEffectFnAff5 getViewOnDatabaseImpl db viewname (write "") noKey includeDocs
-        Key k -> lift $ fromEffectFnAff $ runEffectFnAff5 getViewOnDatabaseImpl db viewname (unsafeToForeign k) singleKey includeDocs
+        NoKey -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write "") noKey includeDocs false 
+        Key k -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (unsafeToForeign k) singleKey includeDocs false
         -- We have to provide an Array String to the Pouchdb query function when using 'keys'.
-        Keys ks -> lift $ fromEffectFnAff $ runEffectFnAff5 getViewOnDatabaseImpl db viewname (unsafeToForeign ks) multipleKeys includeDocs
+        Keys ks -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (unsafeToForeign ks) multipleKeys includeDocs false
       case read f of
         Left e -> throwError $ error ("getViewWithDocs : error in decoding result: " <> show e)
         Right ((ViewDocResult{rows}) :: (ViewDocResult doc String)) -> do
           pure (map (\(ViewDocResultRow{doc}) -> doc) rows)
     (handlePouchError "getViewWithDocs" viewname)
 
-
--- | Get the view on the database. Notice that the type of the value in the result
--- | is parameterised and must be an instance of ReadForeign.
 getViewOnDatabase :: forall f value key.
   ReadForeign key =>
   WriteForeign key =>
   ReadForeign value =>
   DatabaseName -> ViewName -> Keys key -> MonadPouchdb f (Array value)
-getViewOnDatabase dbName viewname keys = withDatabase dbName
+getViewOnDatabase dbName viewname keys = getViewOnDatabase_ dbName viewname keys false {-no refresh-}
+
+-- | Get the view on the database. Notice that the type of the value in the result
+-- | is parameterised and must be an instance of ReadForeign.
+getViewOnDatabase_ :: forall f value key.
+  ReadForeign key =>
+  WriteForeign key =>
+  ReadForeign value =>
+  DatabaseName -> ViewName -> Keys key -> Boolean -> MonadPouchdb f (Array value)
+getViewOnDatabase_ dbName viewname keys forceRefresh = withDatabase dbName
   \db -> catchError
     do
       f <- case keys of 
-        NoKey -> lift $ fromEffectFnAff $ runEffectFnAff5 getViewOnDatabaseImpl db viewname (write "") noKey false
-        Key k -> lift $ fromEffectFnAff $ runEffectFnAff5 getViewOnDatabaseImpl db viewname (write k) singleKey false
-        Keys ks -> lift $ fromEffectFnAff $ runEffectFnAff5 getViewOnDatabaseImpl db viewname (write ks) multipleKeys false
+        NoKey -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write "") noKey false forceRefresh
+        Key k -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write k) singleKey false forceRefresh
+        Keys ks -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write ks) multipleKeys false forceRefresh
       case read f of
         Left e -> throwError $ error ("getViewOnDatabase : error in decoding result: " <> show e)
         Right ((ViewResult{rows}) :: (ViewResult Foreign key)) -> do
@@ -669,13 +690,28 @@ getViewOnDatabase dbName viewname keys = withDatabase dbName
     (handlePouchError "getViewOnDatabase" viewname)
 
 foreign import getViewOnDatabaseImpl ::
-  EffectFn5
+  EffectFn6
     PouchdbDatabase
     ViewName
     Foreign
     Boolean   -- true iff a key is provided.
     Boolean   -- when true, include docs.
+    Boolean   -- when true, force refresh of the view.
     Foreign
+
+-----------------------------------------------------------
+-- RESET A VIEW INDEX
+-----------------------------------------------------------
+resetViewIndex :: forall f. DatabaseName -> ViewName -> MonadPouchdb f Boolean
+resetViewIndex dbName viewname = withDatabase dbName
+  -- NOTICE: THIS IS A STUB
+  \db -> lift $ toAffE (resetViewIndexImpl_ db viewname)
+
+foreign import resetViewIndexImpl :: EffectFn2 PouchdbDatabase String (Promise Boolean)
+
+resetViewIndexImpl_ :: PouchdbDatabase -> String -> Effect (Promise Boolean)
+resetViewIndexImpl_ = runEffectFn2 resetViewIndexImpl
+
 
 -----------------------------------------------------------
 -- SPLIT AN URL INTO A COUCHDB DATABASE URL AND A DOCUMENT NAME

@@ -24,6 +24,7 @@ module Main
 where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
+import Control.Monad.Cont (lift)
 import Control.Monad.Writer (runWriterT)
 import Data.Array (cons, foldM)
 import Data.DateTime.Instant (Instant, instant, unInstant)
@@ -66,11 +67,12 @@ import Perspectives.ModelDependencies (indexedContext, indexedContextName, index
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (DatabaseName, Keys(..), PouchdbUser, UserName, createDatabase, databaseInfo, decodePouchdbUser', deleteDatabase, getViewOnDatabase)
+import Perspectives.Persistence.API (DatabaseName, Keys(..), PouchdbUser, UserName, compactDatabase, createDatabase, databaseInfo, decodePouchdbUser', deleteDatabase)
 import Perspectives.Persistence.CouchdbFunctions (setSecurityDocument)
 import Perspectives.Persistence.State (getSystemIdentifier, withCouchdbUrl)
 import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Persistent (entitiesDatabaseName, invertedQueryDatabaseName, postDatabaseName, saveMarkedResources)
+import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, modelsDatabaseName, newPerspectivesState, resetCaches)
 import Perspectives.Proxy (handleClientRequest) as Proxy
 import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope, getPropertyFunction, getRoleFunction, getterFromPropertyType)
@@ -181,6 +183,16 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
 
       -- Fork aff to run the system clocks. Should not be started before we have added the private key to state!
       void $ forkAff $ forkedSystemClocks state
+
+      -- Compact the entities database 5 seconds after the PDR has started.
+      void $ forkAff $ runPerspectivesWithState 
+        (do
+          lift $ delay (Milliseconds 5000.0)
+          entitiesDatabaseName >>= \dbName -> do
+            log $ "Compacting the database " <> dbName
+            compactDatabase dbName)
+        state
+
 
   where
     run :: AVar PerspectivesState -> Aff Unit
@@ -724,7 +736,7 @@ recompileLocalModels rawPouchdbUser callback = void $ runAff handler
 retrieveAllCredentials :: MonadPerspectives Unit 
 retrieveAllCredentials = do
   -- All instances with type model://perspectives.domains#System$WithCredentials.
-  (roleInstances :: Array RoleInstance) <- entitiesDatabaseName >>= \db -> getViewOnDatabase db "defaultViews/credentialsView" (NoKey :: Keys String)
+  (roleInstances :: Array RoleInstance) <- entitiesDatabaseName >>= \db -> getSafeViewOnDatabase db "defaultViews/credentialsView" (NoKey :: Keys String)
   userNameGetter <- getterFromPropertyType (CP $ CalculatedPropertyType userWithCredentialsUsername) 
   rows :: Array (Tuple String Credential) <- foldM
     (\rows' roleId -> (try (roleId ##>> getPropertyFromTelescope (EnumeratedPropertyType userWithCredentialsPassword))) >>= 

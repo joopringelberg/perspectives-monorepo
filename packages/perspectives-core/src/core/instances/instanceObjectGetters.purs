@@ -56,8 +56,9 @@ import Perspectives.InstanceRepresentation.PublicUrl (PublicUrl)
 import Perspectives.Instances.Combinators (orElse)
 import Perspectives.ModelDependencies (perspectivesUsers)
 import Perspectives.ModelTranslation (translateType)
-import Perspectives.Persistence.API (Keys(..), getViewOnDatabase)
+import Perspectives.Persistence.API (Keys(..))
 import Perspectives.Persistent (entitiesDatabaseName, getPerspectContext, getPerspectRol)
+import Perspectives.Persistent.FromViews (getSafeViewOnDatabase, getSafeViewOnDatabase_)
 import Perspectives.PerspectivesState (contextCache, roleCache)
 import Perspectives.Query.QueryTypes (RoleInContext)
 import Perspectives.Representation.ADT (ADT(..))
@@ -70,7 +71,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Per
 import Perspectives.Representation.Perspective (StateSpec(..)) as SP
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleKind(..), RoleType, StateIdentifier)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, isInPublicScheme, takeGuid)
-import Perspectives.SetupCouchdb (context2RoleFilter, filler2filledFilter, filled2fillerFilter, roleFromContextFilter, role2ContextFilter)
+import Perspectives.SetupCouchdb (FillerInfo, context2RoleFilter, filled2FillerInfo, filled2fillerFilter, filler2filledFilter, role2ContextFilter, roleFromContextFilter)
 import Prelude (class Show, Unit, append, bind, discard, eq, flip, identity, join, map, pure, show, ($), (&&), (*>), (<#>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>))
 
 -----------------------------------------------------------
@@ -97,7 +98,7 @@ getUnlinkedRoleInstances :: EnumeratedRoleType -> (ContextInstance ~~> RoleInsta
 getUnlinkedRoleInstances rn c = ArrayT $ try 
   (lift do
     db <- entitiesDatabaseName
-    filledRolesInDatabase :: Array RoleInstance <- getViewOnDatabase db "defaultViews/roleFromContext" (Key [unwrap rn, takeGuid (unwrap c)])
+    filledRolesInDatabase :: Array RoleInstance <- getSafeViewOnDatabase db "defaultViews/roleFromContext" (Key [unwrap rn, takeGuid (unwrap c)])
     filledRolesInCache :: Array RoleInstance <- (do 
       cache <- roleCache
       cachedRoleAvars <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
@@ -342,7 +343,7 @@ filler2filledFromDatabase_ :: Filler_ -> MonadPerspectives (Array RoleInstance)
 filler2filledFromDatabase_ (Filler_ filler) = try 
   (do
     db <- entitiesDatabaseName
-    filledRolesInDatabase :: Array RoleInstance <- getViewOnDatabase db "defaultViews/filler2filledView" (Key $ unwrap filler)
+    filledRolesInDatabase :: Array RoleInstance <- getSafeViewOnDatabase db "defaultViews/filler2filledView" (Key $ unwrap filler)
     filledRolesInCache :: Array RoleInstance <- (do 
       cache <- roleCache
       cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
@@ -362,16 +363,17 @@ filled2fillerFromDatabase_ rid = try
   (do
     db <- entitiesDatabaseName
     -- FillerInfo provides, for a given filler, the type of the filled role and the type of the context.
-    fillerRolesInDatabase :: Array FillerInfo <- getViewOnDatabase db "defaultViews/filled2fillerView" (Key $ unwrap rid)
+    fillerRolesInDatabase :: Array FillerInfo <- getSafeViewOnDatabase_ (_.filler) db "defaultViews/filled2fillerView" (Key $ unwrap rid)
     fillerRoleInCache :: Array FillerInfo <- (do 
       cache <- roleCache
       cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
       -- There may be empty AVars.
       cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
       for (filter (filled2fillerFilter rid) cachedRoles)
-        (\(PerspectRol{id, pspType, context:cid}) -> do
+        (\filler@(PerspectRol{id, pspType, context:cid}) -> do
           filledContextType <- contextType_ cid 
-          pure {filler: id, filledRoleType: pspType, filledContextType}) 
+          -- By construction we know there will be a result.
+          pure $ unsafePartial fromJust $ filled2FillerInfo rid filler)
       )
     pure $ fillerRolesInDatabase `union` fillerRoleInCache
   )
@@ -379,15 +381,13 @@ filled2fillerFromDatabase_ rid = try
   handlePerspectRolError' "filled2fillerFromDatabase_" []
     \(infos :: Array FillerInfo) -> pure infos
 
-type FillerInfo = {filler :: RoleInstance, filledContextType :: ContextType, filledRoleType :: EnumeratedRoleType}
-
 -- | Select by providing a role and retrieve the context that (still) refers to it.
 -- | Only useful when the role itself can no longer be retrieved.
 role2contextFromDatabase_ :: RoleInstance -> MonadPerspectives (Array ContextInstance)
 role2contextFromDatabase_ rid = try 
   (do
     db <- entitiesDatabaseName
-    contextInDatabase :: Array ContextInstance <- getViewOnDatabase db "defaultViews/role2ContextView" (Key $ unwrap rid)
+    contextInDatabase :: Array ContextInstance <- getSafeViewOnDatabase db "defaultViews/role2ContextView" (Key $ unwrap rid)
     contextInCache :: Array ContextInstance <- (do 
       cache <- contextCache
       cachedContextAvars :: Array (AVar IP.PerspectContext) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
@@ -406,7 +406,7 @@ context2roleFromDatabase_ :: ContextInstance -> MonadPerspectives (Array RoleIns
 context2roleFromDatabase_ cid = try 
   (do
     db <- entitiesDatabaseName
-    contextRolesInDatabase :: Array RoleInstance <- getViewOnDatabase db "defaultViews/context2RoleView" (Key $ unwrap cid)
+    contextRolesInDatabase :: Array RoleInstance <- getSafeViewOnDatabase db "defaultViews/context2RoleView" (Key $ unwrap cid)
     contextRolesInCache :: Array RoleInstance <- (do 
       cache <- roleCache
       cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)

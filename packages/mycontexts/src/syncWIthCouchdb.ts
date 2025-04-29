@@ -19,25 +19,31 @@ const accountPassword = "admin"
 
 
 export function syncWithCouchDB( databaseName: string ) {
-  const localDB = new PouchDB(databaseName);
-  const remoteDB = new PouchDB(`https://${accountName}:${accountPassword}@localhost:6984/${databaseName}`);
-    // This sync will resume on every reload or restart
-  const syncHandler = localDB.sync(remoteDB, {
-      live: true,
-      retry: true,
-    }).on('change', (info : any) => {
-      console.log('🔄 Change from sync:', info);
-    }).on('error', (err : Error) => {
-      console.error('❌ Sync error:', err);
-    });
+  return new Promise<void>((resolve, reject) => {
+    const localDB = new PouchDB(databaseName);
+    const remoteDB = new PouchDB(`https://${accountName}:${accountPassword}@localhost:6984/${databaseName}`);
+      // Add a global flag to avoid multiple syncs during dev reloads
+    if (!window.__pouch_sync_active__) {
+      window.__pouch_sync_active__ = true;
 
-    // Add a global flag to avoid multiple syncs during dev reloads
-  if (!window.__pouch_sync_active__) {
-    window.__pouch_sync_active__ = true;
-
-    localDB.sync(remoteDB, {
-      live: true,
-      retry: true,
-    }).on('change', (info : any) => console.log('🔄', info));
-  }
+      localDB.sync(remoteDB, {live: false})
+      .on('change', (info : any) => console.log('🔄', info))
+      .on('error', (err : Error) => {
+        console.error('❌ Sync error:', err)
+        reject(err);
+      })
+      .on('complete', () => {
+        console.log('✅ Initial sync complete');
+        localDB.sync(remoteDB, {
+          live: true,
+          retry: true,
+        }).on('change', (info : any) => {
+          console.log('🔄 Change from sync:', info);
+        }).on('error', (err : Error) => {
+          console.error('❌ Sync error:', err);
+        });
+        resolve();
+      });
+    }
+  });
 }

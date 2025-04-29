@@ -120,6 +120,9 @@ export const filled2fillerView = (function(filler)
   // This view outputs another table [filled; {filler, filledContextType, filledRoleType}].
   // We use that table by filtering it with a particular filled role (see getViewOnDatabase).
   // The end result is the row that represents the role that fills the filled role. 
+  // The resulting information gives us the filler and the context type and role type of the filled role.
+  // The latter two were originally used to register the reverse link from filler to filled.
+  // As this view is used in situations where filled role is no longer present, that type information is useful.
   // a proxy for being a role:
   if (filler.universeRoleDelta)
   {

@@ -80,7 +80,7 @@ import Perspectives.ModelDependencies (identifiableLastName, perspectivesUsersPu
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (DesignDocument(..), MonadPouchdb, addDocument_, deleteDatabase, getAttachment, getDocument, getViewOnDatabase, splitRepositoryFileUrl, tryGetDocument_, withDatabase, Keys(..))
+import Perspectives.Persistence.API (DesignDocument(..), MonadPouchdb, addDocument_, deleteDatabase, getAttachment, getDocument, splitRepositoryFileUrl, tryGetDocument_, withDatabase, Keys(..))
 import Perspectives.Persistence.API (deleteDocument, documentsInDatabase, excludeDocs) as Persistence
 import Perspectives.Persistence.Authentication (addCredentials) as Authentication
 import Perspectives.Persistence.CouchdbFunctions (addRoleToUser, concatenatePathSegments, removeRoleFromUser)
@@ -88,6 +88,7 @@ import Perspectives.Persistence.CouchdbFunctions as CDB
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (UserName, Password)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit)
+import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.PerspectivesState (clearQueryCache, contextCache, getPerspectivesUser, modelsDatabaseName, removeTranslationTable, roleCache)
 import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.Class.Identifiable (identifier)
@@ -116,7 +117,7 @@ roleInstancesFromCouchdb roleTypes _ = try
       Nothing -> pure []
       Just rt -> do
         (tell $ ArrayWithoutDoubles [RoleAssumption (ContextInstance "def:AnyContext") (EnumeratedRoleType rt)])
-        instancesInCouchdb <- (lift entitiesDatabaseName) >>= \db -> lift $ getViewOnDatabase db "defaultViews/roleView" (maybe NoKey Key (head roleTypes))
+        instancesInCouchdb <- (lift entitiesDatabaseName) >>= \db -> lift $ getSafeViewOnDatabase db "defaultViews/roleView" (maybe NoKey Key (head roleTypes))
         instancesInCache <- lift (do
           cache <- roleCache
           cachedRoleAvars <- liftAff $ liftEffect (rvalues cache >>= pure <<< toArray)
@@ -133,7 +134,7 @@ contextInstancesFromCouchdb contextTypeArr _ = try
       Nothing -> pure []
       Just ct -> do
         -- push assumption!
-        instancesInCouchdb <- (lift entitiesDatabaseName) >>= \db -> lift $ getViewOnDatabase db "defaultViews/contextView" (maybe NoKey Key (head contextTypeArr))
+        instancesInCouchdb <- (lift entitiesDatabaseName) >>= \db -> lift $ getSafeViewOnDatabase db "defaultViews/contextView" (maybe NoKey Key (head contextTypeArr))
         instancesInCache <- lift (do
           cache <- contextCache
           cachedContextAvars <- liftAff $ liftEffect (rvalues cache >>= pure <<< toArray)
@@ -147,7 +148,7 @@ pendingInvitations :: ContextInstance ~~> RoleInstance
 pendingInvitations _ = try 
   (ArrayT $ lift do
     db <- entitiesDatabaseName
-    filledRolesInDatabase :: Array RoleInstance <- getViewOnDatabase db "defaultViews/roleView" (Key DEP.invitation)
+    filledRolesInDatabase :: Array RoleInstance <- getSafeViewOnDatabase db "defaultViews/roleView" (Key DEP.invitation)
     filledRolesInCache :: Array RoleInstance <- (do 
       cache <- roleCache
       cachedRoleAvars <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)

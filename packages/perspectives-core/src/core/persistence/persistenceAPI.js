@@ -165,6 +165,38 @@ export function databaseInfoImpl ( database ) {
   };
 };
 
+export function compactDatabaseImpl(db) {
+  return function(onError, onSuccess) {
+    db.compact()
+      .then(function(result) {
+        onSuccess(result);
+      })
+      .catch(function(err) {
+        onError(convertPouchError(err));
+      });
+      
+    return function(cancelError, cancelerError, cancelerSuccess) {
+      cancelerSuccess();
+    };
+  };
+}
+
+export function viewCleanupImpl(db) {
+  return function(onError, onSuccess) {
+    db.viewCleanup()
+      .then(function(result) {
+        onSuccess(result);
+      })
+      .catch(function(err) {
+        onError(convertPouchError(err));
+      });
+      
+    return function(cancelError, cancelerError, cancelerSuccess) {
+      cancelerSuccess();
+    };
+  };
+}
+
 export function addDocumentImpl ( database, doc, force ) {
   return function (onError, onSuccess) {
     database.put(doc, {force: force}, function(err, response)
@@ -362,7 +394,7 @@ export function getAttachmentImpl( database, docName, attachmentId )
   };
 }
 
-export function getViewOnDatabaseImpl( database, viewname, key, multipleKeys, includeDocs )
+export function getViewOnDatabaseImpl( database, viewname, key, multipleKeys, includeDocs, forceRefresh )
 {
   return function (onError, onSucces)
   {
@@ -374,7 +406,7 @@ export function getViewOnDatabaseImpl( database, viewname, key, multipleKeys, in
     if (multipleKeys)
     {
       database.query( viewname,
-        { keys: key, include_docs: includeDocs },
+        { keys: key, include_docs: includeDocs, stale: forceRefresh },
         function (err, result)
         {
           if (err != null)
@@ -391,7 +423,7 @@ export function getViewOnDatabaseImpl( database, viewname, key, multipleKeys, in
     else if (key != "")
     {
       database.query( viewname,
-        { key: key, include_docs: includeDocs },
+        { key: key, include_docs: includeDocs, stale: forceRefresh },
         function (err, result)
         {
           if (err != null)
@@ -408,7 +440,7 @@ export function getViewOnDatabaseImpl( database, viewname, key, multipleKeys, in
     else
     {
       database.query( viewname, 
-        {include_docs: includeDocs},
+        {include_docs: includeDocs, stale: forceRefresh},
         function (err, result)
         {
           if (err != null)
@@ -439,4 +471,72 @@ export function toFileImpl( fileName, mimeType, arrayBuffer )
 export function fromBlobImpl( blob )
 {
   return blob.text()
+}
+
+export function resetViewIndexImpl(db, viewName) {
+  return new Promise((resolve, reject) => {
+    
+    // Extract the design doc name from the view
+    const parts = viewName.split('/');
+    const designDocId = '_design/' + parts[0];
+    
+    console.log(`Attempting to reset view index for ${viewName}}`);
+    
+    // Local variable to store the original view function
+    let originalViewFunction;
+    
+    // Step 1: Get the design document
+    db.get(designDocId)
+      .then((designDoc) => {
+        console.log(`Found design document:`, designDoc);
+        
+        // Store the original view function
+        originalViewFunction = designDoc.views[parts[1]].map;
+        
+        // Delete the view from the design doc
+        delete designDoc.views[parts[1]];
+        
+        // Update the design doc without the view
+        return db.put(designDoc);
+      })
+      .then(() => {
+        console.log(`Temporarily removed view ${parts[1]} from design doc`);
+        
+        // Step 2: Run view cleanup to remove the old index files
+        return db.viewCleanup();
+      })
+      .then(() => {
+        // Step 3: Get the updated design doc
+        return db.get(designDocId);
+      })
+      .then((designDoc) => {
+        console.log(`Restoring view with original function`);
+        
+        // Step 4: Restore the original view with the saved function
+        designDoc.views[parts[1]] = {
+          map: originalViewFunction
+        };
+        
+        // Update the design doc with the restored view
+        return db.put(designDoc);
+      })
+      .then(() => {
+        console.log(`View ${parts[1]} restored, forcing rebuild...`);
+        
+        // Step 5: Force a query to rebuild the index
+        return db.query(viewName, {
+          limit: 1,
+          stale: false,
+          update_seq: true
+        });
+      })
+      .then(() => {
+        console.log(`View ${viewName} has been successfully reset`);
+        resolve(true);
+      })
+      .catch((err) => {
+        console.error(`Error resetting view index:`, err);
+        reject(err);
+      });
+  });
 }
