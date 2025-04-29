@@ -71,7 +71,8 @@ import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, typeUri2ModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
-import Perspectives.Instances.Clipboard (allItemsOnClipboard, findItemOnClipboardWithRole)
+import Perspectives.Instances.AutoRemoveWithFiller (emptyRolesToRemove)
+import Perspectives.Instances.Clipboard (allItemsOnClipboard)
 import Perspectives.Instances.Me (getMyType, isMe)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, context, contextType, contextType_, getUnlinkedRoleInstances, roleType_)
 import Perspectives.Names (findIndexedContextName, findIndexedRoleName, removeIndexedContext, removeIndexedRole)
@@ -134,9 +135,9 @@ scheduleRoleRemoval sync id = do
             { rolesToExit = rolesToExit `union` [id]
             , scheduledAssignments = scheduledAssignments `union` [RoleRemoval id]
             })
-          (lift $ findItemOnClipboardWithRole id) >>= case _ of 
-            Nothing -> pure unit
-            Just item -> void $ scheduleRoleRemoval false {- do not share with peers-} item
+          -- Remove now empty roles that may be on the clipboard, in recent contexts, in pinned contexts and in notifications.
+          emptyRoles <- (lift $ emptyRolesToRemove id)
+          for_ emptyRoles (scheduleRoleRemoval false)
           if sync
             then (lift $ try $ (getPerspectRol id)) >>= handlePerspectRolError' "scheduleRoleRemoval" []
               \role@(PerspectRol{pspType:roleType, context:contextId, binding}) -> do

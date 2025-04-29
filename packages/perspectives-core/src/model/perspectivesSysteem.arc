@@ -579,7 +579,7 @@ domain model://perspectives.domains#System
       property Message (String)
     user NotifiedUser
       perspective on Notifications
-        only (Remove, Delete, RemoveContext, DeleteContext)
+        only (Remove, Delete)
         props (Message) verbs (Consult)
         action DeleteNotifications
           delete role Notifications

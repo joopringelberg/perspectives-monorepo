@@ -115,6 +115,13 @@ selectedClipboardItem = "model://perspectives.domains#System$PerspectivesSystem$
 
 chatAspect :: String
 chatAspect = "model://perspectives.domains#System$Chat" 
+
+recentContexts :: String
+recentContexts = "model://perspectives.domains#System$PerspectivesSystem$RecentContexts"
+
+pinnedContexts :: String
+pinnedContexts = "model://perspectives.domains#System$PerspectivesSystem$PinnedContexts"
+
 ------------------------------------------------------------------------------------
 -- ROOTCONTEXT
 ------------------------------------------------------------------------------------

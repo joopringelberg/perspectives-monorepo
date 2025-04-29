@@ -406,7 +406,7 @@ export function getViewOnDatabaseImpl( database, viewname, key, multipleKeys, in
     if (multipleKeys)
     {
       database.query( viewname,
-        { keys: key, include_docs: includeDocs, stale: forceRefresh },
+        { keys: key, include_docs: includeDocs, stale: forceRefresh ? 'update_after' : undefined },
         function (err, result)
         {
           if (err != null)
@@ -423,7 +423,7 @@ export function getViewOnDatabaseImpl( database, viewname, key, multipleKeys, in
     else if (key != "")
     {
       database.query( viewname,
-        { key: key, include_docs: includeDocs, stale: forceRefresh },
+        { key: key, include_docs: includeDocs, stale: forceRefresh ? 'update_after' : undefined },
         function (err, result)
         {
           if (err != null)
@@ -440,7 +440,7 @@ export function getViewOnDatabaseImpl( database, viewname, key, multipleKeys, in
     else
     {
       database.query( viewname, 
-        {include_docs: includeDocs, stale: forceRefresh},
+        {include_docs: includeDocs, stale: forceRefresh ? 'update_after' : undefined},
         function (err, result)
         {
           if (err != null)
@@ -526,7 +526,6 @@ export function resetViewIndexImpl(db, viewName) {
         // Step 5: Force a query to rebuild the index
         return db.query(viewName, {
           limit: 1,
-          stale: false,
           update_seq: true
         });
       })
