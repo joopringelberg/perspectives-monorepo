@@ -32,46 +32,55 @@ export class NotificationsDisplayer extends PerspectivesComponent<NotificationsD
   }
   componentDidMount()
   {
-    const component = this;
-    PDRproxy.then( pproxy =>
-      // getPerspective (roleInstanceOfContext, perspectiveObjectRoleType /*OPTIONAL*/, receiveValues, fireAndForget, errorHandler)
-      pproxy.getPerspectiveForUser(
-        component.props.externalroleid,
-        component.props.showAllNavigations ? ModelDependencies.allNotifications : ModelDependencies.notifications,
-        component.props.showAllNavigations ? ModelDependencies.WWWUser : ModelDependencies.sysUser,
-        function( perspectiveArray )
-        {
-          component.setState({perspective: perspectiveArray[0]});
-        },
-        CONTINUOUS
-      ).then( unsubscriber => component.currentContextNotificationsUnsubscriber = unsubscriber));
+    this.getNotifications();
   }
 
   componentDidUpdate(prevProps : NotificationsDisplayerProps)
   {
-    const component = this;
     if (prevProps.externalroleid != this.props.externalroleid)
     {
-      PDRproxy.then( pproxy => 
+      this.getNotifications();
+    }
+  }
+
+  getNotifications()
+  {
+    const component = this;
+    PDRproxy.then( pproxy => 
+      {
+        // unsubscriber = {subject: req.subject, corrId: req.corrId}
+        if (component.currentContextNotificationsUnsubscriber)
         {
-          // unsubscriber = {subject: req.subject, corrId: req.corrId}
-          if (component.currentContextNotificationsUnsubscriber)
-          {
-            pproxy.send(component.currentContextNotificationsUnsubscriber, function(){});
-          }
+          pproxy.send(component.currentContextNotificationsUnsubscriber, function(){});
+        }
+        if (component.props.showAllNavigations)
+        {
+          // Why getPerspectiveForUser? Because we want the perspective of the WWWUser, not User.
           pproxy.getPerspectiveForUser(
             component.props.externalroleid,
-            component.props.showAllNavigations ? ModelDependencies.allNotifications : ModelDependencies.notifications,
-            component.props.showAllNavigations ? ModelDependencies.WWWUser : ModelDependencies.sysUser,
+            ModelDependencies.allNotifications,
+            ModelDependencies.WWWUser,
             function( perspectiveArray )
             {
               component.setState({perspective: perspectiveArray[0]});
             },
             CONTINUOUS
               ).then( unsubscriber => component.currentContextNotificationsUnsubscriber = unsubscriber);
-        });
+        }
+        else {
+          // Why getPerspective? Because the API will sort out what role the end user has and will use its perspectives.
+          pproxy.getPerspective(
+            component.props.externalroleid,
+            ModelDependencies.notifications,
+            function( perspectiveArray )
+            {
+              component.setState({perspective: perspectiveArray[0]});
+            },
+            CONTINUOUS
+              ).then( unsubscriber => component.currentContextNotificationsUnsubscriber = unsubscriber);
+        }
+      });
     }
-  }
 
   render()
   {

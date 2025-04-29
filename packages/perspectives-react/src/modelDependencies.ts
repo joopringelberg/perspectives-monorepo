@@ -9,6 +9,7 @@ interface ModelDependenciesT
   currentLanguage: PropertyType;
   sysUser: RoleType;
   WWWUser: RoleType;
+  notifiedUser: RoleType;
   startContexts: RoleType;
   system: ContextType;
   systemExternal: RoleType;
@@ -34,6 +35,7 @@ const ModelDependencies =
 , currentLanguage: "model://perspectives.domains#System$PerspectivesSystem$External$CurrentLanguage" as PropertyType
 , sysUser: "model://perspectives.domains#System$PerspectivesSystem$User" as RoleType
 , WWWUser: "model://perspectives.domains#System$PerspectivesSystem$WWWUser" as RoleType
+, notifiedUser: "model://perspectives.domains#System$ContextWithNotification$NotifiedUser" as RoleType
 , startContexts: "model://perspectives.domains#System$PerspectivesSystem$StartContexts" as RoleType
 , system: "model://perspectives.domains#System$PerspectivesSystem" as ContextType
 , systemExternal: "model://perspectives.domains#System$PerspectivesSystem$External" as RoleType

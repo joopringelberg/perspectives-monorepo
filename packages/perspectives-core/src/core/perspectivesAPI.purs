@@ -420,7 +420,9 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
       userRoleType <- string2RoleType object
       muserRoleInstance <- contextInstance ##> getRoleInstances userRoleType
       case muserRoleInstance of
-        Nothing -> sendResponse (Error corrId ("There is no user role instance for role type '" <> subject <> "' in context instance '" <> object <> "'!")) setter
+        Nothing -> do 
+          contextType <- contextType_ contextInstance
+          sendResponse (Error corrId ("There is no user role instance of role type '" <> object <> "' with a perspective on '" <> roletype2string objectRoleType <> "' in instance '" <> show contextInstance <> "'(" <> show contextType <> ")!")) setter
         Just userRoleInstance -> registerSupportedEffect
           corrId
           setter
