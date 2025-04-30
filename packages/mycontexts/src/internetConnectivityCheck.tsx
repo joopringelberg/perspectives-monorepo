@@ -4,7 +4,7 @@ import { OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { i18next } from 'perspectives-react';
 
 export function InternetConnectivityCheck( {reportBack} : {reportBack: (isOnline: boolean) => void}){
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(false);
   
   // Check connectivity by making a lightweight request
   const checkConnectivity = () => {
