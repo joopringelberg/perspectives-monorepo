@@ -149,6 +149,7 @@ data PropertyFacet =
   | MessageProperty
   | MediaProperty
   | ReadableNameProperty
+  | SettingProperty
 
 instance WriteForeign PropertyFacet where
   writeImpl pf = case pf of
@@ -166,6 +167,7 @@ instance WriteForeign PropertyFacet where
     MessageProperty -> writeImpl {constructor: "MessageProperty", args: writeJSON ""}
     MediaProperty -> writeImpl {constructor: "MediaProperty", args: writeJSON ""}
     ReadableNameProperty -> writeImpl {constructor: "ReadableNameProperty", args: writeJSON ""}
+    SettingProperty -> writeImpl {constructor: "SettingProperty", args: writeJSON ""}
 
 instance ReadForeign PropertyFacet where
   readImpl f = do
@@ -187,6 +189,7 @@ instance ReadForeign PropertyFacet where
       "MessageProperty" -> pure MessageProperty
       "MediaProperty" -> pure MediaProperty
       "ReadableNameProperty" -> pure ReadableNameProperty
+      "SettingProperty" -> pure SettingProperty
 
 instance Eq PropertyFacet where
   eq (MinLength i1) (MinLength i2) = i1 == i2

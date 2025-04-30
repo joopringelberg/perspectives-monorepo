@@ -60,6 +60,11 @@ domain model://perspectives.domains#System
       messageProperty
     property Media (relational, String)
       mediaProperty
+  
+  -- PDRDEPENDENCY
+  -- Used to declare an external role as bearing settings.
+  -- The properties that have facet 'Settings' are the ones that are used to construct the settings panel in the client.
+  thing Settings
 
   -- PDRDEPENDENCY
   user WithCredentials
@@ -198,6 +203,7 @@ domain model://perspectives.domains#System
 
     external
       aspect sys:RootContext$External
+      aspect sys:Settings
       -- PDRDEPENDENCY
       property ConnectedToAMQPBroker (Boolean)
       -- PDRDEPENDENCY
@@ -211,6 +217,7 @@ domain model://perspectives.domains#System
       property CurrentHour (Time)
       property CurrentLanguage (String)
         enumeration = ("nl", "en")
+        setting
       property PreviousLanguage (String)
         enumeration = ("nl", "en")
       

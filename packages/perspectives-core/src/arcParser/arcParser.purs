@@ -697,7 +697,8 @@ propertyE = do
           "messageProperty" -> pure MessageProperty
           "mediaProperty" -> pure MediaProperty
           "readableName" -> pure ReadableNameProperty
-          kw -> fail ("Expected `minLength`, `maxLength`, `enumeration` but got: " <> kw <> ". ")
+          "setting" -> pure SettingProperty
+          kw -> fail ("Expected `minLength`, `maxLength`, `enumeration`, `settings` but got: " <> kw <> ". ")
       
         where
           whiteSpaceRegime :: IP WhiteSpaceRegime

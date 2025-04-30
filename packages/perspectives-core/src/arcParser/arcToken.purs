@@ -140,6 +140,7 @@ perspectDef = LanguageDef
                   , "mediaProperty"
                   , "readableName"
                   , "regexp"
+                  , "setting"
 
                   -- Perspectives
                   , "perspective"

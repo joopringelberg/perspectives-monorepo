@@ -352,6 +352,7 @@ makeSerialisedProperty pt = do
       MessageProperty -> pr {isMessageProperty = true}
       MediaProperty -> pr {isMediaProperty = true}
       ReadableNameProperty -> pr {isReadableNameProperty = true}
+      SettingProperty -> pr {isSettingProperty = true}
       
       )
       { minLength: Nothing
@@ -368,6 +369,7 @@ makeSerialisedProperty pt = do
       , isMessageProperty: false
       , isMediaProperty: false
       , isReadableNameProperty: false
+      , isSettingProperty: false
       }
       facets
 

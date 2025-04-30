@@ -100,6 +100,7 @@ type PropertyFacets =
   , isMessageProperty :: Boolean
   , isMediaProperty :: Boolean
   , isReadableNameProperty :: Boolean
+  , isSettingProperty :: Boolean
   }
 
 newtype SerialisedPerspective = SerialisedPerspective String
