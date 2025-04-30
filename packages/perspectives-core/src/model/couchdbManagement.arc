@@ -527,6 +527,7 @@ domain model://perspectives.domains#CouchdbManagement
   case Repository
     aspect acc:Body
     aspect sys:ManifestCollection
+    aspect sys:ContextWithNotification
 
     state Endorsed = extern >> binder Repositories >> AdminEndorses
       perspective of Admin
