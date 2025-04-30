@@ -16,9 +16,12 @@ export function InternetConnectivityCheck( {reportBack} : {reportBack: (isOnline
     .catch(() => registerOnlineStatusChange(false));
   };
 
-  const registerOnlineStatusChange = (isOnline: boolean) => {
-    setIsOnline(isOnline);
-    reportBack(isOnline);
+  const registerOnlineStatusChange = (currentStatus: boolean) => {
+    if (currentStatus !== isOnline)
+    {
+      setIsOnline(currentStatus);
+      reportBack(currentStatus);
+    }
   };
   
   useEffect(() => {
