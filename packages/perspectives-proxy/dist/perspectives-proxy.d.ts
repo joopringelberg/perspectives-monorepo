@@ -131,6 +131,18 @@ export declare class PerspectivesProxy {
    * @returns {Promise<RoleInstanceT>} A promise that resolves with the selected role instance.
    */
     subscribeSelectedRoleFromClipboard(receiver: (roleOnClipboard: RoleOnClipboard[]) => void): Promise<Unsubscriber>;
+    /**
+     * Retrieves the settings from the Perspectives system and processes them.
+     *
+     * @param receiveValues - A callback function that receives serialised perspectives on roles with settings as an array of objects.
+     *                        The settings are provided as strings and are parsed using `JSON.parse`.
+     * @param fireAndForget - An optional boolean indicating whether the request should be a "fire and forget" type.
+     *                        Defaults to `false`.
+     * @param errorHandler - An optional callback function to handle errors that may occur during the request.
+     *
+     * @returns The result of the `send` method, which handles the request and response processing.
+     */
+    getSettings(receiveValues: PerspectivesReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     checkBindingP(roleName: RoleType, rolInstance: RoleInstanceT): Promise<boolean>;
     getCouchdbUrl(): Promise<string>;
     getContextActions(myRoleType: UserRoleType, contextInstance: ContextInstanceT): Promise<ContextActions>;

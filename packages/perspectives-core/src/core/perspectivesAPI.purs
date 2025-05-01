@@ -31,7 +31,7 @@ import Control.Monad.Except (runExceptT)
 import Control.Monad.Rec.Class (forever)
 import Control.Monad.Trans.Class (lift)
 import Control.Plus ((<|>))
-import Data.Array (elemIndex, foldM, head)
+import Data.Array (catMaybes, elemIndex, foldM, head)
 import Data.Either (Either(..))
 import Data.List.Types (NonEmptyList)
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
@@ -64,7 +64,7 @@ import Perspectives.Instances.Combinators (filter)
 import Perspectives.Instances.Me (getAllMyRoleTypes, getMeInRoleAndContext, getMyType, isMe)
 import Perspectives.Instances.ObjectGetters (binding, context, contextType, contextType_, getContextActions, getFilledRoles, getMe, getProperty, getRoleName, roleType, roleType_, siblings)
 import Perspectives.Instances.Values (parsePerspectivesFile)
-import Perspectives.ModelDependencies (actualSharedFileServer, fileShareCredentials, identifiableFirstName, identifiableLastName, itemOnClipboardClipboardData, itemsOnClipboard, mySharedFileServices, selectedClipboardItem, sharedFileServices, sysUser)
+import Perspectives.ModelDependencies (actualSharedFileServer, allSettings, fileShareCredentials, identifiableFirstName, identifiableLastName, itemOnClipboardClipboardData, itemsOnClipboard, mySharedFileServices, selectedClipboardItem, sharedFileServices, sysUser)
 import Perspectives.ModelTranslation (translateType)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, getUserIdentifier, lookupIndexedContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -90,7 +90,7 @@ import Perspectives.SaveUserData (removeAllRoleInstances, removeBinding, removeC
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUser, serialisedTableFormForContextAndUser)
-import Perspectives.TypePersistence.PerspectiveSerialisation (perspectiveForContextAndUser, perspectivesForContextAndUser)
+import Perspectives.TypePersistence.PerspectiveSerialisation (perspectiveForContextAndUser, perspectivesForContextAndUser, settingsPerspective)
 import Perspectives.Types.ObjectGetters (findPerspective, getAction, getContextAction, isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
 import Prelude (Unit, bind, discard, eq, identity, map, negate, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=))
 import Simple.JSON (read, unsafeStringify, writeJSON)
@@ -472,6 +472,30 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
         Just userRoleInstance -> do
           res <- (ContextInstance object) ##= getContextActions userRoleType userRoleInstance
           sendResponse (Result corrId (writeJSON <$> res)) setter
+    
+    Api.GetSettings -> do
+      sysId <- getMySystem
+      registerSupportedEffect
+        corrId
+        setter
+        (\system -> ArrayT do 
+          theSettings <- runArrayT $ getRoleInstances (CR $ CalculatedRoleType allSettings) system
+          catMaybes <$> (for theSettings \setting -> do
+            typeOfSetting <- lift $ roleType_ setting
+            -- Safely assume that the context of the setting will not change.
+            contextOfSetting <- lift (setting ##>> context)
+            -- This is not entirely correct as the user role might change. 
+            (muserRoleType :: Maybe RoleType) <- lift (contextOfSetting ##> getMyType)
+            case muserRoleType of 
+              Nothing -> pure Nothing
+              Just userRoleType -> do
+                -- Given a user role type, the user role instance will not change. No need to register a dependency.
+                muserRoleInstance <-  lift (contextOfSetting ##> getRoleInstances userRoleType )
+                case muserRoleInstance of
+                  Nothing -> pure Nothing
+                  Just userRoleInstance -> head <$> (runArrayT $ (settingsPerspective userRoleInstance userRoleType (ENR typeOfSetting) contextOfSetting))))
+        (ContextInstance sysId)
+        onlyOnce
 
     Api.GetSelectedRoleFromClipboard -> do
       -- Get the SelectedClipboardItem.

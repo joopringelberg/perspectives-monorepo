@@ -42,3 +42,18 @@ export function loadLanguageResources (currentLanguage : string) : Promise<any>
     getPreact(currentLanguage).then( t => i18next.addResourceBundle(currentLanguage, "preact", t, true))
   ])
 }
+
+// Add this function to your i18next.ts file
+export async function changeLanguage(language: string): Promise<void> {
+  // Store the selected language in IndexedDB
+  await set("currentLanguage", language);
+  
+  // Load the language resources if needed
+  await loadLanguageResources(language);
+  
+  // Change the i18next language
+  await i18next.changeLanguage(language);
+  
+  // Force a re-render of components that use translation
+  // document.dispatchEvent(new Event('languageChanged'));
+}

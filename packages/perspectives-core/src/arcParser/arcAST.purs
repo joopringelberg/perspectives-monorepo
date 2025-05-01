@@ -206,6 +206,7 @@ instance Eq PropertyFacet where
   eq MessageProperty MessageProperty = true
   eq MediaProperty MediaProperty = true
   eq ReadableNameProperty ReadableNameProperty = true
+  eq SettingProperty SettingProperty = true
   eq _ _ = false
 
 data WhiteSpaceRegime =

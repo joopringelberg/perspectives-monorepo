@@ -39,7 +39,6 @@ interface PerspectiveFormProps
 {
   roleinstance: RoleInstanceT;
   contextinstance?: ContextInstanceT;
-  myroletype?: RoleType;
 }
 
 export default class PerspectiveForm extends PerspectivesComponent<PerspectiveFormProps>

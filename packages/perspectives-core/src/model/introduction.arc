@@ -85,6 +85,10 @@ domain model://perspectives.domains#Introduction
         only (Create, Fill)
 
     user Introducer filledBy sys:TheWorld$PerspectivesUsers
+      state ActionsCanBeTaken = exists binding
+        on entry
+          do
+            create role Conversation
       perspective on extern
         props (Title) verbs (Consult, SetPropertyValue)
         action StartConversation
@@ -125,18 +129,24 @@ domain model://perspectives.domains#Introduction
         only (Create, Remove, RemoveContext)
         props (Messages, Media) verbs (AddPropertyValue, Consult)
       screen
-        row
-          column 
-            row 
-              form External
-            row 
-              form Introducer
-            row 
-              table Introducee
-          column 
-            chat Conversation
-              messages Messages
-              media Media
+        who
+          Introducer
+            master
+              props (FirstName) verbs (Consult)
+            detail
+              props (FirstName, LastName) verbs (Consult)
+          Introducee
+            master
+              props (FirstName) verbs (Consult)
+            detail
+              props (FirstName, LastName) verbs (Consult)
+        what
+          External
+            master
+              props (Title) verbs (Consult)
+            detail
+              props (Title) verbs (Consult)
+        where
       
     thing Conversation
       aspect sys:Chat

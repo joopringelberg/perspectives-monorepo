@@ -86,6 +86,12 @@ currentSystemDate = "model://perspectives.domains#System$PerspectivesSystem$Exte
 cardClipBoard :: String
 cardClipBoard = "model://perspectives.domains#System$PerspectivesSystem$External$CardClipBoard"
 
+currentLanguage :: String
+currentLanguage = "model://perspectives.domains#System$PerspectivesSystem$External$CurrentLanguage"
+
+previousLanguage :: String
+previousLanguage = "model://perspectives.domains#System$PerspectivesSystem$External$PreviousLanguage"
+
 userChannel :: String
 userChannel = "model://perspectives.domains#System$PerspectivesSystem$User$Channel"
 
@@ -149,6 +155,14 @@ notifications = "model://perspectives.domains#System$ContextWithNotification$Not
 notificationMessage :: String
 notificationMessage = "model://perspectives.domains#System$ContextWithNotification$Notifications$Message"
 
+------------------------------------------------------------------------------------
+-- SETTINGS
+------------------------------------------------------------------------------------
+settings :: String
+settings = "model://perspectives.domains#System$$Settings"
+
+allSettings :: String
+allSettings = "model://perspectives.domains#System$PerspectivesSystem$AllSettings"
 
 ------------------------------------------------------------------------------------
 -- MODEL

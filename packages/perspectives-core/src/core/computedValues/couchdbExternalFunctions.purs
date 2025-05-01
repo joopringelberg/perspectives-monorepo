@@ -89,7 +89,7 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (UserName, Password)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (clearQueryCache, contextCache, getPerspectivesUser, modelsDatabaseName, removeTranslationTable, roleCache)
+import Perspectives.PerspectivesState (clearQueryCache, contextCache, getCurrentLanguage, getPerspectivesUser, modelsDatabaseName, removeTranslationTable, roleCache)
 import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, perspectivesUser2RoleInstance)
@@ -429,13 +429,14 @@ initSystem = do
   -- Create the system instance (the instance of sys:PerspectivesSystem for this installation).
   -- This will also create an instance of IndexedContext in the new system instance, filled with itself.
   sysId <- lift getSystemIdentifier
+  language <- lift $ getCurrentLanguage
   sysresult <- runExceptT $ constructContext Nothing 
     (ContextSerialization
       { id: Just sysId
       , prototype: Nothing
       , ctype: DEP.theSystem
       , rollen: empty
-      , externeProperties: (PropertySerialization empty)
+      , externeProperties: (PropertySerialization $ fromFoldable [Tuple DEP.currentLanguage [language], Tuple DEP.previousLanguage [language]])
       } ) 
   case sysresult of
     Left se -> logPerspectivesError (Custom (show se))

@@ -47,6 +47,7 @@ interface PerspectiveBasedFormProps {
   behaviours?: string[];
   cardtitle: PropertyType;
   showControls : boolean;
+  suppressIdentifyingProperty?: boolean;
 }
 
 interface PerspectiveBasedFormState {
@@ -242,7 +243,9 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
       return (
         <Form>
           {
-            Object.values(perspective.properties).map((serialisedProperty, index) =>
+            Object.values(perspective.properties)
+              .filter( property => !component.props.suppressIdentifyingProperty || property.id !== perspective.identifyingProperty)
+              .map((serialisedProperty, index) =>
               <SmartFieldControlGroup
                 key={serialisedProperty.id}
                 hasFocus={index === 0}

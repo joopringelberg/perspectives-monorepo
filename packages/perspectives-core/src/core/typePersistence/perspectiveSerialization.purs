@@ -62,11 +62,19 @@ import Perspectives.Representation.ScreenDefinition (WidgetCommonFieldsDef)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), PropertyType(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..), allPropertyVerbs, roleVerbList2Verbs)
+import Perspectives.Representation.Verbs (PropertyVerb(..)) as Verbs
 import Perspectives.TypePersistence.PerspectiveSerialisation.Data (PropertyFacets, RoleInstanceWithProperties, SerialisedPerspective(..), SerialisedPerspective', SerialisedProperty, ValuesWithVerbs)
 import Perspectives.Types.ObjectGetters (getContextAspectSpecialisations)
 import Perspectives.Utilities (findM)
 import Prelude (append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
 import Simple.JSON (writeJSON)
+
+perspectiveForContextAndUser ::
+  RoleInstance ->           -- The user role instance
+  RoleType ->               -- The user role type
+  RoleType ->               -- An object role type, will be matched against the Perspective's roleTypes member.
+  (ContextInstance ~~> SerialisedPerspective)
+perspectiveForContextAndUser subject userRoleType objectRoleType = perspectiveForContextAndUser' subject userRoleType objectRoleType >=> pure <<< SerialisedPerspective <<< writeJSON
 
 -- | Get the serialisation of the perspective the user role type has on the object role type,
 -- | in a given context instance.
@@ -84,13 +92,6 @@ perspectiveForContextAndUser' subject userRoleType objectRoleType cid = ArrayT d
     (filter
       (isJust <<< elemIndex objectRoleType <<< _.roleTypes <<< unwrap)
       allPerspectives)
-
-perspectiveForContextAndUser ::
-  RoleInstance ->           -- The user role instance
-  RoleType ->               -- The user role type
-  RoleType ->               -- An object role type, will be matched against the Perspective's roleTypes member.
-  (ContextInstance ~~> SerialisedPerspective)
-perspectiveForContextAndUser subject userRoleType objectRoleType = perspectiveForContextAndUser' subject userRoleType objectRoleType >=> pure <<< SerialisedPerspective <<< writeJSON
 
 -- | Get the serialisation of the perspective the user role type has on the object role type,
 -- | in a given context instance.
@@ -128,6 +129,22 @@ perspectivesForContextAndUser' subject userRoleType cid = ArrayT do
       if isEmpty roleInstances
         then (isJust $ elemIndex (show Create) verbs) || (isJust $ elemIndex (show CreateAndFill) verbs)
         else (not $ isEmpty properties) || (not $ isEmpty roleInstances)
+
+settingsPerspective :: RoleInstance -> RoleType -> RoleType -> (ContextInstance ~~> SerialisedPerspective)
+settingsPerspective subject userRoleType objectRoleType cid = ArrayT do
+  contextStates <- map ContextState <$> (runArrayT $ getActiveStates cid)
+  subjectStates <- map SubjectState <$> (runArrayT $ getActiveRoleStates subject)
+  allPerspectives <- lift$  perspectivesOfRoleType userRoleType
+  traverse
+    -- Restrict the properties to those that have the facet SettingProperty.
+    ((\p@(Perspective{object}) -> do
+      (allProps :: Array PropertyType) <- lift $ allProperties (roleInContext2Role <$> (unsafePartial domain2roleType $ range object))
+      settingsProperties <- lift $ filterA (flip hasFacet SettingProperty) allProps
+      serialisePerspective contextStates subjectStates cid userRoleType (Just $ PropertyVerbs (PSet settingsProperties) (PSet[Consult, Verbs.SetPropertyValue])) Nothing p)
+      >=> pure <<< SerialisedPerspective <<< writeJSON)
+    (filter
+      (isJust <<< elemIndex objectRoleType <<< _.roleTypes <<< unwrap)
+      allPerspectives) 
 
 serialisePerspective ::
   Array StateSpec ->

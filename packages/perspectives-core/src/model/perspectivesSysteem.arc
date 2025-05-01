@@ -355,7 +355,7 @@ domain model://perspectives.domains#System
               props (MyContextsVersion, PDRVersion, CurrentDate, CurrentHour) verbs (Consult)
           row
             form "System language" External
-              props (CurrentLanguage) verbs (SetPropertyValue, Consult)
+              props (CurrentLanguage, PreviousLanguage) verbs (SetPropertyValue, Consult)
         tab "SystemCaches"
           row
             form SystemCaches
@@ -504,6 +504,8 @@ domain model://perspectives.domains#System
 
     -- A calculated role representing all available Notifications (from any context).
     context AllNotifications = callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithNotification$Notifications" ) returns sys:ContextWithNotification$Notifications
+
+    context AllSettings = callExternal cdb:RoleInstances( "model://perspectives.domains#System$Settings" ) returns sys:Settings
 
     -- PDRDEPENDENCY
     context PinnedContexts (relational)

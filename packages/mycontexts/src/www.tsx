@@ -2,7 +2,7 @@ import React from 'react';
 import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider } from 'react-bootstrap';
 import './www.css';
 import {i18next} from 'perspectives-react';
-import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization } from 'perspectives-proxy';
+import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT } from 'perspectives-proxy';
 import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
 import { Me } from './me';
@@ -19,6 +19,7 @@ import { syncWithCouchDB } from './syncWIthCouchdb';
 import { MyRoleTypes } from './myRoleTypes';
 import ConnectedToAMQP from './connectedToAMQP';
 import { InternetConnectivityCheck } from './internetConnectivityCheck';
+import { changeLanguage } from './i18next';
 
 type Section = 'who' | 'what' | 'where' | 'none';
 
@@ -133,6 +134,9 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               }
               // Subscribe to all notifications
               component.addUnsubscriber(subscribeToAllNotifications(systemIdentifier));
+              // Subscribe to language changes
+              component.addUnsubscriber(pproxy.getProperty( externalRole( systemIdentifier ), ModelDependencies.currentLanguage, ModelDependencies.systemExternal, 
+                ( languages : ValueT[] ) => changeLanguage( languages[0]as string ) ) );
               // Open the default screen or the one specified in the URL.
               component.prepareMyContextsScreen();
               })
