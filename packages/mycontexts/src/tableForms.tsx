@@ -1,6 +1,6 @@
 import React from "react";
 import { FormElementDef, RoleInstanceT, TableFormDef } from "perspectives-proxy";
-import { buildForm, buildTable } from "perspectives-react";
+import { buildForm, buildMarkDown, buildTable } from "perspectives-react";
 import { Component } from "react";
 import { Accordion, Container, Row } from "react-bootstrap";
 import MSComponent, { SlidingPanelContentProps } from "./mscomponent";
@@ -19,9 +19,15 @@ export class TableForms extends Component<TableFormsProps> {
       <MSComponent isMobile={!this.props.showTablesAndForm} className='bg-light-subtle' doubleclickOpensDetails={this.props.doubleclickOpensDetails}>
         <Accordion defaultActiveKey="0" flush>
           {
-          this.props.screenelements.map(({table, form}, index) => {
+          this.props.screenelements.map(({markdown, table, form}, index) => {
+            const contextinstance = table.widgetCommonFields.perspective.contextInstance;
+            const myroletype = table.widgetCommonFields.perspective.userRoleType;
             // No TableControls, show as Accordion item.
-            return buildTable(table, false, true);
+            return (
+              <div key={index}>
+                { markdown.map( (md, index) => <div key={index}>{ buildMarkDown( contextinstance, myroletype, md) }</div>) }
+                { buildTable(table, false, true) }
+              </div>);
             })
           }
         </Accordion>
@@ -37,7 +43,7 @@ interface SelectedFormProps extends SlidingPanelContentProps {
 const SelectedForm: React.FC<SelectedFormProps> = ({ forms, selectedRoleInstance, selectedRoleType }) => {
   if (selectedRoleType && selectedRoleInstance)
   {
-    const theForm = forms.find(form => form.fields.perspective.roleType === selectedRoleType);
+    const theForm = forms.find(form => form.widgetCommonFields.perspective.roleType === selectedRoleType);
     if (theForm === undefined) {
       // console.error(`No form found for role type ${selectedRoleType}`);
       return null;

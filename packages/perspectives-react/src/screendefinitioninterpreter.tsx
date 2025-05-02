@@ -235,7 +235,7 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
             className="border-bottom pb-4 pt-4 widget"
             key={index}
             >
-          { tableDef.fields.title ? <h4>{tableDef.fields.title}</h4> : null }
+          { tableDef.widgetCommonFields.title ? <h4>{tableDef.widgetCommonFields.title}</h4> : null }
           { component.buildTable( tableDef ) }
           </div>);
       case "FormElementD":
@@ -245,7 +245,7 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
             className="border-bottom pb-4 pt-4 widget"
             key={index}
             >
-          { formDef.fields.title ? <h4>{formDef.fields.title}</h4> : null }
+          { formDef.widgetCommonFields.title ? <h4>{formDef.widgetCommonFields.title}</h4> : null }
           { component.buildForm( formDef ) }
           </div>);
       case "MarkDownElementD":
@@ -286,9 +286,9 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
       </Col>
     );
   }
-  buildTable({fields} : TableElementDef)
+  buildTable({widgetCommonFields} : TableElementDef)
   {
-    const perspective = fields.perspective;
+    const perspective = widgetCommonFields.perspective;
     // const title = widgetCommonFields.title;
     return (
       <PerspectiveTable
@@ -297,10 +297,10 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
         perspective={perspective}
         />);
   }
-  buildForm({fields} : FormElementDef)
+  buildForm({widgetCommonFields} : FormElementDef)
   {
     const component = this;
-    const perspective = fields.perspective;
+    const perspective = widgetCommonFields.perspective;
     // const title = widgetCommonFields.title;
     return (
       <PerspectiveBasedForm

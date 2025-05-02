@@ -177,12 +177,14 @@ export type ColumnElementDef = {
 
 export type TableElementDef = {
   tag: "TableDef";
-  fields: WidgetCommonFields;
+  markdown: MarkDownElementDef[];
+  widgetCommonFields: WidgetCommonFields;
 }
 
 export type FormElementDef = {
   tag: "FormDef";
-  fields: WidgetCommonFields;
+  markdown: MarkDownElementDef[];
+  widgetCommonFields: WidgetCommonFields;
 }
 
 export type MarkDownElementDef = MarkDownConstant | MarkDownPerspective | MarkDownExpression;
@@ -230,6 +232,7 @@ export type Who = {
   }
 
 export type TableFormDef = {
+  markdown: MarkDownElementDef[];
   table: TableElementDef;
   form: FormElementDef;
 };

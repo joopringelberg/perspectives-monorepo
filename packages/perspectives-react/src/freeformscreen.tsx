@@ -188,7 +188,7 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
             className="border-bottom pb-4 pt-4 widget"
             key={index}
             >
-          { tableDef.fields.title ? <h4>{tableDef.fields.title}</h4> : null }
+          { tableDef.widgetCommonFields.title ? <h4>{tableDef.widgetCommonFields.title}</h4> : null }
           { buildTable( tableDef ) }
           </div>);
       case "FormElementD":
@@ -198,7 +198,7 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
             className="border-bottom pb-4 pt-4 widget"
             key={index}
             >
-          { formDef.fields.title ? <h4>{formDef.fields.title}</h4> : null }
+          { formDef.widgetCommonFields.title ? <h4>{formDef.widgetCommonFields.title}</h4> : null }
           { buildForm( formDef ) }
           </div>);
       case "MarkDownElementD":
@@ -206,7 +206,7 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
         return (
           <div 
             key={index}
-          >{ component.buildMarkDown( markDownDef )}</div>
+          >{ buildMarkDown( component.props.contextinstance, component.props.myroletype, markDownDef )}</div>
         )
       case "ChatElementD":
         const chatDef = taggedElement.element as ChatElementDef;
@@ -260,33 +260,16 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
       return <div/>;
     }
   }
-  buildMarkDown({tag, element} : MarkDownElementDef)
-  {
-    const component = this;
-      let perspective : Perspective, markDownProperty : PropertyType | undefined, conditionProperty : PropertyType | undefined;
-      switch (tag) {
-        // MarkDownConstant is by construction functional.
-        case "MarkDownConstantDef":
-        return <MarkDownWidget markdown={element.text} contextid={component.props.contextinstance} myroletype={component.props.myroletype}/>;
-        // MarkDownExpression is required to be functional.
-        case "MarkDownExpressionDef":
-        // text is wrapped in Maybe
-        if (element.text)
-          {
-            return <MarkDownWidget markdown={element.text} contextid={component.props.contextinstance} myroletype={component.props.myroletype}/>;
-          }
-        else
-        {
-          return null;
-        }
-      // MarkDownPerspective may be on a relational role.
-      //   MarkDownPerspectiveDef { widgetFields :: WidgetCommonFieldsDef, conditionProperty :: Maybe PropertyType} |
-      case "MarkDownPerspectiveDef":
-        return component.buildMarkDownPerspective(element);
-    }
-  }
 
-  buildMarkDownPerspective({ widgetFields, conditionProperty: cprop } : { widgetFields : WidgetCommonFields, conditionProperty : EnumeratedOrCalculatedProperty | null})
+  render()
+  {
+    return this.buildScreen(this.props.screen as ScreenDefinition);
+  }
+}
+
+export function buildMarkDown(contextinstance : ContextInstanceT, myroletype : RoleType, {tag, element} : MarkDownElementDef)
+{
+  function buildMarkDownPerspective({ widgetFields, conditionProperty: cprop } : { widgetFields : WidgetCommonFields, conditionProperty : EnumeratedOrCalculatedProperty | null})
   {
       // The property is only consultable when it just has the verb Consult,
       // or when it is calculated. It will be shown disabled as a consequence.
@@ -304,7 +287,6 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
           return false;
         }
       }
-    const component = this;
     const perspective = widgetFields.perspective;
     const conditionProperty = cprop ? cprop.value : undefined;
     // The markdown syntax is like this, for perspectives:
@@ -327,7 +309,7 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
                       myroletype = { perspective.userRoleType }
                       disabled={ propertyOnlyConsultable(roleInstance) || !roleInstance.roleId }
                       isselected={true}
-                      contextinstance={component.props.contextinstance}
+                      contextinstance={contextinstance}
                     />
                   </Col>
                 </Row>
@@ -336,35 +318,64 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
 
   }
 
-  render()
-  {
-    return this.buildScreen(this.props.screen as ScreenDefinition);
+    switch (tag) {
+      // MarkDownConstant is by construction functional.
+      case "MarkDownConstantDef":
+      return <MarkDownWidget markdown={element.text} contextid={contextinstance} myroletype={myroletype}/>;
+      // MarkDownExpression is required to be functional.
+      case "MarkDownExpressionDef":
+      // text is wrapped in Maybe
+      if (element.text)
+        {
+          return <MarkDownWidget markdown={element.text} contextid={contextinstance} myroletype={myroletype}/>;
+        }
+      else
+      {
+        return null;
+      }
+    // MarkDownPerspective may be on a relational role.
+    //   MarkDownPerspectiveDef { widgetFields :: WidgetCommonFieldsDef, conditionProperty :: Maybe PropertyType} |
+    case "MarkDownPerspectiveDef":
+      return buildMarkDownPerspective(element);
   }
 }
 
 export function buildTable(table : TableElementDef, showControls : boolean = true, showAsAccordionItem : boolean = false)
 {
-  const perspective = table.fields.perspective;
-  // const title = widgetCommonFields.title;
+  const perspective = table.widgetCommonFields.perspective;
   return (
-    <PerspectiveTable
-      key={table.fields.perspective.id}
-      cardcolumn={ perspective.identifyingProperty }
-      //roleRepresentation
-      perspective={perspective}
-      showcontrolsandcaption={showControls}
-      showAsAccordionItem={showAsAccordionItem}
-      />);
+    <>
+      { table.markdown.map( (md, index) =>
+        <div key={index}>
+          { buildMarkDown( perspective.contextInstance, perspective.userRoleType, md) }
+        </div>
+      )}
+      <PerspectiveTable
+        key={table.widgetCommonFields.perspective.id}
+        cardcolumn={ perspective.identifyingProperty }
+        //roleRepresentation
+        perspective={perspective}
+        showcontrolsandcaption={showControls}
+        showAsAccordionItem={showAsAccordionItem}
+        />
+    </>);
 }
 export function buildForm(form : FormElementDef, showControls : boolean = true, roleInstance? : RoleInstanceT)
 {
-  const perspective = form.fields.perspective;
+  const perspective = form.widgetCommonFields.perspective;
   return (
-    <PerspectiveBasedForm
-      perspective={perspective}
-      behaviours={mapRoleVerbsToBehaviourNames( perspective )}
-      cardtitle={ perspective.identifyingProperty }
-      showControls={showControls}
-      roleinstance={roleInstance}
-      />);
+    <>
+      { form.markdown.map( (md, index) =>
+        <div key={index}>
+          { buildMarkDown( perspective.contextInstance, perspective.userRoleType, md) }
+        </div>
+      )}
+      <PerspectiveBasedForm
+        perspective={perspective}
+        behaviours={mapRoleVerbsToBehaviourNames( perspective )}
+        cardtitle={ perspective.identifyingProperty }
+        showControls={showControls}
+        roleinstance={roleInstance}
+        />
+    </>);
 }
