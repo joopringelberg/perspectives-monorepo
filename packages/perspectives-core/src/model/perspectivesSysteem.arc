@@ -569,9 +569,18 @@ domain model://perspectives.domains#System
         defaults
 
     thing Cache (relational)
+      -- aspect sys:Settings
       property Name (String)
         readableName
       property Size (Number)
+      -- property Limit (Number)
+      --   setting
+      -- property PreviousLimit (Number)
+      -- state Changed = not (Limit == PreviousLimit)
+      --   on entry
+      --     do for User
+      --       PreviousLimit = Limit
+      --       callEffect util:IdbSet( Name, Limit )
 
       state StartReading = context >> extern >> IsOnScreen
         on entry
