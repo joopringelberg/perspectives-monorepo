@@ -328,10 +328,11 @@ instance containsPrefixesScreenE :: ScanSymbols ScreenE where
       pure $ ClassicScreen $ FreeFormScreenE rec {rows = rows', columns = columns', subject = subject', tabs = tabs'}
 
 instance ScanSymbols TableFormE where
-  scan (TableFormE table form) = do
+  scan (TableFormE markdown table form) = do
     table' <- scan table
     form' <- scan form
-    pure $ TableFormE table' form'
+    markdown' <- traverse scan markdown
+    pure $ TableFormE markdown' table' form'
 
 instance ScanSymbols WhatE where
   scan (TableForms t) = TableForms <$> traverse scan t
@@ -352,10 +353,10 @@ instance ScanSymbols FreeFormScreenE where
     pure $ FreeFormScreenE r {tabs = tabs', rows = rows', columns = columns', subject = subject'}
 
 instance containsPrefixesTableE :: ScanSymbols TableE where
-  scan (TableE wcf)= TableE <$> expandPrefixWidgetCommonFields wcf
+  scan (TableE markdown wcf)= TableE <$> traverse scan markdown <*> expandPrefixWidgetCommonFields wcf
 
 instance containsPrefixesFormE :: ScanSymbols FormE where
-  scan (FormE wcf)= FormE <$> expandPrefixWidgetCommonFields wcf
+  scan (FormE markdown wcf)= FormE <$> traverse scan markdown <*> expandPrefixWidgetCommonFields wcf
 
 instance ScanSymbols MarkDownE where
   scan (MarkDownConstant {text, condition, context, start, end}) = do 

@@ -985,11 +985,11 @@ instance addPerspectivesRowDef  :: CollectMarkdowns RowDef where
 
 instance addPerspectivesTableDef  :: CollectMarkdowns TableDef where
   collectMarkdowns (TableDef widgetCommonFields) = []
-  collectTitles (TableDef widgetCommonFields) = maybe [] (\title -> [title]) widgetCommonFields.title
+  collectTitles (TableDef {widgetCommonFields}) = maybe [] (\title -> [title]) widgetCommonFields.title
 
 instance addPerspectivesFormDef  :: CollectMarkdowns FormDef where
   collectMarkdowns (FormDef widgetCommonFields) = []
-  collectTitles (FormDef widgetCommonFields) = maybe [] (\title -> [title]) widgetCommonFields.title
+  collectTitles (FormDef {widgetCommonFields}) = maybe [] (\title -> [title]) widgetCommonFields.title
 
 instance CollectMarkdowns MarkDownDef where
   collectMarkdowns (MarkDownConstantDef {text}) = [text]

@@ -444,7 +444,7 @@ newtype FreeFormScreenE = FreeFormScreenE
 
 data WhatE = TableForms (List TableFormE) | FreeFormScreen FreeFormScreenE
 
-data TableFormE = TableFormE TableE FormE
+data TableFormE = TableFormE (List MarkDownE) TableE FormE
 --------------------------------------------------------------------------------
 ---- SCREENELEMENT
 --------------------------------------------------------------------------------
@@ -468,7 +468,7 @@ newtype ColumnE = ColumnE (List ScreenElement)
 --------------------------------------------------------------------------------
 ---- FORM
 --------------------------------------------------------------------------------
-newtype FormE = FormE WidgetCommonFields
+data FormE = FormE (List MarkDownE) WidgetCommonFields
 
 type WidgetCommonFields =
   { title :: Maybe String
@@ -486,7 +486,7 @@ type WidgetCommonFields =
 --------------------------------------------------------------------------------
 ---- TABLE
 --------------------------------------------------------------------------------
-newtype TableE = TableE WidgetCommonFields
+data TableE = TableE (List MarkDownE) WidgetCommonFields
 
 --------------------------------------------------------------------------------
 ---- MARKDOWN
@@ -628,7 +628,6 @@ instance showColumn :: Show ColumnE where show = genericShow
 
 derive instance genericTable :: Generic TableE _
 instance showTable :: Show TableE where show = genericShow
-derive instance newtypeTableE :: Newtype TableE _
 
 derive instance genericForm :: Generic FormE _
 instance showForm :: Show FormE where show = genericShow

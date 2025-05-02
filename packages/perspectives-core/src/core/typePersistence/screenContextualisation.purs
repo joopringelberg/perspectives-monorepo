@@ -18,7 +18,7 @@ import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, What(..))
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..), roletype2string)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
@@ -89,10 +89,20 @@ contextualiseColumnDef (ColumnDef elements) = do
     else pure $ Just $ ColumnDef elements'
 
 contextualiseTableDef :: TableDef -> InContext (Maybe TableDef)
-contextualiseTableDef (TableDef widgetFields) = map TableDef <$> contextualiseWidgetCommonFields widgetFields
+contextualiseTableDef (TableDef {markdown, widgetCommonFields}) = do 
+  mwidgetCommonFields <- contextualiseWidgetCommonFields widgetCommonFields
+  markdown' <- traverse contextualiseMarkDownDef markdown
+  case mwidgetCommonFields of 
+    Nothing -> pure Nothing
+    Just widgetCommonFields' -> pure $ Just $ TableDef {markdown: catMaybes markdown', widgetCommonFields: widgetCommonFields'}
 
 contextualiseFormDef :: FormDef -> InContext (Maybe FormDef)
-contextualiseFormDef (FormDef widgetFields) = map FormDef <$> contextualiseWidgetCommonFields widgetFields
+contextualiseFormDef (FormDef {markdown, widgetCommonFields}) = do 
+  mwidgetCommonFields <- contextualiseWidgetCommonFields widgetCommonFields
+  markdown' <- traverse contextualiseMarkDownDef markdown
+  case mwidgetCommonFields of 
+    Nothing -> pure Nothing
+    Just widgetCommonFields' -> pure $ Just $ FormDef {markdown: catMaybes markdown', widgetCommonFields: widgetCommonFields'}
 
 contextualiseMarkDownDef :: MarkDownDef -> InContext (Maybe MarkDownDef)
 contextualiseMarkDownDef md = case md of 
@@ -161,11 +171,12 @@ lift2InContext :: forall a. MonadPerspectives a -> InContext a
 lift2InContext = lift <<< lift <<< lift
 
 contextualiseTableFormDef :: TableFormDef -> InContext (Maybe TableFormDef)
-contextualiseTableFormDef (TableFormDef {table, form}) = do
+contextualiseTableFormDef (TableFormDef {markdown, table, form}) = do
   table' <- contextualiseTableDef table
   form' <- contextualiseFormDef form
+  markdown' <- traverse contextualiseMarkDownDef markdown
   pure $ case table' of 
     Nothing -> Nothing
     Just table'' -> case form' of 
       Nothing -> Nothing
-      Just form'' -> Just $ TableFormDef {table: table'', form: form''}
+      Just form'' -> Just $ TableFormDef {markdown: catMaybes markdown', table: table'', form: form''}

@@ -188,8 +188,8 @@ constructDefaultScreen userRoleInstance userRoleType cid = do
             , userRole: userRoleType
             }
           element = if isFunctional
-            then FormElementD $ FormDef widgetCommonFields
-            else TableElementD $ TableDef widgetCommonFields
+            then FormElementD $ FormDef {markdown: [], widgetCommonFields}
+            else TableElementD $ TableDef {markdown: [], widgetCommonFields}
         in TabDef
           { title: displayName
           , isDefault: false
@@ -208,8 +208,8 @@ constructDefaultScreen userRoleInstance userRoleType cid = do
             }
         in 
           if isFunctional
-            then FormElementD $ FormDef widgetCommonFields
-            else TableElementD $ TableDef widgetCommonFields
+            then FormElementD $ FormDef {markdown: [], widgetCommonFields}
+            else TableElementD $ TableDef {markdown: [], widgetCommonFields}
 
 isOnThingRole :: SerialisedPerspective' -> Boolean
 isOnThingRole {roleKind} = case roleKind of
@@ -243,8 +243,9 @@ makeTableFormDef userRoleType p@{id, displayName} = let
       , userRole: userRoleType
       }
   in TableFormDef
-    { table: TableDef widgetCommonFields
-    , form: FormDef widgetCommonFields
+    { markdown: []
+    , table: TableDef {markdown: [], widgetCommonFields}
+    , form: FormDef {markdown: [], widgetCommonFields}
     }
 
 makeChatDef :: SerialisedPerspective' -> Maybe ChatDef
@@ -312,10 +313,11 @@ instance AddPerspectives What where
     pure $ FreeFormScreen {tabs: tabs', rows: rows', columns: columns'}
 
 instance AddPerspectives TableFormDef where
-  addPerspectives (TableFormDef {table, form}) user ctxt = do
+  addPerspectives (TableFormDef {markdown, table, form}) user ctxt = do
     table' <- addPerspectives table user ctxt
     form' <- addPerspectives form user ctxt
-    pure $ TableFormDef {table: table', form: form'}
+    markdown' <- traverse (\a -> addPerspectives a user ctxt) markdown
+    pure $ TableFormDef {markdown: markdown', table: table', form: form'}
 
 instance addPerspectivesScreenElementDef  :: AddPerspectives ScreenElementDef where
   addPerspectives (RowElementD re) user ctxt = RowElementD <$> addPerspectives re user ctxt
@@ -344,24 +346,26 @@ instance addPerspectivesRowDef  :: AddPerspectives RowDef where
     pure $ RowDef (catMaybes rows')
 
 instance addPerspectivesTableDef  :: AddPerspectives TableDef where
-  addPerspectives (TableDef widgetCommonFields) user ctxt = do
+  addPerspectives (TableDef {markdown, widgetCommonFields}) user ctxt = do
     perspective <- perspectiveForContextAndUserFromId
       user
       widgetCommonFields
       ctxt
     contextType <- lift $ contextType_ ctxt
     (translatedTitle :: Maybe String) <- lift $ traverse (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType)) widgetCommonFields.title
-    pure $ TableDef widgetCommonFields {perspective = Just perspective, title = translatedTitle}
+    markdown' <- traverse (\a -> addPerspectives a user ctxt) markdown
+    pure $ TableDef {markdown: markdown', widgetCommonFields: widgetCommonFields {perspective = Just perspective, title = translatedTitle}}
 
 instance addPerspectivesFormDef  :: AddPerspectives FormDef where
-  addPerspectives (FormDef widgetCommonFields) user ctxt = do
+  addPerspectives (FormDef {markdown, widgetCommonFields}) user ctxt = do
     perspective <- perspectiveForContextAndUserFromId
       user
       widgetCommonFields
       ctxt
     contextType <- lift $ contextType_ ctxt
     (translatedTitle :: Maybe String) <- lift $ traverse (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType)) widgetCommonFields.title
-    pure $ FormDef widgetCommonFields {perspective = Just perspective, title = translatedTitle}
+    markdown' <- traverse (\a -> addPerspectives a user ctxt) markdown
+    pure $ FormDef {markdown: markdown', widgetCommonFields: widgetCommonFields {perspective = Just perspective, title = translatedTitle}}
 
 instance AddPerspectives MarkDownDef where
   addPerspectives (MarkDownConstantDef r@{text, domain}) user ctxt = do 
@@ -472,7 +476,7 @@ tableFormForContextAndUser userRoleInstance userRoleType contextType objectRoleT
 
     tableFormDefIsForRoleType :: TableFormDef -> Boolean
     tableFormDefIsForRoleType (TableFormDef {table, form}) = case table of
-      TableDef {perspective} -> case perspective of 
+      TableDef {widgetCommonFields: {perspective}} -> case perspective of 
         Nothing -> false 
         Just {roleType} -> case roleType of
           Just rt -> rt == roletype2string objectRoleType
@@ -486,21 +490,26 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
   -- Find the perspective of the user in the context on the object.
   (perspective :: SerialisedPerspective') <- perspectiveForContextAndUser' userRoleInstance userRoleType objectRoleType cid
   let tableForm = TableFormDef
-        { table: TableDef
-            { title: Nothing
-            , perspective: Just perspective
-            , perspectiveId: ""
-            , propertyVerbs: Nothing
-            , roleVerbs: Nothing
-            , userRole: userRoleType
-            }
+        { markdown: []
+        , table: TableDef
+            { markdown: []
+            , widgetCommonFields: 
+              { title: Nothing
+              , perspective: Just perspective
+              , perspectiveId: ""
+              , propertyVerbs: Nothing
+              , roleVerbs: Nothing
+              , userRole: userRoleType
+              }}
         , form: FormDef
-            { title: Nothing
-            , perspective: Just perspective
-            , perspectiveId: ""
-            , propertyVerbs: Nothing
-            , roleVerbs: Nothing
-            , userRole: userRoleType
-            }
+            { markdown: []
+            , widgetCommonFields: 
+              { title: Nothing
+              , perspective: Just perspective
+              , perspectiveId: ""
+              , propertyVerbs: Nothing
+              , roleVerbs: Nothing
+              , userRole: userRoleType
+              }}
         }
   pure tableForm

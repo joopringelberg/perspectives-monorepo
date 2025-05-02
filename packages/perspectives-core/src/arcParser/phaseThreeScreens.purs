@@ -58,7 +58,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), Cont
 import Perspectives.Representation.Verbs (PropertyVerb, roleVerbList2Verbs)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_, lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
-import Prelude (Unit, bind, discard, eq, flip, map, not, pure, show, unit, ($), (<$>), (<<<), (==), (>>=), (<#>))
+import Prelude (Unit, bind, discard, eq, flip, map, not, pure, show, unit, ($), (<#>), (<$>), (<<<), (==), (>>=))
 
 
 handleScreens :: LIST.List AST.ScreenE -> PhaseThree Unit
@@ -126,10 +126,11 @@ handleScreens screenEs = do
               pure $ EM.insert (ScreenKey context subjectRoleType) screenDef screenDefMap
               
             tableForm :: AST.TableFormE -> PhaseThree TableFormDef
-            tableForm (AST.TableFormE tableE formE) = do
+            tableForm (AST.TableFormE markD tableE formE) = do
               table' <- table tableFormWidget tableE
               form' <- form tableFormWidget formE
-              pure $ TableFormDef {table: table', form: form'}
+              markdown' <- traverse markdown markD
+              pure $ TableFormDef {markdown: fromFoldable markdown', table: table', form: form'}
 
             freeFormScreen' :: FreeFormScreenE -> PhaseThree ScreenMap
             freeFormScreen' ffs@(FreeFormScreenE{context}) = do
@@ -214,11 +215,17 @@ handleScreens screenEs = do
             tableFormWidget = Unknown
 
             table :: ThreeValuedLogic -> AST.TableE -> PhaseThree TableDef
-            table cardinality (AST.TableE fields) = TableDef <$> widgetCommonFields fields cardinality
+            table cardinality (AST.TableE markD fields) = do
+              markdown' <- traverse markdown (fromFoldable markD)
+              widgetCommonFields' <- widgetCommonFields fields cardinality
+              pure $ TableDef {markdown:markdown', widgetCommonFields:widgetCommonFields'}
 
             form :: ThreeValuedLogic -> AST.FormE -> PhaseThree FormDef
-            form cardinality (AST.FormE fields) = FormDef <$> widgetCommonFields fields cardinality
-
+            form cardinality (AST.FormE markD fields) = do
+              markdown' <- traverse markdown (fromFoldable markD)
+              widgetCommonFields' <- widgetCommonFields fields cardinality
+              pure $ FormDef {markdown:markdown', widgetCommonFields:widgetCommonFields'}
+            
             markdown :: AST.MarkDownE -> PhaseThree MarkDownDef
             markdown (MarkDownConstant { text, condition, context:ctxt}) = do
               text' <- unsafePartial case text of 

@@ -1490,10 +1490,14 @@ tableFormE = withPos do
   -- We cannot know, at this point, whether the role is Calculated or Enumerated.
   -- Like with the filledBy clause, we assume Enumerated and repair that later.
   perspective <- pure (ExplicitRole ctxt (ENR $ EnumeratedRoleType $ roleName) pos)
-  table <- TableE <$> tableFormFields perspective
+  -- Markdown right above the TableForm (i.e. above the accordion).
+  markdownAboveTableForm <- option Nil (reserved "markdown" *> nestedBlock markdownE)
+  -- Markdown right above the table (inside the accordion on the master part).
+  table <- TableE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> tableFormFields perspective
   reserved "detail"
-  form <- FormE <$> tableFormFields perspective
-  pure $ TableFormE table form
+  -- Markdown right above the form (in the detail part).
+  form <- FormE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> tableFormFields perspective
+  pure $ TableFormE markdownAboveTableForm table form
 
 tabE :: IP TabE
 tabE = reserved "tab" *> (TabE <$> token.stringLiteral <*> option false (reserved "default" *> pure true) <*> nestedBlock (defer \_ -> screenElementE))
@@ -1589,10 +1593,10 @@ tableFormFields perspective = do
           , end}
 
 formE :: IP FormE
-formE = FormE <$> widgetCommonFields
+formE = FormE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> widgetCommonFields
 
 tableE :: IP TableE
-tableE = TableE <$> widgetCommonFields
+tableE = TableE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> widgetCommonFields
 
 markdownE :: IP MarkDownE
 markdownE = do

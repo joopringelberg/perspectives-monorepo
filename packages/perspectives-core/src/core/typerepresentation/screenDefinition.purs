@@ -80,8 +80,8 @@ data ScreenElementDef =
 
 newtype RowDef = RowDef (Array ScreenElementDef)
 newtype ColumnDef = ColumnDef (Array ScreenElementDef)
-newtype TableDef = TableDef WidgetCommonFieldsDef
-newtype FormDef = FormDef WidgetCommonFieldsDef
+newtype TableDef = TableDef {markdown :: Array MarkDownDef, widgetCommonFields :: WidgetCommonFieldsDef}
+newtype FormDef = FormDef {markdown :: Array MarkDownDef, widgetCommonFields :: WidgetCommonFieldsDef}
 data MarkDownDef = 
   MarkDownConstantDef {text :: String, condition :: Maybe QueryFunctionDescription, domain :: String} |
   MarkDownPerspectiveDef { widgetFields :: WidgetCommonFieldsDef, conditionProperty :: Maybe PropertyType} |
@@ -127,7 +127,7 @@ newtype WhoWhatWhereScreenDef = WhoWhatWhereScreenDef {who :: Who, what :: What,
 -----------------------------------------------------------
 -- TABLEFORM
 -----------------------------------------------------------
-newtype TableFormDef = TableFormDef {table :: TableDef, form :: FormDef}
+newtype TableFormDef = TableFormDef {markdown :: Array MarkDownDef, table :: TableDef, form :: FormDef}
 
 -----------------------------------------------------------
 -- WHO
@@ -214,9 +214,9 @@ instance WriteForeign RowDef where
 instance WriteForeign ColumnDef where
   writeImpl (ColumnDef elements) = write { tag: "ColumnDef", elements}
 instance WriteForeign TableDef where
-  writeImpl (TableDef fields) = write { tag: "TableDef", fields}
+  writeImpl (TableDef {markdown, widgetCommonFields}) = write { tag: "TableDef", markdown, widgetCommonFields}
 instance WriteForeign FormDef where
-  writeImpl (FormDef fields) = write { tag: "FormDef", fields}
+  writeImpl (FormDef {markdown, widgetCommonFields}) = write { tag: "FormDef", markdown, widgetCommonFields}
 instance WriteForeign MarkDownDef where
   writeImpl (MarkDownConstantDef f) = write { tag: "MarkDownConstantDef", element: f}
   writeImpl (MarkDownPerspectiveDef f) = write { tag: "MarkDownPerspectiveDef", element: f}
@@ -228,7 +228,7 @@ instance WriteForeign ScreenKey where
   writeImpl (ScreenKey ct rt) = writeImpl {ct, rt}
 
 instance WriteForeign TableFormDef where
-  writeImpl (TableFormDef {table, form}) = write {tag: "TableFormDef", table, form}
+  writeImpl (TableFormDef {markdown, table, form}) = write {tag: "TableFormDef", markdown, table, form}
 
 instance WriteForeign WhoWhatWhereScreenDef where
   writeImpl (WhoWhatWhereScreenDef {who, what, whereto}) = write {tag: "WhoWhatWhereScreenDef", who, what, whereto}
@@ -281,16 +281,16 @@ instance ReadForeign ColumnDef where
 
 instance ReadForeign TableDef where 
   readImpl f = do 
-    ({tag, fields} :: { tag :: String, fields :: WidgetCommonFieldsDef}) <- read' f
+    ({tag, markdown, widgetCommonFields} :: { tag :: String, markdown :: Array MarkDownDef, widgetCommonFields :: WidgetCommonFieldsDef}) <- read' f
     case tag of 
-      "TableDef" -> pure $ TableDef fields
+      "TableDef" -> pure $ TableDef {markdown, widgetCommonFields}
       _ -> fail (TypeMismatch "TableDef" tag)
 
 instance ReadForeign FormDef where
   readImpl f = do 
-    ({tag, fields} :: { tag :: String, fields :: WidgetCommonFieldsDef}) <- read' f
+    ({tag, markdown, widgetCommonFields} :: { tag :: String, markdown :: Array MarkDownDef, widgetCommonFields :: WidgetCommonFieldsDef}) <- read' f
     case tag of 
-      "FormDef" -> pure $ FormDef fields
+      "FormDef" -> pure $ FormDef {markdown, widgetCommonFields}
       _ -> fail (TypeMismatch "FormDef" tag)
 
 instance ReadForeign ChatDef where
@@ -302,11 +302,19 @@ instance ReadForeign ChatDef where
   
 derive newtype instance ReadForeign TabDef
 
+instance ReadForeign MarkDownDef where 
+  readImpl f = do 
+    ({tag, element} :: {tag :: String, element :: Foreign}) <- read' f
+    unsafePartial $ case tag of 
+      "MarkDownConstantDef" -> MarkDownConstantDef <$> ((read' element) :: F {text :: String, condition :: Maybe QueryFunctionDescription, domain :: String})
+      "MarkDownPerspectiveDef" -> MarkDownPerspectiveDef <$> ((read' element) :: F { widgetFields :: WidgetCommonFieldsDef, conditionProperty :: Maybe PropertyType})
+      "MarkDownExpressionDef" -> MarkDownExpressionDef <$> ((read' element) :: F {textQuery :: QueryFunctionDescription, condition :: Maybe QueryFunctionDescription,  text :: Maybe String})
+
 instance ReadForeign TableFormDef where
   readImpl f = do 
-    ({tag, table, form} :: {tag :: String, table :: TableDef, form :: FormDef}) <- read' f
+    ({tag, markdown, table, form} :: {tag :: String, markdown :: Array MarkDownDef, table :: TableDef, form :: FormDef}) <- read' f
     case tag of 
-      "TableFormDef" -> pure $ TableFormDef {table, form}
+      "TableFormDef" -> pure $ TableFormDef {markdown, table, form}
       _ -> fail (TypeMismatch "TableFormDef" tag)
 
 instance ReadForeign WhoWhatWhereScreenDef where
