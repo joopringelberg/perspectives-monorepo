@@ -422,9 +422,9 @@ showPath = maybe "" (append "$")
 data ScreenE = WWW WhoWhatWhereScreenE | ClassicScreen FreeFormScreenE
 
 newtype WhoWhatWhereScreenE = WhoWhatWhereScreenE
-  { who :: (List TableFormE)
+  { who :: TableFormSectionE
   , what :: WhatE
-  , whereTo :: (List TableFormE) 
+  , whereTo :: TableFormSectionE
   , subject :: RoleIdentification
   , context :: ContextType
   , start :: ArcPosition
@@ -442,7 +442,9 @@ newtype FreeFormScreenE = FreeFormScreenE
   , end :: ArcPosition
   }
 
-data WhatE = TableForms (List TableFormE) | FreeFormScreen FreeFormScreenE
+data WhatE = TableForms TableFormSectionE | FreeFormScreen FreeFormScreenE
+
+data TableFormSectionE = TableFormSectionE (List MarkDownE) (List TableFormE)
 
 data TableFormE = TableFormE (List MarkDownE) TableE FormE
 --------------------------------------------------------------------------------
@@ -603,6 +605,9 @@ instance Show ScreenE where show = genericShow
 
 derive instance Generic WhoWhatWhereScreenE _
 instance Show WhoWhatWhereScreenE where show = genericShow
+
+derive instance Generic TableFormSectionE _
+instance Show TableFormSectionE where show = genericShow
 
 derive instance Generic FreeFormScreenE _
 instance Show FreeFormScreenE where show = genericShow

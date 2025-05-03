@@ -18,7 +18,7 @@ import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..), roletype2string)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
@@ -40,13 +40,13 @@ contextualiseScreen (ScreenDefinition{title, tabs, rows, columns}) computedTitle
       , columns: Nothing
       -- Moeten we de tabs, rows of columns niet onderbrengen in het what?
       , whoWhatWhereScreen: Just $ WhoWhatWhereScreenDef 
-        { who: Who {chats: [], userRoles: []}
+        { who: Who {markdown: [], chats: [], userRoles: []}
         , what: FreeFormScreen 
           { tabs: tabs'
           , rows: rows'
           , columns: columns'
           }
-        , whereto: []
+        , whereto: WhereTo {markdown: [], contextRoles: []}
         }
       }
 

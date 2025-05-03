@@ -46,6 +46,7 @@ module Perspectives.Parsing.Arc.IndentParser
   , nestedBlock
   , nextLine
   , onSameLine
+  , optionalNestedBlock
   , outdented'
   , position2ArcPosition
   , protectLabel
@@ -351,6 +352,14 @@ nestedBlock p = do
   nl <- isNextLine
   if ind && nl
     then entireBlock1 p
+    else pure Nil
+
+optionalNestedBlock :: forall x. IP x -> IP (List x)
+optionalNestedBlock p = do
+  ind <- isIndented
+  nl <- isNextLine
+  if ind && nl
+    then entireBlock p
     else pure Nil
 
 -- | True iff the Parser Position is further to the right than the reference position.

@@ -444,6 +444,7 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
           (ContextInstance object)
           onlyOnce
     -- { request: "GetTableForm", subject: UserRoleType, predicate: ContextInstance, object: RoleType }
+    -- OBSOLETE
     Api.GetTableForm -> do 
       userRoleType <- getRoleType subject
       objectRoleType <- getRoleType object

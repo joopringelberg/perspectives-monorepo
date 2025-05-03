@@ -223,10 +223,11 @@ export type WidgetCommonFields = {
 export type WhoWhatWhereScreenDef = {
   who: Who;
   what: What;
-  whereto: TableFormDef[];
+  whereto: WhereTo;
 };
 
 export type Who = {
+  markdown: MarkDownElementDef[];
   chats: ChatElementDef[];
   userRoles: TableFormDef[];
   }
@@ -237,7 +238,12 @@ export type TableFormDef = {
   form: FormElementDef;
 };
 
-export type What = {tag: "TableForms", elements: TableFormDef[]} | {tag: "FreeFormScreen", elements: MainScreenElements}; 
+export type What = {tag: "TableForms", elements: {markdown: MarkDownElementDef[], tableForms: TableFormDef[]}} | {tag: "FreeFormScreen", elements: MainScreenElements}; 
+
+export type WhereTo = {
+  markdown: MarkDownElementDef[];
+  contextRoles: TableFormDef[];
+  }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // PDRTYPES

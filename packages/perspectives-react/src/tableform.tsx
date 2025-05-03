@@ -1,3 +1,6 @@
+// OBSOLETE: This file is no longer used in the project. It was used to create a table form component that is now replaced by a more generic form component.
+
+
 import React from "react";
 import { ContextInstanceT, PDRproxy, RoleType, TableFormDef } from "perspectives-proxy";
 import PerspectivesComponent from "./perspectivesComponent";

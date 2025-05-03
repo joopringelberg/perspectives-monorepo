@@ -130,7 +130,8 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               // Only sync with CouchDB in development mode
               if (import.meta.env.DEV) {
                 console.log('Development mode: Syncing with CouchDB');
-                syncWithCouchDB(installationData.perspectivesUserId! + installationData.deviceName! + "_entities");
+                syncWithCouchDB(installationData.perspectivesUserId! + installationData.deviceName! + "_entities")
+                  .then(() => syncWithCouchDB(installationData.perspectivesUserId! + installationData.deviceName! + "_models"));
               }
               // Subscribe to all notifications
               component.addUnsubscriber(subscribeToAllNotifications(systemIdentifier));

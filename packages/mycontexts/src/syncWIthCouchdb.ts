@@ -10,7 +10,7 @@ import PouchDB from "pouchdb-browser";
 
 declare global {
   interface Window {
-    __pouch_sync_active__?: boolean;
+    __pouch_sync_active__?: Record<string, boolean>;
   }
 }
 
@@ -22,11 +22,15 @@ export function syncWithCouchDB( databaseName: string ) {
   return new Promise<void>((resolve, reject) => {
     const localDB = new PouchDB(databaseName);
     const remoteDB = new PouchDB(`https://${accountName}:${accountPassword}@localhost:6984/${databaseName}`);
-      // Add a global flag to avoid multiple syncs during dev reloads
-    if (!window.__pouch_sync_active__) {
-      window.__pouch_sync_active__ = true;
+    // Add a global register to avoid multiple syncs during dev reloads
+    if (!window.__pouch_sync_active__ ) {
+      window.__pouch_sync_active__ = {};
+    }
+    if (!window.__pouch_sync_active__[databaseName]) {
+      window.__pouch_sync_active__[databaseName] = true;
 
       localDB.sync(remoteDB, {live: false})
+      // localDB.replicate.from(remoteDB, {live: false})
       .on('change', (info : any) => console.log('🔄', info))
       .on('error', (err : Error) => {
         console.error('❌ Sync error:', err)

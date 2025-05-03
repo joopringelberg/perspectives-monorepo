@@ -47,12 +47,12 @@ import Parsing.Indent (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), ViewE(..), WhatE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseName, prefixedName, qualifiedName, reserved, stringUntilNewline)
-import Perspectives.Parsing.Arc.IndentParser (IP, arcPosition2Position, containsTab, entireBlock, entireBlock1, getArcParserState, getCurrentContext, getCurrentState, getObject, getPosition, getStateIdentifier, getSubject, inSubContext, isEof, isIndented, isNextLine, nestedBlock, protectObject, protectOnEntry, protectOnExit, protectSubject, sameOrOutdented', setObject, setOnEntry, setOnExit, setSubject, withArcParserState, withEntireBlock)
+import Perspectives.Parsing.Arc.IndentParser (IP, arcPosition2Position, containsTab, entireBlock, entireBlock1, getArcParserState, getCurrentContext, getCurrentState, getObject, getPosition, getStateIdentifier, getSubject, inSubContext, isEof, isIndented, isNextLine, nestedBlock, optionalNestedBlock, protectObject, protectOnEntry, protectOnExit, protectSubject, sameOrOutdented', setObject, setOnEntry, setOnExit, setSubject, withArcParserState, withEntireBlock)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.Statement (assignment, letWithAssignment, twoReservedWords)
 import Perspectives.Parsing.Arc.Statement.AST (Statements(..))
@@ -1450,48 +1450,36 @@ whoWhatWhereScreenE start = do
   end <- getPosition
   pure $ WWW $ WhoWhatWhereScreenE {who, what, whereTo, subject, context, start, end}
 
-whoE :: IP (List TableFormE)
-whoE = option Nil do 
-  _ <- reserved "who"
-  nestedBlock tableFormE
+whoE :: IP TableFormSectionE
+whoE = reserved "who" *> (TableFormSectionE <$> optionalNestedBlock markdownE <*> optionalNestedBlock tableFormE)
 
 whatE :: IP WhatE
-whatE = do
-  _ <- reserved "what"
-  tableForms <- option false isTableForms
-  if tableForms
-    then TableForms <$> nestedBlock tableFormE
-    -- If neither tableForms, nor a classic screen, return empty TableForms.
-    else option (TableForms Nil) do
-      start <- getPosition
-      title <- optionMaybe token.stringLiteral
-      subscreen <- classicScreenE title start
-      case subscreen of 
-        ClassicScreen s -> pure $ FreeFormScreen s
-        _ -> fail "Expected ClassicScreen"
-  where
-    isTableForms :: IP Boolean
-    isTableForms = lookAhead do
-      _ <- arcIdentifier
-      keyword <- reservedIdentifier
-      case keyword of
-        "master" -> pure true
-        _ -> pure false
+whatE = reserved "what" *>
+  (TableForms <$> (TableFormSectionE <$> optionalNestedBlock markdownE <*> optionalNestedBlock tableFormE)
+  <|> 
+  do
+    start <- getPosition
+    title <- optionMaybe token.stringLiteral
+    subscreen <- classicScreenE title start
+    case subscreen of 
+      ClassicScreen s -> pure $ FreeFormScreen s
+      _ -> fail "Expected ClassicScreen")
 
-whereE :: IP (List TableFormE)
-whereE = option Nil (reserved "where" *> nestedBlock tableFormE)
+whereE :: IP TableFormSectionE
+whereE = reserved "where" *> (TableFormSectionE <$> optionalNestedBlock markdownE <*> optionalNestedBlock tableFormE)
 
 tableFormE :: IP TableFormE
 tableFormE = withPos do
   pos <- getPosition
+  -- Markdown right above the TableForm (i.e. above the accordion).
+  markdownAboveTableForm <- option Nil (reserved "markdown" *> entireBlock markdownE)
+  -- MISSCHIEN VOLGT HIER NIETS.
   roleName <- arcIdentifier
   reserved "master"
   ctxt <- getCurrentContext
   -- We cannot know, at this point, whether the role is Calculated or Enumerated.
   -- Like with the filledBy clause, we assume Enumerated and repair that later.
   perspective <- pure (ExplicitRole ctxt (ENR $ EnumeratedRoleType $ roleName) pos)
-  -- Markdown right above the TableForm (i.e. above the accordion).
-  markdownAboveTableForm <- option Nil (reserved "markdown" *> nestedBlock markdownE)
   -- Markdown right above the table (inside the accordion on the master part).
   table <- TableE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> tableFormFields perspective
   reserved "detail"

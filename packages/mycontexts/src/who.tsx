@@ -2,7 +2,7 @@ import React from "react";
 import { Who as WhoDef } from "perspectives-proxy";
 import { Component } from "react";
 import { TableForms } from "./tableForms";
-import { ChatComponent, externalRole, PSContext } from "perspectives-react";
+import { buildMarkDown, ChatComponent, externalRole, PSContext } from "perspectives-react";
 import { Accordion } from "react-bootstrap";
 
 interface WhoProps {
@@ -34,6 +34,9 @@ export class Who extends Component<WhoProps> {
           : null))
         }
         </Accordion>
+        {this.props.screenelements.markdown.map((markdown, index) => 
+          <div key={index}>{ buildMarkDown(value.contextinstance, value.myroletype, markdown) }</div>
+        )}
         <TableForms screenelements={this.props.screenelements.userRoles} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={true} />
       </>
       }</PSContext.Consumer>;

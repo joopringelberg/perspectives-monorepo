@@ -50,12 +50,23 @@ domain model://joopringelberg.nl#Disconnect
         props (FirstName, LastName) verbs (Consult)
       screen
         who
+          markdown <## Roles
+                    There is just a single role one can take on in this context: that of the Manager, who 
+                    decides which peers to disconnect from. To disconnect a peer means that the peer is
+                    no longer informed about changes that might be relevant to him or her.
+                    >
           Manager
             master "Master"
               props (FirstName) verbs (Consult)
             detail
               props (FirstName, LastName) verbs (Consult)
         what
+            markdown <## Disconnect yourself from a peer
+                      It may happen that you do no longer want to exchange information with a peer.
+                      You can use this screen to disconnect yourself from someone.
+                      This means that information you enter that might be relevant to the peer will not be
+                      sent to him or her.
+                      >
         where
           DisconnectedPeers
             master "Disconnected peers"

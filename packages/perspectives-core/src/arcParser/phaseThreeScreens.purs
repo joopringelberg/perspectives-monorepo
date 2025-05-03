@@ -30,6 +30,7 @@ import Data.List (List) as LIST
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
+import Data.Tuple (Tuple(..), fst, snd)
 import Foreign.Object (Object, keys, lookup)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (###=), (###>))
@@ -37,7 +38,7 @@ import Perspectives.Data.EncodableMap (empty, insert) as EM
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_)
 import Perspectives.ModelDependencies (chatAspect)
-import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), RoleIdentification(..), WhoWhatWhereScreenE(..))
+import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..))
 import Perspectives.Parsing.Arc.AST (ColumnE(..), FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), WhatE(..), WidgetCommonFields) as AST
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -52,13 +53,13 @@ import Perspectives.Representation.Class.Property (hasFacet)
 import Perspectives.Representation.Class.Role (allProperties, displayName, perspectivesOfRoleType, roleADTOfRoleType, roleTypeIsFunctional)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), addProperty, expandPropSet, expandVerbs, perspectiveSupportsPropertyForVerb, perspectiveSupportsRoleVerbs)
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), What(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optimistic, pessimistic)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), propertytype2string, roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb, roleVerbList2Verbs)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_, lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
-import Prelude (Unit, bind, discard, eq, flip, map, not, pure, show, unit, ($), (<#>), (<$>), (<<<), (==), (>>=))
+import Prelude (Unit, bind, discard, eq, flip, map, not, pure, show, unit, ($), (<#>), (<$>), (<<<), (==), (>>=), (<*>))
 
 
 handleScreens :: LIST.List AST.ScreenE -> PhaseThree Unit
@@ -105,13 +106,18 @@ handleScreens screenEs = do
           
             whoWhatWhereScreen :: WhoWhatWhereScreenE -> PhaseThree ScreenMap
             whoWhatWhereScreen (WhoWhatWhereScreenE {who, what, whereTo, context, subject, start, end}) = do
-              who' <- traverse tableForm who
+              who' <- case who of 
+                TableFormSectionE markdowns tableForms -> Tuple <$> traverse markdown markdowns <*> traverse tableForm tableForms
               what' <- case what of 
-                AST.TableForms tfs -> TableForms <<< fromFoldable <$> traverse tableForm tfs
+                AST.TableForms (TableFormSectionE md tb) -> do 
+                  tableForms <- fromFoldable <$> traverse tableForm tb
+                  markdown' <- fromFoldable <$> traverse markdown md
+                  pure $ TableForms {tableForms, markdown: markdown'}
                 AST.FreeFormScreen scrn' -> do 
                   ScreenDefinition {tabs, rows, columns} <- freeFormScreen scrn'
                   pure $ FreeFormScreen {tabs, rows, columns}
-              whereTo' <- traverse tableForm whereTo
+              whereTo' <- case whereTo of 
+                TableFormSectionE markdowns tableForms -> Tuple <$> traverse markdown markdowns <*> traverse tableForm tableForms
               chats <- constructChatDefs
               screenDef <- pure $ ScreenDefinition 
                 { title: Nothing
@@ -119,9 +125,9 @@ handleScreens screenEs = do
                 , rows: Nothing
                 , columns: Nothing
                 , whoWhatWhereScreen: Just $ WhoWhatWhereScreenDef 
-                  { who: Who {chats, userRoles: fromFoldable who'}
+                  { who: Who {markdown: fromFoldable $ fst who', chats, userRoles: fromFoldable $ snd who'}
                   , what: what'
-                  , whereto: fromFoldable whereTo'}
+                  , whereto: WhereTo {markdown: fromFoldable $ fst whereTo', contextRoles: fromFoldable $ snd whereTo'}}
                 }
               pure $ EM.insert (ScreenKey context subjectRoleType) screenDef screenDefMap
               
