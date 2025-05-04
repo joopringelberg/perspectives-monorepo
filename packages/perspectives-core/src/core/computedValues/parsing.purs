@@ -51,7 +51,7 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.ErrorLogging (logPerspectivesError)
-import Perspectives.Extern.Couchdb (retrieveModelFromRepository, updateModel)
+import Perspectives.Extern.Couchdb (retrieveModelFromLocalStore, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (DomeinFileName, ModelUri, isModelUri, modelUri2ModelUrl, unversionedModelUri)
@@ -215,8 +215,8 @@ compileRepositoryModels modelsurl_ manifestsurl_ _ = try
 -- | Parse and compile the Arc file. Store in the local model database. Does not cache.
 -- | If the file is not valid, nothing happens.
 -- | The DomeinFileName should be versioned (e.g. model://perspectives.domains#System@1.0).
--- | Attachments are taken from the Repository and stored locally, 
--- | where the StoredQueries that result from model compilation overwrite those from the Repository. 
+-- | Attachments are taken from the local model database, 
+-- | where the StoredQueries that result from model compilation overwrite those from the local store. 
 -- | The translation is that of the Repository, though.
 storeModelLocally_ ::
   Array DomeinFileName -> 
@@ -230,7 +230,7 @@ storeModelLocally_ domeinFileName_ arcSource_ _ = try
         Left m -> logPerspectivesError $ Custom ("storeModelLocally: " <> show m)
         -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries.
         Right (Tuple (DomeinFile dfr@{id, namespace}) invertedQueries) -> do
-          (Tuple _ attachments) <- retrieveModelFromRepository id
+          (Tuple _ attachments) <- retrieveModelFromLocalStore id
           updateModel false {-with dependencies-} true {-install for first time if necessary-} id (Tuple dfr attachments) invertedQueries
           -- Finally, save the invertedQueries as a local replacement of the storedQueries.json attachment.
           theFile <- liftEffect $ toFile "storedQueries.json" "application/json" (unsafeToForeign $ writeJSON invertedQueries)

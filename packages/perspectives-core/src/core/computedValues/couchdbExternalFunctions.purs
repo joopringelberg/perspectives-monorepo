@@ -95,7 +95,7 @@ import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, perspectivesUser2RoleInstance)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), RoleType(..))
-import Perspectives.ResourceIdentifiers (createDefaultIdentifier, resourceIdentifier2WriteDocLocator, takeGuid)
+import Perspectives.ResourceIdentifiers (createDefaultIdentifier, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.RoleAssignment (roleIsMe)
 import Perspectives.SaveUserData (scheduleContextRemoval, setFirstBinding)
 import Perspectives.SetupCouchdb (contextViewFilter, roleViewFilter, setContext2RoleView, setContextView, setCredentialsView, setFiller2FilledView, setFilled2FillerView, setPendingInvitationView, setRoleFromContextView, setRoleView, setRole2ContextView)
@@ -282,6 +282,18 @@ retrieveModelFromRepository dfid@(DomeinFileId modelname) = do
     Nothing -> pure empty
     Just atts ->  lift $ traverseWithIndex
       (\attName {content_type} -> Tuple (MediaType content_type) <$> getAttachment repositoryUrl documentName attName)
+      atts
+  pure (Tuple dfile attachments)
+
+retrieveModelFromLocalStore :: DomeinFileId -> MonadPerspectivesTransaction (Tuple DomeinFileRecord AttachmentFiles)
+retrieveModelFromLocalStore dfid@(DomeinFileId modelname) = do
+  {database, documentName} <- lift $ resourceIdentifier2DocLocator modelname
+  (DomeinFile dfile@{_attachments}) <- lift $ getDocument database documentName
+
+  attachments <- case _attachments of
+    Nothing -> pure empty
+    Just atts ->  lift $ traverseWithIndex
+      (\attName {content_type} -> Tuple (MediaType content_type) <$> getAttachment database documentName attName)
       atts
   pure (Tuple dfile attachments)
 
