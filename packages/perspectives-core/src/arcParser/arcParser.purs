@@ -52,7 +52,7 @@ import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseName, prefixedName, qualifiedName, reserved, stringUntilNewline)
-import Perspectives.Parsing.Arc.IndentParser (IP, arcPosition2Position, containsTab, entireBlock, entireBlock1, getArcParserState, getCurrentContext, getCurrentState, getObject, getPosition, getStateIdentifier, getSubject, inSubContext, isEof, isIndented, isNextLine, nestedBlock, optionalNestedBlock, protectObject, protectOnEntry, protectOnExit, protectSubject, sameOrOutdented', setObject, setOnEntry, setOnExit, setSubject, withArcParserState, withEntireBlock)
+import Perspectives.Parsing.Arc.IndentParser (IP, arcPosition2Position, containsTab, entireBlock, entireBlock1, getArcParserState, getCurrentContext, getCurrentState, getObject, getPosition, getStateIdentifier, getSubject, inSubContext, isEof, isIndented, isNextLine, nestedBlock, protectObject, protectOnEntry, protectOnExit, protectSubject, sameOrOutdented', setObject, setOnEntry, setOnExit, setSubject, withArcParserState, withEntireBlock)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.Statement (assignment, letWithAssignment, twoReservedWords)
 import Perspectives.Parsing.Arc.Statement.AST (Statements(..))
@@ -1451,11 +1451,11 @@ whoWhatWhereScreenE start = do
   pure $ WWW $ WhoWhatWhereScreenE {who, what, whereTo, subject, context, start, end}
 
 whoE :: IP TableFormSectionE
-whoE = reserved "who" *> (TableFormSectionE <$> optionalNestedBlock markdownE <*> optionalNestedBlock tableFormE)
+whoE = reserved "who" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
 
 whatE :: IP WhatE
 whatE = reserved "what" *>
-  (TableForms <$> (TableFormSectionE <$> optionalNestedBlock markdownE <*> optionalNestedBlock tableFormE)
+  (TableForms <$> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
   <|> 
   do
     start <- getPosition
@@ -1466,7 +1466,7 @@ whatE = reserved "what" *>
       _ -> fail "Expected ClassicScreen")
 
 whereE :: IP TableFormSectionE
-whereE = reserved "where" *> (TableFormSectionE <$> optionalNestedBlock markdownE <*> optionalNestedBlock tableFormE)
+whereE = reserved "where" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
 
 tableFormE :: IP TableFormE
 tableFormE = withPos do
