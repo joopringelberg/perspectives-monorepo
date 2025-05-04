@@ -1,5 +1,5 @@
 import React from "react";
-import { MainScreenElements, TableFormDef, What as WhatDef } from "perspectives-proxy";
+import { MainScreenElements, MarkDownElementDef, TableFormDef, What as WhatDef } from "perspectives-proxy";
 import { buildMarkDown, FreeFormScreen, PerspectivesComponent, PSContext } from "perspectives-react";
 import { TableForms } from "./tableForms";
 
@@ -15,25 +15,29 @@ export class What extends PerspectivesComponent<WhatProps>{
   }
 
   render() {
-    switch (this.props.screenelements.tag) {
-      case "TableForms":
-        const contextinstance = this.props.screenelements.elements.tableForms[0].table.widgetCommonFields.perspective.contextInstance;
-        const myroletype = this.props.screenelements.elements.tableForms[0].table.widgetCommonFields.perspective.userRoleType;
-        return (<>
-          {this.props.screenelements.elements.markdown.map((markdown, index) => 
-            <div key={index}>{ buildMarkDown(contextinstance, myroletype, markdown) }</div>
-          )}
-          <TableForms screenelements={this.props.screenelements.elements.tableForms} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={true}/>
-          { <TableForms screenelements={this.props.screenelements.elements.tableForms as TableFormDef[]} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={true}/> }
-        </>);
-      case "FreeFormScreen":
-        return <PSContext.Consumer>{
-          context => <FreeFormScreen 
-            screen={this.props.screenelements.elements as MainScreenElements}
-            contextinstance={context.contextinstance}
-            contexttype={context.contexttype}
-            myroletype={context.myroletype}
-          />}
-          </PSContext.Consumer>
-    }}
+    const component = this;
+    return (<PSContext.Consumer>{
+      context => {
+        switch (this.props.screenelements.tag) {
+          case "TableForms":
+            const element = this.props.screenelements.elements as unknown as {markdown: MarkDownElementDef[], tableForms: TableFormDef[]};
+            return <>
+                {element.markdown.map((markdown, index) => 
+                  <div key={index}>{ buildMarkDown(context.contextinstance, context.myroletype, markdown) }</div>
+                )}
+                <TableForms screenelements={element.tableForms} showTablesAndForm={component.props.showTablesAndForm} doubleclickOpensDetails={true}/>
+                { <TableForms screenelements={element.tableForms as TableFormDef[]} showTablesAndForm={component.props.showTablesAndForm} doubleclickOpensDetails={true}/> }
+              </>;
+          case "FreeFormScreen":
+            return <FreeFormScreen 
+                screen={component.props.screenelements.elements as MainScreenElements}
+                contextinstance={context.contextinstance}
+                contexttype={context.contexttype}
+                myroletype={context.myroletype}
+              />;
+        }}
+    
+      }
+    </PSContext.Consumer>);
+  }
 }
