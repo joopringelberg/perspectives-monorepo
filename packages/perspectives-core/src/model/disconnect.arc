@@ -50,10 +50,9 @@ domain model://joopringelberg.nl#Disconnect
         props (FirstName, LastName) verbs (Consult)
       screen
         who
-          markdown <## Roles
-                    There is just a single role one can take on in this context: that of the Manager, who 
-                    decides which peers to disconnect from. To disconnect a peer means that the peer is
-                    no longer informed about changes that might be relevant to him or her.
+          markdown <### Roles
+                    There is just a single role you can have in this context: that of the Manager, who 
+                    decides which peers to disconnect from. You have this role automatically.
                     >
           Manager
             master "Master"
@@ -61,7 +60,7 @@ domain model://joopringelberg.nl#Disconnect
             detail
               props (FirstName, LastName) verbs (Consult)
         what
-            markdown <## Disconnect yourself from a peer
+            markdown <### Disconnect yourself from a peer
                       It may happen that you do no longer want to exchange information with a peer.
                       You can use this screen to disconnect yourself from someone.
                       This means that information you enter that might be relevant to the peer will not be
@@ -69,9 +68,15 @@ domain model://joopringelberg.nl#Disconnect
                       >
         where
           DisconnectedPeers
-            master "Disconnected peers"
+            master
+              markdown <### Disconnected peers
+                        This is a list of all peers you have disconnected from. Visit each for more possiblities.
+                        >
               props (Peer) verbs (Consult)
             detail
+              markdown <### Disconnected peer
+                        These are the details of the peer you can disconnect from.
+                        >
               props (Peer, Disconnected) verbs (Consult)
 
     context DisconnectedPeers (relational) filledBy DisconnectedPeer
@@ -133,7 +138,16 @@ domain model://joopringelberg.nl#Disconnect
             detail
               props (FirstName, LastName, Cancelled) verbs (Consult)
         what
+          markdown <### Disconnect from or reconnect to a peer
+                    Disconnect from this peer by choosing the *Disconnect* action from the main menu (top left corner).
+                    Reconnect by choosing the *Reconnect* action.
+                    
+                    As long as you are connected, you can chat with the peer (see the chat under *Who*).
+                    >
         where
+          markdown <### You can't go anywhere from here
+                    There are no subcontexts to visit from here.
+                    >
     
     user Disconnected filledBy sys:TheWorld$PerspectivesUsers
       property Reconnect (Boolean)

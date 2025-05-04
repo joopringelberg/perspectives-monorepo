@@ -16,7 +16,6 @@ interface WhereProps {
 }
 export class Where extends Component<WhereProps> {
   render() {
-    // TODO: add indexed contexts and recent contexts.
     return (<PSContext.Consumer>{ value => 
     <>
       {this.props.screenelements.markdown.map((markdown, index) => 

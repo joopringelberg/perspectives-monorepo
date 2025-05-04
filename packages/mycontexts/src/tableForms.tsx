@@ -15,24 +15,26 @@ interface TableFormsProps {
 export class TableForms extends Component<TableFormsProps> {
   render() {
     const forms = this.props.screenelements.map(({ form }) => form);
-    return (
-      <MSComponent isMobile={!this.props.showTablesAndForm} className='bg-light-subtle' doubleclickOpensDetails={this.props.doubleclickOpensDetails}>
-        <Accordion defaultActiveKey="0" flush>
-          {
-          this.props.screenelements.map(({markdown, table, form}, index) => {
-            const contextinstance = table.widgetCommonFields.perspective.contextInstance;
-            const myroletype = table.widgetCommonFields.perspective.userRoleType;
-            // No TableControls, show as Accordion item.
-            return (
-              <div key={index}>
-                { markdown.map( (md, index) => <div key={index}>{ buildMarkDown( contextinstance, myroletype, md) }</div>) }
-                { buildTable(table, false, true) }
-              </div>);
-            })
-          }
-        </Accordion>
-        <SelectedForm forms={forms} />
-    </MSComponent>)
+    if (forms.length > 0) {
+      return (
+        <MSComponent isMobile={!this.props.showTablesAndForm} className='bg-light-subtle' doubleclickOpensDetails={this.props.doubleclickOpensDetails}>
+          <Accordion defaultActiveKey="0" flush>
+            {
+            this.props.screenelements.map(({markdown, table, form}, index) => {
+              const contextinstance = table.widgetCommonFields.perspective.contextInstance;
+              const myroletype = table.widgetCommonFields.perspective.userRoleType;
+              // No TableControls, show as Accordion item.
+              return (
+                <div key={index}>
+                  { markdown.map( (md, index) => <div key={index}>{ buildMarkDown( contextinstance, myroletype, md) }</div>) }
+                  { buildTable(table, false, true) }
+                </div>);
+              })
+            }
+          </Accordion>
+          <SelectedForm forms={forms} />
+      </MSComponent>)
+    }
   }
 }
 
