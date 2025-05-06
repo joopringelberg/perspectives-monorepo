@@ -1400,7 +1400,7 @@ sentenceE = do
 reserved' :: String -> IP String
 reserved' name = token.reserved name *> pure name
 
--- | This parser always succeeds with a string.
+-- | This parser always succeeds with a string but does not consume any input.
 -- | If no reserved word is found, restores the parser state (uses try internally).
 scanIdentifier :: IP String
 scanIdentifier = option "" (lookAhead reservedIdentifier)
@@ -1455,15 +1455,22 @@ whoE = reserved "who" *> (TableFormSectionE <$> option Nil (reserved "markdown" 
 
 whatE :: IP WhatE
 whatE = reserved "what" *>
-  (TableForms <$> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
+  ((do 
+    tforms <- TableForms <$> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
+    -- Make sure we have parsed the who clause completely.
+    lookAhead (reserved "where")
+    pure tforms)
   <|> 
-  do
+  (do
+    -- put' indentParserPosition
     start <- getPosition
     title <- optionMaybe token.stringLiteral
     subscreen <- classicScreenE title start
+    -- Make sure we have parsed the who clause completely.
+    lookAhead (reserved "where")
     case subscreen of 
       ClassicScreen s -> pure $ FreeFormScreen s
-      _ -> fail "Expected ClassicScreen")
+      _ -> fail "Expected ClassicScreen"))
 
 whereE :: IP TableFormSectionE
 whereE = reserved "where" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
