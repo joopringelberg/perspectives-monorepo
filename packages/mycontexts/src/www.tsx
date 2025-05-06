@@ -526,7 +526,10 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             >
             <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
               { this.state.screen?.whoWhatWhereScreen ?
-                <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "who"}/>
+                <Who 
+                  screenelements={ this.state.screen.whoWhatWhereScreen.who } 
+                  showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "who"}
+                />
                 : 
                 <p className='bg-light-subtle'>Ga ergens heen</p>
               }

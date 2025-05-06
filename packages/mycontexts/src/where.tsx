@@ -57,6 +57,7 @@ export class Where extends Component<WhereProps, WhereState> {
       {this.props.screenelements.markdown.map((markdown, index) => 
           <div key={index}>{ buildMarkDown(value.contextinstance, value.myroletype, markdown) }</div>
         )}
+      <TableForms screenelements={this.props.screenelements.contextRoles} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={false} />
       <Accordion ref={this.ref} activeKey={this.state.accordionOpen} flush>
         <PinnedContexts systemuser={this.props.systemUser} />
         <RecentContexts systemuser={this.props.systemUser} openContext={this.props.openContext} systemIdentifier={this.props.systemIdentifier}/>
