@@ -313,7 +313,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
       return (
           component.props.showAsAccordionItem ?
             <Accordion.Item eventKey={perspective.id} key={perspective.id}>
-              <Accordion.Header>
+              <Accordion.Header onClick={() => component.eventDiv.current?.dispatchEvent(new CustomEvent('OpenAccordionItem', {detail: perspective.id, bubbles: true}))}>
                 <AccordionHeaderWithmenu perspective={perspective} roleinstance={component.state.row}/>
               </Accordion.Header>
               <Accordion.Body>{

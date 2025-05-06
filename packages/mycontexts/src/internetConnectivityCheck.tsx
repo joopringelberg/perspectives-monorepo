@@ -19,6 +19,7 @@ export function InternetConnectivityCheck( {reportBack} : {reportBack: (isOnline
   const registerOnlineStatusChange = (currentStatus: boolean) => {
     if (currentStatus !== isOnline)
     {
+      console.log("Connectivity status changed: ", currentStatus);
       setIsOnline(currentStatus);
       reportBack(currentStatus);
     }
@@ -26,14 +27,22 @@ export function InternetConnectivityCheck( {reportBack} : {reportBack: (isOnline
   
   useEffect(() => {
     // Check immediately
+    console.log("Checking connectivity for the first time");
     checkConnectivity();
     
     // Regular interval checking
-    const interval = setInterval(checkConnectivity, 30000); // Every 30 seconds
+    const interval = setInterval(
+      () =>{
+        console.log("Checking connectivity periodically");
+        checkConnectivity}, 10000); // Every 30 seconds
     
     // Also use the browser events
-    const handleOnline = () => checkConnectivity();
-    const handleOffline = () => registerOnlineStatusChange(false);
+    const handleOnline = () => {
+      console.log("Browser online event");
+      checkConnectivity()};
+    const handleOffline = () => {
+      console.log("Browser offline event");
+      registerOnlineStatusChange(false)};
     
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);

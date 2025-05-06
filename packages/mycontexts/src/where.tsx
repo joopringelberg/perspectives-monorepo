@@ -14,15 +14,45 @@ interface WhereProps {
   systemIdentifier: ContextInstanceT;
   openContext: RoleInstanceT | undefined;
 }
-export class Where extends Component<WhereProps> {
+
+interface WhereState {
+  accordionOpen: string[];
+}
+
+export class Where extends Component<WhereProps, WhereState> {
+  ref: React.RefObject<HTMLDivElement | null>;
+
+  constructor(props: WhereProps) {
+    super(props);
+    this.ref = React.createRef();
+    this.state = { accordionOpen: [] };
+  }
+
+  componentDidMount() {
+    const component = this;
+    if (this.ref.current) {
+      this.ref.current.addEventListener(
+        'OpenContext', 
+        (e : CustomEvent) => {
+          component.setState({accordionOpen: []});  
+        }, 
+        false);
+      this.ref.current.addEventListener(
+        'OpenAccordionItem',
+        (e : CustomEvent) => {
+          component.setState({accordionOpen: [e.detail]});
+        },
+        false)
+    }
+  }
+
   render() {
     return (<PSContext.Consumer>{ value => 
     <>
       {this.props.screenelements.markdown.map((markdown, index) => 
           <div key={index}>{ buildMarkDown(value.contextinstance, value.myroletype, markdown) }</div>
         )}
-      <TableForms screenelements={this.props.screenelements.contextRoles} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={false} />
-      <Accordion defaultActiveKey="0" flush>
+      <Accordion ref={this.ref} activeKey={this.state.accordionOpen} flush>
         <PinnedContexts systemuser={this.props.systemUser} />
         <RecentContexts systemuser={this.props.systemUser} openContext={this.props.openContext} systemIdentifier={this.props.systemIdentifier}/>
       </Accordion>
