@@ -13,7 +13,7 @@ export class Who extends Component<WhoProps> {
   render() {
     const defaultActiveKey = this.props.screenelements.chats[0]?.fields.chatInstance;
     return <PSContext.Consumer>{ value => 
-      <>
+      <>{ defaultActiveKey ?
         <Accordion defaultActiveKey={defaultActiveKey} flush>
         {this.props.screenelements.chats.map((chat) => (
           chat.fields.chatInstance ? 
@@ -34,6 +34,7 @@ export class Who extends Component<WhoProps> {
           : null))
         }
         </Accordion>
+        : null}
         {this.props.screenelements.markdown.map((markdown, index) => 
           <div key={index}>{ buildMarkDown(value.contextinstance, value.myroletype, markdown) }</div>
         )}
