@@ -19,8 +19,6 @@
 // END LICENSE
 
 import React, { useState, useEffect, useRef } from "react";
-import "./App.css";
-
 
 import OverlayTrigger from 'react-bootstrap/OverlayTrigger';
 import Tooltip from 'react-bootstrap/Tooltip';
@@ -37,6 +35,7 @@ export default function ConnectedToAMQP(props : ConnectedToAMQPProps)
 {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const eventDiv = useRef(null);
+  const isOnline = props.isOnline;
 
   // useEffect hook to handle the asynchronous call
   useEffect(() => {
@@ -69,7 +68,7 @@ export default function ConnectedToAMQP(props : ConnectedToAMQPProps)
       props.show}>
       {i18next.t("app_connected_to_amqp_tooltip", 
         { ns: 'mycontexts'
-        , connectionState: isConnected  && props.isOnline ? 
+        , connectionState: isConnected  && isOnline ? 
           "" :
           i18next.t("app_connected_to_internet_connected", { ns: 'mycontexts' })
         })
