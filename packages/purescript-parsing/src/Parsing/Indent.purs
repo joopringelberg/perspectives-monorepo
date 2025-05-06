@@ -61,13 +61,14 @@ import Prelude
 
 import Control.Alt ((<|>))
 import Control.Apply (lift2)
+import Control.Monad.Error.Class (catchError, throwError)
 import Control.Monad.State (StateT, evalStateT)
 import Control.Monad.State.Trans (get, put)
 import Control.Monad.Trans.Class (lift)
 import Data.List (List(..), many)
 import Data.Maybe (Maybe(..))
 import Parsing (ParserT, fail, position, Position(..), initialPos)
-import Parsing.Combinators (option, optionMaybe)
+import Parsing.Combinators (option, optionMaybe, try)
 import Parsing.String (string)
 import Parsing.String.Basic (oneOf)
 
@@ -145,11 +146,15 @@ block p = withPos $ do
   pure r
 
 -- | Parses using the current location for indentation reference
+-- | Maintains the original reference position in case of failure.
 withPos :: forall m s a. Monad m => IndentParser m s a -> IndentParser m s a
 withPos x = do
   a <- get'
   p <- position
-  r <- put' p *> x
+  r <- put' p *> catchError x (\e -> do
+    -- Restore the original reference position
+    put' a
+    throwError e)
   put' a *> pure r
 
 -- | Ensures the current indentation level matches that of the reference
