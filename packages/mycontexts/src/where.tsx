@@ -40,7 +40,12 @@ export class Where extends Component<WhereProps, WhereState> {
       this.ref.current.addEventListener(
         'OpenAccordionItem',
         (e : CustomEvent) => {
-          component.setState({accordionOpen: [e.detail]});
+          if (component.state.accordionOpen.indexOf( e.detail ) === -1) {
+            component.setState({accordionOpen: [e.detail]});
+          }
+          else {
+            component.setState({accordionOpen: []});
+          }
         },
         false)
     }
