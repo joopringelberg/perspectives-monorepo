@@ -70,7 +70,9 @@ domain model://perspectives.domains#CouchdbManagement
         only (CreateAndFill, RemoveContext, DeleteContext, Create, Fill)
         props (Name) verbs (Consult)
         props (Url, CouchdbServers$CouchdbPort, AdminUserName, AdminPassword, Name) verbs (SetPropertyValue)
-
+      perspective on Manager
+        props (FirstName, LastName) verbs (Consult)
+        
       -- Manager needs this action so he can set the Url before the CouchdbServer$Visitor tries to publish.
       action CreateServer
         create role CouchdbServers
@@ -81,11 +83,38 @@ domain model://perspectives.domains#CouchdbManagement
         props (AuthorizedDomain, Password, SpecificUserName) verbs (SetPropertyValue)
       
       screen "Couchdb Server Administration"
-        row
-          table CouchdbServers
-            -- No restriction on properties, but the Create and CreateAndFill verbs are omitted.
-            only (RemoveContext)
+        who
+          Manager
+            master
+              props(LastName) verbs (Consult)
+            detail
+              props (FirstName, LastName) verbs (Consult)
+        what
+          markdown <### Managing Couchdb Servers for Perspectives
+                      If you run a Couchdb server, you can use this app to create repositories and accounts on it.
+                      A *Repository* is a collection of models and versions of those models.
+                      Managed servers are listed under *where*.
 
+                      #### Add a Couchdb Server as a managed server
+                      Look up the url, port and credentials of the Couchdb server you want to manage.
+                      Then:
+                      * Click the item *Create Server* in the main menu.
+                      * Fill in the URL of the Couchdb server. The URL must start with `https://` and end with a `/`.
+                      * Fill in the port number of the Couchdb server. This is a number between 1 and 65535.
+                      * Fill in the username and password of an Admin account on the Couchdb server.
+                      >
+        where
+          CouchdbServers
+            master
+              markdown <### Couchdb Servers
+                        On adding a new server, you will not be able to enter its name yet.
+                        This is because the server is not yet created in Couchdb.
+                        After entering all required information, the server will be created in Couchdb.
+                        After that, visit the CouchdbServer context and enter a name.
+                        >
+              props (Name) verbs (Consult)
+            detail
+              props (Url, CouchdbServers$CouchdbPort, AdminUserName, AdminPassword) verbs (SetPropertyValue)
       
     -- A new CouchdbServers instance comes complete with a CouchdbServer$Admin role
     -- filled with CouchdbManagementApp$Admin.
@@ -156,6 +185,7 @@ domain model://perspectives.domains#CouchdbManagement
       property ServerUrl (functional) = binder CouchdbServers >> Url
       property CouchdbPort (functional) = binder CouchdbServers >> CouchdbServers$CouchdbPort
       property Name (String)
+        readableName
 
       -- This covers the case we get a CouchdbServer that we did not create ourselves.
       -- If we do not refer to my indexed version of the CouchdbApp, this condition will fail because another user
@@ -267,24 +297,38 @@ domain model://perspectives.domains#CouchdbManagement
         -- in object state WithoutManifests
         --   action RemoveRepository
         --     remove role origin
-      
+            
       screen "Couchdb Server"
-        tab "The server"
+        who
+        what
           row
-            form External
-              props (ServerUrl, Name) verbs (Consult)
-              --props (Name) verbs (SetPropertyValue)
+            markdown <### Couchdb Server Administration
+                        A Couchdb Server is the container of *Repositories* and *Bespoke Databases*.
+                        The former are in essence a collection of models and versions of those models.
+                        The latter are stores for contexts and roles, the primary stuff kept by Perspectives.
+                        You need a bespoke database for example, to store *public pages* in.
+                        >
           row
-            form "Admins" Admin
-        tab "Repositories" default
-          row 
-            table Repositories
-        tab "Accounts"
-          row
-            table Accounts
-        tab "Bespoke databases"
-          row
-            table BespokeDatabases
+            form "Couchdb Server" External
+        where
+
+      -- screen "Couchdb Server"
+      --   tab "The server"
+      --     row
+      --       form External
+      --         props (ServerUrl, Name) verbs (Consult)
+      --         --props (Name) verbs (SetPropertyValue)
+      --     row
+      --       form "Admins" Admin
+      --   tab "Repositories" default
+      --     row 
+      --       table Repositories
+      --   tab "Accounts"
+      --     row
+      --       table Accounts
+      --   tab "Bespoke databases"
+      --     row
+      --       table BespokeDatabases
 
     -- This role requires credentials for the ServerUrl, because it can remove itself.
     -- It requires write access to cw_servers_and_repositories.

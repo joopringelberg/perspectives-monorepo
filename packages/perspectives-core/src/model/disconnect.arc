@@ -60,12 +60,14 @@ domain model://joopringelberg.nl#Disconnect
             detail
               props (FirstName, LastName) verbs (Consult)
         what
+          row
             markdown <### Disconnect yourself from a peer
                       It may happen that you do no longer want to exchange information with a peer.
                       You can use this screen to disconnect yourself from someone.
                       This means that information you enter that might be relevant to the peer will not be
                       sent to him or her.
                       >
+                      
         where
           DisconnectedPeers
             master
