@@ -149,7 +149,8 @@ export class EndUserNotifier extends PerspectivesComponent<EndUserNotifierProps,
     const component = this;
     const acknowledge = component.props.message.acknowledge ? component.props.message.acknowledge : () => undefined;
     return <Modal
-      show={component.props.message.message !== undefined}>
+      show={component.props.message.message !== undefined}
+      onHide={ () => acknowledge( true )}>
       <Modal.Header closeButton>
         <Modal.Title>{component.props.message.title || "A message"}</Modal.Title>
       </Modal.Header>
