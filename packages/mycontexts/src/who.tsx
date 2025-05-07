@@ -36,7 +36,7 @@ export class Who extends Component<WhoProps> {
         </Accordion>
         : null}
         {this.props.screenelements.markdown.map((markdown, index) => 
-          <div key={index}>{ buildMarkDown(value.contextinstance, value.myroletype, markdown) }</div>
+          <div key={index} className="markdown">{ buildMarkDown(value.contextinstance, value.myroletype, markdown) }</div>
         )}
         <TableForms screenelements={this.props.screenelements.userRoles} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={true} />
       </>

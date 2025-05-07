@@ -334,7 +334,6 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
   buildMarkDown({tag, element} : MarkDownElementDef)
   {
     const component = this;
-      let perspective : Perspective, markDownProperty : PropertyType | undefined, conditionProperty : PropertyType | undefined;
       switch (tag) {
         // MarkDownConstant is by construction functional.
         case "MarkDownConstantDef":

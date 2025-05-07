@@ -79,3 +79,9 @@ html body .dropdown-menu .dropdown-item {
     width 0.6s ease-in-out, 
     padding 0.6s ease-in-out;
 }
+
+.markdown {
+  --markdown-padding-y: var(--bs-accordion-body-padding-y, 1rem);
+  --markdown-padding-x: var(--bs-accordion-body-padding-x, 1.25rem);
+  padding: var(--markdown-padding-y) var(--markdown-padding-x);
+}

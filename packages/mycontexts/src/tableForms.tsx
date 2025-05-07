@@ -25,7 +25,7 @@ export class TableForms extends Component<TableFormsProps> {
               const myroletype = table.widgetCommonFields.perspective.userRoleType;
               // No TableControls, show as Accordion item.
               return (
-                <div key={index}>
+                <div key={index} className="markdown">
                   { markdown.map( (md, index) => <div key={index}>{ buildMarkDown( contextinstance, myroletype, md) }</div>) }
                   { buildTable(table, false, true) }
                 </div>);
