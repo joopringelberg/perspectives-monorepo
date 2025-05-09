@@ -85,3 +85,13 @@ html body .dropdown-menu .dropdown-item {
   --markdown-padding-x: var(--bs-accordion-body-padding-x, 1.25rem);
   padding: var(--markdown-padding-y) var(--markdown-padding-x);
 }
+
+/* Add this to your existing CSS */
+.content-top-aligned {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start; /* This is the key property for top alignment */
+  height: 100%;  /* Take up all available height */
+  width: 100%;   /* Take up all available width */
+}

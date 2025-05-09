@@ -86,12 +86,10 @@ export class ThemeManager {
         document.head.removeChild(oldLink);
       }
     }
-    
-    let stylesheetId: string;
+      // Load standard theme from node_modules    
+    let stylesheetId = `theme-${theme.id}`;
     
     if (theme.type === 'standard') {
-      // Load standard theme from node_modules
-      stylesheetId = `theme-${theme.id}`;
       await this.loadStylesheet(
         `https://cdn.jsdelivr.net/npm/bootswatch@5/dist/${theme.id}/bootstrap.min.css`, 
         stylesheetId

@@ -21,20 +21,21 @@ export class What extends PerspectivesComponent<WhatProps>{
         switch (this.props.screenelements.tag) {
           case "TableForms":
             const element = this.props.screenelements.elements as unknown as {markdown: MarkDownElementDef[], tableForms: TableFormDef[]};
-            return <>
+            return <div className="content-top-aligned">
                 {element.markdown.map((markdown, index) => 
                   <div key={index} className="markdown">{ buildMarkDown(context.contextinstance, context.myroletype, markdown) }</div>
-                )}
+                  )}
                 <TableForms screenelements={element.tableForms} showTablesAndForm={component.props.showTablesAndForm} doubleclickOpensDetails={true}/>
-                { <TableForms screenelements={element.tableForms as TableFormDef[]} showTablesAndForm={component.props.showTablesAndForm} doubleclickOpensDetails={true}/> }
-              </>;
+              </div>;
           case "FreeFormScreen":
-            return <FreeFormScreen 
-                screen={component.props.screenelements.elements as MainScreenElements}
-                contextinstance={context.contextinstance}
-                contexttype={context.contexttype}
-                myroletype={context.myroletype}
-              />;
+            return  <div className="content-top-aligned">
+                      <FreeFormScreen 
+                        screen={component.props.screenelements.elements as MainScreenElements}
+                        contextinstance={context.contextinstance}
+                        contexttype={context.contexttype}
+                        myroletype={context.myroletype}
+                      />
+                    </div>;
         }}
     
       }

@@ -53,7 +53,7 @@ export class Where extends Component<WhereProps, WhereState> {
 
   render() {
     return (<PSContext.Consumer>{ value => 
-    (<>
+    (<div className="content-top-aligned">
       {this.props.screenelements.markdown.map((markdown, index) => 
           <div key={index} className="markdown">{ buildMarkDown(value.contextinstance, value.myroletype, markdown) }</div>
         )}
@@ -62,7 +62,7 @@ export class Where extends Component<WhereProps, WhereState> {
         <PinnedContexts systemuser={this.props.systemUser} />
         <RecentContexts systemuser={this.props.systemUser} openContext={this.props.openContext} systemIdentifier={this.props.systemIdentifier}/>
       </Accordion>
-    </>)
+    </div>)
     }</PSContext.Consumer>);
   }
 }
