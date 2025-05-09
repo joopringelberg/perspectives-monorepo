@@ -1,7 +1,6 @@
 -- Copyright Joop Ringelberg and Cor Baars 2019, 2020, 2021, 2023
 domain model://perspectives.domains#Introduction
   use sys for model://perspectives.domains#System
-  use cdb for model://perspectives.domains#Couchdb
   use intro for model://perspectives.domains#Introduction
 
 -------------------------------------------------------------------------------
@@ -61,14 +60,25 @@ domain model://perspectives.domains#Introduction
             detail
               props (FirstName, LastName) verbs (Consult)
         what
+          markdown <### Introducing acquiantances
+                    This is the place where you can introduce people to each other. 
+                    After introducing them, they will be able to communicate with each other through MyContexts.
+                    Within an introduction context, the introducer and introducees can chat with each other.
+                    >
         where
           Introductions
             master 
+              markdown <### Introductions
+                        These are the persons that have been introduced to each other by you.
+                        >
               props (Title) verbs (Consult)
             detail
               props (Title) verbs (Consult)
           IncomingIntroductions
             master 
+              markdown <### Incoming introductions
+                        You have been introduced to these persons by others.
+                        >
               props (Title) verbs (Consult)
             detail
               props (Title) verbs (Consult)
@@ -80,6 +90,7 @@ domain model://perspectives.domains#Introduction
           bind sys:SocialMe >> binding to Introducer
     external
       property Title (String)
+        readableName
     user Guest = sys:SocialMe
       perspective on Introducer
         only (Create, Fill)
@@ -105,15 +116,20 @@ domain model://perspectives.domains#Introduction
         who
           Introducee
             master
-              props (FirstName) verbs (Consult)
+              markdown <### Introducees
+                        These are the persons that have been introduced to each other by you.
+                        >
+              without props (FirstName)
             detail
-              props (FirstName, LastName) verbs (Consult)
         what
+          markdown <### Introduction
+                    The purpose of this context is to introduce people to each other.
+                    You can chat with the others under *Who*.
+                    >
           External
             master
-              props (Title) verbs (Consult)
+              props (Title) without (SetPropertyValue)
             detail
-              props (Title) verbs (Consult, SetPropertyValue)
         where
 
     user Introducee (relational) filledBy sys:TheWorld$PerspectivesUsers
@@ -137,10 +153,18 @@ domain model://perspectives.domains#Introduction
               props (FirstName, LastName) verbs (Consult)
           Introducee
             master
+              markdown <### Introducees
+                        These are the persons that have been introduced to you.
+                        >
               props (FirstName) verbs (Consult)
             detail
               props (FirstName, LastName) verbs (Consult)
         what
+          markdown <### Introduction
+                    You have been introduced to others by the introducer of this context.
+                    You can chat with the others under *Who*.
+                    The introducees have been added to your contacts.
+                    >
           External
             master
               props (Title) verbs (Consult)
