@@ -23,6 +23,7 @@ module Perspectives.Parsing.Arc.PhaseThree.Screens where
 
 import Control.Monad.State (gets) as State
 import Control.Monad.Trans.Class (lift)
+import Control.Monad.Writer (WriterT, execWriterT, tell)
 import Data.Array (catMaybes, cons, elemIndex, filter, filterA, find, findIndex, foldM, fromFoldable, head, length, nub, null)
 import Data.Array.Partial (head) as ARRP
 import Data.Foldable (for_)
@@ -34,11 +35,11 @@ import Data.Tuple (Tuple(..), fst, snd)
 import Foreign.Object (Object, keys, lookup)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (###=), (###>))
-import Perspectives.Data.EncodableMap (empty, insert) as EM
+import Perspectives.Data.EncodableMap (empty, insert, singleton) as EM
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_)
 import Perspectives.ModelDependencies (chatAspect)
-import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..))
+import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), PropertyVerbE(..), PropsOrView, RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..))
 import Perspectives.Parsing.Arc.AST (ColumnE(..), FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), WhatE(..), WidgetCommonFields) as AST
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -51,12 +52,12 @@ import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getEnumeratedRole, tryGetPerspectType)
 import Perspectives.Representation.Class.Property (hasFacet)
 import Perspectives.Representation.Class.Role (allProperties, displayName, perspectivesOfRoleType, roleADTOfRoleType, roleTypeIsFunctional)
-import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
-import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), addProperty, expandPropSet, expandVerbs, perspectiveSupportsPropertyForVerb, perspectiveSupportsRoleVerbs)
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ExplicitSet (ExplicitSet(..), elements_)
+import Perspectives.Representation.Perspective (Perspective(..), expandPropSet, perspectiveSupportsPropertyForVerb, perspectiveSupportsRoleVerbs)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyRestrictions)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optimistic, pessimistic)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), propertytype2string, roletype2string)
-import Perspectives.Representation.Verbs (PropertyVerb, roleVerbList2Verbs)
+import Perspectives.Representation.Verbs (PropertyVerb, allPropertyVerbs, roleVerbList2Verbs)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_, lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
 import Prelude (Unit, bind, discard, eq, flip, map, not, pure, show, unit, ($), (<#>), (<$>), (<<<), (==), (>>=), (<*>))
@@ -252,7 +253,7 @@ handleScreens screenEs = do
                     Just conditionProperty -> do 
                       -- add the conditionProperty to the widgetFields!
                       widgetFields' <- widgetCommonFields widgetFields Unknown
-                      pure $ MarkDownPerspectiveDef {widgetFields: widgetFields' {propertyVerbs = (flip (unsafePartial addProperty) conditionProperty) <$> widgetFields'.propertyVerbs}, conditionProperty: Just conditionProperty}
+                      pure $ MarkDownPerspectiveDef {widgetFields: widgetFields', conditionProperty: Just conditionProperty}
             markdown (MarkDownExpression {text, condition, context:ctxt, start:start', end:end'}) = do
               text' <- compileStep (CDOM $ ST ctxt) text
               -- The resulting QueryFunctionDescription should be functional.
@@ -282,12 +283,13 @@ handleScreens screenEs = do
 
 
             widgetCommonFields :: AST.WidgetCommonFields -> ThreeValuedLogic -> PhaseThree WidgetCommonFieldsDef
-            widgetCommonFields {title:title', perspective, propsOrView, propertyVerbs, roleVerbs, start:start', end:end'} isFunctionalWidget = do
+            widgetCommonFields {title:title', perspective, withoutProps, withoutVerbs, roleVerbs, start:start', end:end'} isFunctionalWidget = do
               -- From a RoleIdentification that represents the object,
               -- find the relevant Perspective.
               -- A ScreenElement can only be defined for a named Enumerated or Calculated Role. This means that `perspective` is constructed with the
               -- RoleIdentification.ExplicitRole data constructor: a single RoleType.
               -- If no role can be found for the given specification, collectRoles throws an error.
+              -- NOTE: objectRoleType identifies the same role as perspective.
               (objectRoleType :: RoleType) <- unsafePartial ARRP.head <$> collectRoles perspective
               -- Check the Cardinality
               (lift2 $ roleTypeIsFunctional objectRoleType) >>= if _
@@ -317,34 +319,54 @@ handleScreens screenEs = do
                   if perspectiveSupportsRoleVerbs pspve (maybe [] roleVerbList2Verbs roleVerbs)
                     then pure unit
                     else throwError (UnauthorizedForRole "Auteur" subjectRoleType objectRoleType (maybe [] roleVerbList2Verbs roleVerbs) (Just start') (Just end'))
-                  case propsOrView, propertyVerbs of
-                    -- The modeller has provided no restrictions.
-                    AST.AllProperties, Universal -> pure
-                      { title:title'
-                      , perspectiveId
-                      , perspective: Nothing
-                      , propertyVerbs: Nothing
-                      , roleVerbs: maybe Nothing (Just <<< roleVerbList2Verbs) roleVerbs
-                      , userRole: subjectRoleType
-                      }
-                    pOrV, pVerbs -> do
-                      (propertyTypes :: ExplicitSet PropertyType) <- unsafePartial collectPropertyTypes pOrV perspective start'
-                      checkVerbsAndProps allProps propertyTypes (expandVerbs pVerbs) pspve objectRoleType
-                      pure
-                        { title:title'
-                        , perspectiveId
-                        , perspective: Nothing
-                        , propertyVerbs: Just $ PropertyVerbs propertyTypes pVerbs
-                        , roleVerbs: maybe Nothing (Just <<< roleVerbList2Verbs) roleVerbs
-                        , userRole: subjectRoleType
-                        }
+                  -- Compute the excluded propertiesfrom Maybe PropsOrView.
+                  (withoutProperties :: Maybe (Array PropertyType)) <- case withoutProps of 
+                    Nothing -> pure Nothing
+                    Just (withoutProps' :: PropsOrView) -> Just <$> propertiesInPropsOrView withoutProps' perspective objectRoleType start'
+
+                  -- compute the excluded verbs per property from List PropertyVerbE.
+                  -- Each PropertyVerbE has an ExplicitSet PropertyVerb and a PropsOrView. 
+                  -- The former gives the verbs that are not allowed for each of the properties in the latter.
+                  -- We can safely assume that the props per PropertyVerbE are disjunct.
+                  (propertyRestrictions :: Maybe PropertyRestrictions) <- Just <$> (execWriterT $ collectPropertyRestrictions withoutVerbs objectRoleType)
+                  
+                  pure
+                    { title:title'
+                    , perspectiveId
+                    , perspective: Nothing
+                    , propertyRestrictions
+                    , withoutProperties
+                    , roleVerbs: maybe Nothing (Just <<< roleVerbList2Verbs) roleVerbs
+                    , userRole: subjectRoleType
+                    }
+
               where 
+
+                propertiesInPropsOrView :: PropsOrView -> RoleIdentification -> RoleType -> ArcPosition -> PhaseThree (Array PropertyType)
+                propertiesInPropsOrView pOrV role objectRoleType start = do 
+                  (propertyTypes :: ExplicitSet PropertyType) <- unsafePartial collectPropertyTypes pOrV role start
+                  case propertyTypes of
+                    Universal -> case objectRoleType of 
+                      ENR r -> lift2 $ allProperties $ ST r
+                      CR r -> lift2 (roleADTOfRoleType objectRoleType >>= allProperties <<< map roleInContext2Role)
+                    Empty -> pure []
+                    PSet as -> pure as 
+
+                -- NOTE: currently not in use and not good anyway.
                 checkVerbsAndProps :: Array PropertyType -> ExplicitSet PropertyType -> Array PropertyVerb -> Perspective -> RoleType -> PhaseThree Unit
                 checkVerbsAndProps allProps requiredProps propertyVerbs' perspective' objectRoleType = for_ (expandPropSet allProps requiredProps)
                   \requiredProp -> for propertyVerbs' \requiredVerb ->
                     if perspectiveSupportsPropertyForVerb perspective' requiredProp requiredVerb
                       then pure unit
                       else throwError (UnauthorizedForProperty "Auteur" subjectRoleType objectRoleType requiredProp requiredVerb (Just start') (Just end'))
+                
+                collectPropertyRestrictions :: LIST.List PropertyVerbE -> RoleType -> WriterT (PropertyRestrictions) PhaseThree Unit
+                collectPropertyRestrictions propertyVerbEs objectRoleType = for_ propertyVerbEs \(PropertyVerbE {propertyVerbs, propsOrView, start}) -> 
+                  do 
+                    props <- lift $ propertiesInPropsOrView propsOrView perspective objectRoleType start
+                    verbs <- pure $ elements_ propertyVerbs allPropertyVerbs
+                    for_ props \prop -> tell (EM.singleton prop verbs)
+                    pure unit
 
 -- | Qualifies incomplete names and changes RoleType constructor to CalculatedRoleType if necessary.
 -- | The role type name (parameter `rt`) is always fully qualified, EXCEPT

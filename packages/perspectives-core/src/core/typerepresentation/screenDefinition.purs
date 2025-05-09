@@ -38,9 +38,9 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.Data.EncodableMap (EncodableMap)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance)
-import Perspectives.Representation.Perspective (PropertyVerbs, PerspectiveId)
+import Perspectives.Representation.Perspective (PerspectiveId)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType, RoleType(..), roletype2string)
-import Perspectives.Representation.Verbs (RoleVerb)
+import Perspectives.Representation.Verbs (PropertyVerb, RoleVerb)
 import Perspectives.TypePersistence.PerspectiveSerialisation.Data (SerialisedPerspective')
 import Simple.JSON (class ReadForeign, class WriteForeign, read, read', write, writeImpl)
 
@@ -108,11 +108,16 @@ type WidgetCommonFieldsDefWithoutPerspective f =
   -- The runtime  has a perspective serialisation.
   -- These three fields are not serialised runtime; they are used to
   -- create the restricted serialised perspective.
-  , propertyVerbs :: Maybe PropertyVerbs
+  , propertyRestrictions :: Maybe PropertyRestrictions
+  , withoutProperties :: Maybe (Array PropertyType)
   , roleVerbs :: Maybe (Array RoleVerb)
   , userRole :: RoleType
   | f
   }
+
+-- | The keys are the string representations of PropertyTypes.
+-- | The values are the PropertyVerbs that are EXCLUDED for that property.
+type PropertyRestrictions = EncodableMap PropertyType (Array PropertyVerb)
 
 -- For en- and decoding. This discharges us from implementing a lot of instances for
 -- SerialisedPerspective'.

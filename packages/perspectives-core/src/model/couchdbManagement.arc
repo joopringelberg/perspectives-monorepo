@@ -259,6 +259,24 @@ domain model://perspectives.domains#CouchdbManagement
       action CreateRepository
         create role Repositories
 
+      perspective on Accounts
+        all roleverbs
+        props (FirstName, LastName) verbs (Consult)
+        props (Password, AuthorizedDomain) verbs (Consult, SetPropertyValue)
+      
+      perspective on BespokeDatabases
+        all roleverbs
+        props (OwnerName, Description) verbs (Consult)
+        props (Endorsed) verbs (SetPropertyValue)
+      
+      perspective on Admin
+        props (FirstName, UserName) verbs (Consult)
+        props (SpecificUserName, Password) verbs (SetPropertyValue)
+        all roleverbs
+      
+      perspective on Visitor
+        props (FirstName, LastName) verbs (Consult)
+
       perspective on External
         props (ServerUrl, CouchdbPort, ServerUrl) verbs (Consult)
         props (Name) verbs (SetPropertyValue, Consult)
@@ -274,24 +292,6 @@ domain model://perspectives.domains#CouchdbManagement
         in object state NoNameSpace
           props (Repositories$NameSpace) verbs (SetPropertyValue, AddPropertyValue)
         
-      perspective on Accounts
-        all roleverbs
-        props (FirstName, LastName) verbs (Consult)
-        props (Password, AuthorizedDomain) verbs (SetPropertyValue)
-      
-      perspective on BespokeDatabases
-        all roleverbs
-        props (OwnerName, Description) verbs (Consult)
-        props (Endorsed) verbs (SetPropertyValue)
-      
-      perspective on Admin
-        props (FirstName, UserName) verbs (Consult)
-        props (SpecificUserName, Password) verbs (SetPropertyValue)
-        all roleverbs
-      
-      perspective on Visitor
-        props (FirstName, LastName) verbs (Consult)
-
         -- This is currently not very useful, because a Repositories instance will not enter state WithoutManifests 
         -- when its last Manifest is deleted. Negation by failure breaks on removing instances!
         -- in object state WithoutManifests
@@ -300,6 +300,20 @@ domain model://perspectives.domains#CouchdbManagement
             
       screen "Couchdb Server"
         who
+          Admin
+            master
+              props(LastName) verbs (Consult)
+            detail
+          Accounts
+            master
+              markdown <#### Accounts
+                        The accounts of the Couchdb Server. Add an account by choosing *Empty role* from the accordion menu.
+                        Then put a user role on the clipboard (or select the role you want if it is already on the clipboard).
+                        Finally choose *Fill with the role on the clipboard* from the accordion menu
+                        >
+              props(LastName) verbs (Consult)
+            detail
+              props (FirstName, LastName, Password, AuthorizedDomain, Password) verbs (Consult)
         what
           row
             markdown <### Couchdb Server Administration
@@ -311,6 +325,19 @@ domain model://perspectives.domains#CouchdbManagement
           row
             form "Couchdb Server" External
         where
+          Repositories
+            master
+              props (Repositories$NameSpace) verbs (Consult)
+            detail
+              props (Repositories$NameSpace, AdminEndorses, IsPublic) verbs (SetPropertyValue, Consult)
+          BespokeDatabases
+            master
+              markdown <### Bespoke databases
+                        Databases owned by Accounts. 
+                        >
+              props (OwnerName) verbs (Consult)
+            detail
+
 
       -- screen "Couchdb Server"
       --   tab "The server"

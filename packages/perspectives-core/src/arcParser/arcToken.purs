@@ -243,6 +243,7 @@ perspectDef = LanguageDef
                   , "where"
                   , "master"
                   , "detail"
+                  , "without"
 
                   ]
                 , caseSensitive:   true

@@ -32,6 +32,8 @@ module Perspectives.Data.EncodableMap
   , removeAll
   , union
   , values
+  , singleton
+  , fromFoldable
   )
   where
 
@@ -39,8 +41,9 @@ import Prelude
 
 import Data.Array (foldr)
 import Data.Array.Partial (head, tail)
+import Data.Foldable (class Foldable)
 import Data.List (List)
-import Data.Map (Map, fromFoldable, showTree, toUnfoldable, insert, delete, lookup, values, empty, keys, union, filterKeys, unionWith) as Map
+import Data.Map (Map, fromFoldable, showTree, toUnfoldable, insert, delete, lookup, values, empty, keys, union, filterKeys, unionWith, singleton) as Map
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype, over, unwrap)
 import Data.Set (Set)
@@ -77,6 +80,11 @@ instance Functor (EncodableMap k) where
 --   sequence (EncodableMap mp) t = EncodableMap <$> (traverse t)
   -- sequence (EncodableMap mp) = EncodableMap <$> traverse identity mp
 
+instance semigroupEncodableMap :: (Ord k, Semigroup v) => Semigroup (EncodableMap k v) where
+  append (EncodableMap map1) (EncodableMap map2)= EncodableMap (Map.unionWith append map1 map2)
+
+instance monoidEncodableMap :: (Ord k, Monoid v) => Monoid (EncodableMap k v) where
+  mempty = EncodableMap Map.empty
 
 insert :: forall k v. Ord k => k -> v -> EncodableMap k v -> EncodableMap k v
 insert k v mp = EncodableMap $ Map.insert k v (unwrap mp)
@@ -96,9 +104,6 @@ empty = EncodableMap Map.empty
 keys :: forall k v. EncodableMap k v -> Set k
 keys (EncodableMap mp) = Map.keys mp
 
-instance semigroupEncodableMap :: (Ord k, Semigroup v) => Semigroup (EncodableMap k v) where
-  append (EncodableMap map1) (EncodableMap map2)= EncodableMap (Map.unionWith append map1 map2)
-
 -- | Add the value to the map for each key.
 addAll :: forall key value. Ord key => value -> EncodableMap key value -> Array key -> EncodableMap key value
 addAll value = foldr (\key map -> insert key value map)
@@ -113,3 +118,11 @@ union (EncodableMap m1) (EncodableMap m2) = EncodableMap (m1 `Map.union` m2)
 -- | on the key fails to hold.
 filterKeys :: forall k. Ord k => (k -> Boolean) -> EncodableMap k ~> EncodableMap k
 filterKeys criterium = over EncodableMap (Map.filterKeys criterium)
+
+singleton :: forall k v. k -> v -> EncodableMap k v
+singleton k v = EncodableMap $ Map.singleton k v
+
+-- | Convert any foldable collection of key/value pairs to a map.
+-- | On key collision, later values take precedence over earlier ones.
+fromFoldable :: forall f k v. Ord k => Foldable f => f (Tuple k v) -> EncodableMap k v
+fromFoldable fd = EncodableMap $ Map.fromFoldable fd

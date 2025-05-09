@@ -1,5 +1,6 @@
 import React, { Component, ReactElement } from 'react'
 import 'bootswatch/dist/spacelab/bootstrap.min.css';
+// import './assets/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import { set as setValue, get as getValue } from 'idb-keyval';
 import ConfigureInstallation, { InstallationData, InstallationResult } from './configureInstallation';

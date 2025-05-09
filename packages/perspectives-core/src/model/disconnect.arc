@@ -56,9 +56,8 @@ domain model://joopringelberg.nl#Disconnect
                     >
           Manager
             master "Master"
-              props (FirstName) verbs (Consult)
+              without props (FirstName)
             detail
-              props (FirstName, LastName) verbs (Consult)
         what
           row
             markdown <### Disconnect yourself from a peer
@@ -74,12 +73,11 @@ domain model://joopringelberg.nl#Disconnect
               markdown <### Disconnected peers
                         This is a list of all peers you have disconnected from. Visit each for more possiblities.
                         >
-              props (Peer) verbs (Consult)
+              without props (Disconnected)
             detail
               markdown <### Disconnected peer
                         These are the details of the peer you can disconnect from.
                         >
-              props (Peer, Disconnected) verbs (Consult)
 
     context DisconnectedPeers (relational) filledBy DisconnectedPeer
       state GiveMeARole = exists binding
@@ -125,20 +123,22 @@ domain model://joopringelberg.nl#Disconnect
       action Reconnect
         Cancelled = false for Disconnected
         Reconnect = true for Disconnected
-      action StartChat
-        create role sys:Chat
       screen 
         who
           Disconnecter
             master
-              props (FirstName) verbs (Consult)
+              without props (FirstName)
             detail
-              props (FirstName, LastName) verbs (Consult)
           Disconnected
             master
-              props (FirstName) verbs (Consult)
+              without props (FirstName, Cancelled, Reconnect)
             detail
-              props (FirstName, LastName, Cancelled) verbs (Consult)
+              markdown <### Disconnect and reconnect
+                        If the *Disconnected* property is set to *true*, you are disconnected from the peer.
+                        Restore contact by choosing the *Reconnect* action in the main menu (top left corner).
+                        >
+              without props (Reconnect)
+              props (Cancelled, Reconnect) without (SetPropertyValue)
         what
           markdown <### Disconnect from or reconnect to a peer
                     Disconnect from this peer by choosing the *Disconnect* action from the main menu (top left corner).
@@ -172,5 +172,31 @@ domain model://joopringelberg.nl#Disconnect
       perspective on sys:Chat
         only (Create, RemoveContext, Remove)
         props (Messages, Media) verbs (AddPropertyValue, Consult)
+      
+      action Reconnect
+        Cancelled = false for Disconnecter
+
+      screen 
+        who
+          Disconnecter
+            master
+              without props (FirstName)
+            detail
+          Disconnected
+            master
+              without props (FirstName, Reconnect)
+            detail
+        what
+          markdown <### You have been disconnected
+                    Your peer has severed the connection with you.
+                    Your installation automatically stops sending information to the peer.
+                    You can reconnect to your peer by choosing the *Reconnect* item from the main menu (top left corner).
+                    This will e.g. allow you to send chat messages to the peer again.
+                    However, it is up to the peer to restore her/his side of the connection.
+                    >
+        where
+          markdown <### You can't go anywhere from here
+                    There are no subcontexts to visit from here.
+                    >
         
     aspect thing sys:ContextWithNotification$Notifications

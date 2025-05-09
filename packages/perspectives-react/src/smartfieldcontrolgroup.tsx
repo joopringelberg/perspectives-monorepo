@@ -51,7 +51,6 @@ import React, { PureComponent } from "react";
 const Component = PureComponent;
 import
   { Row
-  , Col
   , Form
   } from "react-bootstrap";
 import { bool, string, shape, arrayOf } from "prop-types";

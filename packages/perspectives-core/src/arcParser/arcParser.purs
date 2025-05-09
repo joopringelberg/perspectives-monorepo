@@ -152,7 +152,6 @@ contextE = withPos do
     contextPart = do
       keyword <- scanIdentifier
       case keyword of
-        -- TODO voeg "state" en "on entry" en "on exit" toe.
         "domain" -> contextE
         "case" -> contextE
         "party" -> contextE
@@ -1285,6 +1284,7 @@ authorOnly = do
 -- |   |
 -- |   props [(<ident> {, <ident>}+) ] [ verbs ( <propertyVerb>{, <propertyVerb>}+ )]
 -- | The default has propertyVerbs = Universal and propsOrView = AllProperties!
+-- | CAREFUL: this parser always succeeds with a PropertyVerbE.
 propertyVerbs :: IP PropertyVerbE
 propertyVerbs = basedOnView <|> basedOnProps
   where
@@ -1299,7 +1299,7 @@ propertyVerbs = basedOnView <|> basedOnProps
           -- | view <ArcIdentifier> [: (<PropertyVerb+)]
           start <- getPosition
           view <- reserved "view" *> (View <$> arcIdentifier)
-          (pv :: ExplicitSet PropertyVerb) <- option Universal (reserved "verbs" *> lotsOfVerbs)
+          (pv :: ExplicitSet PropertyVerb) <- option Universal (((reserved "verbs") <|> (reserved "without")) *> lotsOfVerbs)
           end <- getPosition
           sameOrOutdented'
           pure $ PropertyVerbE {subject: s, object: o, state, propertyVerbs: pv, propsOrView: view, start, end}
@@ -1319,10 +1319,49 @@ propertyVerbs = basedOnView <|> basedOnProps
           -- | props (<ArcIdentifier>) [: (<PropertyVerb+)]
           start <- getPosition
           props <- option AllProperties (reserved "props" *> (Properties <$> lotsOfProperties))
-          (pv :: ExplicitSet PropertyVerb) <- option Universal (reserved "verbs" *> lotsOfVerbs)
+          (pv :: ExplicitSet PropertyVerb) <- option Universal (((reserved "verbs") <|> (reserved "without")) *> lotsOfVerbs)
           end <- getPosition
           sameOrOutdented'
           pure $ PropertyVerbE {subject: s, object: o, state, propertyVerbs: pv, propsOrView: props, start, end}
+        _, _ -> fail "User role and object of perspective must be given, "
+
+    lotsOfVerbs :: IP (ExplicitSet PropertyVerb)
+    lotsOfVerbs = PSet <<< fromFoldable <$> token.parens (propertyVerb `sepBy` token.symbol ",")
+
+    lotsOfProperties :: IP (List String)
+    lotsOfProperties = token.parens (arcIdentifier `sepBy` token.symbol ",")
+
+withoutProperties :: IP PropsOrView
+withoutProperties = basedOnView <|> basedOnProps
+  where
+    -- view SomeView              all properties in SomeView, all verbs
+    -- view SomeView (Consult)    all properties in SomeView, verb Consult
+    basedOnView :: IP PropsOrView
+    basedOnView = do
+      -- | subject and object must be present.
+      {subject, object, state} <- getArcParserState
+      case subject, object of
+        Just s, Just o -> do
+          -- | view <ArcIdentifier> [: (<PropertyVerb+)]
+          view <- reserved "view" *> (View <$> arcIdentifier)
+          sameOrOutdented'
+          pure view
+        _, _ -> fail "User role and object of perspective must be given, "
+
+    -- props                         all properties, all verbs
+    -- props (Title)                 property Title, all verbs
+    -- The default has propertyVerbs = Universal and propsOrView = AllProperties!
+    basedOnProps :: IP PropsOrView
+    basedOnProps = do
+      -- | subject and object must be present.
+      {subject, object, state} <- getArcParserState
+      case subject, object of
+        Just s, Just o -> do
+          -- | props (<ArcIdentifier>) [: (<PropertyVerb+)]
+          start <- getPosition
+          props <- option AllProperties (reserved "props" *> (Properties <$> lotsOfProperties))
+          sameOrOutdented'
+          pure props
         _, _ -> fail "User role and object of perspective must be given, "
 
     lotsOfVerbs :: IP (ExplicitSet PropertyVerb)
@@ -1475,6 +1514,7 @@ whatE = reserved "what" *>
 whereE :: IP TableFormSectionE
 whereE = reserved "where" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
 
+--  | Position is just before the keyword 'markdown' or a role identifier.
 tableFormE :: IP TableFormE
 tableFormE = withPos do
   pos <- getPosition
@@ -1532,15 +1572,16 @@ widgetCommonFields = do
     setObject perspective
     if isIndented'
       then withPos do
+        withoutProps <- optionMaybe (reserved "without" *> withoutProperties)
         -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
-        PropertyVerbE r <- propertyVerbs
+        (withoutVerbs :: (List PropertyVerbE)) <- option Nil (checkIndent *> entireBlock propertyVerbs)
         mroleVerbs <- optionMaybe roleVerbs
         end <- getPosition
         pure
           { title
           , perspective
-          , propsOrView: r.propsOrView
-          , propertyVerbs: r.propertyVerbs
+          , withoutProps
+          , withoutVerbs
           , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
           , start
           , end}
@@ -1549,8 +1590,8 @@ widgetCommonFields = do
         pure
           { title
           , perspective
-          , propsOrView: AllProperties
-          , propertyVerbs: Universal
+          , withoutProps: Nothing
+          , withoutVerbs: Nil
           , roleVerbs: Nothing
           , start
           , end}
@@ -1563,16 +1604,21 @@ tableFormFields perspective = do
   protectObject do
     setObject perspective
     if isIndented'
+      -- Set the reference position to the indented position following 'master' or 'detail'.
       then withPos do
+        (withoutProps :: Maybe PropsOrView) <- optionMaybe (reserved "without" *> withoutProperties)
         -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
-        PropertyVerbE r <- propertyVerbs
+        -- entireBlock expects the same indentation, i.e. the position taken up after parsing the optional 'without' clause.
+        -- This may be outdented! 
+        -- Because propertyVerbs always succeeds, we must explicitly check the indentation.
+        (withoutVerbs :: (List PropertyVerbE)) <- option Nil (checkIndent *> entireBlock propertyVerbs)
         mroleVerbs <- optionMaybe roleVerbs
         end <- getPosition
         pure
-          { title
+          { title 
           , perspective
-          , propsOrView: r.propsOrView
-          , propertyVerbs: r.propertyVerbs
+          , withoutProps
+          , withoutVerbs
           , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
           , start
           , end}
@@ -1581,8 +1627,8 @@ tableFormFields perspective = do
         pure
           { title
           , perspective
-          , propsOrView: AllProperties
-          , propertyVerbs: Universal
+          , withoutProps: Nothing
+          , withoutVerbs: Nil
           , roleVerbs: Nothing
           , start
           , end}

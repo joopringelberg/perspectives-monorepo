@@ -1,6 +1,6 @@
 // Create a new file: src/Settings.tsx (or update your existing Settings component)
 import React from 'react';
-import { Container, Row, Col, Nav, Tab, Tabs } from 'react-bootstrap';
+import { Tab, Tabs } from 'react-bootstrap';
 import NotificationsSettings from './notificationsSettings';
 import {i18next} from 'perspectives-react';
 import { ModelSettings } from './modelSettings';

@@ -1,6 +1,6 @@
 import React from 'react';
 
-import {Form, Row} from 'react-bootstrap';
+import {Form, Row, Col} from 'react-bootstrap';
 
 import {PDRproxy, RoleInstanceT, RoleType, PerspectivesFile as PerspectivesFileType, ValueT} from "perspectives-proxy";
 // const PDRproxy = new Promise( function(resolve)
@@ -11,10 +11,8 @@ import {PDRproxy, RoleInstanceT, RoleType, PerspectivesFile as PerspectivesFileT
 //       }
 //     )
 //   })
-import { shape, string } from "prop-types";
 import PerspectivesComponent from "./perspectivesComponent";
 import i18next from "i18next";
-import { Col } from 'react-bootstrap';
 import { UploadIcon, DownloadIcon} from '@primer/octicons-react';
 import {UserMessagingPromise} from "./userMessaging.js";
 import {AsyncImage} from "./asyncImage.js";

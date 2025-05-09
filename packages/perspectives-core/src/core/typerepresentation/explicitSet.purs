@@ -145,3 +145,8 @@ overlapsPSet p q = case p, q of
 
 elements :: forall a. Partial => ExplicitSet a -> Array a
 elements (PSet s) = s
+
+elements_ :: forall a. ExplicitSet a -> Array a -> Array a
+elements_ (PSet s) _ = s
+elements_ Empty _ = []
+elements_ Universal s = s

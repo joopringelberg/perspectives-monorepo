@@ -476,9 +476,8 @@ type WidgetCommonFields =
   { title :: Maybe String
   -- Only the ExplicitRole constructor is allowed!
   , perspective :: RoleIdentification
-  , propsOrView :: PropsOrView
-  -- Must be a subset of the propertyVerbs of the perspective
-  , propertyVerbs :: ExplicitSet PropertyVerb
+  , withoutProps :: Maybe PropsOrView
+  , withoutVerbs :: List PropertyVerbE
   -- Must be a subset of the roleVerbs of the perspective
   , roleVerbs :: Maybe RoleVerbList
   , start :: ArcPosition

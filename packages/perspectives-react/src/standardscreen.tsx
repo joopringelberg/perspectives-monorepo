@@ -27,7 +27,7 @@ import PerspectiveBasedForm from "./perspectivebasedform.js";
 import PerspectiveTable from "./perspectivetable.js";
 import {UserMessagingPromise} from "./userMessaging.js";
 import i18next from "i18next";
-import { Tab, Nav, Navbar, Container, Button, Card, Tabs } from "react-bootstrap";
+import { Tab, Container, Button, Card, Tabs } from "react-bootstrap";
 import { mapRoleVerbsToBehaviourNames } from './maproleverbstobehaviours';
 
 interface StandardScreenProps

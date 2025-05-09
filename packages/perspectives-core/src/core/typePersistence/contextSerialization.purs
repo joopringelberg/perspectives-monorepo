@@ -200,7 +200,8 @@ constructDefaultScreen userRoleInstance userRoleType cid = do
             { title: Nothing
             , perspective: Just p
             , perspectiveId: ""
-            , propertyVerbs: Nothing
+            , propertyRestrictions: Nothing
+            , withoutProperties: Nothing
             , roleVerbs: Nothing
             , userRole: userRoleType
             }
@@ -219,7 +220,8 @@ constructDefaultScreen userRoleInstance userRoleType cid = do
             { title: Nothing
             , perspective: Just p
             , perspectiveId: ""
-            , propertyVerbs: Nothing
+            , propertyRestrictions: Nothing
+            , withoutProperties: Nothing
             , roleVerbs: Nothing
             , userRole: userRoleType
             }
@@ -255,7 +257,8 @@ makeTableFormDef userRoleType p@{id, displayName} = let
       { title: Just displayName
       , perspective: Just p
       , perspectiveId: id
-      , propertyVerbs: Nothing
+      , propertyRestrictions: Nothing
+      , withoutProperties: Nothing
       , roleVerbs: Nothing
       , userRole: userRoleType
       }
@@ -525,7 +528,8 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               { title: Nothing
               , perspective: Just perspective
               , perspectiveId: ""
-              , propertyVerbs: Nothing
+              , propertyRestrictions: Nothing
+              , withoutProperties: Nothing
               , roleVerbs: Nothing
               , userRole: userRoleType
               }}
@@ -535,7 +539,8 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               { title: Nothing
               , perspective: Just perspective
               , perspectiveId: ""
-              , propertyVerbs: Nothing
+              , propertyRestrictions: Nothing
+              , withoutProperties: Nothing
               , roleVerbs: Nothing
               , userRole: userRoleType
               }}
