@@ -158,7 +158,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
       {
         // console.log("Popping previous state, now on " + (e.state.selectedContext ? "context state " + e.state.selectedContext : "roleform state " + e.state.selectedRoleInstance));
         component.setState(
-          { openContext: e.state.selectedContext } );
+          { openContext: e.state.selectedContext, activeSection: 'what' } );
         e.stopPropagation();
       }
       else
@@ -246,7 +246,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                   });
                 // console.log("Pushing context state " + e.detail);
                 component.setState(
-                  { openContext: erole, leftPanelContent: false });
+                  { openContext: erole, leftPanelContent: false, activeSection: 'what' } );
               }
               break;
             case "Choices":
@@ -255,7 +255,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                   { title: ""
                   , message: i18next.t("app_opencontext_title", { ns: 'mycontexts' })
                   , choices: result.value
-                  , chosen: (choice) => component.setState({openContext: choice as RoleInstanceT})
+                  , chosen: (choice) => component.setState({openContext: choice as RoleInstanceT, activeSection: 'what'})
                   }} );
             break;
           }})
@@ -318,7 +318,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
     const mycontextStartPage = __STARTPAGE__ as RoleInstanceT; 
     document.title = "Welcome to MyContexts";
     history.pushState({ selectedContext: mycontextStartPage, title: "Welcome to MyContexts" }, "");
-    component.setState( {openContext: mycontextStartPage } );
+    component.setState( {openContext: mycontextStartPage, activeSection: 'what' } );
   }
 
   getScreen (externalRole : RoleInstanceT)
@@ -446,7 +446,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               <NotificationsDisplayer 
               externalroleid={component.state.openContext}
               shownotifications={true}
-              navigateto={(state) => component.setState({openContext: state})}
+              navigateto={(state) => component.setState({openContext: state, activeSection: 'what'})}
               />
               :
               null
@@ -461,7 +461,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               externalroleid={ externalRole( component.state.systemIdentifier )}
               shownotifications={true}
               showAllNavigations={true}
-              navigateto={(state) => component.setState({openContext: state})}
+              navigateto={(state) => component.setState({openContext: state, activeSection: 'what'})}
               />
               :
               null
@@ -512,7 +512,10 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
   {
     const component = this;
     return (
-      <PSContext.Provider value={{contextinstance: deconstructContext( this.state.openContext!) as ContextInstanceT, contexttype: this.state.openContextType!, myroletype: this.state.openContextUserType!}}>
+      <PSContext.Provider value={
+        {contextinstance: deconstructContext( this.state.openContext!) as ContextInstanceT
+        , contexttype: this.state.openContextType!
+        , myroletype: this.state.openContextUserType!}}>
         <Container fluid className='px-0'>
           {component.renderTopNavBar()}
           <Tabs
@@ -555,9 +558,15 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               }
             </Tab>
           </Tabs>
-          <Navbar fixed="bottom" bg="primary" expand="xs" className="justify-content-center py-0">
+          <Navbar fixed="bottom" bg="primary" expand="xs" className="justify-content-between py-0 px-3">
+            <Navbar.Brand onClick={() => window.history.back()}>
+              <i className="bi bi-arrow-left text-light"></i>
+            </Navbar.Brand>
             <Navbar.Brand onClick={() => component.setState({ showNotifications: true })}>
-              <i className="bi bi-arrow-up"></i>
+              <i className="bi bi-arrow-up text-light"></i>
+            </Navbar.Brand>
+            <Navbar.Brand onClick={() => window.history.forward()}>
+              <i className="bi bi-arrow-right text-light"></i>
             </Navbar.Brand>
         </Navbar>
         <EndUserNotifier message={component.state.endUserMessage}/>
