@@ -191,6 +191,17 @@ class SharedWorkerChannel
   channelId: Promise<number>;
 
   // port is a MessagePort as documented here: https://developer.mozilla.org/en-US/docs/Web/API/MessagePort.
+
+  // In case of a pageworker, it is the input port of the channel created by the page that wants to use the PDR.
+  // The other (output) port is the end of the channel where we call the PDR.
+  // This will be the page that hosts the PDR. On this page, we've instantiated the PDR and passed it as an argument in the call to pageHostingPDRPort.
+  // This function provides the output end (port) of the channel with a listener that passes requests to the PDR function 'handleClientRequest'.
+  // This function is defined in the PDR foreign module 'proxy.js'.
+  // The port is bi-directional, so the PDR can send messages back.
+  // Such responses from the PDR are handled by the handleWorkerResponse function in this module (perspectives-proxy).
+  // Refining the above: some requests are actually handled by the proxy itself.
+  // It will call several PDR functions (like createAccount).
+  // Most requests will be passed to the PDR API, though.
   constructor( port: MessagePort )
   {
     const serviceWorkerChannel = this;
@@ -206,7 +217,7 @@ class SharedWorkerChannel
 
     this.handleWorkerResponse = this.handleWorkerResponse.bind(this);
     this.port.onmessage = this.handleWorkerResponse;
-
+    this.provokeChannelIdResponse();
   }
 
   // The sharedworker or pageworker sends messages of various types.
@@ -273,6 +284,15 @@ class SharedWorkerChannel
           break;
       }
     }
+  }
+
+  // Returns a promise for the channelId of the channel.
+  // This is the only call without the channelId to identify the channel!
+  // It will provoke the response { responseType: "WorkerResponse", serviceWorkerMessage: "channelId", channelId: <some number> }
+  // That will be handled by the handleWorkerResponse function.
+  provokeChannelIdResponse () : void
+  {
+    this.port.postMessage( {proxyRequest: "getChannelId"} );
   }
 
   // This promise will resolve regardless of whether the PDR has started or not.

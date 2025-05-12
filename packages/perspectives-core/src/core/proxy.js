@@ -139,7 +139,7 @@ const pdrStarted = new Promise(function( resolver, rejecter)
 // `handleClientRequest` deals with them by using the InternalChannel's send function, 
 // that has been connected by the PDR with the stream of requests the PerspectivesAPI handles.
 // channels is an array of MessagePort objects. See: https://developer.mozilla.org/en-US/docs/Web/API/MessagePort
-export function handleClientRequest( pdr, channels, request )
+export function handleClientRequest( pdr, channels, request, callersChannelId )
 {
   const req = request.data;
   if (req.proxyRequest)
@@ -147,6 +147,10 @@ export function handleClientRequest( pdr, channels, request )
     // The request can be handled right here in the SharedWorker itself.
     switch (req.proxyRequest)
     {
+      case "getChannelId":
+        // The parameter callersChannelId is the channelId of the page that is calling this function.
+        channels[corrId2ChannelId(callersChannelId)].postMessage({responseType: "WorkerResponse", serviceWorkerMessage: "ChannelId", channelId: callersChannelId });
+        break;
       case "pdrStarted":
         // This will always return an answer: it is not dependent on whether the PDR has actually been started.
         channels[corrId2ChannelId(req.channelId)].postMessage({responseType: "WorkerResponse", serviceWorkerMessage: "pdrStarted", pdrStarted: pdrStartedIsResolved});

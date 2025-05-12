@@ -21,38 +21,44 @@
 ////////////////////////////////////////////////////////////////////////////////
 //// SERVICE WORKER
 ////////////////////////////////////////////////////////////////////////////////
-//1
-// self.onmessage( function(event)
+// Notice that this listener is just used to shuffle ports between pages.
+// We establish a connection between the page that hosts the PDR and the page that
+// wants to use the PDR. That connection is a 'channel'.
+// It consists of two ports. One port is sent by the page that wants to use de PDR.
+// It is received and used by the page that hosts the PDR.
+// The other port is used by the page that wants to use the PDR.
+// Corrolary: this listener has nothing to do with Perspectives calls that are passed 
+// from client pages to the PDR!
 self.addEventListener('message', function(event)
   {
-    const promise = self.clients.matchAll()
+    self.clients.matchAll()
       .then(function(clientList) {
         switch (event.data.messageType ){
 
           case "relayPort":
-          // If there is but one client, return a message immediately.
-          if (clientList.length == 1)
-          {
-            // Return the port sent by the first page. It will communicate with itself through it.
-            clientList[0].postMessage({ "messageType": "youHost", port: event.data.port }, [event.data.port]);
-          }
-          else
-          {
-            clientList.forEach(function(client)
+            // If there is but one client, return a message immediately.
+            if (clientList.length == 1)
             {
-              // Send to all pages except for the sender.
-              if (client.id === event.source.id)
-              {
-                return;
-              }
+              // Return the port sent by the first page. It will communicate with itself through it.
+              clientList[0].postMessage({ "messageType": "youHost", port: event.data.port }, [event.data.port]);
+            }
             else
+            {
+              clientList.forEach(function(client)
               {
-                client.postMessage( event.data, [event.data.port] );
-              }
-            });
+                // Send to all pages except for the sender.
+                if (client.id === event.source.id)
+                {
+                  return;
+                }
+              else
+                {
+                  client.postMessage( event.data, [event.data.port] );
+                }
+              });
+            }
+            break;
           }
-          break;
-        }
       })
       .catch(function( error )
       {
