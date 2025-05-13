@@ -202,7 +202,7 @@ class SharedWorkerChannel {
                     }
                 };
             });
-            proxy.channelId.then(channelId => this.port.postMessage({ proxyRequest: "runPDR", username, pouchdbuser, options, channelId }));
+            proxy.channelId.then(channelId => proxy.port.postMessage({ proxyRequest: "runPDR", username, pouchdbuser, options, channelId }));
             return p;
         }
         else {
@@ -223,7 +223,7 @@ class SharedWorkerChannel {
                 }
             };
         });
-        proxy.channelId.then(channelId => this.port.postMessage({ proxyRequest: "createAccount", perspectivesUser, pouchdbuser, channelId, runtimeOptions, identityDocument: optionalIdentityDocument ? optionalIdentityDocument : null }));
+        proxy.channelId.then(channelId => proxy.port.postMessage({ proxyRequest: "createAccount", perspectivesUser, pouchdbuser, channelId, runtimeOptions, identityDocument: optionalIdentityDocument ? optionalIdentityDocument : null }));
         return p;
     }
     resetAccount(username, pouchdbuser, options) {
@@ -234,7 +234,7 @@ class SharedWorkerChannel {
                 resolver(result);
             };
         });
-        proxy.channelId.then(channelId => this.port.postMessage({ proxyRequest: "resetAccount", username, pouchdbuser, options, channelId }));
+        proxy.channelId.then(channelId => proxy.port.postMessage({ proxyRequest: "resetAccount", username, pouchdbuser, options, channelId }));
         return p;
     }
     reCreateInstances(pouchdbuser, options) {
@@ -245,7 +245,7 @@ class SharedWorkerChannel {
                 resolver(result);
             };
         });
-        proxy.channelId.then(channelId => this.port.postMessage({ proxyRequest: "reCreateInstances", pouchdbuser, options, channelId }));
+        proxy.channelId.then(channelId => proxy.port.postMessage({ proxyRequest: "reCreateInstances", pouchdbuser, options, channelId }));
         return p;
     }
     recompileLocalModels(pouchdbuser) {
@@ -256,7 +256,7 @@ class SharedWorkerChannel {
                 resolver(result);
             };
         });
-        proxy.channelId.then(channelId => this.port.postMessage({ proxyRequest: "recompileLocalModels", pouchdbuser, channelId }));
+        proxy.channelId.then(channelId => proxy.port.postMessage({ proxyRequest: "recompileLocalModels", pouchdbuser, channelId }));
         return p;
     }
     removeAccount(username, pouchdbuser) {
@@ -267,7 +267,7 @@ class SharedWorkerChannel {
                 resolver(result);
             };
         });
-        proxy.channelId.then(channelId => this.port.postMessage({ proxyRequest: "removeAccount", username, pouchdbuser, channelId }));
+        proxy.channelId.then(channelId => proxy.port.postMessage({ proxyRequest: "removeAccount", username, pouchdbuser, channelId }));
         return p;
     }
     // Inform the server that this client shuts down.

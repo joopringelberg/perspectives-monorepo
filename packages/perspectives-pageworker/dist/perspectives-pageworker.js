@@ -67,6 +67,7 @@ function pageHostingPDRPort(pdr) {
               channels[channelIndex] = event.data.port;
               // Return the channelIndex.
               channels[channelIndex].postMessage({
+                responseType: "WorkerResponse",
                 serviceWorkerMessage: "channelId",
                 channelId: 1000000 * channelIndex
               });
@@ -84,6 +85,7 @@ function pageHostingPDRPort(pdr) {
                 channels[channelIndex] = event.data.port;
                 // Return the channelIndex.
                 channels[channelIndex].postMessage({
+                  responseType: "WorkerResponse",
                   serviceWorkerMessage: "channelId",
                   channelId: 1000000 * channelIndex
                 });

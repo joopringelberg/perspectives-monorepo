@@ -69,7 +69,7 @@ export default function pageHostingPDRPort(pdr) {
                 // We've sent ourselves a port.
                 channels[channelIndex] = event.data.port;
                 // Return the channelIndex.
-                channels[channelIndex].postMessage({ serviceWorkerMessage: "channelId", channelId: 1000000 * channelIndex });
+                channels[channelIndex].postMessage({ responseType: "WorkerResponse", serviceWorkerMessage: "channelId", channelId: 1000000 * channelIndex });
                 // start listening to the new channel, handle requests.
                 // This page must host the PDR.
                 channels[channelIndex].onmessage = request => pdr.handleClientRequest(pdr, channels, request);
@@ -81,7 +81,7 @@ export default function pageHostingPDRPort(pdr) {
                   // the new client (page) sends a port. This is a MessagePort.
                   channels[channelIndex] = event.data.port;
                   // Return the channelIndex.
-                  channels[channelIndex].postMessage({ serviceWorkerMessage: "channelId", channelId: 1000000 * channelIndex });
+                  channels[channelIndex].postMessage({ responseType: "WorkerResponse", serviceWorkerMessage: "channelId", channelId: 1000000 * channelIndex });
                   // start listening to the new channel, handle requests.
                   channels[channelIndex].onmessage = request => pdr.handleClientRequest(pdr, channels, request);
                   channelIndex = channelIndex + 1;

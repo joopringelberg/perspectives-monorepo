@@ -338,7 +338,7 @@ class SharedWorkerChannel
             };
         }
       ) as Promise<boolean>;
-      proxy.channelId.then( channelId => this.port.postMessage({proxyRequest: "runPDR", username, pouchdbuser, options, channelId }));
+      proxy.channelId.then( channelId => proxy.port.postMessage({proxyRequest: "runPDR", username, pouchdbuser, options, channelId }));
       return p;
     }
     else {
@@ -367,7 +367,7 @@ class SharedWorkerChannel
           };
       }
     ) as Promise<boolean>;
-    proxy.channelId.then( channelId => this.port.postMessage( {proxyRequest: "createAccount", perspectivesUser, pouchdbuser, channelId, runtimeOptions, identityDocument: optionalIdentityDocument ? optionalIdentityDocument : null } ) );
+    proxy.channelId.then( channelId => proxy.port.postMessage( {proxyRequest: "createAccount", perspectivesUser, pouchdbuser, channelId, runtimeOptions, identityDocument: optionalIdentityDocument ? optionalIdentityDocument : null } ) );
     return p;
   }
 
@@ -384,7 +384,7 @@ class SharedWorkerChannel
           };
       }
     ) as Promise<boolean>;
-    proxy.channelId.then( channelId => this.port.postMessage( {proxyRequest: "resetAccount", username, pouchdbuser, options, channelId } ) );
+    proxy.channelId.then( channelId => proxy.port.postMessage( {proxyRequest: "resetAccount", username, pouchdbuser, options, channelId } ) );
     return p;
   }
 
@@ -401,7 +401,7 @@ class SharedWorkerChannel
           };
       }
     ) as Promise<boolean>;
-    proxy.channelId.then( channelId => this.port.postMessage( {proxyRequest: "reCreateInstances", pouchdbuser, options, channelId } ) );
+    proxy.channelId.then( channelId => proxy.port.postMessage( {proxyRequest: "reCreateInstances", pouchdbuser, options, channelId } ) );
     return p;
   }
 
@@ -418,7 +418,7 @@ class SharedWorkerChannel
           };
       }
     ) as Promise<boolean>;
-    proxy.channelId.then( channelId => this.port.postMessage( {proxyRequest: "recompileLocalModels", pouchdbuser, channelId } ) );
+    proxy.channelId.then( channelId => proxy.port.postMessage( {proxyRequest: "recompileLocalModels", pouchdbuser, channelId } ) );
     return p;
   }
 
@@ -435,7 +435,7 @@ class SharedWorkerChannel
           };
       }
     ) as Promise<boolean>;
-    proxy.channelId.then( channelId => this.port.postMessage( {proxyRequest: "removeAccount", username, pouchdbuser, channelId } ) );
+    proxy.channelId.then( channelId => proxy.port.postMessage( {proxyRequest: "removeAccount", username, pouchdbuser, channelId } ) );
     return p;
   }
 
