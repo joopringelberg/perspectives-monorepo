@@ -41,7 +41,7 @@ self.onconnect = function(e)
   // the new subscribing page sends a port. subscribingPages is an array of MessagePort objects.
   subscribingPages[ pageIndex ] = connectionToAPage;
   // Return the page its index.
-  // connectionToAPage.postMessage( {responseType: "WorkerResponse", serviceWorkerMessage: "channelId", channelId: 1000000 * pageIndex });
+  connectionToAPage.postMessage( {responseType: "WorkerResponse", serviceWorkerMessage: "channelId", channelId: 1000000 * pageIndex });
   // start listening to the new page, handle requests.
   connectionToAPage.onmessage = requestFromPage => pdr.handleClientRequest( pdr, subscribingPages, requestFromPage, 1000000 * pageIndex);
   // increment the index so we're ready for the next page that connects.
