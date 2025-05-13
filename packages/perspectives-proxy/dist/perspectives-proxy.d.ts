@@ -52,6 +52,7 @@ declare class SharedWorkerChannel {
     channelId: Promise<number>;
     constructor(port: MessagePort);
     handleWorkerResponse(e: MessageEvent<Response>): void;
+    provokeChannelIdResponse(): void;
     pdrStarted(): Promise<boolean>;
     isUserLoggedIn(): Promise<boolean>;
     runPDR(username: string, pouchdbuser: PouchdbUser, options: RuntimeOptions): Promise<boolean>;

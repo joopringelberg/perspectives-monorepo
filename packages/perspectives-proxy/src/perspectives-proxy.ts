@@ -217,7 +217,7 @@ class SharedWorkerChannel
 
     this.handleWorkerResponse = this.handleWorkerResponse.bind(this);
     this.port.onmessage = this.handleWorkerResponse;
-    this.provokeChannelIdResponse();
+    // this.provokeChannelIdResponse();
   }
 
   // The sharedworker or pageworker sends messages of various types.
@@ -249,6 +249,7 @@ class SharedWorkerChannel
           // As soon as the SharedWorker receives a port from this proxy, it will return the channels id.
           // {serviceWorkerMessage: "channelId", channelId: i} where i is a multiple of a million.
           // Handle the port identification message that is sent by the service worker.
+          console.log( "SharedWorkerChannel received a channelId: " + e.data.channelId );
           this.channelIdResolver!( e.data.channelId );
           break;
         case "pdrStarted":

@@ -3,7 +3,107 @@
   // 1. The PDR is loaded in a SharedWorker. 
   // 2. The PDR is loaded in the host page. 
 
-  import { configurePDRproxy } from "perspectives-proxy";
+import { configurePDRproxy } from "perspectives-proxy";
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+//               options    DEBUGGING ONLY
+// Use this function on the console of the host page to force the service worker to update.
+///////////////////////////////////////////////////////////////////////////////////////////////
+declare global {
+  interface Window {
+    forceUpdateServiceWorker?: () => void;
+    debugServiceWorker?: () => void;
+    purgeServiceWorkers?: () => Promise<boolean>;
+  }
+}
+
+// Add this to a development tools page or button handler
+function forceUpdateServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistration().then(registration => {
+      if (registration) {
+        console.log('Forcing service worker update...');
+        // registration.update();
+        registration.update().then(() => {
+          console.log('Service worker unregistered. Reloading page...');
+          // Optionally, you can reload the page after unregistering
+          // to ensure the new service worker is activated.
+          // This will reload the page after 1 second
+          // to give the unregister process some time.
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      })
+    };
+  })
+}}
+
+// For development only
+function debugServiceWorker() {
+  const status = {
+    controller: !!navigator.serviceWorker.controller,
+    registration: null as any,
+  };
+  
+  navigator.serviceWorker.getRegistration().then(reg => {
+    if (reg) {
+      status.registration = {
+        installing: !!reg.installing,
+        waiting: !!reg.waiting,
+        active: !!reg.active,
+        updateViaCache: reg.updateViaCache
+      };
+    }
+    console.table(status);
+  });
+}
+
+async function purgeServiceWorkers() {
+  if ('serviceWorker' in navigator) {
+    try {
+      // First, unregister all service workers
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      console.log(`Found ${registrations.length} service worker registrations`);
+      
+      const unregisterPromises = registrations.map(registration => {
+        console.log('Unregistering service worker scope:', registration.scope);
+        return registration.unregister();
+      });
+      
+      await Promise.all(unregisterPromises);
+      
+      // Clear all caches
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames.map(cacheName => {
+          console.log(`Deleting cache: ${cacheName}`);
+          return caches.delete(cacheName);
+        })
+      );
+      
+      console.log('Service workers unregistered and caches cleared');
+      
+      // Force reload with cache clearing
+      console.log('Reloading page with cache clearing...');
+      window.location.href = window.location.href.split('#')[0] + 
+                             '?cache=' + Date.now();
+      
+      return true;
+    } catch (error) {
+      console.error('Service worker purge failed:', error);
+      return false;
+    }
+  }
+  return false;
+}
+
+// Expose for dev console
+if (import.meta.env.DEV) {
+  window.forceUpdateServiceWorker = forceUpdateServiceWorker;
+  window.debugServiceWorker = debugServiceWorker;
+  window.purgeServiceWorkers = purgeServiceWorkers;
+}///////////////////////////////////////////////////////////////////////////////////////////////
+
 
   // As a result of calling this function, the two promises PDRHandler and PDRproxy are resolved.
 export function startPDR()
@@ -33,5 +133,10 @@ export function startPDR()
     // As a result, the PDR runs in the SharedWorker.
     configurePDRproxy("sharedWorkerChannel", {});
   }
+  // For easier debugging, attach to window in development
+  if (import.meta.env.DEV) {
+    window.forceUpdateServiceWorker = forceUpdateServiceWorker;
+  }
+
 }
 
