@@ -13,6 +13,8 @@ import json from '@rollup/plugin-json';import { default as thepackage } from './
 // Get path to monorepo root
 const monorepoRoot = resolve(__dirname, '../..');
 
+const pageDispatcherVersion = "1";
+
 // https://vite.dev/config/
 export default defineConfig({
   base: "/www/",
@@ -28,6 +30,14 @@ export default defineConfig({
         '/Users/joopringelberg/Code/perspectives-monorepo/node_modules',
         '/Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/output'
       ] 
+    },
+    headers: {
+      // Critical headers for service worker development
+      'Service-Worker-Allowed': '/',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Surrogate-Control': 'no-store',
+      'Expires': '0'
     }
   },
   plugins: [
@@ -60,7 +70,19 @@ export default defineConfig({
         // Add this plugin to copy assets
         copy({
           targets: [
-            { src: 'public/**/*', dest: 'dist' }
+            { 
+              src: 'src/perspectives-pagedispatcher.js', 
+              dest: 'public',
+              rename: (name) => `perspectives-pagedispatcher${pageDispatcherVersion}.js` 
+            },
+            {
+              src: 'src/notification-worker.js',
+              dest: 'public',
+            },
+            { 
+              src: 'public/**/*', 
+              dest: 'dist' 
+            },
           ]
         }),
         // visualizer({
@@ -73,6 +95,7 @@ export default defineConfig({
   define: {
     __MYCONTEXTS_VERSION__: JSON.stringify(thepackage.version),
     __STARTPAGE__: JSON.stringify("pub:https://perspectives.domains/cw_j4qovsczpm/#bxjprzq9q6$External"),
-    __MyContextsContainer__: JSON.stringify("root")
+    __MyContextsContainer__: JSON.stringify("root"),
+    __PAGEDISPATCHER_VERSION__: pageDispatcherVersion
   }
 })
