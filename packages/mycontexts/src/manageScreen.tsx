@@ -55,8 +55,15 @@ export default function ManageScreen()
               </Row>
               <Row>
                 <Col className="alert alert-danger">
-                  Remove your (default) installation. If you have just a single installation in this browser (the default situation), 
-                  the button on the right takes you to a page that will begin to remove all associated data from this browser's database immediately.
+                  Remove your installation from this browser (removes indexedDB, local storage, service workers, caches).
+                </Col>
+                <Col className="d-flex align-items-center">
+                  <Button variant="danger" onClick={deleteAccountFromIndexedDB}>Remove all local data</Button>
+                </Col>
+              </Row>
+              <Row>
+                <Col className="alert alert-danger">
+                  Removes your installation. Advised when you have your data in a local Couchdb Database.
                 </Col>
                 <Col className="d-flex align-items-center">
                   <Button variant="danger" onClick={deleteAccount}>Completely remove your installation</Button>
@@ -121,6 +128,35 @@ function deleteAccount()
         });
       }
     );
+  }
+
+  function deleteAccountFromIndexedDB()
+  {
+      clear().then(() => {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (let registration of registrations) {
+              registration.unregister();
+            }
+          });
+        if ('caches' in window) {
+          caches.keys().then((cacheNames) => {
+            cacheNames.forEach((cacheName) => {
+              caches.delete(cacheName);
+            });
+          });
+        }
+        localStorage.clear();
+        indexedDB.databases().then((dbs) => {
+          dbs.forEach((db) => {
+            if (db.name && db.name !== 'keyval-store')
+            {
+              indexedDB.deleteDatabase(db.name);
+            }
+          });
+        });
+      }
+    });
   }
 
   function recompileLocalModels()
