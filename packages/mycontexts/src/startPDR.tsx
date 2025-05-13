@@ -3,7 +3,7 @@
   // 1. The PDR is loaded in a SharedWorker. 
   // 2. The PDR is loaded in the host page. 
 
-import { configurePDRproxy } from "perspectives-proxy";
+  import { configurePDRproxy } from "perspectives-proxy";
 
   // As a result of calling this function, the two promises PDRHandler and PDRproxy are resolved.
 export function startPDR()

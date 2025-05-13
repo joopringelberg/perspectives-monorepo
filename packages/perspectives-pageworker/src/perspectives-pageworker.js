@@ -79,7 +79,9 @@ export default function pageHostingPDRPort(pdr) {
                 // This page must host the PDR.
                 weHost = true;
                 // We've sent ourselves a port.
-                channels[channelIndex] = hostingPage;
+                channels[channelIndex] = event.data.port;
+                // Return the channelIndex.
+                channels[channelIndex].postMessage({ responseType: "WorkerResponse", serviceWorkerMessage: "channelId", channelId: 1000000 * channelIndex });
                 // start listening to the new channel, handle requests.
                 // The page that has sent the port will send WorkerResponse messages and API calls
                 hostingPage.onmessage = request => pdr.handleClientRequest(pdr, channels, request, 1000000 * channelIndex);
@@ -92,7 +94,9 @@ export default function pageHostingPDRPort(pdr) {
                   // Notice how this section is exactly the same as the one in the onconnect handler of the SharedWorker.
                   const connectionToAPage = event.data.port;
                   // the new client (page) sends a port. This is a MessagePort.
-                  channels[channelIndex] = connectionToAPage;
+                  channels[channelIndex] = event.data.port;
+                  // Return the channelIndex.
+                  channels[channelIndex].postMessage({ responseType: "WorkerResponse", serviceWorkerMessage: "channelId", channelId: 1000000 * channelIndex });
                   // start listening to the new channel, handle requests.
                   connectionToAPage.onmessage = request => pdr.handleClientRequest(pdr, channels, request, 1000000 * channelIndex);
                   // increment the index so we're ready for the next page that connects.

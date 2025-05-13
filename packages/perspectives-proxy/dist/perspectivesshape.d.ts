@@ -238,7 +238,10 @@ export type TableFormDef = {
   form: FormElementDef;
 };
 
-export type What = {tag: "TableForms", elements: {markdown: MarkDownElementDef[], tableForms: TableFormDef[]}} | {tag: "FreeFormScreen", elements: MainScreenElements}; 
+export type What = 
+  {tag: "TableForms", elements: {markdown: MarkDownElementDef[], tableForms: TableFormDef[]}} 
+  | 
+  {tag: "FreeFormScreen", elements: MainScreenElements}; 
 
 export type WhereTo = {
   markdown: MarkDownElementDef[];
