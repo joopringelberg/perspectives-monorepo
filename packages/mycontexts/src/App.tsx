@@ -124,6 +124,22 @@ export default class App extends Component<{}, AppState>
         .then( () => setMyContextsVersion())
     }
   
+  refreshApp() {
+    // Clear any in-memory caches first
+    if ('caches' in window) {
+      caches.keys().then(names => {
+        names.forEach(name => {
+          caches.delete(name);
+        });
+      });
+    }
+    
+    // Add a small delay to allow cache clearing to complete
+    setTimeout(() => {
+      window.location.href = window.location.href.split('?')[0] + 
+                            '?refresh=' + Date.now();
+    }, 100);
+  }
 
   render()
   {
@@ -135,7 +151,13 @@ export default class App extends Component<{}, AppState>
           this.setState({ phase: 'installing', installationResult });
         }} />;
       case 'installationError' :
-      return <div>Installation error.</div>;
+      return <div>
+              <h2>{ i18next.t( "installationerror", {ns: "mycontexts"} ) }</h2>
+              <Button onClick={() => this.refreshApp()}>
+                { i18next.t( "installationerror_button", {ns: "mycontexts"} ) }
+              </Button>
+              <p>{ i18next.t( "installationerror_message", {ns: "mycontexts"} ) }</p>
+            </div>;
       case 'installing':
         return this.installing(this.state.installationResult);
       case 'installationcomplete':

@@ -108,4 +108,7 @@
   , "clipboard": "Klembord"
   , "allNotifications": "Alle notificaties"
   , "settings_model": "App instellingen"
+  , "installationerror": "Installatiefout"
+  , "installationerror_button": "Hervat"
+  , "installationerror_message": "De installatie van MyContexts kon niet in één keer worden voltooid. Druk op de knop om het proces opnieuw te starten."
 }

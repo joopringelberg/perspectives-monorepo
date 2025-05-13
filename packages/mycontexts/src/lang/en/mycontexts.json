@@ -109,4 +109,7 @@
   , "clipboard": "Clipboard"
   , "allNotifications": "All notifications"
   , "settings_model": "App settings"
+  , "installationerror": "Installation error"
+  , "installationerror_button": "Refresh"
+  , "installationerror_message": "The installation of MyContexts did could complete at once. Press the button to restart the process."
   }
