@@ -7,7 +7,6 @@ module Perspectives.Proxy
 where
 
 import Control.Coroutine.Aff (Emitter, Step(..))
-import Control.Promise (Promise)
 import Effect (Effect)
 import Effect.Uncurried (EffectFn1, EffectFn3, runEffectFn1, runEffectFn3)
 import Foreign (Foreign)

@@ -147,10 +147,6 @@ export function handleClientRequest( pdr, channels, request, callersChannelId )
     // The request can be handled right here in the SharedWorker itself.
     switch (req.proxyRequest)
     {
-      case "getChannelId":
-        // The parameter callersChannelId is the channelId of the page that is calling this function.
-        channels[corrId2ChannelId(callersChannelId)].postMessage({responseType: "WorkerResponse", serviceWorkerMessage: "ChannelId", channelId: callersChannelId });
-        break;
       case "pdrStarted":
         // This will always return an answer: it is not dependent on whether the PDR has actually been started.
         channels[corrId2ChannelId(req.channelId)].postMessage({responseType: "WorkerResponse", serviceWorkerMessage: "pdrStarted", pdrStarted: pdrStartedIsResolved});

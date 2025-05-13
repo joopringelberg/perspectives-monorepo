@@ -108,7 +108,6 @@ class SharedWorkerChannel {
         this.port = port;
         this.handleWorkerResponse = this.handleWorkerResponse.bind(this);
         this.port.onmessage = this.handleWorkerResponse;
-        // this.provokeChannelIdResponse();
     }
     // The sharedworker or pageworker sends messages of various types.
     // Among them are responses received by the core.
@@ -170,13 +169,6 @@ class SharedWorkerChannel {
                     break;
             }
         }
-    }
-    // Returns a promise for the channelId of the channel.
-    // This is the only call without the channelId to identify the channel!
-    // It will provoke the response { responseType: "WorkerResponse", serviceWorkerMessage: "channelId", channelId: <some number> }
-    // That will be handled by the handleWorkerResponse function.
-    provokeChannelIdResponse() {
-        this.port.postMessage({ proxyRequest: "getChannelId" });
     }
     // This promise will resolve regardless of whether the PDR has started or not.
     pdrStarted() {
