@@ -668,6 +668,8 @@ export class ChatComponent extends PerspectivesComponent<ChatComponentProps, Cha
                 <ConversationHeader.Actions>
                 </ConversationHeader.Actions>
             </ConversationHeader>
+            {/* The MessageList should have a fixed height to enable scrolling behaviour. 
+            This can be achieved by giving the entire ChatComponent a fixed height.*/}
             <MessageList>{ component.buildMessageList()}</MessageList>
             <MessageInput
               placeholder="Type message here" 

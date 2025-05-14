@@ -19,7 +19,7 @@ export class Who extends Component<WhoProps> {
           chat.fields.chatInstance ? 
             <Accordion.Item eventKey={chat.fields.chatInstance} key={chat.fields.chatInstance}>
               <Accordion.Header>{chat.fields.title}</Accordion.Header>
-              <Accordion.Body>
+              <Accordion.Body className="chat-height">
                 <ChatComponent 
                   key={chat.fields.chatRole}
                   externalrole={ externalRole( value.contextinstance )}

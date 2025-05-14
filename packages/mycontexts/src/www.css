@@ -11,6 +11,10 @@
   height: calc(100vh - 2 * var(--navbar-height) - var(--who-header-height));
 }
 
+.chat-height {
+  height: calc((100vh - 2 * var(--navbar-height) - var(--who-header-height)) / 2);
+}
+
 /* Define the slide-in-from-right animation */
 @keyframes slide-in-from-right {
   from {
