@@ -527,7 +527,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               }}
             fill
             >
-            <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
+            <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
               { this.state.screen?.whoWhatWhereScreen ?
                 <Who 
                   screenelements={ this.state.screen.whoWhatWhereScreen.who } 
@@ -537,14 +537,14 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
                 <p className='bg-light-subtle'>Ga ergens heen</p>
               }
             </Tab>
-            <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
+            <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
               { this.state.screen?.whoWhatWhereScreen ? 
                   <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "what"}/>
                   : 
                 <div>Ga ergens heen.</div>
               }
             </Tab>
-            <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2' style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
+            <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
             { this.state.screen?.whoWhatWhereScreen ? 
               <Where 
                 screenelements={ this.state.screen.whoWhatWhereScreen.whereto } 
