@@ -579,7 +579,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
   renderTopNavBar() {
     const component = this;
     return (<Navbar bg="primary" expand="xs" className="py-0 ps-2" id="top-navbar">
-      <NavDropdown title={<i className="bi bi-list text-light"></i>} className="me-auto hide-caret">
+      <NavDropdown title={<i className="bi bi-list text-light fs-2"></i>} className="me-auto hide-caret px-2 py-1" id="nav-dropdown">
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'about'})}>About...</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'me'})}>Me</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'apps'})}>Apps</NavDropdown.Item>
