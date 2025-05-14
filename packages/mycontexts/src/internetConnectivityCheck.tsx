@@ -33,7 +33,7 @@ export function InternetConnectivityCheck( {reportBack} : {reportBack: (isOnline
     // Regular interval checking
     const interval = setInterval(
       () =>{
-        console.log("Checking connectivity periodically");
+        // console.log("Checking connectivity periodically");
         checkConnectivity}, 10000); // Every 30 seconds
     
     // Also use the browser events
