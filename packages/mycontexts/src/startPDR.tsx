@@ -4,6 +4,8 @@
   // 2. The PDR is loaded in the host page. 
 
 import { configurePDRproxy } from "perspectives-proxy";
+import PouchDB from "pouchdb-browser";
+import { getInstallationData } from "./installationData";
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 //               options    DEBUGGING ONLY
@@ -14,6 +16,7 @@ declare global {
     forceUpdateServiceWorker?: () => void;
     debugServiceWorker?: () => void;
     purgeServiceWorkers?: () => Promise<boolean>;
+    showDatabaseInfo?: () => void;
   }
 }
 
@@ -97,11 +100,35 @@ async function purgeServiceWorkers() {
   return false;
 }
 
+function showDatabaseInfo() {
+  function showSize(db: any) {
+    db.info().then((info : any) => {
+      console.log(`Database ${db.name}:`);
+      console.log(`  Document count: ${info.doc_count}`);
+    }).catch((error : any) => {
+      console.error(`Error getting info for database ${db.name}:`, error);
+    });
+  }
+  if ('indexedDB' in window)
+    {
+      getInstallationData().then( installationData => {
+        const entitiesDbName = installationData.perspectivesUserId! + installationData.deviceName! + "_entities";
+        const invertedQueriesDbName = installationData.perspectivesUserId! + installationData.deviceName! + "_invertedqueries";
+        const modelsDbName = installationData.perspectivesUserId! + installationData.deviceName! + "_models";
+        showSize(new PouchDB(entitiesDbName));
+        showSize(new PouchDB(invertedQueriesDbName));
+        showSize(new PouchDB(modelsDbName));
+    });
+  }
+}
+
+
 // Expose for dev console
 if (import.meta.env.DEV) {
   window.forceUpdateServiceWorker = forceUpdateServiceWorker;
   window.debugServiceWorker = debugServiceWorker;
   window.purgeServiceWorkers = purgeServiceWorkers;
+  window.showDatabaseInfo = showDatabaseInfo;
 }///////////////////////////////////////////////////////////////////////////////////////////////
 
 

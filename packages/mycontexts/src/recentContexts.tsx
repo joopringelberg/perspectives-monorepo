@@ -64,7 +64,7 @@ export class RecentContexts extends PerspectivesComponent<RecentContextsProps, R
       return null;
     }
     else {
-      // We have a perspective, produce a form.
+      // We have a perspective, produce a table.
       return <PerspectiveTable 
               perspective={this.state.perspective} 
               showcontrolsandcaption={false}
