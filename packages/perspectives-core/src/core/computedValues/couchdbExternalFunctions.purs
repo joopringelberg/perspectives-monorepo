@@ -208,7 +208,7 @@ updateModel' dfid@(DomeinFileId modelName) withDependencies install = do
   {repositoryUrl, documentName} <- pure $ unsafePartial modelUri2ModelUrl modelName
   storedQueries <- lift $ getInvertedQueriesOfModel repositoryUrl documentName
   domeinFileAndAttachents <- retrieveModelFromRepository (DomeinFileId modelName)
-  updateModel withDependencies false (DomeinFileId modelName) domeinFileAndAttachents storedQueries 
+  updateModel withDependencies install (DomeinFileId modelName) domeinFileAndAttachents storedQueries 
 
 updateModel :: Boolean -> Boolean -> DomeinFileId -> (Tuple DomeinFileRecord AttachmentFiles) -> StoredQueries -> MonadPerspectivesTransaction Unit
 updateModel withDependencies install dfid@(DomeinFileId modelName) domeinFileAndAttachents storedQueries= do
@@ -217,7 +217,7 @@ updateModel withDependencies install dfid@(DomeinFileId modelName) domeinFileAnd
     -- Not installed.
     Nothing -> if install
       -- Not installed, but want to install: install it.
-      then installModelLocally domeinFileAndAttachents isInitialLoad
+      then installModelLocally domeinFileAndAttachents isInitialLoad storedQueries
       -- Not installed, and do not want to install: do nothing.
       else pure unit
     Just (DomeinFile{upstreamStateNotifications, upstreamAutomaticEffects, referredModels}) -> do
@@ -227,14 +227,6 @@ updateModel withDependencies install dfid@(DomeinFileId modelName) domeinFileAnd
         else pure unit
       -- Remove the inverted queries contributed by this model.
       lift $ removeInvertedQueriesContributedByModel dfid
-
-      -- Get the inverted queries from the repository,
-      -- and add the inverted queries to the local database.
-      lift (saveInvertedQueries storedQueries)
-      -- As we have the new definitions of invertedQueries in place in the database, we should now clear the cache in PerspectivesState
-      -- to prevent old versions of being used.
-      lift clearQueryCache
-
       forWithIndex_ upstreamStateNotifications
         \domainName notifications -> do
           (lift $ try $ getDomeinFile (DomeinFileId domainName)) >>=
@@ -250,7 +242,10 @@ updateModel withDependencies install dfid@(DomeinFileId modelName) domeinFileAnd
       -- Clear the caches of compiled states.
       void $ pure $ clearModelStates (DomeinFileId unversionedModelname)
       -- Install the new model, taking care of outgoing InvertedQueries.
-      installModelLocally domeinFileAndAttachents isUpdate
+      installModelLocally domeinFileAndAttachents isUpdate storedQueries
+      -- As we have the new definitions of invertedQueries in place in the database, we should now clear the cache in PerspectivesState
+      -- to prevent old versions of being used.
+      lift clearQueryCache
       -- The model is now decached, but the translations table is still in cache.
       -- It will be loaded when a new type lookup is performed.
       lift $ removeTranslationTable modelName
@@ -270,7 +265,9 @@ addModelToLocalStore_ modelNames _ = try (for_ modelNames (flip addModelToLocalS
 addModelToLocalStore :: DomeinFileId -> Boolean -> MonadPerspectivesTransaction Unit
 addModelToLocalStore dfid@(DomeinFileId modelname) isInitialLoad' = do
   domeinFileAndAttachments <- retrieveModelFromRepository dfid
-  installModelLocally domeinFileAndAttachments isInitialLoad'
+  {repositoryUrl, documentName} <- pure $ unsafePartial modelUri2ModelUrl modelname
+  storedQueries <- lift $ getInvertedQueriesOfModel repositoryUrl documentName
+  installModelLocally domeinFileAndAttachments isInitialLoad' storedQueries
 
 retrieveModelFromRepository :: DomeinFileId -> MonadPerspectivesTransaction (Tuple DomeinFileRecord AttachmentFiles)
 retrieveModelFromRepository dfid@(DomeinFileId modelname) = do
@@ -326,8 +323,8 @@ computeVersionedAndUnversiondName (DomeinFileId modelname) = do
   pure {patch, build, versionedModelName, unversionedModelname, versionedModelManifest: _.versionedModelManifest <$> x}
 
 
-installModelLocally :: (Tuple DomeinFileRecord AttachmentFiles) -> Boolean -> MonadPerspectivesTransaction Unit
-installModelLocally (Tuple dfrecord@{id, referredModels, invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects, _attachments} attachmentFiles) isInitialLoad' = do
+installModelLocally :: (Tuple DomeinFileRecord AttachmentFiles) -> Boolean -> StoredQueries -> MonadPerspectivesTransaction Unit
+installModelLocally (Tuple dfrecord@{id, referredModels, invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects, _attachments} attachmentFiles) isInitialLoad' storedQueries = do
   {patch, build, versionedModelName, unversionedModelname, versionedModelManifest} <- computeVersionedAndUnversiondName id
   -- Store the model in Couchdb, that is: in the local store of models.
   -- Save it with the revision of the local version that we have, if any (do not use the repository version).
@@ -335,6 +332,8 @@ installModelLocally (Tuple dfrecord@{id, referredModels, invertedQueriesInOtherD
   lift $ void $ cacheEntity id (DomeinFile dfrecord { _rev = Nothing, _id = unversionedDocumentName, _attachments = Nothing})
   -- saveCachedDomeinFile takes care of revisions.
   void $ lift $ saveCachedDomeinFile id
+
+  lift (saveInvertedQueries storedQueries)
 
   if isInitialLoad'
     then do 
