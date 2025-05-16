@@ -1,4 +1,4 @@
-import type { RoleInstanceT, RoleReceiver, ContextInstanceT, ValueT, PropertyValueReceiver, RoleType, UserRoleType, RoleTypeReceiver, PerspectivesReceiver, ScreenReceiver, TableFormReceiver, PropertyType, ContextType, RoleKind, ContextActions, FileShareCredentials, PSharedFile, PerspectivesFile, RuntimeOptions, PouchdbUser, Unsubscriber, PRange, InputType, RoleOnClipboard } from "./perspectivesshape.d.ts";
+import type { RoleInstanceT, RoleReceiver, ContextInstanceT, ValueT, PropertyValueReceiver, RoleType, UserRoleType, RoleTypeReceiver, PerspectivesReceiver, ScreenReceiver, TableFormReceiver, PropertyType, ContextType, RoleKind, ContextActions, FileShareCredentials, PSharedFile, PerspectivesFile, RuntimeOptions, PouchdbUser, Unsubscriber, PRange, InputType, RoleOnClipboard, ContextAndNameReceiver } from "./perspectivesshape.d.ts";
 export type * from "./perspectivesshape.d.ts";
 export declare const PDRproxy: Promise<PerspectivesProxy>;
 type Options = {
@@ -143,6 +143,7 @@ export declare class PerspectivesProxy {
      * @returns The result of the `send` method, which handles the request and response processing.
      */
     getSettings(receiveValues: PerspectivesReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
+    getWiderContexts(externalRoleInstance: RoleInstanceT, receiveValues: ContextAndNameReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     checkBindingP(roleName: RoleType, rolInstance: RoleInstanceT): Promise<boolean>;
     getCouchdbUrl(): Promise<string>;
     getContextActions(myRoleType: UserRoleType, contextInstance: ContextInstanceT): Promise<ContextActions>;

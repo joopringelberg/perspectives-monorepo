@@ -61,7 +61,7 @@ import Perspectives.Identifiers (isExternalRole)
 import Perspectives.InstanceRepresentation (PerspectRol)
 import Perspectives.Instances.Combinators (available', not_)
 import Perspectives.Instances.Environment (_pushFrame)
-import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding_, context, contextModelName, contextType, externalRole, filledBy, fills, getAllFilledRoles, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, roleModelName, roleType)
+import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding_, context, contextModelName, contextType, externalRole, filledBy, fills, getAllFilledRoles_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, roleModelName, roleType)
 import Perspectives.Instances.Values (bool2Value, parseNumber, value2Date, value2Number)
 import Perspectives.ModelDependencies (roleWithId)
 import Perspectives.Names (lookupIndexedRole)
@@ -602,7 +602,7 @@ getRecursivelyFilledRoles filledContextType filledType fillerId = ArrayT $ execW
       r <- lift $ runArrayT $ getFilledRoles filledContextType filledType rid
       if null r
         then do 
-          allFilleds <- lift $ lift $ getAllFilledRoles rid
+          allFilleds <- lift $ lift $ getAllFilledRoles_ rid
           for_ allFilleds \filled -> depthFirst filled (consOnMainPath (R filled) depPath)
         else for_ r \filled -> tell [consOnMainPath (R filled) depPath]
 

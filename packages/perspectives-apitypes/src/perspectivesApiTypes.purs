@@ -75,6 +75,7 @@ data RequestType =
   | GetPublicUrl
   | GetSelectedRoleFromClipboard
   | GetSettings
+  | GetWiderContexts
   | RemoveRoleFromClipboard
   | AddRoleToClipboard
 
@@ -135,6 +136,7 @@ instance decodeRequestType :: ReadForeign RequestType where
     "GetPublicUrl" -> GetPublicUrl
     "GetSelectedRoleFromClipboard" -> GetSelectedRoleFromClipboard
     "GetSettings" -> GetSettings
+    "GetWiderContexts" -> GetWiderContexts
     "RemoveRoleFromClipboard" -> RemoveRoleFromClipboard
     "AddRoleToClipboard" -> AddRoleToClipboard
 

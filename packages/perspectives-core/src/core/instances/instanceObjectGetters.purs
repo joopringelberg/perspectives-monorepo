@@ -23,10 +23,10 @@
 module Perspectives.Instances.ObjectGetters where 
 
 import Control.Monad.Error.Class (try)
-import Control.Monad.Writer (WriterT, execWriterT, lift, tell)
+import Control.Monad.Writer (WriterT, execWriter, execWriterT, lift, tell)
 import Control.Plus (empty) as Plus
 import Data.Array (catMaybes, concat, cons, elemIndex, filter, findIndex, foldM, foldMap, head, index, length, nub, null, singleton, union)
-import Data.FoldableWithIndex (foldWithIndexM)
+import Data.FoldableWithIndex (foldWithIndexM, forWithIndex_)
 import Data.Map (Map, lookup) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Monoid.Conj (Conj(..))
@@ -317,15 +317,25 @@ getRecursivelyFilledRoles' filledContextType filledType fillerId = ArrayT do
         \(filler :: IP.PerspectRol) -> pure (rol_gevuldeRollen filler)
 
 
-getAllFilledRoles :: RoleInstance -> MonadPerspectives (Array RoleInstance)
-getAllFilledRoles rid = (try $ getPerspectRol rid) >>=
-  handlePerspectRolError' "getAllFilledRoles" []
+getAllFilledRoles_ :: RoleInstance -> MonadPerspectives (Array RoleInstance)
+getAllFilledRoles_ rid = (try $ getPerspectRol rid) >>=
+  handlePerspectRolError' "getAllFilledRoles_" []
     \(filler :: IP.PerspectRol) -> pure $ concat $ concat (values <$> values (rol_gevuldeRollen filler))
 
 
+getAllFilledRoles :: RoleInstance ~~> RoleInstance
+getAllFilledRoles rid = ArrayT ((lift (try $ getPerspectRol rid)) >>=
+  handlePerspectRolError' "getAllFilledRoles" []
+    \(filler :: IP.PerspectRol) -> do 
+      tell $ ArrayWithoutDoubles $ execWriter 
+        (forWithIndex_ (rol_gevuldeRollen filler) (\contexttype filleds -> 
+          forWithIndex_ filleds (\filledRoleType _ -> 
+            tell [FilledRolesAssumption rid (ContextType contexttype) (EnumeratedRoleType filledRoleType)])))
+      pure $ concat $ concat (values <$> values (rol_gevuldeRollen filler)))
+
 getRecursivelyAllFilledRoles :: RoleInstance -> MonadPerspectives (Array RoleInstance)
 getRecursivelyAllFilledRoles rid = do 
-  all <- getAllFilledRoles rid
+  all <- getAllFilledRoles_ rid
   append all <<< join <$> for all getRecursivelyAllFilledRoles
 
 -- | Select by providing a filler and retrieve all roles that are filled by it.

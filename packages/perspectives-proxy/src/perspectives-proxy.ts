@@ -42,7 +42,8 @@ import type {
   Unsubscriber,
   PRange,
   InputType,
-  RoleOnClipboard
+  RoleOnClipboard,
+  ContextAndNameReceiver
 } from "./perspectivesshape.d.ts";
 
 export type * from "./perspectivesshape.d.ts";
@@ -897,6 +898,19 @@ export class PerspectivesProxy
       errorHandler
     );
   }
+
+  getWiderContexts( externalRoleInstance : RoleInstanceT, receiveValues : ContextAndNameReceiver, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
+  {
+    return this.send(
+      {request: "GetWiderContexts", subject: externalRoleInstance, onlyOnce: fireAndForget},
+      function (contextAndNameStrings)
+      {
+        return receiveValues(contextAndNameStrings.map( JSON.parse ));
+      },
+      errorHandler
+    );
+  }
+  
 
   ///////////////////////////////////////////////////////////////////////////////////////
   //// PROMISE RETURNING GETTERS.

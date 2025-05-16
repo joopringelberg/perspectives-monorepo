@@ -13,6 +13,7 @@ export type RoleType = string & { readonly brand: unique symbol };
 export type UserRoleType = RoleType
 export type RoleTypeReceiver = (roleType: RoleType[]) => void;
 export type PerspectivesReceiver = (perspectives: Perspective[]) => void;
+export type ContextAndNameReceiver = (contextAndName: ContextAndName[]) => void;
 export type ScreenReceiver = (screen: ScreenDefinition[]) => void;
 export type TableFormReceiver = (tableForm: TableFormDef[]) => void;
 export type PropertyType = string & { readonly brand: unique symbol };
@@ -299,3 +300,10 @@ export type RoleOnClipboard =
     addedBehaviour: string[],
     myroletype: RoleType
   }
+
+ ////////////////////////////////////////////
+//// CLIPBOARD
+////////////////////////////////////////////
+export type ContextAndName =
+	{ externalRole : RoleInstanceT
+	  readableName : string }

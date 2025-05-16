@@ -6,6 +6,7 @@ import { PinnedContexts } from "./pinnedContexts";
 import { RecentContexts } from "./recentContexts";
 import { Accordion, Container } from "react-bootstrap";
 import { buildMarkDown, PSContext } from "perspectives-react";
+import { WiderContexts } from "./widerContexts";
 
 interface WhereProps {
   screenelements: WhereTo;
@@ -52,6 +53,7 @@ export class Where extends Component<WhereProps, WhereState> {
   }
 
   render() {
+    const component = this;
     return (<PSContext.Consumer>{ value => 
     (<div className="content-top-aligned">
       {this.props.screenelements.markdown.map((markdown, index) => 
@@ -59,6 +61,7 @@ export class Where extends Component<WhereProps, WhereState> {
         )}
       <TableForms screenelements={this.props.screenelements.contextRoles} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={false} />
       <Accordion ref={this.ref} activeKey={this.state.accordionOpen} flush>
+        <WiderContexts externalrole={component.props.openContext}/>
         <PinnedContexts systemuser={this.props.systemUser} />
         <RecentContexts systemuser={this.props.systemUser} openContext={this.props.openContext} systemIdentifier={this.props.systemIdentifier}/>
       </Accordion>

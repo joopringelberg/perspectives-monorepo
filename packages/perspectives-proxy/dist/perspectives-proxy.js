@@ -565,6 +565,11 @@ class PerspectivesProxy {
             return receiveValues(settingsStrings.map(JSON.parse));
         }, errorHandler);
     }
+    getWiderContexts(externalRoleInstance, receiveValues, fireAndForget = false, errorHandler) {
+        return this.send({ request: "GetWiderContexts", subject: externalRoleInstance, onlyOnce: fireAndForget }, function (contextAndNameStrings) {
+            return receiveValues(contextAndNameStrings.map(JSON.parse));
+        }, errorHandler);
+    }
     ///////////////////////////////////////////////////////////////////////////////////////
     //// PROMISE RETURNING GETTERS.
     //// These getters, by their nature, return a result only once.

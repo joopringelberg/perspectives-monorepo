@@ -24,6 +24,7 @@ module Perspectives.Api where
  
 -- import Control.Aff.Sockets (ConnectionProcess, connectionConsumer, connectionProducer, dataProducer, defaultTCPOptions, writeData)
 
+import Control.Alternative (guard)
 import Control.Coroutine (Consumer, Producer, await, runProcess, transform, ($$), ($~))
 import Control.Coroutine.Aff (produce')
 import Control.Monad.AvarMonadAsk (gets)
@@ -62,11 +63,12 @@ import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
 import Perspectives.Instances.Combinators (filter)
 import Perspectives.Instances.Me (getAllMyRoleTypes, getMeInRoleAndContext, getMyType, isMe)
-import Perspectives.Instances.ObjectGetters (binding, context, contextType, contextType_, getContextActions, getFilledRoles, getMe, getProperty, getRoleName, roleType, roleType_, siblings)
+import Perspectives.Instances.ObjectGetters (binding, context, contextType, contextType_, externalRole, getAllFilledRoles, getContextActions, getFilledRoles, getMe, getProperty, getRoleName, roleType, roleType_, siblings)
 import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.ModelDependencies (actualSharedFileServer, allSettings, fileShareCredentials, identifiableFirstName, identifiableLastName, itemOnClipboardClipboardData, itemsOnClipboard, mySharedFileServices, selectedClipboardItem, sharedFileServices, sysUser)
 import Perspectives.ModelTranslation (translateType)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, getUserIdentifier, lookupIndexedContext)
+import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment, toFile)
 import Perspectives.Persistence.State (getSystemIdentifier)
@@ -74,9 +76,10 @@ import Perspectives.Persistent (getPerspectRol, saveMarkedResources)
 import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getWarnings, pushFrame, resetWarnings, restoreFrame)
 import Perspectives.Proxy (createRequestEmitter, retrieveRequestEmitter)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter, getDynamicPropertyGetterFromLocalName, getPropertyFromTelescope, getPropertyValues, getPublicUrl, getRoleFunction, getRoleInstances)
-import Perspectives.Representation.ADT (ADT)
+import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Action (Action(..)) as ACTION
 import Perspectives.Representation.Class.PersistentType (DomeinFileId(..), getCalculatedRole, getContext, getEnumeratedRole, getPerspectType)
+import Perspectives.Representation.Class.Property (hasFacet)
 import Perspectives.Representation.Class.Role (getRoleType, kindOfRole, rangeOfRoleCalculation, roleKindOfRoleType)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
@@ -90,9 +93,9 @@ import Perspectives.SaveUserData (removeAllRoleInstances, removeBinding, removeC
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUser, serialisedTableFormForContextAndUser)
-import Perspectives.TypePersistence.PerspectiveSerialisation (perspectiveForContextAndUser, perspectivesForContextAndUser, settingsPerspective)
+import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableNameFromTelescope, perspectiveForContextAndUser, perspectivesForContextAndUser, settingsPerspective)
 import Perspectives.Types.ObjectGetters (findPerspective, getAction, getContextAction, isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
-import Prelude (Unit, bind, discard, eq, identity, map, negate, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=))
+import Prelude (Unit, bind, discard, eq, flip, identity, map, negate, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (/=), (&&))
 import Simple.JSON (read, unsafeStringify, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -496,6 +499,19 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
                   Nothing -> pure Nothing
                   Just userRoleInstance -> head <$> (runArrayT $ (settingsPerspective userRoleInstance userRoleType (ENR typeOfSetting) contextOfSetting))))
         (ContextInstance sysId)
+        onlyOnce
+    
+    Api.GetWiderContexts -> do
+      registerSupportedEffect corrId setter 
+        (\erole -> do 
+          system <- lift $ lift getMySystem
+          widerContextExternalRole <- ((getAllFilledRoles) >=> context >=> externalRole) erole
+          guard ((widerContextExternalRole /= RoleInstance (buitenRol system)) && (widerContextExternalRole /= erole))
+          widerContextRoleType <- roleType widerContextExternalRole
+          readableName <- lift $ (getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST widerContextRoleType) widerContextExternalRole)
+          pure $ Value $ writeJSON { externalRole: widerContextExternalRole, readableName }
+          ) 
+        (RoleInstance subject) 
         onlyOnce
 
     Api.GetSelectedRoleFromClipboard -> do

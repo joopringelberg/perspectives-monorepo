@@ -111,4 +111,5 @@
   , "installationerror": "Installatiefout"
   , "installationerror_button": "Hervat"
   , "installationerror_message": "De installatie van MyContexts kon niet in één keer worden voltooid. Druk op de knop om het proces opnieuw te starten."
+  , "wider_contexts_title": "De bredere context"
 }
