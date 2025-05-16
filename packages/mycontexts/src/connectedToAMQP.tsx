@@ -48,6 +48,19 @@ export default class ConnectedToAMQP extends PerspectivesComponent<ConnectedToAM
   componentDidMount(): void {
     const component = this;
     this.eventDiv = React.createRef();
+    this.subscribeToConnectionProperty();
+  }
+
+  componentDidUpdate(prevProps: Readonly<ConnectedToAMQPProps>, prevState: Readonly<ConnectedToAMQPState>, snapshot?: any): void {
+    if (prevProps.roleinstance !== this.props.roleinstance) {
+      this.unsubscribeAll();
+      this.subscribeToConnectionProperty();
+    }
+  }
+
+  subscribeToConnectionProperty()
+  {
+    const component = this;
     PDRproxy.then(pproxy => 
       component.addUnsubscriber(
         pproxy.getProperty(
@@ -59,6 +72,7 @@ export default class ConnectedToAMQP extends PerspectivesComponent<ConnectedToAM
             component.setState({ isConnected: values[0] === "true" });
           }
         )));
+
   }
 
   render() {
