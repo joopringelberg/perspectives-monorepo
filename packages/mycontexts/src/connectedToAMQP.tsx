@@ -40,6 +40,9 @@ export default class ConnectedToAMQP extends PerspectivesComponent<ConnectedToAM
 
   constructor(props: ConnectedToAMQPProps) {
     super(props);
+    this.state = {
+      isConnected: false
+    };
   }
 
   componentDidMount(): void {
