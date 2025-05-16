@@ -90,7 +90,6 @@ html body .dropdown-menu .dropdown-item {
   padding: var(--markdown-padding-y) var(--markdown-padding-x);
 }
 
-/* Add this to your existing CSS */
 .content-top-aligned {
   display: flex;
   flex-direction: column;
@@ -98,4 +97,17 @@ html body .dropdown-menu .dropdown-item {
   justify-content: flex-start; /* This is the key property for top alignment */
   height: 100%;  /* Take up all available height */
   width: 100%;   /* Take up all available width */
+}
+
+/* Maximizing the width of the title of the context */
+/* Add to www.css */
+.navbar-title {
+  max-width: 60%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  
+  /* These properties ensure the text is centered but still shows ellipsis */
+  text-align: center;
+  margin: 0 auto;
 }

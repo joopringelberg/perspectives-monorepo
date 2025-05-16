@@ -593,7 +593,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
           : null }
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
-      <Navbar.Brand href="#home" className='text-light flex-grow-1 d-flex justify-content-center align-items-center'>{this.state.title}</Navbar.Brand>
+      <Navbar.Brand href="#home" className='text-light navbar-title'>{this.state.title}</Navbar.Brand>
       <InternetConnectivityCheck reportBack={ (isOnline : boolean) => component.setState({isOnline})}/>
       <ConnectedToAMQP roleinstance={ externalRole( component.state.systemIdentifier )} isOnline={component.state.isOnline} />
     </Navbar>);
