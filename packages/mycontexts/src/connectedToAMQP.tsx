@@ -23,7 +23,7 @@ import React, { useState, useEffect, useRef } from "react";
 import OverlayTrigger from 'react-bootstrap/OverlayTrigger';
 import Tooltip from 'react-bootstrap/Tooltip';
 import { PDRproxy, RoleInstanceT } from "perspectives-proxy";
-import { i18next, ModelDependencies } from "perspectives-react";
+import { i18next, ModelDependencies, PerspectivesComponent } from "perspectives-react";
 import { OverlayInjectedProps } from 'react-bootstrap/esm/Overlay';
 
 interface ConnectedToAMQPProps {
@@ -31,66 +31,65 @@ interface ConnectedToAMQPProps {
   isOnline: boolean
 }
 
-export default function ConnectedToAMQP(props : ConnectedToAMQPProps) 
-{
-  const [isConnected, setIsConnected] = useState<boolean>(false);
-  const eventDiv = useRef(null);
-  const isOnline = props.isOnline;
+interface ConnectedToAMQPState {
+  isConnected: boolean
+}
 
-  // useEffect hook to handle the asynchronous call
-  useEffect(() => {
-    let unsubscriber: any;
-    
+export default class ConnectedToAMQP extends PerspectivesComponent<ConnectedToAMQPProps>{
+  private eventDiv!: React.RefObject<HTMLDivElement|null>;
+
+  constructor(props: ConnectedToAMQPProps) {
+    super(props);
+  }
+
+  componentDidMount(): void {
+    const component = this;
+    this.eventDiv = React.createRef();
     PDRproxy.then(pproxy => 
-      pproxy.getProperty(
-        props.roleinstance,
-        ModelDependencies.connectedToAMQPBroker, 
-        ModelDependencies.systemExternal,
-        (values) => {
-          // values is an array, with "true" or "false" as strings
-          setIsConnected(values[0] === "true");
-        }
-      ).then(unsub => {
-        unsubscriber = unsub;
-      })
+      component.addUnsubscriber(
+        pproxy.getProperty(
+          component.props.roleinstance,
+          ModelDependencies.connectedToAMQPBroker, 
+          ModelDependencies.systemExternal,
+          (values) => {
+            // values is an array, with "true" or "false" as strings
+            component.setState({ isConnected: values[0] === "true" });
+          }
+        )));
+  }
+
+  render() {
+    const component = this;
+    const renderTooltip = (props : OverlayInjectedProps) => (
+      <Tooltip id="amqp-tooltip" {...props} show={
+        props.show}>
+        {i18next.t("app_connected_to_amqp_tooltip", 
+          { ns: 'mycontexts'
+          , connectionState: component.state.isConnected  && component.props.isOnline ? 
+            "" :
+            i18next.t("app_connected_to_internet_connected", { ns: 'mycontexts' })
+          })
+          }
+      </Tooltip>
     );
-
-    // Cleanup function that runs when the component unmounts
-    return () => {
-      if (unsubscriber) {
-        PDRproxy.then(pproxy => pproxy.send(unsubscriber, () => {}));
-      }
-    };
-  }, [props.roleinstance]); // Re-run effect if roleinstance changes
-
-  const renderTooltip = (props : OverlayInjectedProps) => (
-    <Tooltip id="amqp-tooltip" {...props} show={
-      props.show}>
-      {i18next.t("app_connected_to_amqp_tooltip", 
-        { ns: 'mycontexts'
-        , connectionState: isConnected  && isOnline ? 
-          "" :
-          i18next.t("app_connected_to_internet_connected", { ns: 'mycontexts' })
-        })
-        }
-    </Tooltip>
-  );
-
-  return <OverlayTrigger
-      placement="left"
-      delay={{ show: 250, hide: 400 }}
-      overlay={renderTooltip}
-    >
-      <div
-        ref={eventDiv}
-        className="ml-3 mr-3 text-secondary"
-        aria-describedby="amqp-tooltip"
-        tabIndex={0}
-      >{
-        isConnected  && props.isOnline ? <span role="img" aria-label="Online" style={{ color: "green", marginRight: "8px" }}>🟢</span> :
-        <span role="img" aria-label="Offline" style={{ color: "red", marginRight: "8px" }}>🔴</span>
-      }
-        
-      </div>
-    </OverlayTrigger>
-  ;}
+  
+    return <OverlayTrigger
+    placement="left"
+    delay={{ show: 250, hide: 400 }}
+    overlay={renderTooltip}
+  >
+    <div
+      ref={component.eventDiv}
+      className="ml-3 mr-3 text-secondary"
+      aria-describedby="amqp-tooltip"
+      tabIndex={0}
+    >{
+      component.state.isConnected  && component.props.isOnline ? <span role="img" aria-label="Online" style={{ color: "green", marginRight: "8px" }}>🟢</span> :
+      <span role="img" aria-label="Offline" style={{ color: "red", marginRight: "8px" }}>🔴</span>
+    }
+      
+    </div>
+  </OverlayTrigger>
+;
+  }
+}
