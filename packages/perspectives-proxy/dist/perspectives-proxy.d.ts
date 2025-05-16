@@ -301,7 +301,11 @@ type ChatParticipantFields = {
     avatar?: PSharedFile;
 };
 declare class Cursor {
-    wait(): void;
-    restore(): void;
+    private static loadingOverlayElement;
+    private static activeRequests;
+    private static correlationIdentifiers;
+    constructor();
+    wait(request: RequestRecord): void;
+    restore(request: RequestRecord): void;
 }
 export declare function mapRange(range: PRange): InputType;

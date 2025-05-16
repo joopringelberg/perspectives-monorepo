@@ -73,7 +73,8 @@ const defaultRequest = {
     reactStateSetter: function () { },
     corrId: 0,
     contextDescription: {},
-    onlyOnce: false
+    onlyOnce: false,
+    // trackingNumber: 0,
 };
 ////////////////////////////////////////////////////////////////////////////////
 //// SHARED WORKER CHANNEL
@@ -327,6 +328,7 @@ const SharedWorkerChannelPromise = new Promise(function (resolve /*, reject*/) {
     // sharedWorkerChannelRejecter = reject;
 });
 class PerspectivesProxy {
+    // private static index : number = 0;
     channel;
     cursor;
     userMessageChannel;
@@ -340,15 +342,16 @@ class PerspectivesProxy {
         this.channel.close();
     }
     // Returns a promise for unsuscriber information of the form: {subject: req.subject, corrId: req.corrId}
-    // that can be used by the caller to unsubscribe from the core dependency network.
+    // that can be used by the caller to unsubscribe from updates.
     send(req, receiveValues, errorHandler) {
         const cursor = this.cursor;
         const proxy = this;
+        // req.trackingNumber = PerspectivesProxy.index++;
         // Handle errors here. Use `errorHandler` if provided by the PerspectivesProxy method.
         // Log errors to the console anyway for the developer.
         const handleErrors = function (response) {
             // Restore cursor shape
-            cursor.restore();
+            cursor.restore(req);
             if (response.responseType === "APIerror") {
                 console.warn("This request:\n" + JSON.stringify(req) + "\n results in this error: \n" + response.error);
                 if (errorHandler) {
@@ -376,7 +379,9 @@ class PerspectivesProxy {
         //   console.warn( "Request misses values: " + JSON.stringify(fullRequest) );
         // }
         // Set cursor shape
-        cursor.wait();
+        if (!(req.request == "Unsubscribe")) {
+            cursor.wait(req);
+        }
         return this.channel.send(fullRequest);
     }
     // unsubscribe from the channel.
@@ -1023,11 +1028,90 @@ const CONTINUOUS = false;
 //// CURSOR HANDLING
 ////////////////////////////////////////////////////////////////////////////////
 class Cursor {
-    wait() {
-        document.body.style.cursor = "wait";
+    static loadingOverlayElement = null;
+    static activeRequests = 0;
+    static correlationIdentifiers = [];
+    constructor() {
+        // Create the overlay element once
+        if (!Cursor.loadingOverlayElement) {
+            const overlay = document.createElement('div');
+            overlay.className = 'pdr-loading-overlay';
+            overlay.innerHTML = `
+        <div class="pdr-spinner-container">
+          <div class="pdr-spinner"></div>
+          <div>Processing...</div>
+        </div>
+      `;
+            overlay.style.display = 'none';
+            document.body.appendChild(overlay);
+            Cursor.loadingOverlayElement = overlay;
+            // Add styles to your CSS or inject them here
+            const style = document.createElement('style');
+            style.textContent = `
+        .pdr-loading-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background-color: rgba(0, 0, 0, 0.3);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 9999;
+          transition: opacity 0.3s;
+        }
+        .pdr-spinner-container {
+          background-color: white;
+          padding: 20px;
+          border-radius: 8px;
+          text-align: center;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .pdr-spinner {
+          border: 4px solid #f3f3f3;
+          border-top: 4px solid #3498db;
+          border-radius: 50%;
+          width: 30px;
+          height: 30px;
+          animation: pdr-spin 1s linear infinite;
+          margin: 0 auto 10px auto;
+        }
+        @keyframes pdr-spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `;
+            document.head.appendChild(style);
+        }
     }
-    restore() {
+    wait(request) {
+        Cursor.activeRequests++;
+        // console.log("=".repeat(Cursor.activeRequests) + ">" + " Cursor.activeRequests in wait: ", Cursor.activeRequests);
+        // console.log(request);
+        // Cursor.correlationIdentifiers.push(request.trackingNumber!);
+        setTimeout(() => {
+            if (Cursor.activeRequests > 0) {
+                document.body.style.cursor = "wait"; // Keep for desktop
+                if (Cursor.loadingOverlayElement) {
+                    Cursor.loadingOverlayElement.style.display = 'flex';
+                }
+            }
+        }, 400);
+    }
+    restore(request) {
         document.body.style.cursor = "auto";
+        Cursor.activeRequests--;
+        // console.log("<" + "=".repeat( Cursor.activeRequests < 0 ? 0 : Cursor.activeRequests) + " Cursor.activeRequests in restore: ", Cursor.activeRequests);
+        // console.log(request);
+        // Cursor.correlationIdentifiers = Cursor.correlationIdentifiers.filter(id => id !== request.trackingNumber);
+        // console.log("Cursor.correlationIdentifiers: ", Cursor.correlationIdentifiers);
+        if (Cursor.activeRequests <= 0) {
+            Cursor.activeRequests = 0;
+            if (Cursor.loadingOverlayElement) {
+                Cursor.loadingOverlayElement.style.display = 'none';
+            }
+        }
     }
 }
 // See: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input
