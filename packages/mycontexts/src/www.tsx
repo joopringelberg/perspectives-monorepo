@@ -194,10 +194,10 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
       // Register the service worker if not already registered
       navigator.serviceWorker.register('/www/notification-worker.js')
         .then(registration => {
-          console.log('ServiceWorker registered from WWW component');
+          console.log('notification-worker registered from WWW component');
         })
         .catch(err => {
-          console.error('Error registering ServiceWorker from WWW component:', err);
+          console.error('Error registering notification-worker from WWW component:', err);
         });
     }
 
