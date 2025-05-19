@@ -78,6 +78,16 @@ domain model://joopringelberg.nl#Disconnect
               markdown <### Disconnected peer
                         These are the details of the peer you can disconnect from.
                         >
+          IncomingDisconnections
+            master
+              markdown <### Peers that have disconnected from you
+                        This is a list of all peers that have disconnected from you.
+                        >
+              without props (Disconnected)
+            detail
+              markdown <### Disconnecting peer
+                        These are the details of the peer that has disconnected from you.
+                        >
 
     context DisconnectedPeers (relational) filledBy DisconnectedPeer
       state GiveMeARole = exists binding
