@@ -1542,14 +1542,14 @@ export class PerspectivesProxy
       });
   }
 
-  bind_ (filledRole : RoleInstanceT, filler : RoleInstanceT, myroletype  : UserRoleType) : Promise<[]>
+  bind_ (filledRole : RoleInstanceT, filler : RoleInstanceT, myroletype  : UserRoleType) : Promise<boolean>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)
       {
         return proxy.send(
           {request: "Bind_", subject: filledRole, object: filler, authoringRole: myroletype, onlyOnce: true},
-          resolver,
+          values => resolver( values[0] == "true" ),
           rejecter
         );
       });

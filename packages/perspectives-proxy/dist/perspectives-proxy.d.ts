@@ -226,7 +226,7 @@ export declare class PerspectivesProxy {
      * @returns A promise that resolves to the role instance.
      */
     bind(contextinstance: ContextInstanceT, localRolName: RolName, contextType: ContextType, rolDescription: RolSerialization, myroletype: UserRoleType): Promise<RoleInstanceT>;
-    bind_(filledRole: RoleInstanceT, filler: RoleInstanceT, myroletype: UserRoleType): Promise<[]>;
+    bind_(filledRole: RoleInstanceT, filler: RoleInstanceT, myroletype: UserRoleType): Promise<boolean>;
     /**
      * Creates a role instance within a given context.
      *

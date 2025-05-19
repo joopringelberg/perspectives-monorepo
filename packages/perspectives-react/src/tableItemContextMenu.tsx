@@ -243,7 +243,18 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
         pproxy.bind_(
           component.props.roleinstance,
           component.props.roleOnClipboard!.roleData.rolinstance,
-          component.props.perspective.userRoleType);
+          component.props.perspective.userRoleType)
+          .then( uniqueFiller => {
+            if (!uniqueFiller)
+            {
+              UserMessagingPromise.then( um => 
+                um.addMessageForEndUser(
+                  { title: i18next.t("fillRole_title", { ns: 'preact' }) 
+                  , message: i18next.t("fillRole_filler_has_been_used", {ns: 'preact'})
+                  , error: i18next.t("fillRole_error", {ns: 'preact'})
+                  }));
+            }}
+          );
       });
   }
 

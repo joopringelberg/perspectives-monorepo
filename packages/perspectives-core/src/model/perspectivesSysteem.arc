@@ -387,7 +387,9 @@ domain model://perspectives.domains#System
 
     context SocialEnvironment filledBy SocialEnvironment
 
-    user Contacts = sys:TheWorld >> PerspectivesUsers
+    -- In effect, this will filter out the Serialization persona.
+    user Contacts = filter (callExternal cdb:RoleInstances( "model://perspectives.domains#System$TheWorld$PerspectivesUsers" ) returns sys:TheWorld$PerspectivesUsers) with (exists PublicKey) and (not this == sys:SocialMe >> binding)
+    
     -- user Contacts = sys:MySocialEnvironment >> Persons
 
     -- PDRDEPENDENCY

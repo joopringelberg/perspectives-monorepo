@@ -51,12 +51,12 @@ export default class RoleInstance extends PerspectivesComponent<RoleInstanceProp
       function (pproxy)
       {
         // see RoleData (in perspectivesshape.js) for the structure of the roleData argument that binds to the parameter.
-        function bind_(roleData : RoleDataProper) : Promise<void|[]>
+        function bind_(roleData : RoleDataProper) : Promise<boolean>
         {
           const filler = roleData.rolinstance;
           if (filler && component.props.roleinstance)
           {
-            return pproxy
+            return pproxy 
               .bind_(
                 component.props.roleinstance,
                 filler,
@@ -68,7 +68,8 @@ export default class RoleInstance extends PerspectivesComponent<RoleInstanceProp
                     , message: i18next.t("fillRole_message", {ns: 'preact' })
                     , error: e.toString()
                   });
-                  component.setState({showRemoveContextModal: false})
+                  component.setState({showRemoveContextModal: false});
+                  return false; // Ensure a boolean is returned
                 }));
           }
           else return new Promise((resolve, reject) => { reject(false) });

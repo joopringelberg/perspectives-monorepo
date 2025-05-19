@@ -91,7 +91,7 @@ export type PSRolType =
   , contexttype: ContextType
   , roltype: RoleType
   , roleKind: RoleKind
-  , bind_: (roleData: RoleDataProper) => Promise<[]|void>
+  , bind_: (roleData: RoleDataProper) => Promise<boolean>
   , bind: (roleInstance: RoleInstanceT) => Promise<RoleInstanceT|void>
   , checkbinding: (roleData: RoleDataProper) => Promise<boolean>
   , removerol: () => Promise<void>

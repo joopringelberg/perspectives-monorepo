@@ -952,7 +952,7 @@ class PerspectivesProxy {
     bind_(filledRole, filler, myroletype) {
         const proxy = this;
         return new Promise(function (resolver, rejecter) {
-            return proxy.send({ request: "Bind_", subject: filledRole, object: filler, authoringRole: myroletype, onlyOnce: true }, resolver, rejecter);
+            return proxy.send({ request: "Bind_", subject: filledRole, object: filler, authoringRole: myroletype, onlyOnce: true }, values => resolver(values[0] == "true"), rejecter);
         });
     }
     // We have room for checkBinding_( <binder>, <binding>, [() -> undefined] )

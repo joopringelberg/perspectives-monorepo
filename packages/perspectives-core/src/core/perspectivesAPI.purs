@@ -682,12 +682,12 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
         -- binds the object.
         bindings <- (RoleInstance subject) ##= siblings >=> binding
         if isJust $ elemIndex (RoleInstance object) bindings
-          then sendResponse (Error corrId ("Cannot not bind the same role instance twice in the same role type")) setter
+          then sendResponse (Result corrId ["false"]) setter
           else do
             void $ runMonadPerspectivesTransaction authoringRole
               do
                 void $ setBinding (RoleInstance subject) (RoleInstance object) Nothing
-            sendResponse (Result corrId []) setter
+            sendResponse (Result corrId ["true"]) setter
       (\e -> sendResponse (Error corrId (show e)) setter)
     -- {request: "RemoveBinding", subject: rolID}
     Api.RemoveBinding -> catchError

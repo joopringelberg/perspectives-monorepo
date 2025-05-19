@@ -477,6 +477,15 @@ export function addRoleToClipboard(roleInstance : RoleInstanceT, roleData: RoleO
       ModelDependencies.system,
       itemOnClipboard,
       myroletype
-    )
+      ).then( uniqueFiller => {
+        if (!uniqueFiller)
+        {
+          UserMessagingPromise.then( um => 
+            um.addMessageForEndUser(
+              { title: i18next.t("fillRole_title", { ns: 'preact' }) 
+              , message: i18next.t("fillRole_filler_has_been_used", {ns: 'preact'})
+              , error: i18next.t("fillRole_error", {ns: 'preact'})
+              }));
+        }})
     });
   }

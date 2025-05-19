@@ -44,7 +44,7 @@ export default class ExternalRole extends PerspectivesComponent<ExternalRoleProp
                 , roleKind: "ExternalRole" as RoleKind
                 , rolinstance: externalRole( component.context.contextinstance)
                 // There is no effective implementation of any of these functions for external roles.
-                , bind_: (ignore:RoleDataProper) => Promise.resolve()
+                , bind_: (ignore:RoleDataProper) => Promise.resolve(false)
                 , bind: (ignore:RoleInstanceT) => Promise.resolve("" as RoleInstanceT)
                 , checkbinding: (roleData : RoleDataProper) => Promise.resolve(true)
                 , removerol: () => Promise.resolve()
