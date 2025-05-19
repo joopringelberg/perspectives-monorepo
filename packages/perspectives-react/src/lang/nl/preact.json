@@ -98,5 +98,6 @@
 , "copyPublicUrl_title": "Publiek adres"
 , "copyPublicUrl_error_title": "Kopiëren mislukt"
 , "copyPublicUrl_error_message": "Kon het publieke adres van deze context niet kopiëren."
+, "tableContextMenu_copy": "Kopieer"
 
 }

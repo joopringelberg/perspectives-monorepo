@@ -461,7 +461,7 @@ export function getBehaviourAdder(name: string): BehaviourAdder {
 ////////////////////////////////////////
 // ADD A ROLE TO CLIPBOARD
 ////////////////////////////////////////
-function addRoleToClipboard(roleInstance : RoleInstanceT, roleData: RoleOnClipboard,systemExternalRole : RoleInstanceT, myroletype : RoleType) : Promise<RoleInstanceT | void>
+export function addRoleToClipboard(roleInstance : RoleInstanceT, roleData: RoleOnClipboard,systemExternalRole : RoleInstanceT, myroletype : RoleType) : Promise<RoleInstanceT | void>
 {
   let properties: PropertySerialization = {};
   properties[ModelDependencies.itemOnClipboardSelected] =  ["true" as ValueT ];

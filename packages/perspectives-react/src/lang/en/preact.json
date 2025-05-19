@@ -98,4 +98,5 @@
 , "copyPublicUrl_title": "Public address"
 , "copyPublicUrl_error_title": "Copy failed"
 , "copyPublicUrl_error_message": "Could not copy the public address of this context."
+, "tableContextMenu_copy": "Copy"
 }

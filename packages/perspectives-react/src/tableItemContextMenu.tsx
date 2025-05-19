@@ -26,11 +26,13 @@ import { UserMessagingPromise } from "./userMessaging";
 import { PSContextType } from "./reactcontexts";
 import { externalRole } from "./urifunctions";
 import _ from "lodash";
+import { addRoleToClipboard } from "./cardbehaviour";
 
 interface TableItemContextMenuProps {
   perspective: Perspective;
-  roleinstance: RoleInstanceT
+  roleinstance: RoleInstanceT;
   roleOnClipboard?: RoleOnClipboard;
+  systemExternalRole: RoleInstanceT;
 }
 
 interface TableItemContextMenuState {
@@ -509,11 +511,62 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     }
   }
 
+  computeCopyItem() : JSX.Element[]
+  {
+    const component = this;
+    const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance];
+    if (roleInstanceWithProps)
+    {
+      return [<Dropdown.Item
+                key="Copy"
+                eventKey="Copy"
+                onClick={ () => component.copy()}
+              >{
+                i18next.t("tableContextMenu_copy", { ns: 'preact' })
+              }</Dropdown.Item>];
+    }
+    else
+    {
+      return [];
+    }
+  }
+
+  copy() {
+    const component = this;
+    const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance];
+    navigator.clipboard.writeText(this.props.roleinstance!);
+    addRoleToClipboard(
+      component.props.roleinstance!, 
+      {
+        roleData: {
+          rolinstance: component.props.roleinstance!,
+          cardTitle: roleInstanceWithProps.readableName || "No title",
+          roleType: component.props.perspective.roleType,
+          contextType: component.props.perspective.contextType,
+        },
+        addedBehaviour: ["fillARole"],
+        myroletype: component.props.perspective.userRoleType,
+      },
+      component.props.systemExternalRole,
+      component.props.perspective.userRoleType
+      ).catch((e) =>
+          UserMessagingPromise.then((um) =>
+            um.addMessageForEndUser({
+              title: i18next.t("clipboardSet_title", { ns: "preact" }),
+              message: i18next.t("clipboardSet_message", { ns: "preact" }),
+              error: e.toString(),
+            })
+          )
+        );
+}
+
+
   render()
   {
     const component = this;
     const items = [
       ...this.computeOpenDetailsItem(),
+      ...this.computeCopyItem(),
       ...this.computeFillItem(),
       ...this.computeAddItems(),
       ...this.computeRemovalItems(),

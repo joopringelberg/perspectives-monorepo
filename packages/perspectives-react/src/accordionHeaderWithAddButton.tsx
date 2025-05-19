@@ -21,11 +21,12 @@ export class AccordionHeaderWithmenu extends Component<AccordionHeaderWithMenuPr
       <div className="d-flex align-items-center w-100 justify-content-between m-0">
         <span>{this.props.perspective.displayName}</span>
         <AppContext.Consumer>
-          {({ roleOnClipboard }) => 
+          {({ roleOnClipboard, systemExternalRole }) => 
             <TableItemContextMenu 
               perspective={component.props.perspective} 
               roleinstance={component.props.roleinstance}
-              roleOnClipboard={roleOnClipboard}/>
+              roleOnClipboard={roleOnClipboard}
+              systemExternalRole={systemExternalRole}/>
         }
         </AppContext.Consumer>
       </div> 
