@@ -93,4 +93,9 @@
 , "tableContextMenu_opencontextoffiller": "Open the context of the filler"
 , "restoreContextForUser_title": "Restore context"
 , "restoreContextForUser_message": "Could not restore the context for this user."
+, "tableContextMenu_publicurl": "Copy the public address of this context"
+, "copyPublicUrl_message": "Copied the public address of this context to the clipboard."
+, "copyPublicUrl_title": "Public address"
+, "copyPublicUrl_error_title": "Copy failed"
+, "copyPublicUrl_error_message": "Could not copy the public address of this context."
 }

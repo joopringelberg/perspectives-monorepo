@@ -146,6 +146,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
                             key="RemoveRole"
                             eventKey="RemoveRole"
                             onClick={ () => component.removeWithoutContext()}
+                            className="text-danger"
                           >{
                             i18next.t("tableContextMenu_removerole", { ns: 'preact' }) 
                           }</Dropdown.Item>);
@@ -156,6 +157,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
                             key="RemoveContext"
                             eventKey="RemoveContext"
                             onClick={ () => component.removeWithContext()}
+                            className="text-danger"
                           >{
                             i18next.t("tableContextMenu_removecontext", { ns: 'preact' })
                           }</Dropdown.Item>);
@@ -466,7 +468,47 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
           })));
   }
 
-  
+  computePublicUrl() : JSX.Element[]
+  {
+    const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance];
+    if (roleInstanceWithProps && roleInstanceWithProps.publicUrl)
+    {
+      const url = window.location.origin + "?opencontext=" + encodeURIComponent( roleInstanceWithProps.publicUrl );
+      return [<Dropdown.Item
+        key="PublicUrl"
+        eventKey="PublicUrl"
+        onClick={() => {
+          if (roleInstanceWithProps.publicUrl) {
+            navigator.clipboard.writeText(url)
+              .then(() => {
+                UserMessagingPromise.then(um =>
+                  um.addMessageForEndUser({
+                    title: i18next.t("copyPublicUrl_title", { ns: 'preact' }),
+                    message: i18next.t("copyPublicUrl_message", { ns: 'preact' }),
+                  })
+                );
+              })
+              .catch(e => {
+                UserMessagingPromise.then(um =>
+                  um.addMessageForEndUser({
+                    title: i18next.t("copyPublicUrl_error_title", { ns: 'preact' }),
+                    message: i18next.t("copyPublicUrl_error_message", { ns: 'preact' }),
+                    error: e.toString(),
+                  })
+                );
+              });
+          }
+        }}
+      >
+        {i18next.t("tableContextMenu_publicurl", { ns: 'preact' })}
+      </Dropdown.Item>];
+    }
+    else
+    {
+      return [];
+    }
+  }
+
   render()
   {
     const component = this;
@@ -478,7 +520,8 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
       ...this.computeOpenContextOfFillerItem(),
       ...this.computeActionItems(),
       ...this.computeTakeOnThisRoleItem(),
-      ...this.computeRestoreContextForUserItem()
+      ...this.computeRestoreContextForUserItem(),
+      ...this.computePublicUrl()
     ];
     {
       return <NavDropdown 

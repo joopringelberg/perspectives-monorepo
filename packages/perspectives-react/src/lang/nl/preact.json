@@ -93,4 +93,10 @@
 , "tableContextMenu_opencontextoffiller": "Open de context van de vuller"
 , "restoreContextForUser_title": "Herstel context"
 , "restoreContextForUser_message": "Kon deze context niet herstellen, voor deze gebruiker."
+, "tableContextMenu_publicurl": "Kopieer het publieke adres van deze context"
+, "copyPublicUrl_message": "Het publieke adres van deze context is naar het klembord gekopieerd."
+, "copyPublicUrl_title": "Publiek adres"
+, "copyPublicUrl_error_title": "Kopiëren mislukt"
+, "copyPublicUrl_error_message": "Kon het publieke adres van deze context niet kopiëren."
+
 }

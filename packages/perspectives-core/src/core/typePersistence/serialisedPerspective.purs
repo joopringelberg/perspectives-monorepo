@@ -13,6 +13,7 @@
 -- GNU General Public License for more details.
 --
 -- You should have received a copy of the GNU General Public License
+
 -- along with this program.  If not, see <https:--www.gnu.org/licenses/>.
 --
 -- Full text of this license can be found in the LICENSE file in the projects root.
@@ -28,7 +29,7 @@
 module Perspectives.TypePersistence.PerspectiveSerialisation.Data where
 
 import Data.Maybe (Maybe)
-import Data.Newtype (class Newtype) 
+import Data.Newtype (class Newtype)
 import Foreign.Object (Object)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (ContextType, PropertyType, RoleKind)
@@ -38,6 +39,7 @@ type SerialisedPerspective' =
   ----
   ---- Type level properties
   ----
+
   id :: String
   , displayName :: String
   , isFunctional :: Boolean
@@ -109,6 +111,7 @@ derive instance newtypeSerialisedPerspective :: Newtype SerialisedPerspective _
 type RoleInstanceWithProperties =
   { roleId :: String
   , isMe :: Boolean
+  , publicUrl :: Maybe String
   , objectStateBasedRoleVerbs :: Array String
   -- keys are the string representation of PropertyType,
   -- so this map can be read as one from PropertyType to PropertyVerbs, too.

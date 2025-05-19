@@ -1030,7 +1030,7 @@ getPublicUrl ctxt = do
         case murl of 
           Just (Value url) -> pure $ Just $ ensureTerminalSlash url
           Nothing ->  do 
-            addWarning ("Cannot compute a URL to publish to for this user role type and context instance: " <> show r <> " ('" <> show ctxt <> "')")
+            -- addWarning ("Cannot compute a URL to publish to for this user role type and context instance: " <> show r <> " ('" <> show ctxt <> "')")
             pure Nothing
       _ -> pure Nothing
 

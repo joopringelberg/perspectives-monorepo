@@ -100,6 +100,7 @@ export type Roleinstancewithprops = {
   publicUrl?: string;
   filler?: RoleInstanceT;
   isMe: boolean;
+  publicUrl?: string;
   readableName: string
 };
 
