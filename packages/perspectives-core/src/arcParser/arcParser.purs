@@ -860,6 +860,7 @@ perspectivePart = do
     "only", _ -> singleton <<< R <$> roleVerbs
     "except", _ -> singleton <<< R <$> roleVerbs
     "all", "roleverbs" -> singleton <<< R <$> roleVerbs
+    "all", "props" -> singleton <<< P <$> propertyVerbs
     "in", _ -> inState
     "on", "entry" -> onEntryE
     "on", "exit" -> onExitE
@@ -1284,7 +1285,6 @@ authorOnly = do
 -- |   |
 -- |   props [(<ident> {, <ident>}+) ] [ verbs ( <propertyVerb>{, <propertyVerb>}+ )]
 -- | The default has propertyVerbs = Universal and propsOrView = AllProperties!
--- | CAREFUL: this parser always succeeds with a PropertyVerbE.
 propertyVerbs :: IP PropertyVerbE
 propertyVerbs = basedOnView <|> basedOnProps
   where
@@ -1318,7 +1318,12 @@ propertyVerbs = basedOnView <|> basedOnProps
         Just s, Just o -> do
           -- | props (<ArcIdentifier>) [: (<PropertyVerb+)]
           start <- getPosition
-          props <- option AllProperties (reserved "props" *> (Properties <$> lotsOfProperties))
+          -- "all props" of "props (P1, P2)" 
+          props <- do 
+            allProps <- option false allProperties
+            if allProps
+              then pure AllProperties
+              else (reserved "props" *> (Properties <$> lotsOfProperties))
           (pv :: ExplicitSet PropertyVerb) <- option Universal (((reserved "verbs") <|> (reserved "without")) *> lotsOfVerbs)
           end <- getPosition
           sameOrOutdented'
@@ -1330,6 +1335,13 @@ propertyVerbs = basedOnView <|> basedOnProps
 
     lotsOfProperties :: IP (List String)
     lotsOfProperties = token.parens (arcIdentifier `sepBy` token.symbol ",")
+
+    allProperties :: IP Boolean
+    allProperties = do 
+      (Tuple first second) <- twoReservedWords
+      case first, second of
+        "all", "props" -> reserved "all" *> reserved "props" *> pure true
+        _, _ -> pure false
 
 withoutProperties :: IP PropsOrView
 withoutProperties = basedOnView <|> basedOnProps
@@ -1494,22 +1506,30 @@ whoE = reserved "who" *> (TableFormSectionE <$> option Nil (reserved "markdown" 
 
 whatE :: IP WhatE
 whatE = reserved "what" *>
-  ((do 
-    tforms <- TableForms <$> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
-    -- Make sure we have parsed the who clause completely.
-    lookAhead (reserved "where")
-    pure tforms)
-  <|> 
-  (do
-    -- put' indentParserPosition
+  do
     start <- getPosition
     title <- optionMaybe token.stringLiteral
-    subscreen <- classicScreenE title start
-    -- Make sure we have parsed the who clause completely.
-    lookAhead (reserved "where")
-    case subscreen of 
-      ClassicScreen s -> pure $ FreeFormScreen s
-      _ -> fail "Expected ClassicScreen"))
+    keyword <- scanIdentifier
+    case keyword of
+      "tab" -> classicSubscreenE start
+      "row" -> classicSubscreenE start
+      "column" -> classicSubscreenE start
+      "markdown" -> whatProperE
+      "master" -> whatProperE
+      _ -> fail "Expected: tab, row, column for a classic screen, or markdown or master for a who-what-where screen. "
+  where
+    classicSubscreenE :: ArcPosition -> IP WhatE
+    classicSubscreenE start = do
+      subscreen <- classicScreenE Nothing start
+      lookAhead (reserved "where")
+      case subscreen of 
+        ClassicScreen s -> pure $ FreeFormScreen s
+        _ -> fail "Expected ClassicScreen"
+    whatProperE :: IP WhatE
+    whatProperE = do
+      tforms <- TableForms <$> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
+      lookAhead (reserved "where")
+      pure tforms
 
 whereE :: IP TableFormSectionE
 whereE = reserved "where" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))

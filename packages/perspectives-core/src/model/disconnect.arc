@@ -44,6 +44,7 @@ domain model://joopringelberg.nl#Disconnect
         props (Peer, Disconnected) verbs (Consult)
       perspective on DisconnectedPeers >> binding >> context >> Disconnecter
         all roleverbs
+        all props
       perspective on IncomingDisconnections
         props (Peer) verbs (Consult)
       perspective on Manager
