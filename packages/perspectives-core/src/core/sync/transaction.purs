@@ -93,6 +93,7 @@ newtype Transaction = Transaction (TransactionRecord
   , identityDocument :: Maybe UninterpretedTransactionForPeer
   -- Maybe an index where to insert deltas.
   , insertionPoint :: Maybe Int
+  , transactionNumber :: Int
   ))
 
 data TransactionDestination = PublicDestination RoleInstance | Peer UnschemedResourceIdentifier
@@ -158,6 +159,7 @@ instance ReadForeign Transaction where
       , postponedStateEvaluations: []
       , identityDocument: Nothing
       , insertionPoint: Nothing
+      , transactionNumber: 0
       }
 
 derive newtype instance ReadForeign Transaction'
@@ -197,6 +199,7 @@ createTransaction authoringRole =
       , postponedStateEvaluations: []
       , identityDocument: Nothing
       , insertionPoint: Nothing
+      , transactionNumber: 0
     }
 
 -- | We consider a Transaction to be 'empty' when it shows no difference to the clone of the original.

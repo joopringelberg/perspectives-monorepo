@@ -101,6 +101,7 @@ runMonadPerspectivesTransaction' share authoringRole a = (lift $ createTransacti
       t <- lift $ transactionFlag
       lift $ lift $ void $ take t
       transactionNumber <- lift $ nextTransactionNumber
+      AA.modify \trns -> over Transaction (\tr -> tr {transactionNumber = transactionNumber}) trns
       padding <- lift transactionLevel
       log (padding <> "Starting " <> (if share then "" else "non-") <> "sharing transaction " <> show transactionNumber)
       catchError 
@@ -123,7 +124,8 @@ runMonadPerspectivesTransaction' share authoringRole a = (lift $ createTransacti
 phase1 :: forall o. Boolean -> RoleType -> o -> MonadPerspectivesTransaction o
 phase1 share authoringRole r = do
   padding <- lift transactionLevel
-  log $ padding <> "Entering phase1."
+  transactionNumber <- AA.gets( \(Transaction tr) -> tr.transactionNumber)
+  log $ padding <> "Entering phase1 of transaction " <> show transactionNumber
   -- Run monotonic actions, after
   --  * adding all ContextRemovals to the untouchableContexts and
   --  * adding rolesToExit to the untouchableRoles.
@@ -167,7 +169,7 @@ phase1 share authoringRole r = do
   -- Exit the rootState of roles that are scheduled to be removed, unless we did so before.
   rolesThatHaveNotExited <- lift $ filterA (\rid -> rid ##>> exists' getActiveRoleStates) rolesToExit
   if not $ null rolesThatHaveNotExited
-    then log (padding <> "Roles that have not exited: " <> show rolesThatHaveNotExited)
+    then log (padding <> "Transaction " <> show transactionNumber <> " Roles that have not exited: " <> show rolesThatHaveNotExited)
     else pure unit
   if null rolesThatHaveNotExited
     then pure unit
@@ -237,9 +239,10 @@ phase1 share authoringRole r = do
 phase2 :: forall o. Boolean -> RoleType -> o -> MonadPerspectivesTransaction o
 phase2 share authoringRole r = do
   padding <- lift transactionLevel
-  log $ padding <>  "Entering phase2."
-  runSharing share authoringRole recursivelyEvaluateStates
+  transactionNumber <- AA.gets( \(Transaction tr) -> tr.transactionNumber)
+  log $ padding <>  "Entering phase2 of transaction " <> show transactionNumber
   Transaction {createdContexts, createdRoles, rolesToExit, scheduledAssignments, modelsToBeRemoved} <- AA.get
+  runSharing share authoringRole recursivelyEvaluateStates
   -- Is there a reason to run phase1 again?
   -- Only if there are new createdContexts, createdRoles, rolesToExit, 
   -- or new scheduledAssignments that are a ContextRemoval, a RoleUnbinding or a ExecuteDestructiveEffect.
@@ -249,7 +252,7 @@ phase2 share authoringRole r = do
     || (not $ null (tr.createdContexts `difference` createdContexts))
     || (not $ null (tr.createdRoles `difference` createdRoles)) )
   if reRunPhase1
-    then (log $ padding <> "Rerun phase1") *> phase1 share authoringRole r
+    then (log $ padding <> "Rerun phase1 for " <> show transactionNumber) *> phase1 share authoringRole r
     else do
       -- Invariant: there are no rolesToExit, no createdContexts, no createdRoles. 
       -- Nor will there be RoleUnbinding or ExecuteDestructiveEffect items in scheduledAssignments.
@@ -305,7 +308,7 @@ phase2 share authoringRole r = do
           lift $ void $ for modelsToBeRemoved tryRemoveEntiteit
           if not $ null correlationIdentifiers
             then do
-              log $ padding <> "==========RUNNING EFFECTS============"
+              log $ padding <> "==========RUNNING EFFECTS IN " <> show transactionNumber <> "============"
               -- Sort from low to high, so we can never actualise a client side component after it has been removed.
               for_ (sort correlationIdentifiers) \corrId -> do
                 mEffect <- pure $ lookupActiveSupportedEffect corrId
@@ -342,9 +345,10 @@ runSharing share authoringRole t = if share
   -- Run from within a non-sharing transaction. Run an embedded, sharing transaction.
   else do
     padding <- lift transactionLevel
-    log $ padding <> "run sharing transaction from nonsharing transaction."
+    transactionNumber <- AA.gets( \(Transaction tr) -> tr.transactionNumber)
+    log $ padding <> "run sharing transaction from nonsharing transaction " <> show transactionNumber
     r <- lift $ runEmbeddedTransaction shareWithPeers authoringRole t
-    log $ padding <> "returning to nonsharing transaction from sharing transaction."
+    log $ padding <> "returning to nonsharing transaction " <> show transactionNumber <> " from sharing transaction."
     pure r
 
 -- Add to each context or role instance the user role type and the RootState type.
