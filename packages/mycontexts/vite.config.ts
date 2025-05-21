@@ -24,6 +24,7 @@ export default defineConfig({
   base: "/www/",
   server: {
     port: 5177,
+    host: '0.0.0.0',
     https: {
       key: fs.readFileSync(resolve(monorepoRoot, 'certificates/key.pem')),
       cert: fs.readFileSync(resolve(monorepoRoot, 'certificates/cert.pem')),
@@ -41,8 +42,10 @@ export default defineConfig({
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
       'Pragma': 'no-cache',
       'Surrogate-Control': 'no-store',
-      'Expires': '0'
-    }
+      'Expires': '0',
+      'Access-Control-Allow-Origin': '*',
+      'Content-Security-Policy': "default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: gap: https://ssl.gstatic.com; style-src * 'self' 'unsafe-inline'; script-src * 'self' 'unsafe-inline' 'unsafe-eval';"
+    },
   },
   plugins: [
     react(),
