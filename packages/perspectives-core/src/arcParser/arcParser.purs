@@ -1394,7 +1394,7 @@ propertyVerb = do
     "AddPropertyValue" -> pure AddPropertyValue
     "SetPropertyValue" -> pure SetPropertyValue
     "Consult" -> pure Consult
-    _ -> fail "Not a property verb, "
+    _ -> fail "Not a property verb. Use only 'RemovePropertyValue', 'AddPropertyValue', 'SetPropertyValue' and 'DeleteProperty', "
 
 -- | action =
 -- |   action <ident>
@@ -1515,7 +1515,7 @@ whatE = reserved "what" *>
       "row" -> classicSubscreenE start
       "column" -> classicSubscreenE start
       "markdown" -> whatProperE
-      "master" -> whatProperE
+      "" -> whatProperE
       _ -> fail "Expected: tab, row, column for a classic screen, or markdown or master for a who-what-where screen. "
   where
     classicSubscreenE :: ArcPosition -> IP WhatE
