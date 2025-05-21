@@ -143,11 +143,19 @@ export function startPDR()
     return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
   }
 
+  function isAndroid() {
+    return /Android/i.test(navigator.userAgent);
+  }
+
+  function isFirefox() {
+    return /firefox|fxios/i.test(navigator.userAgent);
+  }
+
   // Preferrably we run the PDR in a SharedWorker. However, even while IOS supports SharedWorkers, it has no debugging 
   // facilities for SharedWorkers. As a result, we cannot use SharedWorkers on IOS.
   // Turns out that as of februari 2025, it runs in a SharedWorker even on IOS.
   // if (typeof SharedWorker != "undefined" && !isIOS())
-  if (isSafari() || isIOS())
+  if ((isSafari() || isIOS() || isAndroid()) && !isFirefox())
     {
       // The proxy function configurePDRProxy will load the PDR using dynamic import.
       // As a result, the PDR runs in the current page (that we call the 'host page').
