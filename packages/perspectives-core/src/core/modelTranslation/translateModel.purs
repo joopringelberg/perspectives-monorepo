@@ -889,7 +889,6 @@ emptyTranslationTable = TranslationTable empty
 parseTranslation :: String -> Effect (Either Error ModelTranslation)
 parseTranslation source = do 
   parseResult :: Either Error ParsedYaml <- load source
-  -- TODO: doe iets met foutmeldingen!
   modelTranslation :: Either Error ModelTranslation <- pure (map (hydrate <<< toModelTranslation_) parseResult)
   case modelTranslation of 
     Left e -> pure $ Left (error $ "Could not parse the translation file: " <> message e) 

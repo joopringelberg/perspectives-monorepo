@@ -44,7 +44,7 @@ import Prelude
 
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, concat, difference, filter, filterA, head, length)
+import Data.Array (catMaybes, concat, difference, filter, filterA, head)
 import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Traversable (traverse)
@@ -74,8 +74,7 @@ import Perspectives.TypePersistence.PerspectiveSerialisation.Data (SerialisedPer
 import Perspectives.TypePersistence.ScreenContextualisation (contextualiseScreen, contextualiseTableFormDef)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, generalisesRoleType_, string2RoleType)
 import Simple.JSON (writeJSON)
-import Unsafe.Coerce (unsafeCoerce)
-
+import Unsafe.Coerce (unsafeCoerce) 
 newtype SerialisedScreen = SerialisedScreen String
 derive instance newTypeSerialisedScreen :: Newtype SerialisedScreen _
 
@@ -155,43 +154,22 @@ computeTitle perspectives = do
 constructDefaultScreen :: RoleInstance -> RoleType -> ContextInstance -> AssumptionTracking ScreenDefinition
 constructDefaultScreen userRoleInstance userRoleType cid = do
   (perspectives :: Array SerialisedPerspective') <- runArrayT $ perspectivesForContextAndUser' userRoleInstance userRoleType cid
-  -- If there is just a single perspective, don't make tabs but make a row with a widget instead.
-  if length perspectives == 1
-    then do 
-      row <- pure $ Just $ makeRow <$> perspectives
-      perspectivesOnChats :: Array SerialisedPerspective' <- lift $ filterA isChat perspectives
-      userRoles <- pure $ makeTableFormDef userRoleType <$> (filter isOnUserRole perspectives) `difference` perspectivesOnChats
-      who <- pure $ makeTableFormDef userRoleType <$> filter isOnUserRole perspectives
-      wheretoContextRoles <- pure $ makeTableFormDef userRoleType <$> filter isOnContextRole perspectives
-      pure $ ScreenDefinition
-        { title: computeTitle perspectivesOnChats
-        , tabs: Nothing
-        , rows: Nothing
-        , columns: Nothing
-        , whoWhatWhereScreen: Just $ WhoWhatWhereScreenDef $ 
-          { who: Who {markdown: [], chats: catMaybes (makeChatDef <$> perspectivesOnChats), userRoles}
-          , what: FreeFormScreen {tabs: Nothing, rows: row, columns: Nothing}
-          , whereto: WhereTo {markdown: [], contextRoles: wheretoContextRoles}
-          }
-        }
-    else do
-      -- Make tabs just for the thing roles.
-      perspectivesOnChats :: Array SerialisedPerspective' <- lift $ filterA isChat perspectives
-      tabs <- pure $ Just $ makeTab <$> (filter isOnThingRole perspectives) `difference` perspectivesOnChats
-      userRoles <- pure $ makeTableFormDef userRoleType <$> (filter isOnUserRole perspectives) `difference` perspectivesOnChats
-      who <- pure $ makeTableFormDef userRoleType <$> filter isOnUserRole perspectives
-      wheretoContextRoles <- pure $ makeTableFormDef userRoleType <$> filter isOnContextRole perspectives
-      pure $ ScreenDefinition
-        { title: computeTitle perspectivesOnChats
-        , tabs: Nothing
-        , rows: Nothing
-        , columns: Nothing
-        , whoWhatWhereScreen: Just $ WhoWhatWhereScreenDef $ 
-          { who: Who {markdown: [], chats: catMaybes (makeChatDef <$> perspectivesOnChats), userRoles}
-          , what: FreeFormScreen {tabs, rows: Nothing, columns: Nothing}
-          , whereto: WhereTo {markdown: [], contextRoles: wheretoContextRoles}
-          }
-        }
+  perspectivesOnChats :: Array SerialisedPerspective' <- lift $ filterA isChat perspectives
+  userRoles <- pure $ makeTableFormDef userRoleType <$> (filter isOnUserRole perspectives) `difference` perspectivesOnChats
+  who <- pure $ makeTableFormDef userRoleType <$> filter isOnUserRole perspectives
+  what <- pure $ makeTableFormDef userRoleType <$> ((filter isOnThingRole perspectives) `difference` perspectivesOnChats)
+  wheretoContextRoles <- pure $ makeTableFormDef userRoleType <$> filter isOnContextRole perspectives
+  pure $ ScreenDefinition
+    { title: computeTitle perspectives
+    , tabs: Nothing
+    , rows: Nothing
+    , columns: Nothing
+    , whoWhatWhereScreen: Just $ WhoWhatWhereScreenDef $ 
+      { who: Who {markdown: [], chats: catMaybes (makeChatDef <$> perspectivesOnChats), userRoles}
+      , what: TableForms {markdown: [], tableForms: what}
+      , whereto: WhereTo {markdown: [], contextRoles: wheretoContextRoles}
+      }
+    }
     where
       makeTab :: SerialisedPerspective' -> TabDef
       makeTab p@{displayName, isFunctional} =
