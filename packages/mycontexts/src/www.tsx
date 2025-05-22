@@ -284,15 +284,22 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
       }
     }
     const component = this;
-    const navbar = document.querySelector('#top-navbar');
+    const topNavbar = document.querySelector('#top-navbar');
+    const bottomNavbar = document.querySelector('#bottom-navbar');
     const mobileTabs = document.querySelector('#mobile-tabs');
     const whoHeader = document.querySelector('#whoHeader');
     // Includes the padding of the navbar.
-    const navbarHeight = navbar ? (navbar as HTMLElement).offsetHeight : 40;
+    const topNavbarHeight = topNavbar ? (topNavbar as HTMLElement).offsetHeight : 40;
+    const bottomNavbarHeight = bottomNavbar ? (bottomNavbar as HTMLElement).offsetHeight : 40;
     const mobileTabsHeight = mobileTabs ? (mobileTabs as HTMLElement).offsetHeight : 48;
+    const bodyHeight = window.innerHeight;
+    const mobileContentHeight = bodyHeight - (mobileTabsHeight + topNavbarHeight + bottomNavbarHeight) - 4;
+    
     // Set the CSS variable for the navbar height. This is incorporated in the CSS style full-height.
-    document.documentElement.style.setProperty('--navbar-height', `${navbarHeight}px`);
+    document.documentElement.style.setProperty('--top-navbar-height', `${topNavbarHeight}px`);
+    document.documentElement.style.setProperty('--bottom-navbar-height', `${bottomNavbarHeight}px`);
     document.documentElement.style.setProperty('--tabs-height', `${mobileTabsHeight}px`); 
+    document.documentElement.style.setProperty('--mobile-content-height', `${mobileContentHeight}px`); 
     document.documentElement.style.setProperty('--who-header-height', `${whoHeader ? (whoHeader as HTMLElement).offsetHeight : 0}px`);  
     this.setState(
       { isSmallScreen: window.innerWidth < 768, doubleSection: computeDoubleSection() } );
@@ -558,17 +565,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               }
             </Tab>
           </Tabs>
-          <Navbar fixed="bottom" bg="primary" expand="xs" className="justify-content-between py-0 px-3">
-            <Navbar.Brand onClick={() => window.history.back()}>
-              <i className="bi bi-arrow-left text-light"></i>
-            </Navbar.Brand>
-            <Navbar.Brand onClick={() => component.setState({ showNotifications: true })}>
-              <i className="bi bi-arrow-up text-light"></i>
-            </Navbar.Brand>
-            <Navbar.Brand onClick={() => window.history.forward()}>
-              <i className="bi bi-arrow-right text-light"></i>
-            </Navbar.Brand>
-        </Navbar>
+          { component.renderBottomNavBar() }
         <EndUserNotifier message={component.state.endUserMessage}/>
         <UserChoice message={component.state.choiceMessage}/>
       </Container>
@@ -597,6 +594,23 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
       <InternetConnectivityCheck reportBack={ (isOnline : boolean) => component.setState({isOnline})}/>
       <ConnectedToAMQP roleinstance={ externalRole( component.state.systemIdentifier )} isOnline={component.state.isOnline} />
     </Navbar>);
+  }
+
+  renderBottomNavBar() {
+    const component = this;
+    return (
+      <Navbar id="bottom-navbar" fixed="bottom" bg="primary" expand="xs" className="justify-content-between py-0 px-3">
+        <Navbar.Brand onClick={() => window.history.back()}>
+          <i className="bi bi-arrow-left text-light"></i>
+        </Navbar.Brand>
+        <Navbar.Brand onClick={() => component.setState({ showNotifications: true })}>
+          <i className="bi bi-arrow-up text-light"></i>
+        </Navbar.Brand>
+        <Navbar.Brand onClick={() => window.history.forward()}>
+          <i className="bi bi-arrow-right text-light"></i>
+        </Navbar.Brand>
+      </Navbar>
+      );
   }
 
   pinContext( externalRole : RoleInstanceT )
@@ -685,17 +699,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
               </Row>
             </Col>
           </Row>
-            <Navbar fixed="bottom" bg="primary" expand="xs" className="justify-content-between py-0 px-3">
-            <Navbar.Brand onClick={() => window.history.back()}>
-              <i className="bi bi-arrow-left text-light"></i>
-            </Navbar.Brand>
-            <Navbar.Brand onClick={() => component.setState({ showNotifications: true })}>
-              <i className="bi bi-arrow-up text-light"></i>
-            </Navbar.Brand>
-            <Navbar.Brand onClick={() => window.history.forward()}>
-              <i className="bi bi-arrow-right text-light"></i>
-            </Navbar.Brand>
-          </Navbar>
+          { component.renderBottomNavBar() }
           <EndUserNotifier message={component.state.endUserMessage}/>
           <UserChoice message={component.state.choiceMessage}/>
         </Container>

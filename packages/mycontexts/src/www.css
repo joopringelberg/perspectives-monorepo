@@ -1,18 +1,18 @@
 
 .full-height {
-  height: calc(100vh - 2 * var(--navbar-height));
+  height: calc(100dvh - 2 * var(--top-navbar-height));
 }
 
 .full-mobile-height {
-  height: calc(100vh - 2 * var(--navbar-height) - var(--tabs-height));
+  height: var(--mobile-content-height)
 }
 
 .full-www-content-height {
-  height: calc(100vh - 2 * var(--navbar-height) - var(--who-header-height));
+  height: calc(100dvh - var(--bottom-navbar-height) - var(--top-navbar-height) - var(--who-header-height));
 }
 
 .chat-height {
-  height: calc((100vh - 2 * var(--navbar-height) - var(--who-header-height)) / 2);
+  height: calc((100dvh - var(--bottom-navbar-height) - var(--top-navbar-height) - var(--who-header-height)) / 2);
 }
 
 /* Define the slide-in-from-right animation */
