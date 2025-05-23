@@ -25,9 +25,9 @@ model://joopringelberg.nl#Disconnect:
                 orig: "### Manager\n
                   This is the role of the person who decides which peers to disconnect from."
                 en: "### Manager\n
-                  This is the role of the person who decides which peers to disconnect from."
+                   This is the role of the person who decides which peers to disconnect from."
                 nl: "### Beheerder\n
-                          Dit is de rol van de persoon die beslist van welke peers de verbinding wordt verbroken."
+                   Dit is de rol van de persoon die beslist van welke peers de verbinding wordt verbroken."
             2:
               translations:
                 orig: "### Disconnect yourself from a peer\n
@@ -40,43 +40,43 @@ model://joopringelberg.nl#Disconnect:
                    You can use this screen to disconnect yourself from someone.\n
                    This means that information you enter that might be relevant to the peer will not be\n
                    sent to him or her."
-                nl: "### Verbreek de verbinding met een peer\n
-                   Het kan gebeuren dat je geen informatie meer wilt uitwisselen met een peer.\n
+                nl: "### Verbreek de verbinding met een andere gebruiker\n
+                   Het kan voorkomen dat je geen informatie meer wilt uitwisselen met een andere gebruiker.\n
                    Je kunt dit scherm gebruiken om de verbinding met iemand te verbreken.\n
-                   Dit betekent dat informatie die je invoert en die relevant zou kunnen zijn voor de peer,\n
-                   niet meer naar hem of haar wordt gestuurd."
+                   Dit betekent dat informatie die je invoert en die relevant zou kunnen zijn voor de andere gebruiker niet\n
+                   naar hem of haar wordt verzonden."
             3:
               translations:
                 orig: "### Disconnected peers\n
                   This is a list of all peers you have disconnected from. Visit each for more possiblities."
                 en: "### Disconnected peers\n
-                  This is a list of all peers you have disconnected from. Visit each for more possiblities."
-                nl: "### Afgesloten anderen\n
-                    Dit is een lijst van alle peers waarvan je de verbinding hebt verbroken. Bezoek elk voor meer mogelijkheden."
+                   This is a list of all peers you have disconnected from. Visit each for more possiblities."
+                nl: "### Afgesloten andere gebruikers\n
+                   Dit is een lijst van alle andere gebruikers waarvan je de verbinding hebt verbroken. Bezoek elk van hen voor meer mogelijkheden."
             4:
               translations:
                 orig: "### Disconnected peer\n
                   These are the details of the peer you can disconnect from."
                 en: "### Disconnected peer\n
-                  These are the details of the peer you can disconnect from."
+                   These are the details of the peer you can disconnect from."
                 nl: "### Afgesloten andere gebruiker\n
-                  Dit zijn de details van de gebruiker waarvan je de verbinding kunt verbreken."
+                   Dit zijn de details van de gebruiker waarvan je de verbinding kunt verbreken."
             5:
               translations:
                 orig: "### Peers that have disconnected from you\n
                   This is a list of all peers that have disconnected from you."
                 en: "### Peers that have disconnected from you\n
-                  This is a list of all peers that have disconnected from you."
+                   This is a list of all peers that have disconnected from you."
                 nl: "### Peers die de verbinding met jou hebben verbroken\n
-                  Dit is een lijst van alle peers die de verbinding met jou hebben verbroken."
+                   Dit is een lijst van alle peers die de verbinding met jou hebben verbroken."
             6:
               translations:
                 orig: "### Disconnecting peer\n
                   These are the details of the peer that has disconnected from you."
                 en: "### Disconnecting peer\n
-                  These are the details of the peer that has disconnected from you."
+                   These are the details of the peer that has disconnected from you."
                 nl: "### Peer die de verbinding met jou heeft verbroken\n
-                    Dit zijn de details van de peer die de verbinding met jou heeft verbroken."
+                   Dit zijn de details van de peer die de verbinding met jou heeft verbroken."
         Initializer:
           translations:
             en: Initializer
@@ -127,6 +127,14 @@ model://joopringelberg.nl#Disconnect:
           markdowns:
             0:
               translations:
+                orig: "### Disconnected peer\n
+                    This peer has disconnected from you."
+                en: "### Disconnected peer\n
+                    This peer has disconnected from you."
+                nl: "### Afgesloten andere gebruiker\n
+                    Deze gebruiker heeft de verbinding met jou verbroken."
+            1:
+              translations:
                 orig: "### You have been disconnected\n
                   Your peer has severed the connection with you.\n
                   Your installation automatically stops sending information to the peer.\n
@@ -145,7 +153,7 @@ model://joopringelberg.nl#Disconnect:
                    Je kunt de verbinding met je peer herstellen door het menu-item *Verbind opnieuw* te kiezen in het hoofdmenu (linksboven).\n
                    Hiermee kun je bijvoorbeeld weer chatberichten sturen naar de peer.\n
                    Het is echter aan de peer om haar/zijn kant van de verbinding te herstellen."
-            1:
+            2:
               translations:
                 orig: "### You can't go anywhere from here\n
                   There are no subcontexts to visit from here."
@@ -167,8 +175,8 @@ model://joopringelberg.nl#Disconnect:
             model://perspectives.domains#System$ContextWithNotification$NotifiedUser:
               DeleteNotifications:
                 translations:
-                  en: 
-                  nl: 
+                  en: Delete notifications
+                  nl: Verwijder meldingen
             model://joopringelberg.nl#Disconnect$DisconnectedPeer$Disconnecter:
               Disconnect:
                 translations:
@@ -184,6 +192,12 @@ model://joopringelberg.nl#Disconnect:
                 orig: "### Disconnect and reconnect\n
                   If the *Disconnected* property is set to *true*, you are disconnected from the peer.\n
                   Restore contact by choosing the *Reconnect* action in the main menu (top left corner)."
+                en: "### Disconnect and reconnect\n
+                   If the *Disconnected* property is set to *true*, you are disconnected from the peer.\n
+                   Restore contact by choosing the *Reconnect* action in the main menu (top left corner)."
+                nl: "### Verbreek en herstel de verbinding\n
+                   Als de eigenschap *Afgesloten* is ingesteld op *true*, ben je afgesloten van de andere gebruiker.\n
+                   Herstel het contact door de actie *Verbind opnieuw* te kiezen in het hoofdmenu (linksboven)."
             1:
               translations:
                 orig: "### Disconnect from or reconnect to a peer\n

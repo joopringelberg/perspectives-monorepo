@@ -194,6 +194,9 @@ domain model://joopringelberg.nl#Disconnect
         who
           Disconnecter
             master
+              markdown <### Disconnected peer
+                          This peer has disconnected from you.
+                          >
               without props (FirstName)
             detail
           Disconnected
