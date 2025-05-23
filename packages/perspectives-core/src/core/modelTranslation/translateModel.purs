@@ -32,7 +32,7 @@ import Control.Monad.Reader (Reader, runReader, ask)
 import Control.Monad.State (State) as ST
 import Control.Monad.State (get, lift, modify, runStateT, execState)
 import Control.Monad.Writer (Writer, execWriter, tell)
-import Data.Array (catMaybes, concat, cons, filter, fold, head, null)
+import Data.Array (catMaybes, concat, cons, filter, fold, head)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -507,11 +507,10 @@ class Translation a where
 instance Translation Translations where
   qualify _ a = a
   writeKeys _ = pure unit
-  writeYaml indent (Translations translations) = do
+  writeYaml indent trans = do
     tell (i indent "translations" colonNl)
-    translations' <- case object2array translations of
-      none | null none -> pure [Tuple "en" "", Tuple "nl" ""]
-      ts -> pure ts
+    translations' <- case addDefaultLanguages trans of 
+      (Translations translations) -> pure $ object2array translations
     void $ for translations'
       \(Tuple lang translation) -> do
         -- We write the translations in quotes if the modeller has indicated with a pipe symbol (|) that it is necessary.
@@ -531,7 +530,7 @@ instance Translation NotificationsTranslation where
           \original (Translations translations) -> do
             nr <- get
             lift $ tell (i indent tab nr colonNl)
-            lift $ writeYaml (indent <> tab <> tab) (Translations $ insert "orig" original translations)
+            lift $ writeYaml (indent <> tab <> tab) (addDefaultLanguages (Translations $ insert "orig" original translations))
             modify ((+) 1)
             )
         0
@@ -552,7 +551,7 @@ instance Translation TitlesTranslation where
           \original (Translations translations) -> do
             nr <- get
             lift $ tell (i indent tab nr colonNl)
-            lift $ writeYaml (indent <> tab <> tab) (Translations $ insert "orig" original translations)
+            lift $ writeYaml (indent <> tab <> tab) (addDefaultLanguages (Translations $ insert "orig" original translations))
             modify ((+) 1)
             )
         0
@@ -573,7 +572,7 @@ instance Translation MarkdownsTranslation where
           \original (Translations translations) -> do
             nr <- get
             lift $ tell (i indent tab nr colonNl)
-            lift $ writeYaml (indent <> tab <> tab) (Translations $ insert "orig" (escapeMarkdownForYaml (indent <> tab <> tab <> tab <> tab) original) (escapeMarkdownForYaml (indent <> tab <> tab <> tab <> tab) <$> translations))
+            lift $ writeYaml (indent <> tab <> tab) (addDefaultLanguages (Translations $ insert "orig" (escapeMarkdownForYaml (indent <> tab <> tab <> tab <> tab) original) (escapeMarkdownForYaml (indent <> tab <> tab <> tab <> tab) <$> translations)))
             modify ((+) 1)
             )
         0
@@ -582,6 +581,13 @@ instance Translation MarkdownsTranslation where
       Nothing -> translations
       Just ts -> ts
 
+addDefaultLanguages :: Translations -> Translations
+addDefaultLanguages trans = addLanguage "en" $ addLanguage "nl" trans
+  where
+  addLanguage :: String -> Translations -> Translations 
+  addLanguage lang t@(Translations translations) = if isJust $ lookup lang translations
+    then t
+    else Translations $ insert lang ("MISSING " <> lang) translations
 
 -- Markdown is parsed from ARC to a string containing newlines (\n) and double quotes ("). The ARC indentation has been thrown out.
 -- In Yaml we need proper indentation for multiline Markdown texts. Also, it needs to be enclosed in double quotes or otherwise 
