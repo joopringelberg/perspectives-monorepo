@@ -56,7 +56,10 @@ domain model://joopringelberg.nl#Disconnect
                     decides which peers to disconnect from. You have this role automatically.
                     >
           Manager
-            master "Master"
+            master
+              markdown <### Manager
+                        This is the role of the person who decides which peers to disconnect from.
+                        >
               without props (FirstName)
             detail
         what

@@ -43,7 +43,7 @@ import Data.Newtype (class Newtype, unwrap)
 import Data.Nullable (Nullable, notNull, null, toMaybe) as NULL
 import Data.Set (toUnfoldable) as SET
 import Data.String (Pattern(..), Replacement(..), replaceAll, stripPrefix, stripSuffix)
-import Data.String.Regex (match, replace)
+import Data.String.Regex (match, replace) as Regex
 import Data.String.Regex.Flags (noFlags, global)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for)
@@ -67,7 +67,7 @@ import Perspectives.Representation.Class.Role (Role(..))
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.Perspective (StateSpec, stateSpec2StateIdentifier)
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..))
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), PropertyType(..), RoleType(..), roletype2string)
 import Purescript.YAML (load)
@@ -359,7 +359,7 @@ generateFirstTranslation (DomeinFile dr) = flip runReader dr do
   pure $ ModelTranslation { namespace: dr.namespace, contexts, roles}
   where
   isDefinedAtTopLevel :: String -> Boolean
-  isDefinedAtTopLevel s = dr.namespace == typeUri2typeNameSpace_ s && (isNothing $ match (unsafeRegex "External$" noFlags) s )
+  isDefinedAtTopLevel s = dr.namespace == typeUri2typeNameSpace_ s && (isNothing $ Regex.match (unsafeRegex "External$" noFlags) s )
 
 translateContext :: Context -> Reader DomeinFileRecord ContextTranslation
 translateContext (Context {id:contextId, gebruikerRol, contextRol, rolInContext, nestedContexts}) = do 
@@ -514,9 +514,9 @@ instance Translation Translations where
       ts -> pure ts
     void $ for translations'
       \(Tuple lang translation) -> do
-        -- We write the translations in quotes. Some characters such as ':' and parentheses 
-        -- will otherwise be seen as delimiters by the yaml parser.
-        tell (i indent tab lang colonSpace doubleQuote translation doubleQuote nl)
+        -- We write the translations in quotes if the modeller has indicated with a pipe symbol (|) that it is necessary.
+        -- Some characters such as ':' and parentheses will otherwise be seen as delimiters by the yaml parser.
+        tell (i indent tab lang colonSpace translation nl)
   addTranslations _ t = t 
 
 instance Translation NotificationsTranslation where
@@ -601,7 +601,7 @@ escapeMarkdownForYaml indent' s = "\"" <> (replaceAll (Pattern "\"") (Replacemen
 -- The end result should be the same as the input for escapeMarkdownForYaml (that is, the string given by the ARC parser).
 unEscapeMarkdownForYaml :: String -> String
 unEscapeMarkdownForYaml s = let 
-    unIndented = replace (unsafeRegex "\\n\\s+" global) "\n" s
+    unIndented = Regex.replace (unsafeRegex "\\n\\s+" global) "\n" s
     unEnclosed = case stripSuffix (Pattern "\"") unIndented of
       Nothing -> case stripPrefix (Pattern "\"") unIndented of 
         Nothing -> unIndented
@@ -945,10 +945,10 @@ class CollectMarkdowns a where
 
 instance addPerspectivesScreenDefinition :: CollectMarkdowns ScreenDefinition where
   collectMarkdowns (ScreenDefinition r) = concat $ map concat $ catMaybes 
-    [map collectMarkdowns <$> r.tabs, map collectMarkdowns <$> r.rows, map collectMarkdowns <$> r.columns]
+    [map collectMarkdowns <$> r.tabs, map collectMarkdowns <$> r.rows, map collectMarkdowns <$> r.columns, (\a -> [a]) <<< collectMarkdowns <$> r.whoWhatWhereScreen]
   collectTitles (ScreenDefinition r) = let 
     titles = (concat $ map concat $ catMaybes 
-        [map collectTitles <$> r.tabs, map collectTitles <$> r.rows, map collectTitles <$> r.columns])
+        [map collectTitles <$> r.tabs, map collectTitles <$> r.rows, map collectTitles <$> r.columns, (\a -> [a]) <<< collectTitles <$> r.whoWhatWhereScreen])
     in
     case r.title of 
       Nothing -> titles
@@ -969,6 +969,29 @@ instance addPerspectivesScreenElementDef  :: CollectMarkdowns ScreenElementDef w
   collectTitles (MarkDownElementD re) = []
   collectTitles (ChatElementD re) = []
   
+instance CollectMarkdowns WhoWhatWhereScreenDef where
+  collectMarkdowns (WhoWhatWhereScreenDef {who, what, whereto}) = collectMarkdowns who <> collectMarkdowns what <> collectMarkdowns whereto
+  collectTitles (WhoWhatWhereScreenDef {who, what, whereto}) = collectTitles who <> collectTitles what <> collectTitles whereto
+
+instance CollectMarkdowns Who where
+  collectMarkdowns (Who {markdown, userRoles}) = (concat $ collectMarkdowns <$> markdown) <> (concat $ collectMarkdowns <$> userRoles)
+  collectTitles (Who {userRoles}) = concat $ collectTitles <$> userRoles
+
+instance CollectMarkdowns What where
+  collectMarkdowns (TableForms {markdown, tableForms}) = (concat $ collectMarkdowns <$> markdown) <> (concat $ collectMarkdowns <$> tableForms)
+  collectMarkdowns (FreeFormScreen r) = concat $ map concat $ catMaybes 
+    [map collectMarkdowns <$> r.tabs, map collectMarkdowns <$> r.rows, map collectMarkdowns <$> r.columns]
+  collectTitles (TableForms {tableForms}) = concat $ collectTitles <$> tableForms
+  collectTitles (FreeFormScreen r) = (concat $ map concat $ catMaybes 
+        [map collectTitles <$> r.tabs, map collectTitles <$> r.rows, map collectTitles <$> r.columns])
+
+instance CollectMarkdowns WhereTo where
+  collectMarkdowns (WhereTo {markdown, contextRoles}) = (concat $ collectMarkdowns <$> markdown) <> (concat $ collectMarkdowns <$> contextRoles)
+  collectTitles (WhereTo {contextRoles}) = concat $ collectTitles <$> contextRoles
+
+instance  CollectMarkdowns TableFormDef where
+  collectMarkdowns (TableFormDef {markdown, table, form}) = concat (collectMarkdowns <$> markdown) <> collectMarkdowns table <> collectMarkdowns form
+  collectTitles (TableFormDef {table, form}) = (collectTitles table) <> (collectTitles form)
 
 instance addPerspectivesTabDef  :: CollectMarkdowns TabDef where
   collectMarkdowns (TabDef {elements}) = concat (collectMarkdowns <$> elements)
@@ -983,11 +1006,11 @@ instance addPerspectivesRowDef  :: CollectMarkdowns RowDef where
   collectTitles (RowDef rows) = concat (collectTitles <$> rows)
 
 instance addPerspectivesTableDef  :: CollectMarkdowns TableDef where
-  collectMarkdowns (TableDef widgetCommonFields) = []
+  collectMarkdowns (TableDef {markdown}) = concat (collectMarkdowns <$> markdown)
   collectTitles (TableDef {widgetCommonFields}) = maybe [] (\title -> [title]) widgetCommonFields.title
 
 instance addPerspectivesFormDef  :: CollectMarkdowns FormDef where
-  collectMarkdowns (FormDef widgetCommonFields) = []
+  collectMarkdowns (FormDef {markdown}) = concat (collectMarkdowns <$> markdown)
   collectTitles (FormDef {widgetCommonFields}) = maybe [] (\title -> [title]) widgetCommonFields.title
 
 instance CollectMarkdowns MarkDownDef where
