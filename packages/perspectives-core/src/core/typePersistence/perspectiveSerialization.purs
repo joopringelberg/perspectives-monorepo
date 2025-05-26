@@ -162,14 +162,15 @@ serialisePerspective ::
 serialisePerspective contextStates subjectStates cid userRoleType propertyRestrictions withoutProperties roleVerbs' p@(Perspective {id, object, isEnumerated, roleTypes, roleVerbs, propertyVerbs, actions}) = do
   -- All properties available on the object of the perspective.
   (allProps :: Array PropertyType) <- lift $ allProperties (roleInContext2Role <$> (unsafePartial domain2roleType $ range object))
-  -- All PropertyVerbs available on the object of the perspective, given context- and subject state.
+  -- All PropertyVerbs (PropertyVerbs (ExplicitSet PropertyType) (ExplicitSet PropertyVerb) available on the object of the perspective, given context- and subject state.
   (availablePropertyVerbs :: Array PropertyVerbs) <- pure $ concat (catMaybes $ (flip EM.lookup propertyVerbs) <$> (contextStates <> subjectStates))
   -- All PropertyTypes available for the object of the perspective, given context- and subject state.
   -- Restrict with the given PropertyVerbs.
   -- Includes the readableNameProperties, if available.
-  (availableProperties' :: Array PropertyType) <- case propertyRestrictions of
-    Nothing -> pure $ nub $ (concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> availablePropertyVerbs)
-    Just (restrictions :: PropertyRestrictions) -> pure $ nub $ difference (concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> availablePropertyVerbs) (maybe [] identity withoutProperties)
+  (availableProperties' :: Array PropertyType) <- do
+    bruto <- pure $ nub (concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> availablePropertyVerbs)
+    pure $ difference bruto (maybe [] identity withoutProperties)
+      -- pure $ nub $ difference (concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> availablePropertyVerbs) (maybe [] identity withoutProperties)
   mreadableNameProperty <- computeReadableNameProperty availableProperties' allProps
   -- Either the property available on the type with facet ReadableNameProperty, or the Id property (the raw identifier of the role) as a last resort.
   (identifyingProperty :: PropertyType) <- case mreadableNameProperty of 
@@ -189,6 +190,7 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyRestri
     cid
     p
     propertyRestrictions
+    (maybe [] identity withoutProperties)
     mreadableNameProperty
   -- Additional properties available on instances given object state.
   additionalPropertiesOnInstances <- pure $ foldl union [] (propertiesInInstance <$> roleInstances)
@@ -404,9 +406,10 @@ roleInstancesWithProperties ::
   ContextInstance ->
   Perspective ->
   Maybe PropertyRestrictions ->
+  Array PropertyType ->
   Maybe PropertyType ->
   AssumptionTracking (Array RoleInstanceWithProperties)
-roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContextStateBasedPropertyVerbs cid (Perspective{object, roleVerbs, propertyVerbs, actions}) propertyRestrictions mreadableNameProperty = do
+roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContextStateBasedPropertyVerbs cid (Perspective{object, roleVerbs, propertyVerbs, actions}) propertyRestrictions withoutProperties mreadableNameProperty = do
   (roleGetter :: ContextInstance ~~> RoleInstance) <- lift $ context2role object
   -- These are all instances of the object of the perspective, regardless of their state.
   (roleInstances :: Array RoleInstance) <- runArrayT $ roleGetter cid
@@ -431,7 +434,7 @@ roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContex
       -- RoleVerbs based on the states of the RoleInstance.
       objectStateBasedRoleVerbs <- pure $ show <$> concat (roleVerbList2Verbs <$> (catMaybes $ (flip EM.lookup roleVerbs) <$> roleStates))
       -- PropertyTypes based on the states of the RoleInstance.
-      (objectStateBasedProperties :: Array PropertyType) <- pure (concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> objectStateBasedPropertyVerbs)
+      (objectStateBasedProperties :: Array PropertyType) <- pure $ difference (nub $ concat $ expandPropSet allProps <<< (\(PropertyVerbs props _) -> props) <$> objectStateBasedPropertyVerbs) withoutProperties
       -- Add getters that we not yet have
       void $ for objectStateBasedProperties (\propertyType -> do
         getters <- get
