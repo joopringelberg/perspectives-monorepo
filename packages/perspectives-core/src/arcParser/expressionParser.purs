@@ -24,17 +24,23 @@ module Perspectives.Parsing.Arc.Expression where
 
 import Control.Alt ((<|>))
 import Control.Lazy (defer)
-import Data.Array (elemIndex, fold, fromFoldable, many, replicate)
+import Data.Array (elemIndex, fromFoldable, many)
 import Data.DateTime (Date, DateTime(..), Hour, Time(..))
 import Data.Either (Either(..))
 import Data.Enum (toEnum)
 import Data.JSDate (JSDate, parse, toDateTime)
 import Data.List (List(..))
 import Data.Maybe (Maybe(..), fromJust, isJust)
-import Data.String (Pattern(..), Replacement(..), length, replaceAll, trim)
+import Data.String (length, trim)
 import Data.String.CodeUnits as SCU
-import Data.String.Regex (parseFlags, regex)
+import Data.String.Regex (Regex, replace, parseFlags, regex)
+import Data.String.Regex.Flags (global)
+import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect.Unsafe (unsafePerformEffect)
+import Parsing (fail)
+import Parsing.Combinators (between, lookAhead, manyTill, option, optionMaybe, try, (<?>))
+import Parsing.String (char, satisfy)
+import Parsing.Token (alphaNum)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), UnaryStep(..), VarBinding(..))
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
@@ -46,10 +52,6 @@ import Perspectives.Representation.QueryFunction (FunctionName(..))
 import Perspectives.Representation.Range (Duration_(..), Range(..))
 import Perspectives.Time (date2String, dateTime2String, time2String)
 import Prelude (bind, not, pure, show, ($), (&&), (*>), (+), (<$>), (<*), (<*>), (<<<), (>), (>>=), (<>), eq, (/=))
-import Parsing (fail)
-import Parsing.Combinators (between, lookAhead, manyTill, option, optionMaybe, try, (<?>))
-import Parsing.String (char, satisfy)
-import Parsing.Token (alphaNum)
 
 step :: IP Step
 step = defer \_ -> step_ false
@@ -550,13 +552,16 @@ markDownLiteral = (go <?> "MarkDown") <* token.whiteSpace
     go = do
         (ArcPosition {column}) <- getPosition
         chars <- between (char '<') (char '>' <?> "end of MarkDown (>). ") (many markDownChar)
-        pure $ fixIndentation column $ trim $ SCU.fromCharArray chars
+        pure $ fixIndentation $ trim $ SCU.fromCharArray chars
 
     markDownChar :: IP Char
     markDownChar = satisfy \c -> c /= '>'
 
-    -- Replace each occurrence of a newline character followed by n spaces by
-    -- a newline character followed by (n-startColumn) spaces. 
+    -- Trims the whitespace at the start and end of each line, so that all is removed.
     -- This allows for the formatting of markdown at any position, where the starting '<' character should be to the left of all markdown lines.
-    fixIndentation :: Int -> String -> String
-    fixIndentation startColumn s = replaceAll (Pattern $ fold $ replicate startColumn " ") (Replacement "") s
+    fixIndentation :: String -> String
+    fixIndentation s = replace whiteSpaceRegex "\n" s
+
+    whiteSpaceRegex :: Regex
+    whiteSpaceRegex = unsafeRegex "\\s*\\n+\\s*" global
+
