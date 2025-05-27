@@ -2,20 +2,16 @@ module Perspectives.Parsing.Arc.PhaseThree.PerspectiveContextualisation where
 
 import Prelude
 
-import Control.Monad.Except (Except, runExcept, throwError)
-import Control.Monad.State (StateT, evalStateT, execStateT, get, gets, modify, put)
+import Control.Monad.State (StateT, execStateT, gets, modify)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
-import Data.Array (catMaybes, concat, cons, difference, filter, filterA, findIndex, foldM, fromFoldable, intercalate, length, many, modifyAt, null)
-import Data.Array.Partial (tail, head) as AP
-import Data.Either (Either(..))
+import Data.Array (catMaybes, concat, cons, difference, filter, filterA, foldM, foldl, fromFoldable, intercalate, null, uncons)
 import Data.FoldableWithIndex (foldlWithIndex)
-import Data.Map (Map, empty, fromFoldable, insert, lookup, values) as Map
-import Data.Map (toUnfoldable)
+import Data.Map (Map, empty, insert, insertWith, lookup, toUnfoldable, values) as Map
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
-import Data.Traversable (for_, traverse)
-import Data.Tuple (Tuple(..), snd)
+import Data.Traversable (for, for_, traverse)
+import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, insert, lookup, values, fromFoldable) as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes ((###=), MP)
@@ -114,29 +110,47 @@ contextualisePerspectives = do
     -- Write an aspect user role perspective (contextualised) if its object is specialised in the context,
     -- but only if the user role's own perspectives do not cover that specialisation.
     writeContextualisedPerspective :: ContextType -> Array Perspective -> RolesWithAspects -> EnumeratedRole -> WriterT (Array Perspective) MP Unit
-    writeContextualisedPerspective context ownPerspectives rolesWithAspects (EnumeratedRole{perspectives:aspectUserPerspectives}) = for_ aspectUserPerspectives
-      \(Perspective precord@{object, propertyVerbs}) -> if null (allLeavesInADT (roleInContext2Role <$> (unsafePartial domain2roleInContext $ range object)) `difference` (concat <$> fromFoldable $ Map.values rolesWithAspects) )
-        -- all role types in the aspect object can be substituted with role types in the context we contextualise in.
-        then do
-          (substitutions :: Array Substitution) <- pure $ createSubstitutions rolesWithAspects
-          for_ substitutions \substitution -> do
-            (contextualisedObject :: ADT RoleInContext) <- pure $ contextualiseADT (unsafePartial domain2roleInContext $ range object) context substitution
-            (roleTypes :: Array RoleType) <- pure (ENR <$> allLeavesInADT (roleInContext2Role <$> contextualisedObject))
-            covered <- lift $ coveredByOwnPerspectives contextualisedObject
-            if covered
-              then pure unit
-              else do
-                propertyVerbs' <- lift $ applyPropertyMapping contextualisedObject propertyVerbs
-                tell [Perspective precord 
-                  { object = replaceRange object (RDOM contextualisedObject)
-                  , roleTypes = roleTypes
-                  , displayName = (intercalate ", " (typeUri2LocalName_ <<< roletype2string <$> roleTypes))
-                  -- Apply property mappings found in the contextualisedObject ADT to the propertyVerbs.
-                  , propertyVerbs = propertyVerbs'
-                  }]
-        else pure unit
+    writeContextualisedPerspective context ownPerspectives rolesWithAspects (EnumeratedRole{perspectives:aspectUserPerspectives}) = do 
+      (substitutions :: Map.Map EnumeratedRoleType (Array EnumeratedRoleType)) <- pure $ invertRolesWithAspects rolesWithAspects
+      for_ aspectUserPerspectives
+        \(Perspective precord@{object, propertyVerbs}) -> do 
+          rolesInObject <- pure $ allLeavesInADT (roleInContext2Role <$> (unsafePartial domain2roleInContext $ range object))
+          if null (rolesInObject `difference` (concat <$> fromFoldable $ Map.values rolesWithAspects))
+            -- all role types in the aspect object can be substituted with role types in the context we contextualise in.
+            then do
+              -- Now compute all objects we can create by substituting the roles in the aspect object with roles in the context.
+              contextualisedObjects :: Array (ADT RoleInContext) <- pure $ computeAllContextualisedObjects (unsafePartial domain2roleInContext $ range object) (Map.toUnfoldable substitutions)
+              for_ contextualisedObjects \contextualisedObject -> do
+                (roleTypes :: Array RoleType) <- pure (ENR <$> allLeavesInADT (roleInContext2Role <$> contextualisedObject))
+                covered <- lift $ coveredByOwnPerspectives contextualisedObject
+                if covered
+                  then pure unit
+                  else do
+                    propertyVerbs' <- lift $ applyPropertyMapping contextualisedObject propertyVerbs
+                    tell [Perspective precord 
+                      { object = replaceRange object (RDOM contextualisedObject)
+                      , roleTypes = roleTypes
+                      , displayName = (intercalate ", " (typeUri2LocalName_ <<< roletype2string <$> roleTypes))
+                      -- Apply property mappings found in the contextualisedObject ADT to the propertyVerbs.
+                      , propertyVerbs = propertyVerbs'
+                      }]
+            else pure unit
 
       where
+        computeAllContextualisedObjects :: ADT RoleInContext -> Array (Tuple EnumeratedRoleType (Array EnumeratedRoleType)) -> Array (ADT RoleInContext)
+        computeAllContextualisedObjects object roleSubstitutions = case uncons roleSubstitutions of
+          Nothing -> [object]
+          Just {head, tail} -> case head of 
+            (Tuple aspectRole specialisedRoles) -> concat $ for 
+              specialisedRoles 
+              \specialisedRole -> computeAllContextualisedObjects
+                -- replace the aspect role with the specialised role in the object.
+                (object <#> \ric@(QT.RoleInContext{role}) -> if role == aspectRole
+                  then QT.RoleInContext{context: context, role: specialisedRole}
+                  else ric)
+                -- and the rest of the substitutions.
+                tail
+        
         -- Retrieve the property mappings in the ADT and replace any propertytype in the PropertyVerbs with its local destination property.
         applyPropertyMapping :: ADT RoleInContext -> EncodableMap StateSpec (Array PropertyVerbs) -> MP (EncodableMap StateSpec (Array PropertyVerbs))
         applyPropertyMapping adt pverbs = do
@@ -163,28 +177,13 @@ contextualisePerspectives = do
         -- notCoveredByOwnPerspectives objectADT = isNothing $ find
         --   (\(ownPerspectiveObjectADT :: ADT RoleInContext) -> ownPerspectiveObjectADT `equalsOrGeneralisesRoleInContext` objectADT)
         --   (ownPerspectives <#> (\(Perspective{object}) -> unsafePartial domain2roleInContext $ range object))
-
-        createSubstitutions :: RolesWithAspects -> Array Substitution
-        createSubstitutions rwas = case runExcept $ evalStateT (many createSubstitution) (Just (toUnfoldable rwas)) of
-          Left _ -> []
-          Right ss -> ss
-
-          where
-          createSubstitution :: StateT (Maybe (Array (Tuple EnumeratedRoleType (Array EnumeratedRoleType)))) (Except String) Substitution
-          createSubstitution = do
-            x <- get
-            case x of 
-              Nothing -> throwError "We're done"
-              Just (x' :: (Array (Tuple EnumeratedRoleType (Array EnumeratedRoleType)))) -> do
-                case findIndex ((>) 1 <<< length <<< snd) x' of
-                  -- In this case, none of the substitution arrays holds more than one element. 
-                  -- That means that the current substitution is the last one.
-                  Nothing -> put Nothing
-                  -- In this case, the substitution Tuple at i holds more than one element.
-                  -- We'll pop that element and store the resulting substitutions in state.
-                  Just i -> put $ modifyAt i (\(Tuple e as) -> Tuple e (unsafePartial AP.tail as)) x'
-                -- Create a map from the array of tuples consisting of the role type and its first replacement
-                pure $ Map.fromFoldable $ (\(Tuple e as) -> Tuple (unsafePartial AP.head as) e) <$> x'
+        
+        invertRolesWithAspects :: RolesWithAspects -> Map.Map EnumeratedRoleType (Array EnumeratedRoleType)
+        invertRolesWithAspects rwas = foldlWithIndex
+          (\(erole :: EnumeratedRoleType) (accum :: Map.Map EnumeratedRoleType (Array EnumeratedRoleType)) (aspectRoles :: Array EnumeratedRoleType) -> 
+            foldl (\m aspectRole -> Map.insertWith (<>) aspectRole [erole] m) accum aspectRoles)
+          Map.empty
+          rwas 
 
     contextualisePerspective :: Array EnumeratedRole -> Perspective -> PhaseThree Perspective
     contextualisePerspective aspects p = foldM contextualiseWithAspect p aspects
