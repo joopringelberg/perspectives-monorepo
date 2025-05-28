@@ -86,9 +86,8 @@ domain model://perspectives.domains#CouchdbManagement
         who
           Manager
             master
-              props(LastName) verbs (Consult)
+              without props(FirstName)
             detail
-              props (FirstName, LastName) verbs (Consult)
         what
           markdown <### Managing Couchdb Servers for Perspectives
                       If you run a Couchdb server, you can use this app to create repositories and accounts on it.
@@ -112,9 +111,8 @@ domain model://perspectives.domains#CouchdbManagement
                         After entering all required information, the server will be created in Couchdb.
                         After that, visit the CouchdbServer context and enter a name.
                         >
-              props (Name) verbs (Consult)
+              without props (Url, CouchdbServers$CouchdbPort, AdminUserName, AdminPassword)
             detail
-              props (Url, CouchdbServers$CouchdbPort, AdminUserName, AdminPassword) verbs (SetPropertyValue)
       
     -- A new CouchdbServers instance comes complete with a CouchdbServer$Admin role
     -- filled with CouchdbManagementApp$Admin.
@@ -302,7 +300,7 @@ domain model://perspectives.domains#CouchdbManagement
         who
           Admin
             master
-              props(LastName) verbs (Consult)
+              without props (FirstName, UserName, SpecificUserName, Password)
             detail
           Accounts
             master
@@ -311,9 +309,8 @@ domain model://perspectives.domains#CouchdbManagement
                         Then put a user role on the clipboard (or select the role you want if it is already on the clipboard).
                         Finally choose *Fill with the role on the clipboard* from the accordion menu
                         >
-              props(LastName) verbs (Consult)
+              without props (FirstName, Password, AuthorizedDomain, UserName)
             detail
-              props (FirstName, LastName, Password, AuthorizedDomain, Password) verbs (Consult)
         what
           row
             markdown <### Couchdb Server Administration
@@ -327,35 +324,17 @@ domain model://perspectives.domains#CouchdbManagement
         where
           Repositories
             master
-              props (Repositories$NameSpace) verbs (Consult)
+              -- Domain is the readable name of ManifestCollection.
+              without props (Repositories$NameSpace, AdminEndorses, AdminLastName, IsPublic, NameSpace_, HasDatabases)
             detail
-              props (Repositories$NameSpace, AdminEndorses, IsPublic) verbs (SetPropertyValue, Consult)
+              without props (AdminLastName, IsPublic, NameSpace_, HasDatabases)
           BespokeDatabases
             master
               markdown <### Bespoke databases
                         Databases owned by Accounts. 
                         >
-              props (OwnerName) verbs (Consult)
+              without props (Description, Endorsed, OwnerName)
             detail
-
-
-      -- screen "Couchdb Server"
-      --   tab "The server"
-      --     row
-      --       form External
-      --         props (ServerUrl, Name) verbs (Consult)
-      --         --props (Name) verbs (SetPropertyValue)
-      --     row
-      --       form "Admins" Admin
-      --   tab "Repositories" default
-      --     row 
-      --       table Repositories
-      --   tab "Accounts"
-      --     row
-      --       table Accounts
-      --   tab "Bespoke databases"
-      --     row
-      --       table BespokeDatabases
 
     -- This role requires credentials for the ServerUrl, because it can remove itself.
     -- It requires write access to cw_servers_and_repositories.
@@ -413,7 +392,7 @@ domain model://perspectives.domains#CouchdbManagement
         props (FirstName, LastName) verbs (Consult)
       
       perspective on Repositories
-        props (Repositories$NameSpace) verbs (Consult)
+        props (Repositories$NameSpace, IsPublic, RepositoryUrl) verbs (Consult)
       
       perspective on BespokeDatabases
         only (CreateAndFill, RemoveContext)
@@ -435,20 +414,38 @@ domain model://perspectives.domains#CouchdbManagement
       perspective on MyBespokeDatabases
         props (Description) verbs (Consult)
 
-      screen "Couchdb Server"
-        tab "The server"
+      screen 
+        who
+          Accounts
+            master
+              props(LastName) verbs (Consult)
+            detail
+              props (FirstName, LastName, Password, AuthorizedDomain) verbs (Consult)
+          Admin
+            master
+              props(LastName) verbs (Consult)
+            detail
+              props (FirstName, LastName) verbs (Consult)
+        what
           row
+            markdown <### Couchdb Server
+                        You have an account with this server. In principle you can have a Bespoke Database on it.
+                        Also, this account is a necessary condition for participating in a Repository other than as visitor.
+                      >
             form External
-          row
-            form "Admins" Admin
-          row
-            table Accounts
-        tab "Repositories" default
-          row
-            table Repositories
-        tab "My databases"
-          row
-            table MyBespokeDatabases
+        where
+          Repositories
+            master
+              props (Repositories$NameSpace) verbs (Consult)
+            detail
+          BespokeDatabases
+            master
+              markdown <### Bespoke databases
+                        Databases exclusively for you. 
+                        >
+              props (Name) verbs (Consult)
+            detail
+              props (Name, Description) verbs (Consult)
 
     -- The instance of CouchdbServer is published in the cw_servers_and_repositories database.
     -- TODO: als omkering van filtered queries volledig is, beperk dan het perspectief van Visitor tot PublicRepositories.
@@ -462,13 +459,28 @@ domain model://perspectives.domains#CouchdbManagement
       perspective on Admin
         props (FirstName, LastName) verbs (Consult)
       
-      screen "Couchdb Server"
-        row
-          form "This server" External
-        row 
-          table "Repositories" Repositories
-            props (Repositories$NameSpace) verbs (Consult)
-
+      screen
+        who
+          Admin
+            master
+              without props (FirstName)
+            detail
+        what
+          row
+            markdown <### Couchdb Server
+                        This is a Couchdb Server. You can sign up for an account on it.
+                        >
+          row
+            form External
+        where
+          Repositories
+            master
+              markdown <### Repositories
+                          A repository is a collection of models and versions of those models.
+                          You can visit the public repositores and install models from them.
+                          >
+              without props (IsPublic, Repositories$NameSpace)
+            detail
 
     context PublicRepositories = filter Repositories with IsPublic
 
@@ -553,6 +565,8 @@ domain model://perspectives.domains#CouchdbManagement
       property Endorsed (Boolean)
       property BaseUrl = binder BespokeDatabases >> context >> extern >> ServerUrl
       property OwnerName = context >> Owner >> LastName
+      property Name (String)
+        readableName
       property Description (String)
       property Public (Boolean)
       state CreateDb = Endorsed and (exists context >> Owner) and not exists DatabaseName
@@ -577,7 +591,7 @@ domain model://perspectives.domains#CouchdbManagement
     user Owner filledBy (CouchdbServer$Accounts, CouchdbServer$Admin)
       property BespokeDatabaseUrl = context >> extern >> DatabaseLocation
       perspective on External
-        props (Public, Description) verbs (Consult, SetPropertyValue)
+        props (Public, Description, Name) verbs (Consult, SetPropertyValue)
         props (DatabaseLocation) verbs (Consult)
       perspective on Owner
         props (LastName) verbs (Consult)
@@ -698,8 +712,8 @@ domain model://perspectives.domains#CouchdbManagement
       perspective on External
         props (IsPublic, NameSpace_, RepositoryUrl) verbs (Consult)
 
-        action CompileRepositoryModels
-          callEffect p:CompileRepositoryModels( RepositoryUrl + ModelsDatabase, RepositoryUrl + InstancesDatabase )
+      action CompileRepositoryModels
+        callEffect p:CompileRepositoryModels( extern >> (RepositoryUrl + ModelsDatabase), extern >> (RepositoryUrl + InstancesDatabase) )
       
       perspective on Admin
         props (FirstName, SpecificUserName, UserName, Password) verbs (Consult)
@@ -722,24 +736,39 @@ domain model://perspectives.domains#CouchdbManagement
       -- Moet in staat zijn om een instantie toe te voegen aan Accounts.
       -- perspective on Accounts
 
-      screen "Repository"
-        tab "This repository"
-          row 
-            form "Repository information" External
+      screen
+        who
+          Admin
+            master
+              without props (FirstName, SpecificUserName, UserName, Password)
+            detail
+          Authors
+            master
+              without props(FirstName, UserName, Password)
+            detail
+        what
           row
-            form "Administrator" Admin
-        tab "Manifests" default
-          row
-            table Manifests
-          row
-            markdown <## Add a manifest
-                      Add a manifest by clicking the `plus` button on the table toolbar.
-                      Enter the *unqualified* name of the model in the column `LocalModelName`.
-                      For the domain 'model://perspectives.domains#System' for example, this is 'System'.
-                     >
-        tab "Authors"
-          row
-            table Authors
+            markdown <### Repository Administration
+                      A repository is a collection of models and versions of those models.
+                      You can add manifests to the repository, which are pointers to models in the CouchdbServer.
+                      **Notice** the function in the main menu on the left, `Compile models in repository`. 
+                      Use it to recompile all models in the repository when the shape of the model representation has changed.
+                      >
+            form "Repository" External
+              props (RepositoryUrl, IsPublic) verbs (Consult)
+        where
+          Manifests
+            master
+              markdown <## Add a manifest
+                        Add a manifest by opening the menu and creating a new empty role.
+                        Then enter the *unqualified* name of the model in the column `Local model name`.
+                        For the domain 'model://perspectives.domains#System' for example, this would be 'System'.
+                      >
+              -- Notice that we will have a table with both LocalModelName and Name. The latter is the ReadableName. 
+              -- We cannot omit the readable name. It equals the LocalModelName, but we cannot edit it. 
+              -- Hence we need both.
+              without props (Description, DomeinFileName)
+            detail
       
     -- This role requires credentials for the ServerUrl. It 'inherits' them from its filler.
     -- It also requires credentials for the RepositoryUrl, because it creates and updates Manifests.
@@ -788,40 +817,67 @@ domain model://perspectives.domains#CouchdbManagement
       perspective on Visitor
         props (FirstName, LastName) verbs (Consult)
 
-      screen "Repository"
-        tab "This repository"
-          row 
-            form "Repository information" External
-              props (RepositoryUrl) verbs (Consult)
-          row 
-            table "Authors" Authors
-        tab "Manifests" default
+      screen
+        who
+          Admin
+            master
+              without props (FirstName)
+            detail
+          Authors
+            master
+              without props(FirstName, AuthorizedDomain)
+            detail
+        what
           row
-            table Manifests
-          row
-            markdown <## Add a manifest
-                      Add a manifest by clicking the `plus` button on the table toolbar.
-                      Enter the *unqualified* name of the model in the column `LocalModelName`.
-                      For the domain 'model://perspectives.domains#System' for example, this is 'System'.
-                     >
-    
+            markdown <### Repository Administration
+                      A repository is a collection of models and versions of those models.
+                      You can add manifests to the repository, which are pointers to models in the CouchdbServer.
+                      >
+            form "Repository" External
+              props (RepositoryUrl, IsPublic) verbs (Consult)
+        where
+          Manifests
+            master
+              markdown <## Add a manifest
+                        Add a manifest by opening the menu and creating a new empty role.
+                        Then enter the *unqualified* name of the model in the column `Local model name`.
+                        For the domain 'model://perspectives.domains#System' for example, this would be 'System'.
+                      >
+              -- Notice that we will have a table with both LocalModelName and Name. The latter is the ReadableName. 
+              -- We cannot omit the readable name. It equals the LocalModelName, but we cannot edit it. 
+              -- Hence we need both.
+              without props (Description, DomeinFileName)
+            detail    
     
     user Accounts (relational, unlinked) filledBy (CouchdbServer$Accounts, CouchdbServer$Admin)
 
     -- The instances of Repository are published in the cw_servers_and_repositories database.
     public Visitor at extern >> ServerUrl + "cw_servers_and_repositories/" = sys:Me
       perspective on Manifests
-        props (LocalModelName) verbs (Consult)
+        props (LocalModelName, ModelManifest$External$Name, Description) verbs (Consult)
       perspective on extern
         props (NameSpace_, NameSpace) verbs (Consult)
 
-      screen "Repository"
-        row
-          form "Repository information" External
-            props (NameSpace) verbs (Consult)
-        row
-          table "Manifests" Manifests
-
+      screen
+        who
+        what
+          row
+            markdown <### Repository
+                      This repository is a collection of manifests describing models and versions of those manifests.
+                      Visit a manifest context to install a new app or to update an existing app.
+                      >
+          row
+            form External
+              props (NameSpace) verbs (Consult)
+        where
+          Manifests
+            master
+              markdown <## Manifests
+                        A manifest describes a model / App.
+                      >
+              without props (Description, LocalModelName)
+            detail
+              without props (LocalModelName)
 
     -- This role is in the public Visitor perspective. These are all models that
     -- are stored in this Repository.
@@ -922,33 +978,38 @@ domain model://perspectives.domains#CouchdbManagement
         props (FirstName, LastName) verbs (Consult)
       action CreateVersion
         create role Versions
-      screen "Model Manifest"
-        tab "Versions" default
-          row 
-            form "This Manifest" External
+      screen
+        who
+          Author
+            master
+              without props (FirstName)
+            detail
+        what
           row
-            table "Available Versions" Versions
-              only (RemoveContext, Create)
-          row
-            markdown <## Add a version
-                      In order to add a version of your manifest, use the action `CreateVersion` from the top toolbar.
-                      Add a version number in the row that appears. A version should be of the form "Major.Minor" where both
-                      components should be integers. For example: "1.0" or "2.11".
-                     >
-        tab "Authors"
-          row
-            table "Authors" Author
+            markdown <### Model Manifest
+                      A manifest describes a model and its versions.
+                      >
+            form External
+              without props (RecomputeVersionToInstall, IsLibrary)
+              props (Description, VersionToInstall, DomeinFileName) verbs (Consult, SetPropertyValue)
+        where
+          Versions
+            master
+              markdown <## Add a version
+                        In order to add a version of your manifest, use the action `CreateVersion` from the menu on the top left.
+                        Add a version number in the row that appears. A version should be of the form "Major.Minor" where both
+                        components should be integers. For example: "1.0" or "2.11".
+                      >
+              without props (Versions$Version, Description, Patch, Build)
+            detail
     
     -- A public version of ModelManifest is available in the database cw_<NameSpace>.
     public Visitor at extern >> PublicUrl = sys:Me
       perspective on extern
-        props (Description, IsLibrary, VersionToInstall, DomeinFileName) verbs (Consult)
+        props (DomeinFileName, Description, IsLibrary, VersionToInstall) verbs (Consult)
       -- NOTA BENE: betekent dit niet dat instanties van ModelsInUse gepubliceerd worden?
-      -- TODO: dubbel perspectief??
       perspective on sys:MySystem >> ModelsInUse
         only (Fill, Remove)
-      perspective on sys:MySystem >> ModelsInUse
-        only (Fill)
         props (ModelToRemove) verbs (SetPropertyValue)
       perspective on Versions
         props (Versions$Version, Description, VersionedModelURI, VersionedModelManifest$External$DomeinFileName, Patch, Build) verbs (Consult)
@@ -974,12 +1035,24 @@ domain model://perspectives.domains#CouchdbManagement
         action UpdateModelWithDependencies
           callEffect cdb:UpdateModel( VersionedModelURI, true )
       
-      screen "Model Manifest"
-        row 
-          form "This Manifest" External
-            props (Description, VersionToInstall) verbs (Consult)
-        row
-          table "Model versions" Versions
+      screen
+        who
+        what 
+          row
+            markdown <### Model Manifest
+                      A manifest describes a model and its versions.
+                      >
+            form External
+              without props (IsLibrary, DomeinFileName)
+        where
+          Versions
+            master
+              markdown <## Versions
+                        The versions of the manifest. You can install a version by selecting the item `Start using` from the menu.
+                        Once you have installed a version, you can update it by selecting the item `Update model` from the menu.
+                      >
+              without props (Versions$Version, Description, VersionedModelURI, VersionedModelManifest$External$DomeinFileName, Patch, Build)
+            detail
 
     context Versions (relational) filledBy VersionedModelManifest
       aspect sys:ModelManifest$Versions
@@ -1110,6 +1183,9 @@ domain model://perspectives.domains#CouchdbManagement
               "Version {External$Version} (build {Build}) has not been stored in the local store or applied to the current session."
       
     thing Translation
+      property FileName = context >> extern >> VersionedModelURI + ".yaml"
+        readableName
+      -- Whether the Author wants to generate a new Yaml file for translation.
       property GenerateYaml (Boolean)
       -- The (Javascript) DateTime value of the last Yaml file upload.
       property LastYamlChangeDT (DateTime)
@@ -1129,13 +1205,13 @@ domain model://perspectives.domains#CouchdbManagement
                 -- modeltranslation <- callExternal p:GenerateFirstTranslation( context >> extern >> VersionedModelURI ) returns String
                 text <- callExternal p:GetTranslationYaml( modeltranslation ) returns String
               in
-                create file ("translation_of_" + context >> extern >> VersionedModelURI + ".yaml") as "text/yaml" in TranslationYaml
+                create file FileName as "text/yaml" in TranslationYaml
                   text
                 GenerateYaml = false
       
       -- Construct a new TranslationTable from the YAML that the author has enriched with translations.
       -- Will be triggered on each new version of TranslationYaml, whether generated in state GenerateYaml or uploaded by the end user.
-      state GenerateTranslationTable = (exists TranslationYaml) and ((callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime > LastYamlChangeDT + 10 seconds) or not exists LastYamlChangeDT) and context >> extern >> ArcFeedback matches regexp "^OK"
+      state GenerateTranslationTable = (exists TranslationYaml) and ((callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime > LastYamlChangeDT + 10 seconds) or (not exists LastYamlChangeDT)) and context >> extern >> ArcFeedback matches regexp "^OK"
         on entry
           do for Author
             letA
@@ -1152,8 +1228,15 @@ domain model://perspectives.domains#CouchdbManagement
         props (ArcFile, ArcFeedback, Description, IsRecommended, Build, Patch, LastChangeDT, MustUpload, AutoUpload, Store, ApplyInSession) verbs (Consult, SetPropertyValue)
       perspective on Translation
         only (Create, Remove, Delete)
-        props (TranslationYaml, GenerateYaml, LastYamlChangeDT) verbs (Consult, SetPropertyValue)
-        props (ModelTranslation) verbs (Consult)
+        props (TranslationYaml, GenerateYaml, LastYamlChangeDT) verbs (Consult, SetPropertyValue, DeleteProperty)
+        props (FileName, ModelTranslation) verbs (Consult)
+        action GenerateTranslationTable
+          letA
+            modeltranslation <- callExternal p:ParseYamlTranslation( context >> Translation >> TranslationYaml ) returns String
+          in
+            callEffect p:GenerateTranslationTable( modeltranslation, context >> extern >> VersionedModelURI)
+            LastYamlChangeDT = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime for context >> Translation
+
       perspective on Manifest
         props (VersionToInstall) verbs (Consult, SetPropertyValue)
       perspective on Manifest >> context >> Versions
@@ -1161,42 +1244,81 @@ domain model://perspectives.domains#CouchdbManagement
       perspective on Author
         all roleverbs
         props (FirstName, LastName) verbs (Consult)
-      screen "Model version"
-        tab "Version" default
-          row
-            markdown <## Compile your model
-                      Select the `ArcFile` control and press enter. Then upload your file. It's domain declaration *must* be in 
-                      the repository NameSpace (if you are not sure about that: move back to the Repositories tab of the CouchdbServer)
-                      and its local name *must* equal what you entered on creating the manifest (move back to the Manifests tab of the Repository).
-                      Compiling will take some time. Watch the `ArcFeedback` field for possible errors and correct them.
-                      On succes, the compiled model is uploaded automatically to the repository.
-                      Don't forget to update the model in your local installation!
-                     >
-          row
+      screen
+        who
+          Author
+            master
+              without props (FirstName)
+            detail
+        what
+          tab "Manifest"
             form External
-          row
-            markdown <## Translate your model
-                      Start by downloading the `TranslationYaml` file. Edit in a simple text editor. Supply translations and take care to preserve 
-                      indentation (only use 'soft tabs'. A tab should be two spaces).
-                      To upload your augmented translation, select the `TranslationYaml` control and press enter. Then upload your file.
-                     >
-          row
-            form Translation
-              -- props (TranslationYaml, LastYamlChangeDT) verbs (Consult, SetPropertyValue)
-        tab "Authors"
-          row
-            table Author
+              without props (ArcFile, ArcFeedback, LastChangeDT, MustUpload, AutoUpload, Store, ApplyInSession, ArcSource)
+          tab "Compile"
+            row
+              markdown <### Compile your model
+                        Select the `ArcFile` control and press enter. Then upload your file. There are rules:
+
+                        * It's domain declaration *must* be in the repository Domain (or namespace. If you are not sure about that: move twice up to the wider context and 
+                        read the Domain of the Repository).
+                        * Its local name *must* equal the name of the manifest (move up to the wider context to read that).
+                        ---
+                        Compiling will take some time. Watch the `ArcFeedback` field for possible errors and correct them.
+                        On succes, the compiled model is uploaded automatically to the repository.
+                        Don't forget to update the model in your local installation!
+                      >
+            row
+              form External
+                without props (Description, IsRecommended, Version, Build, Patch, ArcSource, MustUpload, DomeinFileName, AutoUpload, Store, ApplyInSession)
+            row 
+              markdown <#### Where to store
+                        Storage: choose from 
+                        * **Not**: the model is not stored anywhere, but only compiled.
+                        * **Locally**: the model is stored in the local store, so it is available for you only.
+                        * **Repository**: the model is stored in the repository, so it is available for all users.
+                        
+                        #### Compiling and applying immediately
+                        **Apply immediately**: choose whether the model is loaded into the current session.
+                        **Auto upload** means that the model is automatically compiled when you upload it.
+                      >
+            row
+              form External
+                without props (DomeinFileName, Version, ArcSource, LastUpload, ArcFile, ArcFeedback, Description, IsRecommended, Build, Patch, LastChangeDT, MustUpload)
+          tab "Translate"
+            row
+              markdown <## Translate your model
+                        * Adhere to the convention of using English in the model, and use the translation file to translate the model into your own language.
+                        * The `Yaml translation file` is a YAML file that contains all the model's readable names and descriptions.
+                        It is generated automatically when you compile the model.
+                        You can download it, edit it in a text editor, and upload it again.
+                        * Take care to preserve the indentation (only use 'soft tabs'. A tab should be two spaces).
+                        * To upload your augmented translation, select the `Yaml translation file` control and press enter. Then upload your file.
+                      >
+            row
+              form Translation
+                without props (ModelTranslation)
+        where
     
     public Visitor at (extern >> PublicUrl) = sys:Me
       perspective on extern
         props (Version, Description, IsRecommended, Patch, Build) verbs (Consult) -- ModelURI geeft een probleem. Probeer VersionedModelManifest$External$ModelURI.
       perspective on Manifest
         props (ModelURI) verbs (Consult) 
-      screen "Model version"
-        row
-          form "This version" External
-        row
-          form "All versions" Manifest 
+      
+      screen 
+        who
+        what 
+          row
+            markdown <### Model Version
+                      A model version is a specific version of a model, with a specific name and description.
+                      >
+          row
+            form External
+              without props (IsRecommended)
+        where
+          markdown <### How to install or update a version
+                    Move to the wider context (the Manifest) to see all versions of the model. Install or update from there.
+                    >
 
     context Manifest (functional) = extern >> binder Versions >> context >> extern
     aspect thing sys:ContextWithNotification$Notifications
