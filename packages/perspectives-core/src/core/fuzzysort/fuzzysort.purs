@@ -25,13 +25,12 @@ module Perspectives.Fuzzysort where
 import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (tell)
-import Data.Maybe (fromJust)
+import Data.Array (uncons)
+import Data.Function.Uncurried (Fn2, runFn2)
+import Data.Maybe (Maybe(..), fromJust)
 import Data.Newtype (unwrap)
 import Data.Tuple (Tuple(..))
-import Effect (Effect)
-import Effect.Class (liftEffect)
-import Effect.Uncurried (EffectFn2, runEffectFn2)
-import Foreign.Object (fromFoldable, keys, lookup)
+import Foreign.Object (Object, fromFoldable, keys, lookup)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
@@ -39,7 +38,7 @@ import Perspectives.ModelDependencies (indexedContextFuzzies)
 import Perspectives.Names (getMySystem)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..))
-import Prelude (bind, map, pure, ($), (<$>), discard)
+import Prelude (bind, map, pure, ($), (<$>), discard, (>=))
 import Simple.JSON (writeJSON)
 
 -- const result = fuzzysort.single('query', 'some string that contains my query.')
@@ -53,17 +52,17 @@ import Simple.JSON (writeJSON)
 type Target = String
 
 -- | We represent just the fields of interest for this module.
-type FuzzyResultRecord =
-  { score :: Int
+type FuzzyResultRecord a =
+  { score :: Number
   , indexes :: Array Int
-  , target :: String
+  , target :: a
 }
 
-foreign import matchStringsImpl :: EffectFn2 String (Array String) (Array FuzzyResultRecord)
+foreign import matchStringsImpl :: forall a. Fn2 String (Array a) (Array (FuzzyResultRecord a))
 
 -- fuzzysort.go('mr', ['Monitor.cpp', 'MeshRenderer.cpp'])
-matchStrings :: String -> Array String -> Effect (Array FuzzyResultRecord)
-matchStrings = runEffectFn2 matchStringsImpl
+matchStrings :: forall a. String -> Array a -> Array (FuzzyResultRecord a)
+matchStrings = runFn2 matchStringsImpl
 
 -- | Return an object whose keys are Indexed Context Names and whose values are
 -- | the actual context identifiers.
@@ -71,10 +70,20 @@ matchStrings = runEffectFn2 matchStringsImpl
 matchIndexedContextNames :: String -> ContextInstance ~~> Value
 matchIndexedContextNames s _ = ArrayT do
   indexedNames <- lift $ gets _.indexedContexts
-  sortedMatches <- liftEffect $ matchStrings s (keys indexedNames)
+  sortedMatches <- pure $ matchStrings s (keys indexedNames)
   (matchingIndexedNames :: Array String) <- pure (_.target <$> sortedMatches)
   mysystem <- lift $ getMySystem
   tell $ ArrayWithoutDoubles [RoleAssumption (ContextInstance mysystem) (EnumeratedRoleType indexedContextFuzzies)]
   pure [Value $ writeJSON $ fromFoldable (map
     (\iname -> Tuple iname (unwrap $ unsafePartial $ fromJust $ lookup iname indexedNames))
     matchingIndexedNames)]
+
+fuzzyLookup :: forall a. String -> Object a -> Maybe a
+fuzzyLookup s obj = let
+  (sortedMatches :: Array (FuzzyResultRecord String)) = matchStrings s (keys obj)
+  in 
+  case uncons sortedMatches of
+    Nothing -> Nothing
+    Just {head, tail} -> if head.score >= 0.9
+      then lookup head.target obj
+      else Nothing

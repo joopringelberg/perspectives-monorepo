@@ -59,6 +59,7 @@ import Perspectives.CoreTypes (MonadPerspectives, TranslationTable(..), Translat
 import Perspectives.Data.EncodableMap (EncodableMap)
 import Perspectives.Data.EncodableMap (keys, lookup, values) as EM
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
+import Perspectives.Fuzzysort (fuzzyLookup)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, qualifyWith, startsWithSegments, typeUri2LocalName_, typeUri2ModelUri, typeUri2typeNameSpace_)
 import Perspectives.PerspectivesState (getCurrentLanguage, getTranslationTable)
 import Perspectives.Representation.Action (Action)
@@ -535,7 +536,7 @@ instance Translation NotificationsTranslation where
             )
         0
   addTranslations (TranslationTable table) (NotificationsTranslation notifications) = NotificationsTranslation $
-    flip mapWithKey notifications \original translations -> case lookup original table of 
+    flip mapWithKey notifications \original translations -> case fuzzyLookup original table of 
       Nothing -> translations
       Just ts -> ts
 
@@ -577,7 +578,7 @@ instance Translation MarkdownsTranslation where
             )
         0
   addTranslations (TranslationTable table) (MarkdownsTranslation markdowns) = MarkdownsTranslation $
-    flip mapWithKey markdowns \original translations -> case lookup original table of 
+    flip mapWithKey markdowns \original translations -> case fuzzyLookup original table of
       Nothing -> translations
       Just ts -> ts
 
