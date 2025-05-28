@@ -274,9 +274,18 @@ domain model://perspectives.domains#System
         props (LastShownOnScreen) verbs (Consult, SetPropertyValue)
       perspective on Contacts
         props (FirstName, LastName) verbs (Consult, SetPropertyValue)
+      perspective on ActiveContacts
+        props (FirstName, LastName) verbs (Consult, SetPropertyValue)
+      perspective on OutgoingInvitations >> binding >> context >> Inviter
+        only (Create, Fill)
       perspective on OutgoingInvitations
-        only (CreateAndFill, Remove)
+        only (CreateAndFill, Remove, RemoveContext)
         props (InviterLastName) verbs (Consult)
+      action CreateInvitation
+        letA
+          invitation <- create context Invitation bound to OutgoingInvitations
+        in
+          bind sys:Me to Inviter in invitation >> binding >> context
       perspective on External
         props (ShowLibraries, CurrentLanguage, PreviousLanguage) verbs (Consult, SetPropertyValue)
         props (MyContextsVersion, PDRVersion, CurrentDate, CurrentHour) verbs (Consult)
@@ -326,70 +335,68 @@ domain model://perspectives.domains#System
       perspective on SelectedClipboardItem
         props (ClipboardData) verbs (Consult)
       
-      -- screen "Home"
-      --   who 
-      --     User 
-      --       master "User"
-      --         props (FirstName) verbs (Consult)
-      --       detail
-      --         props (FirstName, LastName, PublicKey) verbs (Consult, SetPropertyValue)
-      --   what
-      --     External
-      --       master "Perspectives system"
-      --         props (MyContextsVersion) verbs (Consult)
-      --       detail
-      --         props (MyContextsVersion, PDRVersion, CurrentDate, CurrentHour) verbs (Consult)
-      --         props (CurrentLanguage) verbs (SetPropertyValue, Consult)
-      --     ModelsInUse 
-      --       master "Models in Use"
-      --         props (ModelName, Version) verbs (Consult)
-      --       detail
-      --         props (Version, Patch, InstalledPatch, Build, InstalledBuild, Description) verbs (Consult)
-      --         props (UpdateOnBuild) verbs (SetPropertyValue, Consult)
-              
+      screen
+        who 
+          ActiveContacts
+            master 
+              without props (FirstName)
+            detail
+              props (FirstName, LastName) verbs (Consult)
+        what
+          row 
+            markdown <### Perspectives system
+                      This is the Perspectives system, representing your installation.
 
-      screen "Home"
-        tab "System"
-          row
+                      * Create and accept invitations to connect with other users.
+                      * Go to an App store to install a new App.
+                      * On the left, under **Who** you see your contacts.
+                      >
+          row  
             form External
-              props (MyContextsVersion, PDRVersion, CurrentDate, CurrentHour) verbs (Consult)
-          row
-            form "System language" External
-              props (CurrentLanguage, PreviousLanguage) verbs (SetPropertyValue, Consult)
-        tab "SystemCaches"
-          row
-            form SystemCaches
-        tab "Manage new models"
-          row 
-            form "Default (Base) Repository" BaseRepository
-          row 
-            table "Other repositories" Repositories
-          row 
-            table "Models that have been patched" ModelsToUpdate
-          row 
-            table "Models in use" ModelsInUse
-        tab "Start contexts"
-          row
-            table StartContexts
-              props (Name) verbs (Consult)
-        tab "User and Contacts"
-          row
-            form User
-              props (FirstName, LastName) verbs (SetPropertyValue)
-          row 
-            table Contacts
-          row 
-            table "Invitations I have created" OutgoingInvitations
-        tab "Invitations"
-          row
-            table PendingInvitations
-              props (InviterLastName, Message) verbs (Consult)
+              without props (ShowLibraries, CurrentLanguage, PreviousLanguage)
+        where
+          OutgoingInvitations
+            master
+              markdown <#### Outgoing invitations
+                        These are the invitations you have sent to other users.
+                        Create a new invitation either in the main menu on the left, or by [[action: CreateInvitation|clicking here]].
+                        >
+            detail
+          ModelsInUse
+            master
+              without props (ModelName, Description, Version, Patch, Build, InstalledPatch, InstalledBuild, UpdateOnBuild, DetachedFiller)
+            detail
+              without props (DetachedFiller)
+          ModelsToUpdate
+            master
+              without props (ModelName, Description, Version)
+            detail
+          BaseRepository
+            master
+              markdown <#### Base Repository
+                        This is the base repository of Perspectives.
+                        It contains the models that are used to run Perspectives.
+                        >
+            detail
+          Repositories
+            master
+              markdown <#### Repositories
+                        These are the repositories that you have access to.
+                        Open a repository to see the models it contains.
+                        >
+            detail
+          PendingInvitations
+            master
+              without props (Message)
+            detail
 
     context SocialEnvironment filledBy SocialEnvironment
 
     -- In effect, this will filter out the Serialization persona.
     user Contacts = filter (callExternal cdb:RoleInstances( "model://perspectives.domains#System$TheWorld$PerspectivesUsers" ) returns sys:TheWorld$PerspectivesUsers) with (exists PublicKey) and (not this == sys:SocialMe >> binding)
     
+    user ActiveContacts = filter Contacts with not Cancelled
+
     -- user Contacts = sys:MySocialEnvironment >> Persons
 
     -- PDRDEPENDENCY
@@ -655,6 +662,8 @@ domain model://perspectives.domains#System
 
   case Invitation
     state NoInviter = not exists Inviter
+    state NoInvitee = not exists Invitee
+    state UnlockInvitation = extern >> CorrectCodeEntered
 
     external
       property SerialisedInvitation (File)
@@ -663,9 +672,11 @@ domain model://perspectives.domains#System
         maxLength = 256
       property CompleteMessage = Addressing + Message
       property ConfirmationCode (Number)
+      property EnteredCode (Number)
       property InviterLastName = context >> Inviter >> LastName
         readableName
       property IWantToInviteAnUnconnectedUser (Boolean)
+      property CorrectCodeEntered = ConfirmationCode == EnteredCode
       state Message = exists Message
       state CreateInvitation = exists ConfirmationCode
         on entry
@@ -687,49 +698,108 @@ domain model://perspectives.domains#System
           action CreateInvitation
             ConfirmationCode = callExternal util:Random(100000, 999999) returns Number
       
-      screen "Invite someone"
-        row 
-          form External
-            -- NOTE: the file control should preferrably not show the upload button in this case.
-            props (Message) verbs (SetPropertyValue)
-        row 
-          form External
-            props (SerialisedInvitation, ConfirmationCode, CompleteMessage) verbs (Consult)
-        row
-          form "Invitee" Invitee
+      screen 
+        who 
+          Invitee
+            master
+              without props (FirstName, HasKey)
+            detail
+              without props (HasKey)
+        what
+          row 
+            markdown <### Invite a new person to Perspectives
+                      You can invite a person to Perspectives by sending an **invitation file**.
+                      Enter a message. It will be appended to the standard message below.
+                      After entering the message, an action button will appear to create the invitation file.
+                      The button is shown with a lightning bolt icon.
+                      Excecute the action and then download the file.
+                      Send the file to the person you want to invite.
+                      The file contains a security code that the person must enter to unlock the invitation.
+                      After creating the file, the security code has apppeared, too.
+                      Wait for the Invitee to contact you for the security code.
+                      Only if you're sure the person who contacts you is the person you want to invite,
+                      give him/her the security code.
+                      After that, the person can fill the role of Invitee with his/her own data.
+                      These will become available to you, too.
+                      In this way you'll have established a connection in a safe way.
+                      >
+          row 
+            form External
+              without props (CompleteMessage, ConfirmationCode, SerialisedInvitation)
+          row 
+            form External
+              without props (Message)
+        where 
 
     user Invitee (mandatory) filledBy Guest
       perspective on Inviter
         props (FirstName, LastName, HasKey) verbs (Consult)
       perspective on extern
-        props (InviterLastName, CompleteMessage, ConfirmationCode) verbs (Consult)
-      screen "Invitation"
-        row 
-          form "You are invited by:" Inviter
-        row
-          form "Message" External
-            props (CompleteMessage) verbs (Consult)
+        props (InviterLastName, Message, ConfirmationCode, Addressing) verbs (Consult)
+      screen
+        who 
+          Inviter
+            master
+              without props (FirstName, HasKey)
+            detail
+              without props (HasKey)
+        what
+          row 
+            markdown <### Invitation to Perspectives
+                      You have accepted this invitation to Perspectives.
+                      >
+          row 
+            form External
+              without props (Addressing, ConfirmationCode)
+        where 
+          -- The Guest will fill the Invitee role with his/her own data.
+          -- The Guest will not be able to fill the Inviter role.
 
     -- Without the filter, the Inviter will count as Guest and its bot will fire for the Inviter, too.
-    user Guest = (filter sys:SocialMe >> binding with not fills (currentcontext >> Inviter))
+    -- user Guest = (filter sys:SocialMe >> binding with not fills (currentcontext >> Inviter))
+    user Guest = sys:SocialMe >> binding
       perspective on extern
-        props (InviterLastName, Message) verbs (Consult)
+        props (InviterLastName, Message, EnteredCode) verbs (Consult)
+        props (EnteredCode) verbs (SetPropertyValue)
       perspective on Invitee
-        only (Fill, Create)
         props (FirstName, LastName) verbs (Consult)
+        in context state NoInvitee
+          only (Create, Fill)
+          props (FirstName, LastName) verbs (Consult)
       perspective on Inviter
         props (FirstName, LastName) verbs (Consult)
-        in context state NoInviter
-          only (CreateAndFill, Fill)
-          props (FirstName, LastName) verbs (Consult)
-      screen "Invitation"
-        row 
-          form "You are invited by:" Inviter
-        row
-          form "Message from the inviter" External
-            props (Message) verbs (Consult)
-        row 
-          form "Accept by filling this role with yourself" Invitee
+      in context state UnlockInvitation
+        action AcceptInvitation
+          bind sys:SocialMe >> binding to Invitee
+      screen
+        who 
+          Inviter
+            master
+              without props (FirstName)
+            detail
+          Invitee
+            master
+              without props (LastName)
+            detail
+        what
+          row
+            markdown <### Invitation to Perspectives
+                      You have received an invitation to Perspectives.
+                      To unlock the invitation, you must enter the security code that the Inviter has given you.
+                      >
+              when not External >> CorrectCodeEntered
+            markdown <### Invitation to Perspectives
+                      You have been invited to Perspectives.
+                      If you want to accept the invitation, you must fill the Invitee role with your own data.
+                      [[action: AcceptInvitation|Accept by clicking here]].
+                      >
+              when External >> CorrectCodeEntered
+          row 
+            form External
+              without props (Addressing)
+        where 
+          -- The Guest will fill the Invitee role with his/her own data.
+          -- The Guest will not be able to fill the Inviter role.
 
   -- To be used as Aspect in model:CouchdbManagement$Repository
   case ManifestCollection
