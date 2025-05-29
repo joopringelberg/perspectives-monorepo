@@ -679,8 +679,8 @@ model://perspectives.domains#CouchdbManagement:
               nl: Toepassen in huidige sessie
           Store:
             translations:
-              en: Store locally
-              nl: Lokaal opslaan
+              en: Storage location
+              nl: Plaats van opslag
           AutoUpload:
             translations:
               en: Auto upload

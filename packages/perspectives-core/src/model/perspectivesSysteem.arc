@@ -503,6 +503,11 @@ domain model://perspectives.domains#System
     -- These are the 'apps' of Perspectives.
     context StartContexts (relational) filledBy sys:RootContext
 
+    context Apps = letA
+        withsystemapps <- extern >> NoSystemApps
+      in
+        filter StartContexts with not IsSystemModel or withsystemapps
+
     context PendingInvitations = callExternal cdb:PendingInvitations() returns sys:Invitation$External
 
     thing Databases (mandatory, relational)
@@ -767,6 +772,7 @@ domain model://perspectives.domains#System
           only (Create, Fill)
           props (FirstName, LastName) verbs (Consult)
       perspective on Inviter
+        only (Create, Fill)
         props (FirstName, LastName) verbs (Consult)
       in context state UnlockInvitation
         action AcceptInvitation
@@ -826,6 +832,7 @@ domain model://perspectives.domains#System
         readableName
       property Description (mandatory, String)
       property IsLibrary (mandatory, Boolean)
+      property IsSystemModel (Boolean)
       -- The value of this property will be set automatically by the Couchdb:VersionedModelManifest$Author.
       -- It must be a local DomeinFileId, e.g. perspectives_domains-System.json (WITHOUT the version!)
       -- PDRDEPENDENCY

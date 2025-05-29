@@ -97,17 +97,9 @@ domain model://perspectives.domains#BrokerServices
               bind sys:SocialMe >> binding to AccountHolder in accountsinstance >> binding >> context
               bind accountsinstance >> context >> Administrator to Administrator in accountsinstance >> binding >> context
 
-      
-      screen "Managing Broker Services and contracts"
-        tab "My Contracts"
-          row
-            table "My Contracts" Contracts
-          row 
-            form "Contract in use" ContractInUse
-        tab "Brokers" default
-          row 
-            table ManagedBrokers
-              only (Create, Remove)
+      screen
+        who
+        what
           row
             markdown <## Get connected
                       MyContexts is most useful when you connect to other people. 
@@ -135,11 +127,34 @@ domain model://perspectives.domains#BrokerServices
                       automatically with peers you are in contact with (including the manager of this service).
                      >
               when exists bs:MyBrokers >> Contracts
-          row 
-            table PublicBrokers
-              only (Remove)
-
-
+          row
+            form ContractInUse
+        where
+          PublicBrokers
+            master
+              markdown <### Public broker service(s)
+                        These are the public broker services that you can sign up to. 
+                        You can only sign up to a single service.
+                      >
+            detail
+          ContractInUse
+            master
+              markdown <### Your contract
+                        This is the contract you have with the broker service. 
+                        You can see when it expires, and you can cancel it.
+                      >
+              without props (Name, UseExpiresOn)
+            detail
+          ManagedBrokers
+            master
+              markdown <### Managed broker services
+                        These are the broker services you manage. You can add new ones, remove existing ones, 
+                        or change their storage location.
+                        **NOTE**: Most people will **not** manage broker services, but use the ones that are available.
+                      >
+              without props (StorageLocation)
+            detail
+          
   -- A Managed service.
   -- PDRDEPENDENCY
   case BrokerService
@@ -184,6 +199,43 @@ domain model://perspectives.domains#BrokerServices
       perspective on extern
         props (Name, Url, ManagementEndpoint, SelfRegisterEndpoint, Exchange, ServiceDescription, TerminationPeriod, GracePeriod, ContractPeriod) verbs (Consult, SetPropertyValue)
         props (PublicUrl) verbs (Consult)
+      
+      screen
+        who
+          Administrator
+            master
+              markdown <### Administrator
+                        Manage your account details with the external broker service here.
+                       >
+              without props (FirstName, AdminUserName, AdminPassword, HasKey)
+            detail
+              without props (HasKey)
+        what
+          row 
+            markdown <### Broker service
+                      Perspectives needs a broker service to exchange information with peers.
+                      Currently, we rely on [RabbitMQ](https://www.rabbitmq.com/), a popular open source message broker.
+                      If you are the administrator of such a service, you can fill in the details below.
+                      Notice the **Public URL**: this is the URL that other people can use to connect to your service. It is, 
+                      in fact, the location of this context as seen by its Visitor role.
+                      The **Self Register Endpoint** is used as a proxy for the RabbitMQ server, to enable self-signup.
+                      This service can be set up using the [perspectives-rabbitmq-service](https://github.com/joopringelberg/perspectives-rabbitmq-service)
+                      open source project.
+                      The **Management Endpoint** is a location on the server that runs RabbitMQ. It should be configured
+                      (e.g. in Apache) as a reverse proxy for RabbitMQ, that is used by the BrokerServices App to register 
+                      and service accounts on RabbitMQ. Only the Administrator user uses that endpoint.
+                      The **Description of the service**, finally is what is seen by Visitors and other non-Administrator roles.
+                    >
+          row
+            form "Broker Service" External
+        where
+          Accounts
+            master
+              markdown <### Accounts
+                        These are the accounts at the Broker Service. 
+                        You can create new accounts, or remove existing ones.
+                      >
+            detail
 
     user Guest = sys:Me
       perspective on Administrator
@@ -201,42 +253,62 @@ domain model://perspectives.domains#BrokerServices
       -- TODO: waarom dit perspectief?
       perspective on Accounts >> binding >> context >> Administrator
         only (Create, Fill)
-      perspective on bs:MyBrokers >> PublicBrokers
+      perspective on MyPublicBrokers
         only (CreateAndFill, Fill)
-      screen 
-        row
-          markdown <# Broker service
-                    This is a 'broker service'. It is a program running on 
-                    a webserver that programs use to exchange messages. MyContexts
-                    installations use it to synchronize information.
-                   >
-        row
-          markdown External
-            props (ServiceDescription) verbs (Consult)
-        row
-          markdown <## Do you want to add this service?
-                    This service is not yet available in your installation.
-                    You might want to add it so you can sign up to it afterwards in order
-                    to connect to other people on MyContexts.
-                    [[action: AddThisServer|Add the service]]
-                   >
-            when not (exists bs:MyBrokers >> PublicBrokers)
-          markdown <## Service available, sign up!
-                    This service is available in your installation. However, you have not signed up to it.
-                    Move to the [[link:model://perspectives.domains#BrokerServices$MyBrokers|Broker Services Management]] 
-                    page to read how to sign up.
-                   >
-            when (exists bs:MyBrokers >> PublicBrokers) and (not exists bs:MyBrokers >> Contracts)
-        row
-          form "This service" External
-            props (Name) verbs (Consult)
-        row 
-          form "Service administrator" Administrator
       action AddThisServer
         bind extern to PublicBrokers in bs:MyBrokers
 
+      screen
+        who
+          Administrator
+            master
+              markdown <### Administrator
+                        This is the administrator of the Broker Service. 
+                        You can contact him or her if you have questions about the service.
+                       >
+              without props (FirstName, HasKey)
+            detail
+              without props (HasKey)
+        what
+          row
+            markdown <### Broker service
+                      This is a 'broker service'. It is a program running on 
+                      a webserver that programs use to exchange messages. MyContexts
+                      installations use it to synchronize information.
+                    >
+          row
+            markdown External
+              props (ServiceDescription) verbs (Consult)
+          row
+            markdown <### Do you want to add this service?
+                      This service is not yet available in your installation.
+                      You might want to add it so you can sign up to it afterwards in order
+                      to connect to other people on MyContexts.
+                      [[action: AddThisServer|Add the service]]
+                    >
+              when not (exists bs:MyBrokers >> PublicBrokers)
+            markdown <### Service available, sign up!
+                      This service is available in your installation. However, you have not signed up to it.
+                      Move to the [[link:model://perspectives.domains#BrokerServices$MyBrokers|Broker Services Management]] 
+                      page to read how to sign up.
+                    >
+              when (exists bs:MyBrokers >> PublicBrokers) and (not exists bs:MyBrokers >> Contracts)
+          row
+            form "This service" External
+              without props (SelfRegisterEndpoint, PublicUrl, Url, Exchange, ServiceDescription, ContractPeriod, GracePeriod, TerminationPeriod)
+        where
+          MyPublicBrokers
+            master
+              markdown <### Public broker services
+                        These are the public broker services that you are signed up to (or can sign up to). 
+                        You can only sign up to a single service.
+                      >
+            detail
+
     -- PDRDEPENDENCY
     context Accounts (relational, unlinked) filledBy BrokerContract
+
+    context MyPublicBrokers = bs:MyBrokers >> PublicBrokers
 
   -- The contract between an end user and a BrokerService.
   -- PDRDEPENDENCY
@@ -384,18 +456,39 @@ domain model://perspectives.domains#BrokerServices
         only (Create, Fill)
         props (QueueName) verbs (SetPropertyValue, Consult)
 
-      screen "Broker Contract"
-        column
+      screen
+        who
+          Administrator
+            master
+              markdown <### Administrator
+                        This is the administrator of the Broker Service. 
+                        You can contact him or her if you have questions about the service.
+                       >
+              without props (FirstName, HasKey)
+            detail
+              without props (HasKey)
+          AccountHolder
+            master
+              markdown <### Account holder
+                        This is your account at the Broker Service. 
+                        You can see when it expires, and you can cancel it.
+                      >
+              without props (AccountName, AccountPassword)
+            detail
+        what
           row
-            form "Contract" External
+            markdown <### Broker service account
+                      This is your account at the Broker Service. 
+                      You can see when it expires, and you can cancel it.
+                    >
           row
-            form "Administrator" Administrator
+            form "Broker Service" External
+              without props (Registered, GracePeriodExpiresOn, TerminatesOn, ContractTerminated, Url, Exchange, CurrentQueueName, InviterLastName, Message, ConfirmationCode, Addressing)
+              props (Name, UseExpiresOn) verbs (Consult)
           row
-            form "Account" AccountHolder
-          row
-            table Queues
+            table "Queues" Queues
               props (QueueName) verbs (Consult)
-
+        where
 
     context EmptyQueue (functional) = filter Queues with not exists binding
 
@@ -408,6 +501,7 @@ domain model://perspectives.domains#BrokerServices
       perspective on AccountHolder
         all roleverbs
         props (AccountName, AccountPassword) verbs (Consult, SetPropertyValue)
+        props (Cancelled) verbs (Consult)
       
       perspective on Queues
         only (Create, Fill, DeleteContext)
@@ -417,20 +511,22 @@ domain model://perspectives.domains#BrokerServices
       -- fills an Accounts role in the service
       perspective on extern
         props (Name, ContractTerminated, ManagementEndpoint, TerminatesOn) verbs (Consult)
-        props (Registered) verbs (SetPropertyValue)
+        props (Registered, ContractTerminated) verbs (SetPropertyValue)
 
-      screen "Create Broker Contract"
-        row 
-          form External
-            -- NOTE: the file control should preferrably not show the upload button in this case.
-            props (Message) verbs (SetPropertyValue)
-        row 
-          form "Invitation" External
-            props (SerialisedInvitation, ConfirmationCode, CompleteMessage) verbs (Consult)
-        row
-          form "AccountHolder" AccountHolder
-        row 
-          table "Queues" Queues
+      screen
+        who
+          AccountHolder
+            master
+              without props (FirstName, AccountName, AccountPassword, Cancelled, HasKey)
+            detail
+              without props (HasKey)
+        what
+          row
+            form "Broker Service" External
+              without props (Name, ContractTerminated, ManagementEndpoint, TerminatesOn, Registered)
+          row
+            table Queues
+        where
 
     aspect user sys:Invitation$Guest
     aspect thing sys:ContextWithNotification$Notifications
