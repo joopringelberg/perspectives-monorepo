@@ -32,7 +32,7 @@ import Data.JSDate (toISOString)
 import Data.List (List(..), concat, filter, find, intercalate, many, null, singleton, some, (:))
 import Data.List.NonEmpty (NonEmptyList, toList, singleton) as LNE
 import Data.Maybe (Maybe(..), maybe)
-import Data.Newtype (unwrap)
+import Data.Newtype (unwrap) 
 import Data.String (trim)
 import Data.String.CodeUnits (fromCharArray)
 import Data.String.Regex (Regex)
@@ -1594,7 +1594,7 @@ widgetCommonFields = do
       then withPos do
         withoutProps <- optionMaybe (reserved "without" *> withoutProperties)
         -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
-        (withoutVerbs :: (List PropertyVerbE)) <- option Nil (checkIndent *> entireBlock propertyVerbs)
+        (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
         mroleVerbs <- optionMaybe roleVerbs
         end <- getPosition
         pure
@@ -1631,7 +1631,7 @@ tableFormFields perspective = do
         -- entireBlock expects the same indentation, i.e. the position taken up after parsing the optional 'without' clause.
         -- This may be outdented! 
         -- Because propertyVerbs always succeeds, we must explicitly check the indentation.
-        (withoutVerbs :: (List PropertyVerbE)) <- option Nil (checkIndent *> entireBlock propertyVerbs)
+        (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
         mroleVerbs <- optionMaybe roleVerbs
         end <- getPosition
         pure
