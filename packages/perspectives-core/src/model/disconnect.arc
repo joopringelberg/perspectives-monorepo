@@ -118,6 +118,7 @@ domain model://joopringelberg.nl#Disconnect
 
     user Disconnecter filledBy sys:TheWorld$PerspectivesUsers
       aspect sys:ContextWithNotification$NotifiedUser
+      -- aspect acc:Body$Admin
       state ActionsCanBeTaken = exists binding
         on entry
           do
@@ -166,6 +167,7 @@ domain model://joopringelberg.nl#Disconnect
                     >
     
     user Disconnected filledBy sys:TheWorld$PerspectivesUsers
+      -- aspect acc:Body$Admin
       property Reconnect (Boolean)
 
       on entry
