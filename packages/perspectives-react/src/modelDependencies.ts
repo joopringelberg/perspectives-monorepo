@@ -10,7 +10,7 @@ interface ModelDependenciesT
   sysUser: RoleType;
   WWWUser: RoleType;
   notifiedUser: RoleType;
-  startContexts: RoleType;
+  apps: RoleType;
   system: ContextType;
   systemExternal: RoleType;
   notifications: RoleType;
@@ -36,7 +36,7 @@ const ModelDependencies =
 , sysUser: "model://perspectives.domains#System$PerspectivesSystem$User" as RoleType
 , WWWUser: "model://perspectives.domains#System$PerspectivesSystem$WWWUser" as RoleType
 , notifiedUser: "model://perspectives.domains#System$ContextWithNotification$NotifiedUser" as RoleType
-, startContexts: "model://perspectives.domains#System$PerspectivesSystem$StartContexts" as RoleType
+, apps: "model://perspectives.domains#System$PerspectivesSystem$Apps" as RoleType
 , system: "model://perspectives.domains#System$PerspectivesSystem" as ContextType
 , systemExternal: "model://perspectives.domains#System$PerspectivesSystem$External" as RoleType
 , notifications: "model://perspectives.domains#System$ContextWithNotification$Notifications" as RoleType

@@ -19,7 +19,7 @@ export class Apps extends PerspectivesComponent<AppsProps, AppsState> {
   componentDidMount() {
     const component = this;
     PDRproxy.then((PDRproxy) => {
-      PDRproxy.getPerspective( this.props.systemuser, ModelDependencies.startContexts , (perspectives: Perspective[]) => {
+      PDRproxy.getPerspective( this.props.systemuser, ModelDependencies.apps , (perspectives: Perspective[]) => {
         component.setState({ perspective: perspectives[0] });
       });
     })

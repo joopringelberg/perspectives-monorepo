@@ -22,6 +22,7 @@ domain model://perspectives.domains#System
       in
         bind_ sys:MySystem >> extern to start
         Name = "My System" for start
+        IsSystemModel = true for start
 
 
         -- NOTE that the following line only compiles correctly when
@@ -220,6 +221,10 @@ domain model://perspectives.domains#System
         setting
       property PreviousLanguage (String)
         enumeration = ("nl", "en")
+      -- PDRDEPENDENCY
+      -- Should be true to show System, BrokerServices and CouchdbManagement from the user.
+      property ShowSystemApps (Boolean)
+        setting
       
       state LanguageChanged = not (CurrentLanguage == PreviousLanguage)
         on entry
@@ -287,7 +292,7 @@ domain model://perspectives.domains#System
         in
           bind sys:Me to Inviter in invitation >> binding >> context
       perspective on External
-        props (ShowLibraries, CurrentLanguage, PreviousLanguage) verbs (Consult, SetPropertyValue)
+        props (ShowLibraries, CurrentLanguage, PreviousLanguage, ShowSystemApps) verbs (Consult, SetPropertyValue)
         props (MyContextsVersion, PDRVersion, CurrentDate, CurrentHour) verbs (Consult)
       -- Notice that these roles are filled with the public version of VersionedModelManifest$External.
       -- We can actually only show properties that are in that perspective.
@@ -334,6 +339,8 @@ domain model://perspectives.domains#System
         props (Selected, ClipboardData) verbs (SetPropertyValue, Consult)
       perspective on SelectedClipboardItem
         props (ClipboardData) verbs (Consult)
+      perspective on Apps
+        props (Name) verbs (Consult)
       
       screen
         who 
@@ -403,7 +410,7 @@ domain model://perspectives.domains#System
     user Installer
       perspective on StartContexts
         only (Create, CreateAndFill, Remove, RemoveContext, Fill)
-        props (Name) verbs (SetPropertyValue)
+        props (Name, IsSystemModel) verbs (SetPropertyValue)
       perspective on IndexedContexts
         only (Create, Fill, Remove, RemoveContext)
         props (IndexedContexts$Name) verbs (SetPropertyValue)
@@ -499,14 +506,19 @@ domain model://perspectives.domains#System
 
     context Channels = User >> (binder Initiator union binder ConnectedPartner) >> context >> extern
 
+    -- PDRDEPENDENCY
     -- StartContexts should be bound to Contexts that share an Aspect and that Aspect should have a name on the External role.
     -- These are the 'apps' of Perspectives.
     context StartContexts (relational) filledBy sys:RootContext
 
-    context Apps = letA
-        withsystemapps <- extern >> NoSystemApps
+    -- PDRDEPENDENCY
+    context Apps = letE
+        showsystemapps <- extern >> ShowSystemApps
       in
-        filter StartContexts with not IsSystemModel or withsystemapps
+        -- By default, if a StartContext has no value for IsSystemModel, that is interpreted as false.
+        -- Hence `not IsSystemModel` will be true. In other words, by default all StartContexts are shown,
+        -- irrespective of the value of ShowSystemApps.
+        filter StartContexts with ((not IsSystemModel) or showsystemapps)
 
     context PendingInvitations = callExternal cdb:PendingInvitations() returns sys:Invitation$External
 
@@ -656,12 +668,13 @@ domain model://perspectives.domains#System
       perspective on ConnectedPartner
     user Me = filter (Initiator union ConnectedPartner) with filledBy sys:Me
     user You = filter (Initiator union ConnectedPartner) with not filledBy sys:Me
-
+        
   case RootContext
     -- PDRDEPENDENCY
     external
       property Name (mandatory, String)
         readableName
+      property IsSystemModel (Boolean)
     -- PDRDEPENDENCY
     user RootUser filledBy sys:TheWorld$PerspectivesUsers
 
