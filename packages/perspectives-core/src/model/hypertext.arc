@@ -16,6 +16,8 @@ domain model://perspectives.domains#HyperContext
         in
           bind_ app >> extern to start
           Name = "Hypertext types" for start
+          IsSystemModel = true for start
+          
 
   on exit
     do for sys:PerspectivesSystem$Installer
@@ -55,32 +57,20 @@ domain model://perspectives.domains#HyperContext
       screen
         who
           Manager
-            master "Manager"
-              props (LastName) verbs (Consult)
+            master
+              without props (FirstName)
             detail
-              props (FirstName, LastName) verbs (Consult)
         what
-          Pages
-            master "Pages"
-              props (Title) verbs (Consult)
-            detail
-              props (Title, ShowAllBlocks) verbs (Consult, SetPropertyValue)
-          PublicPageCollections
-            master "Public Page Collections"
-              props (Name) verbs (Consult)
-            detail
-              props (Name) verbs (Consult, SetPropertyValue)
+          row
+            markdown <### Write and manage hypertext pages>
         where
           Pages
-            master "Pages"
-              props (Title) verbs (Consult)
+            master
+              without props (ShowAllBlocks)
             detail
-              props (Title, ShowAllBlocks) verbs (Consult, SetPropertyValue)
           PublicPageCollections
-            master "Public Page Collections"
-              props (Name) verbs (Consult)
+            master
             detail
-              props (Name) verbs (Consult, SetPropertyValue)
 
     context Pages (relational) filledBy Page
       state PageAvailable = exists binding
@@ -93,6 +83,7 @@ domain model://perspectives.domains#HyperContext
   case Page
     external 
       property Title (String)
+        readableName
       property ShowAllBlocks (Boolean)
 
     user Author filledBy sys:TheWorld$PerspectivesUsers
@@ -108,28 +99,36 @@ domain model://perspectives.domains#HyperContext
       perspective on LinkedPages >> binding >> context >> Author
         only (Create, Fill)
 
-      screen "Page Editor"
-        row
-          form External
-        row
-          column
-            table "Text blocks" TextBlocks
-              props (Title, Condition) verbs (Consult, SetPropertyValue)
-          column
-            table "Conditions" TextBlocks
-              props (RawConditionResult) verbs (Consult)
-        row
-          table "Links" LinkedPages
-        row
-          -- editor
-          column
-            markdown TextBlocks
-              props (MD, Condition) verbs (Consult, SetPropertyValue) 
-          -- preview
-          column
-            markdown TextBlocks
-              props (MD) verbs (Consult) 
-              when ShowToAuthor
+      screen 
+        who
+        what
+          row
+            markdown <### A simple page editor>
+          row
+            form External
+          row
+            column
+              table "Text blocks" TextBlocks
+                without props (MD, RawConditionResult, ShowBlock, ShowToAuthor)
+            column
+              table "Conditions" TextBlocks
+                without props (Title, MD, Condition, ShowBlock, ShowToAuthor)
+                props (RawConditionResult) verbs (Consult)
+          row
+            -- editor
+            column
+              markdown TextBlocks
+                without props (Title, RawConditionResult, ShowBlock, ShowToAuthor)
+            -- preview
+            column
+              markdown TextBlocks
+                without props (Title, RawConditionResult, ShowBlock, Condition)
+                props (MD) without (SetPropertyValue, AddPropertyValue, RemovePropertyValue, DeleteProperty)
+                when ShowToAuthor
+        where
+          LinkedPages
+            master
+            detail
 
     thing TextBlocks (relational)
       property Title (String)
@@ -172,6 +171,7 @@ domain model://perspectives.domains#HyperContext
   case PublicPageCollection
     external 
       property Name (String)
+        readableName
     
     user Creator = sys:SocialMe
       perspective on Author
@@ -189,6 +189,22 @@ domain model://perspectives.domains#HyperContext
         props (Title) verbs (Consult, SetPropertyValue)
       perspective on PublicPages >> binding >> context >> Author
         only (Create, Fill)
+      screen
+        who
+        what
+          row
+            markdown <### A public page collection>
+          row 
+            form External
+        where
+          EntryPoint
+            master
+              without props (ShowAllBlocks)
+            detail
+              without props (ShowAllBlocks)
+          PublicPages
+            master
+            detail
       screen "Public Page Collection"
         row 
           form External
@@ -222,7 +238,7 @@ domain model://perspectives.domains#HyperContext
         row 
           -- Conditional read only view of blocks.
           markdown ht:Page$TextBlocks
-            props (MD) verbs (Consult)
+            props (MD) without (SetPropertyValue, AddPropertyValue, RemovePropertyValue, DeleteProperty)
             when ShowBlock
 
     aspect user ht:Page$Author
