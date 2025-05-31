@@ -93,6 +93,7 @@ screenForContextAndUser userRoleInstance userRoleType contextType contextInstanc
       aspects <- lift2MPQ (contextType ###= contextAspectsClosure)
       typesWithScreen <- pure $ filter (\aspect -> isJust $ lookup (ScreenKey aspect userRoleType) df.screens) aspects
       -- TODO. ALS we een aspect scherm overnemen, dan moeten we dat nalopen.
+      -- Arbitrarily take the first aspect that has a screen for this user role type.
       case head typesWithScreen of 
         Just typeWithScreen -> case lookup (ScreenKey typeWithScreen userRoleType) df.screens of
           Just s -> do 

@@ -28,27 +28,49 @@ type Context = {userRoleInstance :: RoleInstance, contextType :: ContextType, co
 type InContext = ReaderT Context MonadPerspectivesQuery
 
 contextualiseScreen :: ScreenDefinition -> String -> InContext (Maybe ScreenDefinition)
-contextualiseScreen (ScreenDefinition{title, tabs, rows, columns}) computedTitle = do
+contextualiseScreen (ScreenDefinition{title, tabs, rows, columns, whoWhatWhereScreen}) computedTitle = do
   tabs' <- emptyArrayToNothing <<< map catMaybes <$> (for tabs (traverse contextualiseTab))
   rows' <- emptyArrayToNothing <<< map catMaybes <$> (for rows (traverse contextualiseScreenElementDef))
   columns' <- (emptyArrayToNothing <<< map catMaybes) <$> (for columns (traverse contextualiseScreenElementDef))
+  whoWhatWhereScreen' <- traverse contextualiseWhoWhatWhereScreenDef whoWhatWhereScreen
   pure $ Just $ ScreenDefinition
     {
       title: if isResourceIdentifier computedTitle then title else Just computedTitle
       , tabs: Nothing
       , rows: Nothing
       , columns: Nothing
-      -- Moeten we de tabs, rows of columns niet onderbrengen in het what?
-      , whoWhatWhereScreen: Just $ WhoWhatWhereScreenDef 
-        { who: Who {markdown: [], chats: [], userRoles: []}
-        , what: FreeFormScreen 
-          { tabs: tabs'
-          , rows: rows'
-          , columns: columns'
-          }
-        , whereto: WhereTo {markdown: [], contextRoles: []}
-        }
+      , whoWhatWhereScreen: whoWhatWhereScreen'
       }
+contextualiseWhoWhatWhereScreenDef :: WhoWhatWhereScreenDef -> InContext WhoWhatWhereScreenDef
+contextualiseWhoWhatWhereScreenDef (WhoWhatWhereScreenDef {who, what, whereto}) = do
+  who' <- contextualiseWho who
+  what' <- contextualiseWhat what
+  whereto' <- contextualiseWhereTo whereto
+  pure $ WhoWhatWhereScreenDef {who: who', what: what', whereto: whereto'}
+
+contextualiseWho :: Who -> InContext Who
+contextualiseWho (Who {markdown, chats, userRoles}) = do
+  markdown' <- catMaybes <$> (traverse contextualiseMarkDownDef markdown)
+  chats' <- catMaybes <$> (traverse contextualiseChatDef chats)
+  userRoles' <- catMaybes <$> (traverse contextualiseTableFormDef userRoles)
+  pure $ Who {markdown: markdown', chats: chats', userRoles: userRoles'}
+
+contextualiseWhat :: What -> InContext What
+contextualiseWhat (TableForms {markdown, tableForms}) = do
+  markdown' <- catMaybes <$> (traverse contextualiseMarkDownDef markdown)
+  tableForms' <- catMaybes <$> (traverse contextualiseTableFormDef tableForms)
+  pure $ TableForms {markdown: markdown', tableForms: tableForms'}
+contextualiseWhat (FreeFormScreen {tabs, rows, columns}) = do
+  tabs' <- emptyArrayToNothing <<< map catMaybes <$> (for tabs (traverse contextualiseTab))
+  rows' <- emptyArrayToNothing <<< map catMaybes <$> (for rows (traverse contextualiseScreenElementDef))
+  columns' <- (emptyArrayToNothing <<< map catMaybes) <$> (for columns (traverse contextualiseScreenElementDef))
+  pure $ FreeFormScreen {tabs: tabs', rows: rows', columns: columns'}
+
+contextualiseWhereTo :: WhereTo -> InContext WhereTo
+contextualiseWhereTo (WhereTo {markdown, contextRoles}) = do
+  markdown' <- catMaybes <$> (traverse contextualiseMarkDownDef markdown)
+  contextRoles <- catMaybes <$> (traverse contextualiseTableFormDef contextRoles)
+  pure $ WhereTo {markdown: markdown', contextRoles: contextRoles}
 
 emptyArrayToNothing :: forall a. Maybe (Array a) -> Maybe (Array a)
 emptyArrayToNothing marr = case marr of 
