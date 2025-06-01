@@ -29,6 +29,7 @@ domain model://perspectives.domains#CouchdbManagement
           -- of StartContexts with it.
           bind_ couchdbapp >> extern to start
           Name = "Couchdb Management App" for start
+          IsSystemModel = true for start
 
   on exit
     do for sys:PerspectivesSystem$Installer
@@ -997,7 +998,7 @@ domain model://perspectives.domains#CouchdbManagement
             master
               markdown <## Add a version
                         In order to add a version of your manifest, use the action `CreateVersion` from the menu on the top left.
-                        Add a version number in the row that appears. A version should be of the form "Major.Minor" where both
+                        Open the details of the row that appears. Add a version number. A version should be of the form "Major.Minor" where both
                         components should be integers. For example: "1.0" or "2.11".
                       >
               without props (Versions$Version, Description, Patch, Build)

@@ -583,15 +583,15 @@ model://perspectives.domains#CouchdbManagement:
               translations:
                 orig: "## Add a version\n
                   In order to add a version of your manifest, use the action `CreateVersion` from the menu on the top left.\n
-                  Add a version number in the row that appears. A version should be of the form \"Major.Minor\" where both\n
+                  Open the details of the row that appears. Add a version number. A version should be of the form \"Major.Minor\" where both\n
                   components should be integers. For example: \"1.0\" or \"2.11\"."
                 nl: "## Voeg een versie toe\n
                   Om een versie van je manifest toe te voegen, gebruik de actie `Maak een versie` uit het menu linksboven.\n
-                  Voeg een versienummer toe in de rij die verschijnt. Een versie moet de vorm \"Major.Minor\" hebben, waarbij beide\n
+                  Open de details van de nieuwe rij. Voeg een versienummer toe. Een versie moet de vorm \"Major.Minor\" hebben, waarbij beide\n
                   componenten gehele getallen moeten zijn. Bijvoorbeeld: \"1.0\" of \"2.11\"."
                 en: "## Add a version\n
                   In order to add a version of your manifest, use the action `CreateVersion` from the menu on the top left.\n
-                  Add a version number in the row that appears. A version should be of the form \"Major.Minor\" where both\n
+                  Open the details of the row that appears. Add a version number. A version should be of the form \"Major.Minor\" where both\n
                   components should be integers. For example: \"1.0\" or \"2.11\"."
         VisitorProxy:
           translations:
