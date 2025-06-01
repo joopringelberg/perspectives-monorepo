@@ -1,0 +1,105 @@
+model://perspectives.domains#SharedFileServices:
+  contexts:
+    SharedFileServices:
+      translations:
+        en: Shared File Services
+        nl: Shared File Services
+      users:
+        Manager:
+          translations:
+            en: Manager
+            nl: Beheerder
+          markdowns:
+            0:
+              translations:
+                orig: "## Configure file sharing\n
+                  Media files are too large to be sent directly to your peers. Consequently, MyContexts puts them in a place that you have write rights to, and from which your peers can read.\n
+                  As MyContexts is totally distributed, we cannot provide you with a central place to put the media files that all MyContexts users want to share.\n
+                  However, you can easily set up your own storage. Currently we support the cloud service Mega. The company offers you a free account with 20Gb of storage.\n
+                  Sign up at the [Mega website](https://mega.nz/). Write down your username and password and enter them below. Write \"mega\" in the field 'StorageType' and you are all set.\n
+                  Rest assured: these credentials will never leave your computer (except to authenticate with Mega)! Such is the inherent safety of a truly distributed program such as MyContexts."
+                en: "## Configure file sharing\n
+                   Media files are too large to be sent directly to your peers. Consequently, MyContexts puts them in a place that you have write rights to, and from which your peers can read.\n
+                   As MyContexts is totally distributed, we cannot provide you with a central place to put the media files that all MyContexts users want to share. \n
+                   However, you can easily set up your own storage. Currently we support the cloud service Mega. The company offers you a free account with 20Gb of storage. \n
+                   Sign up at the [Mega website](https://mega.nz/). Write down your username and password and enter them below. Write \"mega\" in the field 'StorageType' and you are all set. \n
+                   Rest assured: these credentials will never leave your computer (except to authenticate with Mega)! Such is the inherent safety of a truly distributed program such as MyContexts."
+                nl: "## Configureer bestandsdeling\n
+                   Media bestanden zijn te groot om direct naar uw collega's te sturen. Daarom plaatst MyContexts ze op een plek waar u schrijfrechten heeft, en waar uw collega's ze kunnen lezen.\n
+                   Omdat MyContexts volledig gedistribueerd is, kunnen we u geen centrale plek bieden om de media bestanden te plaatsen die alle MyContexts gebruikers willen delen. \n
+                   U kunt echter eenvoudig uw eigen opslag instellen. Momenteel ondersteunen we de cloud service Mega. Het bedrijf biedt u een gratis account met 20Gb opslag. \n
+                   Meld u aan op de [Mega website](https://mega.nz/). Schrijf uw gebruikersnaam en wachtwoord op en voer ze hieronder in. Schrijf \"mega\" in het veld 'StorageType' en u bent klaar. \n
+                   Wees gerust: deze gegevens zullen uw computer nooit verlaten (behalve om te authenticeren met Mega)! Zo is de inherente veiligheid van een echt gedistribueerd programma zoals MyContexts."
+            1:
+              translations:
+                orig: "## Your own Shared File Service\n
+                  This is the Shared File Service that you have set up for your installation. Media files that you include in chats will be uploaded to this service."
+                nl: "## Uw eigen Shared File Service\n
+                  Dit is de Shared File Service die u hebt ingesteld voor uw installatie. Mediabestanden die u in chats opneemt, worden geüpload naar deze service."
+                en: "## Your own Shared File Service\n
+                  This is the Shared File Service that you have set up for your installation. Media files that you include in chats will be uploaded to this service."
+            2:
+              translations:
+                orig: "## Shared File Server currently in use\n
+                  This is the actual shared file server that your installation uses to upload files.\n
+                  By default, it will be a location provided by the Perspectives project.\n
+                  You can use it to upload a limited number of files to get you started.\n
+                  When you exceed that limit, a warning will be shown."
+                nl: "## Gedeelde bestandsserver momenteel in gebruik\n
+                  Dit is de daadwerkelijke gedeelde bestandsserver die uw installatie gebruikt om bestanden te uploaden.\n
+                  Standaard is het een locatie die wordt aangeboden door het Perspectives-project.\n
+                  U kunt het gebruiken om een beperkt aantal bestanden te uploaden om u op weg te helpen.\n
+                  Wanneer u die limiet overschrijdt, wordt er een waarschuwing weergegeven."
+                en: "## Shared File Server currently in use\n
+                  This is the actual shared file server that your installation uses to upload files.\n
+                  By default, it will be a location provided by the Perspectives project.\n
+                  You can use it to upload a limited number of files to get you started.\n
+                  When you exceed that limit, a warning will be shown."
+      things:
+        DefaultFileServer:
+          translations:
+            en: Default file server
+            nl: Terugval file server
+          properties:
+            NrOfUploadedFiles:
+              translations:
+                en: Number of uploaded files
+                nl: Aantal geuploade bestanden
+            Disabled:
+              translations:
+                en: Disabled
+                nl: Uitgeschakeld
+        ActualSharedFileServer:
+          translations:
+            en: File server in use
+            nl: File server in gebruik
+        MySharedFileService:
+          translations:
+            en: My shared file service
+            nl: Mijn shared file service
+  roles:
+    SharedFileService:
+      translations:
+        en: Shared file service
+        nl: Shared file service
+      properties:
+        FileShareCredentials:
+          translations:
+            en: File share credentials
+            nl: File share gegevens
+        StorageType:
+          translations:
+            en: Storage type
+            nl: Type opslag
+        Password:
+          translations:
+            en: Password
+            nl: Paswoord
+        AccountName:
+          translations:
+            en: Account name
+            nl: Lidmaatschapsnaam
+        Name:
+          translations:
+            nl: Naam
+            en: Name
