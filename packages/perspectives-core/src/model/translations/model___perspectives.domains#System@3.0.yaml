@@ -499,6 +499,10 @@ model://perspectives.domains#System:
           translations:
             en: Root user
             nl: Root gebruiker
+    ContextWithSettings:
+      translations:
+        nl: Context met instellingen
+        en: Context with settings
     Invitation:
       translations:
         en: Invitation
@@ -775,10 +779,6 @@ model://perspectives.domains#System:
           translations:
             nl: Meldingen
             en: Messages
-    Settings:
-      translations:
-        nl: Vertalingen
-        en: Translations
     WithCredentials:
       translations:
         en: With credentials

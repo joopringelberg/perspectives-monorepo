@@ -63,11 +63,6 @@ domain model://perspectives.domains#System
       mediaProperty
   
   -- PDRDEPENDENCY
-  -- Used to declare an external role as bearing settings.
-  -- The properties that have facet 'Settings' are the ones that are used to construct the settings panel in the client.
-  thing Settings
-
-  -- PDRDEPENDENCY
   user WithCredentials
     -- | The role identifier of the filler of SocialEnvironment$Me - that is, the unique identifier of this user
     -- | in the Perspectives Universe (a PerspectivesUsers instance).
@@ -190,6 +185,7 @@ domain model://perspectives.domains#System
     indexed sys:MySystem
     aspect sys:RootContext
     aspect sys:ContextWithNotification
+    aspect sys:ContextWithSettings
 
     state NoCaches = not exists SystemCaches
       on entry
@@ -204,7 +200,7 @@ domain model://perspectives.domains#System
 
     external
       aspect sys:RootContext$External
-      aspect sys:Settings
+      aspect sys:ContextWithSettings$External
       -- PDRDEPENDENCY
       property ConnectedToAMQPBroker (Boolean)
       -- PDRDEPENDENCY
@@ -531,7 +527,7 @@ domain model://perspectives.domains#System
     -- A calculated role representing all available Notifications (from any context).
     context AllNotifications = callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithNotification$Notifications" ) returns sys:ContextWithNotification$Notifications
 
-    context AllSettings = callExternal cdb:RoleInstances( "model://perspectives.domains#System$Settings" ) returns sys:Settings
+    context AllSettings = callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithSettings$External" ) returns sys:ContextWithSettings$External
 
     -- PDRDEPENDENCY
     context PinnedContexts (relational)
@@ -677,6 +673,12 @@ domain model://perspectives.domains#System
       property IsSystemModel (Boolean)
     -- PDRDEPENDENCY
     user RootUser filledBy sys:TheWorld$PerspectivesUsers
+
+  -- PDRDEPENDENCY
+  -- Used to declare an external role as bearing settings.
+  -- The properties that have facet 'Settings' are the ones that are used to construct the settings panel in the client.
+  case ContextWithSettings
+    external
 
   case Invitation
     state NoInviter = not exists Inviter
