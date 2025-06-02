@@ -72,6 +72,14 @@ filter' source criterium a = do
   guard (criterium r)
   pure r
 
+-- | Convert a Perspectives Value to a Purescript Boolean value.
+-- | Just the value "true" is interpreted as true, all other values are interpreted as false.
+toBool :: forall m. Monad m =>
+  (Value -> ArrayT m Boolean)
+toBool v = if v == Value "true"
+  then pure true
+  else pure false
+
 cond :: forall m s o. Monad m =>
   (s -> ArrayT m Boolean) ->
   (s -> ArrayT m o) ->

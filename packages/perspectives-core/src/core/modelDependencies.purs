@@ -128,6 +128,9 @@ recentContexts = "model://perspectives.domains#System$PerspectivesSystem$RecentC
 pinnedContexts :: String
 pinnedContexts = "model://perspectives.domains#System$PerspectivesSystem$PinnedContexts"
 
+startContexts :: String
+startContexts = "model://perspectives.domains#System$PerspectivesSystem$StartContexts"
+
 ------------------------------------------------------------------------------------
 -- ROOTCONTEXT
 ------------------------------------------------------------------------------------
@@ -136,6 +139,12 @@ rootContext = "model://perspectives.domains#System$RootContext$External"
 
 rootUser :: String
 rootUser = "model://perspectives.domains#System$RootContext$RootUser"
+
+isSystemModel :: String
+isSystemModel = "model://perspectives.domains#System$RootContext$External$IsSystemModel"
+
+rootName :: String
+rootName = "model://perspectives.domains#System$RootContext$External$Name"
 
 ------------------------------------------------------------------------------------
 -- INVITATION
@@ -159,7 +168,7 @@ notificationMessage = "model://perspectives.domains#System$ContextWithNotificati
 -- SETTINGS
 ------------------------------------------------------------------------------------
 settings :: String
-settings = "model://perspectives.domains#System$$Settings"
+settings = "model://perspectives.domains#System$ContextWithSettings$External"
 
 allSettings :: String
 allSettings = "model://perspectives.domains#System$PerspectivesSystem$AllSettings"

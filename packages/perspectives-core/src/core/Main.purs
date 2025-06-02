@@ -139,8 +139,12 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
         indexedResourceToCreate
         missingResource
 
-      -- Start by running data upgrades.
-      runPerspectivesWithState runDataUpgrades state
+      -- Start by running data upgrades. We need the private key now if we want to make changes to data!
+      runPerspectivesWithState (do 
+        key <- getPrivateKey
+        modify \(s@{runtimeOptions}) -> s {runtimeOptions = runtimeOptions {privateKey = unsafeCoerce key}}
+        runDataUpgrades)
+        state
       
       -- Fork aff to capture transactions to run.
       void $ forkAff $ forkTimedTransactions transactionWithTiming state
@@ -161,8 +165,6 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
         addIndexedNames
         retrieveAllCredentials
         retrieveBrokerService
-        key <- getPrivateKey
-        modify \(s@{runtimeOptions}) -> s {runtimeOptions = runtimeOptions {privateKey = unsafeCoerce key}}
         )
         state
       void $ forkAff $ run state

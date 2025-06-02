@@ -69,8 +69,8 @@ contextualiseWhat (FreeFormScreen {tabs, rows, columns}) = do
 contextualiseWhereTo :: WhereTo -> InContext WhereTo
 contextualiseWhereTo (WhereTo {markdown, contextRoles}) = do
   markdown' <- catMaybes <$> (traverse contextualiseMarkDownDef markdown)
-  contextRoles <- catMaybes <$> (traverse contextualiseTableFormDef contextRoles)
-  pure $ WhereTo {markdown: markdown', contextRoles: contextRoles}
+  contextRoles' <- catMaybes <$> (traverse contextualiseTableFormDef contextRoles)
+  pure $ WhereTo {markdown: markdown', contextRoles: contextRoles'}
 
 emptyArrayToNothing :: forall a. Maybe (Array a) -> Maybe (Array a)
 emptyArrayToNothing marr = case marr of 
