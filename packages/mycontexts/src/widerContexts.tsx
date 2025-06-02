@@ -57,7 +57,7 @@ export class WiderContexts extends PerspectivesComponent<WiderContextsProps, Wid
                   {
                     this.state.widerContexts.map(({ externalRole, readableName }) => {
                       return (
-                        <ListGroup.Item key={externalRole} action onClick={_ => component.openContext(externalRole)}>
+                        <ListGroup.Item key={externalRole} action onDoubleClick={(_ : any) => component.openContext(externalRole)}>
                           {readableName}
                         </ListGroup.Item>
                       );
