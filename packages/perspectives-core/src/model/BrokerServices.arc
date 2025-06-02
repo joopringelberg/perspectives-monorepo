@@ -26,6 +26,7 @@ domain model://perspectives.domains#BrokerServices
           -- of StartContexts with it.
           bind_ app >> extern to start
           Name = "Broker Services App" for start
+          IsSystemModel = true for start
   
   on exit
     do for sys:PerspectivesSystem$Installer

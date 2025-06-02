@@ -54,6 +54,10 @@ model://perspectives.domains#System:
         nl: Perspectivessysteem
       external:
         properties:
+          ShowSystemApps:
+            translations:
+              nl: Show systeem apps
+              en: Show system apps
           PreviousLanguage:
             translations:
               en: Previous language
@@ -165,10 +169,10 @@ model://perspectives.domains#System:
                    * Ga naar een App store om een nieuwe App te installeren.\n
                    * Aan de linkerkant, onder **Wie** zie je je contacten."
                 en: "### Perspectives system\n
-                  This is the Perspectives system, representing your installation.\n
-                  * Create and accept invitations to connect with other users.\n
-                  * Go to an App store to install a new App.\n
-                  * On the left, under **Who** you see your contacts."
+                   This is the Perspectives system, representing your installation.\n
+                   * Create and accept invitations to connect with other users.\n
+                   * Go to an App store to install a new App.\n
+                   * On the left, under **Who** you see your contacts."
             1:
               translations:
                 orig: "#### Outgoing invitations\n
@@ -178,8 +182,8 @@ model://perspectives.domains#System:
                    Dit zijn de uitnodigingen die je naar andere gebruikers hebt verstuurd.\n
                    Maak een nieuwe uitnodiging via het hoofdmenu aan de linkerkant, of door [[action: CreateInvitation|hier te klikken]]."
                 en: "#### Outgoing invitations\n
-                  These are the invitations you have sent to other users.\n
-                  Create a new invitation either in the main menu on the left, or by [[action: CreateInvitation|clicking here]]."
+                   These are the invitations you have sent to other users.\n
+                   Create a new invitation either in the main menu on the left, or by [[action: CreateInvitation|clicking here]]."
             2:
               translations:
                 orig: "#### Base Repository\n
@@ -189,8 +193,8 @@ model://perspectives.domains#System:
                    Dit is de basis repository van Perspectieven.\n
                    Het bevat de modellen die worden gebruikt om Perspectieven te laten draaien."
                 en: "#### Base Repository\n
-                  This is the base repository of Perspectives.\n
-                  It contains the models that are used to run Perspectives."
+                   This is the base repository of Perspectives.\n
+                   It contains the models that are used to run Perspectives."
             3:
               translations:
                 orig: "#### Repositories\n
@@ -200,8 +204,8 @@ model://perspectives.domains#System:
                    Dit zijn de repositories waartoe je toegang hebt.\n
                    Open een repository om de modellen te zien die het bevat."
                 en: "#### Repositories\n
-                  These are the repositories that you have access to.\n
-                  Open a repository to see the models it contains."
+                   These are the repositories that you have access to.\n
+                   Open a repository to see the models it contains."
       things:
         SelectedClipboardItem:
           translations:
@@ -280,6 +284,10 @@ model://perspectives.domains#System:
           translations:
             en: Pending invitations
             nl: Te beantwoorden uitnodigingen
+        Apps:
+          translations:
+            nl: Apps
+            en: Apps
         StartContexts:
           translations:
             en: Start contexts
@@ -478,6 +486,10 @@ model://perspectives.domains#System:
         nl: Root context
       external:
         properties:
+          IsSystemModel:
+            translations:
+              nl: Is een systeem model
+              en: Is a system model
           Name:
             translations:
               en: Name
@@ -671,6 +683,10 @@ model://perspectives.domains#System:
             translations:
               en: Domain filename
               nl: Domein bestandsnaam
+          IsSystemModel:
+            translations:
+              nl: Is een systeem model
+              en: Is a system model
           IsLibrary:
             translations:
               en: Is a library
