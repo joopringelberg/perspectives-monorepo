@@ -58,7 +58,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (createDatabase, databaseInfo, documentsInDatabase, includeDocs)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspectRol, saveEntiteit_, saveMarkedResources)
-import Perspectives.PerspectivesState (modelsDatabaseName)
+import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedRoleType(..), RoleType(..), EnumeratedPropertyType(..))
@@ -150,7 +150,9 @@ runUpgrade installedVersion upgradeVersion upgrade = if installedVersion < upgra
   -- Run the upgrade
   then do 
     log ("Running upgrade to version " <> upgradeVersion)
+    pushMessage ("Upgrading to PDR version " <> upgradeVersion)
     upgrade unit
+    removeMessage ("Upgrading to PDR version " <> upgradeVersion)
   else pure unit
 
 addFixingUpdates :: Unit -> MonadPerspectives Unit

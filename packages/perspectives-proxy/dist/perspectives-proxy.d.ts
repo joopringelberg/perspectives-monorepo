@@ -16,6 +16,7 @@ interface RequestRecord {
     onlyOnce?: boolean;
     reactStateSetter?: (response: any) => void;
     corrId?: number;
+    trackingNumber?: number;
 }
 type Response = ErrorResponse | ResultResponse | WorkerResponse;
 type ErrorResponse = {
@@ -68,6 +69,7 @@ declare class SharedWorkerChannel {
 export declare const SharedWorkerChannelPromise: Promise<SharedWorkerChannel>;
 type UserMessageChannel = (message: string) => void;
 export declare class PerspectivesProxy {
+    private static index;
     channel: SharedWorkerChannel;
     cursor: Cursor;
     userMessageChannel?: UserMessageChannel;
@@ -144,6 +146,7 @@ export declare class PerspectivesProxy {
      */
     getSettings(receiveValues: PerspectivesReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
     getWiderContexts(externalRoleInstance: RoleInstanceT, receiveValues: ContextAndNameReceiver, fireAndForget?: SubscriptionType, errorHandler?: errorHandler): Promise<Unsubscriber>;
+    getPDRStatus(): void;
     checkBindingP(roleName: RoleType, rolInstance: RoleInstanceT): Promise<boolean>;
     getCouchdbUrl(): Promise<string>;
     getContextActions(myRoleType: UserRoleType, contextInstance: ContextInstanceT): Promise<ContextActions>;
@@ -305,7 +308,17 @@ declare class Cursor {
     private static loadingOverlayElement;
     private static activeRequests;
     private static correlationIdentifiers;
+    private PDRStatus;
+    private messages;
     constructor();
+    pushMessage(identifier: string, text: string): void;
+    removeMessage(identifier: string): void;
+    setPDRStatus({ action, message }: {
+        action: "push" | "remove";
+        message: string;
+    }): void;
+    setOverlayVisibility(visible: boolean): void;
+    setOverlayText(text: string): void;
     wait(request: RequestRecord): void;
     restore(request: RequestRecord): void;
 }

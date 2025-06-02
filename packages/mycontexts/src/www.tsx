@@ -592,7 +592,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
       </NavDropdown>
       <Navbar.Brand href="#home" className='text-light navbar-title'>{this.state.title}</Navbar.Brand>
       <InternetConnectivityCheck reportBack={ (isOnline : boolean) => component.setState({isOnline})}/>
-      <ConnectedToAMQP roleinstance={ externalRole( component.state.systemIdentifier )} isOnline={component.state.isOnline} />
+      {component.state.systemIdentifier ? <ConnectedToAMQP roleinstance={ externalRole( component.state.systemIdentifier )} isOnline={component.state.isOnline} /> : null}
     </Navbar>);
   }
 

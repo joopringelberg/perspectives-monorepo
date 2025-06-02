@@ -130,7 +130,7 @@ interface RequestRecord {
   onlyOnce?: boolean;
   reactStateSetter?: (response: any) => void;
   corrId?: number;
-  // trackingNumber?: number;
+  trackingNumber?: number;
 }
 
 const defaultRequest =
@@ -143,7 +143,7 @@ const defaultRequest =
     corrId: 0,
     contextDescription: {},
     onlyOnce: false,
-    // trackingNumber: 0,
+    trackingNumber: 0,
   } as RequestRecord;
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -526,7 +526,7 @@ type UserMessageChannel = (message : string) => void;
 
 export class PerspectivesProxy
 {
-  // private static index : number = 0;
+  private static index : number = 0;
 
   channel: SharedWorkerChannel;
   cursor: Cursor;
@@ -536,6 +536,7 @@ export class PerspectivesProxy
   {
     this.channel = channel;
     this.cursor = new Cursor();
+    this.getPDRStatus();
   }
 
   // Inform the server that this client shuts down.
@@ -551,7 +552,7 @@ export class PerspectivesProxy
   {
     const cursor = this.cursor;
     const proxy = this;
-    // req.trackingNumber = PerspectivesProxy.index++;
+    req.trackingNumber = PerspectivesProxy.index++;
     // Handle errors here. Use `errorHandler` if provided by the PerspectivesProxy method.
     // Log errors to the console anyway for the developer.
     const handleErrors = function(response : Response) // response = PerspectivesApiTypes.ResponseRecord
@@ -911,6 +912,14 @@ export class PerspectivesProxy
     );
   }
   
+  getPDRStatus()
+  {
+    const component = this;
+    // We don't unsubscribe this call.
+    this.send(
+      {request: "GetPDRStatusMessage", onlyOnce: false},
+      status => component.cursor.setPDRStatus( status[0] ? JSON.parse( status[0] ) : {} ) );
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   //// PROMISE RETURNING GETTERS.
@@ -1702,10 +1711,14 @@ type TranslatedActionName = string
 ////////////////////////////////////////////////////////////////////////////////
 //// CURSOR HANDLING
 ////////////////////////////////////////////////////////////////////////////////
+type Message = { identifier: string, text: string};
+
 class Cursor {
   private static loadingOverlayElement: HTMLDivElement | null = null;
   private static activeRequests: number = 0;
   private static correlationIdentifiers: number[] = [];
+  private PDRStatus: string = "Processing..."
+  private messages: Message[] = [];
   
   constructor() {
     // Create the overlay element once
@@ -1715,7 +1728,7 @@ class Cursor {
       overlay.innerHTML = `
         <div class="pdr-spinner-container">
           <div class="pdr-spinner"></div>
-          <div>Processing...</div>
+          <div id="pdrstatus">${this.PDRStatus}</div>
         </div>
       `;
       overlay.style.display = 'none';
@@ -1763,34 +1776,93 @@ class Cursor {
     }
   }
 
+  pushMessage(identifier: string, text: string) {
+    this.messages.unshift({ identifier, text });
+    this.setOverlayText(text);
+    this.setOverlayVisibility(true);
+    // For desktop:
+    document.body.style.cursor = "wait";
+    }
+  
+  removeMessage(identifier: string) {
+    const index = this.messages.findIndex(msg => msg.identifier === identifier);
+    if (index == 0)
+    {
+      this.messages.shift();
+      if (this.messages.length > 0)
+      {
+        // Since we had at least two messages, we can safely assume the overlay is visible.
+        this.setOverlayText( this.messages[0].text);
+      }
+      else
+      {
+        // No messages left, hide the overlay.
+        this.setOverlayVisibility(false);
+        // For desktop:
+        document.body.style.cursor = "auto";
+      }
+    }
+    if (index > 0)
+    {
+      this.messages.splice(index, 1);
+    }
+  }
+
+  // PDR status messages become active immediately.
+  setPDRStatus({ action , message } : { action: "push" | "remove", message: string }) {
+    if (action == "push")
+    {
+      this.pushMessage(message, message)
+    }
+    else if (action == "remove")
+    {
+      this.removeMessage(message);
+    }
+  }
+
+  // Show the loading overlay if it is not already visible
+  setOverlayVisibility(visible: boolean) {
+    if (Cursor.loadingOverlayElement) {
+      Cursor.loadingOverlayElement.style.display = visible ? 'flex' : 'none';
+    }
+  }
+
+  setOverlayText(text: string) {
+    this.PDRStatus = text;
+    if (Cursor.loadingOverlayElement) {
+      const statusElement = Cursor.loadingOverlayElement.querySelector('#pdrstatus');
+      if (statusElement) {
+        statusElement.textContent = text;
+      }
+    }
+  }
+
   wait(request: RequestRecord) {
-    Cursor.activeRequests++;
-    // console.log("=".repeat(Cursor.activeRequests) + ">" + " Cursor.activeRequests in wait: ", Cursor.activeRequests);
-    // console.log(request);
-    // Cursor.correlationIdentifiers.push(request.trackingNumber!);
+    const component = this;
+    // Add the message to the top of the messages array.
+    // But do not yet display it.
+    const identifier = request.trackingNumber!.toString();
+    this.messages.unshift({ identifier, text: "Processing..." });
     
     setTimeout(() => {
-      if (Cursor.activeRequests > 0) {
-        document.body.style.cursor = "wait"; // Keep for desktop
-        if (Cursor.loadingOverlayElement) {
-          Cursor.loadingOverlayElement.style.display = 'flex';
-        }
-      }}, 400);
+      const index = component.messages.findIndex(msg => msg.identifier === identifier);
+      let message;
+      if ( index >= 0 )
+      {
+        // As the message is still waiting in the array, we can display it now.
+        // Move it to the top of the array.
+        message = component.messages[index];
+        component.messages.splice(index, 1);
+        component.messages.unshift(message);
+        // Display it.
+        component.setOverlayText(message.text);
+        component.setOverlayVisibility(true);
+      }
+      }, 400);
   }
   
   restore(request: RequestRecord) {
-    document.body.style.cursor = "auto";
-    Cursor.activeRequests--;
-    // console.log("<" + "=".repeat( Cursor.activeRequests < 0 ? 0 : Cursor.activeRequests) + " Cursor.activeRequests in restore: ", Cursor.activeRequests);
-    // console.log(request);
-    // Cursor.correlationIdentifiers = Cursor.correlationIdentifiers.filter(id => id !== request.trackingNumber);
-    // console.log("Cursor.correlationIdentifiers: ", Cursor.correlationIdentifiers);
-    if (Cursor.activeRequests <= 0) {
-      Cursor.activeRequests = 0;
-      if (Cursor.loadingOverlayElement) {
-        Cursor.loadingOverlayElement.style.display = 'none';
-      }
-    }
+    this.removeMessage(request.trackingNumber!.toString())
   }
 }
 

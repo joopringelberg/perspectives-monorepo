@@ -78,6 +78,7 @@ data RequestType =
   | GetWiderContexts
   | RemoveRoleFromClipboard
   | AddRoleToClipboard
+  | GetPDRStatusMessage
 
   -- Pure Deltas
   | CreateContext
@@ -139,6 +140,7 @@ instance decodeRequestType :: ReadForeign RequestType where
     "GetWiderContexts" -> GetWiderContexts
     "RemoveRoleFromClipboard" -> RemoveRoleFromClipboard
     "AddRoleToClipboard" -> AddRoleToClipboard
+    "GetPDRStatusMessage" -> GetPDRStatusMessage
 
 
     "GetSystemIdentifier" -> GetSystemIdentifier

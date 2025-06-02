@@ -123,6 +123,7 @@ import Data.Nullable (Nullable)
 import Data.Ord.Generic (genericCompare)
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple(..))
+import Effect (Effect)
 import Effect.Aff (Aff, Fiber, throwError)
 import Effect.Aff.AVar (AVar, empty)
 import Effect.Aff.Class (liftAff)
@@ -132,7 +133,7 @@ import Foreign.Object (Object)
 import Foreign.Object as F
 import LRUCache (Cache, defaultGetOptions, delete, get, set)
 import Perspectives.AMQP.Stomp (ConnectAndSubscriptionParameters, StompClient)
-import Perspectives.ApiTypes (CorrelationIdentifier)
+import Perspectives.ApiTypes (CorrelationIdentifier, ApiEffect)
 import Perspectives.Couchdb.Revision (class Revision)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DomeinFile (DomeinFile)
@@ -227,6 +228,8 @@ type PerspectivesExtraState =
   , currentLanguage :: String
 
   , translations :: Object TranslationTable
+
+  , setPDRStatus :: String -> Effect Unit
 
   )
 

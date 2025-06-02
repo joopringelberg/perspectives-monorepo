@@ -27,7 +27,7 @@ module Perspectives.Api where
 import Control.Alternative (guard)
 import Control.Coroutine (Consumer, Producer, await, runProcess, transform, ($$), ($~))
 import Control.Coroutine.Aff (produce')
-import Control.Monad.AvarMonadAsk (gets)
+import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Rec.Class (forever)
 import Control.Monad.Trans.Class (lift)
@@ -73,7 +73,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment, toFile)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (getPerspectRol, saveMarkedResources)
-import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getWarnings, pushFrame, resetWarnings, restoreFrame)
+import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getWarnings, pushFrame, pushMessage, resetWarnings, restoreFrame)
 import Perspectives.Proxy (createRequestEmitter, retrieveRequestEmitter)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter, getDynamicPropertyGetterFromLocalName, getPropertyFromTelescope, getPropertyValues, getPublicUrl, getRoleFunction, getRoleInstances)
 import Perspectives.Representation.ADT (ADT(..))
@@ -866,6 +866,17 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
             sendResponse (Result corrId []) setter
       )
       \e -> sendResponse (Error corrId (show e)) setter
+    
+    -- The callback that comes with this request is stored in X.
+    -- Whenever the PDR wants to communicate its status to the client, it will call this callback.
+    -- Status is displayed in the UI.
+    Api.GetPDRStatusMessage -> catchError
+      (do 
+        -- Register the callback in Perspective State.
+        -- We'll use the setter to send the status message.
+        modify \s -> s {setPDRStatus = \status -> setter (ResultWithWarnings corrId [status] [])} 
+      )
+      \e -> sendResponse (Error corrId (show e)) setter
 
     Api.Unsubscribe -> unregisterSupportedEffect corrId
     Api.WrongRequest -> sendResponse (Error corrId subject) setter
@@ -879,7 +890,7 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
     withLocalName :: String -> ContextType -> (RoleType -> MonadPerspectives Unit) -> MonadPerspectives Unit
     withLocalName localRoleName contextType effect = do
       qrolNames <- if isTypeUri localRoleName
-        then if isExternalRole localRoleName
+        then if isExternalRole localRoleName 
           then if deconstructBuitenRol localRoleName == (unwrap contextType)
             then pure [(ENR $ (EnumeratedRoleType localRoleName))]
             else pure []

@@ -73,7 +73,7 @@ import Perspectives.Persistence.State (getSystemIdentifier, withCouchdbUrl)
 import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Persistent (entitiesDatabaseName, invertedQueryDatabaseName, postDatabaseName, saveMarkedResources)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (defaultRuntimeOptions, modelsDatabaseName, newPerspectivesState, resetCaches)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, modelsDatabaseName, newPerspectivesState, pushMessage, removeMessage, resetCaches)
 import Perspectives.Proxy (handleClientRequest) as Proxy
 import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope, getPropertyFunction, getRoleFunction, getterFromPropertyType)
 import Perspectives.ReferentialIntegrity (fixReferences)
@@ -194,9 +194,11 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
           models <- modelsDatabaseName
           inverted <- invertedQueryDatabaseName
           post <- postDatabaseName
+          pushMessage "Compacting databases"
           for_ [entities, models, inverted, post] (\dbName -> do
             log $ "Compacting the database " <> dbName
-            compactDatabase dbName))
+            compactDatabase dbName)
+          void $ removeMessage "Compacting databases")
         state
 
 
@@ -748,7 +750,7 @@ retrieveAllCredentials = do
     (\rows' roleId -> (try (roleId ##>> getPropertyFromTelescope (EnumeratedPropertyType userWithCredentialsPassword))) >>= 
       handlePerspectRolError' "retrieveAllCredentials_Password" rows' 
         \pw -> (try (roleId ##>> getPropertyFromTelescope (EnumeratedPropertyType userWithCredentialsAuthorizedDomain))) >>=
-          handlePerspectRolError' "retrieveAllCredentials_AuthorizedDomain" rows' 
+          handlePerspectRolError' "retrieveAllCredentials_AuthorizedDomain" rows'
             (\authorizedDomain ->  (try (roleId ##>> userNameGetter)) >>=
               handlePerspectRolError' "retrieveAllCredentials_Username" rows' 
                 (\username -> pure $ cons (Tuple (unwrap authorizedDomain) (Credential (takeGuid (unwrap username)) (unwrap pw))) rows')))

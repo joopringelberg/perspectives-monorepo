@@ -29,6 +29,7 @@ import Data.Map (empty) as Map
 import Data.Maybe (Maybe(..))
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
+import Effect (Effect)
 import Effect.Aff.AVar (AVar, put, read)
 import Effect.Class (liftEffect)
 import Foreign.Object (empty, singleton)
@@ -44,6 +45,7 @@ import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
 import Prelude (Unit, bind, discard, pure, unit, void, ($), (+), (<<<), (>>=), (<>))
+import Simple.JSON (writeJSON)
 
 newPerspectivesState :: 
   PouchdbUser -> 
@@ -90,6 +92,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , missingResource
   , currentLanguage
   , translations: empty
+  , setPDRStatus: \_ -> pure unit
   }
 
 defaultRuntimeOptions :: RuntimeOptions
@@ -213,6 +216,20 @@ setCurrentLanguage lang = modify \s -> s {currentLanguage = lang}
 
 modelsDatabaseName :: MonadPerspectives String
 modelsDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_models")
+
+getPDRStatusSetter :: MonadPerspectives (String -> Effect Unit)
+getPDRStatusSetter = gets _.setPDRStatus
+
+type PDRStatusMessage = { action :: String, message :: String }
+pushMessage :: String -> MonadPerspectives Unit
+pushMessage msg = do
+  setPDRStatus <- getPDRStatusSetter
+  liftEffect $ setPDRStatus $ writeJSON {action: "push", message: msg}
+
+removeMessage :: String -> MonadPerspectives Unit
+removeMessage msg = do
+  setPDRStatus <- getPDRStatusSetter
+  liftEffect $ setPDRStatus $ writeJSON {action: "remove", message: msg}
 
 -----------------------------------------------------------
 -- PERSPECTIVESUSER

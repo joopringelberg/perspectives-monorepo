@@ -74,7 +74,7 @@ const defaultRequest = {
     corrId: 0,
     contextDescription: {},
     onlyOnce: false,
-    // trackingNumber: 0,
+    trackingNumber: 0,
 };
 ////////////////////////////////////////////////////////////////////////////////
 //// SHARED WORKER CHANNEL
@@ -328,13 +328,14 @@ const SharedWorkerChannelPromise = new Promise(function (resolve /*, reject*/) {
     // sharedWorkerChannelRejecter = reject;
 });
 class PerspectivesProxy {
-    // private static index : number = 0;
+    static index = 0;
     channel;
     cursor;
     userMessageChannel;
     constructor(channel) {
         this.channel = channel;
         this.cursor = new Cursor();
+        this.getPDRStatus();
     }
     // Inform the server that this client shuts down.
     // No other requests may follow this message.
@@ -346,7 +347,7 @@ class PerspectivesProxy {
     send(req, receiveValues, errorHandler) {
         const cursor = this.cursor;
         const proxy = this;
-        // req.trackingNumber = PerspectivesProxy.index++;
+        req.trackingNumber = PerspectivesProxy.index++;
         // Handle errors here. Use `errorHandler` if provided by the PerspectivesProxy method.
         // Log errors to the console anyway for the developer.
         const handleErrors = function (response) {
@@ -569,6 +570,11 @@ class PerspectivesProxy {
         return this.send({ request: "GetWiderContexts", subject: externalRoleInstance, onlyOnce: fireAndForget }, function (contextAndNameStrings) {
             return receiveValues(contextAndNameStrings.map(JSON.parse));
         }, errorHandler);
+    }
+    getPDRStatus() {
+        const component = this;
+        // We don't unsubscribe this call.
+        this.send({ request: "GetPDRStatusMessage", onlyOnce: false }, status => component.cursor.setPDRStatus(status[0] ? JSON.parse(status[0]) : {}));
     }
     ///////////////////////////////////////////////////////////////////////////////////////
     //// PROMISE RETURNING GETTERS.
@@ -1029,13 +1035,12 @@ class PerspectivesProxy {
 }
 const FIREANDFORGET = true;
 const CONTINUOUS = false;
-////////////////////////////////////////////////////////////////////////////////
-//// CURSOR HANDLING
-////////////////////////////////////////////////////////////////////////////////
 class Cursor {
     static loadingOverlayElement = null;
     static activeRequests = 0;
     static correlationIdentifiers = [];
+    PDRStatus = "Processing...";
+    messages = [];
     constructor() {
         // Create the overlay element once
         if (!Cursor.loadingOverlayElement) {
@@ -1044,7 +1049,7 @@ class Cursor {
             overlay.innerHTML = `
         <div class="pdr-spinner-container">
           <div class="pdr-spinner"></div>
-          <div>Processing...</div>
+          <div id="pdrstatus">${this.PDRStatus}</div>
         </div>
       `;
             overlay.style.display = 'none';
@@ -1090,33 +1095,79 @@ class Cursor {
             document.head.appendChild(style);
         }
     }
+    pushMessage(identifier, text) {
+        this.messages.unshift({ identifier, text });
+        this.setOverlayText(text);
+        this.setOverlayVisibility(true);
+        // For desktop:
+        document.body.style.cursor = "wait";
+    }
+    removeMessage(identifier) {
+        const index = this.messages.findIndex(msg => msg.identifier === identifier);
+        if (index == 0) {
+            this.messages.shift();
+            if (this.messages.length > 0) {
+                // Since we had at least two messages, we can safely assume the overlay is visible.
+                this.setOverlayText(this.messages[0].text);
+            }
+            else {
+                // No messages left, hide the overlay.
+                this.setOverlayVisibility(false);
+                // For desktop:
+                document.body.style.cursor = "auto";
+            }
+        }
+        if (index > 0) {
+            this.messages.splice(index, 1);
+        }
+    }
+    // PDR status messages become active immediately.
+    setPDRStatus({ action, message }) {
+        if (action == "push") {
+            this.pushMessage(message, message);
+        }
+        else if (action == "remove") {
+            this.removeMessage(message);
+        }
+    }
+    // Show the loading overlay if it is not already visible
+    setOverlayVisibility(visible) {
+        if (Cursor.loadingOverlayElement) {
+            Cursor.loadingOverlayElement.style.display = visible ? 'flex' : 'none';
+        }
+    }
+    setOverlayText(text) {
+        this.PDRStatus = text;
+        if (Cursor.loadingOverlayElement) {
+            const statusElement = Cursor.loadingOverlayElement.querySelector('#pdrstatus');
+            if (statusElement) {
+                statusElement.textContent = text;
+            }
+        }
+    }
     wait(request) {
-        Cursor.activeRequests++;
-        // console.log("=".repeat(Cursor.activeRequests) + ">" + " Cursor.activeRequests in wait: ", Cursor.activeRequests);
-        // console.log(request);
-        // Cursor.correlationIdentifiers.push(request.trackingNumber!);
+        const component = this;
+        // Add the message to the top of the messages array.
+        // But do not yet display it.
+        const identifier = request.trackingNumber.toString();
+        this.messages.unshift({ identifier, text: "Processing..." });
         setTimeout(() => {
-            if (Cursor.activeRequests > 0) {
-                document.body.style.cursor = "wait"; // Keep for desktop
-                if (Cursor.loadingOverlayElement) {
-                    Cursor.loadingOverlayElement.style.display = 'flex';
-                }
+            const index = component.messages.findIndex(msg => msg.identifier === identifier);
+            let message;
+            if (index >= 0) {
+                // As the message is still waiting in the array, we can display it now.
+                // Move it to the top of the array.
+                message = component.messages[index];
+                component.messages.splice(index, 1);
+                component.messages.unshift(message);
+                // Display it.
+                component.setOverlayText(message.text);
+                component.setOverlayVisibility(true);
             }
         }, 400);
     }
     restore(request) {
-        document.body.style.cursor = "auto";
-        Cursor.activeRequests--;
-        // console.log("<" + "=".repeat( Cursor.activeRequests < 0 ? 0 : Cursor.activeRequests) + " Cursor.activeRequests in restore: ", Cursor.activeRequests);
-        // console.log(request);
-        // Cursor.correlationIdentifiers = Cursor.correlationIdentifiers.filter(id => id !== request.trackingNumber);
-        // console.log("Cursor.correlationIdentifiers: ", Cursor.correlationIdentifiers);
-        if (Cursor.activeRequests <= 0) {
-            Cursor.activeRequests = 0;
-            if (Cursor.loadingOverlayElement) {
-                Cursor.loadingOverlayElement.style.display = 'none';
-            }
-        }
+        this.removeMessage(request.trackingNumber.toString());
     }
 }
 // See: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input
