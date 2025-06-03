@@ -594,7 +594,7 @@ export class PerspectivesProxy
     // }
 
     // Set cursor shape
-    if ( !(req.request == "Unsubscribe") )
+    if ( !(req.request == "Unsubscribe") && !(req.request == "GetPDRStatusMessage") )
       {
         cursor.wait(req);
       }

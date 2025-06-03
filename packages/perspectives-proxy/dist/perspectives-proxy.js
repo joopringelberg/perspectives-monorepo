@@ -380,7 +380,7 @@ class PerspectivesProxy {
         //   console.warn( "Request misses values: " + JSON.stringify(fullRequest) );
         // }
         // Set cursor shape
-        if (!(req.request == "Unsubscribe")) {
+        if (!(req.request == "Unsubscribe") && !(req.request == "GetPDRStatusMessage")) {
             cursor.wait(req);
         }
         return this.channel.send(fullRequest);
