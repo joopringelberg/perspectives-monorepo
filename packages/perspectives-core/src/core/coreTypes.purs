@@ -133,7 +133,7 @@ import Foreign.Object (Object)
 import Foreign.Object as F
 import LRUCache (Cache, defaultGetOptions, delete, get, set)
 import Perspectives.AMQP.Stomp (ConnectAndSubscriptionParameters, StompClient)
-import Perspectives.ApiTypes (CorrelationIdentifier, ApiEffect)
+import Perspectives.ApiTypes (CorrelationIdentifier)
 import Perspectives.Couchdb.Revision (class Revision)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DomeinFile (DomeinFile)

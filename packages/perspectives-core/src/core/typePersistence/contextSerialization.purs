@@ -82,8 +82,9 @@ derive instance newTypeSerialisedScreen :: Newtype SerialisedScreen _
 screenForContextAndUser :: RoleInstance -> RoleType -> ContextType -> (ContextInstance ~~> SerialisedScreen)
 screenForContextAndUser userRoleInstance userRoleType contextType contextInstance = do
   DomeinFile df <- lift2MPQ $ retrieveDomeinFile (DomeinFileId $ unsafePartial typeUri2ModelUri_ $ unwrap contextType)
+  title <- lift (getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST $ externalRoleType contextType) (externalRole contextInstance))
   case lookup (ScreenKey contextType userRoleType) df.screens of
-    Just s -> populateScreen s
+    Just s -> populateScreen s title
     Nothing -> do 
       -- We should take aspects in consideration!
       -- `userRoleType` may have been added as an aspect user role to `contextType`. In such a case we will never find 
@@ -97,35 +98,29 @@ screenForContextAndUser userRoleInstance userRoleType contextType contextInstanc
       case head typesWithScreen of 
         Just typeWithScreen -> case lookup (ScreenKey typeWithScreen userRoleType) df.screens of
           Just s -> do 
-            title <- lift $ (getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST $ externalRoleType contextType) (externalRole contextInstance))
             mscreen <- runReaderT (contextualiseScreen s title) {userRoleInstance, contextType, contextInstance} 
             case mscreen of  
-              Nothing -> defaultScreen
+              Nothing -> defaultScreen title
               Just contextualisedScreen -> pure $ SerialisedScreen $ writeJSON contextualisedScreen
-          Nothing -> defaultScreen
-        Nothing -> defaultScreen
+          Nothing -> defaultScreen title
+        Nothing -> defaultScreen title
   where 
 
-  populateScreen :: ScreenDefinition -> MonadPerspectivesQuery SerialisedScreen
-  populateScreen s@(ScreenDefinition {title, tabs, rows, columns, whoWhatWhereScreen}) = do 
+  populateScreen :: ScreenDefinition -> String -> MonadPerspectivesQuery SerialisedScreen
+  populateScreen s@(ScreenDefinition {title, tabs, rows, columns, whoWhatWhereScreen}) computedTitle = do 
     if isJust whoWhatWhereScreen
       then do
         -- Now populate the screen definition with instance data.
         -- However, prevent chat roles from ending up in the What section. Add them to the Who section as ChatDefs.
-        (screenInstance :: ScreenDefinition) <- lift $ addPerspectives s userRoleInstance contextInstance
-        pure $ SerialisedScreen $ writeJSON screenInstance
+        (ScreenDefinition screenInstance :: ScreenDefinition) <- lift $ addPerspectives s userRoleInstance contextInstance
+        pure $ SerialisedScreen $ writeJSON (ScreenDefinition $ screenInstance {title = if isResourceIdentifier computedTitle then title else Just computedTitle})
       else do
         (perspectives :: Array SerialisedPerspective') <- lift $ lift (contextInstance ##= perspectivesForContextAndUser' userRoleInstance userRoleType)
         perspectivesOnChats :: Array SerialisedPerspective' <- lift $ lift $ filterA isChat perspectives
         userRoles <- pure $ makeTableFormDef userRoleType <$> (filter isOnUserRole perspectives) `difference` perspectivesOnChats
         wheretoContextRoles <- pure $ makeTableFormDef userRoleType <$> filter isOnContextRole perspectives
         constructedScreen <- lift $ addPerspectives (ScreenDefinition
-          { title: let 
-                mcomputedTitle = computeTitle perspectives
-              in
-                case mcomputedTitle of
-                  Just computedTitle -> if isResourceIdentifier computedTitle then title else Just computedTitle
-                  Nothing -> title
+          { title: if isResourceIdentifier computedTitle then title else Just computedTitle
           , tabs: Nothing
           , rows: Nothing
           , columns: Nothing
@@ -138,9 +133,9 @@ screenForContextAndUser userRoleInstance userRoleType contextType contextInstanc
           userRoleInstance
           contextInstance
         pure $ SerialisedScreen $ writeJSON constructedScreen
-  defaultScreen :: MonadPerspectivesQuery SerialisedScreen
-  defaultScreen = do
-    screenInstance <- lift $ constructDefaultScreen userRoleInstance userRoleType contextInstance
+  defaultScreen :: String -> MonadPerspectivesQuery SerialisedScreen
+  defaultScreen title = do
+    screenInstance <- lift $ constructDefaultScreen userRoleInstance userRoleType contextInstance title
     pure $ SerialisedScreen $ writeJSON screenInstance
     
 computeTitle :: Array SerialisedPerspective' -> Maybe String
@@ -152,8 +147,8 @@ computeTitle perspectives = do
     Nothing -> Nothing
 
 -- | A screen with a tab for each perspective the user has in this context.
-constructDefaultScreen :: RoleInstance -> RoleType -> ContextInstance -> AssumptionTracking ScreenDefinition
-constructDefaultScreen userRoleInstance userRoleType cid = do
+constructDefaultScreen :: RoleInstance -> RoleType -> ContextInstance -> String -> AssumptionTracking ScreenDefinition
+constructDefaultScreen userRoleInstance userRoleType cid title = do
   (perspectives :: Array SerialisedPerspective') <- runArrayT $ perspectivesForContextAndUser' userRoleInstance userRoleType cid
   perspectivesOnChats :: Array SerialisedPerspective' <- lift $ filterA isChat perspectives
   userRoles <- pure $ makeTableFormDef userRoleType <$> (filter isOnUserRole perspectives) `difference` perspectivesOnChats
@@ -161,7 +156,7 @@ constructDefaultScreen userRoleInstance userRoleType cid = do
   what <- pure $ makeTableFormDef userRoleType <$> ((filter isOnThingRole perspectives) `difference` perspectivesOnChats)
   wheretoContextRoles <- pure $ makeTableFormDef userRoleType <$> filter isOnContextRole perspectives
   pure $ ScreenDefinition
-    { title: computeTitle perspectives
+    { title: Just title
     , tabs: Nothing
     , rows: Nothing
     , columns: Nothing
