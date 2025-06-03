@@ -205,9 +205,10 @@ updateModel_ arrWithModelName arrWithDependencies _ = try
 
 updateModel' :: DomeinFileId -> Boolean -> Boolean -> MonadPerspectivesTransaction Unit
 updateModel' dfid@(DomeinFileId modelName) withDependencies install = do
-  {repositoryUrl, documentName} <- pure $ unsafePartial modelUri2ModelUrl modelName
+  {versionedModelName} <- computeVersionedAndUnversiondName dfid
+  {repositoryUrl, documentName} <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
   storedQueries <- lift $ getInvertedQueriesOfModel repositoryUrl documentName
-  domeinFileAndAttachents <- retrieveModelFromRepository (DomeinFileId modelName)
+  domeinFileAndAttachents <- retrieveModelFromRepository versionedModelName
   updateModel withDependencies install (DomeinFileId modelName) domeinFileAndAttachents storedQueries 
 
 updateModel :: Boolean -> Boolean -> DomeinFileId -> (Tuple DomeinFileRecord AttachmentFiles) -> StoredQueries -> MonadPerspectivesTransaction Unit
@@ -262,16 +263,17 @@ addModelToLocalStore_ modelNames _ = try (for_ modelNames (flip addModelToLocalS
 -- | Parameter `isUpdate` should be true iff the model has been added to the local installation before.
 -- | Attachments are fetched from the repository and stored locally.
 -- | Invariant: the model is not in cache when this function returns.
+-- | The modelname is UNVERSIONED!
 addModelToLocalStore :: DomeinFileId -> Boolean -> MonadPerspectivesTransaction Unit
-addModelToLocalStore dfid@(DomeinFileId modelname) isInitialLoad' = do
-  domeinFileAndAttachments <- retrieveModelFromRepository dfid
-  {repositoryUrl, documentName} <- pure $ unsafePartial modelUri2ModelUrl modelname
+addModelToLocalStore dfid isInitialLoad' = do
+  {versionedModelName} <- computeVersionedAndUnversiondName dfid
+  domeinFileAndAttachments <- retrieveModelFromRepository versionedModelName
+  {repositoryUrl, documentName} <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
   storedQueries <- lift $ getInvertedQueriesOfModel repositoryUrl documentName
   installModelLocally domeinFileAndAttachments isInitialLoad' storedQueries
 
-retrieveModelFromRepository :: DomeinFileId -> MonadPerspectivesTransaction (Tuple DomeinFileRecord AttachmentFiles)
-retrieveModelFromRepository dfid@(DomeinFileId modelname) = do
-  {versionedModelName} <- computeVersionedAndUnversiondName dfid
+retrieveModelFromRepository :: String -> MonadPerspectivesTransaction (Tuple DomeinFileRecord AttachmentFiles)
+retrieveModelFromRepository versionedModelName = do
   {repositoryUrl, documentName} <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
   (DomeinFile dfile@{_attachments}) <- lift $ getDocument repositoryUrl documentName
 

@@ -54,7 +54,7 @@ import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.ModelDependencies (build, patch, versionToInstall)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, fromBlob, getAttachment, tryGetDocument)
-import Perspectives.Persistent (forceSaveDomeinFile, getPerspectRol, removeEntiteit, saveEntiteit, tryGetPerspectEntiteit, tryRemoveEntiteit, updateRevision)
+import Perspectives.Persistent (forceSaveDomeinFile, getDomeinFile, getPerspectRol, modelDatabaseName, removeEntiteit, saveEntiteit, tryGetPerspectEntiteit, tryRemoveEntiteit, updateRevision)
 import Perspectives.PerspectivesState (domeinCacheRemove, getModelToLoad, getTranslationTable, setTranslationTable)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -237,16 +237,19 @@ storeDomeinFileInCouchdb df@(DomeinFile dfr@{id}) = do
 storeDomeinFileInCouchdbPreservingAttachments :: DomeinFile -> MonadPerspectives Unit
 storeDomeinFileInCouchdbPreservingAttachments df@(DomeinFile dfr@{id, _attachments}) = do
   {repositoryUrl, documentName} <- pure $ unsafePartial modelUri2ModelUrl (unwrap id)
+  modelsDb <- modelDatabaseName
   attachments <- case _attachments of
     Nothing -> pure empty
     Just atts ->  traverseWithIndex
-      (\attName {content_type} -> Tuple (MediaType content_type) <$> getAttachment repositoryUrl documentName attName)
+      -- Instead of fetching the attachment from the repository, we fetch it from the local models database.
+      (\attName {content_type} -> Tuple (MediaType content_type) <$> getAttachment modelsDb documentName attName)
       atts
   void $ storeDomeinFileInCache id df
-  (DomeinFile {_rev}) <- saveCachedDomeinFile id
+  void $ saveCachedDomeinFile id
   -- Unless we actually store in the database, adding attachments will go wrong.
   forceSaveDomeinFile id
-  newRev <- State.execStateT (addAttachments repositoryUrl documentName attachments) _rev
+  (DomeinFile {_rev}) <- getDomeinFile id
+  newRev <- State.execStateT (addAttachments modelsDb documentName attachments) _rev
   setRevision id newRev
   
 
