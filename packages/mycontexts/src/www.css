@@ -1,6 +1,6 @@
 
 .full-height {
-  height: calc(100dvh - 2 * var(--top-navbar-height));
+  height: calc(100dvh - var(--bottom-navbar-height) - var(--top-navbar-height));
 }
 
 .full-mobile-height {
