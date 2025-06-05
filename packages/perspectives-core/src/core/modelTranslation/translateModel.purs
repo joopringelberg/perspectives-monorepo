@@ -43,8 +43,9 @@ import Data.Newtype (class Newtype, unwrap)
 import Data.Nullable (Nullable, notNull, null, toMaybe) as NULL
 import Data.Set (toUnfoldable) as SET
 import Data.String (Pattern(..), Replacement(..), replaceAll, stripPrefix, stripSuffix)
+import Data.String.Regex (match)
 import Data.String.Regex (match, replace) as Regex
-import Data.String.Regex.Flags (noFlags, global)
+import Data.String.Regex.Flags (global, noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for)
 import Data.TraversableWithIndex (forWithIndex)
@@ -933,7 +934,9 @@ translationOf domain text = do
       Nothing -> pure defaultTranslation
       Just (Translations translations) -> case lookup language translations of 
         Nothing -> pure defaultTranslation
-        Just translation -> pure translation
+        Just translation -> case match (unsafeRegex "MISSING" noFlags) translation of
+          Just _ -> pure defaultTranslation
+          Nothing -> pure translation
 
 translateType :: String -> MonadPerspectives String
 translateType typeName = case typeUri2ModelUri typeName of
