@@ -35,6 +35,7 @@
   , "configurationDialog_Title": "Installeer MyContexts"
   , "configurationDialog_deviceName": "De naam voor het apparaat waarop je installeert:"
   , "configurationDialog_deviceNameFeedback": "Voer een geldige apparaatnaam in, zoals 'mijnlaptop'."
+  , "configurationDialog_deviceNameInvalidChars": "De apparaatnaam mag alleen letters, cijfers, koppeltekens, punten en underscores bevatten."
   , "configurationDialog_NotFirstInstallation": "Niet mijn eerste installatie"
   , "configurationDialog_NotFirstInstallationTooltip": "Als dit niet je eerste MyContext installatie is moet je een identity file en een cryptografische sleutel uploaden. Daarmee zorgen we ervoor dat de gegevens tussen je verschillende apparaten worden gesynchroniseerd."
   , "configurationDialog_advancedInstallation": "Geavanceerde installatie"

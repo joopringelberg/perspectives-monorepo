@@ -92,18 +92,29 @@ const InstallModal: FC<{ show: boolean; onHide: () => void, callback: (data: Ins
     <Modal.Body>
       <Form noValidate validated={validated} id='installForm'>
         <Form.Group controlId="formDeviceName">
-          <Form.Label>{ i18next.t("configurationDialog_deviceName", {ns: 'mycontexts'}) }</Form.Label>
+          <Form.Label>{i18next.t("configurationDialog_deviceName", {ns: 'mycontexts'})}</Form.Label>
           <Form.Control
             type="text"
             placeholder="E.g. mylaptop, mymobile, mytablet"
             value={deviceName || ''}
             required
+            pattern="^[a-zA-Z0-9_\-\.]+$"  // Allow only letters, numbers, underscores, hyphens and periods
             onChange={(e) => {
-              setDeviceName(e.target.value)
-              setValue('deviceName', e.target.value)
+              const value = e.target.value;
+              // Check if the value matches our allowed pattern
+              if (/^[a-zA-Z0-9_\-\.]*$/.test(value)) {
+                setDeviceName(value);
+                setValue('deviceName', value);
+              }
             }}
+            isInvalid={!!deviceName && !/^[a-zA-Z0-9_\-\.]+$/.test(deviceName)}
           />
-          <Form.Control.Feedback type="invalid">{ i18next.t("configurationDialog_deviceNameFeedback", {ns: 'mycontexts'})}</Form.Control.Feedback>
+          <Form.Control.Feedback type="invalid">
+            {!deviceName 
+              ? i18next.t("configurationDialog_deviceNameFeedback", {ns: 'mycontexts'})
+              : i18next.t("configurationDialog_deviceNameInvalidChars", {ns: 'mycontexts', defaultValue: "Device name can only contain letters, numbers, underscores, hyphens and periods (no spaces)."})
+            }
+          </Form.Control.Feedback>
         </Form.Group>
         <SliderWithTooltip 
           label={i18next.t("configurationDialog_NotFirstInstallation", {ns: 'mycontexts'})}

@@ -50,15 +50,20 @@ export default class App extends Component<{}, AppState>
   }
   }
 
-  componentDidUpdate(prevProps: Readonly<{}>, prevState: Readonly<AppState>, snapshot?: any): void {
-    let installationData: InstallationData, pouchdbUser: PouchdbUser, couchdbUrl: string | undefined;
+  componentDidUpdate(prevProps: Readonly<{}>, prevState: Readonly<AppState>, snapshot?: any): void {    
+    if (this.state.phase === 'installing') {
+      this.createAccount();
+    }
+  }
+
+  createAccount(): void {
     const options : RuntimeOptions = 
       { isFirstInstallation: this.state.installationResult.type === 'KeyPairData' ? true : false
         , useSystemVersion: null
         , myContextsVersion: __MYCONTEXTS_VERSION__
       };
-    
-    if (this.state.phase === 'installing') {
+
+    let installationData: InstallationData, pouchdbUser: PouchdbUser, couchdbUrl: string | undefined;
       getInstallationData().then((data: InstallationData) => {
         installationData = data;
         pouchdbUser = constructPouchdbUser(installationData);
@@ -78,7 +83,7 @@ export default class App extends Component<{}, AppState>
           this.setState({ phase: 'installationError' });
         });
       }
-    )}
+    )
   }
 
   // Shows the installation progress and offers the keypair download.
@@ -125,6 +130,7 @@ export default class App extends Component<{}, AppState>
     }
   
   refreshApp() {
+    const component = this;
     // Clear any in-memory caches first
     if ('caches' in window) {
       caches.keys().then(names => {
@@ -136,8 +142,8 @@ export default class App extends Component<{}, AppState>
     
     // Add a small delay to allow cache clearing to complete
     setTimeout(() => {
-      window.location.href = window.location.href.split('?')[0] + 
-                            '?refresh=' + Date.now();
+      // Restart account creation.
+      component.createAccount();
     }, 100);
   }
 

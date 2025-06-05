@@ -36,6 +36,7 @@
   , "configurationDialog_Title": "Install MyContexts"
   , "configurationDialog_deviceName": "The name of the device you're doing the installation:"
   , "configurationDialog_deviceNameFeedback": "Please enter a valid device name, e.g. 'mylaptop'."
+  , "configurationDialog_deviceNameInvalidChars": "The device name may only contain letters, numbers, hyphens, periods and underscores."
   , "configurationDialog_NotFirstInstallation": "Not my first installation"
   , "configurationDialog_NotFirstInstallationTooltip": "If this is not your first MyContext installation, you need to upload an identity file and a cryptographic key. This ensures that data is synchronized between your different devices."
   , "configurationDialog_advancedInstallation": "Advanced installation"
