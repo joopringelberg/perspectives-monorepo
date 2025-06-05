@@ -51,6 +51,7 @@ import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (traverse)
 import Effect (Effect)
 import Effect.Aff (Aff, catchError, error, throwError)
+import Effect.Aff.Class (liftAff)
 import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
 import Effect.Class (liftEffect)
 import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn6, runEffectFn1, runEffectFn2, runEffectFn3)
@@ -235,6 +236,20 @@ compactDatabase dbName = withDatabase dbName
 
 foreign import compactDatabaseImpl :: EffectFn1 PouchdbDatabase Foreign
 foreign import viewCleanupImpl :: EffectFn1 PouchdbDatabase Foreign
+
+-----------------------------------------------------------
+-- CLEANUPDELETEDDOCS
+-----------------------------------------------------------
+-- cleanupDatabase :: forall f. DatabaseName -> MonadPouchdb f Unit
+cleanupDeletedDocs :: forall f. DatabaseName -> MonadPouchdb f Unit
+cleanupDeletedDocs = cleanupDeletedDocs_ >>> Promise.toAffE >>> liftAff
+
+cleanupDeletedDocs_ :: DatabaseName -> Effect (Promise.Promise Unit)
+cleanupDeletedDocs_ = runEffectFn1 cleanupDeletedDocsImpl
+
+foreign import cleanupDeletedDocsImpl :: EffectFn1
+  DatabaseName
+  (Promise.Promise Unit)
 
 -----------------------------------------------------------
 -- DOCUMENTSINDATABASE

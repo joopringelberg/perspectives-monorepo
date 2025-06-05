@@ -181,6 +181,40 @@ export function compactDatabaseImpl(db) {
   };
 }
 
+// Create a utility function that:
+// 1. Creates a new temporary database
+// 2. Copies only non-deleted documents to it
+// 3. Destroys the original and renames the new one
+export function cleanupDeletedDocsImpl (dbName) {
+  const origDb = new PouchDB(dbName);
+  const tempDb = new PouchDB(`${dbName}_temp`);
+  let docsToKeep = [];
+  
+  return origDb.allDocs({include_docs: true})
+    .then(result => {
+      // Filter out deleted documents
+      docsToKeep = result.rows
+        .filter(row => !row.doc._deleted)
+        .map(row => row.doc);
+      if (docsToKeep.length) {
+        return tempDb.bulkDocs(docsToKeep);
+      } else {
+        return Promise.resolve();
+      }
+    })
+    .then(() => origDb.destroy())
+    .then(() => tempDb.replicate.to(new PouchDB(dbName)))
+    .then(() => tempDb.destroy())
+    .then(() => {
+      console.log(`Cleanup complete. Kept ${docsToKeep.length} non-deleted documents.`);
+      return {};
+    })
+    .catch(err => {
+      console.error(`Error during cleanup:`, convertPouchError(err));
+      throw convertPouchError(err);
+    });
+  }
+
 export function viewCleanupImpl(db) {
   return function(onError, onSuccess) {
     db.viewCleanup()

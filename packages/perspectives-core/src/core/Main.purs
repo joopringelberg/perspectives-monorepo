@@ -67,7 +67,7 @@ import Perspectives.ModelDependencies (indexedContext, indexedContextName, index
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (DatabaseName, Keys(..), PouchdbUser, UserName, compactDatabase, createDatabase, databaseInfo, decodePouchdbUser', deleteDatabase)
+import Perspectives.Persistence.API (DatabaseName, Keys(..), PouchdbUser, UserName, cleanupDeletedDocs, compactDatabase, createDatabase, databaseInfo, decodePouchdbUser', deleteDatabase)
 import Perspectives.Persistence.CouchdbFunctions (setSecurityDocument)
 import Perspectives.Persistence.State (getSystemIdentifier, withCouchdbUrl)
 import Perspectives.Persistence.Types (Credential(..))
@@ -194,11 +194,12 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
           models <- modelsDatabaseName
           inverted <- invertedQueryDatabaseName
           post <- postDatabaseName
-          pushMessage "Compacting databases"
+          pushMessage "Minimizing databases"
           for_ [entities, models, inverted, post] (\dbName -> do
             log $ "Compacting the database " <> dbName
             compactDatabase dbName)
-          void $ removeMessage "Compacting databases")
+          cleanupDeletedDocs post
+          void $ removeMessage "Minimizing databases")
         state
 
 
