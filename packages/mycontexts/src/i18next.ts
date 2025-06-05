@@ -2,7 +2,6 @@
 
 // We need http-backend to load the translations from the server.
 
-import HttpApi from "i18next-http-backend";
 import {i18next, getPreact} from "perspectives-react";
 import LanguageDetector from 'i18next-browser-languagedetector';
 import {get, set} from 'idb-keyval';
@@ -12,7 +11,6 @@ export async function initI18next () : Promise<void>
   let currentLanguage = await get("currentLanguage");
 
   return i18next
-    .use(HttpApi)
     .use(LanguageDetector)
     .init({
       supportedLngs: ["en", "nl"],

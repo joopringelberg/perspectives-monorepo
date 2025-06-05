@@ -33,7 +33,7 @@ const appFiles = [
   "/manage.html"
 ];
 
-const macIcons = ["512.png", "256.png", "128.png", "32.png", "16.png"].map(icon => "/appimages/ios/" + icon);
+const macIcons = ["512.png", "256.png", "128.png", "32.png", "16.png"].map(icon => "/AppImages/ios/" + icon);
 
 // Join app files and icons
 const toBeCached = appFiles.concat(macIcons);
