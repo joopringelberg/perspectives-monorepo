@@ -131,6 +131,7 @@ constructContext mbindingRoleType c@(ContextSerialization{id, ctype, rollen, ext
         lift $ lift $ void $ saveEntiteit contextInstanceId
         -- If the context type has a public role, create an instance of its proxy; but only when the contextId is not a public identifier.
         -- Proxies are not created for public contexts, as they are not needed.
+        -- We also should only create proxies in contexts that have an instance of the author role.
         publicRoleInstances <- if isInPublicScheme (unwrap contextInstanceId)
           then pure []
           else do

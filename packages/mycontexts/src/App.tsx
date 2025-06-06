@@ -13,12 +13,14 @@ import { startPDR } from './startPDR.js';
 import { Button, Container, Row } from 'react-bootstrap';
 import WWWComponent from './www.js';
 import { getInstalledVersion, runUpgrade, setMyContextsVersion, toWWW } from './dataUpgrade.js';
+import LoadingScreen from './LoadingScreen.js';
 
 await initI18next();
 
 interface AppState {
   phase: 'installationExists' | 'prepareInstallation' | 'installationError' | 'installing' | 'installationcomplete' | undefined,
   installationResult: InstallationResult,
+  wwwComponentReady: boolean
 }
 
 export default class App extends Component<{}, AppState>
@@ -29,6 +31,7 @@ export default class App extends Component<{}, AppState>
     this.state =
       { phase: undefined
       , installationResult: { type: 'NoKeyPairData', perspectivesUserId: 'newuser' }
+      , wwwComponentReady: false
       };
     this.runDataUpgrades().then( () => startPDR());
   }
@@ -151,7 +154,15 @@ export default class App extends Component<{}, AppState>
   {
     switch (this.state.phase) {
       case 'installationExists':
-      return <WWWComponent />;
+        return (
+          <>
+            {!this.state.wwwComponentReady && <LoadingScreen />}
+            <div style={{ display: this.state.wwwComponentReady ? 'block' : 'none' }}>
+              <WWWComponent 
+                onMounted={() => this.setState({ wwwComponentReady: true })}
+              />
+            </div>
+          </>);
       case 'prepareInstallation':
       return <ConfigureInstallation callback={ (installationResult : InstallationResult) =>{
           this.setState({ phase: 'installing', installationResult });

@@ -23,6 +23,10 @@ import { changeLanguage } from './i18next';
 
 type Section = 'who' | 'what' | 'where' | 'none';
 
+interface WWWComponentProps {
+  onMounted : () => void;
+}
+
 interface WWWComponentState {
   isSmallScreen: boolean;
   title: string;
@@ -44,7 +48,7 @@ interface WWWComponentState {
   isOnline: boolean;
 }
 
-class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
+class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponentState> {
   screenUnsubscriber: Unsubscriber | undefined;
 
   constructor(props: {}) {
@@ -103,6 +107,7 @@ class WWWComponent extends PerspectivesComponent<{}, WWWComponentState> {
             })
           .then ( () => {
             PDRproxy.then( pproxy => {
+              component.props.onMounted()
               pproxy.subscribeSelectedRoleFromClipboard(
                 function (clipBoardContents : RoleOnClipboard[])
                 {
