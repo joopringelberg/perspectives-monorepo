@@ -44,9 +44,9 @@ import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.ObjectGetters (context, externalRole, getProperty)
 import Perspectives.ModelDependencies (accountHolder, accountHolderName, accountHolderPassword, accountHolderQueueName, brokerEndpoint, brokerServiceContractInUse, brokerServiceExchange, connectedToAMQPBroker, myBrokers, sysUser)
 import Perspectives.Names (getMySystem, lookupIndexedContext)
-import Perspectives.Persistence.API (deleteDocument, documentsInDatabase, excludeDocs, getDocument_)
+import Perspectives.Persistence.API (cleanupDeletedDocs, deleteDocument, documentsInDatabase, excludeDocs, getDocument_)
 import Perspectives.Persistent (postDatabaseName)
-import Perspectives.PerspectivesState (getBrokerService, getPerspectivesUser, setBrokerService, setStompClient, stompClient, transactionLevel)
+import Perspectives.PerspectivesState (getBrokerService, getPerspectivesUser, pushMessage, removeMessage, setBrokerService, setStompClient, stompClient, transactionLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyFunction, getRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
@@ -60,6 +60,10 @@ import Simple.JSON (writeJSON)
 
 incomingPost :: MonadPerspectives Unit
 incomingPost = do
+  post <- postDatabaseName
+  pushMessage "Cleaning up post database"
+  cleanupDeletedDocs post
+  removeMessage "Cleaning up post database"
   setConnectionState false
   {topic, queueId, login, passcode, vhost, url} <- getBrokerService
   -- Create a Stomp Client: url
