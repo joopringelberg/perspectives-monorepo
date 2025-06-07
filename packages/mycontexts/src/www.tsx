@@ -20,6 +20,7 @@ import { MyRoleTypes } from './myRoleTypes';
 import ConnectedToAMQP from './connectedToAMQP';
 import { InternetConnectivityCheck } from './internetConnectivityCheck';
 import { changeLanguage } from './i18next';
+import { About } from './about';
 
 type Section = 'who' | 'what' | 'where' | 'none';
 
@@ -491,7 +492,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     let content;
     switch (this.state.leftPanelContent) {
       case 'about':
-        content = <p>About</p>;
+        content = <About />
         break;
       case 'me':
         content = <Me systemuser={component.state.systemUser}/>;
