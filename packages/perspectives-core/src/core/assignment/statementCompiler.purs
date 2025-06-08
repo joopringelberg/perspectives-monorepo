@@ -63,7 +63,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..))
-import Perspectives.Representation.Verbs (RoleVerb(..), PropertyVerb(..)) as Verbs
+import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Verbs
 import Perspectives.Types.ObjectGetters (externalRole, generalisesRoleType_, hasPerspectiveOnPropertyWithVerb, isDatabaseQueryRole, isEnumeratedProperty, lookForRoleTypeOfADT, lookForUnqualifiedPropertyType, lookForUnqualifiedRoleTypeOfADT)
 import Prelude (bind, discard, pure, show, unit, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>), (>>=), (||))
 
@@ -259,7 +259,7 @@ compileStatement stateIdentifiers originDomain currentcontextDomain userRoleType
         qualifiedContextTypeIdentifier <- qualifyContextType contextTypeIdentifier start end
         -- Check for each of the subjects whether they have a sufficient perspective on the range of the role expression.
         for_ subjects (\subject -> for_ (roleInContext2Role <$> (allLeavesInADT $ unsafePartial roleRange roleQfd))
-          (\object -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject object [Verbs.Fill] (Just start) (Just end)) >>= case _ of 
+          (\object -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject object [Verbs.Fill, Verbs.CreateAndFill] (Just start) (Just end)) >>= case _ of 
             Left e -> throwError e
             _ -> pure unit))
         case mnameGetterDescription of
@@ -287,7 +287,7 @@ compileStatement stateIdentifiers originDomain currentcontextDomain userRoleType
             False -> throwError $ NotFunctional f.start f.end bindingExpression
           else pure unit
         -- Check for each of the subjects whether they have a sufficient perspective to fill the qualifiedRoleIdentifier.
-        for_ subjects (\subject -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject qualifiedRoleIdentifier [Verbs.Fill] (Just start) (Just end)) >>= case _ of 
+        for_ subjects (\subject -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject qualifiedRoleIdentifier [Verbs.Fill, Verbs.CreateAndFill] (Just start) (Just end)) >>= case _ of 
             Left e -> throwError e
             _ -> pure unit)
         -- the possible fillers of binderType (qualifiedRoleIdentifier) should be less specific (=more general) than or equal to the type of the results of binderExpression (fillers).
@@ -311,7 +311,7 @@ compileStatement stateIdentifiers originDomain currentcontextDomain userRoleType
         (binders :: QueryFunctionDescription) <- ensureRole subjects binderExpression >>= ensureFunctional binderExpression
         -- Check for each of the subjects whether they have a sufficient perspective on the range of the binders expression.
         for_ subjects (\subject -> for_ (roleInContext2Role <$> (allLeavesInADT $ unsafePartial roleRange binders))
-          (\object -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject object [Verbs.Fill] (Just start) (Just end)) >>= case _ of 
+          (\object -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject object [Verbs.Fill, Verbs.CreateAndFill] (Just start) (Just end)) >>= case _ of 
             Left e -> throwError e
             _ -> pure unit))
         -- Now create a function description.

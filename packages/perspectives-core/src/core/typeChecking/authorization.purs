@@ -25,11 +25,14 @@ module Perspectives.Checking.Authorization where
 import Prelude
 
 import Control.Monad.State (StateT, get)
+import Data.Array (foldMap)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), isJust)
+import Data.Monoid.Disj (Disj(..))
+import Data.Newtype (ala)
 import Effect.Class (liftEffect)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (MonadPerspectives, (##>>), (###>>))
+import Perspectives.CoreTypes (MonadPerspectives, (##>>), (###=))
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Instances.ObjectGetters (roleType)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
@@ -63,8 +66,8 @@ roleHasPerspectiveOnPropertyWithVerb subject roleInstance property verb' = do
 -- | OR if the subject has the aspect "sys:RootContext$RootUser"
 roleHasPerspectiveOnRoleWithVerb :: RoleType -> EnumeratedRoleType -> Array RoleVerb -> Maybe ArcPosition -> Maybe ArcPosition -> MonadPerspectives (Either PerspectivesError Boolean)
 roleHasPerspectiveOnRoleWithVerb subject roleType verbs mstart mend = do
-  hasPerspective <- unsafePartial (roleType ###>> hasPerspectiveOnRoleWithVerbs verbs subject)
-  if hasPerspective
+  hasVerbs <- unsafePartial (roleType ###= hasPerspectiveOnRoleWithVerbs verbs subject)
+  if ala Disj foldMap hasVerbs
     then pure $ Right true
     else pure $ Left $ UnauthorizedForRole "Auteur" subject (ENR roleType) verbs mstart mend
 
