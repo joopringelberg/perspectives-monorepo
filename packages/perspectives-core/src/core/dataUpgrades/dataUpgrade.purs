@@ -29,12 +29,13 @@ module Perspectives.DataUpgrade where
 import Prelude
 
 import Control.Monad.Except (runExceptT)
-import Data.Array (catMaybes, cons, elemIndex)
+import Data.Array (catMaybes, elemIndex, union)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), isJust)
 import Data.String (Pattern(..), Replacement(..), replace)
 import Data.Traversable (for)
+import Data.Version (Version, parseVersion)
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign (unsafeToForeign)
@@ -131,6 +132,12 @@ runDataUpgrades = do
       addSettingsType
       -- Add IsSystemModel to various models.
       )
+  runUpgrade installedVersion "0.26.10"
+    (\_ -> do
+      -- Add IsSystemModel to various models.
+      addIsSystemModel
+      -- Add SettingsType to the system model.
+      addSettingsType)
 
 
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
@@ -146,7 +153,8 @@ runDataUpgrades = do
 -- |    * AND
 -- |    * the upgradeVersion argument is lower than or equal to the package version (pdrVersion: the version in package.json)
 runUpgrade :: PDRVersion -> PDRVersion -> Upgrade -> MonadPerspectives Unit
-runUpgrade installedVersion upgradeVersion upgrade = if installedVersion < upgradeVersion && upgradeVersion <= pdrVersion
+runUpgrade installedVersion upgradeVersion upgrade = if isLowerVersion installedVersion upgradeVersion && 
+     (isLowerVersion upgradeVersion pdrVersion || upgradeVersion == pdrVersion)
   -- Run the upgrade
   then do 
     log ("Running upgrade to version " <> upgradeVersion)
@@ -278,4 +286,18 @@ addSettingsType :: MonadPerspectives Unit
 addSettingsType = do
   systemId <- getMySystem
   PerspectRol rec@{allTypes} <- getPerspectRol (RoleInstance $ buitenRol systemId)
-  cacheAndSave (RoleInstance systemId) (PerspectRol rec {allTypes = cons (EnumeratedRoleType settings) allTypes })
+  cacheAndSave (RoleInstance systemId) (PerspectRol rec {allTypes = [(EnumeratedRoleType settings)] `union` allTypes })
+
+-- Parse version strings into the Version type
+toVersion :: String -> Maybe Version
+toVersion str = case parseVersion str of
+  Right v -> Just v
+  Left _ -> Nothing
+
+-- Compare versions (returns true if v1 < v2)
+isLowerVersion :: String -> String -> Boolean
+isLowerVersion v1 v2 = 
+  case toVersion v1, toVersion v2 of
+    Just v1', Just v2' -> v1' < v2'
+    _, _ -> false  -- Handle parsing errors however you prefer
+

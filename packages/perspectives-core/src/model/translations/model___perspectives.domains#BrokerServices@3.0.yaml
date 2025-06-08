@@ -40,9 +40,10 @@ model://perspectives.domains#BrokerServices:
                   A little later, an icon will appear in the top left part of your screen,\n
                   indicating you can now connect with peers."
                 nl: "## Schrijf je in voor een service\n
-                  Je kunt nog geen verbinding maken met andere gebruikers, maar hieronder is een service beschikbaar om dit te doen.\n
+                  Je kunt nog geen verbinding maken met andere gebruikers, maar er is een service beschikbaar om dit te doen.\n
+                  Open 'Openbare broker services' onder 'Waar'.\n
                   Selecteer een rij met een service (er is waarschijnlijk maar één) door erop te klikken.\n
-                  Klik vervolgens in de werkbalk eronder op het bliksempictogram. Er verschijnt een menu.\n
+                  Open vervolgens het menu (aangegeven door drie puntjes) op deze sectie.\n
                   Klik op het item \"Inschrijven\".\n
                   ***LET OP*** door je in te schrijven, deel je je voor- en achternaam\n
                   met de beheerder van de service. Hij of zij kan contact met je opnemen\n
@@ -50,10 +51,11 @@ model://perspectives.domains#BrokerServices:
                   Even later verschijnt er een pictogram in de linkerbovenhoek van je scherm,\n
                   wat aangeeft dat je nu verbinding kunt maken met andere gebruikers."
                 en: "## Sign up to a service\n
-                   You cannot yet connect to peers, but a service to do so is available below.\n
+                   You cannot yet connect to peers, but a service to do so is available.\n
+                   Open 'Public broker services' under 'Where'.\n
+                   Then open the menu (indicated by three dots) on this section.\n
                    Select a row with a service (there is probably just one) by clicking it.\n
-                   Then, in the toolbar below, click the bolt icon. A menu will drop down.\n
-                   Click the \"SignUp\" item.\n
+                   Now click the item \"SignUp\" in the menu.\n
                    ***NOTE*** that by signing up, you will share your first- and last name\n
                    with the manager of the service. He or she will be able to contact you\n
                    through MyContexts.\n

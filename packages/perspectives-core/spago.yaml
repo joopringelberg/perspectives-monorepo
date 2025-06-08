@@ -63,6 +63,7 @@ package:
     - uint
     - unicode
     - unsafe-coerce
+    - versions
     - web-encoding
   name: perspectives-core
 workspace:

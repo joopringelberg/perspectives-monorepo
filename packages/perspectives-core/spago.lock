@@ -68,6 +68,7 @@
             "uint",
             "unicode",
             "unsafe-coerce",
+            "versions",
             "web-encoding"
           ],
           "build_plan": [
@@ -170,6 +171,7 @@
             "unicode",
             "unsafe-coerce",
             "variant",
+            "versions",
             "web-dom",
             "web-encoding",
             "web-events",
@@ -2084,6 +2086,24 @@
         "record",
         "tuples",
         "unsafe-coerce"
+      ]
+    },
+    "versions": {
+      "type": "registry",
+      "version": "7.0.0",
+      "integrity": "sha256-+7qxEsCbSl8JDsOsGQO/XxCfcCYak13lJHEXmCzUjIs=",
+      "dependencies": [
+        "control",
+        "either",
+        "foldable-traversable",
+        "functions",
+        "integers",
+        "lists",
+        "maybe",
+        "orders",
+        "parsing",
+        "partial",
+        "strings"
       ]
     },
     "web-dom": {
