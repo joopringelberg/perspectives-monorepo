@@ -144,10 +144,13 @@ runDataUpgrades = do
   ----------------------------------------------------------------------------------------
   ------- SET CURRENT VERSION
   ----------------------------------------------------------------------------------------
-  if installedVersion < pdrVersion
+  if installedVersion `isLowerVersion` pdrVersion
     then liftAff $ idbSet "CurrentPDRVersion" (unsafeToForeign pdrVersion) 
     else pure unit
 
+----------------------------------------------------------------------------------------
+---- RUN UPGRADE
+----------------------------------------------------------------------------------------
 -- | Runs the upgrade iff
 -- |    * the currently installed PDR  version is lower than the upgradeVersion argument
 -- |    * AND
@@ -162,6 +165,26 @@ runUpgrade installedVersion upgradeVersion upgrade = if isLowerVersion installed
     upgrade unit
     removeMessage ("Upgrading to PDR version " <> upgradeVersion)
   else pure unit
+
+----------------------------------------------------------------------------------------
+---- VERSION COMPARING
+----------------------------------------------------------------------------------------
+-- Parse version strings into the Version type
+toVersion :: String -> Maybe Version
+toVersion str = case parseVersion str of
+  Right v -> Just v
+  Left _ -> Nothing
+
+-- Compare versions (returns true if v1 < v2)
+isLowerVersion :: String -> String -> Boolean
+isLowerVersion v1 v2 = 
+  case toVersion v1, toVersion v2 of
+    Just v1', Just v2' -> v1' < v2'
+    _, _ -> false  -- Handle parsing errors however you prefer
+
+----------------------------------------------------------------------------------------
+---- SPECIFIC UPGRADES
+----------------------------------------------------------------------------------------
 
 addFixingUpdates :: Unit -> MonadPerspectives Unit
 addFixingUpdates _ = do
@@ -287,17 +310,4 @@ addSettingsType = do
   systemId <- getMySystem
   PerspectRol rec@{allTypes} <- getPerspectRol (RoleInstance $ buitenRol systemId)
   cacheAndSave (RoleInstance systemId) (PerspectRol rec {allTypes = [(EnumeratedRoleType settings)] `union` allTypes })
-
--- Parse version strings into the Version type
-toVersion :: String -> Maybe Version
-toVersion str = case parseVersion str of
-  Right v -> Just v
-  Left _ -> Nothing
-
--- Compare versions (returns true if v1 < v2)
-isLowerVersion :: String -> String -> Boolean
-isLowerVersion v1 v2 = 
-  case toVersion v1, toVersion v2 of
-    Just v1', Just v2' -> v1' < v2'
-    _, _ -> false  -- Handle parsing errors however you prefer
 
