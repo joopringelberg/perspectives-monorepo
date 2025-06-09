@@ -22,9 +22,18 @@ export class RecentContexts extends PerspectivesComponent<RecentContextsProps, R
     const component = this;
     PDRproxy.then((PDRproxy) => {
       this.addUnsubscriber(
-        PDRproxy.getPerspectiveForUser( this.props.systemuser, ModelDependencies.recentContexts, ModelDependencies.WWWUser, (perspectives: Perspective[]) =>
-          component.setState({ perspective: perspectives[0] })
-        ));
+        PDRproxy.getPerspectiveForUser( this.props.systemuser, ModelDependencies.recentContexts, ModelDependencies.WWWUser
+          ,(perspectives: Perspective[]) =>
+              component.setState({ perspective: perspectives[0] })
+          , false
+          , (error: String) => {
+            // The most likely error is that some recent context can no longer be found.
+            // We mitigate this problem by removing the recent contexts.
+            PDRproxy.deleteRole(
+              component.props.systemIdentifier
+              , ModelDependencies.recentContexts
+              , ModelDependencies.WWWUser)
+          }));
       });
   }
 
