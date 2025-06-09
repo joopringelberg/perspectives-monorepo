@@ -6,6 +6,8 @@
   , "app_contextactions_message": "De context acties voor {{- context}} konden niet worden opgehaald."
   , "app_myroletypes_title": "Jouw roltypen"
   , "app_myroletypes_message": "Kon de roltypen die je in deze context ({{- context}}) speelt niet ophalen."
+  , "app_startPDR_title": "Start Applicatie"
+  , "app_startPDR_message": "Kon de applicatie niet starten."
   , "notifications_title": "Notificatie context"
   , "notifications_message": "Kan niet naar de context van deze notificatie navigeren."
   , "unbindtool_title": "Verwijder vuller"

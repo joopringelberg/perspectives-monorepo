@@ -25,15 +25,18 @@ export class RecentContexts extends PerspectivesComponent<RecentContextsProps, R
         PDRproxy.getPerspectiveForUser( this.props.systemuser, ModelDependencies.recentContexts, ModelDependencies.WWWUser
           ,(perspectives: Perspective[]) =>
               component.setState({ perspective: perspectives[0] })
-          , false
-          , (error: String) => {
-            // The most likely error is that some recent context can no longer be found.
-            // We mitigate this problem by removing the recent contexts.
-            PDRproxy.deleteRole(
-              component.props.systemIdentifier
-              , ModelDependencies.recentContexts
-              , ModelDependencies.WWWUser)
-          }));
+          // NOTA BENE Ik heb dit uitgecommentarieerd omdat kort hierna in twee installaties de PerspecivesSystem$User instantie
+          // verdween. Vermoedelijk heeft dat hier niet mee te maken, maar voor alle zekerheid uitgeschakeld.
+          // , false
+          // , (error: String) => {
+          //   // The most likely error is that some recent context can no longer be found.
+          //   // We mitigate this problem by removing the recent contexts.
+          //   PDRproxy.deleteRole(
+          //     component.props.systemIdentifier
+          //     , ModelDependencies.recentContexts
+          //     , ModelDependencies.WWWUser)
+          // }
+        ));
       });
   }
 

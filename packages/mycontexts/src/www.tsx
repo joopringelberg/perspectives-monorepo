@@ -148,8 +148,14 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               component.prepareMyContextsScreen();
               })
             }
-          )});
-        })
+          )
+          .catch( e => UserMessagingPromise.then( um =>
+            um.addMessageForEndUser(
+              { title: i18next.t("app_startPDR_title", { ns: 'mycontexts' })
+              , message: i18next.t("app_startPDR_message", {ns: 'mycontexts'})
+              , error: e.toString()
+              })));
+        })});
     window.addEventListener('resize', this.checkScreenSize);
     this.checkScreenSize()
     
