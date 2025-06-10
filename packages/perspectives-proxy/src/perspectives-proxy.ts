@@ -1715,10 +1715,9 @@ type Message = { identifier: string, text: string};
 
 class Cursor {
   private static loadingOverlayElement: HTMLDivElement | null = null;
-  private static activeRequests: number = 0;
-  private static correlationIdentifiers: number[] = [];
   private PDRStatus: string = "Processing..."
   private messages: Message[] = [];
+  private queuePromise = Promise.resolve();
   
   constructor() {
     // Create the overlay element once
@@ -1785,27 +1784,29 @@ class Cursor {
     }
   
   removeMessage(identifier: string) {
-    const index = this.messages.findIndex(msg => msg.identifier === identifier);
-    if (index == 0)
-    {
-      this.messages.shift();
-      if (this.messages.length > 0)
+    this.enqueue(() => {
+      const index = this.messages.findIndex(msg => msg.identifier === identifier);
+      if (index == 0)
       {
-        // Since we had at least two messages, we can safely assume the overlay is visible.
-        this.setOverlayText( this.messages[0].text);
+        this.messages.shift();
+        if (this.messages.length > 0)
+        {
+          // Since we had at least two messages, we can safely assume the overlay is visible.
+          this.setOverlayText( this.messages[0].text);
+        }
+        else
+        {
+          // No messages left, hide the overlay.
+          this.setOverlayVisibility(false);
+          // For desktop:
+          document.body.style.cursor = "auto";
+        }
       }
-      else
+      if (index > 0)
       {
-        // No messages left, hide the overlay.
-        this.setOverlayVisibility(false);
-        // For desktop:
-        document.body.style.cursor = "auto";
+        this.messages.splice(index, 1);
       }
-    }
-    if (index > 0)
-    {
-      this.messages.splice(index, 1);
-    }
+    });
   }
 
   // PDR status messages become active immediately.
@@ -1842,29 +1843,39 @@ class Cursor {
     // Add the message to the top of the messages array.
     // But do not yet display it.
     const identifier = request.trackingNumber!.toString();
-    this.messages.unshift({ identifier, text: "Processing..." });
+    this.enqueue(() => this.messages.unshift({ identifier, text: "Processing..." })
+    );
     
     setTimeout(() => {
-      const index = component.messages.findIndex(msg => msg.identifier === identifier);
-      let message;
-      if ( index >= 0 )
-      {
-        // As the message is still waiting in the array, we can display it now.
-        // Move it to the top of the array.
-        message = component.messages[index];
-        component.messages.splice(index, 1);
-        component.messages.unshift(message);
-        // Display it.
-        component.setOverlayText(message.text);
-        component.setOverlayVisibility(true);
-      }
-      }, 400);
+      component.enqueue(() => {
+        const index = component.messages.findIndex(msg => msg.identifier === identifier);
+        if ( index >= 0 )
+        {
+          // As the message is still waiting in the array, we can display it now.
+          // Move it to the top of the array.
+          const message = component.messages[index];
+          component.messages.splice(index, 1);
+          component.messages.unshift(message);
+          // Display it.
+          component.setOverlayText(message.text);
+          component.setOverlayVisibility(true);
+        }
+      })}, 400);
   }
   
   restore(request: RequestRecord) {
-    this.removeMessage(request.trackingNumber!.toString())
+    this.enqueue(() => {
+      this.removeMessage(request.trackingNumber!.toString())
+    });
   }
-}
+
+// Execute operations sequentially
+  private enqueue<T>(operation: () => T | Promise<T>): Promise<T> {
+    const result = this.queuePromise.then(() => operation());
+    this.queuePromise = result.then(() => undefined, () => undefined) as Promise<void>; // Ensure queue continues even if operation fails
+    return result;
+  }
+  }
 
 // See: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input
 // We add "markdown"

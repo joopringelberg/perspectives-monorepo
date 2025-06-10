@@ -306,10 +306,9 @@ type ChatParticipantFields = {
 };
 declare class Cursor {
     private static loadingOverlayElement;
-    private static activeRequests;
-    private static correlationIdentifiers;
     private PDRStatus;
     private messages;
+    private queuePromise;
     constructor();
     pushMessage(identifier: string, text: string): void;
     removeMessage(identifier: string): void;
@@ -321,5 +320,6 @@ declare class Cursor {
     setOverlayText(text: string): void;
     wait(request: RequestRecord): void;
     restore(request: RequestRecord): void;
+    private enqueue;
 }
 export declare function mapRange(range: PRange): InputType;
