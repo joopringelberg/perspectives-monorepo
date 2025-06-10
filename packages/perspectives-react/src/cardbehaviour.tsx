@@ -364,9 +364,16 @@ export const addRemoveRoleFromContext : BehaviourAdder = (domEl, component) => {
   addBehaviour(component, "removeRoleFromContext", function (component: BehaviourComponent) {
     domEl.addEventListener("keydown", handleKeyDown);
     domEl.draggable = true;
-    // Notice that this code is highly contextual.
-    // It may have to change if the other behaviours that add dragstart methods
-    // change.
+    
+    // Add swipe to delete functionality
+    addSwipeToDelete(
+      domEl, 
+      component, 
+      () => component.context.removerol(),
+      i18next.t("swipe_remove_role_confirm", { ns: "preact", defaultValue: "Remove this role?" })
+    );
+    
+    // Existing drag behavior
     if (!domEl.ondragstart) {
       domEl.ondragstart = (ev: DragEvent) => {
         const payload = JSON.stringify({
@@ -398,15 +405,19 @@ export const addRemoveContext : BehaviourAdder = (domEl, component) => {
     }
   }
 
-  // Apply the function to the component to add the behaviour, but only if it is not already added.
-  // In effect this is a decorator pattern.
-  // The DOM element (domEl) gets event listeners for keydown and dragstart and we make it draggable.
   addBehaviour(component, "addRemoveContext", function (component: BehaviourComponent) {
     domEl.addEventListener("keydown", handleKeyDown);
     domEl.draggable = true;
-    // Notice that this code is highly contextual.
-    // It may have to change if the other behaviours that add dragstart methods
-    // change.
+    
+    // Add swipe to delete functionality
+    addSwipeToDelete(
+      domEl, 
+      component, 
+      () => component.context.removecontext(),
+      i18next.t("swipe_remove_context_confirm", { ns: "preact", defaultValue: "Remove this context?" })
+    );
+    
+    // Existing drag behavior
     if (!domEl.ondragstart) {
       domEl.ondragstart = (ev: DragEvent) => {
         const payload = JSON.stringify({
@@ -422,6 +433,148 @@ export const addRemoveContext : BehaviourAdder = (domEl, component) => {
   });
 }
 
+////////////////////////////////////////
+// SWIPE BEHAVIOUR
+////////////////////////////////////////
+// Extend HTMLElement to allow __swipeCleanup property
+interface HTMLElementWithSwipeCleanup extends HTMLElement {
+  __swipeCleanup?: () => void;
+}
+
+function addSwipeToDelete(
+  domEl: HTMLElementWithSwipeCleanup, 
+  component: BehaviourComponent, 
+  deleteAction: () => void,
+  confirmText: string
+) {
+  let touchStartX = 0;
+  let touchEndX = 0;
+  const minSwipeDistance = 100; // Minimum distance in pixels to trigger swipe
+  
+  // Create a confirmation element that appears after swiping
+  const confirmElement = document.createElement('div');
+  confirmElement.className = 'swipe-confirm-element';
+  confirmElement.innerHTML = `
+    <div class="swipe-confirm-message">${confirmText}</div>
+    <div class="swipe-confirm-buttons">
+      <button class="btn btn-sm btn-danger confirm-delete">Delete</button>
+      <button class="btn btn-sm btn-secondary cancel-delete">Cancel</button>
+    </div>
+  `;
+  confirmElement.style.position = 'absolute';
+  confirmElement.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+  confirmElement.style.padding = '10px';
+  confirmElement.style.borderRadius = '5px';
+  confirmElement.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.2)';
+  confirmElement.style.zIndex = '1000';
+  confirmElement.style.display = 'none';
+  
+  // Add it to the DOM element
+  domEl.style.position = 'relative';
+  domEl.appendChild(confirmElement);
+  
+  // Attach delete and cancel handlers
+  const confirmButton = confirmElement.querySelector('.confirm-delete');
+  const cancelButton = confirmElement.querySelector('.cancel-delete');
+  
+  if (confirmButton) {
+    confirmButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideConfirmElement();
+      deleteAction();
+    });
+  }
+  
+  if (cancelButton) {
+    cancelButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideConfirmElement();
+    });
+  }
+  
+  function showConfirmElement(clientX: number) {
+    // Position the confirm element near where the user finished swiping
+    const rect = domEl.getBoundingClientRect();
+    confirmElement.style.left = `${Math.min(clientX - rect.left, rect.width - confirmElement.offsetWidth)}px`;
+    confirmElement.style.top = `${rect.height / 2 - confirmElement.offsetHeight / 2}px`;
+    confirmElement.style.display = 'block';
+    
+    // Add a timeout to auto-hide the confirmation after 5 seconds of inactivity
+    setTimeout(() => {
+      if (confirmElement.style.display === 'block') {
+        hideConfirmElement();
+      }
+    }, 5000);
+  }
+  
+  function hideConfirmElement() {
+    confirmElement.style.display = 'none';
+  }
+
+  // Touch event handlers
+  function handleTouchStart(e: TouchEvent) {
+    touchStartX = e.touches[0].clientX;
+    domEl.classList.add('swiping'); // Optional: add visual feedback
+  }
+  
+  function handleTouchMove(e: TouchEvent) {
+    if (touchStartX === 0) return;
+    
+    const currentX = e.touches[0].clientX;
+    const diff = touchStartX - currentX;
+    
+    // If swiping left
+    if (diff > 0) {
+      // Optional: add visual feedback as user swipes
+      const swipePercentage = Math.min((diff / minSwipeDistance) * 100, 100);
+      domEl.style.transform = `translateX(-${swipePercentage * 0.2}%)`;
+      domEl.style.opacity = `${1 - (swipePercentage / 300)}`;
+      
+      // Prevent scrolling while swiping
+      if (diff > 10) {
+        e.preventDefault();
+      }
+    }
+  }
+  
+  function handleTouchEnd(e: TouchEvent) {
+    touchEndX = e.changedTouches[0].clientX;
+    const swipeDistance = touchStartX - touchEndX;
+    
+    // Reset visual effects
+    domEl.style.transform = '';
+    domEl.style.opacity = '';
+    domEl.classList.remove('swiping');
+    
+    // Check if the swipe was long enough and in the left direction
+    if (swipeDistance > minSwipeDistance) {
+      // Show confirmation dialog
+      showConfirmElement(touchEndX);
+    }
+    
+    // Reset values
+    touchStartX = 0;
+    touchEndX = 0;
+  }
+
+  // Add event listeners
+  domEl.addEventListener('touchstart', handleTouchStart, { passive: false });
+  domEl.addEventListener('touchmove', handleTouchMove, { passive: false });
+  domEl.addEventListener('touchend', handleTouchEnd);
+  
+  // Store cleanup function on the element to be called when behavior is removed
+  const cleanup = () => {
+    domEl.removeEventListener('touchstart', handleTouchStart);
+    domEl.removeEventListener('touchmove', handleTouchMove);
+    domEl.removeEventListener('touchend', handleTouchEnd);
+    if (confirmElement.parentNode === domEl) {
+      domEl.removeChild(confirmElement);
+    }
+  };
+  
+  // Store cleanup function for later use
+  domEl.__swipeCleanup = cleanup;
+}
 ////////////////////////////////////////
 // CONDITIONALLY ADD BEHAVIOUR
 ////////////////////////////////////////

@@ -101,4 +101,6 @@
 , "tableContextMenu_copy": "Kopieer"
 , "fillRole_filler_has_been_used": "Een andere rol is al gevuld met dezelfde rol."
 , "fillRole_error": "Twee rolinstanties kunnen niet met dezelfde rol worden gevuld."
+, "swipe_remove_role_confirm": "Deze rol verwijderen?"
+, "swipe_remove_context_confirm": "Deze context verwijderen?"
 }

@@ -9,6 +9,10 @@ import { ComponentProps } from "react";
   Instead, use the AdorningComponentWrapper component.
   This component is used by the AdorningComponentWrapper component.
 */
+// Extend HTMLElement to include optional __swipeCleanup property
+interface HTMLElementWithSwipeCleanup extends HTMLElement {
+    __swipeCleanup?: () => void;
+  }
 
 export interface AdornWithBehaviourProps extends CardProperties, BehaviourComponentProps {
   addedBehaviour: BehaviourAdder[];
@@ -25,7 +29,7 @@ export class AdornWithBehaviour extends React.Component<AdornWithBehaviourProps>
   // This reference will point to the div element that wraps the Card component. 
   // It will have all behaviour handlers.
   // It will also receive focus.
-  ref: React.RefObject<HTMLElement | null>;
+  ref: React.RefObject<HTMLElementWithSwipeCleanup | null>;
   
   constructor(props: AdornWithBehaviourProps) {
     super(props);
@@ -48,6 +52,13 @@ export class AdornWithBehaviour extends React.Component<AdornWithBehaviourProps>
       {
         this.props.addedBehaviour.forEach(behaviour => behaviour(domEl!, this, component.props.title));
       }
+  }
+
+  componentWillUnmount(): void {
+    if (this.ref.current?.__swipeCleanup) {
+      // If the element has a swipe cleanup function, call it.
+      this.ref.current.__swipeCleanup();
+    }
   }
 
   componentDidUpdate() {

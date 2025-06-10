@@ -65,3 +65,20 @@ for a discussion about variables and sass. */
 .accordion-button:not(.collapsed) {
   --bs-accordion-active-bg: var(--bs-dark-bg-subtle) !important;
 }
+
+/* STYLES RELATED TO SWIPE GESTURES */
+.swiping {
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+.swipe-confirm-element {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.swipe-confirm-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}

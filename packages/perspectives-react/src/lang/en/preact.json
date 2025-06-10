@@ -101,4 +101,6 @@
 , "tableContextMenu_copy": "Copy"
 , "fillRole_filler_has_been_used": "Another role has already been filled with the same role."
 , "fillRole_error": "Two role instanes cannot be filled with the same role."
+, "swipe_remove_role_confirm": "Remove this role?"
+, "swipe_remove_context_confirm": "Remove this context?"
 }
