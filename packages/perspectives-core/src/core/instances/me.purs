@@ -8,11 +8,9 @@ import Data.Newtype (unwrap)
 import Perspectives.ContextAndRole (rol_binding, rol_isMe)
 import Perspectives.CoreTypes (type (~~>), MP, liftToInstanceLevel)
 import Perspectives.Instances.Combinators (filter, some) as Combinators
-import Perspectives.Instances.Combinators (logicalAnd_)
 import Perspectives.Instances.ObjectGetters (contextType, getMe, getPreferredUserRoleType, roleType, roleType_)
 import Perspectives.Persistent (tryGetPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
-import Perspectives.Representation.Class.Role (roleTypeIsFunctional)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ResourceType(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (isInPublicScheme, takeGuid)
@@ -21,6 +19,7 @@ import Perspectives.Types.ObjectGetters (calculatedUserRole, contextAspectsClosu
 import Prelude (bind, map, not, pure, ($), (<<<), (>=>), (>>=))
 
 -- | `isMe` has an internal error boundary. On failure, it returns false.
+-- | Checks if `isMe` is true, if not recursively checks the binding.
 -- | If the role instance is a public resource, checks the binding regardless of the value of member 'me'.
 -- | This is because 'me' is a purely local optimization that is never synchronized, but this fails for 
 -- | obvious reasons for public resources.
@@ -76,9 +75,7 @@ getMyType ctxt = getPreferredUserRoleType ctxt
     findMeInCalculatedRoles :: ContextInstance ~~> RoleType
     findMeInCalculatedRoles = (contextType >=> Combinators.filter 
       (liftToInstanceLevel $ contextAspectsClosure >=> calculatedUserRole)
-      (logicalAnd_ 
-        (lift <<< lift <<< roleTypeIsFunctional :: RoleType ~~> Boolean)
-        (computesMe ctxt)))
+      (computesMe ctxt))
 
     findMeInUnlinkedRoles ::  ContextInstance ~~> RoleType
     findMeInUnlinkedRoles = Combinators.filter (Combinators.filter (contextType >=> liftToInstanceLevel (contextAspectsClosure >=> enumeratedUserRole)) isUnlinked) (computesMe ctxt)
