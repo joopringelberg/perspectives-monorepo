@@ -119,4 +119,13 @@
   , "installationerror_button": "Refresh"
   , "installationerror_message": "The installation of MyContexts did could complete at once. Press the button to restart the process."
   , "wider_contexts_title": "The wider context"
+  , "check_for_updates": "Check for updates"
+  , "update_checking_title": "Checking for updates"
+  , "update_checking_message": "The program is checking if a newer version of MyContexts is available. If so, you will receive a notification. You can close this window and continue your work in the meantime (by the way: the program automatically checks every 15 minutes if a new version is available)."
+  , "update_available_title": "Update available"
+  , "update_available_message": "A new version of MyContexts is available. Would you like to update now?"
+  , "update_later": "Update later"
+  , "update_now": "Update now"
+  , "loading_welcome": "Welcome to MyContexts!"
+  , "loading_message": "Please wait while the application loads version {{version}} (build {{build}})..."
   }

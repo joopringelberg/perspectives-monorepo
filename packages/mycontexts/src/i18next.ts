@@ -19,7 +19,6 @@ export async function initI18next () : Promise<void>
       // Disable loading of dev locale
       fallbackLng: false,
       ns: ["mycontexts", "preact"],
-      lng: currentLanguage
       })
     .then(() => {
 

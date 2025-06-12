@@ -118,4 +118,14 @@
   , "installationerror_button": "Hervat"
   , "installationerror_message": "De installatie van MyContexts kon niet in één keer worden voltooid. Druk op de knop om het proces opnieuw te starten."
   , "wider_contexts_title": "De bredere context"
+  , "check_for_updates": "Controleer op updates"
+  , "update_checking_title": "Controle op updates"
+  , "update_checking_message": "Het programma controleert of een nieuwere versie van MyContexts beschikbaar is. Zo ja, krijg je een melding. Je kunt intussen dit venster sluiten en doorgaan met je werk (overigens: het programma controleert automatisch elke 15 minuten of een nieuwe versie beschibaar is."
+  , "update_available_title": "Nieuwe versie beschikbaar"
+  , "update_available_message": "Er is een nieuwe versie van MyContexts beschikbaar. Wil je nu updaten?"
+  , "update_later": "Later updaten"
+  , "update_now": "Nu updaten"
+  , "loading_welcome": "Welkom bij MyContexts!"
+  , "loading_message": "Even geduld a.u.b. terwijl het programma geladen wordt (versie {{version}}, build {{build}})..."
+
 }

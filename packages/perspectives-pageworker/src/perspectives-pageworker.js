@@ -46,11 +46,8 @@ export default function pageHostingPDRPort(pdr) {
 
   
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(
-      "perspectives-pagedispatcher" + __PAGEDISPATCHER_VERSION__ + ".js",
-      {
-        scope: './'
-      }).then(function (registration) {
+    // This assumes perspectives-serviceworker is already registered with scope './'
+    navigator.serviceWorker.ready.then(function(registration) {
 
         function sendPortToController() {
           // Only send if we have a controller
@@ -63,109 +60,74 @@ export default function pageHostingPDRPort(pdr) {
           }
         }
      
-        let serviceWorker;
-        if (registration.installing) {
-          console.log("Pageworker: service worker is installing");
-          serviceWorker = registration.installing;
-          serviceWorker.addEventListener('statechange', function() {
-            console.log("Pageworker: service worker state changed to " + serviceWorker.state);
-            if (serviceWorker.state === 'activated') {
-              console.log("Pageworker: worker just activated, waiting briefly before sending message");
-              // Small delay to ensure controller is properly set up
-              setTimeout(sendPortToController, 100);
-            }
-          });
-        } else if (registration.active) {
-          serviceWorker = registration.active;
-          console.log("Pageworker: worker already active");
-          sendPortToController();
-        }
-        else if (registration.waiting) {
-          console.log("Pageworker: worker waiting");
-          serviceWorker = registration.waiting;
-        }
-        if (serviceWorker) {
-          console.log("Pageworker: service worker found");
-          // Listen to messages coming in from the serviceWorker. The serviceWorker is the central hub that passes messages
-          // between the page hosting the PDR and the other pages.
-          // Notice that all pages that are not the first will never handle a message.
-          // Notice that this handler is on the ServiceWorkerContainer of EACH PAGE; NOT IN THE SERVICEWORKER ITSELF!
-
-          // Notice that this listener is just used to shuffle ports between pages.
-          // We establish a connection between the page that hosts the PDR and the page that
-          // wants to use the PDR. That connection is a 'channel'.
-          // It consists of two ports. One port is sent by the page that wants to use de PDR.
-          // It is received and used by the page that hosts the PDR.
-          // The other port is used by the page that wants to use the PDR.
-          // Corrolary: this listener has nothing to do with Perspectives calls that are passed 
-          // from client pages to the PDR!
-          navigator.serviceWorker.addEventListener('message', function (event) {
-            switch (event.data.messageType) {
-              case "youHost":
-                const hostingPage = event.data.port;
-                hostingPage.start();
-                // This message only arrives to the very first page visiting InPlace.
-                // This page must host the PDR.
-                weHost = true;
-                // We've sent ourselves a port.
-                channels[channelIndex] = hostingPage;
-                // Return the channelIndex.
-                console.log("Pageworker: we host the PDR. We send channelId to the page that hosts the PDR.")
-                channels[channelIndex].postMessage({ responseType: "WorkerResponse", serviceWorkerMessage: "channelId", channelId: 1000000 * channelIndex });
-                // start listening to the new channel, handle requests.
-                // The page that has sent the port will send WorkerResponse messages and API calls
-                hostingPage.onmessage = request => pdr.handleClientRequest(pdr, channels, request, 1000000 * channelIndex);
-                // increment the index so we're ready for the next page that connects.
-                channelIndex = channelIndex + 1;
-                break;
-              case "relayPort":
-                // If we are the host, save the port; otherwise ignore.
-                if (weHost) {
-                  // Notice how this section is exactly the same as the one in the onconnect handler of the SharedWorker.
-                  const connectionToAPage = event.data.port;
-                  connectionToAPage.start();
-                  // the new client (page) sends a port. This is a MessagePort.
-                  channels[channelIndex] = connectionToAPage;
-                  // Return the channelIndex.
-                  console.log("Pageworker: we are not the host. We send channelId to the page that wants to use the PDR.")
-                  channels[channelIndex].postMessage({ responseType: "WorkerResponse", serviceWorkerMessage: "channelId", channelId: 1000000 * channelIndex });
-                  // start listening to the new channel, handle requests.
-                  connectionToAPage.onmessage = request => pdr.handleClientRequest(pdr, channels, request, 1000000 * channelIndex);
-                  // increment the index so we're ready for the next page that connects.
-                  channelIndex = channelIndex + 1;
-                }
-                break;
-            }
-          });
-          // if (navigator.serviceWorker.controller) {
-          //   console.log("Pageworker: navigator heeft controler direct na registreren - deze pagina stuurt relayport nu.")
-          //   // This call transfers port2 of the channel to the serviceWorker perspectives-pagedispatcher.js.
-          //   // The serviceWorker will transfer it to the page hosting the PDR.
-          //   // NOTICE that by providing the port as a second argument, we transfer ownership of the port to the serviceWorker.
-          //   navigator.serviceWorker.controller.postMessage({ messageType: "relayPort", port: channel.port2 }, [channel.port2]);
-          // }
-        }
-        else {
-          console.log("Could not get serviceWorker from registration for an unknown reason.");
-        }
-        // Listen to the controllerchange event. This is fired when the service worker takes control of the page.
-        // For the first page that registers, the case above (if (navigator.serviceWorker.controller)) will be false.
-        // Hence, the first page would never send a "relayPort" message to the service worker.
-        // Also, when a new version of the service worker is installed, the controllerchange event is fired, too.
+      // Always use the active worker from the existing registration
+      let serviceWorker = registration.active;
+      if (serviceWorker) {
+        console.log("Pageworker: using existing service worker");
+        sendPortToController();
+      } else {
+        console.log("Pageworker: waiting for service worker to activate");
+        // Wait for the service worker to be ready
         navigator.serviceWorker.addEventListener("controllerchange", () => {
-          // Send the port to the serviceWorker, to relay it to the page hosting the PDR.
-          // Only the serviceworker knows how many clients it has. If there is but one, it will immediately
-          // return a "youhost" message to this listener, which will set 'wehost' to true. 
-          // See: https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorker/postMessage
-          console.log("Pageworker: controller change. Deze pagina heeft de PDR, of er is een nieuwe versie van 'perspectives-pagedispachter.js'. Hij stuurt relayport nu.")
+          console.log("Pageworker: controller change detected, sending port");
           sendPortToController();
-          // navigator.serviceWorker.controller.postMessage({ messageType: "relayPort", port: channel.port2 }, [channel.port2]);
         });
+      }
+      // Listen to messages coming in from the serviceWorker. The serviceWorker is the central hub that passes messages
+      // between the page hosting the PDR and the other pages.
+      // Notice that all pages that are not the first will never handle a message.
+      // Notice that this handler is on the ServiceWorkerContainer of EACH PAGE; NOT IN THE SERVICEWORKER ITSELF!
 
-      }).catch(function (error) {
+      // Notice that this listener is just used to shuffle ports between pages.
+      // We establish a connection between the page that hosts the PDR and the page that
+      // wants to use the PDR. That connection is a 'channel'.
+      // It consists of two ports. One port is sent by the page that wants to use de PDR.
+      // It is received and used by the page that hosts the PDR.
+      // The other port is used by the page that wants to use the PDR.
+      // Corrolary: this listener has nothing to do with Perspectives calls that are passed 
+      // from client pages to the PDR!
+      navigator.serviceWorker.addEventListener('message', function (event) {
+        switch (event.data.messageType) {
+          case "youHost":
+            const hostingPage = event.data.port;
+            hostingPage.start();
+            // This message only arrives to the very first page visiting InPlace.
+            // This page must host the PDR.
+            weHost = true;
+            // We've sent ourselves a port.
+            channels[channelIndex] = hostingPage;
+            // Return the channelIndex.
+            console.log("Pageworker: we host the PDR. We send channelId to the page that hosts the PDR.")
+            channels[channelIndex].postMessage({ responseType: "WorkerResponse", serviceWorkerMessage: "channelId", channelId: 1000000 * channelIndex });
+            // start listening to the new channel, handle requests.
+            // The page that has sent the port will send WorkerResponse messages and API calls
+            hostingPage.onmessage = request => pdr.handleClientRequest(pdr, channels, request, 1000000 * channelIndex);
+            // increment the index so we're ready for the next page that connects.
+            channelIndex = channelIndex + 1;
+            break;
+          case "relayPort":
+            // If we are the host, save the port; otherwise ignore.
+            if (weHost) {
+              // Notice how this section is exactly the same as the one in the onconnect handler of the SharedWorker.
+              const connectionToAPage = event.data.port;
+              connectionToAPage.start();
+              // the new client (page) sends a port. This is a MessagePort.
+              channels[channelIndex] = connectionToAPage;
+              // Return the channelIndex.
+              console.log("Pageworker: we are not the host. We send channelId to the page that wants to use the PDR.")
+              channels[channelIndex].postMessage({ responseType: "WorkerResponse", serviceWorkerMessage: "channelId", channelId: 1000000 * channelIndex });
+              // start listening to the new channel, handle requests.
+              connectionToAPage.onmessage = request => pdr.handleClientRequest(pdr, channels, request, 1000000 * channelIndex);
+              // increment the index so we're ready for the next page that connects.
+              channelIndex = channelIndex + 1;
+            }
+            break;
+        }
+      });
+    }).catch(function (error) {
         // Something went wrong during registration. The service-worker.js file
         // might be unavailable or contain a syntax error.
-        console.log(error);
+        console.log("Error using perspectives-service worker for port relay in page setup", error);
       });
   }
   else {

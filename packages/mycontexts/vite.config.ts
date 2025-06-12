@@ -82,10 +82,6 @@ export default defineConfig({
               dest: 'public',
               rename: (name) => `perspectives-pagedispatcher${pageDispatcherVersion}.js` 
             },
-            {
-              src: 'src/notification-worker.js',
-              dest: 'public',
-            },
             { 
               src: 'public/**/*', 
               dest: 'dist' 

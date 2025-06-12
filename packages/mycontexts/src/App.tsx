@@ -14,13 +14,15 @@ import { Button, Container, Row } from 'react-bootstrap';
 import WWWComponent from './www.js';
 import { getInstalledVersion, runUpgrade, setMyContextsVersion, toWWW } from './dataUpgrade.js';
 import LoadingScreen from './LoadingScreen.js';
+import UpdateNotification from './updateNotification.js';
 
 await initI18next();
 
 interface AppState {
   phase: 'installationExists' | 'prepareInstallation' | 'installationError' | 'installing' | 'installationcomplete' | undefined,
   installationResult: InstallationResult,
-  wwwComponentReady: boolean
+  wwwComponentReady: boolean,
+  updateAvailable: boolean,
 }
 
 export default class App extends Component<{}, AppState>
@@ -28,11 +30,27 @@ export default class App extends Component<{}, AppState>
   constructor(props: {})
   {
     super(props);
+    const component = this;
     this.state =
       { phase: undefined
       , installationResult: { type: 'NoKeyPairData', perspectivesUserId: 'newuser' }
       , wwwComponentReady: false
+      , updateAvailable: false
       };
+    
+    // ONLY listen for update notifications, don't check for updates
+    if ('serviceWorker' in navigator) {
+      // Listen for update messages from service worker via BroadcastChannel
+      const channel = new BroadcastChannel('app-update-channel');
+      channel.addEventListener('message', (event) => {
+        console.log("Received message from broadcast channel:", event.data);
+        if (event.data === 'NEW_VERSION_AVAILABLE') {
+          console.log("Update available, showing notification");
+          component.setState({updateAvailable: true});
+        }
+      });
+    }
+    
     this.runDataUpgrades().then( () => startPDR());
   }
 
@@ -150,8 +168,29 @@ export default class App extends Component<{}, AppState>
     }, 100);
   }
 
+  handleUpdate() {
+    console.log("User chose to update");
+    // Tell service worker to skipWaiting
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage('SKIP_WAITING');
+      console.log("Sent SKIP_WAITING message to service worker");
+    }
+    this.setState({updateAvailable: false});
+  }
+  
+  handleDismiss () {
+    this.setState({updateAvailable: false});
+  };
+
   render()
   {
+    const component = this;
+    const updateNotification = <UpdateNotification
+              show={component.state.updateAvailable} 
+              onUpdate={() => component.handleUpdate()} 
+              onDismiss={() => component.handleDismiss()} 
+            />
+
     switch (this.state.phase) {
       case 'installationExists':
         return (
@@ -162,23 +201,36 @@ export default class App extends Component<{}, AppState>
                 onMounted={() => this.setState({ wwwComponentReady: true })}
               />
             </div>
+            {updateNotification}
           </>);
       case 'prepareInstallation':
-      return <ConfigureInstallation callback={ (installationResult : InstallationResult) =>{
-          this.setState({ phase: 'installing', installationResult });
-        }} />;
+      return (<>
+                <ConfigureInstallation callback={ (installationResult : InstallationResult) =>{
+                  this.setState({ phase: 'installing', installationResult });
+                }} />
+                {updateNotification}
+              </>);
       case 'installationError' :
-      return <div>
-              <h2>{ i18next.t( "installationerror", {ns: "mycontexts"} ) }</h2>
-              <Button onClick={() => this.refreshApp()}>
-                { i18next.t( "installationerror_button", {ns: "mycontexts"} ) }
-              </Button>
-              <p>{ i18next.t( "installationerror_message", {ns: "mycontexts"} ) }</p>
-            </div>;
+      return (<>
+              <div>
+                <h2>{ i18next.t( "installationerror", {ns: "mycontexts"} ) }</h2>
+                <Button onClick={() => this.refreshApp()}>
+                  { i18next.t( "installationerror_button", {ns: "mycontexts"} ) }
+                </Button>
+                <p>{ i18next.t( "installationerror_message", {ns: "mycontexts"} ) }</p>
+              </div>
+              {updateNotification}
+            </>);
       case 'installing':
-        return this.installing(this.state.installationResult);
+        return (<>
+                  {this.installing(this.state.installationResult)}
+                  {updateNotification}
+                </>);
       case 'installationcomplete':
-        return this.installing(this.state.installationResult);
+        return (<>
+                  {this.installing(this.state.installationResult)}
+                  {updateNotification}
+                </>);
       default:
       return <div>Work to do.</div>;
     }

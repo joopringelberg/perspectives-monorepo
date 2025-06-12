@@ -38,10 +38,6 @@ console.log(`Service Worker Version ${SW_VERSION} starting`);
 self.addEventListener('install', event => {
   console.log(`Service Worker ${SW_VERSION} installing...`);
   // Ensure sync execution
-  event.waitUntil(Promise.resolve().then(() => {
-    console.log(`Service Worker ${SW_VERSION} skipping waiting...`);
-    self.skipWaiting();
-  }));
 });
 
 self.addEventListener('activate', event => {

@@ -143,7 +143,11 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               component.addUnsubscriber(subscribeToAllNotifications(systemIdentifier));
               // Subscribe to language changes
               component.addUnsubscriber(pproxy.getProperty( externalRole( systemIdentifier ), ModelDependencies.currentLanguage, ModelDependencies.systemExternal, 
-                ( languages : ValueT[] ) => changeLanguage( languages[0]as string ) ) );
+                ( languages : ValueT[] ) => {
+                  if (languages[0]) {
+                    changeLanguage( languages[0] as string )
+                  }
+                } ) );
               // Open the default screen or the one specified in the URL.
               component.prepareMyContextsScreen();
               })
@@ -201,16 +205,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
             component.tryToOpenContext(roleId);
           }
         }
-      });
-      
-      // Register the service worker if not already registered
-      navigator.serviceWorker.register('/www/notification-worker.js')
-        .then(registration => {
-          console.log('notification-worker registered from WWW component');
-        })
-        .catch(err => {
-          console.error('Error registering notification-worker from WWW component:', err);
-        });
+      });      
     }
 
     // Add event listener for OpenContext event

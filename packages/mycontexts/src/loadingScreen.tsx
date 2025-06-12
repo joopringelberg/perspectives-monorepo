@@ -17,8 +17,8 @@ const LoadingScreen = () => {
       </Row>
       <Row className="text-center">
         <Col>
-          <h2 className="mb-4">{i18next.t("loading_welcome", {ns: 'mycontexts', defaultValue: "Welcome to MyContexts"})}</h2>
-          <p className="mb-4">{i18next.t("loading_message", {ns: 'mycontexts', defaultValue: "Loading the app..."})}</p>
+          <h2 className="mb-4">{i18next.t("loading_welcome", {ns: 'mycontexts'})}</h2>
+          <p className="mb-4">{i18next.t("loading_message", {ns: 'mycontexts', version: __MYCONTEXTS_VERSION__, build: __BUILD__})}</p>
           <Spinner animation="border" role="status" variant="primary">
             <span className="visually-hidden">Loading...</span>
           </Spinner>
