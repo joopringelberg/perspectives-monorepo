@@ -18,7 +18,7 @@ if ("serviceWorker" in navigator) {
   });
 
   // Register service worker and set up update checking
-  navigator.serviceWorker.register(`perspectives-serviceworker${__BUILD__}.js`)
+  navigator.serviceWorker.register('perspectives-serviceworker.js')
     .then(reg => {
       console.log("Perspectives-service worker registration succeeded:", reg);
       registration = reg;
@@ -27,7 +27,7 @@ if ("serviceWorker" in navigator) {
       setInterval(() => {
         registration.update();
         console.log('Checking for updates to perspectives-serviceworker...');
-      }, 60 * 60 * 1000); // Check hourly
+      }, 15 * 60 * 1000); // Check every 15 minutes
       
       // Listen for new service worker installation once, at registration time
       registration.addEventListener('updatefound', () => {

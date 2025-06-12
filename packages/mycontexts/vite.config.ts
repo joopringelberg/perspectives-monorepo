@@ -124,7 +124,7 @@ export default defineConfig({
               swContent = swContent.replace(/__BUILD__/g, JSON.stringify(build));
               
               // Write to public for development
-              fs.writeFileSync(`./public/perspectives-serviceworker${build}.js`, swContent);
+              fs.writeFileSync('./public/perspectives-serviceworker.js', swContent);
               console.log('Development service worker generated in public directory');
             }
           },
@@ -163,7 +163,7 @@ export default defineConfig({
             swContent = swContent.replace(/__BUILD__/g, JSON.stringify(build));
             
             // Write the final service worker to dist
-            fs.writeFileSync(`./dist/perspectives-serviceworker${build}.js`, swContent);
+            fs.writeFileSync('./dist/perspectives-serviceworker.js', swContent);
             console.log('Service worker generated with', files.length, 'files in cache list');
           }
         }
