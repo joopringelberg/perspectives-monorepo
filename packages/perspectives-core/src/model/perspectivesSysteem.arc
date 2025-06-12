@@ -430,7 +430,7 @@ domain model://perspectives.domains#System
       perspective on PinnedContexts
         only (Remove)
       perspective on RecentContexts
-        only (Remove)
+        only (Remove, Delete)
         props (LastShownOnScreen) verbs (Consult)
       perspective on ActualRecentContexts
 

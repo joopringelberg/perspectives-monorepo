@@ -1,0 +1,262 @@
+model://perspectives.domains#Stadskamers:
+  contexts:
+    StadskamersApp:
+      translations:
+        nl: Stadskamers app
+        en: Stadskamers app
+      users:
+        Manager:
+          translations:
+            nl: Beheerder
+            en: Manager
+          markdowns:
+            0:
+              translations:
+                orig: "### Dit is de Stadskamer App\n
+                  Hier kun je Stadskamer-organisaties aanmaken en beheren."
+                nl: "### Dit is de Stadskamer App\n
+                  Hier kun je Stadskamer-organisaties aanmaken en beheren."
+                en: MISSING en
+      contextroles:
+        Stadskamers:
+          translations:
+            nl: Stadskamers
+            en: Stadskamers
+    Stadskamer:
+      translations:
+        nl: Stadskamer
+        en: Stadskamer
+      external:
+        properties:
+          Name:
+            translations:
+              nl: Naam
+              en: Name
+      users:
+        Ambassadeurs:
+          translations:
+            nl: Ambassadeurs
+            en: Ambassadors
+          actions:
+            model://perspectives.domains#Stadskamers$Stadskamer$Ambassadeurs:
+              CreateRoute:
+                translations:
+                  nl: Maak een routenl
+                  en: Make a route
+          markdowns:
+            0:
+              translations:
+                orig: "### Stadskamer: routes\n
+                  Hier kun je routes beheren.\n
+                  Maak een route aan met de knop [[CreateRoute|Nieuwe route]] (is ook een actie in het menu linksboven)."
+                nl: "### Stadskamer: routes\n
+                  Hier kun je routes beheren.\n
+                  Maak een route aan met de knop [[CreateRoute|Nieuwe route]] (is ook een actie in het menu linksboven)."
+                en: MISSING en
+        Employees:
+          translations:
+            nl: Werknemers
+            en: Employees
+          markdowns:
+            0:
+              translations:
+                orig: "### Stadskamer: de organisatie\n
+                  Hier zie je je collegas onder Wie.\n
+                  Kijk onder 'Locaties' voor de verschillende vestigingen."
+                nl: "### Stadskamer: de organisatie\n
+                  Hier zie je je collegas onder Wie.\n
+                  Kijk onder 'Locaties' voor de verschillende vestigingen."
+                en: MISSING en
+        Administrators:
+          translations:
+            nl: Beheerders
+            en: Administrators
+          markdowns:
+            0:
+              translations:
+                orig: "### Stadskamer: de organisatie\n
+                  Hier kun je medewerkers en locaties beheren.\n
+                  Er zijn twee soorte locaties: grote, met meerder activiteitencentra, en kleine, met één activiteitencentrum."
+                nl: MISSING nl
+                en: MISSING en
+      contextroles:
+        MyRoutes:
+          translations:
+            nl: Mijn routes
+            en: My routes
+        Routes:
+          translations:
+            nl: Routes
+            en: Routes
+        Locations:
+          translations:
+            nl: Lokaties
+    Route:
+      translations:
+        nl: Route
+        en: Route
+      external:
+        properties:
+          Name:
+            translations:
+              nl: Naam
+              en: Name
+      users:
+        Ambassadeur:
+          translations:
+            nl: Ambassadeur
+            en: Ambassador
+          markdowns:
+            0:
+              translations:
+                orig: "### Route van deelnemer\n
+                  * Vul een deelnemer in en wijs een begeleider toe.\n
+                  * Doe een intake."
+                nl: MISSING nl
+                en: MISSING en
+        Begeleider:
+          translations:
+            nl: Begeleider
+            en: Supervisor
+        Deelnemer:
+          translations:
+            nl: Deelnemer
+            en: Participant
+    Location:
+      translations:
+        nl: Lokatie
+        en: Location
+      external:
+        properties:
+          City:
+            translations:
+              nl: Plaats
+              en: City
+          PostalCode:
+            translations:
+              nl: Postcode
+              en: Postal code
+          HouseNumber:
+            translations:
+              nl: Huisnummer
+              en: House number
+          Street:
+            translations:
+              nl: Straat
+              en: Street
+          Name:
+            translations:
+              nl: Naam
+              en: Name
+      users:
+        LocationManager:
+          translations:
+            nl: Lokatiebeheerder
+            en: Location manager
+        Initializer:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
+          markdowns:
+            0:
+              translations:
+                orig: "### Deze locatie heeft een manager nodig\n
+                  Hier kun je een manager aanstellen voor deze locatie.\n
+                  De manager kan dan activiteitencentra beheren.\n
+                  * maak een lege rol aan onder 'Wie' - LocatieManager\n
+                  * vul met een Medewerker-rol op het clipboard."
+                nl: MISSING nl
+                en: MISSING en
+      contextroles:
+        ActivityCenters:
+          translations:
+            nl: Activiteitscentra
+            en: Activity centers
+    ActivityCenter:
+      translations:
+        nl: Activiteitscentrum
+        en: Activity center
+      external:
+        properties:
+          Name:
+            translations:
+              nl: Naam
+              en: Name
+      users:
+        Regisseur:
+          translations:
+            nl: Regisseur
+            en: Director
+        Initializer:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
+          markdowns:
+            0:
+              translations:
+                orig: "### Deze locatie heeft een Regisseur\n
+                  Hier kun je de Regisseur benoemen.\n
+                  De Regisseur organiseert de activiteiten.\n
+                  * maak een lege rol aan onder 'Wie' - Regisseur\n
+                  * vul met een Medewerker-rol op het clipboard."
+                nl: MISSING nl
+                en: MISSING en
+      contextroles:
+        Activities:
+          translations:
+            nl: Activiteiten
+            en: Activities
+    Activity:
+      translations:
+        nl: Activiteit
+        en: Activity
+      external:
+        properties:
+          EndTime:
+            translations:
+              nl: Eindtijd
+              en: Ending time
+          StartTime:
+            translations:
+              nl: Begintijd
+              en: Starting time
+          Weekday:
+            translations:
+              nl: Weekdag
+              en: Weekday
+          Description:
+            translations:
+              nl: Beschrijving
+              en: Description
+          Name:
+            translations:
+              nl: Naam
+              en: Name
+      users:
+        Organizer:
+          translations:
+            nl: organisator
+            en: or
+          markdowns:
+            0:
+              translations:
+                orig: "### Activiteit\n
+                  Beschrijf je activiteit"
+                nl: MISSING nl
+                en: MISSING en
+        Initializer:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
+          markdowns:
+            0:
+              translations:
+                orig: "### Deze activiteit heeft een Organisator nodig\n
+                  * maak een lege rol aan onder 'Wie' - Organisator\n
+                  * vul met een Medewerker-rol op het clipboard."
+                nl: MISSING nl
+                en: MISSING en
+    SmallLocation:
+      translations:
+        nl: Kleine lokatie
+        en: Small location
