@@ -138,6 +138,13 @@ runDataUpgrades = do
       addIsSystemModel
       -- Add SettingsType to the system model.
       addSettingsType)
+  
+  runUpgrade installedVersion "0.26.11"
+    (\_ -> do 
+      -- We reload the libraries. They now have translations. 
+      -- This prevents the non-critical error messages on startup.
+      updateModels02611
+      )
 
 
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
@@ -311,3 +318,15 @@ addSettingsType = do
   PerspectRol rec@{allTypes} <- getPerspectRol (RoleInstance $ buitenRol systemId)
   cacheAndSave (RoleInstance systemId) (PerspectRol rec {allTypes = [(EnumeratedRoleType settings)] `union` allTypes })
 
+updateModels02611:: MonadPerspectives Unit
+updateModels02611 = runMonadPerspectivesTransaction'
+  false
+  (ENR $ EnumeratedRoleType sysUser)
+  do
+    updateModel_ ["model://perspectives.domains#Couchdb@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#Serialise@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#Sensor@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#Utilities@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#Parsing@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#Files@1.0"] ["false"] (RoleInstance "")
+    updateModel_ ["model://perspectives.domains#RabbitMQ@1.0"] ["false"] (RoleInstance "")
