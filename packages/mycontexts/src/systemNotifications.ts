@@ -9,7 +9,7 @@ type NotificationData = {
 }
 
 // In systemNotifications.ts
-function generateNotifications(messages: NotificationData[]) {
+function generateNotifications(messages: NotificationData[]) : void {
   const next = messages.shift();
   if (next) {
     // Register a service worker if not already registered
@@ -95,12 +95,12 @@ export function subscribeToAllNotifications (systemcontextinstance : ContextInst
                 ModelDependencies.notifications,
                 function( messages )
                 {
-                  resolve( {text: messages[0], data: {roleId: notification}});
+                  resolve( {text: messages[0], data: {roleId: notification}} as NotificationData);
                 },
                 FIREANDFORGET
               );                        
             });
-          }) ).then( generateNotifications );
+          }) ).then( args => generateNotifications(args as NotificationData[]) );
       });
       return unsubscriber;
     });

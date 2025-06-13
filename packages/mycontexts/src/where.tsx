@@ -34,15 +34,16 @@ export class Where extends Component<WhereProps, WhereState> {
     if (this.ref.current) {
       this.ref.current.addEventListener(
         'OpenContext', 
-        (e : CustomEvent) => {
+        (e: Event) => {
           component.setState({accordionOpen: []});  
         }, 
         false);
       this.ref.current.addEventListener(
         'OpenAccordionItem',
-        (e : CustomEvent) => {
-          if (component.state.accordionOpen.indexOf( e.detail ) === -1) {
-            component.setState({accordionOpen: [e.detail]});
+        (e: Event) => {
+          const customEvent = e as CustomEvent;
+          if (component.state.accordionOpen.indexOf(customEvent.detail) === -1) {
+            component.setState({accordionOpen: [customEvent.detail]});
           }
           else {
             component.setState({accordionOpen: []});

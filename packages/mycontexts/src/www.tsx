@@ -1,5 +1,5 @@
 import React from 'react';
-import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider } from 'react-bootstrap';
+import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs } from 'react-bootstrap';
 import './www.css';
 import {i18next} from 'perspectives-react';
 import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT } from 'perspectives-proxy';
@@ -211,9 +211,10 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     // Add event listener for OpenContext event
     document.body.addEventListener(
       'OpenContext', 
-      (e : CustomEvent) => {
-        e.stopPropagation();
-        component.tryToOpenContext(e.detail);  
+      (e : Event) => {
+        const ev = e as CustomEvent;
+        ev.stopPropagation();
+        component.tryToOpenContext(ev.detail);  
       }, 
       false);
 
@@ -591,7 +592,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.setState( {leftPanelContent: 'myroles'} ) }>{ i18next.t("www_myroles", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
         { component.state.actions && Object.keys( component.state.actions ).length > 0 ?
           <>
-          <DropdownDivider />
+          <NavDropdown.Divider />
           { Object.keys( component.state.actions ).map( action => <NavDropdown.Item key={action} onClick={() => component.runAction(action)}>{ component.state.actions![action]}</NavDropdown.Item>) }
           </>
           : null }

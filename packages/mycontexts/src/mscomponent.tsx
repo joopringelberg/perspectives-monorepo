@@ -59,10 +59,11 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
     this.mainPanelRef = React.createRef();
   }
 
-  showDetails = (event: RoleInstanceSelectionEvent) => {
+  showDetails: EventListener = (event) => {
+    const customEvent = event as RoleInstanceSelectionEvent;
     this.setState(
-      { selectedRoleInstance: event.detail.roleInstance
-      , selectedRoleType: event.detail.roleType
+      { selectedRoleInstance: customEvent.detail.roleInstance
+      , selectedRoleType: customEvent.detail.roleType
       , isFormVisible: this.props.isMobile
     });
     // Without this construct, the panel will be displayed before the sliding animation is complete.
@@ -77,7 +78,7 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
     , 600);
   };
 
-  conditionallyShowDetails (event: RoleInstanceSelectionEvent) {
+  conditionallyShowDetails: EventListener = (event) => {
     if (this.props.doubleclickOpensDetails)
       {
         this.showDetails(event);

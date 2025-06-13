@@ -112,8 +112,9 @@ export class MyRoleTypes extends PerspectivesComponent<MyRoleTypesProps, MyRoleT
               <tbody>
                 {
                   Object.keys( component.state.myRoleTypes ).map(
-                    function(rt: UserRoleType)
+                    function(r: string)
                     {
+                      const rt = r as UserRoleType;
                       return  <tr key={rt} onClick={e => component.handleSelect(e, rt)}>
                                 <td>{ component.state.myRoleTypes[rt] } { rt === component.props.currentroletype ? <i className="bi bi-check text-success"></i> : null }</td>
                               </tr>;
