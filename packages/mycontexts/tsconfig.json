@@ -15,14 +15,19 @@
     "outDir": "dist",
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "noUnusedLocals": false, // Disable errors for unused local variables
-    "noUnusedParameters": false, // Disable errors for unused parameters
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "preserveSymlinks": true,
+    "typeRoots": [
+      "./node_modules/@types",
+      "../../node_modules/@types"
+    ],
     "paths": {
-      "perspectives-core": ["/Users/joopringelberg/Code/perspectives-core/dist/perspectives-core.js"],
-      "/perspectives-core.js": ["/Users/joopringelberg/Code/perspectives-core/dist/perspectives-core.js"],
-      "perspectives-pageworker": ["/Users/joopringelberg/Code/perspectives-pageworker/dist/perspectives-pageworker.d.ts"],
-      "perspectives-sharedworker": ["/Users/joopringelberg/Code/perspectives-sharedworker/dist/perspectives-sharedworker.js"],
+      "perspectives-core": ["../perspectives-core/dist/perspectives-core.js"],
+      "/perspectives-core.js": ["../perspectives-core/dist/perspectives-core.js"],
+      "perspectives-pageworker": ["../perspectives-pageworker/dist/perspectives-pageworker.d.ts"],
+      "perspectives-sharedworker": ["../perspectives-sharedworker/dist/perspectives-sharedworker.js"],
+      "*": ["node_modules/*", "../../node_modules/*"]
     }
   },
   "include": ["src"],
