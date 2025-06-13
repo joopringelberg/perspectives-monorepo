@@ -99,16 +99,16 @@ const InstallModal: FC<{ show: boolean; onHide: () => void, callback: (data: Ins
             value={deviceName || ''}
             required
             pattern="^[a-zA-Z0-9_\-\.]+$"  // Allow only letters, numbers, underscores, hyphens and periods
-            onChange={(e) => {
-              const value = e.target.value;
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              const value: string = e.target.value;
               // Check if the value matches our allowed pattern
               if (/^[a-zA-Z0-9_\-\.]*$/.test(value)) {
-                setDeviceName(value);
-                setValue('deviceName', value);
+              setDeviceName(value);
+              setValue('deviceName', value);
               }
             }}
             isInvalid={!!deviceName && !/^[a-zA-Z0-9_\-\.]+$/.test(deviceName)}
-          />
+            />
           <Form.Control.Feedback type="invalid">
             {!deviceName 
               ? i18next.t("configurationDialog_deviceNameFeedback", {ns: 'mycontexts'})
@@ -155,7 +155,7 @@ const InstallModal: FC<{ show: boolean; onHide: () => void, callback: (data: Ins
                     placeholder="https://mydatabase.com"
                     value={couchdbUrl || ''}
                     required
-                    onChange={(e) => {
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       setCouchdbUrl(e.target.value);
                       setValue('couchdbUrl', e.target.value);
                     }}
@@ -174,7 +174,7 @@ const InstallModal: FC<{ show: boolean; onHide: () => void, callback: (data: Ins
                     value={couchdbPort || ''}
                     min={1000}
                     max={65536}
-                    onChange={(e) => {
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     setCouchDbPort(parseInt(e.target.value));
                     setValue('couchdbPort', e.target.value);
                     }}
@@ -193,7 +193,7 @@ const InstallModal: FC<{ show: boolean; onHide: () => void, callback: (data: Ins
                     value={userName || ''}
                     pattern="^[a-z0-9]+$"
                     required
-                    onChange={(e) => {
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       setUsername(e.target.value);
                       setValue('userName', e.target.value);
                     }}
@@ -211,7 +211,7 @@ const InstallModal: FC<{ show: boolean; onHide: () => void, callback: (data: Ins
                     placeholder="mypassword"
                     required
                     value={password || ''}
-                    onChange={(e) => {
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       setPassword(e.target.value);
                       setValue('password', e.target.value);
                       }}
@@ -345,18 +345,18 @@ function SliderWithTooltip({ label, tooltip, callback }: { label: string, toolti
     <Form.Check
         type="switch"
         label=""
-        onChange={(e) => callback(e.target.checked)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => callback(e.target.checked)}
       />
     </Col>
     <Col sm={11}>
       <OverlayTrigger
-            placement="bottom-start"
-            delay={{ show: 250, hide: 400 }}
-            overlay={(props) => (
-              <Tooltip id="MyContexts-tooltip" {...props} show={
-                // eslint-disable-next-line react/prop-types
-                props.show}>{tooltip}
-              </Tooltip> )}
+        placement="bottom-start"
+        delay={{ show: 250, hide: 400 }}
+        overlay={(props: Record<string, any>) => (
+          <Tooltip id="MyContexts-tooltip" {...props} show={
+            // eslint-disable-next-line react/prop-types
+            props.show}>{tooltip}
+          </Tooltip> )}
         >
         <Form.Label>{label}</Form.Label>
       </OverlayTrigger>
@@ -372,7 +372,7 @@ function Slider({ label, callback }: { label: string, callback: (e: any) => void
     <Form.Check
         type="switch"
         label=""
-        onChange={(e) => callback(e.target.checked)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => callback(e.target.checked)}
       />
     </Col>
     <Col sm={11}>
