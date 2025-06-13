@@ -141,6 +141,9 @@ importers:
       typescript-eslint:
         specifier: ^8.26.0
         version: 8.26.1(eslint@9.22.0)(typescript@5.8.3)
+      vite:
+        specifier: ^6.2.2
+        version: 6.2.2(@types/node@22.13.10)(terser@5.39.0)(yaml@2.8.0)
 
   packages/perspectives-apitypes: {}
 

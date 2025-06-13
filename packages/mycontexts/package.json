@@ -9,7 +9,8 @@
     "build": "pnpm exec tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "publish": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com/www"
+    "publishWWW": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com/www",
+    "publishProduction": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com"
   },
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
@@ -50,6 +51,7 @@
     "rollup-plugin-delete": "^3.0.1",
     "rollup-plugin-postcss": "^4.0.2",
     "rollup-plugin-visualizer": "^5.14.0",
-    "typescript-eslint": "^8.26.0"
+    "typescript-eslint": "^8.26.0",
+     "vite": "^6.2.2"
   }
 }

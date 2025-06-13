@@ -14,13 +14,13 @@ function generateNotifications(messages: NotificationData[]) {
   if (next) {
     // Register a service worker if not already registered
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register(`perspectives-serviceworker${__BUILD__}.js`)
+      navigator.serviceWorker.register(`perspectives-serviceworker$.js`)
         .then(registration => {
           // Basic notification options
           const notificationOptions = {
             data: { roleId: next.data.roleId },
-            icon: "/www/AppImages/ios/50.png",
-            badge: "/www/AppImages/ios/32.png",
+            icon: "/AppImages/ios/50.png",
+            badge: "/AppImages/ios/32.png",
              // This will cause each new notification to replace the previous one. That is ok, since we have our own 
             //  notification centre in the app.
             tag: "mycontexts-notification",
@@ -37,7 +37,7 @@ function generateNotifications(messages: NotificationData[]) {
       // Fallback for browsers without ServiceWorker
       const notification = new Notification(next.text, {
         data: next.data,
-        icon: "/www/AppImages/ios/50.png"
+        icon: "/AppImages/ios/50.png"
       });
       
       notification.onclick = function() {

@@ -18,7 +18,7 @@ if ("serviceWorker" in navigator) {
   });
 
   // Register service worker and set up update checking
-  navigator.serviceWorker.register('perspectives-serviceworker.js')
+  navigator.serviceWorker.register('/perspectives-serviceworker.js')
     .then(reg => {
       console.log("Perspectives-service worker registration succeeded:", reg);
       registration = reg;

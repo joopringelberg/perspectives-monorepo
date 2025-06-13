@@ -22,7 +22,7 @@ import React from "react";
 import { PDRproxy, RoleInstanceT, UserRoleType, RoleType } from 'perspectives-proxy';
 import {deconstructLocalName, AppContext, UserMessagingPromise, PerspectivesComponent} from "perspectives-react";
 import i18next from "i18next";
-import { Table } from "react-bootstrap";
+import { Table } from "react-bootstrap"; 
 
 interface MyRoleTypesProps
 {

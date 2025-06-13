@@ -1,13 +1,13 @@
 import { promises as fs } from 'fs';
 
-// Create build.json if it doesn't exist
+// Create build.json if it doesn't exist. Webroot is set to "/".
 try {
   await fs.access("./build.json");
 } catch (err) {
-  await fs.writeFile("./build.json", JSON.stringify({build: 0}));
+  await fs.writeFile("./build.json", JSON.stringify({build: 0, "webroot": "/"}));
 }
 
-const build = JSON.parse(await fs.readFile("./build.json", { encoding: "utf-8" })).build;
+const {build, webroot} = JSON.parse(await fs.readFile("./build.json", { encoding: "utf-8" }));
 
 // See: https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/How_to/Define_app_icons#create_the_necessary_icon_sizes
 const macIcons = ["512.png", "256.png", "128.png", "32.png", "16.png"].map( 
@@ -15,7 +15,7 @@ const macIcons = ["512.png", "256.png", "128.png", "32.png", "16.png"].map(
   {
     const size = icon.replace(".png", "");
     return {
-      "src": "/www/AppImages/ios/" + icon, // Update to match your base URL
+      "src": webroot + "AppImages/ios/" + icon, 
       "sizes": size + "x" + size,
       "type": "image/png"
     }
@@ -25,7 +25,7 @@ const manifest = {
   "name": "MyContexts",
   "short_name": "MyContexts",
   "icons": macIcons,
-  "start_url": "/www/",
+  "start_url": webroot,
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#0275d8"
@@ -41,7 +41,7 @@ await fs.writeFile('./public/perspectives.webmanifest', JSON.stringify(manifest,
   });
 
 // Update build number
-await fs.writeFile("./build.json", JSON.stringify({build: build + 1}))
+await fs.writeFile("./build.json", JSON.stringify({build: build + 1, webroot: webroot}))
   .then(() => {
     console.log(`Build increased to ${build + 1}`);
   })

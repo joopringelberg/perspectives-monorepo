@@ -16,12 +16,14 @@ const monorepoRoot = resolve(__dirname, '../..');
 
 const pageDispatcherVersion = "1";
 
-const build = JSON.parse(fs.readFileSync("./build.json", { encoding: "utf-8" })).build;
-
+// This is the web root where the app will be served from
+// For development, this is usually "/www/"
+// For production, it will be "/".
+const {build, webroot} = JSON.parse(fs.readFileSync("./build.json", { encoding: "utf-8" }))
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: "/www/",
+  base: webroot,
   server: {
     port: 5177,
     host: '0.0.0.0',
@@ -96,37 +98,43 @@ export default defineConfig({
         {
           name: 'generate-service-worker',
           buildStart: async () => {
-            if (process.env.NODE_ENV !== 'production') {
-              // Read the service worker template
-              let swContent = fs.readFileSync('./src/perspectives-serviceworker.js', 'utf8');
-              
-              // For development, just include basic files
-              const devFiles = [
-                "/index.html",
-                "/manage.html",
-                "/assets/main.js",
-                "/assets/main.css"
-              ];
-              
-              // Create the file array as a string
-              const fileListStr = devFiles.map(file => `"${file}"`).join(',\n  ');
-              
-              // Update file list in service worker
-              if (swContent.includes('const appFiles = [')) {
-                swContent = swContent.replace(
-                  /const appFiles = \[\s*[\s\S]*?\];/m,
-                  `const appFiles = [\n  ${fileListStr}\n];`
-                );
-              }
-              
-              // Replace version placeholders
-              swContent = swContent.replace(/__MYCONTEXTS_VERSION__/g, JSON.stringify(thepackage.version));
-              swContent = swContent.replace(/__BUILD__/g, JSON.stringify(build));
-              
-              // Write to public for development
-              fs.writeFileSync('./public/perspectives-serviceworker.js', swContent);
-              console.log('Development service worker generated in public directory');
+            console.log('Generating development service worker...');
+            
+            // Read the service worker template
+            let swContent = fs.readFileSync('./src/perspectives-serviceworker.js', 'utf8');
+            
+            // For development, include basic files with correct paths
+            const devFiles = [
+              `${webroot}index.html`,
+              `${webroot}manage.html`,
+              `${webroot}assets/main.js`,
+              `${webroot}assets/main.css`
+            ];
+            
+            // Create the file array as a string
+            const fileListStr = devFiles.map(file => `"${file}"`).join(',\n  ');
+            
+            // Update file list in service worker
+            if (swContent.includes('const appFiles = [')) {
+              swContent = swContent.replace(
+                /const appFiles = \[\s*[\s\S]*?\];/m,
+                `const appFiles = [\n  ${fileListStr}\n];`
+              );
+            } else {
+              // Add it if it doesn't exist
+              swContent = swContent.replace(
+                /(const cacheName = .*)/,
+                `$1\n\nconst appFiles = [\n  ${fileListStr}\n];`
+              );
             }
+            
+            // Replace version placeholders
+            swContent = swContent.replace(/__MYCONTEXTS_VERSION__/g, JSON.stringify(thepackage.version));
+            swContent = swContent.replace(/__BUILD__/g, JSON.stringify(build));
+            
+            // Write to public directory for development
+            fs.writeFileSync('./public/perspectives-serviceworker.js', swContent);
+            console.log('Development service worker generated at ./public/perspectives-serviceworker.js');
           },
           writeBundle: async () => {
             // Read the service worker template

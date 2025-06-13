@@ -22,7 +22,7 @@
 //// SERVICE WORKER
 ////////////////////////////////////////////////////////////////////////////////
 
-const currentVersion = __MYCONTEXTS_VERSION__ + __BUILD__;
+const currentVersion = "1.1.0" + 163;
 let previousVersion = '';
 
 const cacheName = "mycontexts" + currentVersion;
@@ -31,9 +31,10 @@ const cacheName = "mycontexts" + currentVersion;
 const baseUrl = self.location.href.replace(/\/[^\/]*$/, '');
 
 const appFiles = [
-  // We'll update this list during build, but add key files manually
-  "/index.html",
-  "/manage.html"
+  "/www/index.html",
+  "/www/manage.html",
+  "/www/assets/main.js",
+  "/www/assets/main.css"
 ];
 
 const macIcons = ["512.png", "256.png", "128.png", "32.png", "16.png"].map(icon => "/AppImages/ios/" + icon);
@@ -79,7 +80,7 @@ self.addEventListener("install", (e) => {
       }
 
       const cache = await caches.open(cacheName);
-      console.log(`[perspectives-serviceworker ${currentVersion}] Caching all mycontext sources in cache: ` + cacheName);
+      console.log("[perspectives-serviceworker ${currentVersion}] Caching all mycontext sources in cache: " + cacheName);
       
       // Cache files individually to better handle errors
       const cachePromises = toBeCached.map(async (url) => {
@@ -109,7 +110,7 @@ self.addEventListener("install", (e) => {
       
       // Wait for all cache operations to complete
       await Promise.allSettled(cachePromises);
-      console.log(`[perspectives-serviceworker ${currentVersion}] Caching complete`);
+      console.log("[perspectives-serviceworker ${currentVersion}] Caching complete");
     })()
   );
 });
