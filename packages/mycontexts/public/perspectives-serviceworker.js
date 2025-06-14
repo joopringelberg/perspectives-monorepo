@@ -22,7 +22,7 @@
 //// SERVICE WORKER
 ////////////////////////////////////////////////////////////////////////////////
 
-const currentVersion = "1.1.0" + 163;
+const currentVersion = "1.1.0" + 168;
 let previousVersion = '';
 
 const cacheName = "mycontexts" + currentVersion;
@@ -80,7 +80,7 @@ self.addEventListener("install", (e) => {
       }
 
       const cache = await caches.open(cacheName);
-      console.log("[perspectives-serviceworker ${currentVersion}] Caching all mycontext sources in cache: " + cacheName);
+      console.log(`[perspectives-serviceworker ${currentVersion}] Caching all mycontext sources in cache: ` + cacheName);
       
       // Cache files individually to better handle errors
       const cachePromises = toBeCached.map(async (url) => {
@@ -110,7 +110,7 @@ self.addEventListener("install", (e) => {
       
       // Wait for all cache operations to complete
       await Promise.allSettled(cachePromises);
-      console.log("[perspectives-serviceworker ${currentVersion}] Caching complete");
+      console.log(`[perspectives-serviceworker ${currentVersion}] Caching complete`);
     })()
   );
 });

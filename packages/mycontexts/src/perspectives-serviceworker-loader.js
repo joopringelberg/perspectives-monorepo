@@ -17,10 +17,23 @@ if ("serviceWorker" in navigator) {
     console.error('Error checking for old service workers:', error);
   });
 
+  // Automatically detect the base path from the current URL
+  const getBasePath = () => {
+    // For development server
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return window.location.pathname.includes('/www/') ? '/www/' : '/';
+    }
+    
+    // For production server
+    return window.location.pathname.includes('/www/') ? '/www/' : '/';
+  };
+
+  const basePath = getBasePath();
+
   // Register service worker and set up update checking
-  navigator.serviceWorker.register('/perspectives-serviceworker.js')
+  navigator.serviceWorker.register(`${basePath}perspectives-serviceworker.js`)
     .then(reg => {
-      console.log("Perspectives-service worker registration succeeded:", reg);
+      console.log(`Perspectives-service worker registration succeeded (base: ${basePath}):`, reg);
       registration = reg;
       
       // Set up update checking interval

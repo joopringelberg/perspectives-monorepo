@@ -38,7 +38,7 @@ let channelIndex = 1;
 //// This function is passed on by the client in the call configurePDRProxy({pageHostingPDRPort: pageHostingPDRPort})
 //// This function returns a MessagePort as documented here: https://developer.mozilla.org/en-US/docs/Web/API/MessagePort.
 ////////////////////////////////////////////////////////////////////////////////
-export default function pageHostingPDRPort(pdr) {
+function pageHostingPDRPort(pdr) {
   // Create a channel.
   const channel = new MessageChannel();
   let weHost = false;
@@ -136,3 +136,5 @@ export default function pageHostingPDRPort(pdr) {
   // Use port1 in the SharedWorkerChannel.
   return channel.port1;
 }
+
+export { pageHostingPDRPort as default };

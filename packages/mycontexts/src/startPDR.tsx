@@ -159,7 +159,10 @@ export function startPDR()
     {
       // The proxy function configurePDRProxy will load the PDR using dynamic import.
       // As a result, the PDR runs in the current page (that we call the 'host page').
-      import( "perspectives-pageworker" ).then( pageWorker => configurePDRproxy( "hostPageChannel", { pageHostingPDRPort: pageWorker.default }));
+      import( "perspectives-pageworker" )
+        .then( pageWorker => 
+          configurePDRproxy( "hostPageChannel", { pageHostingPDRPort: pageWorker.default }))
+        .catch( e => console.error("Error loading perspectives-pageworker:", e));
     } 
     else
   {

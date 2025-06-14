@@ -52,12 +52,42 @@ export default defineConfig({
   plugins: [
     react(),
     commonjs(),
-    tsconfigPaths()
+    tsconfigPaths(),
+    
+    // Add this plugin to fix the @vite/client loading issue
+    {
+      name: 'fix-vite-client-path',
+      configureServer(server) {
+        // Early middleware to handle /www/@vite/client requests
+        server.middlewares.use((req, res, next) => {
+          // If requesting vite client through /www/ path, adjust the URL
+          if (req.url?.startsWith('/www/@vite')) {
+            console.log(`Redirecting ${req.url} to ${req.url.replace('/www/', '/')}`);
+            req.url = req.url.replace('/www/', '/');
+          }
+          next();
+        });
+      }
+    },
+    {
+      name: 'adjust-vite-client-html',
+      transformIndexHtml(html) {
+        if (webroot === '/www/') {
+          // Fix paths in development mode HTML
+          return html.replace(
+            /<script type="module" src="\/@vite\/client"><\/script>/,
+            `<script type="module" src="${webroot}@vite/client"></script>`
+          );
+        }
+        return html;
+      }
+    }
   ],
   resolve: {
     alias: {
       'perspectives-core': resolve( __dirname, '../perspectives-core/dist/perspectives-core.js'),
       'perspectives-sharedworker': resolve( __dirname, '../perspectives-sharedworker/dist/perspectives-sharedworker.js'),
+      'perspectives-pageworker': resolve(__dirname, '../perspectives-pageworker/dist/perspectives-pageworker.js'),
       '@perspectives/core': resolve( __dirname, '../perspectives-core/src'),
       '@perspectives/proxy': resolve( __dirname, '../perspectives-proxy/src'),
       '@perspectives/react': resolve( __dirname, '../perspectives-react/src')
@@ -98,7 +128,7 @@ export default defineConfig({
         {
           name: 'generate-service-worker',
           buildStart: async () => {
-            console.log('Generating development service worker...');
+            console.log(`Generating development service worker (webroot: ${webroot})...`);
             
             // Read the service worker template
             let swContent = fs.readFileSync('./src/perspectives-serviceworker.js', 'utf8');
