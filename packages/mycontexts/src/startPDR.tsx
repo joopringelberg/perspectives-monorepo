@@ -129,7 +129,8 @@ if (import.meta.env.DEV) {
   window.debugServiceWorker = debugServiceWorker;
   window.purgeServiceWorkers = purgeServiceWorkers;
   window.showDatabaseInfo = showDatabaseInfo;
-}///////////////////////////////////////////////////////////////////////////////////////////////
+}
+///////////////////////////////////////////////////////////////////////////////////////////////
 
 
   // As a result of calling this function, the two promises PDRHandler and PDRproxy are resolved.
@@ -170,10 +171,6 @@ export function startPDR()
     // (dyanmic import is not supported in SharedWorkers).
     // As a result, the PDR runs in the SharedWorker.
     configurePDRproxy("sharedWorkerChannel", {});
-  }
-  // For easier debugging, attach to window in development
-  if (import.meta.env.DEV) {
-    window.forceUpdateServiceWorker = forceUpdateServiceWorker;
   }
 
 }
