@@ -8,10 +8,15 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "pnpm --recursive run build",
-    "dev": "pnpm --recursive run dev"
+    "dev": "pnpm --recursive run dev",
+    "version": "lerna version --no-push",
+    "version:patch": "lerna version patch --yes --no-push",
+    "version:minor": "lerna version minor --yes --no-push",
+    "version:major": "lerna version major --yes --no-push"
   },
   "devDependencies": {
     "eslint": "^9.22.0",
+    "lerna": "^8.2.2",
     "pnpm": "^10.6.4",
     "rollup": "4",
     "typescript": "^5.8.3",

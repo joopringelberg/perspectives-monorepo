@@ -1,0 +1,10 @@
+decf6b3d - Unimportant edits to startPDR to do with debugging.
+d31a70f2 - Removed remnant of separate pagedispatcher from public directory. Fixed string interpolations. Fixed installation for pageworker.
+c894ee3c - Fixed a number of issues flagged down by typescript since recent changes to the configuration.
+63634ddd - Removed @4c/tsconfig as dependency and removed it from tsconfig.json. Instead added many configuration options to tsconfig.json.
+48d1027b - added typeroots to tsconfig, made paths relative and added node_modules to paths in tsconfig. Also added a types.ts module to make sure bootstrap types are found by typescript.
+b099ea35 - Added some type annotations.
+277a0c8d - The root of the installation is now configured in build.json. For development we use "/www/", while for production we use "/".
+2f2ba139 - Bumped all package versions with lerna. Created boiler plate CHANGELOG files per package.
+
+3c8c460b - Setting up Lerna for monorepo management.
