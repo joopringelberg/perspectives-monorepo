@@ -82,20 +82,6 @@ export default defineConfig(({ mode }) => {
         },
         plugins: [
           del({ targets: 'dist/*' }), // Add this line to clear the dist directory
-          // Add this plugin to copy assets
-          copy({
-            targets: [
-              { 
-                src: 'src/perspectives-pagedispatcher.js', 
-                dest: 'public',
-                rename: (name) => `perspectives-pagedispatcher${pageDispatcherVersion}.js` 
-              },
-              { 
-                src: 'public/**/*', 
-                dest: 'dist' 
-              },
-            ]
-          }),
           // visualizer({
           //   filename: './dist/stats.html',
           //   open: true
