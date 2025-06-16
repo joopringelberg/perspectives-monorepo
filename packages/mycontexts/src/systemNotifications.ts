@@ -14,7 +14,7 @@ function generateNotifications(messages: NotificationData[]) {
   if (next) {
     // Register a service worker if not already registered
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register(`perspectives-serviceworker${__BUILD__}.js`)
+      navigator.serviceWorker.register("perspectives-serviceworker.js")
         .then(registration => {
           // Basic notification options
           const notificationOptions = {
