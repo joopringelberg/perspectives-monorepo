@@ -1,16 +1,14 @@
 {
   "name": "perspectives-utilities",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Utility functions common to multiple perspectives projects.",
   "license": "GPL-3.0-or-later",
   "author": "Joop Ringelberg <joop.ringelberg@gmail.com>",
-  "dependencies": {},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/joopringelberg/perspectives-utilities.git"
   },
   "main": "src/utilities.purs",
   "homepage": "https://github.com/joopringelberg/perspectives-utilities#readme",
-  "scripts": {},
-  "devDependencies": {}
+  "scripts": {}
 }

@@ -10,9 +10,9 @@
     "build": "pnpm --recursive run build",
     "dev": "pnpm --recursive run dev",
     "version": "lerna version --no-push",
-    "version:patch": "lerna version patch --yes --no-push",
-    "version:minor": "lerna version minor --yes --no-push",
-    "version:major": "lerna version major --yes --no-push"
+    "version:patch": "lerna version patch --yes --no-push --no-lifecycle",
+    "version:minor": "lerna version minor --yes --no-push --no-lifecycle",
+    "version:major": "lerna version major --yes --no-push --no-lifecycle"
   },
   "devDependencies": {
     "eslint": "^9.22.0",
