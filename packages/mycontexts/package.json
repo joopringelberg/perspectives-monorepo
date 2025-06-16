@@ -30,16 +30,18 @@
     "perspectives-react": "workspace:*",
     "perspectives-sharedworker": "workspace:*",
     "pouchdb-browser": "^9.0.0",
-    "react": "^18.3.1",
-    "react-bootstrap": "^2.10.5",
-    "react-dom": "^18.3.1"
+    "react": "^18.2.0",
+    "react-bootstrap": "^2.9.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@4c/tsconfig": "^0.4.1",
     "@eslint/js": "^9.21.0",
+    "@rollup/plugin-commonjs": "^28.0.5",
     "@rollup/plugin-json": "^6.1.0",
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react-swc": "^3.8.0",
     "cross-env": "^7.0.3",
     "eslint": "^9.22.0",
@@ -55,7 +57,6 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.26.0",
     "vite": "^5.1.4",
-    "vite-plugin-commonjs": "^0.8.0",
     "vite-tsconfig-paths": "^5.1.4"
   }
 }

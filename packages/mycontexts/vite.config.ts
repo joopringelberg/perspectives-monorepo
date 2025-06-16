@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite'
+import { nodeResolve } from '@rollup/plugin-node-resolve';
 import react from '@vitejs/plugin-react-swc'
 import tsconfigPaths from 'vite-tsconfig-paths' 
-import commonjs from 'vite-plugin-commonjs'
+import commonjs from '@rollup/plugin-commonjs'
 import { visualizer } from 'rollup-plugin-visualizer'
 import copy from 'rollup-plugin-copy'
 import del from 'rollup-plugin-delete'
@@ -59,8 +60,17 @@ export default defineConfig(({ mode }) => {
       {
         name: 'fix-cjs-exports',
         transform(code, id) {
-          // CommonJS modules that need default export
-          const cjsModules = ['invariant', 'warning', 'classnames', 'events', 'react-transition-group'];
+          // Add prop-types-extra to the list of modules needing a default export
+          const cjsModules = [
+            'invariant', 
+            'warning', 
+            'classnames', 
+            'events', 
+            'react-transition-group',
+            'prop-types-extra',  // This is the key addition for your current error
+            'prop-types',
+            'react-bootstrap'    // Add this too as it might have similar issues
+          ];
           
           // Check if this file is one of the problematic modules
           if (cjsModules.some(mod => id.includes(mod)) && 
@@ -72,12 +82,21 @@ export default defineConfig(({ mode }) => {
           return null;
         }
       },
+      nodeResolve({
+          extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx', '.json'],
+          browser: true,
+          preferBuiltins: false
+        }),
       // React configuration adapted to work with @4c/tsconfig
-      react({
-        jsxImportSource: 'react',
+      react(),
+      commonjs({
+        requireReturnsDefault: 'auto',
+        transformMixedEsModules: true,
+        include: [
+          /node_modules\/(invariant|warning|classnames|events|react-transition-group)\/.*/
+        ]
       }),
-      commonjs(),
-      tsconfigPaths(),
+    tsconfigPaths(),
     ],
     resolve: {
       alias: {
