@@ -18,7 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React from "react";
+
 import { PDRproxy, RoleInstanceT, UserRoleType, RoleType } from 'perspectives-proxy';
 import {deconstructLocalName, AppContext, UserMessagingPromise, PerspectivesComponent} from "perspectives-react";
 import i18next from "i18next";

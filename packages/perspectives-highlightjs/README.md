@@ -47,7 +47,7 @@ npm install git+https://github.com/joopringelberg/perspectives-highlightjs.git
 Here is a complete code example:
 
 ```
-import React from "react";
+
 import {render} from 'react-dom';
 
 // Import highlight library (NOTE: this is the complete module, can be done with smaller footprint!)

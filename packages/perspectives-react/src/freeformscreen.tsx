@@ -18,7 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React from 'react';
+
 import {string} from "prop-types";
 
 import {PDRproxy, ContextInstanceT, ContextType, RoleType, Unsubscriber, PropertyType, EnumeratedOrCalculatedProperty, ScreenDefinition, ChatElementDef, ColumnElementDef, FormElementDef, MarkDownElementDef, Perspective, Roleinstancewithprops, RowElementDef, ScreenElementDefTagged, TabDef, TableElementDef, WidgetCommonFields, MainScreenElements, TableFormDef, RoleInstanceT} from "perspectives-proxy";

@@ -1,4 +1,3 @@
-import React from "react";
 import { MainScreenElements, MarkDownElementDef, TableFormDef, What as WhatDef } from "perspectives-proxy";
 import { buildMarkDown, FreeFormScreen, PerspectivesComponent, PSContext } from "perspectives-react";
 import { TableForms } from "./tableForms";

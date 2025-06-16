@@ -18,7 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React, { createRef } from "react"; // 2
+import { createRef } from "react"; // 2
 import PerspectivesComponent from "./perspectivesComponent";
 import TableCell from "./tablecell.js";
 import "./components.css";

@@ -18,7 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React, { StrictMode } from 'react'
+import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import ManageScreen from './manageScreen.tsx'
 

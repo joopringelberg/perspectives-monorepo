@@ -20,7 +20,7 @@
 
 // This component optionally has a roleinstance prop. If not present, it will provide a create button.
 
-import React, { JSX } from "react";
+import { JSX } from "react";
 import {ContextInstanceT, PDRproxy, RoleInstanceT, RoleType, ContextType, Perspective, Roleinstancewithprops} from "perspectives-proxy";
 import PerspectivesComponent from "./perspectivesComponent";
 import {AppContext} from "./reactcontexts.js";

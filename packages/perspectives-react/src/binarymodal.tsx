@@ -23,7 +23,7 @@ import
   , Modal
   } from "react-bootstrap";
 
-import React from 'react';
+
 
 import { bool, func, string } from "prop-types";
 

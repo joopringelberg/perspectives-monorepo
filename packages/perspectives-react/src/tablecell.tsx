@@ -18,7 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React, { createRef } from "react"; // 2
+import { createRef } from "react"; // 2
 import ReactDOM from "react-dom";
 import PerspectivesComponent from "./perspectivesComponent";
 import {deconstructLocalName} from "./urifunctions.js";

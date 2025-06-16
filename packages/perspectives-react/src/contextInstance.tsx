@@ -1,4 +1,4 @@
-import React from "react";
+
 import {ContextInstanceT, PDRproxy} from "perspectives-proxy";
 
 import PerspectivesComponent from "./perspectivesComponent";

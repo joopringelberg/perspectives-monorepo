@@ -1,5 +1,5 @@
 
-import React, { ReactNode } from 'react';
+import { ReactNode } from 'react';
 import { Tooltip, OverlayTrigger} from 'react-bootstrap';
 import { OverlayInjectedProps } from 'react-bootstrap/esm/Overlay';
 

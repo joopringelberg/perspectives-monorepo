@@ -1,4 +1,4 @@
-import React, { Component, JSX } from "react";
+import { Component, JSX } from "react";
 import {ContextInstanceT, PDRproxy, ContextType, RoleType} from "perspectives-proxy";
 
 import PerspectivesComponent from "./perspectivesComponent";

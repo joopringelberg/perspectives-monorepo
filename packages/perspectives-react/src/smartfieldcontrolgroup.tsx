@@ -47,7 +47,7 @@
 //   , verbs :: Array String
 //   }
 
-import React, { PureComponent } from "react";
+import { PureComponent } from "react";
 const Component = PureComponent;
 import
   { Row

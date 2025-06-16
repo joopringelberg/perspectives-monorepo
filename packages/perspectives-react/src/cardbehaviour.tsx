@@ -7,7 +7,7 @@ import {UserMessagingPromise} from "./userMessaging.js";
 import i18next from "i18next";
 import { PSRolType } from "./reactcontexts";
 import { t } from "i18next";
-import React from 'react';
+
 // import { useLongPress } from 'use-long-press';
 
 /*

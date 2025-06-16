@@ -1,9 +1,14 @@
-import React, { useState, ReactElement, FC, ChangeEvent, MouseEventHandler } from 'react';
+import * as React from 'react';
+import type {FC} from 'react'
+const { useState } = React;
+// ReactElement is a type, so we need to import it separately
+import type { ReactElement } from 'react';
 import { Container, Navbar, Button, Modal, Form, Col, Row } from 'react-bootstrap';
 import OverlayTrigger from 'react-bootstrap/OverlayTrigger';
 import Tooltip from 'react-bootstrap/Tooltip';
 import { set as setValue, del as deleteValue} from 'idb-keyval';
-import {init} from '@paralleldrive/cuid2';
+import * as cuid2 from '@paralleldrive/cuid2';
+const { init } = cuid2;
 import { takeCUID } from 'perspectives-react';
 import {i18next} from 'perspectives-react';
 import { IdentityFile, IdentityFileUploader, KeyPair, KeyPairFileUploader } from './configurationComponents';

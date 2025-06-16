@@ -18,7 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React, { createRef } from 'react';
+import { createRef } from 'react';
 import { string } from "prop-types";
 
 import {PDRproxy, RoleInstanceT, RoleOnClipboard} from "perspectives-proxy";

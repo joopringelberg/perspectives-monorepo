@@ -18,7 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React, { PureComponent } from "react";
+import { PureComponent } from "react";
 import {PDRproxy, PropertyType, RoleInstanceT, Perspective, Roleinstancewithprops, RoleVerb} from "perspectives-proxy";
 import RoleDropZone from "./roleDropzone.js";
 import PerspectivesComponent from "./perspectivesComponent";

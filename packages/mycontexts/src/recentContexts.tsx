@@ -1,4 +1,4 @@
-import React, { } from "react";
+import { } from "react";
 import { PDRproxy, RoleInstanceT, ContextInstanceT, Perspective, ValueT, FIREANDFORGET } from "perspectives-proxy";
 import { deconstructContext, ModelDependencies, PerspectivesComponent, PerspectiveTable } from "perspectives-react";
 

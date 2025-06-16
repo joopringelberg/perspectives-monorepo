@@ -1,4 +1,4 @@
-import React, { createRef } from "react";
+import { createRef } from "react";
 import { PDRproxy, RoleInstanceT, ContextAndName } from "perspectives-proxy";
 import { i18next, ModelDependencies, PerspectivesComponent, PerspectiveTable } from "perspectives-react";
 import { Accordion, ListGroup } from "react-bootstrap";

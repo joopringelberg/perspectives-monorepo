@@ -1,4 +1,3 @@
-import React, { } from "react";
 import { i18next, PerspectivesComponent, UserMessagingPromise } from "perspectives-react";
 import { Button, Form } from "react-bootstrap";
 export class About extends PerspectivesComponent<{}, {}> {

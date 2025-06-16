@@ -20,7 +20,7 @@
 
 // This Component is built upon the data sent from the PDR for a single property.
 
-import React, { PureComponent } from "react";
+import { PureComponent } from "react";
 const Component = PureComponent;
 import {ContextInstanceT, PDRproxy, RoleInstanceT, RoleType, ValueT, PropertyValues, SerialisedProperty, InputType } from "perspectives-proxy";
 import { mapRange } from "perspectives-proxy";

@@ -18,8 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React, { Component } from "react";
-import PropTypes from "prop-types";
+import { Component } from "react";
 
 import {i18next} from 'perspectives-react'; from "i18next";
 import { Container, Button, Modal, Row, Col } from "react-bootstrap";
@@ -106,10 +105,3 @@ export class SaveKeypairDialog extends Component
     </Modal>
   }
 }
-
-SaveKeypairDialog.propTypes = 
-  { keypairsaveresolver: PropTypes.func.isRequired
-  , keypairsaverejecter: PropTypes.func.isRequired
-  , keypair: PropTypes.any.isRequired
-  , perspectivesuserid: PropTypes.string.isRequired
-  };

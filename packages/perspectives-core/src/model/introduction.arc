@@ -107,7 +107,7 @@ domain model://perspectives.domains#Introduction
       perspective on Introducer
         props (FirstName) verbs (Consult)
       perspective on Introducee
-        only (Create, Fill)
+        only (Create, Fill, Remove)
         props (FirstName, LastName) verbs (Consult)
       perspective on Conversation
         only (Create, RemoveContext, Remove)

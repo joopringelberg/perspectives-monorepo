@@ -1,8 +1,8 @@
-import React from "react";
+
 import {string} from "prop-types";
 
-import View from "./view.js";
-import ExternalRole from "./externalrole.js";
+import View from "./view";
+import ExternalRole from "./externalrole";
 
 interface ViewOnExternalRoleProps {
   viewname: string;

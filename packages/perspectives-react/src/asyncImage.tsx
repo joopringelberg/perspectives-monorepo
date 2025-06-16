@@ -1,5 +1,5 @@
 
-import React, { PureComponent } from "react";
+import { PureComponent } from "react";
 
 import {PDRproxy, PropertyType, RoleInstanceT} from "perspectives-proxy";
 const Component = PureComponent;

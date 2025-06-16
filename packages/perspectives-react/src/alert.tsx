@@ -28,7 +28,7 @@
  * @returns {JSX.Element} The rendered Alert component.
  */
 import { Button, Modal } from "react-bootstrap";
-import React from 'react';
+
 
 interface AlertProps {
   title: string;

@@ -1,4 +1,4 @@
-import React, { FC } from 'react';
+import type { FC } from 'react';
 import { Modal } from 'react-bootstrap';
 import {i18next} from 'perspectives-react';
 

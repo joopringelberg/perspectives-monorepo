@@ -1,4 +1,4 @@
-import React, { Component } from "react";
+import { Component } from "react";
 import { AppContext, PSContextType } from "./reactcontexts.js";
 
 import "./components.css";

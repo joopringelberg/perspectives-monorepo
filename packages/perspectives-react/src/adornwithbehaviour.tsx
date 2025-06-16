@@ -1,5 +1,5 @@
 import { PropertyType, RoleInstanceT, RoleType } from "perspectives-proxy";
-import React, { createRef } from "react";
+import { createRef } from "react";
 import { PSRol, PSRolType } from "./reactcontexts";
 import { BehaviourAdder, BehaviourComponentProps, CardProperties, InnerCardProperties } from "./cardbehaviour";
 import { ComponentProps } from "react";

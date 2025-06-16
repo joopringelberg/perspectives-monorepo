@@ -1,10 +1,11 @@
-import React from "react";
+
 import { RoleInstanceT, ContextInstanceT, WhereTo } from "perspectives-proxy";
-import { Component } from "react";
+import * as React from "react";
+const { Component } = React;
 import { TableForms } from "./tableForms";
 import { PinnedContexts } from "./pinnedContexts";
 import { RecentContexts } from "./recentContexts";
-import { Accordion, Container } from "react-bootstrap";
+import { Accordion } from "react-bootstrap";
 import { buildMarkDown, PSContext } from "perspectives-react";
 import { WiderContexts } from "./widerContexts";
 

@@ -18,7 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React, { Component } from "react";
+import { Component } from "react";
 import {render} from 'react-dom';
 import styles from '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
 import ChatComponent from "./chatcomponent";

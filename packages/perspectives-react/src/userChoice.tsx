@@ -3,8 +3,11 @@
   Embed the UserChoice component in a component that is rendered in the application. When its ChoiceMessage prop is set
   to a value that has a message, the dialog will be rendered.
 */
-import React, { useEffect } from "react";
-import { Card, ListGroup, Modal } from "react-bootstrap";
+import { useEffect, useState } from "react";
+import type {FC} from "react";
+import *  as Bootstrap from "react-bootstrap";
+const { Card, ListGroup, Modal } = Bootstrap;
+
 import { externalRole } from "./urifunctions";
 
 
@@ -19,8 +22,8 @@ interface UserChoiceProps {
   message: ChoiceMessage;
 }
 
-export const UserChoice: React.FC<UserChoiceProps> = ({message}) => {
-  const [show, setShow] = React.useState(message.message !== undefined);
+export const UserChoice: FC<UserChoiceProps> = ({message}) => {
+  const [show, setShow] = useState(message.message !== undefined);
   useEffect(() => {
     setShow(message.message !== undefined);
   }, [message.message]);

@@ -1,4 +1,4 @@
-import React, { Children, cloneElement, createRef } from "react";
+import { Children, cloneElement, createRef } from "react";
 
 import PerspectivesComponent from "./perspectivesComponent";
 

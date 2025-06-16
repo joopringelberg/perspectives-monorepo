@@ -1,4 +1,4 @@
-import React, { createRef } from "react";
+import { createRef } from "react";
 import PerspectivesComponent from "./perspectivesComponent";
 import {mapRoleVerbsToBehaviourNames} from "./maproleverbstobehaviours.js";
 import TableRow from "./tablerow.js";

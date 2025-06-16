@@ -27,7 +27,7 @@
 ///// TODO: HANDLE THE OPTIONAL 'OPEN' PROP.
 
 
-import React, { Component } from "react";
+import { Component } from "react";
 import { string } from "prop-types";
 import {ContextInstanceT, PDRproxy, RoleInstanceT, RoleType} from "perspectives-proxy";
 

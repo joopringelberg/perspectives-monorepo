@@ -18,7 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React from "react";
+
 import {PDRproxy, CONTINUOUS, RoleInstanceT, ContextInstanceT, RoleType} from "perspectives-proxy";
 import PerspectivesComponent from "./perspectivesComponent";
 import PerspectiveBasedForm from "./perspectivebasedform.js";

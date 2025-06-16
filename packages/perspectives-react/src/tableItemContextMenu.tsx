@@ -18,7 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React, { Component, forwardRef, JSX } from "react";
+import { Component, forwardRef, JSX } from "react";
 import {Dropdown, NavDropdown} from 'react-bootstrap';
 import i18next from "i18next";
 import { ContextType, PDRproxy, Perspective, RoleInstanceT, RoleOnClipboard } from "perspectives-proxy";

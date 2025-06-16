@@ -1,4 +1,4 @@
-import React from "react";
+
 import MySystem from "./mysystem";
 
 export default class Test extends React.Component {

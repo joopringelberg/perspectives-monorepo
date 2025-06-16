@@ -1,4 +1,4 @@
-import React from "react";
+
 import {PDRproxy, RoleDataProper, RoleInstanceT, RoleKind} from "perspectives-proxy";
 
 import PerspectivesComponent from "./perspectivesComponent";

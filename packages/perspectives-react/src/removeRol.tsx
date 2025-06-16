@@ -1,4 +1,4 @@
-import React, { Children, cloneElement } from "react";
+import { Children, cloneElement } from "react";
 import {PDRproxy} from "perspectives-proxy";
 import {PSContext, PSRolType} from "./reactcontexts.js";
 

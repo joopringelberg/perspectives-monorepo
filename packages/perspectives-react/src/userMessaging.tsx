@@ -30,7 +30,7 @@
 //    <EndUserNotifier message={app.state.endUserMessage}/>
 
 
-import React from "react";
+
 import { Button, Card, Modal } from "react-bootstrap";
 import PerspectivesComponent from "./perspectivesComponent.js";
 

@@ -1,4 +1,4 @@
-import React, {createContext} from "react";
+import {createContext} from "react";
 import { RoleDataProper, RoleOnClipboard } from "perspectives-proxy";
 import { ContextInstanceT, ContextType, PropertyType, RoleInstanceT, RoleKind, RoleType, ValueT } from "perspectives-proxy";
 

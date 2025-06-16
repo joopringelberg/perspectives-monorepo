@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { Container, Spinner, Row, Col } from 'react-bootstrap';
 import {i18next} from 'perspectives-react';
 

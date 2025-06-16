@@ -18,7 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { arrayOf, number } from "prop-types";
 
 

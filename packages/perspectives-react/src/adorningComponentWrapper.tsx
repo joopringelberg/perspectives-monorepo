@@ -1,5 +1,5 @@
 import { PropertyType } from "perspectives-proxy";
-import React from "react";
+
 import { AppContext, PSContext } from "./reactcontexts";
 import { AdornWithBehaviour } from "./adornwithbehaviour";
 import { CardProperties, getBehaviourAdder, InnerCardProperties } from "./cardbehaviour";

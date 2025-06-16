@@ -11,7 +11,9 @@
   This component renders a single TableFormDef screen element.
  */
 
-import { Component, ReactNode } from "react";
+import * as react from "react";
+const { Component } = react;
+import type {ReactNode } from "react";
 import { CloseButton, Col, Row } from "react-bootstrap";
 import "./slidingPanels.css";
 import * as React from "react";
