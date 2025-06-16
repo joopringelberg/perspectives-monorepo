@@ -15,15 +15,31 @@
     "version:major": "lerna version major --yes --no-push"
   },
   "devDependencies": {
+    "@4c/tsconfig": "^0.4.1",
     "eslint": "^9.22.0",
     "lerna": "^8.2.2",
     "pnpm": "^10.6.4",
     "rollup": "4",
     "typescript": "^5.8.3",
-    "vite": "^6.2.2"
+    "vite": "^5.1.4"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.6.4"
+  "packageManager": "pnpm@10.6.4",
+  "overrides": {
+    "vite": "^5.1.4",
+    "rollup": "4",
+    "typescript": "^5.8.3",
+    "vite-plugin-commonjs": "^0.8.0",
+    "vite-tsconfig-paths": "^5.1.4",
+    "@4c/tsconfig": "^0.4.0"
+  },
+  "pnpm": {
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "vite": "5"
+      }
+    }
+  }
 }
