@@ -13,7 +13,7 @@ import { startPDR } from './startPDR.js';
 import { Button, Container, Row } from 'react-bootstrap';
 import WWWComponent from './www.js';
 import { getInstalledVersion, runUpgrade, setMyContextsVersion, toWWW } from './dataUpgrade.js';
-import LoadingScreen from './LoadingScreen.js';
+import LoadingScreen from './loadingScreen.js';
 import UpdateNotification from './updateNotification.js';
 
 await initI18next();
