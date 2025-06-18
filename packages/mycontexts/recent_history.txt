@@ -1,0 +1,25 @@
+GECOMBINEERDE LOG VAN TWEE SHELLS
+Ik had in twee shells gewerkt. Hier zijn de relevante commando's, geordend naar tijd.
+
+1325  2025-06-16 15:43:23  pnpm run version:minor
+ 1326  2025-06-16 17:05:09  pnpm install
+ 1327  2025-06-16 17:06:07  pnpm uninstall vite-plugin-commonjs
+ 1328  2025-06-16 17:06:29  pnpm uninstall vite-plugin-commonjs
+
+ 1270  2025-06-16 17:09:43  pnpm install
+ 1271  2025-06-16 17:15:47  # Navigate to your monorepo root\ncd /Users/joopringelberg/Code/perspectives-monorepo\n\n# Remove node_modules directories\nrm -rf node_modules\nrm -rf packages/*/node_modules\n\n# Remove lock files\nrm -f pnpm-lock.yaml\nrm -f packages/*/package-lock.json
+ 1272  2025-06-16 17:16:02  pnpm install
+ 1273  2025-06-16 17:18:22  rm -rf node_modules/.vite
+ 1274  2025-06-16 17:18:29  pnpm run dev
+  
+ 1329  2025-06-16 20:47:02  rm -rf node_modules
+ 1330  2025-06-16 20:47:16  rm -rf packages/*/node_modules
+ 1331  2025-06-16 20:47:25  rm -f pnpm-lock.yaml
+ 1332  2025-06-16 20:47:42  rm -f packages/*/package-lock.json
+ 1333  2025-06-16 20:48:08  pnpm store prune
+ 1334  2025-06-16 20:48:24  pnpm install --force
+
+ 1275  2025-06-16 20:54:42  pnpm run dev
+ 1276  2025-06-16 20:55:51  pnpm run dev
+ 1277  2025-06-16 20:56:30  cd packages/mycontexts
+ 1278  2025-06-16 20:56:33  pnpm run dev

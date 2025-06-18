@@ -61,6 +61,12 @@ domain model://perspectives.domains#Stadskamers
       perspective on Stadskamers
         only (CreateAndFill, RemoveContext, DeleteContext)
         props (Name) verbs (Consult, SetPropertyValue)
+      
+      perspective on MyRoutes
+        props (Name) verbs (Consult)
+      
+      perspective on MyCases
+        props (Name) verbs (Consult)
 
       screen
         who
@@ -73,6 +79,12 @@ domain model://perspectives.domains#Stadskamers
           Stadskamers
             master
             detail
+          MyRoutes
+            master
+            detail
+          MyCases
+            master
+            detail
 
     context Stadskamers (relational) filledBy Stadskamer
       state WhenCreated = exists binding
@@ -82,7 +94,11 @@ domain model://perspectives.domains#Stadskamers
         on entry
           do for Manager
             bind sys:SocialMe >> binding to Administrators in origin >> binding >> context
+    
+    context MyRoutes = sys:SocialMe >> binding >> binder Deelnemer >> context >> extern
+    context MyCases =  sys:SocialMe >> binding >> binder Begeleider >> context >> extern
 
+  ----------------------------------
   case Stadskamer
     external
       property Name (String)
@@ -225,18 +241,82 @@ domain model://perspectives.domains#Stadskamers
     context Routes (relational) filledBy Route
 
     context MyRoutes = filter Routes with binding >> context >> Ambassadeur filledBy sys:SocialMe >> binding
+
   
+  ----------------------------------
   case Route
     external
       property Name = context >> Deelnemer >> LastName
         readableName
     
-    user Deelnemer filledBy sys:SocialEnvironment$Persons
+    user Deelnemer filledBy sys:TheWorld$PerspectivesUsers
       property Vraag (String)
         minLength = 100
+      perspective on Deelnemer
+        props (FirstName, LastName, Vraag) verbs (Consult)
+      perspective on Begeleider
+        props (FirstName, LastName) verbs (Consult)
+      perspective on Ambassadeur
+        props (FirstName, LastName) verbs (Consult)
+      perspective on MyActivities
+        props (Name) verbs (Consult)
+      screen
+        who
+          Ambassadeur
+            master
+              without props (FirstName)
+            detail
+          Begeleider
+            master
+              without props (FirstName)
+            detail
+          Deelnemer
+            master
+              without props (FirstName, Vraag)
+            detail
+        what
+          row
+            markdown <### Dit is je route
+                      Hier zie je de vraag die je hebt gesteld bij het intakegesprek.
+                      >
+          row
+            form Deelnemer
+        where
+          MyActivities
+            master
+            detail
 
 
     user Begeleider filledBy Stadskamer$Employees
+      perspective on Begeleider
+        props (FirstName, LastName) verbs (Consult)
+      perspective on Deelnemer
+        props (FirstName, LastName, Vraag) verbs (Consult)
+        props (Vraag) verbs (Consult, SetPropertyValue)
+      perspective on Ambassadeur
+        props (FirstName, LastName) verbs (Consult)
+      screen
+        who
+          Ambassadeur
+            master
+              without props (FirstName)
+            detail
+          Begeleider
+            master
+              without props (FirstName)
+            detail
+          Deelnemer
+            master
+              without props (FirstName, Vraag)
+            detail
+        what
+          row
+            markdown <### Een deelnemer die je begeleidt
+                      Hier zie je de vraag die de deelnemer heeft gesteld bij het intakegesprek.
+                      >
+          row
+            form Deelnemer
+        where
 
     user Ambassadeur filledBy Stadskamer$Employees
       perspective on Begeleider
@@ -261,7 +341,7 @@ domain model://perspectives.domains#Stadskamers
             detail
           Deelnemer
             master
-              without props (FirstName)
+              without props (FirstName, Vraag)
             detail
         what
           row
@@ -274,7 +354,9 @@ domain model://perspectives.domains#Stadskamers
             form Deelnemer
         where
 
+    context MyActivities = Deelnemer >> binder ActivititeitDeelnemer >> context >> extern
 
+  ----------------------------------
   case Location
     external
       property Name (String)
@@ -307,11 +389,19 @@ domain model://perspectives.domains#Stadskamers
 
     user LocationManager filledBy Employees
       perspective on ActivityCenters
-        only (CreateAndFill, Remove)
+        only (CreateAndFill, RemoveContext)
         props (Name) verbs (Consult, SetPropertyValue)
+      
+      perspective on EmployeeOnLocation
+        only (Create, Fill, Remove)
+        props (FirstName, LastName) verbs (Consult)
       
       screen
         who
+          EmployeeOnLocation
+            master
+              without props (FirstName)
+            detail
         what
           row
             markdown <### Locatie: activiteitencentra
@@ -332,8 +422,38 @@ domain model://perspectives.domains#Stadskamers
             master
             detail
 
+    user EmployeeOnLocation filledBy Employees
+      perspective on LocationManager
+        props (FirstName, LastName) verbs (Consult)
+      perspective on EmployeeOnLocation
+        props (FirstName, LastName) verbs (Consult)
+      perspective on ActivityCenters
+        props (Name) verbs (Consult)
+      
+      screen
+        who
+          LocationManager
+            master
+              without props (FirstName)
+            detail
+          EmployeeOnLocation
+            master
+              without props (FirstName)
+            detail
+        what
+          row
+            markdown <### Locatie
+                      Je werkt op deze locatie.
+                      Je bent betrokken bij (één of meerdere van) de activiteitencentra die hier zijn.
+                      >
+        where
+          ActivityCenters
+            master
+            detail
+
     context ActivityCenters (relational) filledBy ActivityCenter
-    
+
+  ----------------------------------
   case ActivityCenter
     external
       property Name (String)
@@ -357,15 +477,39 @@ domain model://perspectives.domains#Stadskamers
                       * maak een lege rol aan onder 'Wie' - Regisseur
                       * vul met een Medewerker-rol op het clipboard.
                       >
+                    when not exists Regisseur >> binding
+            markdown <### Deze locatie heeft al een Regisseur
+                      Je hebt eerder een Regisseur benoemd.
+                      >
+                    when exists Regisseur >> binding
+
         where
     
     user Regisseur filledBy Employees
       perspective on Activities
         only (CreateAndFill, Remove)
         props (Name) verbs (Consult, SetPropertyValue)
-      
+      perspective on Regisseur
+        props (FirstName, LastName) verbs (Consult)
+      perspective on Coworkers
+        only (Create, Fill, Remove)
+        props (FirstName, LastName) verbs (Consult)
+      perspective on ActivityDeelnemers
+        props (FirstName, LastName) verbs (Consult)
       screen
         who
+          Regisseur
+            master
+              without props (FirstName)
+            detail
+          Coworkers
+            master
+              without props (FirstName)
+            detail
+          ActivityDeelnemers
+            master
+              without props (FirstName)
+            detail
         what
           row
             markdown <### Activiteitencentrum: activiteiten
@@ -385,13 +529,54 @@ domain model://perspectives.domains#Stadskamers
             master
             detail
 
+    user Coworkers filledBy Employees
+      perspective on Coworkers
+        props (FirstName, LastName) verbs (Consult)
+      perspective on Activities
+        props (Name) verbs (Consult)
+      perspective on Regisseur
+        props (FirstName, LastName) verbs (Consult)
+      perspective on ActivityDeelnemers
+        props (FirstName, LastName) verbs (Consult)
+      screen
+        who
+          Regisseur
+            master
+              without props (FirstName)
+            detail
+          Coworkers
+            master
+              without props (FirstName)
+            detail
+          ActivityDeelnemers
+            master
+              without props (FirstName)
+            detail
+        what
+          row
+            markdown <### Activiteitencentrum: activiteiten
+                      Je werkt in dit activiteitencentrum.
+                      >
+        where
+          Activities
+            master
+            detail
+    
     context Activities (relational) filledBy Activity
 
+    context ActivityCases = Regisseur >> binding >> binder Begeleider >> context >> extern 
+      union Coworkers >> binding >> binder Begeleider >> context >> extern 
+    
+    user ActivityDeelnemers = ActivityCases >> context >> Deelnemer
+    
+
+  ----------------------------------
   case Activity
     external
       property Name (String)
         readableName
       property Description (String)
+        minLength = 100
       property Weekday (String)
         enumeration = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
       property StartTime (DateTime)
@@ -415,14 +600,47 @@ domain model://perspectives.domains#Stadskamers
                       >
         where
     
+    user ActivititeitDeelnemer filledBy Deelnemer
+      perspective on External
+        props (Name, Description, Weekday, StartTime, EndTime) verbs (Consult)
+      perspective on Organizer
+        props (FirstName, LastName) verbs (Consult)
+      perspective on ActivititeitDeelnemer
+        props (FirstName, LastName) verbs (Consult)
+      screen 
+        who
+          Organizer
+            master
+              without props (FirstName)
+            detail
+          ActivititeitDeelnemer
+            master
+              without props (FirstName)
+            detail
+        what
+          row
+            markdown <### Activiteit: deelname
+                      Je bent deelnemer aan deze activiteit.
+                      >
+          row
+            form External
+        where
+
     user Organizer filledBy Employees
       perspective on External
         props (Name, Description, Weekday, StartTime, EndTime) verbs (Consult, SetPropertyValue)
       perspective on Organizer
         props (FirstName, LastName) verbs (Consult)
+      perspective on ActivititeitDeelnemer
+        only (Create, Fill, Remove)
+        props (FirstName, LastName) verbs (Consult)
       screen 
         who
           Organizer
+            master
+              without props (FirstName)
+            detail
+          ActivititeitDeelnemer
             master
               without props (FirstName)
             detail
@@ -436,6 +654,7 @@ domain model://perspectives.domains#Stadskamers
             form External
         where
 
+  ----------------------------------
   case SmallLocation
     aspect sk:Location
     aspect sk:ActivityCenter

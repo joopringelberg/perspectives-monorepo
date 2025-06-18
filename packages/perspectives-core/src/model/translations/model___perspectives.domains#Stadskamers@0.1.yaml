@@ -15,9 +15,17 @@ model://perspectives.domains#Stadskamers:
                 orig: "### Dit is de Stadskamer App\n
                   Hier kun je Stadskamer-organisaties aanmaken en beheren."
                 nl: "### Dit is de Stadskamer App\n
-                  Hier kun je Stadskamer-organisaties aanmaken en beheren."
-                en: MISSING en
+                   Hier kun je Stadskamer-organisaties aanmaken en beheren."
+                en: "MISSING en"
       contextroles:
+        MyCases:
+          translations:
+            nl: Mijn caseload
+            en: My case load
+        MyRoutes:
+          translations:
+            nl: Mijn routes
+            en: My routes
         Stadskamers:
           translations:
             nl: Stadskamers
@@ -48,10 +56,10 @@ model://perspectives.domains#Stadskamers:
               translations:
                 orig: "### Stadskamer: routes\n
                   Hier kun je routes beheren.\n
-                  Maak een route aan met de knop [[CreateRoute|Nieuwe route]] (is ook een actie in het menu linksboven)."
+                  Maak een route aan met de knop [[action: CreateRoute|Nieuwe route]] (is ook een actie in het menu linksboven)."
                 nl: "### Stadskamer: routes\n
                   Hier kun je routes beheren.\n
-                  Maak een route aan met de knop [[CreateRoute|Nieuwe route]] (is ook een actie in het menu linksboven)."
+                  Maak een route aan met de knop [[action: CreateRoute|Nieuwe route]] (is ook een actie in het menu linksboven)."
                 en: MISSING en
         Employees:
           translations:
@@ -64,9 +72,9 @@ model://perspectives.domains#Stadskamers:
                   Hier zie je je collegas onder Wie.\n
                   Kijk onder 'Locaties' voor de verschillende vestigingen."
                 nl: "### Stadskamer: de organisatie\n
-                  Hier zie je je collegas onder Wie.\n
-                  Kijk onder 'Locaties' voor de verschillende vestigingen."
-                en: MISSING en
+                   Hier zie je je collegas onder Wie.\n
+                   Kijk onder 'Locaties' voor de verschillende vestigingen."
+                en: "MISSING en"
         Administrators:
           translations:
             nl: Beheerders
@@ -76,7 +84,13 @@ model://perspectives.domains#Stadskamers:
               translations:
                 orig: "### Stadskamer: de organisatie\n
                   Hier kun je medewerkers en locaties beheren.\n
-                  Er zijn twee soorte locaties: grote, met meerder activiteitencentra, en kleine, met één activiteitencentrum."
+                  Er zijn twee soorte locaties: grote, met meerder activiteitencentra, en kleine, met één activiteitencentrum.\n
+                  Zo maak je een Locatie:\n
+                  * maak een Locatie of een Kleine Locatie aan onder 'Waar' - Locaties\n
+                  * zorg dat de Medewerker die de locatie gaat beheren, op het clipboard staat\n
+                  * open de Locatie die je hebt aangemaakt\n
+                  * maak een lege rol aan onder 'Wie' - LocatieManager\n
+                  * vul de rol met de Medewerker-rol op het clipboard"
                 nl: MISSING nl
                 en: MISSING en
       contextroles:
@@ -91,6 +105,7 @@ model://perspectives.domains#Stadskamers:
         Locations:
           translations:
             nl: Lokaties
+            en: MISSING en
     Route:
       translations:
         nl: Route
@@ -112,16 +127,40 @@ model://perspectives.domains#Stadskamers:
                 orig: "### Route van deelnemer\n
                   * Vul een deelnemer in en wijs een begeleider toe.\n
                   * Doe een intake."
-                nl: MISSING nl
-                en: MISSING en
+                nl: "MISSING nl"
+                en: "MISSING en"
         Begeleider:
           translations:
             nl: Begeleider
             en: Supervisor
+          markdowns:
+            0:
+              translations:
+                orig: "### Een deelnemer die je begeleidt\n
+                  Hier zie je de vraag die de deelnemer heeft gesteld bij het intakegesprek."
+                nl: MISSING nl
+                en: MISSING en
         Deelnemer:
           translations:
             nl: Deelnemer
             en: Participant
+          properties:
+            Vraag:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+          markdowns:
+            0:
+              translations:
+                orig: "### Dit is je route\n
+                  Hier zie je de vraag die je hebt gesteld bij het intakegesprek."
+                nl: MISSING nl
+                en: MISSING en
+      contextroles:
+        MyActivities:
+          translations:
+            nl: Mijn activiteiten
+            en: My activities
     Location:
       translations:
         nl: Lokatie
@@ -149,10 +188,37 @@ model://perspectives.domains#Stadskamers:
               nl: Naam
               en: Name
       users:
+        EmployeeOnLocation:
+          translations:
+            nl: collegas op deze lokatie
+            en: coworkers at this location
+          markdowns:
+            0:
+              translations:
+                orig: "### Locatie\n
+                  Je werkt op deze locatie.\n
+                  Je bent betrokken bij (één of meerdere van) de activiteitencentra die hier zijn."
+                nl: MISSING nl
+                en: MISSING en
         LocationManager:
           translations:
             nl: Lokatiebeheerder
             en: Location manager
+          markdowns:
+            0:
+              translations:
+                orig: "### Locatie: activiteitencentra\n
+                  Hier kun je activiteitencentra beheren.\n
+                  Voorbeelden zijn: sport, kunst, muziek, koken, etc.\n
+                  Een locatie kan meerdere activiteitencentra hebben.\n
+                  Zo maak je een Activiteitencentrum aan:\n
+                  * maak een Activiteitencentrum aan onder 'Waar' - Activiteitencentrum\n
+                  * zorg dat de Medewerker die de Regisseur van het centrum wordt, op het clipboard staat\n
+                  * open het centrum dat je hebt aangemaakt\n
+                  * maak een lege rol aan onder 'Wie' - Regisseur\n
+                  * vul de rol met de Medewerker-rol op het clipboard"
+                nl: MISSING nl
+                en: MISSING en
         Initializer:
           translations:
             nl: MISSING nl
@@ -165,8 +231,8 @@ model://perspectives.domains#Stadskamers:
                   De manager kan dan activiteitencentra beheren.\n
                   * maak een lege rol aan onder 'Wie' - LocatieManager\n
                   * vul met een Medewerker-rol op het clipboard."
-                nl: MISSING nl
-                en: MISSING en
+                nl: "MISSING nl"
+                en: "MISSING en"
       contextroles:
         ActivityCenters:
           translations:
@@ -183,10 +249,39 @@ model://perspectives.domains#Stadskamers:
               nl: Naam
               en: Name
       users:
+        ActivityDeelnemers:
+          translations:
+            nl: Deelnemers aan de activiteit
+            en: Participants in the activity
+        Coworkers:
+          translations:
+            nl: Directe collegas
+            en: Direct coworkers
+          markdowns:
+            0:
+              translations:
+                orig: "### Activiteitencentrum: activiteiten\n
+                  Je werkt in dit activiteitencentrum."
+                nl: MISSING nl
+                en: MISSING en
         Regisseur:
           translations:
             nl: Regisseur
             en: Director
+          markdowns:
+            0:
+              translations:
+                orig: "### Activiteitencentrum: activiteiten\n
+                  Hier kun je activiteiten beheren.\n
+                  Een activiteitencentrum kan meerdere activiteiten hebben.\n
+                  Zo maak je een Activiteit aan:\n
+                  * maak een Activiteit aan onder 'Wat' - Activiteiten\n
+                  * zorg dat de Medewerker die de Organisator van de activiteit wordt, op het clipboard staat\n
+                  * open de activiteit die je hebt aangemaakt\n
+                  * maak een lege rol aan onder 'Wie' - Organisator\n
+                  * vul de rol met de Medewerker-rol op het clipboard"
+                nl: MISSING nl
+                en: MISSING en
         Initializer:
           translations:
             nl: MISSING nl
@@ -194,14 +289,24 @@ model://perspectives.domains#Stadskamers:
           markdowns:
             0:
               translations:
-                orig: "### Deze locatie heeft een Regisseur\n
+                orig: "### Deze locatie heeft nog geen Regisseur\n
                   Hier kun je de Regisseur benoemen.\n
                   De Regisseur organiseert de activiteiten.\n
                   * maak een lege rol aan onder 'Wie' - Regisseur\n
                   * vul met een Medewerker-rol op het clipboard."
                 nl: MISSING nl
                 en: MISSING en
+            1:
+              translations:
+                orig: "### Deze locatie heeft al een Regisseur\n
+                  Je hebt eerder een Regisseur benoemd."
+                nl: MISSING nl
+                en: MISSING en
       contextroles:
+        ActivityCases:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
         Activities:
           translations:
             nl: Activiteiten
@@ -241,7 +346,19 @@ model://perspectives.domains#Stadskamers:
             0:
               translations:
                 orig: "### Activiteit\n
+                  Jij bent verantwoordelijk voor deze activiteit.\n
                   Beschrijf je activiteit"
+                nl: MISSING nl
+                en: MISSING en
+        ActivititeitDeelnemer:
+          translations:
+            nl: Deelnemers
+            en: Participants
+          markdowns:
+            0:
+              translations:
+                orig: "### Activiteit: deelname\n
+                  Je bent deelnemer aan deze activiteit."
                 nl: MISSING nl
                 en: MISSING en
         Initializer:
@@ -254,8 +371,8 @@ model://perspectives.domains#Stadskamers:
                 orig: "### Deze activiteit heeft een Organisator nodig\n
                   * maak een lege rol aan onder 'Wie' - Organisator\n
                   * vul met een Medewerker-rol op het clipboard."
-                nl: MISSING nl
-                en: MISSING en
+                nl: "MISSING nl"
+                en: "MISSING en"
     SmallLocation:
       translations:
         nl: Kleine lokatie
