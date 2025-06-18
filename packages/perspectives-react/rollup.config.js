@@ -21,37 +21,48 @@ export default [
       assetFileNames: '[name]-[hash][extname]'
     },
     plugins: [
+      // 1. Cleanup first
       del({ targets: 'dist/*' }),
+
+      // 2. Resolution plugins
       resolve(),
-      commonjs(),
+
+      // 3. Transform plugins
+      commonjs({
+        requireReturnsDefault: 'preferred',
+        transformMixedEsModules: true,
+      }),
+
+      // 4. Typescript compilation
       typescript({
         tsconfig: './tsconfig.json',
         declaration: true,
         declarationDir: 'dist/types',
         rootDir: 'src'
       }),
+
+      // 5. Code replacements
       replace({
         preventAssignment: true,
         __PPSTORAGELIMIT__: JSON.stringify(10),
         __PPWARNINGLEVEL__: JSON.stringify(5),
         __PPSTORAGEURL__: JSON.stringify("https://mycontexts.com/ppsfs/uploadfile")
       }),
+
+      // 6. Asset processing
       postcss({
-        extract: false, // Extract CSS to a separate file
-        minimize: true, // Minimize the CSS
-        sourceMap: true // Generate source maps for the CSS
+        extract: false,
+        minimize: true,
+        sourceMap: true
       }),
-      json(), // Add the json plugin here
+      json(),
+      
+      // 7. Final file operations
       copy({
         targets: [
           { src: 'src/roledata.d.ts', dest: 'dist/types' },
           { src: 'src/components.css', dest: 'dist/types' },
-          { 
-            src: 'src/highlight.css', 
-            dest: 'dist/types', 
-            rename: 'highlight.css' 
-          }
-
+          { src: 'src/highlight.css', dest: 'dist/types', rename: 'highlight.css' }
         ]
       }),
       // visualizer({
