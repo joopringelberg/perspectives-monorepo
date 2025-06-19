@@ -1,6 +1,7 @@
 import * as React from 'react'
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
+const { StrictMode } = React;
+import * as ReactDOM from 'react-dom/client'
+const { createRoot } = ReactDOM;
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(

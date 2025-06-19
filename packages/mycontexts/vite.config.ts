@@ -72,7 +72,8 @@ export default defineConfig(({ mode }) => {
             'highlight.js',
             'markdown-it-link-attributes',
             'spark-md5',
-            'vuvuzela'
+            'vuvuzela',
+            '@paralleldrive/cuid2'
           ];
           
           if (cjsModules.some(mod => id.includes(mod))) {
@@ -86,18 +87,44 @@ export default defineConfig(({ mode }) => {
             // Different patterns of CommonJS modules
             if (code.includes('module.exports')) {
               console.log(`Transforming CJS module with 'module.exports': ${id}`);
-              return `${code}\nexport default module.exports;`;
+              // Create a virtual CommonJS environment
+              return `
+// ESM bridge for CommonJS module
+const exports = {};
+const module = { exports };
+
+// Original module code
+${code}
+
+// Re-export as default
+export default module.exports;
+`;
             } 
             // Some modules use direct exports
             else if (code.includes('exports.') || code.includes('exports[')) {
               console.log(`Transforming CJS module with 'export default exports': ${id}`);
-              return `${code}\nexport default exports;`;
+              return `
+// ESM bridge for CommonJS module
+const exports = {};
+
+// Original module code
+${code}
+
+// Re-export as default
+export default exports;
+`;
             }
             // Some modules might have a global object they're attaching to
             else if (id.includes('vuvuzela') && !code.includes('export')) {
               // For vuvuzela specifically, which might have a different structure
               console.log(`Transforming vuvuzela with 'export default vuvuzela': ${id}`);
-              return `${code}\nexport default vuvuzela;`;
+              return `
+// Original module code
+${code}
+
+// Export the global object
+export default (typeof vuvuzela !== 'undefined' ? vuvuzela : {});
+`;
             }
           }
           return null;
@@ -107,28 +134,218 @@ export default defineConfig(({ mode }) => {
       // React ESM compat fix
       {
         name: 'react-esm-compat',
-        enforce: 'pre', // Add this line to ensure it runs before other plugins
+        enforce: 'pre',
         transform(code, id) {
-          // For React's main module
-          if (id.includes('node_modules/react/index.js') && !code.includes('export default') && code.includes('export {')) {
-            return `${code}\nexport default React;`;
+          // Map of specific modules that need replacement
+          const moduleReplacements = {
+            'react-dom/client.js': `
+import * as ReactDOM from 'react-dom';
+
+export const createRoot = ReactDOM.createRoot;
+export const hydrateRoot = ReactDOM.hydrateRoot;
+export default {
+  createRoot: ReactDOM.createRoot,
+  hydrateRoot: ReactDOM.hydrateRoot
+};`,
+            'react-dom/server.js': `
+import * as ReactDOMServer from './cjs/react-dom-server.browser.${mode !== 'production' ? 'development' : 'production.min'}.js';
+export * from './cjs/react-dom-server.browser.${mode !== 'production' ? 'development' : 'production.min'}.js';
+export default ReactDOMServer;`
+          };
+          
+          // Check for exact module matches first
+          for (const [modulePath, replacement] of Object.entries(moduleReplacements)) {
+            if (id.includes(modulePath)) {
+              console.log(`Replacing module: ${modulePath}`);
+              return replacement;
+            }
           }
           
-          // For the JSX development runtime
-          if (id.includes('react/jsx-dev-runtime')) {
-            // Add necessary exports for development
-            return `${code}\n
-// Added by react-esm-compat plugin
-export const jsxDEV = (type, props, key, isStaticChildren, source, self) => jsx(type, props, key);
-export { Fragment, jsx, jsxs };
+          // Then handle the pattern-based transformations
+          
+          // React main module
+          if (id.includes('node_modules/react/index.js')) {
+            console.log('Replacing React entry module with ESM version');
+            
+            // For dev builds
+            if (mode !== 'production') {
+              return `
+import * as React from './cjs/react.development.js';
+export * from './cjs/react.development.js';
+export default React;
+`;
+            } else {
+              // For production builds
+              return `
+import * as React from './cjs/react.production.min.js';
+export * from './cjs/react.production.min.js';
+export default React;
+`;
+            }
+          }
+          
+          // React DOM main module
+          if (id.includes('node_modules/react-dom/index.js')) {
+            console.log('Fixing React DOM main module');
+            
+            // For dev builds
+            if (mode !== 'production') {
+              return `
+import * as ReactDOM from './cjs/react-dom.development.js';
+export * from './cjs/react-dom.development.js';
+export default ReactDOM;
+`;
+            } else {
+              // For production builds
+              return `
+import * as ReactDOM from './cjs/react-dom.production.min.js';
+export * from './cjs/react-dom.production.min.js';
+export default ReactDOM;
+`;
+            }
+          }
+          
+          // Handle React DOM development version
+          if (id.includes('react-dom/cjs/react-dom.development.js')) {
+            console.log('Converting React DOM development file to ESM');
+            
+            return `
+// ESM bridge for CommonJS module
+const exports = {};
+const module = { exports };
+
+${code}
+
+// Export all properties from the exports object
+export const __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = exports.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+export const createPortal = exports.createPortal;
+export const createRoot = exports.createRoot;
+export const findDOMNode = exports.findDOMNode;
+export const flushSync = exports.flushSync;
+export const hydrate = exports.hydrate;
+export const hydrateRoot = exports.hydrateRoot;
+export const render = exports.render;
+export const unmountComponentAtNode = exports.unmountComponentAtNode;
+export const unstable_batchedUpdates = exports.unstable_batchedUpdates;
+export const unstable_renderSubtreeIntoContainer = exports.unstable_renderSubtreeIntoContainer;
+export const version = exports.version;
+
+// Default export for import ReactDOM from 'react-dom'
+export default exports;
 `;
           }
           
-          // For the JSX production runtime - CRITICAL FIX
+          // For React's development file
+          if (id.includes('react/cjs/react.development.js')) {
+            console.log('Converting React development file to ESM');
+            
+            // Add ESM export handling
+            return `
+// ESM bridge for CommonJS module
+const exports = {};
+const module = { exports };
+
+${code}
+
+// Re-export all exports as named exports
+export const Children = exports.Children;
+export const Component = exports.Component;
+export const Fragment = exports.Fragment;
+export const Profiler = exports.Profiler;
+export const PureComponent = exports.PureComponent;
+export const StrictMode = exports.StrictMode;
+export const Suspense = exports.Suspense;
+export const __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = exports.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+export const cloneElement = exports.cloneElement;
+export const createContext = exports.createContext;
+export const createElement = exports.createElement;
+export const createFactory = exports.createFactory;
+export const createRef = exports.createRef;
+export const forwardRef = exports.forwardRef;
+export const isValidElement = exports.isValidElement;
+export const lazy = exports.lazy;
+export const memo = exports.memo;
+export const startTransition = exports.startTransition;
+export const useCallback = exports.useCallback;
+export const useContext = exports.useContext;
+export const useDebugValue = exports.useDebugValue;
+export const useDeferredValue = exports.useDeferredValue;
+export const useEffect = exports.useEffect;
+export const useId = exports.useId;
+export const useImperativeHandle = exports.useImperativeHandle;
+export const useInsertionEffect = exports.useInsertionEffect;
+export const useLayoutEffect = exports.useLayoutEffect;
+export const useMemo = exports.useMemo;
+export const useReducer = exports.useReducer;
+export const useRef = exports.useRef;
+export const useState = exports.useState;
+export const useSyncExternalStore = exports.useSyncExternalStore;
+export const useTransition = exports.useTransition;
+export const version = exports.version;
+
+// Default export for import React from 'react'
+export default exports;
+`;
+          }
+          
+          // For React's production file
+          if (id.includes('react/cjs/react.production.min.js')) {
+            console.log('Converting React production file to ESM');
+            
+            // Same approach for production file
+            return `
+// ESM bridge for CommonJS module
+const exports = {};
+const module = { exports };
+
+${code}
+
+// Re-export all exports as named exports
+export const Children = exports.Children;
+export const Component = exports.Component;
+export const Fragment = exports.Fragment;
+export const Profiler = exports.Profiler;
+export const PureComponent = exports.PureComponent;
+export const StrictMode = exports.StrictMode;
+export const Suspense = exports.Suspense;
+export const __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = exports.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+export const cloneElement = exports.cloneElement;
+export const createContext = exports.createContext;
+export const createElement = exports.createElement;
+export const createFactory = exports.createFactory;
+export const createRef = exports.createRef;
+export const forwardRef = exports.forwardRef;
+export const isValidElement = exports.isValidElement;
+export const lazy = exports.lazy;
+export const memo = exports.memo;
+export const startTransition = exports.startTransition;
+export const useCallback = exports.useCallback;
+export const useContext = exports.useContext;
+export const useDebugValue = exports.useDebugValue;
+export const useDeferredValue = exports.useDeferredValue;
+export const useEffect = exports.useEffect;
+export const useId = exports.useId;
+export const useImperativeHandle = exports.useImperativeHandle;
+export const useInsertionEffect = exports.useInsertionEffect;
+export const useLayoutEffect = exports.useLayoutEffect;
+export const useMemo = exports.useMemo;
+export const useReducer = exports.useReducer;
+export const useRef = exports.useRef;
+export const useState = exports.useState;
+export const useSyncExternalStore = exports.useSyncExternalStore;
+export const useTransition = exports.useTransition;
+export const version = exports.version;
+
+// Default export for import React from 'react'
+export default exports;
+`;
+          }
+          
+          // For JSX runtime
           if (id.includes('react/jsx-runtime')) {
             console.log('Patching jsx-runtime module');
             
-            // Create a complete replacement for the JSX runtime module
+            // Your existing jsx-runtime fix
             return `
 import { createElement, Fragment as _Fragment } from 'react';
 
@@ -152,6 +369,81 @@ export { jsx as _jsx, jsxs as _jsxs };
 `;
           }
           
+          return null;
+        }
+      },
+      
+      // Add this after your fix-cjs-exports plugin
+      {
+        name: 'handle-cjs-require',
+        enforce: 'pre',
+        transform(code, id) {
+          // Process any file from @paralleldrive/cuid2 that uses require
+          if (id.includes('@paralleldrive/cuid2') && 
+              code.includes('require(') && 
+              !code.includes('typeof require')) {
+            
+            console.log(`Adding require implementation to: ${id}`);
+            
+            // Extract the relative paths being required
+            const requirePaths: string[] = [];
+            const regex = /require\(['"]([^'"]+)['"]\)/g;
+            let match;
+            
+            while ((match = regex.exec(code)) !== null) {
+              requirePaths.push(match[1]);
+            }
+            
+            // Create ESM imports for each required module
+            const imports = requirePaths.map(path => {
+              // Convert relative path to ESM import - create a safe variable name
+              // Replace all non-alphanumeric characters with underscores
+              const safeVarName = path.replace(/[@/\.-]/g, '_').replace(/\+/g, '_plus_');
+              return `import * as _${safeVarName} from '${path}';`;
+            }).join('\n');
+            
+            // Create the require function
+            const requireFunc = `
+// ESM bridge for CommonJS require
+function require(path) {
+  ${requirePaths.map(path => {
+    const safeVarName = path.replace(/[@/\.-]/g, '_').replace(/\+/g, '_plus_');
+    return `if (path === '${path}') return _${safeVarName};`;
+  }).join('\n  ')}
+  throw new Error('Unsupported require path: ' + path);
+}`;
+            
+            // Also create CommonJS environment objects
+            const cjsSetup = `
+// Create CommonJS environment variables
+const exports = {};
+const module = { exports };`;
+            
+            // Assemble the final code
+            return `
+// ESM imports
+${imports}
+
+${requireFunc}
+
+${cjsSetup}
+
+// Original module
+${code}
+
+// Export using dynamic approach that avoids redeclarations
+export default module.exports;
+const _exportNames = ['createId', 'init', 'getConstants', 'isCuid'];
+_exportNames.forEach(name => {
+  if (name !== 'default' && name in module.exports) {
+    Object.defineProperty(exports, name, {
+      enumerable: true,
+      get: function() { return module.exports[name]; }
+    });
+  }
+});
+`;
+          }
           return null;
         }
       },

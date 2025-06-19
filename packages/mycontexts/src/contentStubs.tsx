@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useRef } from 'react';
+const { useRef } = React;
 import { MainContentProps, SlidingPanelContentProps } from './mscomponent';
 
 

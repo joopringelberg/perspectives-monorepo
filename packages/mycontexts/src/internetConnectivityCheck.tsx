@@ -1,6 +1,6 @@
 import { OverlayInjectedProps } from 'react-bootstrap/esm/Overlay';
 import * as React from 'react'
-import { useState, useEffect } from 'react';
+const { useState, useEffect } = React;
 import { OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { i18next } from 'perspectives-react';
 
