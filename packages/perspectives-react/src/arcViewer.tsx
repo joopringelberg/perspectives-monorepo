@@ -19,7 +19,6 @@
 // END LICENSE
 
 import React, {Component} from "react";
-import { string } from "prop-types";
 import {PDRproxy, PropertyType, RoleInstanceT} from "perspectives-proxy"; 
 
 

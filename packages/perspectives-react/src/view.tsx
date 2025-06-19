@@ -1,5 +1,4 @@
 import React from "react";
-import {string} from "prop-types";
 import {ContextInstanceT, ContextType, PDRproxy, PropertyType, RoleInstanceT, RoleType, ValueT} from "perspectives-proxy";
 
 import PerspectivesComponent from "./perspectivesComponent";

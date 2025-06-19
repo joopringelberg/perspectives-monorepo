@@ -25,8 +25,6 @@ import
 
 import React from 'react';
 
-import { bool, func, string } from "prop-types";
-
 interface BinaryModalProps {
   title: string;
   message: string;

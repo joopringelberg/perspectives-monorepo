@@ -30,7 +30,6 @@ import CreateContextDropDown from "./createContextDropdown.js";
 import
   { Navbar
   } from "react-bootstrap";
-import { element, shape, string } from "prop-types";
 import {UserMessagingPromise} from "./userMessaging.js";
 import i18next from "i18next";
 

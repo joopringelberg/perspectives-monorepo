@@ -43,7 +43,6 @@ export default function RoleDropZone(props : RoleDropZoneProps)
   return  <AppContext.Consumer>
           {
             appcontext => <RoleDropZone_ systemExternalRole={appcontext.systemExternalRole} {...props}>{
-              //eslint-disable-next-line react/prop-types
               props.children}</RoleDropZone_>
           }
           </AppContext.Consumer>;

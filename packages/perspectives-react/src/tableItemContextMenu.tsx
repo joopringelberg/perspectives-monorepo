@@ -600,7 +600,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     }
 }
 
-// eslint-disable-next-line react/display-name, react/prop-types
+// eslint-disable-next-line react/display-name
 interface CustomToggleProps {
   children: React.ReactNode;
   onClick: (e: React.MouseEvent<HTMLAnchorElement, MouseEvent>) => void;

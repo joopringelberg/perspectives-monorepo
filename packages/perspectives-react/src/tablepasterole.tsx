@@ -19,7 +19,6 @@
 // END LICENSE
 
 import React, { createRef } from 'react';
-import {string} from "prop-types";
 
 import {ContextInstanceT, ContextType, PDRproxy, RoleInstanceT, RoleOnClipboard, RoleType} from "perspectives-proxy";
 import PerspectivesComponent from "./perspectivesComponent";
@@ -147,7 +146,7 @@ export default class TablePasteRole extends PerspectivesComponent<TablePasteRole
     const component = this;
     const renderTooltip = (props : OverlayInjectedProps) => (
     <Tooltip id="tablePasteRole-tooltip" {...props} show={
-       // eslint-disable-next-line react/prop-types
+       // eslint-disable-next-line
       props.show}>
       { ( component.state.compatibleRole
           ? i18next.t("tablePasteRole_Create", {ns: "preact"})
@@ -189,11 +188,3 @@ export default class TablePasteRole extends PerspectivesComponent<TablePasteRole
 
 TablePasteRole.contextType = PSRoleInstances;
 
-TablePasteRole.propTypes = 
-  { systemexternalrole: string.isRequired 
-  , contextinstance: string.isRequired
-  , contexttype: string.isRequired
-  , roletype: string.isRequired
-  , selectedroleinstance: string
-  , myroletype: string.isRequired
-  };

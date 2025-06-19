@@ -19,7 +19,6 @@
 // END LICENSE
 
 import React, { createRef } from 'react';
-import { string } from "prop-types";
 
 import {PDRproxy, RoleInstanceT, RoleOnClipboard} from "perspectives-proxy";
 import PerspectivesComponent from "./perspectivesComponent";

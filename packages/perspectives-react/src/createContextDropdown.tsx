@@ -116,7 +116,6 @@ export default class CreateContextDropDown extends Component<CreateContextDropDo
 }
 
 
-// eslint-disable-next-line react/display-name, react/prop-types
 interface CustomToggleProps {
   children: React.ReactNode;
   onClick: (e: React.MouseEvent<HTMLAnchorElement, MouseEvent>) => void;

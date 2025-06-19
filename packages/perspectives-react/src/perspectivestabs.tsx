@@ -19,7 +19,6 @@
 // END LICENSE
 
 import React, { useState } from 'react';
-import { arrayOf, number } from "prop-types";
 
 
 

@@ -28,7 +28,6 @@
 
 
 import React, { Component } from "react";
-import { string } from "prop-types";
 import {ContextInstanceT, PDRproxy, RoleInstanceT, RoleType} from "perspectives-proxy";
 
 import markdownit from 'markdown-it'

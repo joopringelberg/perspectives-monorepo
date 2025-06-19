@@ -34,7 +34,6 @@ import
   { Navbar
   } from "react-bootstrap";
 import "./components.css";
-import { shape, string } from "prop-types";
 
 ////////////////////////////////////////////////////////////////////////////////
 // TABLECONTROLS

@@ -1,5 +1,4 @@
 import React from "react";
-import {string} from "prop-types";
 
 import View from "./view.js";
 import ExternalRole from "./externalrole.js";
@@ -17,6 +16,3 @@ export function ViewOnExternalRole(props : ViewOnExternalRoleProps)
     </ExternalRole>);
 }
 
-ViewOnExternalRole.propTypes = {
-  viewname: string.isRequired
-};

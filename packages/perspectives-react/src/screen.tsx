@@ -2,7 +2,6 @@ import "regenerator-runtime";
 
 import React, { createRef } from 'react';
 
-import {string, func} from "prop-types";
 import { PDRproxy, CONTINUOUS, RoleInstanceT, RoleType, ValueT, ContextInstanceT, ContextType, PerspectivesProxy } from 'perspectives-proxy';
 import PerspectivesComponent from "./perspectivesComponent";
 import {PSContext, AppContext, PSContextType} from "./reactcontexts.js";

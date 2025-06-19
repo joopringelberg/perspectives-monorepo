@@ -1,5 +1,4 @@
 import React, { Children } from "react";
-import { bool, node, oneOf, string } from "prop-types";
 import classNames from "classnames";
 import { FC, ReactNode, ButtonHTMLAttributes } from "react";
 

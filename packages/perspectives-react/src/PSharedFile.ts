@@ -2,7 +2,6 @@
 // It is a serialised JSON structure:
 
 import { PSharedFile, RoleInstanceT } from "perspectives-proxy";
-import { string, number } from "prop-types";
 
 // export const PSharedFile =
 //   { // The file name as it was uploaded.

@@ -53,7 +53,6 @@ import
   { Row
   , Form
   } from "react-bootstrap";
-import { bool, string, shape, arrayOf } from "prop-types";
 import SmartFieldControl from "./smartfieldcontrol.js";
 import { ContextInstanceT, RoleInstanceT, RoleType, PropertyValues, SerialisedProperty } from "perspectives-proxy";
 

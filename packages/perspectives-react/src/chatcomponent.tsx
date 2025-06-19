@@ -17,7 +17,6 @@
 
 import {FileShareCredentials, PDRproxy, PropertyType, PStorageType, RoleInstanceT, RoleType, ValueT} from "perspectives-proxy";
 
-import PropTypes from "prop-types"
 import React from "react";
 
 import { MainContainer, ChatContainer, MessageList, MessageInput, ConversationHeader, Avatar, VoiceCallButton, VideoCallButton, InfoButton, TypingIndicator, MessageSeparator, SendButton, AttachmentButton, AvatarGroup, ExpansionPanel, Message as MessageComponent, InputToolbox } from '@chatscope/chat-ui-kit-react';
@@ -643,7 +642,6 @@ export class ChatComponent extends PerspectivesComponent<ChatComponentProps, Cha
   {
     const renderTooltip = (props : OverlayInjectedProps) => (
       <Tooltip id="recordAudio-tooltip" {...props} show={
-         // eslint-disable-next-line react/prop-types
         props.show}>
         { i18next.t("chatComponent_recordAudio", {ns: "preact"}) }
       </Tooltip> );
@@ -727,14 +725,5 @@ export class ChatComponent extends PerspectivesComponent<ChatComponentProps, Cha
     );
   }
 }
-
-ChatComponent.propTypes = 
-  { externalrole: PropTypes.string.isRequired
-  , roleinstance: PropTypes.string.isRequired
-  , roletype: PropTypes.string.isRequired
-  , messagesproperty: PropTypes.string.isRequired
-  , mediaproperty: PropTypes.string.isRequired
-  , myroletype: PropTypes.string.isRequired
-  }
 
   const MAXFILESREACHED = 4;

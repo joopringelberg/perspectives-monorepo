@@ -19,7 +19,6 @@
 // END LICENSE
 
 import React, { createRef } from 'react';
-import { string } from "prop-types";
 
 import PerspectivesComponent from "./perspectivesComponent";
 import { thisAppsLocation } from './utilities';
