@@ -8,6 +8,7 @@ try {
 }
 
 const build = JSON.parse(await fs.readFile("./build.json", { encoding: "utf-8" })).build;
+const buildPath = process.env.BUILD_PATH || '/';
 
 // See: https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/How_to/Define_app_icons#create_the_necessary_icon_sizes
 const macIcons = ["512.png", "256.png", "128.png", "32.png", "16.png"].map( 
@@ -15,7 +16,7 @@ const macIcons = ["512.png", "256.png", "128.png", "32.png", "16.png"].map(
   {
     const size = icon.replace(".png", "");
     return {
-      "src": "/www/AppImages/ios/" + icon, // Update to match your base URL
+      "src": `${buildPath}/AppImages/ios/` + icon, // Update to match your base URL
       "sizes": size + "x" + size,
       "type": "image/png"
     }
@@ -25,7 +26,7 @@ const manifest = {
   "name": "MyContexts",
   "short_name": "MyContexts",
   "icons": macIcons,
-  "start_url": "/www/",
+  "start_url": buildPath,
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#0275d8"
