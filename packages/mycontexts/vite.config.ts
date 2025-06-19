@@ -568,11 +568,28 @@ _exportNames.forEach(name => {
         'perspectives-pageworker': resolve(__dirname, '../perspectives-pageworker/dist/perspectives-pageworker.js'),
         '@perspectives/core': resolve( __dirname, '../perspectives-core/src'),
         '@perspectives/proxy': resolve( __dirname, '../perspectives-proxy/src'),
-        '@perspectives/react': resolve( __dirname, '../perspectives-react/src')
-      }
+        '@perspectives/react': resolve( __dirname, '../perspectives-react/src'),
+        
+        // Force a single React instance across all packages
+        'react': resolve(__dirname, 'node_modules/react'),
+        'react-dom': resolve(__dirname, 'node_modules/react-dom'),
+        'react/jsx-runtime': resolve(__dirname, 'node_modules/react/jsx-runtime'),
+        'react/jsx-dev-runtime': resolve(__dirname, 'node_modules/react/jsx-dev-runtime')
+      },
+      dedupe: ['react', 'react-dom'] // Add this line
     },
     optimizeDeps: {
-      include: ['react', 'react-dom']
+      include: [
+        'react', 
+        'react-dom', 
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime'
+      ],
+      esbuildOptions: {
+        mainFields: ['module', 'main'],
+        resolveExtensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json'],
+        format: 'esm'
+      }
     },
     build: {
       target: 'es2023',
