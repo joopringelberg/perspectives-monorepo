@@ -18,7 +18,8 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React, { useState, useEffect, useRef } from "react";
+import * as React from "react"
+import { useState, useEffect, useRef } from "react";
 
 import OverlayTrigger from 'react-bootstrap/OverlayTrigger';
 import Tooltip from 'react-bootstrap/Tooltip';

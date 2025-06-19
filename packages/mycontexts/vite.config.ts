@@ -1,9 +1,8 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react-swc'
+// import react from '@vitejs/plugin-react-swc'
 import tsconfigPaths from 'vite-tsconfig-paths' 
 import commonjs from '@rollup/plugin-commonjs'
-import { visualizer } from 'rollup-plugin-visualizer'
-import copy from 'rollup-plugin-copy'
+import react from '@vitejs/plugin-react'
 import del from 'rollup-plugin-delete'
 import { resolve } from 'path';
 import fs from 'fs';
@@ -71,13 +70,35 @@ export default defineConfig(({ mode }) => {
             'prop-types',
             'uncontrollable',
             'highlight.js',
-            'markdown-it-link-attributes'
+            'markdown-it-link-attributes',
+            'spark-md5',
+            'vuvuzela'
           ];
           
-          if (cjsModules.some(mod => id.includes(mod)) && 
-              !code.includes('export default') && 
-              code.includes('module.exports')) {
-            return `${code}\nexport default module.exports;`;
+          if (cjsModules.some(mod => id.includes(mod))) {
+            // Log for debugging
+            
+            // Check if it's already an ESM module with a default export
+            if (code.includes('export default')) {
+              return null;
+            }
+            
+            // Different patterns of CommonJS modules
+            if (code.includes('module.exports')) {
+              console.log(`Transforming CJS module with 'module.exports': ${id}`);
+              return `${code}\nexport default module.exports;`;
+            } 
+            // Some modules use direct exports
+            else if (code.includes('exports.') || code.includes('exports[')) {
+              console.log(`Transforming CJS module with 'export default exports': ${id}`);
+              return `${code}\nexport default exports;`;
+            }
+            // Some modules might have a global object they're attaching to
+            else if (id.includes('vuvuzela') && !code.includes('export')) {
+              // For vuvuzela specifically, which might have a different structure
+              console.log(`Transforming vuvuzela with 'export default vuvuzela': ${id}`);
+              return `${code}\nexport default vuvuzela;`;
+            }
           }
           return null;
         }
@@ -86,13 +107,51 @@ export default defineConfig(({ mode }) => {
       // React ESM compat fix
       {
         name: 'react-esm-compat',
+        enforce: 'pre', // Add this line to ensure it runs before other plugins
         transform(code, id) {
-          if (id.includes('node_modules/react/') && !code.includes('export default') && code.includes('export {')) {
+          // For React's main module
+          if (id.includes('node_modules/react/index.js') && !code.includes('export default') && code.includes('export {')) {
             return `${code}\nexport default React;`;
           }
-          if (id.includes('react/jsx-dev-runtime') && !code.includes('export const jsxDEV')) {
-            return `${code}\nexport const jsxDEV = (type, props, key, isStaticChildren, source, self) => jsx(type, props, key);`;
+          
+          // For the JSX development runtime
+          if (id.includes('react/jsx-dev-runtime')) {
+            // Add necessary exports for development
+            return `${code}\n
+// Added by react-esm-compat plugin
+export const jsxDEV = (type, props, key, isStaticChildren, source, self) => jsx(type, props, key);
+export { Fragment, jsx, jsxs };
+`;
           }
+          
+          // For the JSX production runtime - CRITICAL FIX
+          if (id.includes('react/jsx-runtime')) {
+            console.log('Patching jsx-runtime module');
+            
+            // Create a complete replacement for the JSX runtime module
+            return `
+import { createElement, Fragment as _Fragment } from 'react';
+
+export const Fragment = _Fragment;
+
+// Create jsx and jsxs functions based on createElement
+export function jsx(type, props, key) {
+  const propsCopy = { ...props };
+  if (key !== undefined) {
+    propsCopy.key = key;
+  }
+  return createElement(type, propsCopy);
+}
+
+export function jsxs(type, props, key) {
+  return jsx(type, props, key);
+}
+
+// Also export as named imports for different transpiler patterns
+export { jsx as _jsx, jsxs as _jsxs };
+`;
+          }
+          
           return null;
         }
       },
@@ -104,8 +163,16 @@ export default defineConfig(({ mode }) => {
       }),
       
       // React
-      react(),
-      
+      react({
+        jsxImportSource: 'react',
+        babel: {
+          plugins: [
+            ['@babel/plugin-transform-react-jsx', {
+              runtime: 'automatic'
+            }]
+          ]
+        }
+      }),  
       // CommonJS with careful inclusion/exclusion
       commonjs({
         requireReturnsDefault: 'preferred',

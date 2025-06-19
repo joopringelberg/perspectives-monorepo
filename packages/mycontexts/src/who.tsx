@@ -1,6 +1,6 @@
-import React from "react";
+import * as React from "react";
+const { Component } = React;
 import { Who as WhoDef } from "perspectives-proxy";
-import { Component } from "react";
 import { TableForms } from "./tableForms";
 import { buildMarkDown, ChatComponent, externalRole, PSContext } from "perspectives-react";
 import { Accordion } from "react-bootstrap";

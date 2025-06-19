@@ -1,8 +1,8 @@
-import React from "react";
-import { FormElementDef, RoleInstanceT, TableFormDef } from "perspectives-proxy";
+import * as React from "react";
+const { Component } = React;
+import { FormElementDef, TableFormDef } from "perspectives-proxy";
 import { buildForm, buildMarkDown, buildTable } from "perspectives-react";
-import { Component } from "react";
-import { Accordion, Container, Row } from "react-bootstrap";
+import { Accordion } from "react-bootstrap";
 import MSComponent, { SlidingPanelContentProps } from "./mscomponent";
 
 interface TableFormsProps {

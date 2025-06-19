@@ -11,10 +11,10 @@
   This component renders a single TableFormDef screen element.
  */
 
-import { Component, ReactNode } from "react";
+import * as React from "react";
+const { Component } = React;
 import { CloseButton, Col, Row } from "react-bootstrap";
 import "./slidingPanels.css";
-import * as React from "react";
 import { RoleInstanceT, RoleType } from "perspectives-proxy";
 
 type RoleInstanceSelectionEvent = Event & { detail: { roleInstance: RoleInstanceT, roleType: RoleType } };

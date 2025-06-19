@@ -1,4 +1,5 @@
-import React, { FC } from "react";
+import * as React from "react"
+import { FC } from "react";
 import { Container, Row, Col, Button } from "react-bootstrap";
 import {i18next} from 'perspectives-react';
 import { KeyPair } from "./configurationComponents";

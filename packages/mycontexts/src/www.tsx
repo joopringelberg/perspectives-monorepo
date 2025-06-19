@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider } from 'react-bootstrap';
 import './www.css';
 import {i18next} from 'perspectives-react';

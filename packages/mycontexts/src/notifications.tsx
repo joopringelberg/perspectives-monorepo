@@ -1,7 +1,7 @@
 // Displays the notifications of a context in a RoleTable.
 // Because of the RoleTable, must be used in the subtree of a
 
-import React from "react";
+import * as React from "react";
 import { CONTINUOUS, FIREANDFORGET, PDRproxy, Perspective, RoleInstanceT, Unsubscriber } from "perspectives-proxy";
 import { ModelDependencies, PerspectivesComponent, PerspectiveTable } from "perspectives-react";
 

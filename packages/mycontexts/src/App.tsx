@@ -1,4 +1,5 @@
-import React, { Component, ReactElement } from 'react'
+import * as React from 'react'
+import { Component, ReactElement } from 'react'
 import 'bootswatch/dist/spacelab/bootstrap.min.css';
 // import './assets/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';

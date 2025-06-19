@@ -1,9 +1,11 @@
-import React, { useState, ReactElement, FC, ChangeEvent, MouseEventHandler } from 'react';
+import * as React from 'react'
+const { useState } = React;
+import type {FC, ReactElement} from 'react';
 import { Container, Navbar, Button, Modal, Form, Col, Row } from 'react-bootstrap';
 import OverlayTrigger from 'react-bootstrap/OverlayTrigger';
 import Tooltip from 'react-bootstrap/Tooltip';
 import { set as setValue, del as deleteValue} from 'idb-keyval';
-import {init} from '@paralleldrive/cuid2';
+import * as Cuid2 from '@paralleldrive/cuid2';
 import { takeCUID } from 'perspectives-react';
 import {i18next} from 'perspectives-react';
 import { IdentityFile, IdentityFileUploader, KeyPair, KeyPairFileUploader } from './configurationComponents';
@@ -262,7 +264,7 @@ const InstallModal: FC<{ show: boolean; onHide: () => void, callback: (data: Ins
 
 function handleInstall ( { deviceName, keyPair, identityFile, couchdbUrl, couchdbPort, userName, password }: InstallationData, callback: (data: InstallationResult) => void ) {
   // A function that generates a CUID using the current epoch as fingerprint.
-  const cuid2 = init({
+  const cuid2 = Cuid2.init({
     // A custom random function with the same API as Math.random.
     // You can use this to pass a cryptographically secure random function.
     random: Math.random,

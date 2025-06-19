@@ -18,7 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React from 'react';
+import * as React from 'react';
 import
   { Row
   , Col

@@ -1,13 +1,17 @@
-import { ChangeEvent, FC } from "react";
+import * as React from "react";
+const { useState } = React;
+// Keep other non-React imports
 import { set as setValue} from 'idb-keyval';
 import {i18next} from 'perspectives-react';
 import { Form } from "react-bootstrap";
-import * as React from "react";
+
+// Use type imports separately to avoid runtime dependencies
+import type { ChangeEvent, FC } from "react";
 
 export interface IdentityFile {author: string}
 
 export const IdentityFileUploader: FC<{ setIdentityFile: (json: IdentityFile | null) => void }> = ({ setIdentityFile: setIdentityFile }) => {
-  const [feedback, setFeedback] = React.useState('');
+  const [feedback, setFeedback] = useState('');
 
   function handleIdentityFile(event: ChangeEvent<HTMLInputElement>)
   {
@@ -54,7 +58,7 @@ export const IdentityFileUploader: FC<{ setIdentityFile: (json: IdentityFile | n
 export interface KeyPair { privateKey: JsonWebKey, publicKey: JsonWebKey }
 
 export const KeyPairFileUploader: FC<{ setKeyPairFile: (json: KeyPair | null) => void }> = ({ setKeyPairFile: setKeyPairFile }) => {
-  const [feedback, setFeedback] = React.useState('');
+  const [feedback, setFeedback] = useState('');
   function handleCryptoKeys(event: ChangeEvent<HTMLInputElement>)
   {
     const fileList = event.target.files;

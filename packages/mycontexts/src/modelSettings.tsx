@@ -1,4 +1,4 @@
-import React from "react";
+import * as React from "react";
 import { PDRproxy, Perspective } from "perspectives-proxy";
 import { ModelDependencies, PerspectiveBasedForm, PerspectivesComponent } from "perspectives-react";
 import { Accordion, Container } from "react-bootstrap";
