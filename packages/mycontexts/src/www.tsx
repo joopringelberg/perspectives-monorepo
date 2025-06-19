@@ -22,6 +22,8 @@ import { InternetConnectivityCheck } from './internetConnectivityCheck';
 import { changeLanguage } from './i18next';
 import { About } from './about';
 
+const mycontextStartPage = __STARTPAGE__ as RoleInstanceT; 
+
 type Section = 'who' | 'what' | 'where' | 'none';
 
 interface WWWComponentProps {
@@ -69,6 +71,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       , endUserMessage: {title: ''}
       , choiceMessage: {title: '', choices: {}, chosen: () => {}}
       , isOnline: false
+      , openContext: mycontextStartPage
     };
     this.checkScreenSize = this.checkScreenSize.bind(this);
     this.screenUnsubscriber = undefined;
@@ -186,7 +189,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         // If true, accept navigation.
         // If false, abort navigation.
         component.setState(
-          { openContext: undefined }
+          { openContext: mycontextStartPage }
         );
         addEventListener("beforeunload", 
           (e => e.preventDefault()), 
@@ -329,7 +332,6 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   openWelcomePage()
   {
     const component = this;
-    const mycontextStartPage = __STARTPAGE__ as RoleInstanceT; 
     document.title = "Welcome to MyContexts";
     history.pushState({ selectedContext: mycontextStartPage, title: "Welcome to MyContexts" }, "");
     component.setState( {openContext: mycontextStartPage, activeSection: 'what' } );

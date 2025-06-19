@@ -1,11 +1,11 @@
+import * as React from 'react';
 import { OverlayInjectedProps } from 'react-bootstrap/esm/Overlay';
-import * as React from 'react'
-const { useState, useEffect } = React;
 import { OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { i18next } from 'perspectives-react';
 
-export function InternetConnectivityCheck( {reportBack} : {reportBack: (isOnline: boolean) => void}){
-  const [isOnline, setIsOnline] = useState(false);
+export function InternetConnectivityCheck({ reportBack }: { reportBack: (isOnline: boolean) => void }) {
+  // Don't destructure React hooks
+  const [isOnline, setIsOnline] = React.useState(false);
   
   // Check connectivity by making a lightweight request
   const checkConnectivity = () => {
@@ -18,32 +18,33 @@ export function InternetConnectivityCheck( {reportBack} : {reportBack: (isOnline
   };
 
   const registerOnlineStatusChange = (currentStatus: boolean) => {
-    if (currentStatus !== isOnline)
-    {
+    if (currentStatus !== isOnline) {
       console.log("Connectivity status changed: ", currentStatus);
       setIsOnline(currentStatus);
       reportBack(currentStatus);
     }
   };
   
-  useEffect(() => {
+  React.useEffect(() => {
     // Check immediately
     console.log("Checking connectivity for the first time");
     checkConnectivity();
     
     // Regular interval checking
-    const interval = setInterval(
-      () =>{
-        // console.log("Checking connectivity periodically");
-        checkConnectivity}, 10000); // Every 30 seconds
+    const interval = setInterval(() => {
+      checkConnectivity();
+    }, 10000);
     
     // Also use the browser events
     const handleOnline = () => {
       console.log("Browser online event");
-      checkConnectivity()};
+      checkConnectivity();
+    };
+    
     const handleOffline = () => {
       console.log("Browser offline event");
-      registerOnlineStatusChange(false)};
+      registerOnlineStatusChange(false);
+    };
     
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -55,26 +56,23 @@ export function InternetConnectivityCheck( {reportBack} : {reportBack: (isOnline
     };
   }, []);
   
-  const renderTooltip = (props : OverlayInjectedProps) => (
-    <Tooltip id="amqp-tooltip" {...props} show={
-      props.show}>
-      {i18next.t("app_connected_to_internet_tooltip", 
-        { ns: 'mycontexts'
-        , connected: isOnline
-        , connectionState: isOnline ? 
+  const renderTooltip = (props: OverlayInjectedProps) => (
+    <Tooltip id="amqp-tooltip" {...props} show={props.show}>
+      {i18next.t("app_connected_to_internet_tooltip", { 
+        ns: 'mycontexts',
+        connected: isOnline,
+        connectionState: isOnline ? 
           "" :
           i18next.t("app_connected_to_internet_connected", { ns: 'mycontexts' })
-        })
-        }
+      })}
     </Tooltip>
   );
 
-
   return (
     <OverlayTrigger
-    placement="left"
-    delay={{ show: 250, hide: 400 }}
-    overlay={renderTooltip}
+      placement="left"
+      delay={{ show: 250, hide: 400 }}
+      overlay={renderTooltip}
     >
       <div className="ms-auto">
         {isOnline ? 
