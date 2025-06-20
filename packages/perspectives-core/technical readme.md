@@ -78,7 +78,7 @@ __NOTE__ do not use the `pulp docs` command. It [generates documentation](https:
 1. In spago.yaml: update the version of `perspectives-apitypes` at `ref`;
 2. outcomment the `path` section;
 3. incomment the `git` and `ref` sections.
-3. Repeat this for: `purescript-avar-monadask`, `purescript-lru-cache`, `purescript-parsing`, `perspectives-utilities`, `serialisable-nonempty-arrays`, `purescript-subtlecrypto`.
+3. Repeat this for: `purescript-avar-monadask`, `purescript-lru-cache`, `perspectives-utilities`, `serialisable-nonempty-arrays`, `purescript-subtlecrypto`.
 4. In package.json: update the version of `perspectives-proxy`;
 4. increase the package number.
 5. Commit.

@@ -24,10 +24,6 @@ The PDR is being intensively developed by the core team. We appreciate feedback 
 * perspectives-utilities
 * serialisable-nonempty-arrays
 
-#### On cloned Purescript packages
-* purescript-affjax
-* purescript-parsing
-* kishimen
 
 #### On Node packages belonging to the Perspectives Project
 * perspectives-proxy

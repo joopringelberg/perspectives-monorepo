@@ -10,7 +10,6 @@ packages:
   - 'packages/perspectives-utilities'
   - 'packages/purescript-avar-monadask'
   - 'packages/purescript-lru-cache'
-  - 'packages/purescript-parsing'
   - 'packages/serialisable-nonempty-arrays'
 onlyBuiltDependencies:
   - '@fortawesome/fontawesome-common-types'
