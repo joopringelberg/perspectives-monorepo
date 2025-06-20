@@ -23,6 +23,7 @@
 // We use it as a drop-in replacement for new users who can upload a limited number of 
 // files to the courtesy shared file storage offered by Perspectives.
 
+// @ts-ignore
 const ppStorageUrl = __PPSTORAGEURL__;
 import i18next from "i18next";
 

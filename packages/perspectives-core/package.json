@@ -6,11 +6,11 @@
   "author": "Joop Ringelberg <joop.ringelberg@gmail.com>",
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
-    "@stomp/stompjs": "^7.0.0",
+    "@stomp/stompjs": "^7.1.1",
     "fuzzysort": "^3.1.0",
-    "idb-keyval": "^6.2.1",
+    "idb-keyval": "^6.2.2",
     "js-yaml": "^4.1.0",
-    "lru-cache": "^11.0.1",
+    "lru-cache": "^11.1.0",
     "pouchdb-browser": "^9.0.0",
     "purescript-yoga-subtlecrypto": "github:rowtype-yoga/purescript-yoga-subtlecrypto"
   },

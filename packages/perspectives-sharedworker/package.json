@@ -24,14 +24,14 @@
   },
   "homepage": "https://github.com/joopringelberg/perspectives-sharedworker#readme",
   "devDependencies": {
-    "@babel/core": "^7.25.8",
-    "@babel/preset-env": "^7.25.8",
-    "@rollup/plugin-babel": "^6.0.0",
+    "@babel/core": "^7.27.4",
+    "@babel/preset-env": "^7.27.2",
+    "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-commonjs": "^28.0.6",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
-    "eslint": "^9.13.0",
-    "eslint-plugin-react": "^7.37.1",
+    "eslint": "^9.29.0",
+    "eslint-plugin-react": "^7.37.5",
     "rollup-plugin-cleaner": "^1.0.0",
     "rollup-plugin-delete": "^3.0.1"
   }

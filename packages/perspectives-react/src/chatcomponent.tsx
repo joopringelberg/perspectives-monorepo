@@ -39,7 +39,9 @@ import PerspectivesComponent from "./perspectivesComponent";
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
 import { OverlayInjectedProps } from 'react-bootstrap/esm/Overlay';
 
+// @ts-ignore
 const ppStorageLimit = __PPSTORAGELIMIT__;
+// @ts-ignore
 const ppWarningLevel = __PPWARNINGLEVEL__
 
 interface ChatComponentProps {

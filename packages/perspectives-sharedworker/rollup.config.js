@@ -13,6 +13,9 @@ export default {
     name: 'PerspectivesSharedWorker',
     sourcemap: true
   },
+  external: [
+    'perspectives-core'
+  ],
   plugins: [
     del({ targets: 'dist/*' }),
     resolve(),

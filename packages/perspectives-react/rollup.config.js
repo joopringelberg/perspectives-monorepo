@@ -24,6 +24,17 @@ export default [
       // 1. Cleanup first
       del({ targets: 'dist/*' }),
 
+      // 4. Code replacements
+      replace({
+        preventAssignment: true,
+        values: {
+          __PPSTORAGEURL__: JSON.stringify('https://mycontexts.com/ppsfs/uploadfile'),
+          __PPSTORAGELIMIT__: '10',
+          __PPWARNINGLEVEL__: '5',
+          __MyContextsContainer__: JSON.stringify('root')
+        }
+      }),
+
       // 2. Resolution plugins
       resolve(),
 
@@ -33,20 +44,12 @@ export default [
         transformMixedEsModules: true,
       }),
 
-      // 4. Typescript compilation
+      // 5. Typescript compilation
       typescript({
         tsconfig: './tsconfig.json',
         declaration: true,
         declarationDir: 'dist/types',
         rootDir: 'src'
-      }),
-
-      // 5. Code replacements
-      replace({
-        preventAssignment: true,
-        __PPSTORAGELIMIT__: JSON.stringify(10),
-        __PPWARNINGLEVEL__: JSON.stringify(5),
-        __PPSTORAGEURL__: JSON.stringify("https://mycontexts.com/ppsfs/uploadfile")
       }),
 
       // 6. Asset processing
@@ -79,7 +82,8 @@ export default [
       'perspectives-proxy',
       'pouchdb-browser',
       'i18next',
-      'regenerator-runtime'
+      'regenerator-runtime',
+      '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css'
     ]
   },
   {
@@ -90,7 +94,8 @@ export default [
       postcss({
         extract: true, // Extract CSS to a separate file
         minimize: true, // Minimize the CSS
-        sourceMap: true // Generate source maps for the CSS
+        sourceMap: true, // Generate source maps for the CSS
+        extensions: ['.css', '.scss'], // Handle both CSS and SCSS files
       }),
       typescript({
         tsconfig: './tsconfig.json',
@@ -99,5 +104,8 @@ export default [
         rootDir: 'src'
       })
     ],
-  }
+    external: [
+      /\.css$/,  // Match any CSS file
+      '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css'
+    ]  }
 ];

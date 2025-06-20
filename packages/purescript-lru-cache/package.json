@@ -5,7 +5,7 @@
   "license": "GPL-3.0-or-later",
   "author": "Joop Ringelberg <joop.ringelberg@gmail.com>",
   "dependencies": {
-    "lru-cache": "^11.0.1"
+    "lru-cache": "^11.1.0"
   },
   "repository": {
     "type": "git",

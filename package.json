@@ -16,12 +16,12 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.5.2",
-    "eslint": "^9.22.0",
+    "eslint": "^9.29.0",
     "lerna": "^8.2.2",
-    "pnpm": "^10.6.4",
+    "pnpm": "^10.12.1",
     "rollup": "^4.44.0",
     "typescript": "^5.8.3",
-    "vite": "^6.2.2"
+    "vite": "^6.3.5"
   },
   "keywords": [],
   "author": "",
