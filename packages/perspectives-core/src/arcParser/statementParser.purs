@@ -37,7 +37,7 @@ import Perspectives.Parsing.Arc.IndentParser (IP, getPosition, outdented', sameO
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..))
 import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
 import Prelude (bind, discard, pure, ($), (*>), (<$>), (<*), (<*>), (<>), (>>=))
-import Parsing.Indent (indented', withPos)
+import Parsing.Indent.Monadic (indented', withPos)
 import Parsing (fail)
 import Parsing.Combinators (lookAhead, manyTill, option, optionMaybe, (<?>))
 

@@ -80,10 +80,6 @@ workspace:
       path: ../purescript-lru-cache
       # git: https://github.com/joopringelberg/purescript-lru-cache.git
       # ref: v2.0.0
-    parsing:
-      path: ../purescript-parsing
-      # git: https://github.com/joopringelberg/purescript-parsing.git
-      # ref: v10.2.0-transformer
     perspectives-utilities:
       path: ../perspectives-utilities
       # git: https://github.com/joopringelberg/perspectives-utilities.git

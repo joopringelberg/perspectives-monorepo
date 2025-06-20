@@ -712,9 +712,6 @@
       "lrucache": {
         "path": "../purescript-lru-cache"
       },
-      "parsing": {
-        "path": "../purescript-parsing"
-      },
       "perspectives-utilities": {
         "path": "../perspectives-utilities"
       },
@@ -1684,8 +1681,9 @@
       ]
     },
     "parsing": {
-      "type": "local",
-      "path": "../purescript-parsing",
+      "type": "registry",
+      "version": "10.2.0",
+      "integrity": "sha256-ZDIdMFAKkst57x6BVa1aUWJnS8smoZnXsZ339Aq1mPA=",
       "dependencies": [
         "arrays",
         "control",
