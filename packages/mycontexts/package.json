@@ -27,9 +27,9 @@
     "perspectives-react": "workspace:*",
     "perspectives-sharedworker": "workspace:*",
     "pouchdb-browser": "^9.0.0",
-    "react": "^18.3.1",
+    "react": "^19.1.0",
     "react-bootstrap": "^2.10.5",
-    "react-dom": "^18.3.1"
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@4c/tsconfig": "^0.4.1",

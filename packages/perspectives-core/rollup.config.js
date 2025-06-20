@@ -1,7 +1,6 @@
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
-import sourcemaps from 'rollup-plugin-sourcemaps';
 import url from '@rollup/plugin-url';
 import del from 'rollup-plugin-delete';
 import replace from '@rollup/plugin-replace';
@@ -25,7 +24,6 @@ export default async function() {
       ), // Resolve node_modules
       commonjs(), // Convert CommonJS modules to ES6
       json(), // Handle JSON files
-      sourcemaps(), // Include existing source maps
       url({
         include: ['**/*.arc'], // Include .arc files
         limit: 0, // No limit, always include the file

@@ -10,8 +10,15 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "declaration": true, // Generate declaration files
-    "declarationDir": "./dist" // Output directory for declaration files
+    "declarationDir": "./dist", // Output directory for declaration files
+    "typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ]
   },
-  "include": ["src/**/*"],
+  "include": [
+    "src/**/*",
+    "src/types/**/*"
+  ],
   "exclude": ["node_modules", "dist"]
 }
