@@ -3,32 +3,32 @@
   "short_name": "MyContexts",
   "icons": [
     {
-      "src": "//AppImages/ios/512.png",
+      "src": "/www//AppImages/ios/512.png",
       "sizes": "512x512",
       "type": "image/png"
     },
     {
-      "src": "//AppImages/ios/256.png",
+      "src": "/www//AppImages/ios/256.png",
       "sizes": "256x256",
       "type": "image/png"
     },
     {
-      "src": "//AppImages/ios/128.png",
+      "src": "/www//AppImages/ios/128.png",
       "sizes": "128x128",
       "type": "image/png"
     },
     {
-      "src": "//AppImages/ios/32.png",
+      "src": "/www//AppImages/ios/32.png",
       "sizes": "32x32",
       "type": "image/png"
     },
     {
-      "src": "//AppImages/ios/16.png",
+      "src": "/www//AppImages/ios/16.png",
       "sizes": "16x16",
       "type": "image/png"
     }
   ],
-  "start_url": "/",
+  "start_url": "/www/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#0275d8"
