@@ -22,7 +22,7 @@
 //// SERVICE WORKER
 ////////////////////////////////////////////////////////////////////////////////
 
-const currentVersion = "1.1.0" + 159;
+const currentVersion = "1.1.0" + 189;
 let previousVersion = '';
 
 const cacheName = "mycontexts" + currentVersion;
@@ -31,10 +31,10 @@ const cacheName = "mycontexts" + currentVersion;
 const baseUrl = self.location.href.replace(/\/[^\/]*$/, '');
 
 const appFiles = [
-  "/index.html",
-  "/manage.html",
-  "/assets/main.js",
-  "/assets/main.css"
+  "/www/index.html",
+  "/www/manage.html",
+  "/www/assets/main.js",
+  "/www/assets/main.css"
 ];
 
 const macIcons = ["512.png", "256.png", "128.png", "32.png", "16.png"].map(icon => "/AppImages/ios/" + icon);
