@@ -9,7 +9,8 @@
     "build": "pnpm exec tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "publish": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com/www"
+    "publish:www": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com/www",
+    "publish:root": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com"
   },
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
