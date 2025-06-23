@@ -1,6 +1,6 @@
 {
   "name": "perspectives-apitypes",
-  "version": "3.1.0",
+  "version": "3.0.0",
   "description": "Types to use for communicating over TCP with Perspectives-core.",
   "main": "src/perspectivesApiTypes.purs",
   "scripts": {

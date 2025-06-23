@@ -1,6 +1,6 @@
 {
   "name": "perspectives-sharedworker",
-  "version": "0.17.0",
+  "version": "3.0.0",
   "description": "Shared worker shell for Perspectives Distributed Runtime (PDR)",
   "main": "dist/perspectives-sharedworker.js",
   "type": "module",

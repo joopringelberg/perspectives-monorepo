@@ -1,6 +1,6 @@
 {
     "name": "perspectives-highlightjs",
-    "version": "1.4.0",
+    "version": "3.0.0",
     "description": "Perspectives ARC syntax highlighting based on highlight.js (ARC supplied as third party language).",
     "main": "dist/perspectives-arc.js",
     "types": "dist/types/languages/perspectives-arc.d.ts",

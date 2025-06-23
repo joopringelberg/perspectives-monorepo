@@ -1,6 +1,6 @@
 {
   "name": "perspectives-proxy",
-  "version": "1.22.0",
+  "version": "3.0.0",
   "description": "Exposes perspectives-core.",
   "main": "dist/perspectives-proxy.js",
   "module": "dist/perspectives-proxy.js",
