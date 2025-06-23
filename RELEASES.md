@@ -11,6 +11,10 @@ MyContexts Version v3.0.0 delivers the following milestones in the project _Pers
 * Generic GUI improvements (Milestone 7)
 * Custom screens for system functionality (Milestone 8)
 
+The video below demonstrates the new interface (no voice over). It shows MyContexts as it runs on a MacBook M1 Pro, 2021, 2,5 GHz quad core, 32 Mb internal memory.
+
+@[vimeo](1095623599)
+
 ### Major Changes
 
 
