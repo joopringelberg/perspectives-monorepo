@@ -13,8 +13,7 @@ MyContexts Version v3.0.0 delivers the following milestones in the project _Pers
 
 The video below demonstrates the new interface (no voice over). It shows MyContexts as it runs on a MacBook M1 Pro, 2021, 2,5 GHz quad core, 32 Mb internal memory.
 
-@[vimeo](1095623599)
-
+[![MyContexts Demo](https://i.vimeocdn.com/video/1095623599_640.jpg)](https://vimeo.com/1095623599)
 ### Major Changes
 
 
