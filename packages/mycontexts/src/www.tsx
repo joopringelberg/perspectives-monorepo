@@ -334,7 +334,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     const component = this;
     document.title = "Welcome to MyContexts";
     history.pushState({ selectedContext: mycontextStartPage, title: "Welcome to MyContexts" }, "");
-    component.setState( {openContext: mycontextStartPage, activeSection: 'what' } );
+    this.getScreen(mycontextStartPage)
   }
 
   getScreen (externalRole : RoleInstanceT)
@@ -600,7 +600,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
       <Navbar.Brand href="#home" className='text-light navbar-title'>{this.state.title}</Navbar.Brand>
-      <InternetConnectivityCheck reportBack={ (isOnline : boolean) => component.setState({isOnline})}/>
+      <InternetConnectivityCheck reportBack={ (isOnline : boolean) => component.state.isOnline !== isOnline ? component.setState({isOnline}) : null}/>
       {component.state.systemIdentifier ? <ConnectedToAMQP roleinstance={ externalRole( component.state.systemIdentifier )} isOnline={component.state.isOnline} /> : null}
     </Navbar>);
   }
