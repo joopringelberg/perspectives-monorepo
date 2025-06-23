@@ -1,18 +1,10 @@
-## Local Development
+## Perspectives
 
-### SSL Certificates
-For local development, you need to create self-signed certificates:
+This is the Perspectives Monorepo. It was constructed from 12 previously independent repositories in spring 2025 and is now the sole source for the Perspectives and MyContexts programs. 
 
-1. Create a `certificates` directory in the project root
-2. Generate self-signed certificates, e.g. using mkcert.
 
-```
-# First create the certificates directory if it doesn't exist
-mkdir -p {directory holding your cloned repo}/perspectives-monorepo/certificates
+See the [**Release History**](https://github.com/joopringelberg/perspectives-monorepo/blob/master/RELEASES.md) of the monorepo.
 
-# Navigate to the certificates directory
-cd {directory holding your cloned repo}/perspectives-monorepo/certificates
+For more information on the Perspectives Project, see its [documentation start page](https://joopringelberg.github.io/perspectives-documentation/).
 
-# Create certificates for localhost and other domains you might use
-mkcert localhost 127.0.0.1 ::1 perspectives.local *.perspectives.local
-```
+We also have a document with [summary information for developers](https://github.com/joopringelberg/perspectives-monorepo/blob/master/localdevelopment.md).
