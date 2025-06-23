@@ -15,7 +15,7 @@ This release represents a significant milestone for the Perspectives project:
 * Improved module resolution and dependency handling
 * Major architectural improvements for better performance and maintainability
 
-This release is estimated to be at Technology Readiness Level (TRL) 6, meaning it is a fully functional prototype that has been tested in a relevant environment. It is ready for further testing and validation in real-world scenarios.
+This release is estimated to be at Technology Readiness Level (TRL) 7, meaning it is a fully functional prototype that can be tested in a relevant environment. It is ready for further testing and validation in real-world scenarios.
 
 For more details, see the [release documentation](https://github.com/joopringelberg/perspectives-monorepo/blob/master/RELEASES.md#v300).
 `;
