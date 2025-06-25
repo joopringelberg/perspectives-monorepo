@@ -248,9 +248,47 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   console.group('Accessibility issues found in new screen:');
                   results.violations.forEach((violation: any) => {
                     console.log(
-                      `${violation.impact} impact: ${violation.help} - ${violation.helpUrl}\n` +
-                      `Elements: `, violation.nodes.map((n: any) => n.target).join(', ')
+                      `%c${violation.impact} impact: ${violation.help}`,
+                      'font-weight: bold; color: ' + (violation.impact === 'serious' ? '#d93025' : '#e37400')
                     );
+                    console.log(`More info: ${violation.helpUrl}`);
+                    
+                    // Process each node with the violation
+                    violation.nodes.forEach((node: any, index: number) => {
+                      // Get the actual DOM elements
+                      const elements = node.target.map((selector: string) => {
+                        try {
+                          return document.querySelector(selector);
+                        } catch (e) {
+                          return null;
+                        }
+                      }).filter(Boolean);
+                      
+                      // Log with interactive reference
+                      if (elements.length) {
+                        console.groupCollapsed(`Element ${index + 1}: ${node.target.join(', ')}`);
+                        console.log('HTML:', elements[0].outerHTML.slice(0, 150) + '...');
+                        console.log('Suggested fix:', violation.description);
+                        console.log('Element reference:', elements[0]);
+                        console.groupEnd();
+                        
+                        // Temporarily highlight the element on the page
+                        const originalOutline = elements[0].style.outline;
+                        const originalPosition = elements[0].style.position;
+                        const originalZIndex = elements[0].style.zIndex;
+                        
+                        elements[0].style.outline = '3px solid red';
+                        elements[0].style.position = 'relative';
+                        elements[0].style.zIndex = '10000';
+                        
+                        // Reset after 3 seconds
+                        setTimeout(() => {
+                          elements[0].style.outline = originalOutline;
+                          elements[0].style.position = originalPosition;
+                          elements[0].style.zIndex = originalZIndex;
+                        }, 3000);
+                      }
+                    });
                   });
                   console.groupEnd();
                 } else {
