@@ -19,5 +19,9 @@
 			"path": "packages/perspectives-apitypes"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"conventionalCommits.scopes": [
+			"accessibility"
+		]
+	}
 }

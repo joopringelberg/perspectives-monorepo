@@ -590,38 +590,19 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     {
       return <NavDropdown 
               ref={component.ref}
-              title={<i className="bi bi-three-dots-vertical"></i>} 
-              className="hide-caret"
-              onClick={e => e.stopPropagation()}>
+              title={
+                <>
+                  <i className="bi bi-three-dots-vertical" aria-hidden="true"></i>
+                  <span className="visually-hidden">Actions menu</span>
+                </>
+              } 
+              className="hide-caret accordion-menu"
+              onClick={e => e.stopPropagation()}
+              align="end"
+            >
               {items}
             </NavDropdown>
 
     }
     }
 }
-
-// eslint-disable-next-line react/display-name
-interface CustomToggleProps {
-  children: React.ReactNode;
-  onClick: (e: React.MouseEvent<HTMLAnchorElement, MouseEvent>) => void;
-  disabled: boolean;
-}
-
-const CustomToggle = forwardRef<HTMLAnchorElement, CustomToggleProps>(({ children, onClick, disabled }, ref) => (
-  <a
-    href=""
-    ref={ref}
-    className={disabled ? "disabledIcon" : "iconStyle"}
-    onClick={(e) => {
-      e.preventDefault();
-      e.stopPropagation()
-      if (!disabled)
-      {
-        onClick(e);
-      }
-    }}
-  >
-    {children}
-    &#x25bc;
-  </a>
-));

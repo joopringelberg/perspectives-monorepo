@@ -13,8 +13,9 @@ import
 import "./components.css";
 import { CardProperties } from "./cardbehaviour";
 import { CardWithFixedBehaviour, WithOutBehavioursProps } from "./adorningComponentWrapper";
-import { RoleInstanceT, Perspective, SerialisedProperty, PDRproxy, ContextType, PropertyType, Roleinstancewithprops } from "perspectives-proxy";
-import { AccordionHeaderWithmenu } from "./accordionHeaderWithAddButton";
+import { RoleInstanceT, Perspective, SerialisedProperty, PropertyType, Roleinstancewithprops } from "perspectives-proxy";
+import { AppContext } from "./reactcontexts";
+import TableItemContextMenu from "./tableItemContextMenu";
 
 ////////////////////////////////////////////////////////////////////////////////
 // CARD
@@ -24,7 +25,7 @@ import { AccordionHeaderWithmenu } from "./accordionHeaderWithAddButton";
 // Displays the value of prop cardcolumn of RoleTable (a property of the role).
 
 
-const RoleCard: React.FC<CardProperties> = ({title, tabIndex, onClick, className, ...rest}) => {
+const RoleCard: React.FC<CardProperties> = ({title, className, ...rest}) => {
 
   return  <Form.Control
             readOnly
@@ -261,8 +262,6 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
       }
       return 0;
     }
-    {
-    }
     const component = this,
       perspective = component.props.perspective;
     return <Table
@@ -309,31 +308,57 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
   {
     const component = this,
       perspective = component.props.perspective;
-    if (component.stateIsComplete(["row"])){    
+    if (component.stateIsComplete(["row"])) {    
       return (
-          component.props.showAsAccordionItem ?
-            <Accordion.Item eventKey={perspective.id} key={perspective.id}>
-              <Accordion.Header onClick={() => component.eventDiv.current?.dispatchEvent(new CustomEvent('OpenAccordionItem', {detail: perspective.id, bubbles: true}))}>
-                <AccordionHeaderWithmenu perspective={perspective} roleinstance={component.state.row}/>
-              </Accordion.Header>
-              <Accordion.Body>{
-              component.constructTable()}
-              </Accordion.Body>
-            </Accordion.Item>
-            :
-            (<>
+        component.props.showAsAccordionItem ?
+          <Accordion.Item eventKey={perspective.id} key={perspective.id}>
+            {/* Use custom header structure instead of Accordion.Header with a component inside */}
+            <div className="d-flex accordion-custom-header">
+              {/* First part: the accordion header button */}
+              <div className="flex-grow-1">
+                <Accordion.Header 
+                  onClick={() => component.eventDiv.current?.dispatchEvent(
+                    new CustomEvent('OpenAccordionItem', {detail: perspective.id, bubbles: true})
+                  )}
+                >
+                  <span>{perspective.displayName}</span>
+                </Accordion.Header>
+              </div>
+              
+              {/* Second part: the menu outside the button but visually in the header */}
+              <div className="accordion-actions">
+                <AppContext.Consumer>
+                  {({ roleOnClipboard, systemExternalRole }) => 
+                    <TableItemContextMenu 
+                      perspective={perspective}
+                      roleinstance={component.state.row}
+                      roleOnClipboard={roleOnClipboard}
+                      systemExternalRole={systemExternalRole}
+                    />
+                  }
+                </AppContext.Consumer>
+              </div>
+            </div>
+            
+            <Accordion.Body>
               {component.constructTable()}
-              { component.props.showcontrolsandcaption !== false ? 
-                <TableControls
-                  perspective={ perspective}
-                  selectedroleinstance={component.state.row}
-                /> 
-                : 
-                null}
-            </>))}
-        else {
-          return null;
-        }
+            </Accordion.Body>
+          </Accordion.Item>
+          :
+          // Rest of your existing code for non-accordion view
+          (<>
+            {component.constructTable()}
+            {component.props.showcontrolsandcaption !== false ? 
+              <TableControls
+                perspective={perspective}
+                selectedroleinstance={component.state.row}
+              /> 
+              : 
+              null}
+          </>))
+      } else {
+        return null;
+      }
   }
 }
 

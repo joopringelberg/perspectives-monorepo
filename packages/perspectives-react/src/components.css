@@ -82,3 +82,38 @@ for a discussion about variables and sass. */
   gap: 10px;
   justify-content: flex-end;
 }
+
+/* Add these styles to your existing components.css */
+
+/* Styling for the custom accordion header structure */
+.accordion-custom-header {
+  position: relative;
+  width: 100%;
+}
+
+/* Position the dropdown outside the accordion button */
+.accordion-actions {
+  position: absolute;
+  right: 35px; /* Position before the caret */
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  z-index: 2;
+}
+
+/* Make sure the dropdown is above the accordion button */
+.accordion-actions .dropdown-menu {
+  z-index: 1060;
+}
+
+/* Ensure the accordion button doesn't overlap our dropdown */
+.accordion-button.with-actions {
+  padding-right: 50px; /* Make room for the actions dropdown */
+}
+
+/* Hide bootstrap's caret when using hide-caret class */
+.hide-caret.dropdown-toggle::after,
+.hide-caret .dropdown-toggle::after {
+  display: none !important;
+}
