@@ -27,7 +27,7 @@ import
   } from "react-bootstrap";
 
 import 'bootswatch/dist/lumen/bootstrap.min.css';
-import './splash.css';
+import './styles/splash.css';
 
 import {thisAppsLocation} from "perspectives-react";
 
@@ -104,7 +104,7 @@ function deleteAccount()
           .then( () => {
             if ('serviceWorker' in navigator) {
               navigator.serviceWorker.getRegistrations().then((registrations) => {
-                for (let registration of registrations) {
+                for (const registration of registrations) {
                   registration.unregister();
                 }
               });
@@ -135,7 +135,7 @@ function deleteAccount()
       clear().then(() => {
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.getRegistrations().then((registrations) => {
-            for (let registration of registrations) {
+            for (const registration of registrations) {
               registration.unregister();
             }
           });

@@ -111,3 +111,22 @@ html body .dropdown-menu .dropdown-item {
   text-align: center;
   margin: 0 auto;
 }
+
+/* SKIP LINK */
+.skip-link {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 0.5rem;
+  background: white;
+  z-index: 10000;
+}
+
+.skip-link:not(:focus) {
+  height: 1px;
+  width: 1px;
+  overflow: hidden;
+  clip: rect(1px, 1px, 1px, 1px);
+  white-space: nowrap;
+  position: absolute;
+}

@@ -1,6 +1,14 @@
 import * as React from 'react';
 import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider } from 'react-bootstrap';
-import './www.css';
+
+// Add axe to the Window interface for TypeScript
+declare global {
+  interface Window {
+    axe?: any;
+  }
+}
+import './styles/www.css';
+import './styles/accessibility.css'
 import {i18next} from 'perspectives-react';
 import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT } from 'perspectives-proxy';
 import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice} from 'perspectives-react';
@@ -54,7 +62,7 @@ interface WWWComponentState {
 class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponentState> {
   screenUnsubscriber: Unsubscriber | undefined;
 
-  constructor(props: {}) {
+  constructor(props:  WWWComponentProps) {
     super(props);
     const component = this;
     this.state = 
@@ -222,9 +230,36 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
   }
 
-  componentDidUpdate(prevProps: Readonly<{}>, prevState: Readonly<WWWComponentState>, snapshot?: any): void {
+  componentDidUpdate(prevProps: Readonly<WWWComponentProps>, prevState: Readonly<WWWComponentState>): void {
+    // First, handle the normal screen update
     if (this.state.openContext !== prevState.openContext) {
       this.getScreen(this.state.openContext!);
+      
+      // Add a delayed accessibility scan after new content loads
+      if (import.meta.env.DEV) {
+        // Wait for screen content to fully render
+        setTimeout(() => {
+          // Check if axe is available in the window scope
+          if (window.axe && window.axe.run) {
+            console.log('Running accessibility scan for new context:', this.state.openContext);
+            window.axe.run(document.getElementById('main-content') || document.body)
+              .then((results: any) => {
+                if (results.violations.length > 0) {
+                  console.group('Accessibility issues found in new screen:');
+                  results.violations.forEach((violation: any) => {
+                    console.log(
+                      `${violation.impact} impact: ${violation.help} - ${violation.helpUrl}\n` +
+                      `Elements: `, violation.nodes.map((n: any) => n.target).join(', ')
+                    );
+                  });
+                  console.groupEnd();
+                } else {
+                  console.log('No accessibility issues found in new screen!');
+                }
+              });
+          }
+        }, 1000); // Give time for the screen to render completely
+      }
     }
   }
 
@@ -239,10 +274,10 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       .then(
         function(result)
         {
+          const erole = result.value as RoleInstanceT;
           switch (result.tag)
           {
             case "RoleInstance":
-              const erole = result.value;
               if (component.state.openContext !== erole)
               {
                 PDRproxy.then( function( pproxy )
@@ -331,7 +366,6 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
   openWelcomePage()
   {
-    const component = this;
     document.title = "Welcome to MyContexts";
     history.pushState({ selectedContext: mycontextStartPage, title: "Welcome to MyContexts" }, "");
     this.getScreen(mycontextStartPage)
@@ -375,7 +409,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
             , message: i18next.t("screen_computestate_message", {ns: 'preact'})
             , error: e.toString()
           });
-          return false;})) as Promise<Boolean>;
+          return false;})) as Promise<boolean>;
   }
 
   // Ends a previous screen subscription for the current user and establishes a new one.
@@ -534,46 +568,49 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         , myroletype: this.state.openContextUserType!}}>
         <Container fluid className='px-0'>
           {component.renderTopNavBar()}
-          <Tabs
-            id="mobile-tabs"
-            activeKey={this.state.activeSection}
-            onSelect={(k: string | null) => {
-              const key = k || 'what';
-              component.setState({ 'activeSection': k as Section });
-              }}
-            fill
-            >
-            <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
-              { this.state.screen?.whoWhatWhereScreen ?
-                <Who 
-                  screenelements={ this.state.screen.whoWhatWhereScreen.who } 
-                  showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "who"}
-                />
-                : 
-                <p className='bg-light-subtle'>Ga ergens heen</p>
-              }
-            </Tab>
-            <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
-              { this.state.screen?.whoWhatWhereScreen ? 
-                  <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "what"}/>
+          <main id="main-content">
+            <Tabs
+              id="mobile-tabs"
+              activeKey={this.state.activeSection}
+              onSelect={(k: string | null) => {
+                component.setState({ 'activeSection': k as Section });
+                }}
+              fill
+              role="navigation"
+              aria-label="Section navigation"
+              >
+              <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
+                { this.state.screen?.whoWhatWhereScreen ?
+                  <Who 
+                    screenelements={ this.state.screen.whoWhatWhereScreen.who } 
+                    showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "who"}
+                  />
                   : 
-                <div>Ga ergens heen.</div>
-              }
-            </Tab>
-            <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
-            { this.state.screen?.whoWhatWhereScreen ? 
-              <Where 
-                screenelements={ this.state.screen.whoWhatWhereScreen.whereto } 
-                showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "where"} 
-                systemUser={component.state.systemUser}
-                systemIdentifier={component.state.systemIdentifier}
-                openContext={component.state.openContext}
-                />
-              : 
-                <div>Ga ergens heen.</div>
-              }
-            </Tab>
-          </Tabs>
+                  <p className='bg-light-subtle'>Ga ergens heen</p>
+                }
+              </Tab>
+              <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
+                { this.state.screen?.whoWhatWhereScreen ? 
+                    <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "what"}/>
+                    : 
+                  <div>Ga ergens heen.</div>
+                }
+              </Tab>
+              <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
+              { this.state.screen?.whoWhatWhereScreen ? 
+                <Where 
+                  screenelements={ this.state.screen.whoWhatWhereScreen.whereto } 
+                  showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "where"} 
+                  systemUser={component.state.systemUser}
+                  systemIdentifier={component.state.systemIdentifier}
+                  openContext={component.state.openContext}
+                  />
+                : 
+                  <div>Ga ergens heen.</div>
+                }
+              </Tab>
+            </Tabs>
+          </main>
           { component.renderBottomNavBar() }
         <EndUserNotifier message={component.state.endUserMessage}/>
         <UserChoice message={component.state.choiceMessage}/>
@@ -584,8 +621,19 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
   renderTopNavBar() {
     const component = this;
-    return (<Navbar bg="primary" expand="xs" className="py-0 ps-2" id="top-navbar">
-      <NavDropdown title={<i className="bi bi-list text-light fs-2"></i>} className="me-auto hide-caret px-2 py-1" id="nav-dropdown">
+    return (<header> {/* Add header landmark */}
+      <Navbar bg="primary" expand="xs" className="py-0 ps-2" id="top-navbar" role="navigation" aria-label="Main navigation">
+      <NavDropdown 
+        title={
+          <>
+            <i className="bi bi-list text-light fs-2" aria-hidden="true"></i>
+            <span className="visually-hidden">Main Menu</span>
+          </>
+        } 
+        className="me-auto hide-caret px-2 py-1" 
+        id="nav-dropdown"
+        aria-label="Main menu navigation"
+      >
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'about'})}>About...</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'me'})}>Me</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'apps'})}>Apps</NavDropdown.Item>
@@ -599,26 +647,32 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           : null }
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
-      <Navbar.Brand href="#home" className='text-light navbar-title'>{this.state.title}</Navbar.Brand>
+      <Navbar.Brand href="#home" className='text-light navbar-title'>
+        <h1 className="fs-4 mb-0">{this.state.title}</h1>
+      </Navbar.Brand>
       <InternetConnectivityCheck reportBack={ (isOnline : boolean) => component.state.isOnline !== isOnline ? component.setState({isOnline}) : null}/>
       {component.state.systemIdentifier ? <ConnectedToAMQP roleinstance={ externalRole( component.state.systemIdentifier )} isOnline={component.state.isOnline} /> : null}
-    </Navbar>);
+    </Navbar>
+    </header>);
   }
 
+  // For the bottom navigation
   renderBottomNavBar() {
     const component = this;
     return (
-      <Navbar id="bottom-navbar" fixed="bottom" bg="primary" expand="xs" className="justify-content-between py-0 px-3">
-        <Navbar.Brand onClick={() => window.history.back()}>
-          <i className="bi bi-arrow-left text-light"></i>
-        </Navbar.Brand>
-        <Navbar.Brand onClick={() => component.setState({ showNotifications: true })}>
-          <i className="bi bi-arrow-up text-light"></i>
-        </Navbar.Brand>
-        <Navbar.Brand onClick={() => window.history.forward()}>
-          <i className="bi bi-arrow-right text-light"></i>
-        </Navbar.Brand>
-      </Navbar>
+      <nav aria-label="History navigation"> {/* Add nav landmark */}
+        <Navbar id="bottom-navbar" fixed="bottom" bg="primary" expand="xs" className="justify-content-between py-0 px-3">
+          <Navbar.Brand onClick={() => window.history.back()}>
+            <i className="bi bi-arrow-left text-light"></i>
+          </Navbar.Brand>
+          <Navbar.Brand onClick={() => component.setState({ showNotifications: true })}>
+            <i className="bi bi-arrow-up text-light"></i>
+          </Navbar.Brand>
+          <Navbar.Brand onClick={() => window.history.forward()}>
+            <i className="bi bi-arrow-right text-light"></i>
+          </Navbar.Brand>
+        </Navbar>
+      </nav>
       );
   }
 
@@ -653,12 +707,16 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         , myroletype: this.state.openContextUserType!}}>
         <Container fluid className='px-0'>
           {component.renderTopNavBar()}
-          <Row className='mx-0'>
-            <Col 
-              className='bg-primary full-height animated-column' 
-              xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "who" ? 6 : 3 } 
-              style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
-                <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}><h4 className='text-center'>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h4></Row>
+          <main id="main-content">
+            <Row className='mx-0'>
+              <Col 
+                className='bg-primary full-height animated-column' 
+                xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "who" ? 6 : 3 } 
+                style={{'--bs-bg-opacity': '.1'} as React.CSSProperties}>
+                {/* Lower opacity from .2 to .1 for better contrast */}
+                <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}>
+                  <h4 className='text-center text-dark'>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h4>
+                </Row>
                 <Row className='px-1 full-www-content-height scrollable-content'>
                   { this.state.screen?.whoWhatWhereScreen ?
                     <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } 
@@ -668,46 +726,47 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                     <p className='bg-light-subtle'>Ga ergens heen</p>
                   }
                 </Row>
-            </Col>
-            <Col 
-              className='bg-primary animated-column' 
-              xs={ this.state.whatOnly ? 10 : this.state.doubleSection === "what" ? 6 : 3} 
-              style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
-              <Row onClick={() => component.setState( {'doubleSection': "what"} )}
-                onDoubleClick={() => component.setState( {'whatOnly': !component.state.whatOnly} )}
-              >
-                <h4 className='text-center'>{ i18next.t("www_what", {ns: 'mycontexts'}) }</h4>
-              </Row>
-              {/* In the desktop, MSComponent will render a row with px-1 */}
-              {/* Here we render either an arbitrary screen: {tag: "FreeFormScreen", elements: MainScreenElements}, or all TableFormDef elements in the {tag: "TableForms", elements: TableFormDef[]} variant of What. */}
-              <Row className="full-www-content-height scrollable-content">
-              {this.state.screen?.whoWhatWhereScreen ? 
-                    <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "what"}/>
-                    : 
-                  <div>Ga ergens heen.</div>
+              </Col>
+              <Col 
+                className='bg-primary animated-column' 
+                xs={ this.state.whatOnly ? 10 : this.state.doubleSection === "what" ? 6 : 3} 
+                style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
+                <Row onClick={() => component.setState( {'doubleSection': "what"} )}
+                  onDoubleClick={() => component.setState( {'whatOnly': !component.state.whatOnly} )}
+                >
+                  <h4 className='text-center'>{ i18next.t("www_what", {ns: 'mycontexts'}) }</h4>
+                </Row>
+                {/* In the desktop, MSComponent will render a row with px-1 */}
+                {/* Here we render either an arbitrary screen: {tag: "FreeFormScreen", elements: MainScreenElements}, or all TableFormDef elements in the {tag: "TableForms", elements: TableFormDef[]} variant of What. */}
+                <Row className="full-www-content-height scrollable-content">
+                {this.state.screen?.whoWhatWhereScreen ? 
+                      <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "what"}/>
+                      : 
+                    <div>Ga ergens heen.</div>
+                    }
+                </Row>
+              </Col>
+              <Col 
+                className='bg-primary full-height animated-column'
+                xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "where" ? 6 : 3} 
+                style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
+                <Row onClick={() => component.setState( {'doubleSection': "where"} )}  ><h4 className='text-center'>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h4></Row>  
+                <Row className="px-1 full-www-content-height scrollable-content" style={{overflow: 'auto'}}>
+                { this.state.screen?.whoWhatWhereScreen ? 
+                  <Where 
+                    screenelements={  this.state.screen.whoWhatWhereScreen.whereto } 
+                    showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "where"} 
+                    systemUser={component.state.systemUser}
+                    systemIdentifier={component.state.systemIdentifier}
+                    openContext={component.state.openContext}
+                    />
+                  : 
+                    <div>Ga ergens heen.</div>
                   }
-              </Row>
-            </Col>
-            <Col 
-              className='bg-primary full-height animated-column'
-              xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "where" ? 6 : 3} 
-              style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
-              <Row onClick={() => component.setState( {'doubleSection': "where"} )}  ><h4 className='text-center'>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h4></Row>  
-              <Row className="px-1 full-www-content-height scrollable-content" style={{overflow: 'auto'}}>
-              { this.state.screen?.whoWhatWhereScreen ? 
-                <Where 
-                  screenelements={  this.state.screen.whoWhatWhereScreen.whereto } 
-                  showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "where"} 
-                  systemUser={component.state.systemUser}
-                  systemIdentifier={component.state.systemIdentifier}
-                  openContext={component.state.openContext}
-                  />
-                : 
-                  <div>Ga ergens heen.</div>
-                }
-              </Row>
-            </Col>
-          </Row>
+                </Row>
+              </Col>
+            </Row>
+          </main>
           { component.renderBottomNavBar() }
           <EndUserNotifier message={component.state.endUserMessage}/>
           <UserChoice message={component.state.choiceMessage}/>
@@ -725,6 +784,11 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               , roleOnClipboard: component.state.roleOnClipboard
               }}
               >
+            {/* Add skip link at the very top */}
+            <a href="#main-content" className="skip-link visually-hidden-focusable">
+              Skip to main content
+            </a>
+            
             { this.state.openContext ? this.state.isSmallScreen ? this.renderMobile() : this.renderDesktop() : null }
             {this.notificationsAndClipboard()}
             {this.leftPanel()}

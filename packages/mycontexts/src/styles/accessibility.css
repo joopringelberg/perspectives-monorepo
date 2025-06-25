@@ -1,0 +1,66 @@
+/* Improve accordion contrast */
+.accordion-button {
+  color: #212529 !important; /* Darker text */
+}
+
+/* Improve paragraph contrast on colored backgrounds */
+.bg-primary p, 
+.bg-primary .accordion-button,
+.bg-primary .accordion-body {
+  color: #212529 !important; /* Darker text */
+}
+
+/* Ensure accordion headers maintain contrast when collapsed */
+.accordion-button.collapsed {
+  color: #212529 !important;
+}
+
+/* Improve contrast for all text in the columns */
+.animated-column {
+  color: #212529 !important;
+}
+
+/* Add stronger background to accordion items for better contrast */
+.bg-light-subtle.accordion .accordion-item {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Fix links in markdown content and other areas */
+a {
+  color: #0056b3 !important; /* Darker blue with better contrast */
+  text-decoration: underline; /* Ensures links are visually distinguishable even for colorblind users */
+}
+
+/* Handle hover state too */
+a:hover, a:focus {
+  color: #003d7e !important;
+  text-decoration: underline;
+}
+
+/* If needed, target specific areas like markdown content */
+.markdown a, 
+.accordion-body a, 
+.bg-primary a {
+  color: #0056b3 !important;
+}
+
+/* Add these rules to your accessibility.css */
+
+/* Make links even darker against light blue backgrounds */
+.bg-primary[style*="--bs-bg-opacity: .4"] a,
+.bg-primary[style*="--bs-bg-opacity: .2"] a {
+  color: #00397a !important; /* Much darker blue - contrast ratio ~5:1 */
+  font-weight: 500; /* Slightly bolder text */
+}
+
+/* For all animated columns with bg-primary */
+.bg-primary.animated-column a {
+  color: #00397a !important;
+}
+
+/* If needed, ensure these links have clear focus states */
+.bg-primary.animated-column a:focus,
+.bg-primary[style*="--bs-bg-opacity"] a:focus {
+  outline: 2px solid #003366;
+  outline-offset: 2px;
+}

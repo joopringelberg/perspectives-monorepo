@@ -4,7 +4,7 @@ import { Button, Container } from "react-bootstrap";
 
 import { ReactNode } from "react";
 
-import "./slidingPanels.css";
+import "./styles/slidingPanels.css";
 
 interface SlidingPanelsProps {
   children: [ReactNode, ReactNode];
