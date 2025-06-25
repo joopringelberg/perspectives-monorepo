@@ -12,9 +12,18 @@ export default [
       sourceType: 'module',
     },
     rules: {
-      // You can customize rules here
       'no-unused-vars': 'warn',
     },
+  },
+  // TypeScript specific rules
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    rules: {
+      // Use the correct namespaced rule names for TypeScript
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-this-alias': 'off',
+      '@typescript-eslint/no-unused-vars': 'warn'
+    }
   },
   // Service Worker specific configuration
   {
