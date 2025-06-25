@@ -968,9 +968,23 @@ domain model://perspectives.domains#CouchdbManagement
     user Author (relational) filledBy (Repository$Authors, Repository$Admin)
       perspective on extern
         props (Description, IsLibrary, VersionToInstall, RecomputeVersionToInstall) verbs (Consult, SetPropertyValue)
+      -- NOTA BENE: dit betekent dat installaties proberen instanties van ModelsInUse te publiceren!
+      perspective on sys:MySystem >> ModelsInUse
+        only (Fill, Remove)
+        props (ModelToRemove) verbs (SetPropertyValue)
       perspective on Versions
         only (Create, Fill, RemoveContext, CreateAndFill, Delete, DeleteContext)
         props (Versions$Version, Description, Patch, Build) verbs (Consult, SetPropertyValue)
+        action UpdateModel
+          letA
+            -- DomeinFileName without version of the origin.
+            dfilename <- context >> extern >> DomeinFileName
+            -- Notice that because Versions is a published role, there are no backlinks to roles it fills.
+            basicmodel <- (filter sys:MySystem >> ModelsInUse with VersionedModelManifest$External$DomeinFileName == dfilename) >>= first
+          in 
+            callEffect cdb:UpdateModel( VersionedModelURI, false )
+            ModelToRemove = VersionedModelURI for basicmodel
+            bind_ origin >> binding to basicmodel
       perspective on Versions >> binding >> context >> Author
         only (Fill, Create)
         props (FirstName, LastName) verbs (Consult)
