@@ -83,9 +83,7 @@ for a discussion about variables and sass. */
   justify-content: flex-end;
 }
 
-/* Add these styles to your existing components.css */
-
-/* Styling for the custom accordion header structure */
+/* CUSTOM STYLES FOR ACCORDION HEADER WITH ACTIONS */
 .accordion-custom-header {
   position: relative;
   width: 100%;
@@ -116,4 +114,15 @@ for a discussion about variables and sass. */
 .hide-caret.dropdown-toggle::after,
 .hide-caret .dropdown-toggle::after {
   display: none !important;
+}
+
+/* ACCESSIBILITY ADAPTATIONS */
+.accessible-form-control {
+  color: #6b6b6b !important; /* Slightly darker than #777777 */
+}
+
+/* For focus and hover states */
+.accessible-form-control:focus,
+.accessible-form-control:hover {
+  color: #555555 !important;
 }

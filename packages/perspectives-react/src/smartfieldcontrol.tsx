@@ -483,6 +483,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
                   min={component.minInclusive()}
                   max={component.maxInclusive()}
                   {...(pattern ? { pattern: patternToSource(pattern) } : {})}
+                  className="accessible-form-control"
                 />
               </div>);
               }
@@ -505,6 +506,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               min={component.minInclusive()}
               max={component.maxInclusive()}
               {...(pattern ? { pattern: patternToSource(pattern) } : {})}
+              className="accessible-form-control"
             />
           </div>);
     }
