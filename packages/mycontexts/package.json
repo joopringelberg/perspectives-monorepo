@@ -4,11 +4,11 @@
   "version": "3.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
+    "dev": "node ../../node_modules/.pnpm/vite@6.3.5*/node_modules/vite/bin/vite.js --host",
     "prebuild": "node ./src/generateManifest.js",
-    "build": "pnpm exec tsc -b && vite build",
+    "build": "pnpm exec tsc -b && node ../../node_modules/.pnpm/vite@6.3.5*/node_modules/vite/bin/vite.js build",
     "lint": "eslint .",
-    "preview": "vite preview",
+    "preview": "node ../../node_modules/.pnpm/vite@6.3.5*/node_modules/vite/bin/vite.js preview",
     "publish:www": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com/www",
     "publish:root": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com"
   },
