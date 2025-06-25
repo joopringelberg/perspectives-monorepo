@@ -234,70 +234,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     // First, handle the normal screen update
     if (this.state.openContext !== prevState.openContext) {
       this.getScreen(this.state.openContext!);
-      
-      // Add a delayed accessibility scan after new content loads
-      if (import.meta.env.DEV) {
-        // Wait for screen content to fully render
-        setTimeout(() => {
-          // Check if axe is available in the window scope
-          if (window.axe && window.axe.run) {
-            console.log('Running accessibility scan for new context:', this.state.openContext);
-            window.axe.run(document.getElementById('main-content') || document.body)
-              .then((results: any) => {
-                if (results.violations.length > 0) {
-                  console.group('Accessibility issues found in new screen:');
-                  results.violations.forEach((violation: any) => {
-                    console.log(
-                      `%c${violation.impact} impact: ${violation.help}`,
-                      'font-weight: bold; color: ' + (violation.impact === 'serious' ? '#d93025' : '#e37400')
-                    );
-                    console.log(`More info: ${violation.helpUrl}`);
-                    
-                    // Process each node with the violation
-                    violation.nodes.forEach((node: any, index: number) => {
-                      // Get the actual DOM elements
-                      const elements = node.target.map((selector: string) => {
-                        try {
-                          return document.querySelector(selector);
-                        } catch (e) {
-                          return null;
-                        }
-                      }).filter(Boolean);
-                      
-                      // Log with interactive reference
-                      if (elements.length) {
-                        console.groupCollapsed(`Element ${index + 1}: ${node.target.join(', ')}`);
-                        console.log('HTML:', elements[0].outerHTML.slice(0, 150) + '...');
-                        console.log('Suggested fix:', violation.description);
-                        console.log('Element reference:', elements[0]);
-                        console.groupEnd();
-                        
-                        // Temporarily highlight the element on the page
-                        const originalOutline = elements[0].style.outline;
-                        const originalPosition = elements[0].style.position;
-                        const originalZIndex = elements[0].style.zIndex;
-                        
-                        elements[0].style.outline = '3px solid red';
-                        elements[0].style.position = 'relative';
-                        elements[0].style.zIndex = '10000';
-                        
-                        // Reset after 3 seconds
-                        setTimeout(() => {
-                          elements[0].style.outline = originalOutline;
-                          elements[0].style.position = originalPosition;
-                          elements[0].style.zIndex = originalZIndex;
-                        }, 3000);
-                      }
-                    });
-                  });
-                  console.groupEnd();
-                } else {
-                  console.log('No accessibility issues found in new screen!');
-                }
-              });
-          }
-        }, 1000); // Give time for the screen to render completely
-      }
+      this.runAccessibilityScan('main-content');
     }
   }
 
@@ -514,57 +451,70 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
   notificationsAndClipboard() {
     const component = this;
+    const panelTitle = i18next.t("notificationsAndClipboard_title", {ns: 'mycontexts'});
+    
     return (
-      <Offcanvas show={this.state.showNotifications} onHide={() => component.setState({showNotifications:false})} placement='bottom' scroll={true} style={{ height: '50vh' }}>
+      <Offcanvas 
+        show={this.state.showNotifications} 
+        onHide={() => component.setState({showNotifications:false})} 
+        placement='bottom' 
+        scroll={true} 
+        style={{ height: '50vh' }}
+        id="notifications-offcanvas"
+        onEntered={() => component.runAccessibilityScan('notifications-offcanvas')}
+        aria-labelledby="notifications-title"
+      >
         <Offcanvas.Header closeButton>
-          <Offcanvas.Title>{ i18next.t("notificationsAndClipboard_title", {ns: 'mycontexts'})}</Offcanvas.Title>
+          <Offcanvas.Title id="notifications-title">{panelTitle}</Offcanvas.Title>
         </Offcanvas.Header>
-        <Offcanvas.Body>
-        <Accordion defaultActiveKey="0">
-          <Accordion.Item eventKey="0">
-            <Accordion.Header>{ i18next.t("clipboard", {ns: 'mycontexts'})}</Accordion.Header>
-            <Accordion.Body>
-              <Clipboard systemuser={component.state.systemUser}/>
-            </Accordion.Body>
-          </Accordion.Item>
-          <Accordion.Item eventKey="1">
-            <Accordion.Header>{ i18next.t("settings_notifications", {ns: 'mycontexts'})}</Accordion.Header>
-            <Accordion.Body>
-            { component.state.openContext ?
-              <NotificationsDisplayer 
-              externalroleid={component.state.openContext}
-              shownotifications={true}
-              navigateto={(state) => component.setState({openContext: state, activeSection: 'what'})}
-              />
-              :
-              null
-            }
-            </Accordion.Body>
-          </Accordion.Item>
-          <Accordion.Item eventKey="2">
-            <Accordion.Header>{ i18next.t("allNotifications", {ns: 'mycontexts'})}</Accordion.Header>
-            <Accordion.Body>
-            { component.state.openContext ?
-              <NotificationsDisplayer 
-              externalroleid={ externalRole( component.state.systemIdentifier )}
-              shownotifications={true}
-              showAllNavigations={true}
-              navigateto={(state) => component.setState({openContext: state, activeSection: 'what'})}
-              />
-              :
-              null
-            }
-            </Accordion.Body>
-          </Accordion.Item>
-        </Accordion>
+        <Offcanvas.Body id="notifications-content">
+          <Accordion defaultActiveKey="0">
+            <Accordion.Item eventKey="0">
+              <Accordion.Header>{ i18next.t("clipboard", {ns: 'mycontexts'})}</Accordion.Header>
+              <Accordion.Body>
+                <Clipboard systemuser={component.state.systemUser}/>
+              </Accordion.Body>
+            </Accordion.Item>
+            <Accordion.Item eventKey="1">
+              <Accordion.Header>{ i18next.t("settings_notifications", {ns: 'mycontexts'})}</Accordion.Header>
+              <Accordion.Body>
+              { component.state.openContext ?
+                <NotificationsDisplayer 
+                externalroleid={component.state.openContext}
+                shownotifications={true}
+                navigateto={(state) => component.setState({openContext: state, activeSection: 'what'})}
+                />
+                :
+                null
+              }
+              </Accordion.Body>
+            </Accordion.Item>
+            <Accordion.Item eventKey="2">
+              <Accordion.Header>{ i18next.t("allNotifications", {ns: 'mycontexts'})}</Accordion.Header>
+              <Accordion.Body>
+              { component.state.openContext ?
+                <NotificationsDisplayer 
+                externalroleid={ externalRole( component.state.systemIdentifier )}
+                shownotifications={true}
+                showAllNavigations={true}
+                navigateto={(state) => component.setState({openContext: state, activeSection: 'what'})}
+                />
+                :
+                null
+              }
+              </Accordion.Body>
+            </Accordion.Item>
+          </Accordion>
         </Offcanvas.Body>
-    </Offcanvas>
+      </Offcanvas>
     );
   }
 
   leftPanel() {
     const component = this;
     let content;
+    const panelTitle = this.state.leftPanelContent ? i18next.t('leftPanel_' + this.state.leftPanelContent, {ns: 'mycontexts'}) : "";
+    
     switch (this.state.leftPanelContent) {
       case 'about':
         content = <About />
@@ -584,12 +534,22 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       default:
         return null;
     }
+    
     return (
-      <Offcanvas show={this.state.leftPanelContent} onHide={() => component.setState({leftPanelContent:false})} placement='start' scroll={true} style={{ height: '100vh' }}>
+      <Offcanvas 
+        show={this.state.leftPanelContent} 
+        onHide={() => component.setState({leftPanelContent:false})} 
+        placement='start' 
+        scroll={true} 
+        style={{ height: '100vh' }}
+        onEntered={() => component.runAccessibilityScan('left-panel-offcanvas')}
+        id="left-panel-offcanvas"
+        aria-labelledby="left-panel-title"
+        >
         <Offcanvas.Header closeButton>
-          <Offcanvas.Title>{ this.state.leftPanelContent ? i18next.t( 'leftPanel_' + this.state.leftPanelContent, {ns: 'mycontexts'}) : ""}</Offcanvas.Title>
+          <Offcanvas.Title id="left-panel-title">{panelTitle}</Offcanvas.Title>
         </Offcanvas.Header>
-        <Offcanvas.Body>
+        <Offcanvas.Body id="left-panel-content">
           { content }
         </Offcanvas.Body>
     </Offcanvas>
@@ -814,6 +774,72 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       </PSContext.Provider>);
   }
 
+  runAccessibilityScan(elementId: string = 'main-content') {
+    // Only run in development
+    if (import.meta.env.DEV) {
+      // Wait for content to fully render
+      setTimeout(() => {
+        // Check if axe is available
+        if (window.axe && window.axe.run) {
+          console.log('Running accessibility scan for element:', elementId);
+          window.axe.run(document.getElementById(elementId) || document.body)
+            .then((results: any) => {
+              if (results.violations.length > 0) {
+                console.group('Accessibility issues found:');
+                results.violations.forEach((violation: any) => {
+                  console.log(
+                    `%c${violation.impact} impact: ${violation.help}`,
+                    'font-weight: bold; color: ' + (violation.impact === 'serious' ? '#d93025' : '#e37400')
+                  );
+                  console.log(`More info: ${violation.helpUrl}`);
+                  
+                  // Process each node with the violation
+                  violation.nodes.forEach((node: any, index: number) => {
+                    // Get the actual DOM elements
+                    const elements = node.target.map((selector: string) => {
+                      try {
+                        return document.querySelector(selector);
+                      } catch (e) {
+                        return null;
+                      }
+                    }).filter(Boolean);
+                    
+                    // Log with interactive reference
+                    if (elements.length) {
+                      console.groupCollapsed(`Element ${index + 1}: ${node.target.join(', ')}`);
+                      console.log('HTML:', elements[0].outerHTML.slice(0, 150) + '...');
+                      console.log('Suggested fix:', violation.description);
+                      console.log('Element reference:', elements[0]);
+                      console.groupEnd();
+                      
+                      // Temporarily highlight the element on the page
+                      const originalOutline = elements[0].style.outline;
+                      const originalPosition = elements[0].style.position;
+                      const originalZIndex = elements[0].style.zIndex;
+                      
+                      elements[0].style.outline = '3px solid red';
+                      elements[0].style.position = 'relative';
+                      elements[0].style.zIndex = '10000';
+                      
+                      // Reset after 3 seconds
+                      setTimeout(() => {
+                        elements[0].style.outline = originalOutline;
+                        elements[0].style.position = originalPosition;
+                        elements[0].style.zIndex = originalZIndex;
+                      }, 3000);
+                    }
+                  });
+                });
+                console.groupEnd();
+              } else {
+                console.log('No accessibility issues found!');
+              }
+            });
+        }
+      }, 500); // Shorter timeout since the offcanvas is simpler
+    }
+  }
+
   render() { 
     const component = this;
     return ( 
@@ -836,4 +862,4 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     }
 }
 
-export default WWWComponent;
+export default WWWComponent
