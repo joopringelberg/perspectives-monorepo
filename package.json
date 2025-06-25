@@ -17,10 +17,12 @@
     "commit": "cz"
   },
   "devDependencies": {
+    "@axe-core/react": "^4.10.2",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@eslint/js": "^9.29.0",
     "@vitejs/plugin-react": "^4.5.2",
+    "axe-core": "^4.10.3",
     "commitizen": "^4.3.1",
     "cz-conventional-changelog": "^3.3.0",
     "eslint": "^9.29.0",
