@@ -23,14 +23,13 @@ import React, { createRef } from 'react';
 import {PDRproxy, RoleInstanceT, RoleOnClipboard} from "perspectives-proxy";
 import PerspectivesComponent from "./perspectivesComponent";
 import {PSRol, PSRolType} from "./reactcontexts.js";
-import { default as ModelDependencies } from "./modelDependencies.js";
 import {PasteIcon} from '@primer/octicons-react';
 import i18next from "i18next";
 
 import {OverlayTrigger, Tooltip} from "react-bootstrap";
 import { OverlayInjectedProps } from 'react-bootstrap/esm/Overlay';
 
-import "./components.css";
+import "././styles/components.css";
 
 interface FormPasteRoleProps {
   systemexternalrole: RoleInstanceT;

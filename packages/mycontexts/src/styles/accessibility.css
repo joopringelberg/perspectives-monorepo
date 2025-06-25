@@ -1,69 +1,46 @@
-/* Improve accordion contrast */
-.accordion-button {
-  color: #212529 !important; /* Darker text */
+/* Override Bootstrap CSS variables for better accessibility */
+:root {
+  /* Text colors with improved contrast */
+  --bs-body-color: #464e57; /* Replaces Bootstrap's default text color */
+  --bs-secondary-color: #555555; /* Secondary text (often used in muted text) */
+  
+  /* Form control specific colors */
+  --bs-form-text-color: #6b6b6b;
+  
+  /* Table header colors */
+  --bs-table-color: #212529;
+  --bs-table-striped-color: #212529;
+  --bs-table-hover-color: #212529;
+  --bs-table-active-color: #212529;
+  
+  /* --bs-primary-bg: #212529; */
+
+  /* Selected/active state colors with better contrast */
+  --bs-secondary-bg: #626b73; /* Darker secondary background */
+
+  --bs-secondary-rgb: 98,107,115; /* Darker secondary background RGB */
+
+  --bs-success-rgb: 0, 123, 0; /* Darker green for success */
+  --bs-success: #007b00; /* Darker green for success */
+  
+  /* Input placeholder color with better contrast */
+  --bs-input-placeholder-color: #767676;
+
+  --bs-accordion-btn-color: #212529; /* Darker text for accordion buttons */
+  --bs-accordion-btn-bg: rgba(255, 255, 255, 0.9); /* Lighter background for accordion buttons */
+
+  /* Link colors with better contrast */
+  --bs-link-color: #0056b3; /* Darker blue for links */
+  --bs-link-color-rgb: 0, 86, 179; /* Darker blue for links */
+  --bs-link-opacity: 1; /* Full opacity for better visibility */
+  --bs-link-hover-color-rgb: 0, 61, 126; /* Darker blue for hover/focus */
+  --bs-link-hover-color: #003d7e;
+  --bs-link-hover-opacity: 1;
+  --bs-link-focus-color-rgb: 0, 61, 126;
+  --bs-link-focus-color: #003d7e;
+  --bs-link-focus-opacity: 1;
 }
 
-/* Improve paragraph contrast on colored backgrounds */
-.bg-primary p, 
-.bg-primary .accordion-button,
-.bg-primary .accordion-body {
-  color: #212529 !important; /* Darker text */
-}
-
-/* Ensure accordion headers maintain contrast when collapsed */
-.accordion-button.collapsed {
-  color: #212529 !important;
-}
-
-/* Improve contrast for all text in the columns */
-.animated-column {
-  color: #212529 !important;
-}
-
-/* Add stronger background to accordion items for better contrast */
-.bg-light-subtle.accordion .accordion-item {
-  background-color: rgba(255, 255, 255, 0.9) !important;
-}
-
-/* Fix links in markdown content and other areas */
-a {
-  color: #0056b3 !important; /* Darker blue with better contrast */
-  text-decoration: underline; /* Ensures links are visually distinguishable even for colorblind users */
-}
-
-/* Handle hover state too */
-a:hover, a:focus {
-  color: #003d7e !important;
-  text-decoration: underline;
-}
-
-/* If needed, target specific areas like markdown content */
-.markdown a, 
-.accordion-body a, 
-.bg-primary a {
-  color: #0056b3 !important;
-}
-
-/* Add these rules to your accessibility.css */
-
-/* Make links even darker against light blue backgrounds */
-.bg-primary[style*="--bs-bg-opacity: .4"] a,
-.bg-primary[style*="--bs-bg-opacity: .2"] a {
-  color: #00397a !important; /* Much darker blue - contrast ratio ~5:1 */
-  font-weight: 500; /* Slightly bolder text */
-}
-
-/* For all animated columns with bg-primary */
-.bg-primary.animated-column a {
-  color: #00397a !important;
-}
-
-/* If needed, ensure these links have clear focus states */
-.bg-primary.animated-column a:focus,
-.bg-primary[style*="--bs-bg-opacity"] a:focus {
-  outline: 2px solid #003366;
-  outline-offset: 2px;
-}
 
 /* Add to your accessibility.css */
 h2.column-heading {
@@ -72,3 +49,4 @@ h2.column-heading {
   margin-bottom: 0.5rem; /* Same as h4 */
   /* Add any other h4 styles you want to preserve */
 }
+

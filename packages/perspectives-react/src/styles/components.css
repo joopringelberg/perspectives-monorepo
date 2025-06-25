@@ -1,8 +1,10 @@
-/* Custom styles for Perspectives React components */
-.mediumDotted{
-  border-width: medium!important;
-  border-style: dotted!important;
+
+/* Ensure placeholders have good contrast */
+::placeholder {
+  color: var(--bs-input-placeholder-color) !important;
+  opacity: 1 !important;
 }
+
 
 /* These color codes are taken from bootstrap. See https://getbootstrap.com/docs/5.0/utilities/colors/#variables
 for a discussion about variables and sass. */
@@ -116,13 +118,3 @@ for a discussion about variables and sass. */
   display: none !important;
 }
 
-/* ACCESSIBILITY ADAPTATIONS */
-.accessible-form-control {
-  color: #6b6b6b !important; /* Slightly darker than #777777 */
-}
-
-/* For focus and hover states */
-.accessible-form-control:focus,
-.accessible-form-control:hover {
-  color: #555555 !important;
-}

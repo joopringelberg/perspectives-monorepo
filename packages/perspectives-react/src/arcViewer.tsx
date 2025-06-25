@@ -32,7 +32,7 @@ import {default as perspectivesarc} from "perspectives-highlightjs";
 import i18next from "i18next";
 import {UserMessagingPromise} from "./userMessaging.js";
 
-import "./highlight.css";
+import "./styles/highlight.css";
 
 // Register the language, so it can be used as a value for the language prop.
 hljs.registerLanguage("perspectives-arc", perspectivesarc); 
@@ -95,7 +95,7 @@ export class ArcViewer extends Component<ArcViewerProps, ArcViewerState>
       // link.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/base16/solar-flare.min.css';
       
       // Or use a relative path to your bundled CSS
-      link.href = './highlight.css';
+      link.href = '././styles/components.css';
       
       document.head.appendChild(link);
     }

@@ -19,15 +19,13 @@
 // END LICENSE
 
 import React, { createRef } from "react"; // 2
-import ReactDOM from "react-dom";
 import PerspectivesComponent from "./perspectivesComponent";
 import {deconstructLocalName} from "./urifunctions.js";
 import SmartFieldControl from "./smartfieldcontrol.js";
 import RoleInstance from "./roleinstance.js";
 
-import "./components.css";
+import "././styles/components.css";
 import { PropertyType, RoleInstanceT, RoleType, Perspective, PropertyValues, SerialisedProperty } from "perspectives-proxy";
-import { CardProperties } from "./cardbehaviour";
 import { WithOutBehavioursProps } from "./adorningComponentWrapper";
 import ModelDependencies from "./modelDependencies";
 
@@ -148,7 +146,6 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
   // React will then re-render, giving TableCell the value true for the isselected prop.
   handleClick ()
   {
-    //eslint-disable-next-line react/no-find-dom-node
     this.inputRef.current?.dispatchEvent( new CustomEvent('SetColumn', { detail: this.props.propertyname, bubbles: true }) );
   }
 

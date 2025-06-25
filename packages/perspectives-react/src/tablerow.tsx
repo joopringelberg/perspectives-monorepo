@@ -21,9 +21,8 @@
 import React, { createRef } from "react"; // 2
 import PerspectivesComponent from "./perspectivesComponent";
 import TableCell from "./tablecell.js";
-import "./components.css";
+import "././styles/components.css";
 import { Perspective, Roleinstancewithprops, SerialisedProperty, RoleInstanceT, RoleType } from "perspectives-proxy";
-import { CardProperties } from "./cardbehaviour";
 import { WithOutBehavioursProps } from "./adorningComponentWrapper";
 
 ////////////////////////////////////////////////////////////////////////////////

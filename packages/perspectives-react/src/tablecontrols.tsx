@@ -33,7 +33,7 @@ import i18next from "i18next";
 import
   { Navbar
   } from "react-bootstrap";
-import "./components.css";
+import "././styles/components.css";
 
 ////////////////////////////////////////////////////////////////////////////////
 // TABLECONTROLS

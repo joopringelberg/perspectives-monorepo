@@ -10,7 +10,7 @@ import
   , Form,
   Accordion
   } from "react-bootstrap";
-import "./components.css";
+import "././styles/components.css";
 import { CardProperties } from "./cardbehaviour";
 import { CardWithFixedBehaviour, WithOutBehavioursProps } from "./adorningComponentWrapper";
 import { RoleInstanceT, Perspective, SerialisedProperty, PropertyType, Roleinstancewithprops } from "perspectives-proxy";
