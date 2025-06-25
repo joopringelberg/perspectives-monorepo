@@ -4,15 +4,15 @@ import {i18next} from 'perspectives-react';
 
 const LoadingScreen = () => {
   return (
-    <>
-      {/* Add skip link for keyboard users */}
+    <div className="loading-screen-container">
+      {/* Skip link */}
       <a href="#loading-content" className="skip-link visually-hidden-focusable">
         Skip to content
       </a>
       
       <Container fluid className="vh-100 d-flex flex-column justify-content-center align-items-center bg-primary" style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
         {/* Add header landmark */}
-        <header className="text-center">
+        <header role="banner" className="text-center">
           <Row>
             <Col>
               <img 
@@ -26,7 +26,7 @@ const LoadingScreen = () => {
         </header>
         
         {/* Add main landmark with appropriate ID for skip link */}
-        <main id="loading-content" className="text-center">
+        <main role="main" id="loading-content" className="text-center">
           <Row>
             <Col>
               {/* Change h2 to h1 for proper document structure */}
@@ -39,7 +39,7 @@ const LoadingScreen = () => {
           </Row>
         </main>
       </Container>
-    </>
+    </div>
   );
 };
 

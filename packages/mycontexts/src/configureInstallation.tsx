@@ -41,20 +41,25 @@ const ConfigureInstallation: FC<{callback: (data: InstallationResult) => void}> 
   const [showInstallPanel, setShowInstallPanel] = useState<boolean>(false);
   return (
     <>
-      <Navbar bg='primary' fixed="top">
-        <Navbar.Brand className="mx-auto text-white">{ i18next.t( "configuration_Welcome", {ns: 'mycontexts'})}</Navbar.Brand>
-      </Navbar>
-      <Container fluid className="main-content" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', paddingTop: '120px' }}>
-        <p>
-          { i18next.t( "configuration_WelcomeMessage", {ns: 'mycontexts'} )}
-        </p>
-        <Button variant="primary" onClick={() => setShowFAQPanel(true)} className="mb-2">
-          MyContexts FAQ's
-        </Button>
-        <Button variant="primary" onClick={() => setShowInstallPanel(true)}>
-          { i18next.t( "conversationDialog_Install", {ns: 'mycontexts'}) }
-        </Button>
-      </Container>
+      <header>
+        <Navbar bg='primary' fixed="top">
+          <Navbar.Brand className="mx-auto text-white">{ i18next.t( "configuration_Welcome", {ns: 'mycontexts'})}</Navbar.Brand>
+        </Navbar>
+      </header>
+      <main>
+        <Container fluid className="main-content" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', paddingTop: '120px' }}>
+          <h1 className="visually-hidden">{ i18next.t( "configuration_Welcome", {ns: 'mycontexts'})}</h1>
+          <p>
+            { i18next.t( "configuration_WelcomeMessage", {ns: 'mycontexts'} )}
+          </p>
+          <Button variant="primary" onClick={() => setShowFAQPanel(true)} className="mb-2">
+            MyContexts FAQ's
+          </Button>
+          <Button variant="primary" onClick={() => setShowInstallPanel(true)}>
+            { i18next.t( "conversationDialog_Install", {ns: 'mycontexts'}) }
+          </Button>
+        </Container>
+      </main>
       <FAQModal show={showFAQPanel} onHide={() => setShowFAQPanel(false)} />
       <InstallModal show={showInstallPanel} onHide={() => setShowInstallPanel(false)} callback={callback}/>
     </>
@@ -89,7 +94,7 @@ const InstallModal: FC<{ show: boolean; onHide: () => void, callback: (data: Ins
 
   return (<Modal show={show} onHide={onHide} fullscreen dialogClassName="slide-in-bottom">
     <Modal.Header closeButton>
-      <Modal.Title>{ i18next.t( "configurationDialog_Title", {ns: 'mycontexts'})}</Modal.Title>
+      <Modal.Title as="h2">{ i18next.t( "configurationDialog_Title", {ns: 'mycontexts'})}</Modal.Title>
     </Modal.Header>
     <Modal.Body>
       <Form noValidate validated={validated} id='installForm'>
@@ -100,15 +105,18 @@ const InstallModal: FC<{ show: boolean; onHide: () => void, callback: (data: Ins
             placeholder="E.g. mylaptop, mymobile, mytablet"
             value={deviceName || ''}
             required
+             
             pattern="^[a-zA-Z0-9_\-\.]+$"  // Allow only letters, numbers, underscores, hyphens and periods
             onChange={(e) => {
               const value = e.target.value;
               // Check if the value matches our allowed pattern
+              // eslint-disable-next-line no-useless-escape
               if (/^[a-zA-Z0-9_\-\.]*$/.test(value)) {
                 setDeviceName(value);
                 setValue('deviceName', value);
               }
             }}
+            // eslint-disable-next-line no-useless-escape
             isInvalid={!!deviceName && !/^[a-zA-Z0-9_\-\.]+$/.test(deviceName)}
           />
           <Form.Control.Feedback type="invalid">
@@ -356,7 +364,6 @@ function SliderWithTooltip({ label, tooltip, callback }: { label: string, toolti
             delay={{ show: 250, hide: 400 }}
             overlay={(props) => (
               <Tooltip id="MyContexts-tooltip" {...props} show={
-                // eslint-disable-next-line react/prop-types
                 props.show}>{tooltip}
               </Tooltip> )}
         >
