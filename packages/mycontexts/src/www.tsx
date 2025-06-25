@@ -715,7 +715,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                 style={{'--bs-bg-opacity': '.1'} as React.CSSProperties}>
                 {/* Lower opacity from .2 to .1 for better contrast */}
                 <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}>
-                  <h4 className='text-center text-dark'>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h4>
+                  <h2 className='text-center text-dark column-heading'>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h2>
                 </Row>
                 <Row className='px-1 full-www-content-height scrollable-content'>
                   { this.state.screen?.whoWhatWhereScreen ?
@@ -734,7 +734,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                 <Row onClick={() => component.setState( {'doubleSection': "what"} )}
                   onDoubleClick={() => component.setState( {'whatOnly': !component.state.whatOnly} )}
                 >
-                  <h4 className='text-center'>{ i18next.t("www_what", {ns: 'mycontexts'}) }</h4>
+                  <h2 className='text-center column-heading'>{ i18next.t("www_what", {ns: 'mycontexts'}) }</h2>
                 </Row>
                 {/* In the desktop, MSComponent will render a row with px-1 */}
                 {/* Here we render either an arbitrary screen: {tag: "FreeFormScreen", elements: MainScreenElements}, or all TableFormDef elements in the {tag: "TableForms", elements: TableFormDef[]} variant of What. */}
@@ -750,7 +750,9 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                 className='bg-primary full-height animated-column'
                 xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "where" ? 6 : 3} 
                 style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
-                <Row onClick={() => component.setState( {'doubleSection': "where"} )}  ><h4 className='text-center'>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h4></Row>  
+                <Row onClick={() => component.setState( {'doubleSection': "where"} )}>
+                  <h2 className='text-center column-heading'>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h2>
+                </Row>  
                 <Row className="px-1 full-www-content-height scrollable-content" style={{overflow: 'auto'}}>
                 { this.state.screen?.whoWhatWhereScreen ? 
                   <Where 

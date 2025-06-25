@@ -139,7 +139,7 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
       return (
         <div className="sliding-panels-container pb-2" ref={this.containerRef}>
           {/* Main Panel */}
-          <div className="main-panel" ref={this.mainPanelRef} tabIndex={1}>
+          <div className="main-panel" ref={this.mainPanelRef}>
             {React.cloneElement(mainContent as React.ReactElement<MainContentProps>, { className: this.props.className })}
           </div>
           {/* Sliding Panel */}
