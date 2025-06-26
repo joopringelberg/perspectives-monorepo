@@ -436,7 +436,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               as="select"
               {... component.props.inputRef ? { ref: component.props.inputRef as React.RefObject<HTMLSelectElement>} : {}}
               tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}
-              aria-label={ component.props.serialisedProperty.displayName }
+              aria-label={ component.state.value }
               readOnly={ component.props.disabled }
               disabled={ component.props.disabled }
               value={ component.state.value }
@@ -475,7 +475,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
                   as={as}
                   {... component.props.inputRef ? { ref: component.props.inputRef as React.RefObject<HTMLInputElement>} : {}}
                   tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}
-                  aria-label={ pattern? pattern.label : component.props.serialisedProperty.displayName }
+                  aria-label={ pattern? pattern.label : component.state.value }
                   readOnly={ component.props.disabled }
                   value={ component.state.value }
                   onChange={e => component.setState({value: e.target.value}) }
@@ -499,7 +499,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               as={ (component.controlType as React.ElementType) || "input" }
               {... component.props.inputRef ? { ref: component.props.inputRef } : {}}
               tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}
-              aria-label={ pattern? pattern.label : component.props.serialisedProperty.displayName }
+              aria-label={ pattern? pattern.label : component.state.value }
               readOnly={ component.props.disabled }
               value={ component.state.value }
               onChange={e => component.setState({value: e.target.value}) }

@@ -28,6 +28,7 @@ import "././styles/components.css";
 import { PropertyType, RoleInstanceT, RoleType, Perspective, PropertyValues, SerialisedProperty } from "perspectives-proxy";
 import { WithOutBehavioursProps } from "./adorningComponentWrapper";
 import ModelDependencies from "./modelDependencies";
+import { t } from "i18next";
 
 ////////////////////////////////////////////////////////////////////////////////
 // NAVIGATING IN A GRID AND A CELL
@@ -218,6 +219,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
   render ()
   {
     const component = this;
+    const title = component.values().join(", ") ? component.values().join(", ") : deconstructLocalName(component.props.propertyname);
 
     if (component.props.iscard)
     {
@@ -232,7 +234,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
             >
               <SmartFieldControl
                 inputRef={component.inputRef as React.RefObject<HTMLElement>}
-                aria-label={deconstructLocalName(component.props.propertyname)}
+                aria-label={title}
                 serialisedProperty={component.props.serialisedProperty}
                 propertyValues={component.props.propertyValues}
                 roleId={component.props.roleinstance}
@@ -261,8 +263,8 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                     externalRef={component.inputRef as React.RefObject<HTMLElement>}
                     key={component.props.roleinstance}
                     // The title is the value of the cell. It is picked up automatically.
-                    title={component.values().join(", ")}
-                    aria-label={component.props.propertyname} // deconstructLocalName ( component.props.propertyname )
+                    title={title}
+                    aria-label={title}
                     // Other properties to pass on.
                     tabIndex={receiveFocusByKeyboard}
                     className="shadow bg-secondary text-light"
@@ -284,7 +286,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                 title={component.values().join(", ")}
                 className="shadow"
                 onClick={component.handleClick}
-                aria-label={component.props.propertyname} // deconstructLocalName ( component.props.propertyname )
+                aria-label={title} // deconstructLocalName ( component.props.propertyname )
               />
           </td>);
       }
@@ -298,7 +300,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
         >
           <SmartFieldControl
             inputRef={component.inputRef  as React.RefObject<HTMLElement>}
-            aria-label={deconstructLocalName(component.props.propertyname)}
+            aria-label={title}
             serialisedProperty={component.props.serialisedProperty}
             propertyValues={component.props.propertyValues}
             roleId={component.props.roleinstance}
