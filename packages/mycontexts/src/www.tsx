@@ -228,6 +228,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       }, 
       false);
 
+    document.addEventListener('keydown', this.handleKeyboardNavigation as EventListener);
   }
 
   componentDidUpdate(prevProps: Readonly<WWWComponentProps>, prevState: Readonly<WWWComponentState>): void {
@@ -240,6 +241,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
   componentWillUnmount() {
     window.removeEventListener('resize', this.checkScreenSize);
+    document.removeEventListener('keydown', this.handleKeyboardNavigation);
   }
 
   tryToOpenContext( s : string)
@@ -456,7 +458,11 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     return (
       <Offcanvas 
         show={this.state.showNotifications} 
-        onHide={() => component.setState({showNotifications:false})} 
+        onHide={() => {
+          component.setState({showNotifications: false});
+          // Return focus to the element that opened the panel
+          document.querySelector('.bi-arrow-up')?.parentElement?.focus();
+        }} 
         placement='bottom' 
         scroll={true} 
         style={{ height: '50vh' }}
@@ -625,7 +631,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         title={
           <>
             <i className="bi bi-list text-light fs-2" aria-hidden="true"></i>
-            <span className="visually-hidden">Main Menu</span>
+            <span className="visually-hidden">{i18next.t("mainMenu", {ns: "mycontexts"})}</span>
           </>
         } 
         className="me-auto hide-caret px-2 py-1" 
@@ -706,66 +712,67 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         <Container fluid className='px-0'>
           {component.renderTopNavBar()}
           <main id="main-content">
-            <Row className='mx-0'>
-              <Col 
-                className='bg-primary full-height animated-column' 
-                xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "who" ? 6 : 3 } 
-                style={{'--bs-bg-opacity': '.1'} as React.CSSProperties}>
-                {/* Lower opacity from .2 to .1 for better contrast */}
-                <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}>
-                  <h2 className='text-center text-dark column-heading'>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h2>
-                </Row>
-                <Row className='px-1 full-www-content-height scrollable-content'>
-                  { this.state.screen?.whoWhatWhereScreen ?
-                    <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } 
-                      showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "who"}
-                    />
-                    :
-                    <p className='bg-light-subtle'>Ga ergens heen</p>
-                  }
-                </Row>
-              </Col>
-              <Col 
-                className='bg-primary animated-column' 
-                xs={ this.state.whatOnly ? 10 : this.state.doubleSection === "what" ? 6 : 3} 
-                style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
-                <Row onClick={() => component.setState( {'doubleSection': "what"} )}
-                  onDoubleClick={() => component.setState( {'whatOnly': !component.state.whatOnly} )}
-                >
-                  <h2 className='text-center column-heading'>{ i18next.t("www_what", {ns: 'mycontexts'}) }</h2>
-                </Row>
-                {/* In the desktop, MSComponent will render a row with px-1 */}
-                {/* Here we render either an arbitrary screen: {tag: "FreeFormScreen", elements: MainScreenElements}, or all TableFormDef elements in the {tag: "TableForms", elements: TableFormDef[]} variant of What. */}
-                <Row className="full-www-content-height scrollable-content">
-                {this.state.screen?.whoWhatWhereScreen ? 
-                      <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "what"}/>
-                      : 
-                    <div>Ga ergens heen.</div>
+            <div tabIndex={0} className="content-section-area">
+              <Row className='mx-0'>
+                <Col 
+                  className='bg-primary full-height animated-column' 
+                  xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "who" ? 6 : 3 } 
+                  style={{'--bs-bg-opacity': '.1'} as React.CSSProperties}>
+                  <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}>
+                    <h2 className='text-center text-dark column-heading' aria-keyshortcuts="alt+1" tabIndex={0}>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h2>
+                  </Row>
+                  <Row className='px-1 full-www-content-height scrollable-content'>
+                    { this.state.screen?.whoWhatWhereScreen ?
+                      <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } 
+                        showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "who"}
+                      />
+                      :
+                      <p className='bg-light-subtle'>Ga ergens heen</p>
                     }
-                </Row>
-              </Col>
-              <Col 
-                className='bg-primary full-height animated-column'
-                xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "where" ? 6 : 3} 
-                style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
-                <Row onClick={() => component.setState( {'doubleSection': "where"} )}>
-                  <h2 className='text-center column-heading'>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h2>
-                </Row>  
-                <Row className="px-1 full-www-content-height scrollable-content" style={{overflow: 'auto'}}>
-                { this.state.screen?.whoWhatWhereScreen ? 
-                  <Where 
-                    screenelements={  this.state.screen.whoWhatWhereScreen.whereto } 
-                    showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "where"} 
-                    systemUser={component.state.systemUser}
-                    systemIdentifier={component.state.systemIdentifier}
-                    openContext={component.state.openContext}
-                    />
-                  : 
-                    <div>Ga ergens heen.</div>
-                  }
-                </Row>
-              </Col>
-            </Row>
+                  </Row>
+                </Col>
+                <Col 
+                  className='bg-primary animated-column' 
+                  xs={ this.state.whatOnly ? 10 : this.state.doubleSection === "what" ? 6 : 3} 
+                  style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
+                  <Row onClick={() => component.setState( {'doubleSection': "what"} )}
+                    onDoubleClick={() => component.setState( {'whatOnly': !component.state.whatOnly} )}
+                  >
+                    <h2 className='text-center column-heading' aria-keyshortcuts="alt+2" tabIndex={0}>{ i18next.t("www_what", {ns: 'mycontexts'}) }</h2>
+                  </Row>
+                  {/* In the desktop, MSComponent will render a row with px-1 */}
+                  {/* Here we render either an arbitrary screen: {tag: "FreeFormScreen", elements: MainScreenElements}, or all TableFormDef elements in the {tag: "TableForms", elements: TableFormDef[]} variant of What. */}
+                  <Row className="full-www-content-height scrollable-content">
+                  {this.state.screen?.whoWhatWhereScreen ? 
+                        <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "what"}/>
+                        : 
+                      <div>Ga ergens heen.</div>
+                      }
+                  </Row>
+                </Col>
+                <Col 
+                  className='bg-primary full-height animated-column'
+                  xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "where" ? 6 : 3} 
+                  style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
+                  <Row onClick={() => component.setState( {'doubleSection': "where"} )}>
+                    <h2 className='text-center column-heading' aria-keyshortcuts="alt+3" tabIndex={0}>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h2>
+                  </Row>  
+                  <Row className="px-1 full-www-content-height scrollable-content" style={{overflow: 'auto'}}>
+                  { this.state.screen?.whoWhatWhereScreen ? 
+                    <Where 
+                      screenelements={  this.state.screen.whoWhatWhereScreen.whereto } 
+                      showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "where"} 
+                      systemUser={component.state.systemUser}
+                      systemIdentifier={component.state.systemIdentifier}
+                      openContext={component.state.openContext}
+                      />
+                    : 
+                      <div>Ga ergens heen.</div>
+                    }
+                  </Row>
+                </Col>
+              </Row>
+            </div>
           </main>
           { component.renderBottomNavBar() }
           <EndUserNotifier message={component.state.endUserMessage}/>
@@ -773,6 +780,23 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         </Container>
       </PSContext.Provider>);
   }
+
+  // Add to WWWComponent class
+  handleKeyboardNavigation = (e: KeyboardEvent) => {    
+    if (e.altKey && e.key === '¡') {
+      // Focus Who section
+      this.setState({'doubleSection': "who"});
+      e.preventDefault();
+    } else if (e.altKey && e.key === '€') {
+      // Focus What section
+      this.setState({'doubleSection': "what"});
+      e.preventDefault();
+    } else if (e.altKey && e.key === '£') {
+      // Focus Where section
+      this.setState({'doubleSection': "where"});
+      e.preventDefault();
+    }
+  };
 
   runAccessibilityScan(elementId: string = 'main-content') {
     // Only run in development
@@ -852,12 +876,16 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               >
             {/* Add skip link at the very top */}
             <a href="#main-content" className="skip-link visually-hidden-focusable">
-              Skip to main content
+              { i18next.t("skip_to_content", {ns: 'mycontexts'}) }
             </a>
             
             { this.state.openContext ? this.state.isSmallScreen ? this.renderMobile() : this.renderDesktop() : null }
             {this.notificationsAndClipboard()}
             {this.leftPanel()}
+            <div className="keyboard-nav-instructions" id="keyboard-instructions">
+              Press Tab to navigate between sections. Use arrow keys to navigate within a section. 
+              Press Enter to select an item. Press Escape to return to the main navigation.
+            </div>
           </AppContext.Provider>);
     }
 }

@@ -30,6 +30,21 @@ export class About extends PerspectivesComponent<object, object> {
             value={__BUILD__}
           />
         </Form.Group>
+        <Form.Group className="mb-3">
+          <Form.Label htmlFor="keyboard-shortcuts">{i18next.t("about_shortcuts", {ns: "mycontexts"})}</Form.Label>
+          <div id="keyboard-shortcuts" className="p-3 border rounded">
+            <h2 className="column-heading">{i18next.t("about_navigation", {ns: "mycontexts"})}</h2>
+            <ul>
+              <li>{i18next.t("about_navigation_message", {ns: "mycontexts"})}</li>
+              <li>{i18next.t("about_navigation_who", {ns: "mycontexts"})}</li>
+              <li>{i18next.t("about_navigation_what", {ns: "mycontexts"})}</li>
+              <li>{i18next.t("about_navigation_where", {ns: "mycontexts"})}</li>
+              <li>{i18next.t("about_navigation_close", {ns: "mycontexts"})}</li>
+              <li>{i18next.t("about_navigation_arrows", {ns: "mycontexts"})}</li>
+              <li>{i18next.t("about_navigation_space", {ns: "mycontexts"})}</li>
+            </ul> 
+          </div>
+        </Form.Group>
         <Button variant="primary" onClick={checkForUpdates}>
           {i18next.t("check_for_updates", { ns: 'mycontexts' })}
         </Button>

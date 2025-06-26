@@ -41,8 +41,6 @@
   --bs-link-focus-opacity: 1;
 }
 
-
-/* Add to your accessibility.css */
 h2.column-heading {
   font-size: 1.5rem; /* Same as h4 */
   font-weight: 500;  /* Same as h4 */
@@ -50,3 +48,45 @@ h2.column-heading {
   /* Add any other h4 styles you want to preserve */
 }
 
+/* Focus styles for content sections */
+.content-section-area:focus {
+  outline: 2px solid #0056b3; /* Your link color for consistency */
+  outline-offset: -2px;
+}
+
+/* Add key navigation instructions for screen readers */
+.keyboard-nav-instructions {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Make NavDropdown focus state more visible */
+.dropdown-toggle:focus,
+.dropdown-toggle:focus-visible,
+#nav-dropdown:focus {
+  outline: 3px solid #ffffff !important; /* White outline for contrast against primary background */
+  outline-offset: 2px !important;
+  border-radius: 4px !important;
+  box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.5) !important; /* Secondary glow effect */
+}
+
+/* Ensure focus is visible even with hover effects */
+.dropdown-toggle:hover:focus {
+  outline: 3px solid #ffffff !important;
+}
+
+/* Improve focus visibility for all navbar elements */
+.navbar .navbar-brand:focus,
+.navbar button:focus,
+.navbar a:focus {
+  outline: 3px solid #ffffff !important;
+  outline-offset: 2px !important;
+  border-radius: 4px !important;
+}
