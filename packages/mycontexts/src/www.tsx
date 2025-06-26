@@ -663,17 +663,33 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   // For the bottom navigation
   renderBottomNavBar() {
     const component = this;
+
     return (
       <nav aria-label="History navigation"> {/* Add nav landmark */}
         <Navbar id="bottom-navbar" fixed="bottom" bg="primary" expand="xs" className="justify-content-between py-0 px-3">
-          <Navbar.Brand onClick={() => window.history.back()}>
-            <i className="bi bi-arrow-left text-light"></i>
+          <Navbar.Brand 
+            onClick={e => {window.history.back(); e.stopPropagation();}} 
+            onKeyDown={(e) => {if (e.key === ' ' || e.key === 'Enter') window.history.back(); e.stopPropagation();}} 
+            role="button" 
+            tabIndex={0} 
+            aria-label={i18next.t("bottom_goBack", {ns: 'mycontexts'})}>
+              <i className="bi bi-arrow-left text-light"></i>
           </Navbar.Brand>
-          <Navbar.Brand onClick={() => component.setState({ showNotifications: true })}>
-            <i className="bi bi-arrow-up text-light"></i>
+          <Navbar.Brand 
+            onClick={e => { component.setState({ showNotifications: true }); e.stopPropagation(); }} 
+            onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { component.setState({ showNotifications: true }); e.stopPropagation(); }}} 
+            role="button" 
+            tabIndex={0} 
+            aria-label={i18next.t("bottom_showNotifications", {ns: 'mycontexts'})}>
+              <i className="bi bi-arrow-up text-light"></i>
           </Navbar.Brand>
-          <Navbar.Brand onClick={() => window.history.forward()}>
-            <i className="bi bi-arrow-right text-light"></i>
+          <Navbar.Brand 
+            onClick={e => {window.history.forward(); e.stopPropagation();}} 
+            onKeyDown={(e) => {if (e.key === ' ' || e.key === 'Enter') window.history.forward(); e.stopPropagation();}} 
+            role="button" 
+            tabIndex={0} 
+            aria-label={i18next.t("bottom_goForward", {ns: 'mycontexts'})}>
+              <i className="bi bi-arrow-right text-light"></i>
           </Navbar.Brand>
         </Navbar>
       </nav>

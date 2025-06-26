@@ -139,5 +139,8 @@
   , "update_now": "Nu updaten"
   , "loading_welcome": "Welkom bij MyContexts!"
   , "loading_message": "Even geduld a.u.b. terwijl het programma geladen wordt (versie {{version}}, build {{build}})..."
+  , "bottom_goBack": "Terug naar de vorige context"
+  , "bottom_showNotifications": "Toon meldingen"
+  , "bottom_goForward": "Vooruit naar de volgende context"
 
 }

@@ -139,4 +139,7 @@
   , "update_now": "Update now"
   , "loading_welcome": "Welcome to MyContexts!"
   , "loading_message": "Please wait while the application loads version {{version}} (build {{build}})..."
+  , "bottom_goBack": "Go back to the previous context"
+  , "bottom_showNotifications": "Show notifications"
+  , "bottom_goForward": "Go forward to the next context"
   }
