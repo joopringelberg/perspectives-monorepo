@@ -63,6 +63,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
 {
   private inputType: InputType;
   private controlType: string | undefined;
+  private ref = React.createRef<HTMLElement>();
 
   constructor(props : SmartFieldControlProps)
   {
@@ -73,8 +74,15 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     this.state = { value: this.valueOnProps() };
     this.leaveControl = this.leaveControl.bind(this);
     this.controlType = this.htmlControlType();
+    this.ref = props.inputRef ? props.inputRef : React.createRef<HTMLElement>();
   }
 
+  componentDidMount(): void {
+    if (this.props.isselected && this.ref.current)
+    {
+      this.ref.current.focus();
+    }
+  }
 
   componentDidUpdate(prevProps : SmartFieldControlProps)
   {
@@ -83,6 +91,10 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
         && prevProps.propertyValues.values[0] != this.props.propertyValues.values[0]))
     {
       this.setState({ value: this.valueOnProps()});
+    }
+    if (this.props.isselected && this.ref.current)
+    {
+      this.ref.current.focus();
     }
    }
 
@@ -260,7 +272,6 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
         case "ArrowRight": // right arrow.
         case "ArrowUp": // Up arrow
         case "ArrowDown": // Down arrow
-        case "Tab":  // Horizontal Tab.
         case "Control": // Vertical Tab.
         case "Space": // Space
           event.stopPropagation();
@@ -419,7 +430,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
           <div onKeyDown={e => component.handleKeyDown(e, component.state.value)}>
             <Form.Check
               id={component.props.serialisedProperty.id + "_" + component.props.roleId}
-              {... component.props.inputRef ? { ref: component.props.inputRef as React.RefObject<HTMLInputElement>} : {}}
+              ref={component.ref as React.RefObject<HTMLInputElement>}
               tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}
               aria-label={ component.props.serialisedProperty.displayName }
               readOnly={ component.props.disabled }
@@ -434,7 +445,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
             <Form.Control
               id={component.props.serialisedProperty.id + "_" + component.props.roleId}
               as="select"
-              {... component.props.inputRef ? { ref: component.props.inputRef as React.RefObject<HTMLSelectElement>} : {}}
+              ref={component.ref as React.RefObject<HTMLSelectElement>}
               tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}
               aria-label={ component.state.value }
               readOnly={ component.props.disabled }
@@ -473,7 +484,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
                 <Form.Control
                   id={component.props.serialisedProperty.id + "_" + component.props.roleId}
                   as={as}
-                  {... component.props.inputRef ? { ref: component.props.inputRef as React.RefObject<HTMLInputElement>} : {}}
+                  ref={component.ref as React.RefObject<HTMLInputElement>}
                   tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}
                   aria-label={ pattern? pattern.label : component.state.value }
                   readOnly={ component.props.disabled }
@@ -487,7 +498,6 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
                   min={component.minInclusive()}
                   max={component.maxInclusive()}
                   {...(pattern ? { pattern: patternToSource(pattern) } : {})}
-                  className="accessible-form-control"
                 />
               </div>);
               }
@@ -497,7 +507,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
             <Form.Control
               id={component.props.serialisedProperty.id + "_" + component.props.roleId}
               as={ (component.controlType as React.ElementType) || "input" }
-              {... component.props.inputRef ? { ref: component.props.inputRef } : {}}
+              ref={component.ref as React.RefObject<HTMLInputElement>}
               tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}
               aria-label={ pattern? pattern.label : component.state.value }
               readOnly={ component.props.disabled }
@@ -511,7 +521,6 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               min={component.minInclusive()}
               max={component.maxInclusive()}
               {...(pattern ? { pattern: patternToSource(pattern) } : {})}
-              className="accessible-form-control"
             />
           </div>);
     }

@@ -52,6 +52,7 @@ interface PerspectiveBasedFormProps {
 
 interface PerspectiveBasedFormState {
   roleInstanceWithProps?: Roleinstancewithprops;
+  selectedField: number;
 }
 
 export default class PerspectiveBasedForm extends PerspectivesComponent<PerspectiveBasedFormProps, PerspectiveBasedFormState>
@@ -60,7 +61,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
   {
     super(props);
     // Note that rolintanceWithprops may be undefined.
-    this.state = {roleInstanceWithProps: this.computeRoleInstanceWithProps()};
+    this.state = {roleInstanceWithProps: this.computeRoleInstanceWithProps(), selectedField: 0};
     this.checkBinding = this.checkBinding.bind(this);
     this.bind_ = this.bind_.bind(this);
     this.createRoleInstance = this.createRoleInstance.bind(this);
@@ -179,7 +180,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
           rolInstance, // binding
           component.props.perspective.userRoleType)
         });
-}
+  }
 
   render ()
   {
@@ -232,6 +233,26 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
               </RoleInstance>;
     }
 
+    
+    function handleTab(e: React.KeyboardEvent<HTMLFormElement>): void
+    {
+      const propertyCount: number = Object.values(component.props.perspective.properties)
+      .filter(property => !component.props.suppressIdentifyingProperty || property.id !== perspective.identifyingProperty)
+      .length;
+      if (component.state.selectedField < propertyCount && e.key === "Tab" && !e.shiftKey)
+      {
+        e.stopPropagation();
+        e.preventDefault();
+        component.setState({ selectedField: (component.state.selectedField + 1)});
+      }
+      else if (component.state.selectedField > 0 && e.key === "Tab" && e.shiftKey)
+      {
+        e.stopPropagation();
+        e.preventDefault();
+        component.setState({ selectedField: (component.state.selectedField - 1)});
+      }
+    }
+
     // If there are no properties defined on this role type,
     // Just show the form controls.
     if (Object.keys( component.props.perspective.properties).length === 0 && component.props.perspective.roleType)
@@ -241,14 +262,14 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
     else
     {
       return (
-        <Form>
+        <Form onKeyDown={handleTab}>
           {
             Object.values(perspective.properties)
               .filter( property => !component.props.suppressIdentifyingProperty || property.id !== perspective.identifyingProperty)
               .map((serialisedProperty, index) =>
               <SmartFieldControlGroup
                 key={serialisedProperty.id}
-                hasFocus={index === 0}
+                hasFocus={index === component.state.selectedField}
                 serialisedProperty={serialisedProperty}
                 propertyValues={component.findValues( serialisedProperty.id )}
                 roleId={component.state.roleInstanceWithProps ? component.state.roleInstanceWithProps.roleId : undefined}
