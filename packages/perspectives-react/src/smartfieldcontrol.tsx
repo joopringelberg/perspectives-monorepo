@@ -418,6 +418,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
         return (
           <div onKeyDown={e => component.handleKeyDown(e, component.state.value)}>
             <Form.Check
+              id={component.props.serialisedProperty.id + "_" + component.props.roleId}
               {... component.props.inputRef ? { ref: component.props.inputRef as React.RefObject<HTMLInputElement>} : {}}
               tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}
               aria-label={ component.props.serialisedProperty.displayName }
@@ -431,6 +432,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
         return (
           <div onKeyDown={e => component.handleKeyDown(e, (e.target as HTMLInputElement).value)}>
             <Form.Control
+              id={component.props.serialisedProperty.id + "_" + component.props.roleId}
               as="select"
               {... component.props.inputRef ? { ref: component.props.inputRef as React.RefObject<HTMLSelectElement>} : {}}
               tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}
@@ -450,6 +452,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
       case "PerspectivesFile":
         return (
           <PerspectivesFile
+            id={component.props.serialisedProperty.id + "_" + component.props.roleId}
             serialisedProperty={component.props.serialisedProperty}
             propertyValues={component.props.propertyValues}
             roleId={component.props.roleId}
@@ -468,6 +471,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
             return (
               <div onKeyDown={e => component.handleKeyDown(e, (e.target as HTMLInputElement).value)}>
                 <Form.Control
+                  id={component.props.serialisedProperty.id + "_" + component.props.roleId}
                   as={as}
                   {... component.props.inputRef ? { ref: component.props.inputRef as React.RefObject<HTMLInputElement>} : {}}
                   tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}
@@ -491,6 +495,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
         return (
           <div onKeyDown={e => component.handleKeyDown(e, (e.target as HTMLInputElement).value)}>
             <Form.Control
+              id={component.props.serialisedProperty.id + "_" + component.props.roleId}
               as={ (component.controlType as React.ElementType) || "input" }
               {... component.props.inputRef ? { ref: component.props.inputRef } : {}}
               tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}

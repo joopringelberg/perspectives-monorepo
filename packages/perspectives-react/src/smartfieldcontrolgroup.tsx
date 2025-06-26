@@ -130,6 +130,7 @@ export default class SmartFieldControlGroup extends Component<SmartFieldControlG
           <Form.Label
             column={isHorizontal}
             className={isHorizontal ? "col-4" : ""}
+            htmlFor={component.props.serialisedProperty.id + "_" + component.props.roleId}
             >
             { component.props.serialisedProperty.displayName }
           </Form.Label>

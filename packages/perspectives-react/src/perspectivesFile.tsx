@@ -34,6 +34,7 @@ type PerspectivesFileProps =
   myRoletype: RoleType;
   propertyValues?: PropertyValues;
   roleId?: RoleInstanceT;
+  id: string;
 }
 
 interface PerspectivesFileState
@@ -561,6 +562,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
     // label has the shape /regex/flags.
     // flags will be ignored.
     const patternFacet = component.props.serialisedProperty.constrainingFacets.pattern;
+    // eslint-disable-next-line no-useless-escape
     let pattern = "[^\./]+\/[^\./]+" // default pattern;
     if ( patternFacet )
     {
@@ -571,7 +573,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
     switch (component.state.state) {
       case READONLY:
         return (
-          <div onKeyDown={e => component.handleKeyDownInReadOnly(e)} tabIndex={component.state.roleFileName ? -1 : 0}>
+          <div  id={component.props.id} onKeyDown={e => component.handleKeyDownInReadOnly(e)} tabIndex={component.state.roleFileName ? -1 : 0}>
             <Row>
               {
                   component.fileIsImage() && component.state.roleFileName ?
