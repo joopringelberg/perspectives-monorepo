@@ -21,7 +21,10 @@
 	],
 	"settings": {
 		"conventionalCommits.scopes": [
-			"accessibility"
+			"accessibility",
+			"core",
+			"mycontexts",
+			"perspectives-react"
 		]
 	}
 }

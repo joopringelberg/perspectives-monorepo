@@ -251,6 +251,11 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
         e.preventDefault();
         component.setState({ selectedField: (component.state.selectedField - 1)});
       }
+      else if (e.key !== "Tab")
+      {
+        e.stopPropagation();
+        e.preventDefault();
+      }
     }
 
     // If there are no properties defined on this role type,
