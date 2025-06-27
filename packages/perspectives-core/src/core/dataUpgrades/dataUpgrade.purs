@@ -145,6 +145,16 @@ runDataUpgrades = do
       -- This prevents the non-critical error messages on startup.
       updateModels02611
       )
+  
+  runUpgrade installedVersion "3.0.6"
+    (\_ -> do
+      runMonadPerspectivesTransaction'
+        false
+        (ENR $ EnumeratedRoleType sysUser)
+        do
+          updateModel_ ["model://perspectives.domains#System@3.0"] ["false"] (RoleInstance "")
+      addSettingsType
+      )
 
 
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
@@ -316,7 +326,8 @@ addSettingsType :: MonadPerspectives Unit
 addSettingsType = do
   systemId <- getMySystem
   PerspectRol rec@{allTypes} <- getPerspectRol (RoleInstance $ buitenRol systemId)
-  cacheAndSave (RoleInstance systemId) (PerspectRol rec {allTypes = [(EnumeratedRoleType settings)] `union` allTypes })
+  cacheAndSave (RoleInstance $ buitenRol systemId) (PerspectRol rec {allTypes = [(EnumeratedRoleType settings)] `union` allTypes })
+  saveMarkedResources
 
 updateModels02611:: MonadPerspectives Unit
 updateModels02611 = runMonadPerspectivesTransaction'
