@@ -521,6 +521,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               min={component.minInclusive()}
               max={component.maxInclusive()}
               {...(pattern ? { pattern: patternToSource(pattern) } : {})}
+              {... component.props.isselected ? {className: "text-light bg-secondary"} : {}}
             />
           </div>);
     }
