@@ -60,7 +60,8 @@ interface WWWComponentState {
 }
 
 class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponentState> {
-  screenUnsubscriber: Unsubscriber | undefined;
+  getScreenUnsubscriber: Unsubscriber | undefined;
+  getMeForContextUnsubscriber: Unsubscriber | undefined;
 
   constructor(props:  WWWComponentProps) {
     super(props);
@@ -82,7 +83,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       , openContext: mycontextStartPage
     };
     this.checkScreenSize = this.checkScreenSize.bind(this);
-    this.screenUnsubscriber = undefined;
+    this.getScreenUnsubscriber = undefined;
+    this.getMeForContextUnsubscriber = undefined;
     initUserMessaging(
       function ( message )
         {
@@ -208,11 +210,11 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     // Add message event listener for ServiceWorker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', (event) => {
-        console.log('Received message from ServiceWorker:', event.data);
+        // console.log('Received message from ServiceWorker:', event.data);
         if (event.data && event.data.type === 'NOTIFICATION_CLICK') {
           const roleId = event.data.roleId;
           if (roleId) {
-            console.log('Opening context from notification click:', roleId);
+            // console.log('Opening context from notification click:', roleId);
             component.tryToOpenContext(roleId);
           }
         }
@@ -232,9 +234,17 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   }
 
   componentDidUpdate(prevProps: Readonly<WWWComponentProps>, prevState: Readonly<WWWComponentState>): void {
-    // First, handle the normal screen update
+    const component = this;
+    const promises : Promise<any>[] = [];
     if (this.state.openContext !== prevState.openContext) {
-      this.getScreen(this.state.openContext!);
+      if (this.getMeForContextUnsubscriber) {
+        promises.push( PDRproxy.then( pproxy => pproxy.send(component.getMeForContextUnsubscriber!, function(){})));
+      }
+      if (this.getScreenUnsubscriber) {
+        promises.push( PDRproxy.then( pproxy => pproxy.send(component.getScreenUnsubscriber!, function(){})));
+      }
+      Promise.all( promises )
+        .then( () => component.getScreen( component.state.openContext! ))
       this.runAccessibilityScan('main-content');
     }
   }
@@ -356,28 +366,36 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       .then( pproxy => pproxy.getContextType( context ) )
       .then( contextType => 
         {
-          component.addUnsubscriber(
-            PDRproxy.then( pproxy => pproxy.getMeForContext(
-              externalRole,
-              // userRoles includes roles from aspects.
-              function(userRoles)
+          PDRproxy.then( pproxy => pproxy.getMeForContext(
+            externalRole,
+            // userRoles includes roles from aspects.
+            function(userRoles)
+            {
+              // It may happen that there are no user role types.
+              if ( userRoles.length == 0)
               {
-                // It may happen that there are no user role types.
-                if ( userRoles.length == 0)
+                return UserMessagingPromise.then( um => 
+                  um.addMessageForEndUser(
+                    { title: i18next.t("screen_no_usertype_for_context_title", { ns: 'preact' }) 
+                    , message: i18next.t("screen_no_usertype_for_context_message", {ns: 'preact'})
+                    , error: "No result from GetMeFromContext"
+                    }));
+              }
+              else
+              {
+                if (component.getScreenUnsubscriber) 
                 {
-                  UserMessagingPromise.then( um => 
-                    um.addMessageForEndUser(
-                      { title: i18next.t("screen_no_usertype_for_context_title", { ns: 'preact' }) 
-                      , message: i18next.t("screen_no_usertype_for_context_message", {ns: 'preact'})
-                      , error: "No result from GetMeFromContext"
-                      }));
+                  pproxy.send( component.getScreenUnsubscriber, function(){})
+                    .then( () => component.fetchScreen(contextType, userRoles[0], context));
                 }
                 else
                 {
                   component.fetchScreen(contextType, userRoles[0], context);
                 }
-              },
-              CONTINUOUS)))
+              }
+            },
+            CONTINUOUS))
+            .then( unsubscriber => component.getMeForContextUnsubscriber = unsubscriber )
           })
       .catch(e => UserMessagingPromise.then( um => 
         {
@@ -395,10 +413,6 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     const component = this;
     PDRproxy.then(function(pproxy)
       {
-        if (component.screenUnsubscriber)
-        {
-          pproxy.send(component.screenUnsubscriber, function(){});
-        }
         pproxy.getScreen(
           userRoleType
           , context
@@ -427,7 +441,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           }
         ).then( function(unsubscriber)
           {
-            component.screenUnsubscriber = unsubscriber;
+            component.getScreenUnsubscriber = unsubscriber;
           });
       });
   }

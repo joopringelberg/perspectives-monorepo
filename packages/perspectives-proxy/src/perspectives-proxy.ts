@@ -95,11 +95,11 @@ type Options = { pageHostingPDRPort?: (pdr: any) => MessagePort };
 
 export function configurePDRproxy(channeltype: "internalChannel" | "sharedWorkerChannel" | "hostPageChannel", options: Options): void 
 {
-  let sharedWorkerChannel;
+  let sharedWorkerChannel, sharedWorker;
   switch( channeltype )
   {
     case "sharedWorkerChannel":
-      const sharedWorker =  new SharedWorker(new URL('perspectives-sharedworker', import.meta.url), { type: 'module' })
+      sharedWorker =  new SharedWorker(new URL('perspectives-sharedworker', import.meta.url), { type: 'module' })
       //// Its port property is a MessagePort, as documented in https://developer.mozilla.org/en-US/docs/Web/API/MessagePort.
       sharedWorkerChannel = new SharedWorkerChannel( sharedWorker.port );
       sharedWorkerChannelResolver( sharedWorkerChannel );
@@ -598,6 +598,10 @@ export class PerspectivesProxy
       {
         cursor.wait(req);
       }
+    if (req.request === "Unsubscribe"){
+      // If we had been waiting for a response, we can now restore the cursor shape.
+      cursor.restore(req);
+    }
     return this.channel.send( fullRequest );
   }
 
