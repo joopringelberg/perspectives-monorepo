@@ -251,10 +251,15 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
         e.preventDefault();
         component.setState({ selectedField: (component.state.selectedField - 1)});
       }
-      else if (e.key !== "Tab")
+      else if (e.key === "Enter")
       {
         e.stopPropagation();
         e.preventDefault();
+      }
+      else if (e.key !== "Tab")
+      {
+        e.stopPropagation();
+        // e.preventDefault();
       }
     }
 
@@ -272,15 +277,17 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
             Object.values(perspective.properties)
               .filter( property => !component.props.suppressIdentifyingProperty || property.id !== perspective.identifyingProperty)
               .map((serialisedProperty, index) =>
-              <SmartFieldControlGroup
-                key={serialisedProperty.id}
-                hasFocus={index === component.state.selectedField}
-                serialisedProperty={serialisedProperty}
-                propertyValues={component.findValues( serialisedProperty.id )}
-                roleId={component.state.roleInstanceWithProps ? component.state.roleInstanceWithProps.roleId : undefined}
-                myroletype={component.props.perspective.userRoleType}
-                contextinstance={component.props.perspective.contextInstance}
-              />
+              <div onClick= {() => component.setState({selectedField: index})}>
+                <SmartFieldControlGroup
+                  key={serialisedProperty.id}
+                  hasFocus={index === component.state.selectedField}
+                  serialisedProperty={serialisedProperty}
+                  propertyValues={component.findValues( serialisedProperty.id )}
+                  roleId={component.state.roleInstanceWithProps ? component.state.roleInstanceWithProps.roleId : undefined}
+                  myroletype={component.props.perspective.userRoleType}
+                  contextinstance={component.props.perspective.contextInstance}
+                />
+                </div>
             )
           }
           { component.props.showControls ? <Controls/> : null}
