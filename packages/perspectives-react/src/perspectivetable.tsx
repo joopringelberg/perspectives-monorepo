@@ -247,11 +247,11 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
       {
         const value1 = r1.propertyValues[component.props.sortOnHiddenProperty]?.values[0];
         const value2 = r2.propertyValues[component.props.sortOnHiddenProperty]?.values[0];
-        if ((value1 as any) < (value2 as any))
+        if (parseInt( value1 ) < parseInt( value2 ))
         {
           return component.props.sortAscending ? LESS : GREATER;
         }
-        else if ((value1 as any) > (value2 as any))
+        else if (parseInt( value1 ) > parseInt( value2 ))
         {
           return component.props.sortAscending ? GREATER : LESS;
         }
