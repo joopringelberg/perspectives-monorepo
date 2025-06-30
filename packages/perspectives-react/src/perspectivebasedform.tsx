@@ -277,9 +277,11 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
             Object.values(perspective.properties)
               .filter( property => !component.props.suppressIdentifyingProperty || property.id !== perspective.identifyingProperty)
               .map((serialisedProperty, index) =>
-              <div onClick= {() => component.setState({selectedField: index})}>
+              <div 
+                onClick= {() => component.setState({selectedField: index})}
+                key={serialisedProperty.id}
+              >
                 <SmartFieldControlGroup
-                  key={serialisedProperty.id}
                   hasFocus={index === component.state.selectedField}
                   serialisedProperty={serialisedProperty}
                   propertyValues={component.findValues( serialisedProperty.id )}

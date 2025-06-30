@@ -243,7 +243,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
     const EQUAL = 0;
     function orderRoleInstances( r1: Roleinstancewithprops, r2: Roleinstancewithprops ) : number
     {
-      if (component.props.sortOnHiddenProperty && component.props.sortOnHiddenProperty !== undefined)
+      if (component.props.sortOnHiddenProperty !== undefined)
       {
         const value1 = r1.propertyValues[component.props.sortOnHiddenProperty]?.values[0];
         const value2 = r2.propertyValues[component.props.sortOnHiddenProperty]?.values[0];
@@ -260,7 +260,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
           return EQUAL;
         }
       }
-      return 0;
+      return EQUAL;
     }
     const component = this,
       perspective = component.props.perspective;

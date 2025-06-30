@@ -1,5 +1,5 @@
 import React, { } from "react";
-import { PDRproxy, RoleInstanceT, ContextInstanceT, Perspective, ValueT, FIREANDFORGET } from "perspectives-proxy";
+import { PDRproxy, RoleInstanceT, ContextInstanceT, Perspective, ValueT } from "perspectives-proxy";
 import { deconstructContext, ModelDependencies, PerspectivesComponent, PerspectiveTable } from "perspectives-react";
 
 interface RecentContextsProps {
@@ -13,7 +13,7 @@ interface RecentContextsState {
 }
 
 export class RecentContexts extends PerspectivesComponent<RecentContextsProps, RecentContextsState> {
-  constructor(props: {}) {
+  constructor(props: RecentContextsProps) {
     super(props);
     this.state = { perspective: undefined};
   }
@@ -44,8 +44,8 @@ export class RecentContexts extends PerspectivesComponent<RecentContextsProps, R
     const component = this;
     if (this.props.openContext && this.props.openContext !== prevProps.openContext && this.state.perspective) {
       // If the openContext changes, we must check whether it is in the RecentContexts.
-      // TODO: je moet de bindingen van de RecentContexts ophalen en kijken of de openContext er al in zit.
-      if ( Object.values( this.state.perspective!.roleInstances ).find( ({filler}) => filler ? filler === this.props.openContext : false ) === undefined ) {
+      const roleWithContext = Object.values( this.state.perspective!.roleInstances ).find( ({filler}) => filler ? filler === this.props.openContext : false );
+      if ( roleWithContext === undefined ) {
         // The openContext is not in the RecentContexts, add it.
         PDRproxy.then( pproxy => {
           pproxy.bind( deconstructContext( component.props.systemIdentifier as string ) as ContextInstanceT,
@@ -60,12 +60,7 @@ export class RecentContexts extends PerspectivesComponent<RecentContextsProps, R
       else {
         // It is in the RecentContexts, update its time stamp.
         PDRproxy.then( pproxy => {
-          pproxy.getRoleBinders( this.props.openContext!, ModelDependencies.system, ModelDependencies.recentContexts, (binders: RoleInstanceT[]) => {
-            const recentContext = binders[0];
-            if ( recentContext ) {
-            pproxy.setProperty( recentContext, ModelDependencies.lastShownOnScreen, new Date().valueOf().toString() as ValueT, ModelDependencies.sysUser );
-            }
-          }, FIREANDFORGET); 
+          pproxy.setProperty( roleWithContext.roleId, ModelDependencies.lastShownOnScreen, new Date().valueOf().toString() as ValueT, ModelDependencies.sysUser );
         })
       }
     }
