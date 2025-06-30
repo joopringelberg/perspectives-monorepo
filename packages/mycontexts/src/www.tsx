@@ -29,6 +29,7 @@ import ConnectedToAMQP from './connectedToAMQP';
 import { InternetConnectivityCheck } from './internetConnectivityCheck';
 import { changeLanguage } from './i18next';
 import { About } from './about';
+import FlippingTitle from './flippingTitle';
 
 const mycontextStartPage = __STARTPAGE__ as RoleInstanceT; 
 
@@ -666,7 +667,11 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
       <Navbar.Brand href="#home" className='text-light navbar-title'>
-        <h1 className="fs-4 mb-0">{this.state.title}</h1>
+        <FlippingTitle
+          title={this.state.title} 
+          userRoleType={this.state.screen ? this.state.screen.userRole : (this.state.openContextUserType ? deconstructLocalName(this.state.openContextUserType) : '')} 
+        />
+
       </Navbar.Brand>
       <InternetConnectivityCheck reportBack={ (isOnline : boolean) => component.state.isOnline !== isOnline ? component.setState({isOnline}) : null}/>
       {component.state.systemIdentifier ? <ConnectedToAMQP roleinstance={ externalRole( component.state.systemIdentifier )} isOnline={component.state.isOnline} /> : null}

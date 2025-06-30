@@ -23,7 +23,7 @@
 module Perspectives.Representation.ScreenDefinition where
 
 import Prelude
-
+ 
 import Data.Array (length, mapWithIndex)
 import Data.Either (Either(..))
 import Data.Eq.Generic (genericEq)
@@ -64,7 +64,7 @@ type MainScreenElements =
 
 -- When a WhoWhatWhereScreen is defined, we will not have tabs, rows or columns beside that.
 -- However, during transition to the new GUI, we will have to support both.
-type ScreenDefinitionElements f = {title :: Maybe String, whoWhatWhereScreen :: Maybe WhoWhatWhereScreenDef | f}
+type ScreenDefinitionElements f = {title :: Maybe String, userRole :: String, whoWhatWhereScreen :: Maybe WhoWhatWhereScreenDef | f}
 
 newtype ScreenDefinition = ScreenDefinition (ScreenDefinitionElements MainScreenElements)
 

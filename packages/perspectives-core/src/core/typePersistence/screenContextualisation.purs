@@ -5,7 +5,7 @@ import Prelude
 import Control.Monad.Reader (ReaderT, ask)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (catMaybes, elemIndex, filter, filterA, head, null)
-import Data.Maybe (Maybe(..), fromJust, isJust)
+import Data.Maybe (Maybe(..), fromJust, isJust) 
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Partial.Unsafe (unsafePartial)
@@ -22,13 +22,13 @@ import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..),
 import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..), roletype2string)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
-import Perspectives.Types.ObjectGetters (allEnumeratedRoles, aspectsOfRole)
+import Perspectives.Types.ObjectGetters (allEnumeratedRoles, aspectsOfRole) 
 
 type Context = {userRoleInstance :: RoleInstance, contextType :: ContextType, contextInstance :: ContextInstance }
 type InContext = ReaderT Context MonadPerspectivesQuery
 
-contextualiseScreen :: ScreenDefinition -> String -> InContext (Maybe ScreenDefinition)
-contextualiseScreen (ScreenDefinition{title, tabs, rows, columns, whoWhatWhereScreen}) computedTitle = do
+contextualiseScreen :: ScreenDefinition -> String -> String -> InContext (Maybe ScreenDefinition)
+contextualiseScreen (ScreenDefinition{title, tabs, rows, columns, whoWhatWhereScreen}) computedTitle translatedUserRoleType = do
   tabs' <- emptyArrayToNothing <<< map catMaybes <$> (for tabs (traverse contextualiseTab))
   rows' <- emptyArrayToNothing <<< map catMaybes <$> (for rows (traverse contextualiseScreenElementDef))
   columns' <- (emptyArrayToNothing <<< map catMaybes) <$> (for columns (traverse contextualiseScreenElementDef))
@@ -36,6 +36,7 @@ contextualiseScreen (ScreenDefinition{title, tabs, rows, columns, whoWhatWhereSc
   pure $ Just $ ScreenDefinition
     {
       title: if isResourceIdentifier computedTitle then title else Just computedTitle
+      , userRole: translatedUserRoleType
       , tabs: Nothing
       , rows: Nothing
       , columns: Nothing

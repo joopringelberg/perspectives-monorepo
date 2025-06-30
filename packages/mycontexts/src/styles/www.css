@@ -130,3 +130,25 @@ html body .dropdown-menu .dropdown-item {
   white-space: nowrap;
   position: absolute;
 }
+
+/* FLIPPING TITLE */
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.navbar-title h1 {
+  transition: all 0.3s ease;
+}
+
+.navbar-title h1:hover {
+  opacity: 0.9;
+}
+
+@media (max-width: 576px) {
+  .navbar-title h1 {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

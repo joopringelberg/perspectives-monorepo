@@ -83,8 +83,9 @@ screenForContextAndUser :: RoleInstance -> RoleType -> ContextType -> (ContextIn
 screenForContextAndUser userRoleInstance userRoleType contextType contextInstance = do
   DomeinFile df <- lift2MPQ $ retrieveDomeinFile (DomeinFileId $ unsafePartial typeUri2ModelUri_ $ unwrap contextType)
   title <- lift (getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST $ externalRoleType contextType) (externalRole contextInstance))
+  translatedUserRoleType <- lift $  lift $ translateType (roletype2string userRoleType) 
   case lookup (ScreenKey contextType userRoleType) df.screens of
-    Just s -> populateScreen s title
+    Just s -> populateScreen s title translatedUserRoleType
     Nothing -> do 
       -- We should take aspects in consideration!
       -- `userRoleType` may have been added as an aspect user role to `contextType`. In such a case we will never find 
@@ -98,22 +99,22 @@ screenForContextAndUser userRoleInstance userRoleType contextType contextInstanc
       case head typesWithScreen of 
         Just typeWithScreen -> case lookup (ScreenKey typeWithScreen userRoleType) df.screens of
           Just s -> do 
-            mscreen <- runReaderT (contextualiseScreen s title) {userRoleInstance, contextType, contextInstance} 
+            mscreen <- runReaderT (contextualiseScreen s title translatedUserRoleType) {userRoleInstance, contextType, contextInstance} 
             case mscreen of  
-              Nothing -> defaultScreen title
+              Nothing -> defaultScreen title translatedUserRoleType
               Just contextualisedScreen -> pure $ SerialisedScreen $ writeJSON contextualisedScreen
-          Nothing -> defaultScreen title
-        Nothing -> defaultScreen title
+          Nothing -> defaultScreen title translatedUserRoleType
+        Nothing -> defaultScreen title translatedUserRoleType
   where 
 
-  populateScreen :: ScreenDefinition -> String -> MonadPerspectivesQuery SerialisedScreen
-  populateScreen s@(ScreenDefinition {title, tabs, rows, columns, whoWhatWhereScreen}) computedTitle = do 
+  populateScreen :: ScreenDefinition -> String -> String -> MonadPerspectivesQuery SerialisedScreen
+  populateScreen s@(ScreenDefinition {title, tabs, rows, columns, whoWhatWhereScreen}) computedTitle translatedUserRoleType = do 
     if isJust whoWhatWhereScreen
       then do
         -- Now populate the screen definition with instance data.
         -- However, prevent chat roles from ending up in the What section. Add them to the Who section as ChatDefs.
         (ScreenDefinition screenInstance :: ScreenDefinition) <- lift $ addPerspectives s userRoleInstance contextInstance
-        pure $ SerialisedScreen $ writeJSON (ScreenDefinition $ screenInstance {title = if isResourceIdentifier computedTitle then title else Just computedTitle})
+        pure $ SerialisedScreen $ writeJSON (ScreenDefinition $ screenInstance {title = if isResourceIdentifier computedTitle then title else Just computedTitle, userRole = translatedUserRoleType})
       else do
         (perspectives :: Array SerialisedPerspective') <- lift $ lift (contextInstance ##= perspectivesForContextAndUser' userRoleInstance userRoleType)
         perspectivesOnChats :: Array SerialisedPerspective' <- lift $ lift $ filterA isChat perspectives
@@ -121,6 +122,7 @@ screenForContextAndUser userRoleInstance userRoleType contextType contextInstanc
         wheretoContextRoles <- pure $ makeTableFormDef userRoleType <$> filter isOnContextRole perspectives
         constructedScreen <- lift $ addPerspectives (ScreenDefinition
           { title: if isResourceIdentifier computedTitle then title else Just computedTitle
+          , userRole: translatedUserRoleType
           , tabs: Nothing
           , rows: Nothing
           , columns: Nothing
@@ -133,9 +135,9 @@ screenForContextAndUser userRoleInstance userRoleType contextType contextInstanc
           userRoleInstance
           contextInstance
         pure $ SerialisedScreen $ writeJSON constructedScreen
-  defaultScreen :: String -> MonadPerspectivesQuery SerialisedScreen
-  defaultScreen title = do
-    screenInstance <- lift $ constructDefaultScreen userRoleInstance userRoleType contextInstance title
+  defaultScreen :: String -> String -> MonadPerspectivesQuery SerialisedScreen
+  defaultScreen title translatedUserRoleType = do
+    screenInstance <- lift $ constructDefaultScreen userRoleInstance userRoleType contextInstance title translatedUserRoleType
     pure $ SerialisedScreen $ writeJSON screenInstance
     
 computeTitle :: Array SerialisedPerspective' -> Maybe String
@@ -147,8 +149,8 @@ computeTitle perspectives = do
     Nothing -> Nothing
 
 -- | A screen with a tab for each perspective the user has in this context.
-constructDefaultScreen :: RoleInstance -> RoleType -> ContextInstance -> String -> AssumptionTracking ScreenDefinition
-constructDefaultScreen userRoleInstance userRoleType cid title = do
+constructDefaultScreen :: RoleInstance -> RoleType -> ContextInstance -> String -> String -> AssumptionTracking ScreenDefinition 
+constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRoleType = do
   (perspectives :: Array SerialisedPerspective') <- runArrayT $ perspectivesForContextAndUser' userRoleInstance userRoleType cid
   perspectivesOnChats :: Array SerialisedPerspective' <- lift $ filterA isChat perspectives
   userRoles <- pure $ makeTableFormDef userRoleType <$> (filter isOnUserRole perspectives) `difference` perspectivesOnChats
@@ -157,6 +159,7 @@ constructDefaultScreen userRoleInstance userRoleType cid title = do
   wheretoContextRoles <- pure $ makeTableFormDef userRoleType <$> filter isOnContextRole perspectives
   pure $ ScreenDefinition
     { title: Just title
+    , userRole: translatedUserRoleType
     , tabs: Nothing
     , rows: Nothing
     , columns: Nothing
@@ -277,7 +280,7 @@ instance addPerspectivesScreenDefinition :: AddPerspectives ScreenDefinition whe
     whoWhatWhereScreen <- case r.whoWhatWhereScreen of 
       Nothing -> pure Nothing
       Just t -> Just <$> addPerspectives t user ctxt
-    pure $ ScreenDefinition {title: r.title, tabs, rows, columns, whoWhatWhereScreen}
+    pure $ ScreenDefinition {title: r.title, userRole: r.userRole, tabs, rows, columns, whoWhatWhereScreen}
 
 instance AddPerspectives WhoWhatWhereScreenDef where
   addPerspectives (WhoWhatWhereScreenDef r) user ctxt = do

@@ -145,6 +145,7 @@ export type InputType = "text" | "checkbox" | "datetime-local" | "date" | "time"
 ////////////////////////////////////////////
 export type ScreenDefinition = MainScreenElements & {
   title?: string;
+  userRole: string; // The translated user role type, e.g. "My Role" or "Mijn Rol"
   whoWhatWhereScreen?: WhoWhatWhereScreenDef;
 };
 

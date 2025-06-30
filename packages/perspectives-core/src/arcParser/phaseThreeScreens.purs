@@ -122,6 +122,7 @@ handleScreens screenEs = do
               chats <- constructChatDefs
               screenDef <- pure $ ScreenDefinition 
                 { title: Nothing
+                , userRole: ""
                 , tabs: Nothing
                 , rows: Nothing
                 , columns: Nothing
@@ -158,6 +159,7 @@ handleScreens screenEs = do
                 Just cs -> Just <$> traverse column cs
               pure $ ScreenDefinition
                 { title
+                , userRole: ""
                 , tabs: fromFoldable <$> tabs'
                 , rows: fromFoldable <$> rows'
                 , columns: fromFoldable <$> columns'
