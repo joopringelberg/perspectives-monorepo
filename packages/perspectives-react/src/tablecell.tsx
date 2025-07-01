@@ -151,6 +151,9 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
   handleClick ()
   {
     this.inputRef.current?.dispatchEvent( new CustomEvent('SetColumn', { detail: this.props.propertyname, bubbles: true }) );
+    if (this.props.isselected && !this.state.editable && !this.props.iscard) {
+      this.setState({editable: true});
+    }
   }
 
   handleKeyDown(event : React.KeyboardEvent)

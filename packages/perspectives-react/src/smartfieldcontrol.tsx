@@ -167,7 +167,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     }
     const component = this;
     const oldValue = component.valueOnProps();
-    if (component.props.roleId)
+    if (component.props.roleId !== undefined)
     {
       if (val == "")
       {

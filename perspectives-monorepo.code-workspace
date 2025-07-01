@@ -24,7 +24,8 @@
 			"accessibility",
 			"core",
 			"mycontexts",
-			"perspectives-react"
+			"perspectives-react",
+			"monorepo"
 		]
 	}
 }
