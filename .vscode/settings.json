@@ -1,0 +1,7 @@
+{
+  "purescript.outputDirectory": "packages/perspectives-core/output/",
+  "purescript.sourcePath": "packages/perspectives-core/src",
+  "purescript.addSpagoSources": true,
+  "purescript.buildCommand": "cd packages/perspectives-core && spago build --purs-args '--output ../perspectives-core/output'",
+  "purescript.addNpmPath": true
+}
