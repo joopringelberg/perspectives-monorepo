@@ -25,10 +25,11 @@ import SmartFieldControl from "./smartfieldcontrol.js";
 import RoleInstance from "./roleinstance.js";
 
 import "././styles/components.css";
-import { PropertyType, RoleInstanceT, RoleType, Perspective, PropertyValues, SerialisedProperty } from "perspectives-proxy";
+import { PropertyType, RoleInstanceT, RoleType, Perspective, PropertyValues, SerialisedProperty, mapRange, InputType } from "perspectives-proxy";
 import { WithOutBehavioursProps } from "./adorningComponentWrapper";
 import ModelDependencies from "./modelDependencies";
 import { t } from "i18next";
+import { formatPropertyValue } from "./utilities";
 
 ////////////////////////////////////////////////////////////////////////////////
 // NAVIGATING IN A GRID AND A CELL
@@ -85,6 +86,7 @@ interface TableCellState
 export default class TableCell extends PerspectivesComponent<TableCellProps, TableCellState>
 {
   inputRef: React.RefObject<HTMLElement | null>;
+  private inputType: InputType;
   constructor (props : TableCellProps)
   {
     super(props);
@@ -97,6 +99,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     // It is used to dispatch the custom SetRow and SetColumn events.
     // It also receives focus.
     this.inputRef = createRef();
+    this.inputType = mapRange( this.props.serialisedProperty.range )
   }
 
   componentDidMount()
@@ -197,7 +200,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     }
   }
 
-  values()
+  values() : string[]
   {
     if (this.props.propertyname == ModelDependencies.roleWithIdProp)
     {
@@ -219,7 +222,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
   render ()
   {
     const component = this;
-    const title = component.values().join(", ") ? component.values().join(", ") : deconstructLocalName(component.props.propertyname);
+    const title = component.values().length > 0 ? formatPropertyValue(component.values(), component.inputType) : deconstructLocalName(component.props.propertyname);
 
     if (component.props.iscard)
     {
@@ -267,8 +270,9 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                     aria-label={title}
                     // Other properties to pass on.
                     tabIndex={receiveFocusByKeyboard}
-                    className="shadow bg-secondary text-light"
+                    className="shadow"
                     onClick={component.handleClick}
+                    type={component.inputType == 'date' ? 'text' : component.inputType || 'text'}
                   />
                 ]}
               </RoleInstance>
@@ -287,6 +291,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                 className="shadow"
                 onClick={component.handleClick}
                 aria-label={title} // deconstructLocalName ( component.props.propertyname )
+                type={component.inputType == 'date' ? 'text' : component.inputType || 'text'}
               />
           </td>);
       }

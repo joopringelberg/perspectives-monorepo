@@ -35,15 +35,18 @@ import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..), fst)
+import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Foreign.Object (Object, empty, fromFoldable, insert, isEmpty, keys, lookup)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (type (~~>), AssumptionTracking, MonadPerspectives, (##>), (##>>))
 import Perspectives.Data.EncodableMap (fromFoldable, lookup) as EM
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
+import Perspectives.Extern.Utilities (formatDateTime)
 import Perspectives.Identifiers (isExternalRole, qualifyWith)
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextType, getActiveRoleStates, getActiveStates, roleType_)
+import Perspectives.Instances.Values (parseNumber)
 import Perspectives.ModelDependencies (roleWithId)
 import Perspectives.ModelTranslation (translateType)
 import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
@@ -52,13 +55,14 @@ import Perspectives.Query.UnsafeCompiler (context2context, context2role, getDyna
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.Class.PersistentType (EnumeratedRoleType, getEnumeratedRole)
-import Perspectives.Representation.Class.Property (class PropertyClass, hasFacet)
+import Perspectives.Representation.Class.Property (class PropertyClass, hasFacet, rangeOfPropertyType)
 import Perspectives.Representation.Class.Property (getProperty, isCalculated, functional, mandatory, range, Property(..), constrainingFacets) as PROP
 import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, allProperties, bindingOfADT, perspectivesOfRoleType, roleKindOfRoleType)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec(..), expandPropSet, expandPropertyVerbs, expandVerbs)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
+import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ScreenDefinition (WidgetCommonFieldsDef, PropertyRestrictions)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), PropertyType(..), RoleKind(..), RoleType(..), propertytype2string, roletype2string)
@@ -526,7 +530,19 @@ getReadableNameFromTelescope predicate adt rid = do
           values <- runArrayT $ getPropertyValues pt rid
           case head values of 
             Nothing -> pure $ unwrap rid
-            Just (Value v) -> pure v
+            Just (Value v) -> do 
+              r <- lift $ rangeOfPropertyType pt
+              case r of 
+                PDateTime -> do 
+                  epoch <- parseNumber v
+                  liftEffect $ formatDateTime epoch "nl-NL" "{\"dateStyle\": \"short\", \"timeStyle\": \"short\"}"
+                PDate -> do 
+                  epoch <- parseNumber v
+                  liftEffect $ formatDateTime epoch "nl-NL" "{\"dateStyle\": \"short\"}"
+                PTime -> do 
+                  epoch <- parseNumber v
+                  liftEffect $ formatDateTime epoch "nl-NL" "{\"timeStyle\": \"short\"}"
+                _ -> pure v
         Nothing -> do 
           bnds <- runArrayT $ binding rid
           case head bnds of 

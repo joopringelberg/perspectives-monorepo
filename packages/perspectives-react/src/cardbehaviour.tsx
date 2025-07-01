@@ -1,6 +1,6 @@
 // import {PDRproxy} from "perspectives-proxy";
 
-import {PDRproxy, FIREANDFORGET, RoleInstanceT, PropertyType, RoleType, ValueT, PropertySerialization, ContextInstanceT, RoleOnClipboard} from "perspectives-proxy";
+import {PDRproxy, FIREANDFORGET, RoleInstanceT, PropertyType, RoleType, ValueT, PropertySerialization, ContextInstanceT, RoleOnClipboard, InputType} from "perspectives-proxy";
 import {deconstructContext, isQualifiedName} from "./urifunctions";
 import { default as ModelDependencies } from "./modelDependencies";
 import {UserMessagingPromise} from "./userMessaging.js";
@@ -42,6 +42,7 @@ export interface InnerCardProperties {
   title: string;
   "aria-label": string;
   className?: string;
+  type?: InputType
 }
 
 export interface CardProperties extends InnerCardProperties{
@@ -616,7 +617,7 @@ export function getBehaviourAdder(name: string): BehaviourAdder {
 ////////////////////////////////////////
 export function addRoleToClipboard(roleInstance : RoleInstanceT, roleData: RoleOnClipboard,systemExternalRole : RoleInstanceT, myroletype : RoleType) : Promise<RoleInstanceT | void>
 {
-  let properties: PropertySerialization = {};
+  const properties: PropertySerialization = {};
   properties[ModelDependencies.itemOnClipboardSelected] =  ["true" as ValueT ];
   properties[ModelDependencies.itemOnClipboardClipboardData] = [JSON.stringify(roleData) as ValueT];
   const itemOnClipboard = 

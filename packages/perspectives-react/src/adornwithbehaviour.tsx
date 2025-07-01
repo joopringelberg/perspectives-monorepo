@@ -85,6 +85,7 @@ export class AdornWithBehaviour extends React.Component<AdornWithBehaviourProps>
           title={this.props.title} 
           aria-label={this.props["aria-label"]} 
           className={this.props.className}
+          type={this.props.type}
           />
       </div>
     );

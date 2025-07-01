@@ -29,6 +29,7 @@ import {UserMessagingPromise} from "./userMessaging.js";
 import i18next from "i18next";
 import {PerspectivesFile} from "./perspectivesFile.js";
 import {MarkDownWidget} from "./markdownWidget.js";
+import { formatPropertyValue } from "./utilities.js";
 
 ////////////////////////////////////////////////////////////////////////////////
 // TABINDEX VALUES
@@ -134,62 +135,9 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
   // Returns the first value in the `propertyValues` prop, or the empty string.
   valueOnProps() : string
   {
-    function epoch_to_datetime_local (epoch : string)
-    {
-      const dt = new Date( parseInt( epoch ) );
-      dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
-      return dt.toISOString().slice(0,16);
-    }
-
-    // returns either "hh:mm" or "hh:mm.ss"
-    function milliseconds_to_time (millis : string)
-    {
-      // If I don't subtract 
-      const tm = new Date( parseInt( millis ) );
-      return pad(tm.getUTCHours()) + ":" + pad(tm.getUTCMinutes()) + (tm.getUTCSeconds() ? ":" + pad(tm.getUTCMilliseconds()) : "");
-    }
-
-    // returns "yyyy-mm-dd"
-    function epoch_to_date( epoch : string )
-    {
-      const dt = new Date( parseInt( epoch ) );
-      return dt.getFullYear() + "-" + pad( (dt.getMonth() + 1) ) + "-" + pad( dt.getDate() );
-    }
-    function pad(n : number)
-    {
-      if (n < 10)
-      {
-        return "0" + n;
-      }
-      else
-      {
-        return n + "";
-      }
-    }
-  
     if (this.props.propertyValues)
     {
-      if (this.props.propertyValues.values[0])
-      {
-        switch (this.inputType) {
-          case "datetime-local":
-            // a datetime is represented as a timestamp (milliseconds sinds epoch).
-            return epoch_to_datetime_local( this.props.propertyValues.values[0] );  
-          case "date":
-            // A date is represented as a timestamp, but without a time component.
-            return epoch_to_date ( this.props.propertyValues.values[0] );
-          case "time":
-            // a time is represented in terms of milliseconds.
-            // We have to provide a string in the form "hh:mm"
-            return milliseconds_to_time ( this.props.propertyValues.values[0] );
-          default:
-            return this.props.propertyValues.values[0];
-        }
-      }
-      else 
-      {
-        return "";
-      }
+      return formatPropertyValue(this.props.propertyValues.values, this.inputType);
     }
     else
     {

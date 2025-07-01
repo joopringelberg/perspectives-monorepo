@@ -42,6 +42,7 @@ import Data.String.Regex (regex, replace) as REGEX
 import Data.String.Regex.Flags (noFlags)
 import Data.Tuple (Tuple(..))
 import Data.Unit (Unit, unit)
+import Effect (Effect)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
@@ -153,12 +154,12 @@ formatDateTime_ dts locales optionss _ = try
   (ArrayT $ case head dts, head locales, head optionss of
     Just dt, Just locale, Just options -> do
       epoch <- parseNumber dt
-      runArrayT $ formatDateTime epoch locale options
+      runArrayT $ liftEffect $ formatDateTime epoch locale options
     _, _, _ -> pure [])
   >>= handleExternalFunctionError "model://perspectives.domains#Utilities$FormatDateTime"
 
-formatDateTime :: Number -> Locale -> FormatOptions -> MonadPerspectivesQuery String
-formatDateTime dt locale options = liftEffect $ runEffectFn3 formatDateTimeImpl dt locale options
+formatDateTime :: Number -> Locale -> FormatOptions -> Effect String
+formatDateTime dt locale options = runEffectFn3 formatDateTimeImpl dt locale options
 
 foreign import formatDateTimeImpl :: EffectFn3 Number Locale FormatOptions String
 

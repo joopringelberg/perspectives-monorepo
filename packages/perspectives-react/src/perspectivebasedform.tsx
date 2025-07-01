@@ -303,12 +303,12 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
 // This component is used to display a role in a card.
 ////////////////////////////////////////////////////////////////////////////////
 
-const RoleCard: React.FC<CardProperties> = ({title, tabIndex, onClick, ...rest}) => {
+const RoleCard: React.FC<CardProperties> = (props) => {
   // The rest will be aria-label and className.
-  return (<Card {...rest}>
+  return (<Card aria-label={props["aria-label"]} className={props.className}>
     <Card.Body className="navbarCard">
       <Card.Text>
-        {title}
+        {props.title}
       </Card.Text>
     </Card.Body>
   </Card>);

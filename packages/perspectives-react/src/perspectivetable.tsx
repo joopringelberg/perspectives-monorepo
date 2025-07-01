@@ -25,14 +25,15 @@ import TableItemContextMenu from "./tableItemContextMenu";
 // Displays the value of prop cardcolumn of RoleTable (a property of the role).
 
 
-const RoleCard: React.FC<CardProperties> = ({title, className, ...rest}) => {
+const RoleCard: React.FC<CardProperties> = (props) => {
 
   return  <Form.Control
             readOnly
-            plaintext
-            className={`ps-2 ${className || ''}`}
-            value={title}
-            {...rest}
+            value={props.title}
+            
+            className={`ps-2 ${props.className || ''}`}
+            aria-label={props["aria-label"] || props.title}
+            type={props.type || 'text'}
             />;
 }
 

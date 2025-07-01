@@ -18,6 +18,8 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
+import { InputType } from "perspectives-proxy/dist/perspectivesshape";
+
 // Use this function to open a page relative to the origin of the application.
 // Don't rely on the website root (/), as we may serve the app from a subdirectory like "/remotetest/"
 export function thisAppsLocation()
@@ -25,4 +27,62 @@ export function thisAppsLocation()
   const segments = location.pathname.split("/");
   segments.pop();
   return location.origin +  segments.join("/") + "/";
+}
+
+export function formatPropertyValue(propertyValues: string[], inputType: InputType) : string
+{
+  function epoch_to_datetime_local (epoch : string)
+  {
+    const dt = new Date( parseInt( epoch ) );
+    dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
+    return dt.toISOString().slice(0,16);
+  }
+
+  // returns either "hh:mm" or "hh:mm.ss"
+  function milliseconds_to_time (millis : string)
+  {
+    // If I don't subtract 
+    const tm = new Date( parseInt( millis ) );
+    return pad(tm.getUTCHours()) + ":" + pad(tm.getUTCMinutes()) + (tm.getUTCSeconds() ? ":" + pad(tm.getUTCMilliseconds()) : "");
+  }
+
+  // returns "yyyy-mm-dd"
+  function epoch_to_date( epoch : string )
+  {
+    const dt = new Date( parseInt( epoch ) );
+    return dt.getFullYear() + "-" + pad( (dt.getMonth() + 1) ) + "-" + pad( dt.getDate() );
+  }
+  function pad(n : number)
+  {
+    if (n < 10)
+    {
+      return "0" + n;
+    }
+    else
+    {
+      return n + "";
+    }
+  }
+
+    if (propertyValues[0])
+    {
+      switch (inputType) {
+        case "datetime-local":
+          // a datetime is represented as a timestamp (milliseconds sinds epoch).
+          return epoch_to_datetime_local( propertyValues[0] );  
+        case "date":
+          // A date is represented as a timestamp, but without a time component.
+          return epoch_to_date ( propertyValues[0] );
+        case "time":
+          // a time is represented in terms of milliseconds.
+          // We have to provide a string in the form "hh:mm"
+          return milliseconds_to_time ( propertyValues[0] );
+        default:
+          return propertyValues[0];
+      }
+    }
+    else 
+    {
+      return "";
+    }
 }
