@@ -155,6 +155,10 @@ model://perspectives.domains#System:
                 translations:
                   en: Create invitation
                   nl: Maak uitnodiging
+              ResetInvertedQueryDatabase:
+                translations:
+                  nl: Herstel omgekeerde query database
+                  en: Reset inverted query database
           markdowns:
             0:
               translations:
@@ -821,3 +825,28 @@ model://perspectives.domains#System:
           translations:
             en: Last name
             nl: Achternaam
+    Addressable:
+      translations:
+        nl: Adresseerbaar
+        en: Adressable
+      properties:
+        Country:
+          translations:
+            nl: Land
+            en: Country
+        City:
+          translations:
+            nl: Woonplaats
+            en: City
+        PostalCode:
+          translations:
+            nl: Postcode
+            en: Postal code
+        HouseNumber:
+          translations:
+            nl: Huisnummer
+            en: Housenumber
+        Street:
+          translations:
+            nl: Straat
+            en: Street

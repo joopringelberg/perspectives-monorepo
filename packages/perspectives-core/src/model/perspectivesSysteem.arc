@@ -95,6 +95,16 @@ domain model://perspectives.domains#System
       -- PDRDEPENDENCY
       property PublicKey (String)
 
+  user Addressable
+    property Street (String)
+    property HouseNumber (String)
+    property PostalCode (String)
+    property City (String)
+    property Country (String)
+    property EmailAddress (Email)
+    property Phone (String)
+      -- pattern = "^(\\+|00)?[0-9]{1,3}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,9}$"
+
   -- TheWorld is shared by everyone. It is identified by def:#TheWorld.
   case TheWorld
     indexed sys:TheWorld
@@ -103,6 +113,7 @@ domain model://perspectives.domains#System
     -- PDRDEPENDENCY
     user PerspectivesUsers (relational)
       aspect sys:Identifiable
+      aspect sys:Addressable
       -- The unique key provided to each new participant in the Perspectives Trusted Network by one of his peers.
       -- It can be used to store a limited number of media files in the perspectives sharedfile storage.
       -- PDRDEPENDENCY (actually, a MyContexts dependency)
@@ -120,6 +131,7 @@ domain model://perspectives.domains#System
     
     user NonPerspectivesUsers (relational)
       aspect sys:Identifiable
+      aspect sys:Addressable
 
     -- PDRDEPENDENCY
     user Initializer = sys:Me

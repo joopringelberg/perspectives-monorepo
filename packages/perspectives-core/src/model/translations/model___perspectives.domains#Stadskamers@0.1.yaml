@@ -5,6 +5,34 @@ model://perspectives.domains#Stadskamers:
         nl: Stadskamers app
         en: Stadskamers app
       users:
+        Medewerker:
+          translations:
+            nl: Medewerker
+            en: Employee
+          markdowns:
+            0:
+              translations:
+                orig: "### Dit is de Stadskamer App\n
+                  Je bent medewerker van een Stadskamer-organisatie.\n
+                  Onder *Waar*, hoofdje *Stadskamers* zie je de Stadskamer waar je werkt.\n
+                  Onder *Wat*, hoofdje *Mijn caseload* zie je de routes die je begeleidt."
+                nl: "### Dit is de Stadskamer App\n
+                  Je bent medewerker van een Stadskamer-organisatie.\n
+                  Onder *Waar*, hoofdje *Stadskamers* zie je de Stadskamer waar je werkt.\n
+                  Onder *Wat*, hoofdje *Mijn caseload* zie je de routes die je begeleidt."
+                en: "MISSING en"
+        Deelnemer:
+          translations:
+            nl: Deelnemer
+            en: Participant
+          markdowns:
+            0:
+              translations:
+                orig: "### Dit is de Stadskamer App\n
+                  Dit is jouw Stadskamer app. Onder *Waar*, hoofdje *Routes* zie je jouw route."
+                nl: "### Dit is de Stadskamer App\n
+                  Dit is jouw Stadskamer app. Onder *Waar*, hoofdje *Routes* zie je jouw route."
+                en: "MISSING en"
         Manager:
           translations:
             nl: Beheerder
@@ -13,9 +41,14 @@ model://perspectives.domains#Stadskamers:
             0:
               translations:
                 orig: "### Dit is de Stadskamer App\n
-                  Hier kun je Stadskamer-organisaties aanmaken en beheren."
-                nl: "### Dit is de Stadskamer App\n
-                   Hier kun je Stadskamer-organisaties aanmaken en beheren."
+                  Hier kun je Stadskamer-organisaties aanmaken en beheren.\n
+                  Je kunt vier rollen spelen:\n
+                  * **Deelnemer**: als je een Stadskamer bezoekt voor zijn activiteiten.\n
+                  * *Ervaringsdeskundige* (deze rol is er nog niet in de app): als je een Stadskamer bezoekt om te helpen bij de activiteiten.\n
+                  * **Medewerker**: als je in dienst bent bij een Stadskamer.\n
+                  * **Beheerder**: als je de app inricht voor een specifieke Stadskamer.\n
+                  Kies in het menu linksboven de rol die je wilt spelen. Het scherm past zich aan de rol aan."
+                nl: "MISSING nl"
                 en: "MISSING en"
       contextroles:
         MyCases:
@@ -58,9 +91,9 @@ model://perspectives.domains#Stadskamers:
                   Hier kun je routes beheren.\n
                   Maak een route aan met de knop [[action: CreateRoute|Nieuwe route]] (is ook een actie in het menu linksboven)."
                 nl: "### Stadskamer: routes\n
-                  Hier kun je routes beheren.\n
-                  Maak een route aan met de knop [[action: CreateRoute|Nieuwe route]] (is ook een actie in het menu linksboven)."
-                en: MISSING en
+                   Hier kun je routes beheren.\n
+                   Maak een route aan met de knop [[action: CreateRoute|Nieuwe route]] (is ook een actie in het menu linksboven)."
+                en: "MISSING en"
         Employees:
           translations:
             nl: Werknemers
@@ -91,8 +124,8 @@ model://perspectives.domains#Stadskamers:
                   * open de Locatie die je hebt aangemaakt\n
                   * maak een lege rol aan onder 'Wie' - LocatieManager\n
                   * vul de rol met de Medewerker-rol op het clipboard"
-                nl: MISSING nl
-                en: MISSING en
+                nl: "MISSING nl"
+                en: "MISSING en"
       contextroles:
         MyRoutes:
           translations:
@@ -129,6 +162,32 @@ model://perspectives.domains#Stadskamers:
                   * Doe een intake."
                 nl: "MISSING nl"
                 en: "MISSING en"
+          titles:
+            0:
+              translations:
+                orig: Basisgegevens
+                nl: MISSING nl
+                en: MISSING en
+            1:
+              translations:
+                orig: Route
+                nl: MISSING nl
+                en: MISSING en
+            2:
+              translations:
+                orig: Financiering
+                nl: MISSING nl
+                en: MISSING en
+            3:
+              translations:
+                orig: Risico-inventarisatie
+                nl: MISSING nl
+                en: MISSING en
+            4:
+              translations:
+                orig: Persoonsbeeld
+                nl: MISSING nl
+                en: MISSING en
         Begeleider:
           translations:
             nl: Begeleider
@@ -138,6 +197,27 @@ model://perspectives.domains#Stadskamers:
               translations:
                 orig: "### Een deelnemer die je begeleidt\n
                   Hier zie je de vraag die de deelnemer heeft gesteld bij het intakegesprek."
+                nl: "MISSING nl"
+                en: "MISSING en"
+          titles:
+            0:
+              translations:
+                orig: Basisgegevens
+                nl: MISSING nl
+                en: MISSING en
+            1:
+              translations:
+                orig: Route
+                nl: MISSING nl
+                en: MISSING en
+            2:
+              translations:
+                orig: Risico-inventarisatie
+                nl: MISSING nl
+                en: MISSING en
+            3:
+              translations:
+                orig: Persoonsbeeld
                 nl: MISSING nl
                 en: MISSING en
         Deelnemer:
@@ -145,6 +225,34 @@ model://perspectives.domains#Stadskamers:
             nl: Deelnemer
             en: Participant
           properties:
+            Bijzonderheden:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            ReceiveAllEmails:
+              translations:
+                nl: Wil alle e-mails ontvangen
+                en: Wants to receive all emails
+            NoodTelefoon:
+              translations:
+                nl: Noodtelefoon
+                en: Emergency phone
+            Geboortedatum:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Geslacht:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            BSN:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Verheldering:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
             Vraag:
               translations:
                 nl: MISSING nl
@@ -154,9 +262,136 @@ model://perspectives.domains#Stadskamers:
               translations:
                 orig: "### Dit is je route\n
                   Hier zie je de vraag die je hebt gesteld bij het intakegesprek."
+                nl: "MISSING nl"
+                en: "MISSING en"
+          titles:
+            0:
+              translations:
+                orig: Route
+                nl: MISSING nl
+                en: MISSING en
+            1:
+              translations:
+                orig: Risico-inventarisatie
+                nl: MISSING nl
+                en: MISSING en
+      things:
+        Persoonsbeeld:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
+          properties:
+            Overige:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Omgevingsvoorwaarden:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Houdingswaarden:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            SociaalEmotioneel:
+              translations:
+                nl: Sociaal-emotioneel
+                en: Social-emotional
+            Cognitief:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Lichamelijk:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Levensgeschiedenis:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Diagnose:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Name:
+              translations:
+                nl: Naam
+                en: Name
+        RisicoInventarisatie:
+          translations:
+            nl: Risico-inventarisatie
+            en: Risk inventory
+          properties:
+            Gehoor:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Zicht:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Epilepsie:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Diabetes:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Vallen:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Agressie:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            SignaleringsPlan:
+              translations:
+                nl: Signaleringsplan
+                en: MISSING en
+            Medicatie:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Name:
+              translations:
+                nl: Naam
+                en: Name
+        Financiering:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
+          properties:
+            Overig:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            WLZ:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            PGB:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            WMOOverigeGemeenten:
+              translations:
+                nl: WMO overige Gemeenten
+                en: MISSING en
+            Gemeente:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            BSN:
+              translations:
                 nl: MISSING nl
                 en: MISSING en
       contextroles:
+        Location:
+          translations:
+            nl: Locatie
+            en: Location
         MyActivities:
           translations:
             nl: Mijn activiteiten
@@ -167,27 +402,26 @@ model://perspectives.domains#Stadskamers:
         en: Location
       external:
         properties:
-          City:
-            translations:
-              nl: Plaats
-              en: City
-          PostalCode:
-            translations:
-              nl: Postcode
-              en: Postal code
-          HouseNumber:
-            translations:
-              nl: Huisnummer
-              en: House number
-          Street:
-            translations:
-              nl: Straat
-              en: Street
           Name:
             translations:
               nl: Naam
               en: Name
       users:
+        Bezoeker:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
+          markdowns:
+            0:
+              translations:
+                orig: "### Locatie: activiteitencentra\n
+                  Hier zie je wat je op deze locatie kunt doen (kijk onder *Waar*, hoofdje *Activiteitencentra*)."
+                nl: "MISSING nl"
+                en: "MISSING en"
+        AllEmployees:
+          translations:
+            nl: Alle medewerkers
+            en: All employees
         EmployeeOnLocation:
           translations:
             nl: collegas op deze lokatie
@@ -198,8 +432,8 @@ model://perspectives.domains#Stadskamers:
                 orig: "### Locatie\n
                   Je werkt op deze locatie.\n
                   Je bent betrokken bij (één of meerdere van) de activiteitencentra die hier zijn."
-                nl: MISSING nl
-                en: MISSING en
+                nl: "MISSING nl"
+                en: "MISSING en"
         LocationManager:
           translations:
             nl: Lokatiebeheerder
@@ -208,8 +442,11 @@ model://perspectives.domains#Stadskamers:
             0:
               translations:
                 orig: "### Locatie: activiteitencentra\n
-                  Hier kun je activiteitencentra beheren.\n
-                  Voorbeelden zijn: sport, kunst, muziek, koken, etc.\n
+                  Hier kun je medewerkers en activiteitencentra beheren.\n
+                  Zo voeg je een medewerker toe aan deze locatie:\n
+                  * Kopieer een medewerker uit de lijst onder *Alle medewerkers* naar het clipboard.\n
+                  * Maak onder *Wie*, *collegas op deze lokatie* een nieuwe rol aan en vul die met de medewerker op het clipboard.\n
+                  Voorbeelden van activiteitcentra zijn: sport, kunst, muziek, koken, etc.\n
                   Een locatie kan meerdere activiteitencentra hebben.\n
                   Zo maak je een Activiteitencentrum aan:\n
                   * maak een Activiteitencentrum aan onder 'Waar' - Activiteitencentrum\n
@@ -217,8 +454,8 @@ model://perspectives.domains#Stadskamers:
                   * open het centrum dat je hebt aangemaakt\n
                   * maak een lege rol aan onder 'Wie' - Regisseur\n
                   * vul de rol met de Medewerker-rol op het clipboard"
-                nl: MISSING nl
-                en: MISSING en
+                nl: "MISSING nl"
+                en: "MISSING en"
         Initializer:
           translations:
             nl: MISSING nl
@@ -234,6 +471,10 @@ model://perspectives.domains#Stadskamers:
                 nl: "MISSING nl"
                 en: "MISSING en"
       contextroles:
+        AllRoutesOnLocation:
+          translations:
+            nl: Alle routes op deze lokatie
+            en: All routes at this location
         ActivityCenters:
           translations:
             nl: Activiteitscentra
@@ -251,8 +492,19 @@ model://perspectives.domains#Stadskamers:
       users:
         ActivityDeelnemers:
           translations:
-            nl: Deelnemers aan de activiteit
-            en: Participants in the activity
+            nl: Deelnemers in dit centrum
+            en: Participants in this center
+        Bezoeker:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
+          markdowns:
+            0:
+              translations:
+                orig: "### Activiteitencentrum: activiteiten\n
+                  Hier zie je wat je in dit activiteitencentrum kunt doen (kijk onder *Waar*, hoofdje *Activiteiten*)."
+                nl: MISSING nl
+                en: MISSING en
         Coworkers:
           translations:
             nl: Directe collegas
@@ -262,8 +514,8 @@ model://perspectives.domains#Stadskamers:
               translations:
                 orig: "### Activiteitencentrum: activiteiten\n
                   Je werkt in dit activiteitencentrum."
-                nl: MISSING nl
-                en: MISSING en
+                nl: "MISSING nl"
+                en: "MISSING en"
         Regisseur:
           translations:
             nl: Regisseur
@@ -280,8 +532,8 @@ model://perspectives.domains#Stadskamers:
                   * open de activiteit die je hebt aangemaakt\n
                   * maak een lege rol aan onder 'Wie' - Organisator\n
                   * vul de rol met de Medewerker-rol op het clipboard"
-                nl: MISSING nl
-                en: MISSING en
+                nl: "MISSING nl"
+                en: "MISSING en"
         Initializer:
           translations:
             nl: MISSING nl
@@ -294,14 +546,14 @@ model://perspectives.domains#Stadskamers:
                   De Regisseur organiseert de activiteiten.\n
                   * maak een lege rol aan onder 'Wie' - Regisseur\n
                   * vul met een Medewerker-rol op het clipboard."
-                nl: MISSING nl
-                en: MISSING en
+                nl: "MISSING nl"
+                en: "MISSING en"
             1:
               translations:
                 orig: "### Deze locatie heeft al een Regisseur\n
                   Je hebt eerder een Regisseur benoemd."
-                nl: MISSING nl
-                en: MISSING en
+                nl: "MISSING nl"
+                en: "MISSING en"
       contextroles:
         ActivityCases:
           translations:
@@ -338,18 +590,29 @@ model://perspectives.domains#Stadskamers:
               nl: Naam
               en: Name
       users:
+        Bezoeker:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
+          markdowns:
+            0:
+              translations:
+                orig: "### Activiteit\n
+                  Hier zie je wat je kunt doen in deze activiteit."
+                nl: MISSING nl
+                en: MISSING en
         Organizer:
           translations:
-            nl: organisator
-            en: or
+            nl: Organisator
+            en: Organizer
           markdowns:
             0:
               translations:
                 orig: "### Activiteit\n
                   Jij bent verantwoordelijk voor deze activiteit.\n
                   Beschrijf je activiteit"
-                nl: MISSING nl
-                en: MISSING en
+                nl: "MISSING nl"
+                en: "MISSING en"
         ActivititeitDeelnemer:
           translations:
             nl: Deelnemers
@@ -359,8 +622,8 @@ model://perspectives.domains#Stadskamers:
               translations:
                 orig: "### Activiteit: deelname\n
                   Je bent deelnemer aan deze activiteit."
-                nl: MISSING nl
-                en: MISSING en
+                nl: "MISSING nl"
+                en: "MISSING en"
         Initializer:
           translations:
             nl: MISSING nl

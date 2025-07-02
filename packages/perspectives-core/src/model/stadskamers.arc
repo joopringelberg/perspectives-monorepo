@@ -1,15 +1,9 @@
--- Stadskamers - Copyright Joop Ringelberg and Cor Baars 2021 - 2024
+-- Stadskamers - Copyright Joop Ringelberg and Cor Baars 2025
 
 domain model://perspectives.domains#Stadskamers
   use sys for model://perspectives.domains#System
   use sk for model://perspectives.domains#Stadskamers
-  use acc for model://perspectives.domains#BodiesWithAccounts
-  use cdb for model://perspectives.domains#Couchdb
-  use util for model://perspectives.domains#Utilities
-  use p for model://perspectives.domains#Parsing
-  use files for model://perspectives.domains#Files
-  use sensor for model://perspectives.domains#Sensor
-
+  
   -------------------------------------------------------------------------------
   ---- SETTING UP
   -------------------------------------------------------------------------------
@@ -45,7 +39,6 @@ domain model://perspectives.domains#Stadskamers
   ---- INDEXED CONTEXT
   -------------------------------------------------------------------------------
 -- The INDEXED context sk:MyStadskamerApp is the starting point containing all Stadskamers.
-  -- There is NO PUBLIC PERSPECTIVE on this case.
   case StadskamersApp
     indexed sk:MyStadskamerApp
     aspect sys:RootContext
@@ -62,9 +55,45 @@ domain model://perspectives.domains#Stadskamers
         only (CreateAndFill, RemoveContext, DeleteContext)
         props (Name) verbs (Consult, SetPropertyValue)
       
+      screen
+        who
+        what
+          row
+            markdown <### Dit is de Stadskamer App 
+                      Hier kun je Stadskamer-organisaties aanmaken en beheren. 
+                      Je kunt vier rollen spelen:
+                      
+                      * **Deelnemer**: als je een Stadskamer bezoekt voor zijn activiteiten.
+                      * *Ervaringsdeskundige* (deze rol is er nog niet in de app): als je een Stadskamer bezoekt om te helpen bij de activiteiten.
+                      * **Medewerker**: als je in dienst bent bij een Stadskamer.
+                      * **Beheerder**: als je de app inricht voor een specifieke Stadskamer.
+                      
+                      Kies in het menu linksboven de rol die je wilt spelen. Het scherm past zich aan de rol aan.
+                      >
+        where
+          Stadskamers
+            master
+            detail
+
+    user Deelnemer = sys:SocialMe >> binding
       perspective on MyRoutes
         props (Name) verbs (Consult)
-      
+      screen
+        who
+        what
+          row
+            markdown <### Dit is de Stadskamer App 
+                      Dit is jouw Stadskamer app. Onder *Waar*, hoofdje *Routes* zie je jouw route.
+                      >
+        where
+          MyRoutes
+            master
+            detail
+
+    user Medewerker = sys:SocialMe >> binding
+      perspective on Stadskamers
+        props (Name) verbs (Consult)
+            
       perspective on MyCases
         props (Name) verbs (Consult)
 
@@ -73,18 +102,18 @@ domain model://perspectives.domains#Stadskamers
         what
           row
             markdown <### Dit is de Stadskamer App 
-                      Hier kun je Stadskamer-organisaties aanmaken en beheren. 
+                      Je bent medewerker van een Stadskamer-organisatie.
+                      Onder *Waar*, hoofdje *Stadskamers* zie je de Stadskamer waar je werkt.
+                      Onder *Wat*, hoofdje *Mijn caseload* zie je de routes die je begeleidt.
                       >
         where
           Stadskamers
             master
             detail
-          MyRoutes
-            master
-            detail
           MyCases
             master
             detail
+
 
     context Stadskamers (relational) filledBy Stadskamer
       state WhenCreated = exists binding
@@ -229,9 +258,6 @@ domain model://perspectives.domains#Stadskamers
                       Maak een route aan met de knop [[action: CreateRoute|Nieuwe route]] (is ook een actie in het menu linksboven).
                       >
         where
-          -- MyRoutes
-          --   master
-          --   detail
           Routes
             master
             detail
@@ -248,18 +274,45 @@ domain model://perspectives.domains#Stadskamers
     external
       property Name = context >> Deelnemer >> LastName
         readableName
+    on entry
+      do for Ambassadeur
+        create role Financiering
+        create role RisicoInventarisatie
     
+    ----------------------------------
     user Deelnemer filledBy sys:TheWorld$PerspectivesUsers
       property Vraag (String)
         minLength = 100
+      property Verheldering (String)
+        minLength = 100
+
+      property BSN (Number)
+        minLength = 9
+        maxLength = 9
+      property Geslacht (String)
+        enumeration = ("man", "vrouw", "anders")
+      property Geboortedatum (Date)
+      property NoodTelefoon (String)
+      property ReceiveAllEmails (Boolean)
+      property Bijzonderheden (String)
+      
+
       perspective on Deelnemer
-        props (FirstName, LastName, Vraag) verbs (Consult)
+        props (FirstName, LastName, Vraag, Verheldering) verbs (Consult)
+        props (NoodTelefoon, ReceiveAllEmails) verbs (Consult, SetPropertyValue, DeleteProperty)
+      perspective on RisicoInventarisatie
+        only (Create, Fill)
+        props (Medicatie, SignaleringsPlan, Agressie, Vallen, Diabetes, Epilepsie, Zicht, Gehoor) verbs (Consult, SetPropertyValue)
+        props (Name) verbs (Consult)
       perspective on Begeleider
         props (FirstName, LastName) verbs (Consult)
       perspective on Ambassadeur
         props (FirstName, LastName) verbs (Consult)
       perspective on MyActivities
         props (Name) verbs (Consult)
+      -- Dit gaat alleen werken met een publieke rol in Location.
+      -- perspective on Location
+      --   props (Name) verbs (Consult)
       screen
         who
           Ambassadeur
@@ -272,29 +325,46 @@ domain model://perspectives.domains#Stadskamers
             detail
           Deelnemer
             master
-              without props (FirstName, Vraag)
+              without props (FirstName, Street, HouseNumber, PostalCode, City, EmailAddress, Phone, BSN, Geslacht, Geboortedatum, NoodTelefoon, ReceiveAllEmails, Vraag, Verheldering, Bijzonderheden)
             detail
+              without props (Vraag, Verheldering, NoodTelefoon, ReceiveAllEmails)
         what
-          row
+          tab "Route"
+            row
             markdown <### Dit is je route
                       Hier zie je de vraag die je hebt gesteld bij het intakegesprek.
                       >
-          row
-            form Deelnemer
+            row
+              form Deelnemer
+                without props (FirstName, LastName, Street, HouseNumber, PostalCode, City, EmailAddress, Phone, BSN, Geslacht, Geboortedatum, NoodTelefoon, ReceiveAllEmails)
+          tab "Risico-inventarisatie"
+            form RisicoInventarisatie
         where
           MyActivities
             master
             detail
 
 
+    ----------------------------------
     user Begeleider filledBy Stadskamer$Employees
       perspective on Begeleider
         props (FirstName, LastName) verbs (Consult)
       perspective on Deelnemer
-        props (FirstName, LastName, Vraag) verbs (Consult)
-        props (Vraag) verbs (Consult, SetPropertyValue)
+        props (FirstName, LastName) verbs (Consult)
+        props (Vraag, Verheldering, Street, HouseNumber, PostalCode, City, EmailAddress, Phone, BSN, Geslacht, Geboortedatum, NoodTelefoon, ReceiveAllEmails, Bijzonderheden) verbs (Consult, SetPropertyValue, DeleteProperty)
       perspective on Ambassadeur
         props (FirstName, LastName) verbs (Consult)
+      perspective on RisicoInventarisatie
+        only (Create, Fill)
+        props (Medicatie, SignaleringsPlan, Agressie, Vallen, Diabetes, Epilepsie, Zicht, Gehoor) verbs (Consult, SetPropertyValue)
+        props (Name) verbs (Consult)
+      perspective on Persoonsbeeld
+        only (Create, Fill)
+        props (Diagnose, Levensgeschiedenis, Lichamelijk, Cognitief, SociaalEmotioneel) verbs (Consult, SetPropertyValue)
+        props (Name) verbs (Consult)
+      perspective on MyActivities
+        props (Name) verbs (Consult)
+
       screen
         who
           Ambassadeur
@@ -307,27 +377,53 @@ domain model://perspectives.domains#Stadskamers
             detail
           Deelnemer
             master
-              without props (FirstName, Vraag)
+              without props (FirstName, Street, HouseNumber, PostalCode, City, EmailAddress, Phone, BSN, Geslacht, Geboortedatum, NoodTelefoon, ReceiveAllEmails, Vraag, Verheldering, Bijzonderheden)
             detail
+              without props (Street, HouseNumber, PostalCode, City, EmailAddress, Phone, BSN, Geslacht, Geboortedatum, NoodTelefoon, ReceiveAllEmails, Vraag, Verheldering, Bijzonderheden)
         what
-          row
+          tab "Basisgegevens"
+            row
             markdown <### Een deelnemer die je begeleidt
                       Hier zie je de vraag die de deelnemer heeft gesteld bij het intakegesprek.
                       >
-          row
+            row
+              form Deelnemer
+                without props (Vraag, Verheldering, Bijzonderheden)
+          tab "Route"
             form Deelnemer
+              without props (FirstName, LastName, Street, HouseNumber, PostalCode, City, EmailAddress, Phone, BSN, Geslacht, Geboortedatum, NoodTelefoon, ReceiveAllEmails)
+          tab "Risico-inventarisatie"
+            form RisicoInventarisatie
+          tab "Persoonsbeeld"
+            form Persoonsbeeld
         where
+          MyActivities
+            master
+            detail
 
+    ----------------------------------
     user Ambassadeur filledBy Stadskamer$Employees
       perspective on Begeleider
         only (Create, Fill, Remove)
         props (FirstName, LastName) verbs (Consult)
       perspective on Deelnemer
         only (Create, Fill, Remove)
+        props (Vraag, Verheldering, Street, HouseNumber, PostalCode, City, EmailAddress, Phone, BSN, Geslacht, Geboortedatum, NoodTelefoon, ReceiveAllEmails, Bijzonderheden) verbs (Consult, SetPropertyValue, DeleteProperty)
         props (FirstName, LastName) verbs (Consult)
-        props (Vraag) verbs (Consult, SetPropertyValue)
       perspective on Ambassadeur
         props (FirstName, LastName) verbs (Consult)
+      perspective on Financiering
+        only (Create, Fill)
+        props (Gemeente, WMOOverigeGemeenten, PGB, WLZ, Overig) verbs (Consult, SetPropertyValue)
+        props (BSN) verbs (Consult)
+      perspective on RisicoInventarisatie
+        only (Create, Fill)
+        props (Medicatie, SignaleringsPlan, Agressie, Vallen, Diabetes, Epilepsie, Zicht, Gehoor) verbs (Consult, SetPropertyValue)
+        props (Name) verbs (Consult)
+      perspective on Persoonsbeeld
+        only (Create, Fill)
+        props (Diagnose, Levensgeschiedenis, Lichamelijk, Cognitief, SociaalEmotioneel, Houdingswaarden, Omgevingsvoorwaarden, Overige) verbs (Consult, SetPropertyValue)
+        props (Name) verbs (Consult)
       
       screen
         who
@@ -341,30 +437,79 @@ domain model://perspectives.domains#Stadskamers
             detail
           Deelnemer
             master
-              without props (FirstName, Vraag)
+              without props (FirstName, Street, HouseNumber, PostalCode, City, EmailAddress, Phone, BSN, Geslacht, Geboortedatum, NoodTelefoon, ReceiveAllEmails, Vraag, Verheldering, Bijzonderheden)
             detail
+              without props (Street, HouseNumber, PostalCode, City, EmailAddress, Phone, BSN, Geslacht, Geboortedatum, NoodTelefoon, ReceiveAllEmails)
         what
-          row
-            markdown <### Route van deelnemer
+          tab "Basisgegevens"
+            row
+              markdown <### Route van deelnemer
 
-                      * Vul een deelnemer in en wijs een begeleider toe.
-                      * Doe een intake.
-                      >
-          row
+                        * Vul een deelnemer in en wijs een begeleider toe.
+                        * Doe een intake.
+                        >
+            row
+              form Deelnemer
+                without props (Vraag, Verheldering, Bijzonderheden)
+          tab "Route"
             form Deelnemer
+              without props (FirstName, LastName, Street, HouseNumber, PostalCode, City, EmailAddress, Phone, BSN, Geslacht, Geboortedatum, NoodTelefoon, ReceiveAllEmails)
+          tab "Financiering"
+            form Financiering
+          tab "Risico-inventarisatie"
+            form RisicoInventarisatie
+          tab "Persoonsbeeld"
+            form Persoonsbeeld
         where
 
+    ----------------------------------
+    thing Financiering
+      property Naam = context >> Deelnemer >> LastName
+        readableName
+      property BSN = context >> Deelnemer >> BSN
+      property Gemeente (String)
+        enumeration = ("Doetinchem", "Oost-Gelre", "Berkelland", "Monterland", "Bronckhorst")
+      property WMOOverigeGemeenten (Boolean)
+      property PGB (Boolean)
+      property WLZ (Boolean)
+      property Overig (String)
+    ----------------------------------
+    thing RisicoInventarisatie
+      property Name = context >> Deelnemer >> LastName
+        readableName
+      property Medicatie (String)
+      property SignaleringsPlan (String)
+      property Agressie (String)
+      property Vallen (String)
+      property Diabetes (String)
+      property Epilepsie (String)
+      property Zicht (String)
+      property Gehoor (String)
+
+    ----------------------------------
+    thing Persoonsbeeld
+      property Name = context >> Deelnemer >> LastName
+        readableName
+      property Diagnose (String)
+      property Levensgeschiedenis (String)
+      property Lichamelijk (String)
+      property Cognitief (String)
+      property SociaalEmotioneel (String)
+      property Houdingswaarden (String)
+      property Omgevingsvoorwaarden (String)
+      property Overige (String)
+    ----------------------------------
     context MyActivities = Deelnemer >> binder ActivititeitDeelnemer >> context >> extern
+
+    context Location (functional) = Begeleider >> binding >> binder EmployeeOnLocation >> context >> extern
+    ----------------------------------
 
   ----------------------------------
   case Location
     external
+      aspect sys:Addressable
       property Name (String)
         readableName
-      property Street (String)
-      property HouseNumber (String)
-      property PostalCode (String)
-      property City (String)
     
     user Initializer = filter (extern >> binder Locations >> context >> Administrators) with filledBy (sys:SocialMe >> binding)
       perspective on LocationManager
@@ -392,6 +537,9 @@ domain model://perspectives.domains#Stadskamers
         only (CreateAndFill, RemoveContext)
         props (Name) verbs (Consult, SetPropertyValue)
       
+      perspective on AllEmployees
+        props (FirstName, LastName) verbs (Consult)
+      
       perspective on EmployeeOnLocation
         only (Create, Fill, Remove)
         props (FirstName, LastName) verbs (Consult)
@@ -402,11 +550,21 @@ domain model://perspectives.domains#Stadskamers
             master
               without props (FirstName)
             detail
+          AllEmployees
+            master
+              without props (FirstName)
+            detail
         what
           row
             markdown <### Locatie: activiteitencentra
-                      Hier kun je activiteitencentra beheren. 
-                      Voorbeelden zijn: sport, kunst, muziek, koken, etc.
+                      Hier kun je medewerkers en activiteitencentra beheren.
+
+                      Zo voeg je een medewerker toe aan deze locatie:
+                      
+                      * Kopieer een medewerker uit de lijst onder *Alle medewerkers* naar het clipboard.
+                      * Maak onder *Wie*, *collegas op deze lokatie* een nieuwe rol aan en vul die met de medewerker op het clipboard.
+                      
+                      Voorbeelden van activiteitcentra zijn: sport, kunst, muziek, koken, etc.
                       Een locatie kan meerdere activiteitencentra hebben.
 
                       Zo maak je een Activiteitencentrum aan:
@@ -429,6 +587,8 @@ domain model://perspectives.domains#Stadskamers
         props (FirstName, LastName) verbs (Consult)
       perspective on ActivityCenters
         props (Name) verbs (Consult)
+      perspective on AllRoutesOnLocation
+        props (Name) verbs (Consult)
       
       screen
         who
@@ -450,8 +610,32 @@ domain model://perspectives.domains#Stadskamers
           ActivityCenters
             master
             detail
+          AllRoutesOnLocation
+            master
+            detail
 
+    user AllEmployees = extern >> binder Locations >> context >> Employees
+    -- Dit moet een rol met een publiek perspectief worden.
+    user Bezoeker = sys:SocialMe >> binding
+      perspective on ActivityCenters
+        props (Name) verbs (Consult)
+      screen 
+        who
+        what
+          row
+            markdown <### Locatie: activiteitencentra
+                      Hier zie je wat je op deze locatie kunt doen (kijk onder *Waar*, hoofdje *Activiteitencentra*).
+                      >
+        where
+          ActivityCenters
+            master
+            detail
     context ActivityCenters (relational) filledBy ActivityCenter
+    context AllRoutesOnLocation = 
+      letE 
+        loc <- extern
+      in 
+        filter (extern >> binder Locations >> context >> Routes >> binding >> context with Location == loc) >> extern
 
   ----------------------------------
   case ActivityCenter
@@ -562,6 +746,20 @@ domain model://perspectives.domains#Stadskamers
             master
             detail
     
+    user Bezoeker = sys:SocialMe >> binding
+      perspective on Activities
+        props (Name) verbs (Consult)
+      screen 
+        who
+        what
+          row
+            markdown <### Activiteitencentrum: activiteiten
+                      Hier zie je wat je in dit activiteitencentrum kunt doen (kijk onder *Waar*, hoofdje *Activiteiten*).
+                      >
+        where
+          Activities
+            master
+            detail
     context Activities (relational) filledBy Activity
 
     context ActivityCases = Regisseur >> binding >> binder Begeleider >> context >> extern 
@@ -634,6 +832,13 @@ domain model://perspectives.domains#Stadskamers
       perspective on ActivititeitDeelnemer
         only (Create, Fill, Remove)
         props (FirstName, LastName) verbs (Consult)
+      perspective on Bijeenkomsten
+        only (CreateAndFill, Remove)
+        props (Datum) verbs (Consult, SetPropertyValue)
+      perspective on Bijeenkomsten >> binding >> context >> Aanwezigen
+            only (Create, Fill)
+      action MaakBijeenkomst
+        create context Bijeenkomst bound to Bijeenkomsten
       screen 
         who
           Organizer
@@ -653,7 +858,58 @@ domain model://perspectives.domains#Stadskamers
           row 
             form External
         where
-
+          Bijeenkomsten
+            master
+              markdown <### Activiteit: bijeenkomsten
+                          Hier kun je bijeenkomsten aanmaken om aanwezigheid te registreren [[action:MaakBijeenkomst|Maak bijeenkomst]]. 
+                          Een activiteit kan meerdere bijeenkomsten hebben.
+                          Vul de datum van de bijeenkomst in!
+                          >
+            detail
+    -- Dit moet een rol met een publiek perspectief worden.
+    user Bezoeker = sys:SocialMe >> binding
+      perspective on External
+        props (Name, Description, Weekday, StartTime, EndTime) verbs (Consult)
+      screen 
+        who
+        what
+          row
+            markdown <### Activiteit
+                      Hier zie je wat je kunt doen in deze activiteit.
+                      >
+          row 
+            form External
+        where
+    context Bijeenkomsten (relational) filledBy Bijeenkomst
+      on entry
+        do for Organizer
+          bind context >> ActivititeitDeelnemer to Aanwezigen in binding >> context
+  
+  ----------------------------------
+  case Bijeenkomst
+    external
+      property Datum (Date)
+        readableName
+    user Organizer = extern >> binder Bijeenkomsten >> context >> Organizer
+      perspective on Aanwezigen
+        only (Create, Fill, Remove)
+        props (FirstName, LastName) verbs (Consult)
+        props (Aanwezig) verbs (Consult, SetPropertyValue)
+      screen 
+        who
+        what
+          row
+            markdown <### Bijeenkomst: deelnemers
+                      * Vink deelnemers aan die aanwezig zijn.
+                      * Je kunt zo nodig deelnemers toevoegen.
+                      * Je mag afwezige deelnemers verwijderen, maar dat is niet nodig.
+                      >
+          row
+            table Aanwezigen
+        where
+    user Aanwezigen (relational) filledBy Deelnemer
+      property Aanwezig (Boolean)
+      
   ----------------------------------
   case SmallLocation
     aspect sk:Location
