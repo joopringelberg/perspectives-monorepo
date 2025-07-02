@@ -290,7 +290,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                 externalRef={component.inputRef as React.RefObject<HTMLElement>}
                 key={component.props.roleinstance}
                 tabIndex={focusable}
-                title={component.values().join(", ")}
+                title={title}
                 className="shadow"
                 onClick={component.handleClick}
                 aria-label={title} // deconstructLocalName ( component.props.propertyname )
