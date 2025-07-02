@@ -25,7 +25,9 @@
 			"core",
 			"mycontexts",
 			"perspectives-react",
-			"monorepo"
+			"monorepo",
+			"models",
+			"perspectives-proxy"
 		]
 	}
 }
