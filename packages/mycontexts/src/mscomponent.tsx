@@ -145,7 +145,7 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
           {/* Sliding Panel */}
           {this.state.isFormVisible && (
             <div
-              className={`cover-panel ${this.state.isSliding ? 'open' : ''} bg-secondary`}
+              className={`cover-panel ${this.state.isSliding ? 'open' : ''} bg-light-subtle p-2`}
               onKeyDown={(e) => component.handleKeyDown(e)}
               ref={this.slidingPanelRef}
               tabIndex={this.state.isTabbable ? 0 : undefined}

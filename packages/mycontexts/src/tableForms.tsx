@@ -17,7 +17,11 @@ export class TableForms extends Component<TableFormsProps> {
     const forms = this.props.screenelements.map(({ form }) => form);
     if (forms.length > 0) {
       return (
-        <MSComponent isMobile={!this.props.showTablesAndForm} className='bg-light-subtle' doubleclickOpensDetails={this.props.doubleclickOpensDetails}>
+        <MSComponent 
+          isMobile={!this.props.showTablesAndForm} 
+          className='bg-light-subtle' 
+          doubleclickOpensDetails={this.props.doubleclickOpensDetails}
+        >
           <Accordion defaultActiveKey="0" flush>
             {
             this.props.screenelements.map(({markdown, table, form}, index) => {
