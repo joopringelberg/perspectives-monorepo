@@ -13,7 +13,8 @@
   --bs-table-hover-color: #212529;
   --bs-table-active-color: #212529;
   
-  /* --bs-primary-bg: #212529; */
+  --bs-primary-rgb: 68, 110, 155;
+  --bs-primary: #446e9b;
 
   /* Selected/active state colors with better contrast */
   --bs-secondary-bg: #626b73; /* Darker secondary background */
@@ -30,7 +31,7 @@
   --bs-accordion-btn-bg: rgba(255, 255, 255, 0.9); /* Lighter background for accordion buttons */
 
   /* Link colors with better contrast */
-  --bs-link-color: #0056b3; /* Darker blue for links */
+  --bs-link-color: #043466; /* Darker blue for links */
   --bs-link-color-rgb: 0, 86, 179; /* Darker blue for links */
   --bs-link-opacity: 1; /* Full opacity for better visibility */
   --bs-link-hover-color-rgb: 0, 61, 126; /* Darker blue for hover/focus */

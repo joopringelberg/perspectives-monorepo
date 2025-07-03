@@ -769,7 +769,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                 <Col 
                   className='bg-primary animated-column' 
                   xs={ this.state.whatOnly ? 10 : this.state.doubleSection === "what" ? 6 : 3} 
-                  style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
+                  style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
                   <Row onClick={() => component.setState( {'doubleSection': "what"} )}
                     onDoubleClick={() => component.setState( {'whatOnly': !component.state.whatOnly} )}
                   >
@@ -788,7 +788,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                 <Col 
                   className='bg-primary full-height animated-column'
                   xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "where" ? 6 : 3} 
-                  style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
+                  style={{'--bs-bg-opacity': '.3'} as React.CSSProperties}>
                   <Row onClick={() => component.setState( {'doubleSection': "where"} )}>
                     <h2 className='text-center column-heading' aria-keyshortcuts="alt+3" tabIndex={0}>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h2>
                   </Row>  
