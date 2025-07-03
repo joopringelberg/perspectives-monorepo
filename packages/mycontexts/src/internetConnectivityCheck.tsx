@@ -68,6 +68,7 @@ export function InternetConnectivityCheck({ reportBack }: { reportBack: (isOnlin
     </Tooltip>
   );
 
+  return <div className='ms-auto'/>;
   return (
     <OverlayTrigger
       placement="left"
