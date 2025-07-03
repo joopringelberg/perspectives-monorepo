@@ -57,6 +57,7 @@ interface PerspectiveTableProps
   , cardcolumn?: string
   , showcontrolsandcaption?: boolean
   , showAsAccordionItem?: boolean
+  , showDetails? : boolean
   , sortOnHiddenProperty?: PropertyType
   , sortAscending?: boolean
   }
@@ -335,6 +336,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
                       roleinstance={component.state.row}
                       roleOnClipboard={roleOnClipboard}
                       systemExternalRole={systemExternalRole}
+                      showDetails={component.props.showDetails}
                     />
                   }
                 </AppContext.Consumer>

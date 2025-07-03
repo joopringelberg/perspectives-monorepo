@@ -175,13 +175,17 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
   screenElement(taggedElement : ScreenElementDefTagged, index : number)
   {
     const component = this;
+    let tableDef : TableElementDef | undefined;
+    let formDef : FormElementDef | undefined;
+    let markDownDef : MarkDownElementDef | undefined;
+    let chatDef : ChatElementDef | undefined;
     switch (taggedElement.elementType){
       case "RowElementD":
         return component.buildRow( taggedElement.element as RowElementDef, index );
       case "ColumnElementD":
         return component.buildColumn( taggedElement.element as ColumnElementDef, index );    
       case "TableElementD":
-        const tableDef = taggedElement.element as TableElementDef;
+        tableDef = taggedElement.element as TableElementDef;
         return (
           <div
             className="border-bottom pb-4 pt-4 widget"
@@ -191,7 +195,7 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
           { buildTable( tableDef ) }
           </div>);
       case "FormElementD":
-        const formDef = taggedElement.element as FormElementDef;
+        formDef = taggedElement.element as FormElementDef;
         return (
           <div
             className="border-bottom pb-4 pt-4 widget"
@@ -201,14 +205,14 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
           { buildForm( formDef ) }
           </div>);
       case "MarkDownElementD":
-        const markDownDef = taggedElement.element as MarkDownElementDef;
+        markDownDef = taggedElement.element as MarkDownElementDef;
         return (
           <div 
             key={index}
           >{ buildMarkDown( component.props.contextinstance, component.props.myroletype, markDownDef )}</div>
         )
       case "ChatElementD":
-        const chatDef = taggedElement.element as ChatElementDef;
+        chatDef = taggedElement.element as ChatElementDef;
         return (
           <div
             key={index}
@@ -296,7 +300,7 @@ export function buildMarkDown(contextinstance : ContextInstanceT, myroletype : R
     const markDownProperty = Object.keys( perspective.properties ).filter( prop => prop != conditionProperty  && prop != ModelDependencies.roleWithIdProp )[0] as PropertyType;  
     return  <Container>{
               Object.values( perspective.roleInstances )
-                .filter( roleInstance => !!conditionProperty ? roleInstance.propertyValues[ conditionProperty ].values[0] == "true" : true)
+                .filter( roleInstance => conditionProperty ? roleInstance.propertyValues[ conditionProperty ].values[0] == "true" : true)
                 .map( roleInstance => 
                 <Row key= { roleInstance.roleId }>
                   <Col>
@@ -339,7 +343,7 @@ export function buildMarkDown(contextinstance : ContextInstanceT, myroletype : R
   }
 }
 
-export function buildTable(table : TableElementDef, showControls : boolean = true, showAsAccordionItem : boolean = false)
+export function buildTable(table : TableElementDef, showControls : boolean = true, showAsAccordionItem : boolean = false, showDetails : boolean = false)
 {
   const perspective = table.widgetCommonFields.perspective;
   return (
@@ -356,6 +360,7 @@ export function buildTable(table : TableElementDef, showControls : boolean = tru
         perspective={perspective}
         showcontrolsandcaption={showControls}
         showAsAccordionItem={showAsAccordionItem}
+        showDetails={showDetails}
         />
     </>);
 }

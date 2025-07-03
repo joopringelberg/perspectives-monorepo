@@ -33,6 +33,7 @@ interface TableItemContextMenuProps {
   roleinstance: RoleInstanceT;
   roleOnClipboard?: RoleOnClipboard;
   systemExternalRole: RoleInstanceT;
+  showDetails?: boolean;
 }
 
 interface TableItemContextMenuState {
@@ -428,7 +429,9 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   computeOpenDetailsItem() : JSX.Element[]
   {
     const component = this;
-    return [<NavDropdown.Item
+    if ( component.props.showDetails)
+    {
+      return [<NavDropdown.Item
               key="OpenDetails"
               eventKey="OpenDetails"
               onClick={ () => {
@@ -442,6 +445,11 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
             >{
               i18next.t("tableContextMenu_opendetails", { ns: 'preact' }) 
             }</NavDropdown.Item>];
+      }
+    else
+    {
+      return [];
+    }
   }
 
   computeRestoreContextForUserItem() : JSX.Element[]

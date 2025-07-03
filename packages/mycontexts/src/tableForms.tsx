@@ -31,7 +31,7 @@ export class TableForms extends Component<TableFormsProps> {
               return (
                 <div key={index} className="markdown">
                   { markdown.map( (md, index) => <div key={index}>{ buildMarkDown( contextinstance, myroletype, md) }</div>) }
-                  { buildTable(table, false, true) }
+                  { buildTable(table, false, true, true) }
                 </div>);
               })
             }
