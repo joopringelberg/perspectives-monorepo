@@ -14,7 +14,7 @@ interface WiderContextsState {
 
 export class WiderContexts extends PerspectivesComponent<WiderContextsProps, WiderContextsState> {
   private domEl!: React.RefObject<HTMLDivElement | null>;
-  constructor(props: {}) {
+  constructor(props: WiderContextsProps) {
     super(props);
     this.state = {widerContexts: []};
     this.domEl = React.createRef<HTMLDivElement>();
@@ -49,6 +49,26 @@ export class WiderContexts extends PerspectivesComponent<WiderContextsProps, Wid
 
   render() {
     const component = this;
+    if (this.state.widerContexts.length === 0) {
+      return null
+    }
+    else {
+      return  (<div className="mb-2" ref={component.domEl}>
+                <h3 className="column-heading">{i18next.t("wider_context", {ns: 'mycontexts'})}</h3>
+                <ListGroup defaultActiveKey="#link1">
+                {
+                  this.state.widerContexts.map(({ externalRole, readableName }) => {
+                    return (
+                      <ListGroup.Item key={externalRole} action onDoubleClick={(_ : any) => component.openContext(externalRole)}>
+                        {readableName}
+                      </ListGroup.Item>
+                    );
+                  })
+                }
+                </ListGroup>
+              </div>)
+    }
+
     return (  <Accordion.Item eventKey="widercontexts" key="widercontexts" ref={component.domEl}>
                 <Accordion.Header onClick={() => component.domEl.current?.dispatchEvent(new CustomEvent('OpenAccordionItem', {detail: "widercontexts", bubbles: true}))}>
                   { i18next.t( "wider_contexts_title", {ns: 'mycontexts'})}

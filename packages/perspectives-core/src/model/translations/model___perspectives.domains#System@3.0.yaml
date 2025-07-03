@@ -265,8 +265,8 @@ model://perspectives.domains#System:
             nl: Actuele Recente Contexten
         RecentContexts:
           translations:
-            en: Recent Contexts
-            nl: Recente Contexten
+            en: History
+            nl: Geschiedenis
           properties:
             LastShownOnScreen:
               translations:
@@ -274,8 +274,8 @@ model://perspectives.domains#System:
                 nl: Laatst getoond op scherm
         PinnedContexts:
           translations:
-            en: Pinned Contexts
-            nl: Vastgeprikte Contexten
+            en: Bookmarks
+            nl: Bladwijzers
         AllSettings:
           translations:
             en: All Settings

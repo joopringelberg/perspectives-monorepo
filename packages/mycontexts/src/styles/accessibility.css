@@ -40,10 +40,19 @@
   --bs-link-focus-color-rgb: 0, 61, 126;
   --bs-link-focus-color: #003d7e;
   --bs-link-focus-opacity: 1;
+
+  --bs-code-color: #bd2e76; /* Darker pink for code */
 }
 
 h2.column-heading {
   font-size: 1.5rem; /* Same as h4 */
+  font-weight: 500;  /* Same as h4 */
+  margin-bottom: 0.5rem; /* Same as h4 */
+  /* Add any other h4 styles you want to preserve */
+}
+
+h3.column-heading {
+  font-size: 1.0rem; 
   font-weight: 500;  /* Same as h4 */
   margin-bottom: 0.5rem; /* Same as h4 */
   /* Add any other h4 styles you want to preserve */

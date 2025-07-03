@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { RoleType } from 'perspectives-proxy';
-import { deconstructLocalName } from 'perspectives-react';
+import { deconstructLocalName, i18next } from 'perspectives-react';
 
 interface FlippingTitleProps {
   title: string;
@@ -21,7 +21,7 @@ const FlippingTitle: React.FC<FlippingTitleProps> = ({
   const [timer, setTimer] = useState<number | null>(null);
 
   // Format the role type to be more readable
-  const formattedRoleType = userRoleType ? userRoleType : '';
+  const formattedRoleType = userRoleType ? i18next.t("flipping_title", {ns: 'mycontexts', userRoleType }) : '';
   
   // Function to show role type and then revert
   const flipToRoleAndRevert = () => {
@@ -67,7 +67,7 @@ const FlippingTitle: React.FC<FlippingTitleProps> = ({
       tabIndex={0}
       role="button"
       aria-label={showUserRole 
-        ? `Current role: ${formattedRoleType}. Click to show context name.` 
+        ? `${formattedRoleType}. Click to show context name.` 
         : `Context: ${title}. Click to show your role.`}
     >
       {showUserRole ? formattedRoleType : title}

@@ -142,4 +142,8 @@
   , "bottom_goBack": "Go back to the previous context"
   , "bottom_showNotifications": "Show notifications"
   , "bottom_goForward": "Go forward to the next context"
+  , "flipping_title": "(You role: {{userRoleType}})"
+  , "wider_context": "Belongs to:"
+  , "dive_in": "Dive in:"
+  , "jump_to": "Jump to:"
   }

@@ -5,7 +5,7 @@ import { TableForms } from "./tableForms";
 import { PinnedContexts } from "./pinnedContexts";
 import { RecentContexts } from "./recentContexts";
 import { Accordion, Container } from "react-bootstrap";
-import { buildMarkDown, PSContext } from "perspectives-react";
+import { buildMarkDown, i18next, PSContext } from "perspectives-react";
 import { WiderContexts } from "./widerContexts";
 
 interface WhereProps {
@@ -59,9 +59,17 @@ export class Where extends Component<WhereProps, WhereState> {
       {this.props.screenelements.markdown.map((markdown, index) => 
           <div key={index} className="markdown">{ buildMarkDown(value.contextinstance, value.myroletype, markdown) }</div>
         )}
-      <TableForms screenelements={this.props.screenelements.contextRoles} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={false} />
+      <WiderContexts externalrole={component.props.openContext}/>
+      {
+        this.props.screenelements.contextRoles.length > 0 ?
+        <div>
+          <h3 className="column-heading">{i18next.t("dive_in", {ns: 'mycontexts'})}</h3>
+          <TableForms screenelements={this.props.screenelements.contextRoles} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={false} />
+        </div>
+        : null
+      }
+      <h3 className="column-heading">{i18next.t("jump_to", {ns: 'mycontexts'})}</h3>
       <Accordion ref={this.ref} activeKey={this.state.accordionOpen} flush className="pb-3">
-        <WiderContexts externalrole={component.props.openContext}/>
         <PinnedContexts systemuser={this.props.systemUser} />
         <RecentContexts systemuser={this.props.systemUser} openContext={this.props.openContext} systemIdentifier={this.props.systemIdentifier}/>
       </Accordion>
