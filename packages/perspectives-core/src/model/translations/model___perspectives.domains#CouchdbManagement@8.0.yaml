@@ -422,11 +422,12 @@ model://perspectives.domains#CouchdbManagement:
                   Then enter the *unqualified* name of the model in the column `Local model name`.\n
                   For the domain 'model://perspectives.domains#System' for example, this would be 'System'."
                 nl: "## Voeg een manifest toe\n
+                   Klik de button: [[action:CreateManifest|Maak een manifest]].\n
                    Voeg een manifest toe door het menu te openen en een nieuwe lege rol te maken.\n
                    Vul dan de *ongekwalificeerde* naam van het model in de kolom `Lokale modelnaam` in.\n
                    Voor het domein 'model://perspectives.domains#System' bijvoorbeeld, zou dit 'System' zijn."
                 en: "## Add a manifest\n
-                   Add a manifest by opening the menu and creating a new empty role.\n
+                   Just press the button: [[action:CreateManifest|Add a manifest]].\n
                    Then enter the *unqualified* name of the model in the column `Local model name`.\n
                    For the domain 'model://perspectives.domains#System' for example, this would be 'System'."
           titles:
@@ -475,11 +476,11 @@ model://perspectives.domains#CouchdbManagement:
                   Then enter the *unqualified* name of the model in the column `Local model name`.\n
                   For the domain 'model://perspectives.domains#System' for example, this would be 'System'."
                 nl: "## Voeg een manifest toe\n
-                   Voeg een manifest toe door het menu te openen en een nieuwe lege rol te maken.\n
+                   Klik de button: [[action:CreateManifest|Maak een manifest]].\n
                    Vul dan de *ongekwalificeerde* naam van het model in de kolom `Lokale modelnaam` in.\n
                    Voor het domein 'model://perspectives.domains#System' bijvoorbeeld, zou dit 'System' zijn."
                 en: "## Add a manifest\n
-                   Add a manifest by opening the menu and creating a new empty role.\n
+                   Just press the button: [[action:CreateManifest|Add a manifest]].\n
                    Then enter the *unqualified* name of the model in the column `Local model name`.\n
                    For the domain 'model://perspectives.domains#System' for example, this would be 'System'."
           titles:

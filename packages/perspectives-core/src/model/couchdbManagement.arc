@@ -728,6 +728,9 @@ domain model://perspectives.domains#CouchdbManagement
         in object state NoLocalModelName
           props (LocalModelName) verbs (SetPropertyValue)
       
+      action CreateManifest
+        create role Manifests
+      
       perspective on Manifests >> binding >> context >> Author
         only (Create, Fill)
 
@@ -808,6 +811,8 @@ domain model://perspectives.domains#CouchdbManagement
         props (DomeinFileName) verbs (SetPropertyValue, DeleteProperty)
         in object state NoLocalModelName
           props (LocalModelName) verbs (SetPropertyValue)
+      action CreateManifest
+        create role Manifests
       
       perspective on Manifests >> binding >> context >> Author
         only (Create, Fill)

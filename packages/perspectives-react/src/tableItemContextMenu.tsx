@@ -291,11 +291,12 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
                           eventKey="JustTheRole"
                           onClick={ () => component.createRole( "JustTheRole")}
                         >{
-                          i18next.t("contextDropdown_title", { ns: 'preact' }) 
+                          component.props.perspective.displayName
+                          // i18next.t("contextDropdown_title", { ns: 'preact' }) 
                         }</Dropdown.Item>
     if ( this.mayCreateContext() )
     {
-      contextItems.unshift( justTheRole );
+      // contextItems.unshift( justTheRole );
       contextItems.unshift(<Dropdown.Header key="NewItemsHeader">{ i18next.t( "tableContextMenu_new", {ns: 'preact'})}</Dropdown.Header>);
       contextItems.push(<Dropdown.Divider key="EndOfNewItems"/>);
       return contextItems;
