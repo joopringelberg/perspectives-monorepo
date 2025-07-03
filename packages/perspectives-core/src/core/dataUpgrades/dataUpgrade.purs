@@ -158,6 +158,17 @@ runDataUpgrades = do
   
   runUpgrade installedVersion "3.0.7"
     (\_ -> void recompileLocalModels)
+  
+  runUpgrade installedVersion "3.0.8"
+    (\_ -> do
+      -- Add IsSystemModel to various models.
+      runMonadPerspectivesTransaction'
+        false
+        (ENR $ EnumeratedRoleType sysUser)
+        do
+          updateModel_ ["model://perspectives.domains#System@3.0"] ["false"] (RoleInstance "")
+          updateModel_ ["model://perspectives.domains#CouchdbManagement@8.0"] ["false"] (RoleInstance "")
+    )
 
 
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
