@@ -5,7 +5,7 @@ import { TableForms } from "./tableForms";
 import { PinnedContexts } from "./pinnedContexts";
 import { RecentContexts } from "./recentContexts";
 import { Accordion, Container } from "react-bootstrap";
-import { buildMarkDown, i18next, PSContext } from "perspectives-react";
+import { buildMarkDown, i18next, ModelDependencies, PSContext } from "perspectives-react";
 import { WiderContexts } from "./widerContexts";
 
 interface WhereProps {
@@ -26,7 +26,7 @@ export class Where extends Component<WhereProps, WhereState> {
   constructor(props: WhereProps) {
     super(props);
     this.ref = React.createRef();
-    this.state = { accordionOpen: [] };
+    this.state = { accordionOpen: [ModelDependencies.recentContexts] };
   }
 
   componentDidMount() {

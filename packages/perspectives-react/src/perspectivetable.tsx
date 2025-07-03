@@ -313,7 +313,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
     if (component.stateIsComplete(["row"])) {    
       return (
         component.props.showAsAccordionItem ?
-          <Accordion.Item eventKey={perspective.id} key={perspective.id}>
+          <Accordion.Item eventKey={perspective.roleType} key={perspective.id}>
             {/* Use custom header structure instead of Accordion.Header with a component inside */}
             <div className="d-flex accordion-custom-header">
               {/* First part: the accordion header button */}
