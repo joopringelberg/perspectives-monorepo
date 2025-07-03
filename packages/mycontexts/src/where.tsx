@@ -35,7 +35,7 @@ export class Where extends Component<WhereProps, WhereState> {
       this.ref.current.addEventListener(
         'OpenContext', 
         (e : CustomEvent) => {
-          component.setState({accordionOpen: []});  
+          component.setState({accordionOpen: [ModelDependencies.recentContexts]});  
         }, 
         false);
       this.ref.current.addEventListener(

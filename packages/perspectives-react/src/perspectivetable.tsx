@@ -320,7 +320,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
               <div className="flex-grow-1">
                 <Accordion.Header 
                   onClick={() => component.eventDiv.current?.dispatchEvent(
-                    new CustomEvent('OpenAccordionItem', {detail: perspective.id, bubbles: true})
+                    new CustomEvent('OpenAccordionItem', {detail: perspective.roleType, bubbles: true})
                   )}
                 >
                   <span>{perspective.displayName}</span>
