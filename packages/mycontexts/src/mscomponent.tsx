@@ -60,21 +60,23 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
   }
 
   showDetails = (event: RoleInstanceSelectionEvent) => {
-    this.setState(
-      { selectedRoleInstance: event.detail.roleInstance
-      , selectedRoleType: event.detail.roleType
-      , isFormVisible: this.props.isMobile
+    // First set isFormVisible to true to render the panel (but it's still off-screen)
+    this.setState({
+      selectedRoleInstance: event.detail.roleInstance,
+      selectedRoleType: event.detail.roleType,
+      isFormVisible: true
     });
-    // Without this construct, the panel will be displayed before the sliding animation is complete.
-    setTimeout(() => {
+
+    // Use requestAnimationFrame to ensure the panel is rendered before we start animating
+    requestAnimationFrame(() => {
+      // Now trigger the animation by setting isSliding to true
       this.setState({ isSliding: true });
-    }
-    , 100);
-    // If we do not delay setting the tabIndex, the animation will not be completed and the panel is visible immidiately.
-    setTimeout(() => {
-      this.setState({ isTabbable: true });
-    }
-    , 600);
+
+      // Set tabindex after animation completes
+      setTimeout(() => {
+        this.setState({ isTabbable: true });
+      }, 400); // Match this to your transition duration
+    });
   };
 
   conditionallyShowDetails (event: RoleInstanceSelectionEvent) {
@@ -120,7 +122,14 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
   };
 
   handleClose = () => {
-    this.setState({ isFormVisible: false, isSliding: false, isTabbable: false });
+    // First stop the sliding
+    this.setState({ isSliding: false, isTabbable: false });
+    
+    // After the animation completes, hide the panel
+    setTimeout(() => {
+      this.setState({ isFormVisible: false });
+    }, 400); // Match this to your transition duration
+
     this.mainPanelRef.current?.focus();
   };
 
@@ -137,27 +146,31 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
 
     if (component.props.isMobile) {
       return (
-        <div className="sliding-panels-container pb-2" ref={this.containerRef}>
+        <div 
+          className={`sliding-panels-container pb-2 ${this.state.isSliding ? 'has-open-panel' : ''}`} 
+          ref={this.containerRef}
+        >
           {/* Main Panel */}
           <div className="main-panel" ref={this.mainPanelRef}>
             {React.cloneElement(mainContent as React.ReactElement<MainContentProps>, { className: this.props.className })}
           </div>
-          {/* Sliding Panel */}
-          {this.state.isFormVisible && (
-            <div
-              className={`cover-panel ${this.state.isSliding ? 'open' : ''} bg-light-subtle p-2`}
-              onKeyDown={(e) => component.handleKeyDown(e)}
-              ref={this.slidingPanelRef}
-              tabIndex={this.state.isTabbable ? 0 : undefined}
-            >
-              <CloseButton onClick={this.handleClose} />
+          {/* Sliding Panel - Always render it but control visibility with CSS */}
+          <div
+            className={`cover-panel ${this.state.isSliding ? 'open' : ''} bg-light-subtle p-2`}
+            onKeyDown={(e) => component.handleKeyDown(e)}
+            ref={this.slidingPanelRef}
+            tabIndex={this.state.isTabbable ? 0 : undefined}
+            style={{ display: this.state.isFormVisible ? 'flex' : 'none' }} // Control display separately
+          >
+            <CloseButton onClick={this.handleClose} />
+            <div className="sliding-panel-content">
               {React.cloneElement(slidingContent as React.ReactElement<SlidingPanelContentProps>, {
                 className: this.props.className,
                 selectedRoleInstance: this.state.selectedRoleInstance,
                 selectedRoleType: this.state.selectedRoleType,
               })}
             </div>
-          )}
+          </div>
         </div>
       );
     } else {
