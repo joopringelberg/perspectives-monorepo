@@ -26,7 +26,7 @@ export class Where extends Component<WhereProps, WhereState> {
   constructor(props: WhereProps) {
     super(props);
     this.ref = React.createRef();
-    this.state = { accordionOpen: [ModelDependencies.recentContexts] };
+    this.state = { accordionOpen: [] };
   }
 
   componentDidMount() {
@@ -35,7 +35,7 @@ export class Where extends Component<WhereProps, WhereState> {
       this.ref.current.addEventListener(
         'OpenContext', 
         (e : CustomEvent) => {
-          component.setState({accordionOpen: [ModelDependencies.recentContexts]});  
+          component.setState({accordionOpen: []});  
         }, 
         false);
       this.ref.current.addEventListener(
