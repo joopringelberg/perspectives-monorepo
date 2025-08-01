@@ -241,8 +241,8 @@ phase2 share authoringRole r = do
   padding <- lift transactionLevel
   transactionNumber <- AA.gets( \(Transaction tr) -> tr.transactionNumber)
   log $ padding <>  "Entering phase2 of transaction " <> show transactionNumber
-  Transaction {createdContexts, createdRoles, rolesToExit, scheduledAssignments, modelsToBeRemoved} <- AA.get
-  runSharing share authoringRole recursivelyEvaluateStates
+  Transaction {createdContexts, createdRoles, rolesToExit, scheduledAssignments, modelsToBeRemoved, invertedQueryResults} <- AA.get
+  runSharing share authoringRole (recursivelyEvaluateStates invertedQueryResults)
   -- Is there a reason to run phase1 again?
   -- Only if there are new createdContexts, createdRoles, rolesToExit, 
   -- or new scheduledAssignments that are a ContextRemoval, a RoleUnbinding or a ExecuteDestructiveEffect.
@@ -414,13 +414,13 @@ exitContext (ContextRemoval ctxt authorizedRole) = do
   -- Severes the link between the roles and their fillers.
   stateEvaluationAndQueryUpdatesForContext ctxt authorizedRole
 
-  
-recursivelyEvaluateStates :: MonadPerspectivesTransaction Unit
-recursivelyEvaluateStates = do
+-- We have to provide the invertedQueryResults, because we run this function inside an embedded (NEW!) transaction
+-- if sharing is false.
+recursivelyEvaluateStates :: Array InvertedQueryResult -> MonadPerspectivesTransaction Unit
+recursivelyEvaluateStates invertedQueryResults = do
+  AA.modify \t -> over Transaction (\tr -> tr {invertedQueryResults = []}) t
   padding <- lift transactionLevel
   log $ padding <> "Evaluate states"
-  Transaction {invertedQueryResults} <- AA.get
-  AA.modify \t -> over Transaction (\tr -> tr {invertedQueryResults = []}) t
   (stateEvaluations :: Array StateEvaluation) <- lift $ join <$> traverse computeStateEvaluations invertedQueryResults
   if null stateEvaluations
     then pure unit
@@ -430,7 +430,7 @@ recursivelyEvaluateStates = do
   Transaction {invertedQueryResults:newResults} <- AA.get
   if null newResults
     then pure unit
-    else recursivelyEvaluateStates
+    else recursivelyEvaluateStates newResults
 
 evaluateStates :: Array StateEvaluation -> MonadPerspectivesTransaction Unit 
 evaluateStates stateEvaluations' =
