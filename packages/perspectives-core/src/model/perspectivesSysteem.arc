@@ -233,12 +233,20 @@ domain model://perspectives.domains#System
       -- Should be true to show System, BrokerServices and CouchdbManagement from the user.
       property ShowSystemApps (Boolean)
         setting
+      -- PDRDEPENDENCY
+      property OnStartup (Boolean)
       
       state LanguageChanged = not (CurrentLanguage == PreviousLanguage)
         on entry
           do for User
             PreviousLanguage = CurrentLanguage
             callEffect util:SetCurrentLanguage( "currentLanguage", CurrentLanguage )
+      
+      state Startup = OnStartup
+        on entry
+          do for User
+            OnStartup = false
+
 
       view ShowLibraries (ShowLibraries)
 
@@ -300,7 +308,7 @@ domain model://perspectives.domains#System
         in
           bind sys:Me to Inviter in invitation >> binding >> context
       perspective on External
-        props (ShowLibraries, CurrentLanguage, PreviousLanguage, ShowSystemApps) verbs (Consult, SetPropertyValue)
+        props (ShowLibraries, CurrentLanguage, PreviousLanguage, ShowSystemApps, OnStartup) verbs (Consult, SetPropertyValue)
         props (MyContextsVersion, PDRVersion, CurrentDate, CurrentHour) verbs (Consult)
       -- Notice that these roles are filled with the public version of VersionedModelManifest$External.
       -- We can actually only show properties that are in that perspective.
@@ -576,6 +584,16 @@ domain model://perspectives.domains#System
     
     -- PDRDEPENDENCY
     thing SelectedClipboardItem = filter ItemsOnClipboard with Selected
+
+    thing RecoveryPoint
+      state Startup = context >> extern >> OnStartup
+        on entry
+         notify User
+            "The Perspectives system is starting up. Please wait until it is ready."
+        on exit
+          notify User
+            "State startup has exited again."
+
 
   -- A Collection of System Caches.
   case Caches

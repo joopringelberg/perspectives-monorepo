@@ -92,6 +92,9 @@ currentLanguage = "model://perspectives.domains#System$PerspectivesSystem$Extern
 previousLanguage :: String
 previousLanguage = "model://perspectives.domains#System$PerspectivesSystem$External$PreviousLanguage"
 
+onStartUp :: String
+onStartUp = "model://perspectives.domains#System$PerspectivesSystem$External$OnStartup"
+
 userChannel :: String
 userChannel = "model://perspectives.domains#System$PerspectivesSystem$User$Channel"
 

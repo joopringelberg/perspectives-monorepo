@@ -48,6 +48,7 @@ import IDBKeyVal (clear, idbSet)
 import Perspectives.AMQP.IncomingPost (retrieveBrokerService, incomingPost)
 import Perspectives.Api (resumeApi, setupApi) as API
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
+import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (getPrivateKey)
 import Perspectives.CoreTypes (IndexedResource(..), IntegrityFix(..), JustInTimeModelLoad(..), MonadPerspectives, MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction(..), RuntimeOptions, (##=), (##>>))
 import Perspectives.Couchdb (SecurityDocument(..))
@@ -63,7 +64,7 @@ import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Indexed (indexedContexts_, indexedRoles_)
 import Perspectives.Instances.ObjectGetters (context, externalRole)
-import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, sysUser, userWithCredentialsAuthorizedDomain, userWithCredentialsPassword, userWithCredentialsUsername)
+import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, onStartUp, sysUser, userWithCredentialsAuthorizedDomain, userWithCredentialsPassword, userWithCredentialsUsername)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -78,10 +79,10 @@ import Perspectives.Proxy (handleClientRequest) as Proxy
 import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope, getPropertyFunction, getRoleFunction, getterFromPropertyType)
 import Perspectives.ReferentialIntegrity (fixReferences)
 import Perspectives.Repetition (Duration, fromDuration)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier)
 import Perspectives.ResourceIdentifiers (takeGuid)
-import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary, runEmbeddedTransaction, runMonadPerspectivesTransaction)
+import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary, runEmbeddedTransaction, runMonadPerspectivesTransaction, runMonadPerspectivesTransaction')
 import Perspectives.RunPerspectives (runPerspectivesWithState)
 import Perspectives.SetupCouchdb (createUserDatabases)
 import Perspectives.SetupUser (reSetupUser, setupUser)
@@ -208,7 +209,18 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
       (do 
         log "Starting the Perspectives API."
         -- The very first request will invoke detectPublicStateChanges.
-        runPerspectivesWithState API.setupApi state)
+        runPerspectivesWithState 
+          (do 
+            -- Set the OnStartup property to true, This is a hook to model running things on startup.
+            void $ runMonadPerspectivesTransaction'
+              false
+              (ENR $ EnumeratedRoleType sysUser)
+              (do 
+                mysystem <- lift getMySystem
+                setProperty [RoleInstance $ buitenRol mysystem] (EnumeratedPropertyType onStartUp) Nothing [(Value "true")])
+            API.setupApi
+            )
+          state)
       \e -> do
         logPerspectivesError $ Custom $ "API stopped because: " <> show e
         resumeRun state
