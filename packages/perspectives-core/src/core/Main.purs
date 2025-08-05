@@ -211,7 +211,13 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
         -- The very first request will invoke detectPublicStateChanges.
         runPerspectivesWithState 
           (do 
-            -- Set the OnStartup property to true, This is a hook to model running things on startup.
+            -- Set the OnStartup property to false, then to true. This is a hook to model running things on startup.
+            void $ runMonadPerspectivesTransaction'
+              false
+              (ENR $ EnumeratedRoleType sysUser)
+              (do 
+                mysystem <- lift getMySystem
+                setProperty [RoleInstance $ buitenRol mysystem] (EnumeratedPropertyType onStartUp) Nothing [(Value "false")])
             void $ runMonadPerspectivesTransaction'
               false
               (ENR $ EnumeratedRoleType sysUser)
@@ -238,6 +244,12 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
     forkTimedTransactions repeatingTransactionAVar state = do
       repeatingTransaction <- take repeatingTransactionAVar
       case repeatingTransaction of
+        (PostponedTransaction t@{transaction, instanceId, stateId, authoringRole, startMoment}) -> do
+          f <- forkAff (do 
+            delay (fromDuration startMoment)
+            _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
+            pure unit)
+          registerTransactionFiber f instanceId stateId state
         (TransactionWithTiming t@{instanceId, stateId, startMoment, endMoment}) -> do
           f <- forkAff (do 
             case startMoment of

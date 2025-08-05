@@ -235,18 +235,14 @@ domain model://perspectives.domains#System
         setting
       -- PDRDEPENDENCY
       property OnStartup (Boolean)
+      -- PDRDEPENDENCY
+      property Restart (Boolean)
       
       state LanguageChanged = not (CurrentLanguage == PreviousLanguage)
         on entry
           do for User
             PreviousLanguage = CurrentLanguage
             callEffect util:SetCurrentLanguage( "currentLanguage", CurrentLanguage )
-      
-      state Startup = OnStartup
-        on entry
-          do for User
-            OnStartup = false
-
 
       view ShowLibraries (ShowLibraries)
 
@@ -308,7 +304,7 @@ domain model://perspectives.domains#System
         in
           bind sys:Me to Inviter in invitation >> binding >> context
       perspective on External
-        props (ShowLibraries, CurrentLanguage, PreviousLanguage, ShowSystemApps, OnStartup) verbs (Consult, SetPropertyValue)
+        props (ShowLibraries, CurrentLanguage, PreviousLanguage, ShowSystemApps, OnStartup, Restart) verbs (Consult, SetPropertyValue)
         props (MyContextsVersion, PDRVersion, CurrentDate, CurrentHour) verbs (Consult)
       -- Notice that these roles are filled with the public version of VersionedModelManifest$External.
       -- We can actually only show properties that are in that perspective.
@@ -357,6 +353,24 @@ domain model://perspectives.domains#System
         props (ClipboardData) verbs (Consult)
       perspective on Apps
         props (Name) verbs (Consult)
+      perspective on RecoveryPoint
+        only (Create, Remove)
+        props (InstancesLastSeq, ModelsLastSeq) verbs (Consult, SetPropertyValue)
+        action RefreshRecoveryPoint
+          InstancesLastSeq = callExternal cdb:RefreshRecoveryPoint( 
+            callExternal sensor:ReadSensor( "entities", "identifier" ) returns String,
+            InstancesLastSeq) returns String
+          ModelsLastSeq = callExternal cdb:RefreshRecoveryPoint( 
+            callExternal sensor:ReadSensor( "models", "identifier" ) returns String,
+            ModelsLastSeq) returns String
+        action RecoverFromRecoveryPoint
+          InstancesLastSeq = callExternal cdb:RecoverFromRecoveryPoint( 
+            callExternal sensor:ReadSensor( "entities", "identifier" ) returns String,
+            InstancesLastSeq) returns String
+          ModelsLastSeq = callExternal cdb:RecoverFromRecoveryPoint( 
+            callExternal sensor:ReadSensor( "models", "identifier" ) returns String,
+            ModelsLastSeq) returns String
+          Restart = true for context >> extern
       
       screen
         who 
@@ -377,6 +391,8 @@ domain model://perspectives.domains#System
           row  
             form External
               without props (ShowLibraries, CurrentLanguage, PreviousLanguage)
+          row
+            form RecoveryPoint
         where
           OutgoingInvitations
             master
@@ -586,14 +602,21 @@ domain model://perspectives.domains#System
     thing SelectedClipboardItem = filter ItemsOnClipboard with Selected
 
     thing RecoveryPoint
+      property InstancesLastSeq (String)
+      property ModelsLastSeq (String)
+      on entry
+        do for User
+          InstancesLastSeq = ""
+          ModelsLastSeq = ""
       state Startup = context >> extern >> OnStartup
         on entry
-         notify User
-            "The Perspectives system is starting up. Please wait until it is ready."
-        on exit
-          notify User
-            "State startup has exited again."
-
+          do for User every 2 Minutes
+            InstancesLastSeq = callExternal cdb:RefreshRecoveryPoint( 
+              callExternal sensor:ReadSensor( "entities", "identifier" ) returns String,
+              InstancesLastSeq) returns String
+            ModelsLastSeq = callExternal cdb:RefreshRecoveryPoint( 
+              callExternal sensor:ReadSensor( "models", "identifier" ) returns String,
+              ModelsLastSeq) returns String
 
   -- A Collection of System Caches.
   case Caches

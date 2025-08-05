@@ -783,8 +783,12 @@ aisInPropertyDelta
         property 
         replacementProperty
       cType <- lift $ getEnumeratedRole propertyBearingType >>= pure <<< contextOfRepresentation 
-      allCalculations' <- lift $ getPropertyQueries compileBoth allKeys
-      allCalculations <- lift $ filterA (invertedQueryHasRoleRange cType propertyBearingType) allCalculations'
+      allCalculations <- lift $ getPropertyQueries compileBoth allKeys
+      
+      -- NOTE. This is a too strong restriction. It limits us to role state conditions on the own properties of the role.
+      -- A state condition in terms of properties of other roles is then not supported.
+      -- allCalculations <- lift $ filterA (invertedQueryHasRoleRange cType propertyBearingType) allCalculations'
+
       -- `handleBackwardQuery` will actually not return any users since we have no property queries for properties in a perspective and a perspective itself is always on a role.
       -- However, there may be state queries that must be re-evaluated. We conveniently capture both role- and context state queries through handleBackwardQuery
       for_ allCalculations (handleBackwardQuery propertyBearingInstance)

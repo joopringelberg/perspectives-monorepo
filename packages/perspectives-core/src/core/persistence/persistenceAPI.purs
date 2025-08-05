@@ -252,6 +252,36 @@ foreign import cleanupDeletedDocsImpl :: EffectFn1
   (Promise.Promise Unit)
 
 -----------------------------------------------------------
+-- REFRESHRECOVERYPOINT
+-----------------------------------------------------------
+-- | Refreshes the recovery point for the database.
+-- | Creates the recovery point database if it doesn't exist. 
+-- | It will be created with the same name as the database, but with a suffix of "-recovery".
+-- | Accepts the `last_seq` parameter to specify the last sequence number to be used for the recovery point.
+refreshRecoveryPoint :: forall f. DatabaseName -> String -> MonadPouchdb f String
+refreshRecoveryPoint dbName lastSeq = withDatabase dbName
+  \origin -> withDatabase (dbName <> "-recovery")
+    \recovery -> do
+      do
+        lift $ fromEffectFnAff $ runEffectFnAff3 replicateOnce origin recovery lastSeq
+
+foreign import replicateOnce :: EffectFn3
+  PouchdbDatabase
+  PouchdbDatabase
+  String
+  String
+
+-----------------------------------------------------------
+-- RECOVERFROMRECOVERYPOINT
+-----------------------------------------------------------
+recoverFromRecoveryPoint :: forall f. DatabaseName -> String -> MonadPouchdb f String
+recoverFromRecoveryPoint dbName lastSeq = withDatabase dbName
+  \origin -> withDatabase (dbName <> "-recovery")
+    \recovery -> do
+      do
+        lift $ fromEffectFnAff $ runEffectFnAff3 replicateOnce recovery origin lastSeq
+
+-----------------------------------------------------------
 -- DOCUMENTSINDATABASE
 -----------------------------------------------------------
 includeDocs :: Boolean

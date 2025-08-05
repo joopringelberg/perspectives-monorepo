@@ -231,6 +231,25 @@ export function viewCleanupImpl(db) {
   };
 }
 
+export function replicateOnce (origin, recovery, last_seq) {
+  return function(onError, onSuccess) {
+    const options = last_seq !== "" ? { since: last_seq, live: false } : { live: false };
+    recovery.replicate.from(origin, options)
+      .on('complete', function(info) {
+        console.log(`replicated ${origin.name} to ${recovery.name}. Last sequence: ${info.last_seq}, previous: ${last_seq}`);
+        onSuccess(info.last_seq ? info.last_seq.toString() : "");
+      })
+      .on('error', function(err) {
+        console.error(`Error while replicating ${origin.name} to ${recovery.name}:`, err);
+        onError(convertPouchError(err));
+      });
+      
+    return function(cancelError, cancelerError, cancelerSuccess) {
+      cancelerSuccess();
+    };
+  };
+}
+
 export function addDocumentImpl ( database, doc, force ) {
   return function (onError, onSuccess) {
     database.put(doc, {force: force}, function(err, response)

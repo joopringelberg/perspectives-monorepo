@@ -61,7 +61,7 @@ import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.Assignment.Update (withAuthoringRole)
 import Perspectives.Authenticate (getMyPublicKey)
 import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_id)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectivesTransaction, mkLibEffect2, mkLibEffect3)
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectivesTransaction, mkLibEffect2, mkLibEffect3, mkLibFunc2)
 import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.Deltas (addCreatedContextToTransaction)
@@ -80,7 +80,7 @@ import Perspectives.ModelDependencies (identifiableLastName, perspectivesUsersPu
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (DesignDocument(..), MonadPouchdb, addDocument_, deleteDatabase, getAttachment, getDocument, splitRepositoryFileUrl, tryGetDocument_, withDatabase, Keys(..))
+import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addDocument_, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, splitRepositoryFileUrl, tryGetDocument_, withDatabase)
 import Perspectives.Persistence.API (deleteDocument, documentsInDatabase, excludeDocs) as Persistence
 import Perspectives.Persistence.Authentication (addCredentials) as Authentication
 import Perspectives.Persistence.CouchdbFunctions (addRoleToUser, concatenatePathSegments, removeRoleFromUser)
@@ -92,7 +92,7 @@ import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.PerspectivesState (clearQueryCache, contextCache, getCurrentLanguage, getPerspectivesUser, modelsDatabaseName, removeTranslationTable, roleCache)
 import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.Class.Identifiable (identifier)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, perspectivesUser2RoleInstance)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
@@ -799,6 +799,26 @@ clearAndFillInvertedQueriesDatabase _ = do
   reloadQueries db modelFileName = do
     lift (getInvertedQueriesOfModel db modelFileName >>= saveInvertedQueries)
 
+refreshRecoveryPoint_ :: Array DatabaseName -> Array String -> (RoleInstance ~~> Value)
+refreshRecoveryPoint_ databaseNames lastSeqs _ = try
+  (case head databaseNames, head lastSeqs of
+    Just databaseName, Just lastSeq -> lift $ lift $ Value <$> refreshRecoveryPoint databaseName lastSeq
+    Just databaseName, Nothing -> lift $ lift $ Value <$> refreshRecoveryPoint databaseName ""
+    _, _ -> pure $ Value "")
+  >>= handleExternalFunctionError "model://perspectives.domains#Couchdb$RefreshRecoveryPoint"
+
+recoverFromRecoveryPoint_ :: Array DatabaseName -> Array String -> (RoleInstance ~~> Value)
+recoverFromRecoveryPoint_ databaseNames lastSeqs _ = try
+  (case head databaseNames, head lastSeqs of
+    Just databaseName, Just lastSeq -> do
+      r <- lift $ lift $ Value <$> recoverFromRecoveryPoint databaseName lastSeq 
+      pure r
+    Just databaseName, Nothing -> do
+      r <- lift $ lift $ Value <$> recoverFromRecoveryPoint databaseName ""
+      pure r
+    _, _ -> pure $ Value "")
+  >>= handleExternalFunctionError "model://perspectives.domains#Couchdb$RecoverFromRecoveryPoint"
+
 -- | An Array of External functions. Each External function is inserted into the ExternalFunctionCache and can be retrieved
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
@@ -813,6 +833,8 @@ externalFunctions =
   , mkLibEffect3 "model://perspectives.domains#Couchdb$ResetPassword" True resetPassword
   , mkLibEffect3 "model://perspectives.domains#Couchdb$MakeWritingMemberOf" True makeWritingMemberOf
   , mkLibEffect3 "model://perspectives.domains#Couchdb$RemoveAsWritingMemberOf" True removeAsWritingMemberOf
+  , mkLibFunc2 "model://perspectives.domains#Couchdb$RefreshRecoveryPoint" True refreshRecoveryPoint_
+  , mkLibFunc2 "model://perspectives.domains#Couchdb$RecoverFromRecoveryPoint" True recoverFromRecoveryPoint_
   -- DATABASEADMIN
   , Tuple "model://perspectives.domains#Couchdb$MakeDatabasePublic" {func: unsafeCoerce makeDatabasePublic, nArgs: 2, isFunctional: True, isEffect: true}
   , Tuple "model://perspectives.domains#Couchdb$MakeDatabaseWriteProtected" {func: unsafeCoerce makeDatabaseWriteProtected, nArgs: 2, isFunctional: True, isEffect: true}

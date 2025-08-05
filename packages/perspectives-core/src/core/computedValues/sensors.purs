@@ -41,6 +41,7 @@ import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesQuery, mkLibF
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
+import Perspectives.Persistent (entitiesDatabaseName, modelDatabaseName)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
@@ -74,6 +75,8 @@ sensorFunctions = fromFoldable
   , Tuple (Tuple "domaincache" "size") (unsafePartial cacheSize)
   , Tuple (Tuple "querycache" "size") (unsafePartial cacheSize)
   , Tuple (Tuple "clock" "now") (unsafePartial currentDate)
+  , Tuple (Tuple "entities" "identifier") (unsafePartial \_ _ -> entitiesDatabaseName)
+  , Tuple (Tuple "models" "identifier") (unsafePartial \_ _ -> modelDatabaseName)
   ]
 
 currentDate :: Partial => SensorFunction

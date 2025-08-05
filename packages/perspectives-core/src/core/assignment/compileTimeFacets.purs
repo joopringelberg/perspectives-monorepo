@@ -25,6 +25,7 @@ import Prelude
 
 import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Trans.Class (lift)
+import Data.Maybe (Maybe(..))
 import Effect.AVar (AVar)
 import Effect.Aff (Fiber)
 import Effect.Aff.AVar (put)
@@ -39,7 +40,18 @@ addTimeFacets updater {startMoment, endMoment, repeats} authoringRole stateId = 
   pure $ repeat repeats updater
   where
     repeat :: Repeater -> Updater a -> Updater a
-    repeat Never u = u
+    repeat Never u = case startMoment of 
+      Nothing -> u
+      Just s -> \a -> do 
+        (av :: AVar RepeatingTransaction) <- lift $ gets _.transactionWithTiming
+        lift $ lift $ put (PostponedTransaction
+          { transaction: u a
+          , instanceId: unsafeUnwrapResource a
+          , stateId
+          , authoringRole
+          , startMoment: s
+          })
+          av
     repeat (Forever duration) u = \a -> do
       (av :: AVar RepeatingTransaction) <- lift $ gets _.transactionWithTiming
       lift $ lift $ put (TransactionWithTiming

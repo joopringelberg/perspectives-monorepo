@@ -271,6 +271,14 @@ data RepeatingTransaction = TransactionWithTiming
   , startMoment :: Maybe Duration
   , endMoment :: Maybe Duration
   }
+  |
+  PostponedTransaction
+  { transaction :: MonadPerspectivesTransaction Unit
+  , instanceId :: String
+  , stateId :: StateIdentifier
+  , authoringRole :: RoleType
+  , startMoment :: Duration
+  }
 
 data JustInTimeModelLoad = LoadModel DomeinFileId | ModelLoaded | LoadingFailed String | Stop | HotLine (AVar JustInTimeModelLoad)
 
