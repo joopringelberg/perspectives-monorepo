@@ -44,5 +44,24 @@ export default [
     rules: {
       'no-useless-escape': 'warn', // Downgrade to warning
     }
+  },
+  // PureScript FFI files configuration
+  {
+    files: ['**/packages/perspectives-core/src/core/persistence/*.js'],
+    languageOptions: {
+      globals: {
+        Response: 'readonly',
+        File: 'readonly',
+        fetch: 'readonly',
+        console: 'readonly',
+        btoa: 'readonly',
+        Buffer: 'readonly'
+      }
+    },
+    rules: {
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'no-undef': 'warn'
+    }
   }
 ];
