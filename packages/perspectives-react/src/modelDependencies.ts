@@ -24,7 +24,8 @@ interface ModelDependenciesT
   actualRecentContexts: RoleType;
   roleWithIdProp: PropertyType;
   lastShownOnScreen: PropertyType;
-  connectedToAMQPBroker: PropertyType
+  connectedToAMQPBroker: PropertyType;
+  restart: PropertyType;
 }
 
 const ModelDependencies =
@@ -51,6 +52,7 @@ const ModelDependencies =
 , roleWithIdProp: "model://perspectives.domains#System$RoleWithId$Id" as PropertyType
 , lastShownOnScreen: "model://perspectives.domains#System$PerspectivesSystem$RecentContexts$LastShownOnScreen" as PropertyType
 , connectedToAMQPBroker: "model://perspectives.domains#System$PerspectivesSystem$External$ConnectedToAMQPBroker" as PropertyType
+, restart: "model://perspectives.domains#System$PerspectivesSystem$External$Restart" as PropertyType
 } as ModelDependenciesT;
 
 export default ModelDependencies;

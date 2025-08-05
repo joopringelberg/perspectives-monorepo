@@ -162,6 +162,15 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                     changeLanguage( languages[0] as string )
                   }
                 } ) );
+              // Make sure the restart property is false.
+              pproxy.setProperty( externalRole( systemIdentifier ), ModelDependencies.restart, "false" as ValueT, ModelDependencies.sysUser );
+              // Subscribe to the property that signals restart.
+              component.addUnsubscriber(pproxy.getProperty( externalRole( systemIdentifier ), ModelDependencies.restart, ModelDependencies.systemExternal, 
+                ( restartBools : ValueT[] ) => {
+                  if (restartBools[0] == "true") {
+                    window.location.reload();
+                  }
+                } ) );
               // Open the default screen or the one specified in the URL.
               component.prepareMyContextsScreen();
               })
