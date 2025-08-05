@@ -364,12 +364,10 @@ domain model://perspectives.domains#System
             callExternal sensor:ReadSensor( "models", "identifier" ) returns String,
             ModelsLastSeq) returns String
         action RecoverFromRecoveryPoint
-          InstancesLastSeq = callExternal cdb:RecoverFromRecoveryPoint( 
-            callExternal sensor:ReadSensor( "entities", "identifier" ) returns String,
-            InstancesLastSeq) returns String
-          ModelsLastSeq = callExternal cdb:RecoverFromRecoveryPoint( 
-            callExternal sensor:ReadSensor( "models", "identifier" ) returns String,
-            ModelsLastSeq) returns String
+          callEffect cdb:RecoverFromRecoveryPoint( 
+            callExternal sensor:ReadSensor( "entities", "identifier" ) returns String) 
+          callEffect cdb:RecoverFromRecoveryPoint( 
+            callExternal sensor:ReadSensor( "models", "identifier" ) returns String)
           Restart = true for context >> extern
       
       screen

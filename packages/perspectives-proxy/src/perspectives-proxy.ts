@@ -168,7 +168,7 @@ type ResultResponse = {
 
 type WorkerResponse = {
   responseType: "WorkerResponse";
-  serviceWorkerMessage: "channelId" | "pdrStarted" | "isUserLoggedIn" | "runPDR" | "createAccount" | "resetAccount" | "reCreateInstances" | "recompileLocalModels" | "removeAccount";
+  serviceWorkerMessage: "channelId" | "pdrStarted" | "isUserLoggedIn" | "runPDR" | "createAccount" | "resetAccount" | "reCreateInstances" | "recompileLocalModels" | "removeAccount" | "recoverFromRecoveryPoint";
   channelId: number;
   pdrStarted: boolean;  // true if the PDR has started.
   isUserLoggedIn: boolean;  // true if the user has logged in before.
@@ -177,6 +177,7 @@ type WorkerResponse = {
   reCreateSuccesful: boolean;  // true if the instances have been recreated.
   recompileSuccesful: boolean;  // true if the local models have been recompiled.
   removeSuccesful: boolean;  // true if the account has been removed.
+  recoverSuccesful: boolean;  // true if the recovery point has been recovered.
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -268,6 +269,9 @@ class SharedWorkerChannel
         case "reCreateInstances":
           // {serviceWorkerMessage: "reCreateInstances", reCreateSuccesful: b} where b is a boolean.
           this.valueReceivers.reCreateInstances!( e.data.reCreateSuccesful );
+          break;
+        case "recoverFromRecoveryPoint":
+          this.valueReceivers.recoverFromRecoveryPoint!( e.data.recoverSuccesful );
           break;
         case "recompileLocalModels":
         // {serviceWorkerMessage: "recompileLocalModels", recompileSuccesful: b} where b is a boolean.
@@ -433,6 +437,23 @@ class SharedWorkerChannel
       }
     ) as Promise<boolean>;
     proxy.channelId.then( channelId => proxy.port.postMessage( {proxyRequest: "recompileLocalModels", pouchdbuser, channelId } ) );
+    return p;
+  }
+
+  recoverFromRecoveryPoint (pouchdbuser : PouchdbUser) : Promise<boolean>
+  {
+    const proxy = this;
+    const p = new Promise(
+      function(resolver/*, rejecter*/)
+      {
+        proxy.valueReceivers.recoverFromRecoveryPoint = function(result)
+          {
+            proxy.valueReceivers.recoverFromRecoveryPoint = undefined;
+            resolver( result );
+          };
+      }
+    ) as Promise<boolean>;
+    proxy.channelId.then( channelId => proxy.port.postMessage( {proxyRequest: "recoverFromRecoveryPoint", pouchdbuser, channelId } ) );
     return p;
   }
 
@@ -1687,7 +1708,6 @@ type valueReceiver = (value: any) => void;
 type errorHandler = (error: string) => void;
 type ContextID = string;
 type RolName = string;
-type ExternalRoleType = string;
 
 
 export type ContextSerializationRecord =
@@ -1707,9 +1727,6 @@ export type RolSerialization =
 export type PropertySerialization = { [key: string]: ValueT[] }
 
 type ChatParticipantFields = {roleInstance : RoleInstanceT, firstname? : ValueT, lastname? : ValueT, avatar? : PSharedFile} // avatar will be a PSharedFile.
-
-type ModeledActionName = string
-type TranslatedActionName = string
 
 
 ////////////////////////////////////////////////////////////////////////////////

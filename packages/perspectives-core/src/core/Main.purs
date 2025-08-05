@@ -50,7 +50,7 @@ import Perspectives.Api (resumeApi, setupApi) as API
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (getPrivateKey)
-import Perspectives.CoreTypes (IndexedResource(..), IntegrityFix(..), JustInTimeModelLoad(..), MonadPerspectives, MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction(..), RuntimeOptions, (##=), (##>>))
+import Perspectives.CoreTypes (IndexedResource(..), IntegrityFix(..), JustInTimeModelLoad(..), MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction(..), RuntimeOptions, MonadPerspectives, (##=), (##>>))
 import Perspectives.Couchdb (SecurityDocument(..))
 import Perspectives.DataUpgrade (runDataUpgrades)
 import Perspectives.DataUpgrade.RecompileLocalModels as RECOMPILE
@@ -69,6 +69,7 @@ import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (DatabaseName, Keys(..), PouchdbUser, UserName, compactDatabase, createDatabase, databaseInfo, decodePouchdbUser', deleteDatabase)
+import Perspectives.Persistence.API (recoverFromRecoveryPoint) as Persistence
 import Perspectives.Persistence.CouchdbFunctions (setSecurityDocument)
 import Perspectives.Persistence.State (getSystemIdentifier, withCouchdbUrl)
 import Perspectives.Persistence.Types (Credential(..))
@@ -784,3 +785,43 @@ retrieveAllCredentials = do
 
 handleClientRequest :: Foreign
 handleClientRequest = Proxy.handleClientRequest
+
+recoverFromRecoveryPoint :: Foreign -> (Boolean -> Effect Unit) -> Effect Unit
+recoverFromRecoveryPoint rawPouchdbUser callback = void $ runAff handler 
+  do
+    case decodePouchdbUser' rawPouchdbUser of
+      Left e -> throwError (error "Wrong format for parameter 'rawPouchdbUser' in resetAccount")
+      Right (pouchdbUser :: PouchdbUser) -> do
+        transactionFlag <- new true
+        brokerService <- empty
+        transactionWithTiming <- empty
+        modelToLoad <- empty
+        indexedResourceToCreate <- empty 
+        missingResource <- empty
+        state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
+          pouchdbUser 
+          transactionFlag 
+          transactionWithTiming 
+          modelToLoad 
+          defaultRuntimeOptions 
+          brokerService 
+          indexedResourceToCreate
+          missingResource
+        runPerspectivesWithState 
+          (do 
+            entities <- entitiesDatabaseName
+            models <- modelsDatabaseName
+            void $ Persistence.recoverFromRecoveryPoint entities
+            void $ Persistence.recoverFromRecoveryPoint models
+            pure true)
+          state
+  where
+    handler :: Either Error Boolean -> Effect Unit
+    handler (Left e) = do
+      logPerspectivesError $ Custom $ "An error condition in recoverFromRecoveryPoint: " <> (show e)
+      callback false
+    handler (Right e) = do
+      logPerspectivesError $ Custom $ "Recovered from recovery point!"
+      callback e
+
+        

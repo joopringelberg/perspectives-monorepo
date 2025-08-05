@@ -82,8 +82,6 @@ class InternalChannel
   // Returns a promise for unsubscriber information of the form: {subject: req.subject, corrId: req.corrId}
   send ( req )
   {
-    const proxy = this;
-    const setter = req.reactStateSetter;
     // Create a correlation identifier and store it in the request.
     if ( !req.corrId )
     {
@@ -139,7 +137,7 @@ const pdrStarted = new Promise(function( resolver, rejecter)
 // `handleClientRequest` deals with them by using the InternalChannel's send function, 
 // that has been connected by the PDR with the stream of requests the PerspectivesAPI handles.
 // channels is an array of MessagePort objects. See: https://developer.mozilla.org/en-US/docs/Web/API/MessagePort
-export function handleClientRequest( pdr, channels, request, callersChannelId )
+export function handleClientRequest( pdr, channels, request )
 {
   const req = request.data;
   if (req.proxyRequest)
@@ -193,6 +191,17 @@ export function handleClientRequest( pdr, channels, request, callersChannelId )
                 channels[corrId2ChannelId(req.channelId)].postMessage({responseType: "WorkerResponse", serviceWorkerMessage: "recompileLocalModels", recompileSuccesful: success });
               };
             })(); // The core recompileLocalModels function results in an Effect, hence we apply it to return the (boolean) result.
+        break;
+      case "recoverFromRecoveryPoint":
+        pdr.recoverFromRecoveryPoint(req.pouchdbuser)
+          // eslint-disable-next-line no-unexpected-multiline
+          (function(success) // (Boolean -> Effect Unit)
+            {
+              return function() //  This function is the result of the call to recoverFromRecoveryPoint: the Effect.
+              {
+                channels[corrId2ChannelId(req.channelId)].postMessage({responseType: "WorkerResponse", serviceWorkerMessage: "recoverFromRecoveryPoint", recoverSuccesful: success });
+              };
+            })(); // The core recoverFromRecoveryPoint function results in an Effect, hence we apply it to return the (boolean) result.
         break;
       case "createAccount":
         pdr.createAccount( req.username) (req.pouchdbuser) (req.runtimeOptions) (req.identityDocument)

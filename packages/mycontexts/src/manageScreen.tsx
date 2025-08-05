@@ -55,18 +55,26 @@ export default function ManageScreen()
               </Row>
               <Row>
                 <Col className="alert alert-danger">
-                  Remove your installation from this browser (removes indexedDB, local storage, service workers, caches).
+                  Remove your installation from this browser.
                 </Col>
                 <Col className="d-flex align-items-center">
-                  <Button variant="danger" onClick={deleteAccountFromIndexedDB}>Remove all local data</Button>
+                  <Button variant="danger" onClick={deleteAccountFromIndexedDB}>Remove all data from IndexedDB</Button>
                 </Col>
               </Row>
               <Row>
                 <Col className="alert alert-danger">
-                  Removes your installation. Advised when you have your data in a local Couchdb Database.
+                  Removes your installation when you have your data in a Couchdb Database.
                 </Col>
                 <Col className="d-flex align-items-center">
-                  <Button variant="danger" onClick={deleteAccount}>Completely remove your installation</Button>
+                  <Button variant="danger" onClick={deleteAccount}>Remove all data from Couchdb</Button>
+                </Col>
+              </Row>
+              <Row>
+                <Col className="alert alert-warning">
+                  Restore the data in your installation to its latest recovery point. MyContexts makes a recovery point every 15 minutes.
+                </Col>
+                <Col className="d-flex align-items-center">
+                  <Button variant="warning" onClick={recoverFromRecoveryPoint}>Restore data</Button>
                 </Col>
               </Row>
               <Row>
@@ -165,5 +173,26 @@ function deleteAccount()
     getInstallationData().then( data => {
       const user = constructPouchdbUser(data);
       PDRHandler.then( pdrHandler => pdrHandler.recompileLocalModels(user));
+    });
+  }
+
+  function recoverFromRecoveryPoint()
+  {
+    startPDR();
+    getInstallationData().then( data => {
+      const user = constructPouchdbUser(data);
+      PDRHandler
+        .then( pdrHandler => pdrHandler.recoverFromRecoveryPoint(user))
+        .then( success => {
+          if (success) {
+            alert("Your installation has been restored to its latest recovery point.");
+          } else {
+            alert("Your installation could not be restored to its latest recovery point. Please try again later or contact support.");
+          }
+        })
+        .catch( e => {
+          alert("An error occurred while trying to restore your installation: " + e.message);
+        }
+      );
     });
   }

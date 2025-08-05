@@ -274,12 +274,12 @@ foreign import replicateOnce :: EffectFn3
 -----------------------------------------------------------
 -- RECOVERFROMRECOVERYPOINT
 -----------------------------------------------------------
-recoverFromRecoveryPoint :: forall f. DatabaseName -> String -> MonadPouchdb f String
-recoverFromRecoveryPoint dbName lastSeq = withDatabase dbName
+recoverFromRecoveryPoint :: forall f. DatabaseName -> MonadPouchdb f String
+recoverFromRecoveryPoint dbName = withDatabase dbName
   \origin -> withDatabase (dbName <> "-recovery")
     \recovery -> do
       do
-        lift $ fromEffectFnAff $ runEffectFnAff3 replicateOnce recovery origin lastSeq
+        lift $ fromEffectFnAff $ runEffectFnAff3 replicateOnce recovery origin ""
 
 -----------------------------------------------------------
 -- DOCUMENTSINDATABASE

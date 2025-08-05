@@ -61,7 +61,7 @@ import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.Assignment.Update (withAuthoringRole)
 import Perspectives.Authenticate (getMyPublicKey)
 import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_id)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectivesTransaction, mkLibEffect2, mkLibEffect3, mkLibFunc2)
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2)
 import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.Deltas (addCreatedContextToTransaction)
@@ -807,17 +807,14 @@ refreshRecoveryPoint_ databaseNames lastSeqs _ = try
     _, _ -> pure $ Value "")
   >>= handleExternalFunctionError "model://perspectives.domains#Couchdb$RefreshRecoveryPoint"
 
-recoverFromRecoveryPoint_ :: Array DatabaseName -> Array String -> (RoleInstance ~~> Value)
-recoverFromRecoveryPoint_ databaseNames lastSeqs _ = try
-  (case head databaseNames, head lastSeqs of
-    Just databaseName, Just lastSeq -> do
-      r <- lift $ lift $ Value <$> recoverFromRecoveryPoint databaseName lastSeq 
+recoverFromRecoveryPoint_ :: Array DatabaseName -> RoleInstance -> MonadPerspectivesTransaction Unit
+recoverFromRecoveryPoint_ databaseNames _ = try
+  (case head databaseNames of
+    Just databaseName -> do
+      r <- lift $ void $ recoverFromRecoveryPoint databaseName
       pure r
-    Just databaseName, Nothing -> do
-      r <- lift $ lift $ Value <$> recoverFromRecoveryPoint databaseName ""
-      pure r
-    _, _ -> pure $ Value "")
-  >>= handleExternalFunctionError "model://perspectives.domains#Couchdb$RecoverFromRecoveryPoint"
+    Nothing -> pure unit)
+  >>= handleExternalStatementError "model://perspectives.domains#Couchdb$RecoverFromRecoveryPoint"
 
 -- | An Array of External functions. Each External function is inserted into the ExternalFunctionCache and can be retrieved
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
@@ -834,7 +831,7 @@ externalFunctions =
   , mkLibEffect3 "model://perspectives.domains#Couchdb$MakeWritingMemberOf" True makeWritingMemberOf
   , mkLibEffect3 "model://perspectives.domains#Couchdb$RemoveAsWritingMemberOf" True removeAsWritingMemberOf
   , mkLibFunc2 "model://perspectives.domains#Couchdb$RefreshRecoveryPoint" True refreshRecoveryPoint_
-  , mkLibFunc2 "model://perspectives.domains#Couchdb$RecoverFromRecoveryPoint" True recoverFromRecoveryPoint_
+  , mkLibEffect1 "model://perspectives.domains#Couchdb$RecoverFromRecoveryPoint" True recoverFromRecoveryPoint_
   -- DATABASEADMIN
   , Tuple "model://perspectives.domains#Couchdb$MakeDatabasePublic" {func: unsafeCoerce makeDatabasePublic, nArgs: 2, isFunctional: True, isEffect: true}
   , Tuple "model://perspectives.domains#Couchdb$MakeDatabaseWriteProtected" {func: unsafeCoerce makeDatabaseWriteProtected, nArgs: 2, isFunctional: True, isEffect: true}
