@@ -23,6 +23,8 @@ domain model://perspectives.domains#System
         bind_ sys:MySystem >> extern to start
         Name = "My System" for start
         IsSystemModel = true for start
+    do for Upgrader
+        create role SystemDataUpgrade
 
 
         -- NOTE that the following line only compiles correctly when
@@ -48,6 +50,35 @@ domain model://perspectives.domains#System
 
   -- PDRDEPENDENCY
   aspect user sys:PerspectivesSystem$Installer
+
+  -- We compute Upgrader as sys:Me because we know it is available when the domain context is created. 
+  -- Because of that we can then have SystemDataUpgrade being created in name of sys:Upgrader.
+  user Upgrader = sys:Me
+    perspective on SystemDataUpgrade
+      only (Create, Fill)
+      props (LastHandledUpgrade) verbs (SetPropertyValue, Consult)
+
+  -- This is used to upgrade the PDR data model when a new version of the PDR is distributed.
+  -- When introducing SystemDataUpgrade as an Aspect role in a context, you should:
+  --    * include Upgrader as an aspect role;
+  --    * initialise LastHandledUpgrade to the version to be distributed but one!
+  -- Then model your update using whatever state you need, by using "in state Upgrade<Major>_<Minor>_<Patch>"".
+  thing SystemDataUpgrade
+    on entry
+      do for Upgrader
+        -- This is the version of the PDR that has been handled by the upgrade code.
+        -- It is used to determine whether or not an upgrade is needed.
+        -- The value is set to the current PDR version when the upgrade code has been run.
+        -- If it is not set, it will be set to "0.0.0" on startup.
+        LastHandledUpgrade = "0.0.0"
+    property LastHandledUpgrade (String)
+    state CheckUpgrades = sys:MySystem >> extern >> OnStartup
+      state Upgrade3_0_9 = callExternal util:IsLowerVersion( LastHandledUpgrade, "3.0.9" ) returns Boolean and 
+        (callExternal util:IsLowerVersion( "3.0.9", callExternal util:SystemParameter( "PDRVersion" ) returns String) returns Boolean or
+          ("3.0.9" == callExternal util:SystemParameter( "PDRVersion" ) returns String))
+        on entry
+          do for Upgrader
+            LastHandledUpgrade = callExternal util:SystemParameter( "PDRVersion" ) returns String
 
   -- Used as model://perspectives.domains#System$RoleWithId$Id in the PDR code.
   thing RoleWithId
@@ -210,6 +241,13 @@ domain model://perspectives.domains#System
         do for User
           bind sys:MySocialEnvironment >> extern to SocialEnvironment
 
+    on entry
+      do for sys:Upgrader
+        -- PDRDEPENDENCY
+        create role SystemDataUpgrade
+      do for User
+        create role RecoveryPoint
+
     external
       aspect sys:RootContext$External
       aspect sys:ContextWithSettings$External
@@ -344,7 +382,6 @@ domain model://perspectives.domains#System
         callEffect cdb:ClearAndFillInvertedQueriesDatabase()
       perspective on SocialEnvironment
         only (CreateAndFill, Fill)
-      
       perspective on ItemsOnClipboard
         only (Create, Fill, Remove, Delete)
         props (Name) verbs (Consult)
@@ -369,7 +406,7 @@ domain model://perspectives.domains#System
           callEffect cdb:RecoverFromRecoveryPoint( 
             callExternal sensor:ReadSensor( "models", "identifier" ) returns String)
           Restart = true for context >> extern
-      
+
       screen
         who 
           ActiveContacts
@@ -608,13 +645,23 @@ domain model://perspectives.domains#System
           ModelsLastSeq = ""
       state Startup = context >> extern >> OnStartup
         on entry
-          do for User every 2 Minutes
+          do for User every 15 Minutes
             InstancesLastSeq = callExternal cdb:RefreshRecoveryPoint( 
               callExternal sensor:ReadSensor( "entities", "identifier" ) returns String,
               InstancesLastSeq) returns String
             ModelsLastSeq = callExternal cdb:RefreshRecoveryPoint( 
               callExternal sensor:ReadSensor( "models", "identifier" ) returns String,
               ModelsLastSeq) returns String
+
+    aspect user sys:Upgrader
+    thing SystemDataUpgrade
+      aspect sys:SystemDataUpgrade
+      on entry
+        do for sys:Upgrader
+          LastHandledUpgrade = "0.0.0"
+      on entry of object state model://perspectives.domains#System$SystemDataUpgrade$CheckUpgrades$Upgrade3_0_9
+        do for User
+          create role RecoveryPoint in context
 
   -- A Collection of System Caches.
   case Caches
