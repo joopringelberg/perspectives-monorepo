@@ -3,7 +3,9 @@ import { promises as fs } from 'fs';
 // Create build.json if it doesn't exist
 try {
   await fs.access("./build.json");
+  
 } catch (err) {
+  console.log(err)
   await fs.writeFile("./build.json", JSON.stringify({build: 0}));
 }
 
@@ -15,7 +17,7 @@ const macIcons = ["512.png", "256.png", "128.png", "32.png", "16.png"].map(
   {
     const size = icon.replace(".png", "");
     return {
-      "src": `${buildPath}/AppImages/ios/` + icon, // Update to match your base URL
+      "src": `${buildPath}AppImages/ios/` + icon, // Update to match your base URL
       "sizes": size + "x" + size,
       "type": "image/png"
     }

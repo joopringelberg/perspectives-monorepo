@@ -25,9 +25,9 @@ export default [
       '@typescript-eslint/no-unused-vars': 'warn'
     }
   },
-  // Service Worker specific configuration
+  // Service Worker specific configuration, generateWebManifest.js.
   {
-    files: ['**/perspectives-serviceworker.js', '**/service-worker.js', '**/*serviceworker*.js'],
+    files: ['**/perspectives-serviceworker.js', '**/service-worker.js', '**/*serviceworker*.js', '**/generateManifest.js'],
     languageOptions: {
       globals: {
         self: 'readonly',
