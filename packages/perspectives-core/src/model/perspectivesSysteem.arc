@@ -64,6 +64,7 @@ domain model://perspectives.domains#System
   --    * initialise LastHandledUpgrade to the version to be distributed but one!
   -- Then model your update using whatever state you need, by using "in state Upgrade<Major>_<Minor>_<Patch>"".
   thing SystemDataUpgrade
+    indexed sys:UpgradeHook
     on entry
       do for Upgrader
         -- This is the version of the PDR that has been handled by the upgrade code.
@@ -73,7 +74,7 @@ domain model://perspectives.domains#System
         LastHandledUpgrade = "0.0.0"
     property LastHandledUpgrade (String)
     state CheckUpgrades = sys:MySystem >> extern >> OnStartup
-      state Upgrade3_0_9 = callExternal util:IsLowerVersion( LastHandledUpgrade, "3.0.9" ) returns Boolean and 
+      state Upgrade3_0_9 = callExternal util:IsLowerVersion( sys:UpgradeHook >> LastHandledUpgrade, "3.0.9" ) returns Boolean and 
         (callExternal util:IsLowerVersion( "3.0.9", callExternal util:SystemParameter( "PDRVersion" ) returns String) returns Boolean or
           ("3.0.9" == callExternal util:SystemParameter( "PDRVersion" ) returns String))
         on entry
@@ -242,11 +243,9 @@ domain model://perspectives.domains#System
           bind sys:MySocialEnvironment >> extern to SocialEnvironment
 
     on entry
-      do for sys:Upgrader
-        -- PDRDEPENDENCY
-        create role SystemDataUpgrade
       do for User
         create role RecoveryPoint
+        create role SystemDataUpgrade
 
     external
       aspect sys:RootContext$External
@@ -653,12 +652,8 @@ domain model://perspectives.domains#System
               callExternal sensor:ReadSensor( "models", "identifier" ) returns String,
               ModelsLastSeq) returns String
 
-    aspect user sys:Upgrader
     thing SystemDataUpgrade
       aspect sys:SystemDataUpgrade
-      on entry
-        do for sys:Upgrader
-          LastHandledUpgrade = "0.0.0"
       on entry of object state model://perspectives.domains#System$SystemDataUpgrade$CheckUpgrades$Upgrade3_0_9
         do for User
           create role RecoveryPoint in context

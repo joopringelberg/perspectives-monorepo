@@ -810,9 +810,7 @@ refreshRecoveryPoint_ databaseNames lastSeqs _ = try
 recoverFromRecoveryPoint_ :: Array DatabaseName -> RoleInstance -> MonadPerspectivesTransaction Unit
 recoverFromRecoveryPoint_ databaseNames _ = try
   (case head databaseNames of
-    Just databaseName -> do
-      r <- lift $ void $ recoverFromRecoveryPoint databaseName
-      pure r
+    Just databaseName -> lift $ void $ recoverFromRecoveryPoint databaseName
     Nothing -> pure unit)
   >>= handleExternalStatementError "model://perspectives.domains#Couchdb$RecoverFromRecoveryPoint"
 

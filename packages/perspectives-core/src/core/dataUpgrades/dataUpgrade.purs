@@ -35,7 +35,6 @@ import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), isJust)
 import Data.String (Pattern(..), Replacement(..), replace)
 import Data.Traversable (for)
-import Data.Version (Version, parseVersion)
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign (unsafeToForeign)
@@ -47,7 +46,7 @@ import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Extern.Couchdb (updateModel_)
-import Perspectives.Extern.Utilities (pdrVersion)
+import Perspectives.Extern.Utilities (isLowerVersion, pdrVersion)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
@@ -170,6 +169,15 @@ runDataUpgrades = do
           updateModel_ ["model://perspectives.domains#CouchdbManagement@8.0"] ["false"] (RoleInstance "")
     )
 
+  runUpgrade installedVersion "3.0.9"
+    (\_ -> do
+      -- Add IsSystemModel to various models.
+      runMonadPerspectivesTransaction'
+        false
+        (ENR $ EnumeratedRoleType sysUser)
+        do
+          updateModel_ ["model://perspectives.domains#System@3.0"] ["false"] (RoleInstance "")  
+    )
 
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
   ----------------------------------------------------------------------------------------
@@ -196,22 +204,6 @@ runUpgrade installedVersion upgradeVersion upgrade = if isLowerVersion installed
     upgrade unit
     removeMessage ("Upgrading to PDR version " <> upgradeVersion)
   else pure unit
-
-----------------------------------------------------------------------------------------
----- VERSION COMPARING
-----------------------------------------------------------------------------------------
--- Parse version strings into the Version type
-toVersion :: String -> Maybe Version
-toVersion str = case parseVersion str of
-  Right v -> Just v
-  Left _ -> Nothing
-
--- Compare versions (returns true if v1 < v2)
-isLowerVersion :: String -> String -> Boolean
-isLowerVersion v1 v2 = 
-  case toVersion v1, toVersion v2 of
-    Just v1', Just v2' -> v1' < v2'
-    _, _ -> false  -- Handle parsing errors however you prefer
 
 ----------------------------------------------------------------------------------------
 ---- SPECIFIC UPGRADES

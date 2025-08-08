@@ -42,6 +42,7 @@ import Data.String.Regex (regex, replace) as REGEX
 import Data.String.Regex.Flags (noFlags)
 import Data.Tuple (Tuple(..))
 import Data.Unit (Unit, unit)
+import Data.Version (Version, parseVersion)
 import Effect (Effect)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -52,7 +53,7 @@ import Effect.Uncurried (EffectFn3, runEffectFn3)
 import IDBKeyVal (idbSet) as IDBKeyVal
 import Parsing (ParseError)
 import Perspectives.Authenticate (getMyPublicKey)
-import Perspectives.CoreTypes (MonadPerspectivesQuery, MonadPerspectivesTransaction)
+import Perspectives.CoreTypes (MonadPerspectivesQuery, MonadPerspectivesTransaction, mkLibFunc2)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Error.Boundaries (handleExternalFunctionError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
@@ -74,7 +75,7 @@ import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.ResourceIdentifiers (createCuid)
-import Prelude (class Show, bind, discard, pure, show, void, ($), (<<<), (<>), (>=>), (>>=), (*>))
+import Prelude (class Show, bind, discard, pure, show, void, ($), (<<<), (<>), (>=>), (>>=), (*>), (<))
 import Simple.JSON (readJSON, write, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -271,6 +272,28 @@ setCurrentLanguage keys values _ = case head keys, head values of
     lift $ PState.setCurrentLanguage value
   _, _ -> pure unit
 
+----------------------------------------------------------------------------------------
+---- VERSION COMPARING
+----------------------------------------------------------------------------------------
+-- Parse version strings into the Version type
+toVersion :: String -> Maybe Version
+toVersion str = case parseVersion str of
+  Right v -> Just v
+  Left _ -> Nothing
+
+-- Compare versions (returns true if v1 < v2)
+isLowerVersion :: String -> String -> Boolean
+isLowerVersion v1 v2 = 
+  case toVersion v1, toVersion v2 of
+    Just v1', Just v2' -> v1' < v2'
+    _, _ -> false  -- Handle parsing errors however you prefer
+
+isLowerVersion_ :: Array String -> Array String -> RoleInstance -> MonadPerspectivesQuery Value
+isLowerVersion_ v1s v2s _ = try
+  (case head v1s, head v2s of
+    Just v1, Just v2 -> pure $ Value $ show $ isLowerVersion v1 v2
+    _, _ -> pure $ Value "false")
+  >>= handleExternalFunctionError "model://perspectives.domains#Utilities$IsLowerVersion"
 
 -- | An Array of External functions. Each External function is inserted into the ExternalFunctionCache and can be retrieved
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
@@ -292,4 +315,5 @@ externalFunctions =
   , Tuple "model://perspectives.domains#Utilities$GetSharedFileServerKey" {func: unsafeCoerce getSharedFileServerKey, nArgs: 1, isFunctional: True, isEffect: false}
   , Tuple "model://perspectives.domains#Utilities$IdbSet" {func: unsafeCoerce idbSet, nArgs: 2, isFunctional: True, isEffect: true}
   , Tuple "model://perspectives.domains#Utilities$SetCurrentLanguage" {func: unsafeCoerce setCurrentLanguage, nArgs: 2, isFunctional: True, isEffect: true}
+  , mkLibFunc2 "model://perspectives.domains#Utilities$IsLowerVersion" True isLowerVersion_
   ]
