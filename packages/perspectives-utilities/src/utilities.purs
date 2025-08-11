@@ -27,9 +27,11 @@ import Prelude
 import Control.Monad.Error.Class (class MonadThrow, throwError)
 import Data.Array (cons, elemIndex, uncons)
 import Data.Foldable (intercalate)
+import Data.List (List)
 import Data.Map (Map)
 import Data.Maybe (Maybe(..), maybe, isJust)
 import Data.Reflectable (class Reflectable, reflectType)
+import Data.Set (Set, toUnfoldable)
 import Data.Symbol (class IsSymbol)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, foldMap)
@@ -109,6 +111,9 @@ instance maybePrettyPrint :: (PrettyPrint v) => PrettyPrint (Maybe v) where
 
 instance tuplePrettyPrint :: (PrettyPrint f, PrettyPrint s) => PrettyPrint (Tuple f s) where
   prettyPrint' tab (Tuple f s) = "Tuple " <> prettyPrint' tab f <> prettyPrint' tab s
+
+instance setPrettyPrint :: (PrettyPrint v, Ord v) => PrettyPrint (Set v) where 
+  prettyPrint' tab s = "Set " <> "[" <> intercalate ", " (map (prettyPrint' tab) ((toUnfoldable s) :: List v)) <> "]"
 
 newline :: String
 newline = "\n"
