@@ -54,7 +54,7 @@ import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equalsOrGeneralises_, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.Class.Identifiable (identifier_)
-import Perspectives.Representation.Class.PersistentType (StateIdentifier, getEnumeratedProperty, getEnumeratedRole)
+import Perspectives.Representation.Class.PersistentType (getEnumeratedProperty, getEnumeratedRole)
 import Perspectives.Representation.Class.Property (range) as PT
 import Perspectives.Representation.Class.Role (completeDeclaredFillerRestriction, roleKindOfRoleType, toConjunctiveNormalForm_)
 import Perspectives.Representation.Class.Role (roleTypeIsFunctional) as ROLE
@@ -77,13 +77,12 @@ type FD = PhaseThree QueryFunctionDescription
 -- The domain should be a CDOM.
 -- | The expressions in the statements are compiled and inverted as well.
 compileStatement ::
-  Array StateIdentifier ->
   Domain ->
   Domain ->
   Array RoleType ->
   Statements ->
   PhaseThree QueryFunctionDescription
-compileStatement stateIdentifiers originDomain currentcontextDomain userRoleTypes statements =
+compileStatement originDomain currentcontextDomain userRoleTypes statements =
   case statements of
     -- Compile a series of Assignments into a QueryDescription.
     Statements assignments -> sequenceOfAssignments userRoleTypes assignments
