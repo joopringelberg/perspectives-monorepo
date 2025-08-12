@@ -10,7 +10,7 @@ declare global {
 import './styles/www.css';
 import './styles/accessibility.css'
 import {i18next} from 'perspectives-react';
-import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT } from 'perspectives-proxy';
+import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective } from 'perspectives-proxy';
 import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
 import { Me } from './me';
@@ -123,6 +123,11 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           .then ( () => {
             PDRproxy.then( pproxy => {
               component.props.onMounted()
+
+              // Compute systemUser immediately and store it; do not wait for clipboard subscription.
+              const resolvedSystemUser = (systemIdentifier + "$" + deconstructLocalName( ModelDependencies.sysUser)) as RoleInstanceT
+              component.setState({ systemIdentifier, systemUser: resolvedSystemUser })
+
               pproxy.subscribeSelectedRoleFromClipboard(
                 function (clipBoardContents : RoleOnClipboard[])
                 {
@@ -133,7 +138,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                     component.setState(
                       { systemIdentifier
                       , roleOnClipboard: roleOnClipboard
-                      , systemUser: systemIdentifier + "$" + deconstructLocalName( ModelDependencies.sysUser) as RoleInstanceT
+                      , systemUser: resolvedSystemUser
                       });
                   }
                   else if (!roleOnClipboard)
@@ -141,9 +146,12 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                     // The clipboard is empty. Remove the role from the state.
                     component.setState(
                       { systemIdentifier
-                      , systemUser: systemIdentifier + "$" + deconstructLocalName( ModelDependencies.sysUser) as RoleInstanceT
+                      , systemUser: resolvedSystemUser
                       , roleOnClipboard: undefined
                       });
+                  }
+                  else {
+                    component.setState({ systemUser: resolvedSystemUser });
                   }
                 }
               )
@@ -172,7 +180,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   }
                 } ) );
               // Open the default screen or the one specified in the URL.
-              component.prepareMyContextsScreen();
+              component.prepareMyContextsScreen(resolvedSystemUser);
               })
             }
           )
@@ -347,19 +355,63 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       { isSmallScreen: window.innerWidth < 768, doubleSection: computeDoubleSection() } );
   }
 
-  prepareMyContextsScreen( )
+  prepareMyContextsScreen( systemUserOverride?: RoleInstanceT )
   {
-    const component = this;
-    const params = new URLSearchParams(document.location.search.substring(1));
-    
-    if (params.get("opencontext"))
-    {
-      this.tryToOpenContext( decodeURIComponent( params.get("opencontext")!) );
-    }
-    else {
-      component.openWelcomePage( );
-    }
-  }
+    const effectiveSystemUser = systemUserOverride ?? this.state.systemUser;
+     // Returns the roleId whose lastShownOnScreen is the most recent.
+     // If none have that property, returns undefined.
+     function mostRecentRoleId(
+       perspective: Perspective,
+       sortProp: string
+     ): RoleInstanceT | undefined {
+       let best: RoleInstanceT | undefined = undefined;
+       let max = -Infinity;
+     
+       for (const { roleId, propertyValues } of Object.values(perspective.roleInstances)) {
+         const v = propertyValues[sortProp]?.values?.[0];
+         const n = v != null ? Number((v as unknown) as string) : NaN;
+         if (!Number.isNaN(n) && n > max) {
+           max = n;
+           best = roleId;
+         }
+       }
+       return best;
+     }
+     
+     const component = this;
+     const params = new URLSearchParams(document.location.search.substring(1));
+     
+     if (params.get("opencontext"))
+     {
+       this.tryToOpenContext( decodeURIComponent( params.get("opencontext")!) );
+     }
+     else {
+       PDRproxy.then((PDRproxy) => {
+         this.addUnsubscriber(
+           PDRproxy.getPerspectiveForUser(
+             effectiveSystemUser,
+             ModelDependencies.recentContexts,
+             ModelDependencies.WWWUser,
+             (perspectives: Perspective[]) => {
+               const p = perspectives[0];
+               const mostRecent = mostRecentRoleId(p, ModelDependencies.lastShownOnScreen);
+                 if (mostRecent === undefined) {
+                   component.openWelcomePage();
+                 } else {
+                   PDRproxy.getBinding( mostRecent, bindings => {
+                     if (bindings.length > 0) {
+                       component.tryToOpenContext(bindings[0]);
+                     }
+                   });
+                 }
+               },
+             FIREANDFORGET
+             )
+         );
+       });
+   
+     }
+   }
 
   openWelcomePage()
   {
@@ -809,7 +861,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                       systemUser={component.state.systemUser}
                       systemIdentifier={component.state.systemIdentifier}
                       openContext={component.state.openContext}
-                      />
+                    />
                     : 
                       <div>Ga ergens heen.</div>
                     }
