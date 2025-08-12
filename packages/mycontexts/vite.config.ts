@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite'
 // import react from '@vitejs/plugin-react-swc'
 import del from 'rollup-plugin-delete'
-import { resolve } from 'path';
-import fs from 'fs';
-import glob from 'fast-glob';
+import glob from 'fast-glob'
+import fs from 'fs'
+import { resolve } from 'path'
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 
 import { default as thepackage } from './package.json'
@@ -15,17 +15,78 @@ const pageDispatcherVersion = "1";
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  // For development, always use root base
-  const isDev = mode === 'development';
-  
-  // Production base is determined by build.json
-  const devBase = '/';
-  
-  const { build, buildPath } = JSON.parse(fs.readFileSync("./build.json", { encoding: "utf-8" }));
+  const isDev = mode === 'development'
+  const devBase = '/'
+  const { build, buildPath } = JSON.parse(fs.readFileSync("./build.json", { encoding: "utf-8" }))
 
-  console.log(`Building in ${mode} mode, isDev: ${isDev}, buildPath: ${buildPath}`);
-  
+  // module-scope guards
+  let devSwDone = false
+
+  const generateServiceWorkerDev = {
+    name: 'generate-service-worker-dev',
+    apply: 'serve' as const,            // dev only
+    async buildStart() {
+      if (devSwDone) return
+      devSwDone = true
+      console.log(`Generating development service worker (webroot: ${buildPath})...`)
+      let swContent = fs.readFileSync('./src/perspectives-serviceworker.js', 'utf8')
+      const devFiles = [
+        `${buildPath}index.html`,
+        `${buildPath}manage.html`,
+        `${buildPath}assets/main.js`,
+        `${buildPath}assets/main.css`,
+      ]
+      const fileListStr = devFiles.map(f => `"${f}"`).join(',\n  ')
+      if (swContent.includes('const appFiles = [')) {
+        swContent = swContent.replace(/const appFiles = \[\s*[\s\S]*?\];/m, `const appFiles = [\n  ${fileListStr}\n];`)
+      } else {
+        swContent = swContent.replace(/(const cacheName = .*)/, `$1\n\nconst appFiles = [\n  ${fileListStr}\n];`)
+      }
+      swContent = swContent.replace(/__MYCONTEXTS_VERSION__/g, JSON.stringify(thepackage.version))
+      swContent = swContent.replace(/__BUILD__/g, JSON.stringify(build))
+      fs.writeFileSync('./public/perspectives-serviceworker.js', swContent)
+      console.log('Development service worker generated at ./public/perspectives-serviceworker.js')
+    },
+  }
+
+  const generateServiceWorkerBuild = {
+    name: 'generate-service-worker-build',
+    apply: 'build' as const,            // build only
+    async writeBundle() {
+      let swContent = fs.readFileSync('./src/perspectives-serviceworker.js', 'utf8')
+      const files = await glob('**/*', { cwd: resolve(__dirname, 'dist'), onlyFiles: true })
+      const fileListStr = files.map(f => `"/${f}"`).join(',\n  ')
+      if (swContent.includes('const appFiles = [')) {
+        swContent = swContent.replace(/const appFiles = \[\s*[\s\S]*?\];/m, `const appFiles = [\n  ${fileListStr}\n];`)
+      } else {
+        swContent = swContent.replace(/(const cacheName = .*)/, `$1\n\nconst appFiles = [\n  ${fileListStr}\n];`)
+      }
+      swContent = swContent.replace(/__MYCONTEXTS_VERSION__/g, JSON.stringify(thepackage.version))
+      swContent = swContent.replace(/__BUILD__/g, JSON.stringify(build))
+      fs.writeFileSync('./dist/perspectives-serviceworker.js', swContent)
+      console.log('Service worker generated with', files.length, 'files in cache list')
+    },
+  }
+
+  // Plugin fallback: strip top-level "use client" from react-bootstrap ESM
+  const silenceUseClient = {
+    name: 'silence-use-client',
+    enforce: 'pre' as const,
+    transform(code: string, id: string) {
+      if (!id.includes('node_modules/react-bootstrap/esm/')) return null
+      const out = code.replace(/^\s*['"]use client['"];?\s*/,'')
+      return out === code ? null : { code: out, map: null }
+    }
+  }
+
   return {
+    // Suppress esbuild’s “ignored directive” warnings globally (build transforms)
+    esbuild: {
+      logOverride: {
+        'ignored-directive': 'silent',
+        'unsupported-directive': 'silent',
+      },
+    },
     base: isDev ? devBase : buildPath,
     server: {
       port: 5177,
@@ -52,7 +113,10 @@ export default defineConfig(({ mode }) => {
         'Content-Security-Policy': "default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: gap: https://ssl.gstatic.com; style-src * 'self' 'unsafe-inline'; script-src * 'self' 'unsafe-inline' 'unsafe-eval';"
       },
     },
-    plugins: [    
+    plugins: [
+      silenceUseClient,               // fallback (keeps tree clean if logOverride isn’t honored)
+      generateServiceWorkerDev,
+      generateServiceWorkerBuild,
     ],
     resolve: {
       alias: {
@@ -86,8 +150,13 @@ export default defineConfig(({ mode }) => {
       esbuildOptions: {
         mainFields: ['module', 'main'],
         resolveExtensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json'],
-        format: 'esm'
-      }
+        format: 'esm',
+        // Suppress during dep pre-bundling as well
+        logOverride: {
+          'ignored-directive': 'silent',
+          'unsupported-directive': 'silent',
+        },
+      },
     },
     build: {
       target: 'es2023',
@@ -98,99 +167,12 @@ export default defineConfig(({ mode }) => {
           chunkFileNames: 'assets/[name]-[hash].js',
           assetFileNames: 'assets/[name]-[hash].[ext]',
         },
-        input: {
-          main: './index.html',
-          manage: './manage.html',
-        },
+        input: { main: './index.html', manage: './manage.html' },
         plugins: [
-          del({ targets: 'dist/*' }), // Add this line to clear the dist directory
-          // visualizer({
-          //   filename: './dist/stats.html',
-          //   open: true
-          // })
-          // A custom plugin to generate the service worker with file list
-          {
-            name: 'generate-service-worker',
-            buildStart: async () => {
-              console.log(`Generating development service worker (webroot: ${buildPath})...`);
-              
-              // Read the service worker template
-              let swContent = fs.readFileSync('./src/perspectives-serviceworker.js', 'utf8');
-              
-              // For development, include basic files with correct paths
-              const devFiles = [
-                `${buildPath}index.html`,
-                `${buildPath}manage.html`,
-                `${buildPath}assets/main.js`,
-                `${buildPath}assets/main.css`
-              ];
-              
-              // Create the file array as a string
-              const fileListStr = devFiles.map(file => `"${file}"`).join(',\n  ');
-              
-              // Update file list in service worker
-              if (swContent.includes('const appFiles = [')) {
-                swContent = swContent.replace(
-                  /const appFiles = \[\s*[\s\S]*?\];/m,
-                  `const appFiles = [\n  ${fileListStr}\n];`
-                );
-              } else {
-                // Add it if it doesn't exist
-                swContent = swContent.replace(
-                  /(const cacheName = .*)/,
-                  `$1\n\nconst appFiles = [\n  ${fileListStr}\n];`
-                );
-              }
-              
-              // Replace version placeholders
-              swContent = swContent.replace(/__MYCONTEXTS_VERSION__/g, JSON.stringify(thepackage.version));
-              swContent = swContent.replace(/__BUILD__/g, JSON.stringify(build));
-              
-              // Write to public directory for development
-              fs.writeFileSync('./public/perspectives-serviceworker.js', swContent);
-              console.log('Development service worker generated at ./public/perspectives-serviceworker.js');
-            },
-            writeBundle: async () => {
-              // Read the service worker template
-              let swContent = fs.readFileSync('./src/perspectives-serviceworker.js', 'utf8');
-              
-              // Get all files in dist directory (recursively)
-
-              const files = await glob('**/*', { 
-                cwd: resolve(__dirname, 'dist'),
-                onlyFiles: true 
-              });
-              
-              // Create the file array as a string
-              const fileListStr = files
-                .map(file => `"/${file}"`)
-                .join(',\n  ');
-              
-              // Replace placeholder if it exists, or insert after declaration
-              if (swContent.includes('const appFiles = [')) {
-                swContent = swContent.replace(
-                  /const appFiles = \[\s*[\s\S]*?\];/m,
-                  `const appFiles = [\n  ${fileListStr}\n];`
-                );
-              } else {
-                // Add it after the cacheName declaration
-                swContent = swContent.replace(
-                  /(const cacheName = .*)/,
-                  `$1\n\nconst appFiles = [\n  ${fileListStr}\n];`
-                );
-              }
-              
-              // Replace version placeholders
-              swContent = swContent.replace(/__MYCONTEXTS_VERSION__/g, JSON.stringify(thepackage.version));
-              swContent = swContent.replace(/__BUILD__/g, JSON.stringify(build));
-              
-              // Write the final service worker to dist
-              fs.writeFileSync('./dist/perspectives-serviceworker.js', swContent);
-              console.log('Service worker generated with', files.length, 'files in cache list');
-            }
-          }
-        ]
-      }
+          del({ targets: 'dist/*' }),
+          // removed generate-service-worker from here; handled by top-level plugins
+        ],
+      },
     },
     define: {
       __MYCONTEXTS_VERSION__: JSON.stringify(thepackage.version),
@@ -198,6 +180,6 @@ export default defineConfig(({ mode }) => {
       __MyContextsContainer__: JSON.stringify("root"),
       __PAGEDISPATCHER_VERSION__: pageDispatcherVersion,
       __BUILD__: JSON.stringify(build),
-    }
+    },
   }
-});
+})
