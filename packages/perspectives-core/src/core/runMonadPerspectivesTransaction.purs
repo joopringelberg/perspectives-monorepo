@@ -25,13 +25,15 @@ module Perspectives.RunMonadPerspectivesTransaction where
 import Control.Monad.AvarMonadAsk (get, gets, modify) as AA
 import Control.Monad.Error.Class (catchError, throwError)
 import Control.Monad.Reader (lift, runReaderT)
-import Data.Array (difference, filter, filterA, index, intercalate, length, null, sort, unsafeIndex)
-import Data.Foldable (for_)
+import Data.Array (difference, filter, filterA, index, intercalate, length, null, sort, unsafeIndex, cons, reverse)
+import Data.Foldable (foldl, for_)
 import Data.Map as MAP
 import Data.Maybe (Maybe(..), fromJust, isNothing)
 import Data.Newtype (over, unwrap)
+import Data.Set as Set
 import Data.Traversable (for, traverse)
 import Data.TraversableWithIndex (forWithIndex)
+import Data.Tuple (Tuple(..))
 import Data.Unfoldable (replicate)
 import Effect.Aff.AVar (new, put, take, tryRead)
 import Effect.Class.Console (log)
@@ -55,7 +57,8 @@ import Perspectives.Persistent (tryRemoveEntiteit)
 import Perspectives.PerspectivesState (addBinding, addWarning, clearPublicRolesJustLoaded, decreaseTransactionLevel, getPublicRolesJustLoaded, increaseTransactionLevel, nextTransactionNumber, pushFrame, restoreFrame, transactionFlag, transactionLevel)
 import Perspectives.Query.QueryTypes (Calculation(..))
 import Perspectives.Query.UnsafeCompiler (context2propertyValue, getCalculatedRoleInstances)
-import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
+import Perspectives.Representation.Class.PersistentType (StateIdentifier)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RoleStateCompiler (enteringRoleState, evaluateRoleState, exitingRoleState)
 import Perspectives.SaveUserData (changeRoleBinding, removeContextInstance, removeRoleInstance, stateEvaluationAndQueryUpdatesForContext, queryUpdatesForRole)
@@ -64,7 +67,7 @@ import Perspectives.Sync.HandleTransaction (executeDeltas, expandDeltas)
 import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
 import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..), createTransaction)
 import Perspectives.Types.ObjectGetters (contextRootStates, publicUrl_, roleRootStates)
-import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, void, ($), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||))
+import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, unless, void, ($), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||))
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -140,32 +143,44 @@ phase1 share authoringRole r = do
   -- step2 to finally remove the contexts. Keeping them in the Transaction is not optimal as we have to 
   -- filter them on every recursive call to phase1, to see whether they have exited or not.
   AA.modify (\t -> over Transaction (\tr -> tr {createdContexts = [], createdRoles = [], rolesToExit = []}) t)
-  -- Enter the rootState of new contexts.
-  void $ for createdContexts
-    \ctxt -> do
-      states <- lift (ctxt ##= contextType >=> liftToInstanceLevel contextRootStates)
-      -- Provide a new frame for the current context variable binding.
-      oldFrame <- lift pushFrame
-      lift $ addBinding "currentcontext" [unwrap ctxt]
-      -- Error boundary.
-      catchError (void $ runSharing share authoringRole (for states (enteringState ctxt)))
-        \e -> do 
-          lift $ addWarning (show e)
-          logPerspectivesError $ Custom ("Cannot enter context state for " <> show ctxt <>  ", because " <> show e)
-      lift $ restoreFrame oldFrame
-  -- Enter the rootState of roles that are created.
-  void $ for createdRoles
-    \rid -> do
+  ----------------------------------------------------------------
+  -- Enter root states for newly created CONTEXTS (guarded)
+  ----------------------------------------------------------------
+  unless (null createdContexts) $
+    void $ runSharing share authoringRole $ for createdContexts \cid -> do
+      states <- lift (cid ##= contextType >=> liftToInstanceLevel contextRootStates)
+      if null states
+        then pure unit
+        else do
+          oldFrame <- lift pushFrame
+          lift $ addBinding "currentcontext" [unwrap cid]
+          void $ for states \st -> do
+            let k = stateKeyForContext st cid
+            already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
+            unless already do
+              enteringState cid st
+              AA.modify \t -> over Transaction (\tr -> tr { executedStateKeys = Set.insert k tr.executedStateKeys }) t
+          lift $ restoreFrame oldFrame
+  ----------------------------------------------------------------
+  -- Enter root states for newly created ROLES (guarded)
+  ----------------------------------------------------------------
+  unless (null createdRoles) $
+    void $ runSharing share authoringRole $ for createdRoles \rid -> do
       ctxt <- lift (rid ##>> context)
       states <- lift (rid ##= roleType >=> liftToInstanceLevel roleRootStates)
-      oldFrame <- lift pushFrame
-      lift $ addBinding "currentcontext" [unwrap ctxt]
-      -- Error boundary.
-      catchError (void $ runSharing share authoringRole (for states (enteringRoleState rid)))
-        \e -> do 
-          lift $ addWarning (show e)
-          logPerspectivesError $ Custom ("Cannot enter role state, because " <> show e)
-      lift $ restoreFrame oldFrame
+      if null states
+        then pure unit
+        else do
+          oldFrame <- lift pushFrame
+          lift $ addBinding "currentcontext" [unwrap ctxt]
+          void $ for states \st -> do
+            let k = stateKeyForRole st rid
+            already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
+            unless already do
+              enteringRoleState rid st
+              AA.modify \t -> over Transaction (\tr -> tr { executedStateKeys = Set.insert k tr.executedStateKeys }) t
+          lift $ restoreFrame oldFrame
+
   -- Exit the rootState of roles that are scheduled to be removed, unless we did so before.
   rolesThatHaveNotExited <- lift $ filterA (\rid -> rid ##>> exists' getActiveRoleStates) rolesToExit
   if not $ null rolesThatHaveNotExited
@@ -190,7 +205,15 @@ phase1 share authoringRole r = do
                 logPerspectivesError $ Custom ("Cannot exit role state for " <> show rid <> ", because " <> show e)
                 lift $ restoreFrame oldFrame
                 throwError e
-            lift $ restoreFrame oldFrame)
+            lift $ restoreFrame oldFrame
+            -- Remove executed keys so re-entry can fire again later in this transaction
+            AA.modify \t -> over Transaction (\tr -> tr
+              { executedStateKeys = foldl
+                  (\acc st -> Set.delete (stateKeyForRole st rid) acc)
+                  tr.executedStateKeys
+                  states
+              }) t
+      )
   -- Exit the rootState of contexts that scheduled to be removed, unless we did so before.
   contextsThatHaveNotExited <- lift $ filterA (\sa -> case sa of
       ContextRemoval ctxt _ -> ctxt ##>> exists' getActiveStates
@@ -241,7 +264,10 @@ phase2 share authoringRole r = do
   padding <- lift transactionLevel
   transactionNumber <- AA.gets( \(Transaction tr) -> tr.transactionNumber)
   log $ padding <>  "Entering phase2 of transaction " <> show transactionNumber
+  -- Clear the parent transaction's invertedQueryResults BEFORE (possibly) spawning an embedded transaction,
+  -- so they cannot be re-used spuriously in a later phase2.
   Transaction {createdContexts, createdRoles, rolesToExit, scheduledAssignments, modelsToBeRemoved, invertedQueryResults} <- AA.get
+  AA.modify \t -> over Transaction (\tr -> tr { invertedQueryResults = [] }) t
   runSharing share authoringRole (recursivelyEvaluateStates invertedQueryResults)
   -- Is there a reason to run phase1 again?
   -- Only if there are new createdContexts, createdRoles, rolesToExit, 
@@ -324,7 +350,7 @@ phase2 share authoringRole r = do
           log $ padding <> "Re-evaluating state evaluations that depend on a removed resource: " <> (show postponedStateEvaluations)
           if null postponedStateEvaluations
             then pure unit
-            else (runSharing share authoringRole (evaluateStates postponedStateEvaluations))
+            else (runSharing share authoringRole (evaluateStates (dedupeStateEvaluations postponedStateEvaluations)))
           AA.modify \t -> over Transaction (\tr -> tr {postponedStateEvaluations = [], modelsToBeRemoved = []}) t
           phase2 share authoringRole r
 
@@ -410,6 +436,13 @@ exitContext (ContextRemoval ctxt authorizedRole) = do
           lift $ addWarning (show e)
           logPerspectivesError $ Custom ("Cannot exit state, because " <> show e)
       lift $ restoreFrame oldFrame
+      -- Remove executed keys for these context states
+      AA.modify \t -> over Transaction (\tr -> tr
+        { executedStateKeys = foldl
+            (\acc st -> Set.delete (stateKeyForContext st ctxt) acc)
+            tr.executedStateKeys
+            states
+        }) t
   -- Adds a RemoveExternalRoleInstance to the current transaction.
   -- Severes the link between the roles and their fillers.
   stateEvaluationAndQueryUpdatesForContext ctxt authorizedRole
@@ -418,39 +451,49 @@ exitContext (ContextRemoval ctxt authorizedRole) = do
 -- if sharing is false.
 recursivelyEvaluateStates :: Array InvertedQueryResult -> MonadPerspectivesTransaction Unit
 recursivelyEvaluateStates invertedQueryResults = do
-  AA.modify \t -> over Transaction (\tr -> tr {invertedQueryResults = []}) t
   padding <- lift transactionLevel
   log $ padding <> "Evaluate states"
   (stateEvaluations :: Array StateEvaluation) <- lift $ join <$> traverse computeStateEvaluations invertedQueryResults
-  if null stateEvaluations
+  let deduped = dedupeStateEvaluations stateEvaluations
+  if null deduped
     then pure unit
-    else log (padding <> "==========RUNNING " <> (show $ length stateEvaluations) <> " OTHER STATE EVALUTIONS============")
-  evaluateStates stateEvaluations
-  -- We now may have new inverted query results (and other changes). If so, we re-run phase2.
+    else log (padding <> "==========RUNNING " <> (show $ length deduped) <> " UNIQUE STATE EVALUATIONS============")
+  evaluateStates deduped
   Transaction {invertedQueryResults:newResults} <- AA.get
   if null newResults
     then pure unit
-    else recursivelyEvaluateStates newResults
+    else do
+      AA.modify \t -> over Transaction (\tr -> tr {invertedQueryResults = []}) t
+      recursivelyEvaluateStates newResults
 
 evaluateStates :: Array StateEvaluation -> MonadPerspectivesTransaction Unit 
 evaluateStates stateEvaluations' =
   void $ for stateEvaluations' \s -> case s of
     ContextStateEvaluation stateId contextId -> do
-      -- Provide a new frame for the current context variable binding.
-      oldFrame <- lift pushFrame
-      lift $ addBinding "currentcontext" [unwrap contextId]
-      (evaluateContextState contextId stateId)
-      lift $ restoreFrame oldFrame
+      let k = stateKeyForContext stateId contextId
+      already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
+      if already
+        then pure unit
+        else do
+          -- Provide a new frame for the current context variable binding.
+            oldFrame <- lift pushFrame
+            lift $ addBinding "currentcontext" [unwrap contextId]
+            (evaluateContextState contextId stateId)
+            lift $ restoreFrame oldFrame
+            -- Register that we executed automatic actions for this (state, context)
+            AA.modify \t -> over Transaction (\tr -> tr { executedStateKeys = Set.insert k tr.executedStateKeys }) t
     RoleStateEvaluation stateId roleId -> do
-      cid <- lift (roleId ##>> context)
-      oldFrame <- lift pushFrame
-      -- NOTE. This may not be necessary; we have no analysis in runtime whether these variables occur in
-      -- expressions in state.
-      lift $ addBinding "currentcontext" [unwrap cid]
-      -- TODO. add binding for "currentobject" or "currentsubject"?!
-      -- `stateId` points the way: stateFulObject (StateFulObject) tells us whether it is subject- or object state.
-      evaluateRoleState roleId stateId
-      lift $ restoreFrame oldFrame
+      let k = stateKeyForRole stateId roleId
+      already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
+      if already
+        then pure unit
+        else do
+          cid <- lift (roleId ##>> context)
+          oldFrame <- lift pushFrame
+          lift $ addBinding "currentcontext" [unwrap cid]
+          evaluateRoleState roleId stateId
+          lift $ restoreFrame oldFrame
+          AA.modify \t -> over Transaction (\tr -> tr { executedStateKeys = Set.insert k tr.executedStateKeys }) t
 
 -- | Run and discard the transaction.
 runSterileTransaction :: forall o. MonadPerspectivesTransaction o -> (MonadPerspectives o)
@@ -463,7 +506,7 @@ runSterileTransaction a =
 -- | The transaction flag embedded in PerspectivesState enables us to run just one transaction at a time.
 -- | We use this to execute transactions of various peers (including the own user) one by one,
 -- | not mingling the effects.
--- | However, we have occasions where we want to run a transaction irrespective of whether another was running.
+-- | However, we have occasions where we want to run a transaction irrespective of whether another is running.
 -- | Obviously, we should only do this when we can reason that no harm will be done.
 -- | This is the case, for example, when we want to parse an ARC file, or when we want to add another model
 -- | to the installation.
@@ -607,3 +650,29 @@ detectPublicStateChanges = do
 
 pad :: Int -> String
 pad n = intercalate "" $ replicate n " "
+
+-- Helper key constructors
+stateKeyForContext :: StateIdentifier -> ContextInstance -> String
+stateKeyForContext sid cid = unwrap sid <> ":C:" <> unwrap cid
+
+stateKeyForRole :: StateIdentifier -> RoleInstance -> String
+stateKeyForRole sid rid = unwrap sid <> ":R:" <> unwrap rid
+
+-- Key for a StateEvaluation (used for per-batch deduplication)
+stateEvalKey :: StateEvaluation -> String
+stateEvalKey (ContextStateEvaluation sid cid) = unwrap sid <> ":C:" <> unwrap cid
+stateEvalKey (RoleStateEvaluation sid rid)    = unwrap sid <> ":R:" <> unwrap rid
+
+-- Deduplicate a batch of StateEvaluation values (first occurrence wins)
+dedupeStateEvaluations :: Array StateEvaluation -> Array StateEvaluation
+dedupeStateEvaluations arr =
+  let
+    go :: Tuple (Set.Set String) (Array StateEvaluation) -> StateEvaluation -> Tuple (Set.Set String) (Array StateEvaluation)
+    go (Tuple seen acc) se =
+      let k = stateEvalKey se
+      in if Set.member k seen
+           then Tuple seen acc
+           else Tuple (Set.insert k seen) (cons se acc)
+    Tuple _ revAcc = foldl go (Tuple Set.empty []) arr
+  in
+    reverse revAcc

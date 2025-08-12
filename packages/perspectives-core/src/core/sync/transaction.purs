@@ -32,6 +32,7 @@ import Data.Generic.Rep (class Generic)
 import Data.Map (Map, empty) as MAP
 import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype)
+import Data.Set (Set, empty) as Set
 import Data.Show.Generic (genericShow)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
@@ -94,6 +95,7 @@ newtype Transaction = Transaction (TransactionRecord
   -- Maybe an index where to insert deltas.
   , insertionPoint :: Maybe Int
   , transactionNumber :: Int
+  , executedStateKeys :: Set.Set String
   ))
 
 data TransactionDestination = PublicDestination RoleInstance | Peer UnschemedResourceIdentifier
@@ -160,6 +162,7 @@ instance ReadForeign Transaction where
       , identityDocument: Nothing
       , insertionPoint: Nothing
       , transactionNumber: 0
+      , executedStateKeys: Set.empty
       }
 
 derive newtype instance ReadForeign Transaction'
@@ -170,7 +173,7 @@ instance revisionTransaction :: Revision Transaction where
   changeRevision _ t = t
 
 instance prettyPrintTransaction :: PrettyPrint Transaction where
-  prettyPrint' t (Transaction r) = "Transaction " <> prettyPrint' (t <> "  ") r
+  prettyPrint' t (Transaction r) = "Transaction " <> prettyPrint' (t <> "  ") r 
 
 instance Attachment Transaction where
   setAttachment t _ = t
@@ -200,6 +203,7 @@ createTransaction authoringRole =
       , identityDocument: Nothing
       , insertionPoint: Nothing
       , transactionNumber: 0
+      , executedStateKeys: Set.empty
     }
 
 -- | We consider a Transaction to be 'empty' when it shows no difference to the clone of the original.
