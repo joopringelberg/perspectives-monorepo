@@ -1294,6 +1294,9 @@ handlePostponedStateQualifiedParts = do
         roleKind :: Partial => StateIdentifier -> PhaseThree RoleKind
         roleKind (StateIdentifier s) = State.gets _.dfr >>= \{enumeratedRoles} -> pure $ _.kindOfRole $ unwrap $ fromJust (lookup s enumeratedRoles)
 
+-- | Checks if the state is an upstream model state.
+-- An upstream model state is a state that is not part of the current model, but is
+-- part of a model that is referred to by the current model.
 isUpstreamModelState :: StateIdentifier -> PhaseThree Boolean
 isUpstreamModelState (StateIdentifier s) = do
   thisModel <- State.gets (_.namespace <<< _.dfr)

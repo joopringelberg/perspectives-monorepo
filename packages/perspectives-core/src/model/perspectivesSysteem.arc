@@ -73,6 +73,7 @@ domain model://perspectives.domains#System
         -- If it is not set, it will be set to "0.0.0" on startup.
         LastHandledUpgrade = "0.0.0"
     property LastHandledUpgrade (String)
+    -- OnStartup is guaranteed to change to false and then to true every time the system is started.
     state CheckUpgrades = sys:MySystem >> extern >> OnStartup
       state Upgrade3_0_9 = callExternal util:IsLowerVersion( sys:UpgradeHook >> LastHandledUpgrade, "3.0.9" ) returns Boolean and 
         (callExternal util:IsLowerVersion( "3.0.9", callExternal util:SystemParameter( "PDRVersion" ) returns String) returns Boolean or
@@ -80,6 +81,7 @@ domain model://perspectives.domains#System
         on entry
           do for Upgrader
             LastHandledUpgrade = callExternal util:SystemParameter( "PDRVersion" ) returns String
+        state NoRecoveryPoint = not exists sys:MySystem >> RecoveryPoint
 
   -- Used as model://perspectives.domains#System$RoleWithId$Id in the PDR code.
   thing RoleWithId
@@ -389,6 +391,8 @@ domain model://perspectives.domains#System
         props (ClipboardData) verbs (Consult)
       perspective on Apps
         props (Name) verbs (Consult)
+      perspective on SystemDataUpgrade
+        only (Create, Fill)
       perspective on RecoveryPoint
         only (Create, Remove)
         props (InstancesLastSeq, ModelsLastSeq) verbs (Consult, SetPropertyValue)
@@ -579,7 +583,7 @@ domain model://perspectives.domains#System
 
     -- PDRDEPENDENCY
     context Apps = letE
-        showsystemapps <- extern >> ShowSystemApps
+        showsystemapps <- not not extern >> ShowSystemApps
       in
         -- By default, if a StartContext has no value for IsSystemModel, that is interpreted as false.
         -- Hence `not IsSystemModel` will be true. In other words, by default all StartContexts are shown,
@@ -654,7 +658,7 @@ domain model://perspectives.domains#System
 
     thing SystemDataUpgrade
       aspect sys:SystemDataUpgrade
-      on entry of object state model://perspectives.domains#System$SystemDataUpgrade$CheckUpgrades$Upgrade3_0_9
+      on entry of object state model://perspectives.domains#System$SystemDataUpgrade$CheckUpgrades$Upgrade3_0_9$NoRecoveryPoint
         do for User
           create role RecoveryPoint in context
 

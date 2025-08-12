@@ -63,7 +63,7 @@ import Perspectives.Names (expandDefaultNamespaces, lookupIndexedContext, lookup
 import Perspectives.ObjectGetterLookup (lookupPropertyValueGetterByName, lookupRoleGetterByName, propertyGetterCacheInsert)
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Persistent (getPerspectRol)
-import Perspectives.PerspectivesState (addBinding, addWarning, getVariableBindings, lookupVariableBinding)
+import Perspectives.PerspectivesState (addBinding, getVariableBindings, lookupVariableBinding)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), Range, RoleInContext, domain, domain2PropertyRange, domain2contextType, domain2roleType, range, roleInContext2Role)
 import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
@@ -859,7 +859,7 @@ getDynamicPropertyGetter_ pt adt = do
 -- | will compute the Values for a PropertyType (Enumerated or Calculated).
 getPropertyFromTelescope :: EnumeratedPropertyType -> (RoleInstance ~~> Value)
 getPropertyFromTelescope pn r = ArrayT $ (lift $ try $ getPerspectRol r) >>=
-  handlePerspectRolError' "getPropertyFromTelescope" []
+  handlePerspectRolError' ("getPropertyFromTelescope" <> show pn) []
     \((PerspectRol{properties, binding: bnd, pspType:roleType}) :: PerspectRol) -> do
       allProps <- lift $ allLocallyRepresentedProperties (ST roleType)
       if isJust $ elemIndex (ENP pn) allProps

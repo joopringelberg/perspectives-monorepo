@@ -83,7 +83,7 @@ import Perspectives.Repetition (Duration, fromDuration)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier)
 import Perspectives.ResourceIdentifiers (takeGuid)
-import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary, runEmbeddedTransaction, runMonadPerspectivesTransaction, runMonadPerspectivesTransaction')
+import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary, runMonadPerspectivesTransaction, runMonadPerspectivesTransaction')
 import Perspectives.RunPerspectives (runPerspectivesWithState)
 import Perspectives.SetupCouchdb (createUserDatabases)
 import Perspectives.SetupUser (reSetupUser, setupUser)
@@ -141,13 +141,6 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
         indexedResourceToCreate
         missingResource
 
-      -- Start by running data upgrades. We need the private key now if we want to make changes to data!
-      runPerspectivesWithState (do 
-        key <- getPrivateKey
-        modify \(s@{runtimeOptions}) -> s {runtimeOptions = runtimeOptions {privateKey = unsafeCoerce key}}
-        runDataUpgrades)
-        state
-      
       -- Fork aff to capture transactions to run.
       void $ forkAff $ forkTimedTransactions transactionWithTiming state
 
@@ -169,6 +162,15 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
         retrieveBrokerService
         )
         state
+
+      -- Start by running data upgrades. We need the private key now if we want to make changes to data!
+      runPerspectivesWithState (do 
+        key <- getPrivateKey
+        modify \(s@{runtimeOptions}) -> s {runtimeOptions = runtimeOptions {privateKey = unsafeCoerce key}}
+        runDataUpgrades)
+        state
+      
+      -- Set up the API.
       void $ forkAff $ run state
       -- void $ forkAff $ forever do
       --   apiFiber <- forkAff $ do
@@ -365,7 +367,7 @@ forkCreateIndexedResources av state = do
     create ir = case ir of 
       IndexedContext (ContextInstance cid) iName -> do
         mysystem <- getMySystem
-        void $ runEmbeddedTransaction
+        void $ runEmbeddedIfNecessary
           false -- We do not share IndexedRole or IndexedContext.
           (ENR $ EnumeratedRoleType sysUser)
           (createAndAddRoleInstance (EnumeratedRoleType indexedContext) mysystem
@@ -376,7 +378,7 @@ forkCreateIndexedResources av state = do
               }))
       IndexedRole (RoleInstance rid) iName -> do
         mysystem <- getMySystem
-        void $ runEmbeddedTransaction 
+        void $ runEmbeddedIfNecessary 
           false
           (ENR $ EnumeratedRoleType sysUser)
           (createAndAddRoleInstance (EnumeratedRoleType indexedRole) mysystem

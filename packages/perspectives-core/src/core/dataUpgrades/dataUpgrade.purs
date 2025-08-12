@@ -28,6 +28,7 @@ module Perspectives.DataUpgrade where
 
 import Prelude
 
+import Control.Monad.Cont (lift)
 import Control.Monad.Except (runExceptT)
 import Data.Array (catMaybes, elemIndex, union)
 import Data.Either (Either(..))
@@ -38,8 +39,10 @@ import Data.Traversable (for)
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign (unsafeToForeign)
+import Foreign.Object (empty)
 import IDBKeyVal (idbGet, idbSet)
 import Main.RecompileBasicModels (UninterpretedDomeinFile, executeInTopologicalOrder, recompileModel)
+import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (cacheAndSave, setProperty)
 import Perspectives.CoreTypes (MonadPerspectives, (##=))
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
@@ -50,9 +53,10 @@ import Perspectives.Extern.Utilities (isLowerVersion, pdrVersion)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
+import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter)
 import Perspectives.Instances.ObjectGetters (binding, getProperty)
-import Perspectives.ModelDependencies (isSystemModel, rootName, settings, startContexts, sysUser)
+import Perspectives.ModelDependencies (isSystemModel, rootName, settings, startContexts, sysUser, systemModelName, theSystem)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (createDatabase, databaseInfo, documentsInDatabase, includeDocs)
@@ -176,7 +180,16 @@ runDataUpgrades = do
         false
         (ENR $ EnumeratedRoleType sysUser)
         do
-          updateModel_ ["model://perspectives.domains#System@3.0"] ["false"] (RoleInstance "")  
+          updateModel_ ["model://perspectives.domains#System@3.0"] ["false"] (RoleInstance "")
+          void $ createAndAddRoleInstance
+              (EnumeratedRoleType $ systemModelName <> "$SystemDataUpgrade") 
+              "def:#perspectives_domains-System_modelRootContext"
+              (RolSerialization {id: Nothing, properties: PropertySerialization empty, binding: Nothing})
+          system <- lift getMySystem
+          void $ createAndAddRoleInstance
+              (EnumeratedRoleType $ theSystem <> "$SystemDataUpgrade") 
+              system
+              (RolSerialization {id: Nothing, properties: PropertySerialization empty, binding: Nothing})
     )
 
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
