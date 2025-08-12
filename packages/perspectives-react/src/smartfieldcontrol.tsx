@@ -383,7 +383,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               aria-label={ component.props.serialisedProperty.displayName }
               readOnly={ component.props.disabled }
               checked={ component.state.value == "true" }
-              onChange={ toggleValue }
+              // onChange={ toggleValue }
               onClick={ toggleValue }
               required={mandatory}
             />
