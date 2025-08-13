@@ -80,7 +80,7 @@ import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Action (Action(..)) as ACTION
 import Perspectives.Representation.Class.PersistentType (DomeinFileId(..), getCalculatedRole, getContext, getEnumeratedRole, getPerspectType)
 import Perspectives.Representation.Class.Property (hasFacet)
-import Perspectives.Representation.Class.Role (getRoleType, kindOfRole, rangeOfRoleCalculation, roleKindOfRoleType)
+import Perspectives.Representation.Class.Role (getRoleType, kindOfRole, rangeOfRoleCalculation, roleKindOfRoleType, perspectivesOfRoleType)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..))
@@ -316,10 +316,21 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
         onlyOnce
     -- `subject` is a role instance. Returns all RoleTypes that sys:Me
     -- ultimately fills an instance of in the corresponding context instance.
+    -- Filter out role types that do not produce a screen (i.e., no perspectives for the user role in this context).
     Api.GetAllMyRoleTypes -> do
-      allUserRoleTypes <- (RoleInstance subject) ##= (context >=> getAllMyRoleTypes)
-      -- Add translations
-      result <- fromFoldable <$> for allUserRoleTypes \roleType -> do
+      contextInstance <- (RoleInstance subject) ##>> context
+      allUserRoleTypes <- contextInstance ##= getAllMyRoleTypes
+      filteredUserRoleTypes <- foldM
+        (\acc rt -> do
+          ps <- perspectivesOfRoleType rt
+          case head ps of
+            Nothing -> pure acc
+            Just _ -> pure (acc <> [rt])
+        )
+        []
+        allUserRoleTypes
+      -- Add translations for the filtered list only
+      result <- fromFoldable <$> for filteredUserRoleTypes \roleType -> do
         translation <- translateType (roletype2string roleType)
         pure $ Tuple (roletype2string roleType) translation
       sendResponse (Result corrId [(writeJSON result)]) setter
