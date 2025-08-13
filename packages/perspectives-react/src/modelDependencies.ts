@@ -7,6 +7,7 @@ interface ModelDependenciesT
   itemOnClipboardClipboardData: PropertyType;
   itemOnClipboardSelected: PropertyType;
   currentLanguage: PropertyType;
+  maxHistoryItems: PropertyType;
   sysUser: RoleType;
   WWWUser: RoleType;
   notifiedUser: RoleType;
@@ -34,6 +35,7 @@ const ModelDependencies =
 , itemOnClipboardSelected: "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard$Selected"
 , itemOnClipboardClipboardData: "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard$ClipboardData"
 , currentLanguage: "model://perspectives.domains#System$PerspectivesSystem$External$CurrentLanguage" as PropertyType
+, maxHistoryItems: "model://perspectives.domains#System$PerspectivesSystem$External$MaxHistoryLength" as PropertyType
 , sysUser: "model://perspectives.domains#System$PerspectivesSystem$User" as RoleType
 , WWWUser: "model://perspectives.domains#System$PerspectivesSystem$WWWUser" as RoleType
 , notifiedUser: "model://perspectives.domains#System$ContextWithNotification$NotifiedUser" as RoleType

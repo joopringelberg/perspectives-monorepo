@@ -248,6 +248,7 @@ domain model://perspectives.domains#System
       do for User
         create role RecoveryPoint
         create role SystemDataUpgrade
+        MaxHistoryLength = 7 for extern
 
     external
       aspect sys:RootContext$External
@@ -276,7 +277,10 @@ domain model://perspectives.domains#System
       property OnStartup (Boolean)
       -- PDRDEPENDENCY
       property Restart (Boolean)
-      
+      -- MYCONTEXTSDEPENDENCY
+      property MaxHistoryLength (Number)
+        setting
+
       state LanguageChanged = not (CurrentLanguage == PreviousLanguage)
         on entry
           do for User
@@ -343,7 +347,7 @@ domain model://perspectives.domains#System
         in
           bind sys:Me to Inviter in invitation >> binding >> context
       perspective on External
-        props (ShowLibraries, CurrentLanguage, PreviousLanguage, ShowSystemApps, OnStartup, Restart) verbs (Consult, SetPropertyValue)
+        props (ShowLibraries, CurrentLanguage, PreviousLanguage, ShowSystemApps, OnStartup, Restart, MaxHistoryLength) verbs (Consult, SetPropertyValue)
         props (MyContextsVersion, PDRVersion, CurrentDate, CurrentHour) verbs (Consult)
       -- Notice that these roles are filled with the public version of VersionedModelManifest$External.
       -- We can actually only show properties that are in that perspective.
@@ -428,7 +432,7 @@ domain model://perspectives.domains#System
                       >
           row  
             form External
-              without props (ShowLibraries, CurrentLanguage, PreviousLanguage)
+              without props (ShowLibraries, CurrentLanguage, PreviousLanguage, MaxHistoryLength)
           row
             form RecoveryPoint
         where
