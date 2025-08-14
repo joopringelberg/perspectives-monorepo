@@ -1502,20 +1502,20 @@ export class PerspectivesProxy
 
   
   /**
-   * Removes a role instance.
+   * Removes one or more role instances.
    *
    * @param {RolName} rolName - The type of the role instance to be removed.
-   * @param {RoleInstanceT} rolID - The ID of the role instance to be removed.
+   * @param {RoleInstanceT[]} rolID - The IDs of the role instances to be removed.
    * @param {UserRoleType} myroletype - The type of user role performing the removal.
    * @returns {Promise<[]>} A promise that resolves to an empty array upon successful removal.
    */
-  removeRole (rolName : RolName, rolID : RoleInstanceT, myroletype  : UserRoleType) : Promise<[]>
+  removeRoles (rolName : RolName, rolID : RoleInstanceT[], myroletype  : UserRoleType) : Promise<[]>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)
       {
         return proxy.send(
-          {request: "RemoveRole", subject: rolID, predicate: rolName, authoringRole: myroletype, onlyOnce: true},
+          {request: "RemoveRole", subject: JSON.stringify(rolID), predicate: rolName, authoringRole: myroletype, onlyOnce: true},
           resolver,
           rejecter
           );

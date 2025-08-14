@@ -38,7 +38,7 @@ class RemoveRol_ extends PerspectivesComponent
                 function (pproxy)
                 {
                   pproxy
-                    .removeRole( roltype, rolinstance!, component.props.myroletype )
+                    .removeRoles( roltype, [rolinstance!], component.props.myroletype )
                     .catch(e => UserMessagingPromise.then( um => 
                       um.addMessageForEndUser(
                         { title: i18next.t("removeRole_title", { ns: 'preact' }) 

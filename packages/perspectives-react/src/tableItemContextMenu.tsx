@@ -198,9 +198,9 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
         function (pproxy)
         {
           pproxy
-            .removeRole(
+            .removeRoles(
               component.props.perspective.roleType,
-              component.props.roleinstance,
+              [component.props.roleinstance],
               component.props.perspective.userRoleType)
             .catch(e => UserMessagingPromise.then( um => 
               {

@@ -86,9 +86,7 @@ export class RecentContexts extends PerspectivesComponent<RecentContextsProps, R
               component.setState({ perspective: trimmed });
               if (overflow.length > 0) {
                 // Fire-and-forget deletions; any errors will surface via the subscription.
-                overflow.forEach(rid => {
-                  pproxy.removeRole( ModelDependencies.recentContexts, rid, ModelDependencies.sysUser );
-                });
+                pproxy.removeRoles( ModelDependencies.recentContexts, overflow, ModelDependencies.sysUser );
               }
           }
         );

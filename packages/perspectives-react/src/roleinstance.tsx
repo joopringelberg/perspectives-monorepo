@@ -191,9 +191,9 @@ export default class RoleInstance extends PerspectivesComponent<RoleInstanceProp
         function (pproxy)
         {
           pproxy
-            .removeRole(
+            .removeRoles(
               component.state.roltype,
-              component.state.rolinstance!,
+              [component.state.rolinstance!],
               component.props.myroletype)
             .then( () => component.setState({showRemoveContextModal: false}) )
             .catch(e => UserMessagingPromise.then( um => 

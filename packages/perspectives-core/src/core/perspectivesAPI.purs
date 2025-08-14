@@ -34,6 +34,7 @@ import Control.Monad.Trans.Class (lift)
 import Control.Plus ((<|>))
 import Data.Array (catMaybes, elemIndex, foldM, head)
 import Data.Either (Either(..))
+import Data.Foldable (for_)
 import Data.List.Types (NonEmptyList)
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap)
@@ -96,7 +97,7 @@ import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUse
 import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableNameFromTelescope, perspectiveForContextAndUser, perspectivesForContextAndUser, settingsPerspective)
 import Perspectives.Types.ObjectGetters (findPerspective, getAction, getContextAction, isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
 import Prelude (Unit, bind, discard, eq, flip, identity, map, negate, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (/=), (&&))
-import Simple.JSON (read, unsafeStringify, writeJSON)
+import Simple.JSON (read, readJSON_, unsafeStringify, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -606,23 +607,27 @@ dispatchOnRequest r@{request, subject, predicate, object, reactStateSetter, corr
           case result of
             Left e -> lift $ sendResponse (Error corrId (show e)) setter
             Right ids -> lift $ sendResponse (Result corrId (unwrap <$> ids)) setter
-    -- {request: "RemoveRol", subject: rolID, predicate: rolName, object: contextType, authoringRole: myroletype}
+    -- {request: "RemoveRol", subject: rolID[], predicate: rolName, object: contextType, authoringRole: myroletype}
     -- The context type given in object must be described in a locally installed model.
     -- the predicate is the type of the role to be removed. It is the 'authorizedRole'
     Api.RemoveRole -> do
-      if (isExternalRole subject)
-        then do
-          (qrolname :: RoleType) <- string2RoleType subject
-          case qrolname of
-            cr@(CR ctype) -> do
-              isDBQ <- isDatabaseQueryRole cr
-              if isDBQ
-                then void $ runMonadPerspectivesTransaction authoringRole $ removeContextIfUnbound (RoleInstance subject) (Just cr)
-                else sendResponse (Error corrId ("Cannot remove an external role from non-database query role " <> (unwrap ctype))) setter
-            (ENR rtype) -> sendResponse (Error corrId ("Cannot remove an external role from enumerated role " <> (unwrap rtype) <> " - use unbind instead!")) setter
-        else do
-          void $ runMonadPerspectivesTransaction authoringRole $ scheduleRoleRemoval synchronise (RoleInstance subject)
-          sendResponse (Result corrId []) setter
+      mrids :: Maybe (Array RoleInstance) <- pure $ readJSON_ subject
+      case mrids of
+        Nothing -> sendResponse (Error corrId "Invalid role IDs") setter
+        Just rids -> do
+          if (isExternalRole predicate)
+            then do
+              (qrolname :: RoleType) <- string2RoleType predicate
+              case qrolname of
+                cr@(CR ctype) -> do
+                  isDBQ <- isDatabaseQueryRole cr
+                  if isDBQ
+                    then void $ runMonadPerspectivesTransaction authoringRole (for_ rids \rid -> removeContextIfUnbound rid (Just cr))
+                    else sendResponse (Error corrId ("Cannot remove an external role from non-database query role " <> (unwrap ctype))) setter
+                (ENR rtype) -> sendResponse (Error corrId ("Cannot remove an external role from enumerated role " <> (unwrap rtype) <> " - use unbind instead!")) setter
+            else do
+              void $ runMonadPerspectivesTransaction authoringRole (for_ rids \rid -> scheduleRoleRemoval synchronise rid)
+              sendResponse (Result corrId []) setter
     -- {request: "RemoveContext", subject: rolID, predicate: rolName, authoringRole: myroletype}
     -- The context type given in object must be described in a locally installed model.
     -- The RoleType (given in the predicate) must be of kind ContextRole. It may be an unqualified name.
