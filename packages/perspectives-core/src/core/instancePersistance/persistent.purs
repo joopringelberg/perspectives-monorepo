@@ -306,11 +306,13 @@ saveMarkedResources = do
     Ctxt c -> void $ saveCachedEntiteit rs (c :: ContextInstance)
     Rle r -> void $ saveCachedEntiteit rs (r :: RoleInstance)
     Dfile d -> void $ saveCachedEntiteit rs (d :: DomeinFileId)) >>= case _ of 
-      Left e -> logPerspectivesError (Custom ("Could not save resource " <> show rs <> " because: " <> show e)) 
+      Left e -> do 
+        logPerspectivesError (Custom ("Could not save resource " <> show rs <> " because: " <> show e)) 
+        modify \s -> s {entitiesToBeStored = delete rs s.entitiesToBeStored}
       _ -> pure unit
 
 -- | Assumes the entity a has been cached. 
--- | In case saving the resource fails, the cache is left intact.
+-- | In case saving the resource fails, the (entity) cache is restored.
 -- | If the entity is not in cache, it remains in the queue waiting to be saved (it may arrive from a peer).
 -- | This is the only function that removes items from `entitiesToBeStored`.
 saveCachedEntiteit :: forall a i. Attachment a => WriteForeign a => Persistent a i => ResourceToBeStored -> i -> MonadPerspectives a

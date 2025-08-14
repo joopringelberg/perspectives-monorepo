@@ -54,6 +54,7 @@ type Namespace = String
 -- | * when an entity has no revision (i.e. when it had not been saved to Couchdb before)
 -- | * when it had been saved to Couchdb before.
 -- | Finally, it also handles the dynamics of an AVar that can be empty and filled.
+-- | Invariant: after calling this function, the entity's AVar is guaranteed to be non-empty.
 cacheEntity :: forall a i. Cacheable a i => i -> a -> MonadPerspectives (AVar a)
 cacheEntity id e = do
   mAvar <- retrieveInternally id
