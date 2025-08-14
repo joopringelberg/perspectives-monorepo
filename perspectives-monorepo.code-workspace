@@ -27,7 +27,8 @@
 			"perspectives-react",
 			"monorepo",
 			"models",
-			"perspectives-proxy"
+			"perspectives-proxy",
+			"perspectives language"
 		]
 	}
 }

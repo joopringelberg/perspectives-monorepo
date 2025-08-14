@@ -56,7 +56,7 @@ import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Combinators (available_, exists, logicalAnd, logicalOr, not)
 import Perspectives.Instances.Combinators (conjunction, intersection, orElse) as Combinators
 import Perspectives.Instances.Environment (_pushFrame)
-import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextModelName, contextType, contextType_, externalRole, filledByCombinator, filledByOperator, fillsCombinator, getActiveRoleStates_, getActiveStates_, getEnumeratedRoleInstances, getProperty, getRecursivelyFilledRoles', getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType_)
+import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextModelName, contextType, contextType_, externalRole, filledByCombinator, filledByOperator, fillsCombinator, fillsOperator, getActiveRoleStates_, getActiveStates_, getEnumeratedRoleInstances, getProperty, getRecursivelyFilledRoles', getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType_)
 import Perspectives.Instances.Values (parseBool, parseNumber)
 import Perspectives.ModelDependencies (roleWithId)
 import Perspectives.Names (expandDefaultNamespaces, lookupIndexedContext, lookupIndexedRole)
@@ -343,6 +343,11 @@ compileFunction (BQD _ (BinaryCombinator FilledByF) sourceOfFilledRoles sourceOf
   sourceOfFilledRoles' <- compileFunction sourceOfFilledRoles
   sourceOfFillerRoles' <- compileFunction sourceOfFillerRoles
   pure $ (unsafeCoerce filledByOperator (unsafeCoerce sourceOfFilledRoles') (unsafeCoerce sourceOfFillerRoles'))
+
+compileFunction (BQD _ (BinaryCombinator FillsF) sourceOfFilledRoles sourceOfFillerRoles _ _ _) = do
+  sourceOfFilledRoles' <- compileFunction sourceOfFilledRoles
+  sourceOfFillerRoles' <- compileFunction sourceOfFillerRoles
+  pure $ (unsafeCoerce fillsOperator (unsafeCoerce sourceOfFilledRoles') (unsafeCoerce sourceOfFillerRoles'))
 
 compileFunction (BQD _ (BinaryCombinator UnionF) f1 f2 _ _ _) = do
   f1' <- compileFunction f1

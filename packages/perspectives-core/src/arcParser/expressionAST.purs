@@ -25,13 +25,13 @@ module Perspectives.Parsing.Arc.Expression.AST where
 import Prelude
 
 import Data.Eq.Generic (genericEq)
-import Data.Foldable (intercalate) 
+import Data.Foldable (intercalate)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..))
 import Data.Show.Generic (genericShow)
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
-import Perspectives.Representation.QueryFunction (FunctionName) as QF 
+import Perspectives.Representation.QueryFunction (FunctionName) as QF
 import Perspectives.Representation.Range (Range)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 
@@ -123,6 +123,7 @@ data Operator =
   | Intersection ArcPosition
   | OrElse ArcPosition
   | BindsOp ArcPosition
+  | FillsOp ArcPosition
   | Matches ArcPosition
   | Year ArcPosition
   | Month ArcPosition
@@ -238,6 +239,7 @@ instance prettyPrintOperator :: PrettyPrint Operator where
   prettyPrint' t (Intersection _) = "Intersection"
   prettyPrint' t (OrElse _) = "OrElse"
   prettyPrint' t (BindsOp _) = "FilledBy"
+  prettyPrint' t (FillsOp _) = "Fills"
   prettyPrint' t (Matches _) = "Matches"
   prettyPrint' t (Year _) = "Year"
   prettyPrint' t (Month _) = "Month"

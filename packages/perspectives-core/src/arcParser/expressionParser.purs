@@ -294,7 +294,7 @@ isUnaryKeyword kw = isJust $ elemIndex kw ["not", "exists", "filledBy", "fills",
 
 unaryStep :: IP Step
 unaryStep = do
-  keyword <- lookAhead reservedIdentifier <?> "not, exists, filledBy, fills or available. "
+  keyword <- lookAhead reservedIdentifier <?> "not, exists, filledBy, fills, available, contextinstance, roleinstance. "
   case keyword of
     "not" -> (Unary <$> (LogicalNot <$> getPosition <*> (reserved "not" *> (defer \_ -> step))))
     "exists" -> Unary <$> (Exists <$> getPosition <*> (reserved "exists" *> (defer \_ -> step)))
@@ -303,7 +303,7 @@ unaryStep = do
     "available" -> Unary <$> (Available <$> getPosition <*> (reserved "available" *> (defer \_ -> step)))
     "contextinstance" -> Unary <$> (ContextIndividual <$> getPosition <*> (reserved "contextinstance" *> token.parens arcIdentifier) <*> (defer \_ -> step))
     "roleinstance" -> Unary <$> (RoleIndividual <$> getPosition <*> (reserved "roleinstance" *> token.parens arcIdentifier) <*> (defer \_ -> step))
-    s -> fail ("Expected not, exists, filledBy, fills or available, but found: '" <> s <> "'. ")
+    s -> fail ("Expected not, exists, filledBy, fills or available, contextinstance or roleinstance, but found: '" <> s <> "'. ")
 
 operator :: Partial => IP Operator
 operator =
@@ -344,6 +344,8 @@ operator =
   (Intersection <$> (getPosition <* reserved "intersection"))
   <|>
   (BindsOp <$> (getPosition <* token.reserved "filledBy"))
+  <|>
+  (FillsOp <$> (getPosition <* token.reserved "fills"))
   <|>
   -- NOTICE the trick here: we map "matches" to Compose, so we can use it as an infix operator while it
   -- builds on the result of the previous step.
@@ -398,6 +400,7 @@ operatorPrecedence (LessThanEqual _) = 3
 operatorPrecedence (GreaterThan _) = 3
 operatorPrecedence (GreaterThanEqual _) = 3
 operatorPrecedence (BindsOp _) = 3
+operatorPrecedence (FillsOp _) = 3
 operatorPrecedence (Matches _) = 3
 
 operatorPrecedence (LogicalAnd _) = 2
