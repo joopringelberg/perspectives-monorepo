@@ -41,13 +41,14 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Foreign (Foreign, unsafeToForeign)
-import Foreign.Object (Object, empty)
+import Foreign.Object (Object, empty, insert)
 import Main.RecompileBasicModels (recompileModelsAtUrl)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibFunc2, mkLibEffect2, mkLibFunc1, mkLibEffect1)
 import Perspectives.Couchdb (DeleteCouchdbDocument(..), DocWithAttachmentInfo(..))
 import Perspectives.Couchdb.Revision (Revision_, changeRevision)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
+import Perspectives.DomeinCache (AttachmentFiles, addAttachments)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.ErrorLogging (logPerspectivesError)
@@ -66,14 +67,17 @@ import Perspectives.PerspectivesState (addWarning, getWarnings, resetWarnings, s
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedRoleType(..), RoleType(..))
+import Perspectives.ResourceIdentifiers (resourceIdentifier2DocLocator)
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
-import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_)
+import Perspectives.Sidecar.StableIdMapping (StableIdMapping, emptyStableIdMapping)
+import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_, loadAndCompileArcFileWithSidecar_)
 import Simple.JSON (readJSON, readJSON_, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
 -- | Read the .arc file, parse it and try to compile it. Does neither cache nor store.
 -- | However, will load, cache and store dependencies of the model.
 -- | The DomeinFileName should be unversioned.
+-- | Warnings are returned as a result value; they are not sent to the client.
 parseAndCompileArc :: Array DomeinFileName -> Array ArcSource -> (RoleInstance ~~> Value)
 parseAndCompileArc domeinFileName_ arcSource_ _ = try
   (case head domeinFileName_, head arcSource_ of
@@ -95,6 +99,7 @@ parseAndCompileArc domeinFileName_ arcSource_ _ = try
       \e -> ArrayT $ pure [Value (show e)])
   >>= handleExternalFunctionError "model://perspectives.domains#Parsing$ParseAndCompileArc"
 
+-- | Parse and compile the Arc file, saves in cache. Warnings are sent to the client.
 applyImmediately :: Array DomeinFileName -> Array ArcSource -> RoleInstance -> MonadPerspectivesTransaction Unit
 applyImmediately domeinFileName_ arcSource_ _ = try
   (case head domeinFileName_, head arcSource_ of
@@ -124,14 +129,22 @@ uploadToRepository ::
 uploadToRepository domeinFileName_ arcSource_ _ = try
   (case head domeinFileName_, head arcSource_ of
     Just domeinFileName, Just arcSource -> do
-      r <- loadAndCompileArcFile_ (DomeinFileId $ unversionedModelUri domeinFileName) arcSource false
+      let split = unsafePartial modelUri2ModelUrl domeinFileName
+      -- Retrieve existing sidecar (if any) from repository
+      mBlob <- lift $ getAttachment split.repositoryUrl split.documentName "stableIdMapping.json"
+      mMapping <- case mBlob of
+        Nothing -> pure Nothing
+        Just blob -> do
+          txt <- liftAff $ fromBlob blob
+          pure $ case readJSON txt of
+            Right (m :: StableIdMapping) -> Just m
+            _ -> Nothing
+      r <- loadAndCompileArcFileWithSidecar_ (DomeinFileId $ unversionedModelUri domeinFileName) arcSource false mMapping
       case r of
         Left m -> logPerspectivesError $ Custom ("uploadToRepository: " <> show m)
-        -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries.
-        Right (Tuple df@(DomeinFile {id, namespace}) invertedQueries) -> do
-          -- lift $ void $ storeDomeinFileInCache id df
-          -- lift $ void $ CDB.uploadToRepository (DomeinFileId id)
-          lift $ void $ uploadToRepository_ (unsafePartial modelUri2ModelUrl domeinFileName) df invertedQueries
+        -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries plus the updated mapping.
+        Right (Tuple df@(DomeinFile {id, namespace}) (Tuple invertedQueries mapping')) -> do
+          lift $ void $ uploadToRepository_ split df invertedQueries mapping'
     _, _ -> logPerspectivesError $ Custom ("uploadToRepository lacks arguments"))
   >>= handleExternalStatementError "model://perspectives.domains#Parsing$UploadToRepository"
 
@@ -139,32 +152,58 @@ type URL = String
 
 -- | As uploadToRepository, but provide the DomeinFile as argument.
 -- | Adds an empty TranslationTable if the DomeinFile did not yet exist in the Repository.
-uploadToRepository_ :: {repositoryUrl :: String, documentName :: String} -> DomeinFile -> StoredQueries -> MonadPerspectives Unit
-uploadToRepository_ splitName (DomeinFile df) invertedQueries = do 
+-- TODO: retrieve the mapping sidecar from the repository in this function, save its updated value to the repository here too.
+uploadToRepository_ :: {repositoryUrl :: String, documentName :: String} -> DomeinFile -> StoredQueries -> StableIdMapping -> MonadPerspectives Unit
+uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping = do
   -- Get the attachment info
   (mremoteDf :: Maybe DocWithAttachmentInfo) <- tryGetDocument_ splitName.repositoryUrl splitName.documentName
   attachments <- case mremoteDf of
-    Nothing -> pure empty
+    Nothing -> defaultAttachments empty
     Just (DocWithAttachmentInfo {_attachments}) -> case _attachments of
-      Nothing -> pure empty
-      Just atts ->  traverseWithIndex
-        (\attName {content_type} -> Tuple (MediaType content_type) <$> getAttachment splitName.repositoryUrl splitName.documentName attName)
-        atts
+      Nothing -> defaultAttachments empty
+      Just atts -> do
+        mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping)
+        attachments' <- traverseWithIndex
+          (\attName {content_type} -> Tuple (MediaType content_type) <$> getAttachment splitName.repositoryUrl splitName.documentName attName)
+          atts
+        -- Now add or overwrite the inverted queries and the stable mapping, assuming translations are present.
+        pure $ insert
+          "invertedQueries.json"
+          (Tuple (MediaType "application/json") (Just $ unsafeCoerce invertedQueries))
+          (insert
+            "stableIdMapping.json"
+            (Tuple (MediaType "application/json") (Just $ unsafeCoerce mappingFile))
+            attachments')
   -- Get the revision (if any) from the remote database, so we can overwrite.
   (mVersion :: Maybe String) <- retrieveDocumentVersion splitName.repositoryUrl splitName.documentName
   -- The _id of df will be a versionless identifier. If we don't set it to the versioned name, the document
   -- will be stored under the versionless name.
   (newRev :: Revision_) <- addDocument splitName.repositoryUrl (changeRevision mVersion (DomeinFile df {_id = splitName.documentName})) splitName.documentName
-  case mremoteDf of 
-    Nothing -> do 
-      -- Add an empty translations file.
-      theFile <- liftEffect $ unsafeCoerce toFile "translationtable.json" "application/json" (unsafeToForeign $ writeJSON emptyTranslationTable)
-      DeleteCouchdbDocument {rev} <- addAttachment splitName.repositoryUrl splitName.documentName newRev "translationtable.json" theFile (MediaType "application/json")
-      void $ execStateT (go splitName.repositoryUrl splitName.documentName attachments) rev
-    -- Otherwise add the attachments.
-    Just _ -> void $ execStateT (go splitName.repositoryUrl splitName.documentName attachments) newRev
+  void $ execStateT (go splitName.repositoryUrl splitName.documentName attachments) newRev
 
   where
+    -- Default attachments are built from the mapping and inverted queries that are passed in as arguments, 
+    -- and an empty translation table.
+    defaultAttachments :: AttachmentFiles -> MonadPerspectives AttachmentFiles
+    defaultAttachments attachments = do
+      -- Add an empty translations file.
+      translationsFile <- liftEffect $ unsafeCoerce toFile "translationtable.json" "application/json" (unsafeToForeign $ writeJSON emptyTranslationTable)
+      -- Add a skeleton stableIdMapping sidecar.
+      mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping)
+      pure $ insert
+        "stableIdMapping.json"
+        (Tuple (MediaType "application/json") (Just $ unsafeCoerce mappingFile))
+        (insert 
+          "translationtable.json"
+          (Tuple (MediaType "application/json") (Just $ unsafeCoerce translationsFile))
+          (insert
+          "invertedQueries.json"
+          (Tuple 
+            (MediaType "application/json") 
+            (Just $ unsafeCoerce invertedQueries))
+            attachments))
+
+
     -- As each attachment that we add will bump the document version, we have to catch it and use it on the
     -- next attachment.
     go :: URL -> String -> Object (Tuple MediaType (Maybe Foreign)) -> StateT Revision_ MonadPerspectives Unit
@@ -225,19 +264,35 @@ storeModelLocally_ ::
 storeModelLocally_ domeinFileName_ arcSource_ _ = try
   (case head domeinFileName_, head arcSource_ of
     Just domeinFileName, Just arcSource -> do
-      r <- loadAndCompileArcFile_ (DomeinFileId $ unversionedModelUri domeinFileName) arcSource false
+      -- Load mapping from local models DB (if present)
+      let dfId = DomeinFileId $ unversionedModelUri domeinFileName
+      {database, documentName} <- lift $ resourceIdentifier2DocLocator domeinFileName
+      -- TODO: hier moeten we de naam van de DomeinFile in Couchdb hebben!
+      mLocalMappingBlob <- lift $ getAttachment database documentName "stableIdMapping.json"
+      mLocalMapping <- case mLocalMappingBlob of
+        Nothing -> pure Nothing
+        Just blob -> do
+          txt <- liftAff $ fromBlob blob
+          pure $ case readJSON txt of
+            Right (m :: StableIdMapping) -> Just m
+            _ -> Nothing
+      r <- loadAndCompileArcFileWithSidecar_ dfId arcSource false mLocalMapping
       case r of
         Left m -> logPerspectivesError $ Custom ("storeModelLocally: " <> show m)
         -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries.
-        Right (Tuple (DomeinFile dfr@{id, namespace}) invertedQueries) -> do
+        Right (Tuple (DomeinFile dfr@{id, namespace}) (Tuple invertedQueries mapping')) -> do
           (Tuple _ attachments) <- retrieveModelFromLocalStore id
-          updateModel false {-with dependencies-} true {-install for first time if necessary-} id (Tuple dfr attachments) invertedQueries
-          -- Finally, save the invertedQueries as a local replacement of the storedQueries.json attachment.
           theFile <- liftEffect $ toFile "storedQueries.json" "application/json" (unsafeToForeign $ writeJSON invertedQueries)
-          -- We need to get the local database, the local document name and its revision.
-          (DomeinFile {_id, _rev}) <- lift $ getDomeinFile id
-          db <- lift modelDatabaseName
-          lift $ void $ addAttachment db _id _rev "storedQueries.json" theFile (MediaType "application/json")
+          mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping')
+          attachments' <- pure $ insert 
+            "storedQueries.json" 
+            (Tuple (MediaType "application/json") (Just $ unsafeCoerce theFile) )
+            (insert 
+              "stableIdMapping.json" 
+              (Tuple (MediaType "application/json") (Just $ unsafeCoerce mappingFile) ) 
+              attachments)
+          -- Also saves the inverted queries in the inverted query database.
+          updateModel false {-with dependencies-} true {-install for first time if necessary-} id (Tuple dfr attachments') invertedQueries
 
     _, _ -> logPerspectivesError $ Custom ("storeModelLocally lacks arguments"))
   >>= handleExternalStatementError "model://perspectives.domains#Parsing$storeModelLocally"

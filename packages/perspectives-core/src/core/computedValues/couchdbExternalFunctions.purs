@@ -192,6 +192,7 @@ ensureLatestModel_ arrWithModelName arrWithDependencies _ = try
 -- | The second argument should contain the string representation of a boolean value.
 -- | The third argument is an array with an instance of the role ModelsInuse.
 -- | If no SemVer is given, will try to load the unversioned model (if any).
+-- | Also saves the attachments.
 updateModel_ :: Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
 updateModel_ arrWithModelName arrWithDependencies _ = try 
   (case head arrWithModelName of
@@ -203,6 +204,7 @@ updateModel_ arrWithModelName arrWithDependencies _ = try
       else throwError (error $ "This is not a well-formed domain name: " <> modelName))
   >>= handleExternalStatementError "model://perspectives.domains#UpdateModel"
 
+-- | Also saves the attachments.
 updateModel' :: DomeinFileId -> Boolean -> Boolean -> MonadPerspectivesTransaction Unit
 updateModel' dfid@(DomeinFileId modelName) withDependencies install = do
   {versionedModelName} <- computeVersionedAndUnversiondName dfid
@@ -211,6 +213,7 @@ updateModel' dfid@(DomeinFileId modelName) withDependencies install = do
   domeinFileAndAttachents <- retrieveModelFromRepository versionedModelName
   updateModel withDependencies install (DomeinFileId modelName) domeinFileAndAttachents storedQueries 
 
+-- | Also saves the attachments.
 updateModel :: Boolean -> Boolean -> DomeinFileId -> (Tuple DomeinFileRecord AttachmentFiles) -> StoredQueries -> MonadPerspectivesTransaction Unit
 updateModel withDependencies install dfid@(DomeinFileId modelName) domeinFileAndAttachents storedQueries= do
   unversionedModelname <- pure $ unversionedModelUri modelName
@@ -324,7 +327,7 @@ computeVersionedAndUnversiondName (DomeinFileId modelname) = do
   versionedModelName <- pure (unversionedModelname <> (maybe "" ((<>) "@") version))
   pure {patch, build, versionedModelName, unversionedModelname, versionedModelManifest: _.versionedModelManifest <$> x}
 
-
+-- | Also saves the attachments.
 installModelLocally :: (Tuple DomeinFileRecord AttachmentFiles) -> Boolean -> StoredQueries -> MonadPerspectivesTransaction Unit
 installModelLocally (Tuple dfrecord@{id, referredModels, invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects, _attachments} attachmentFiles) isInitialLoad' storedQueries = do
   {patch, build, versionedModelName, unversionedModelname, versionedModelManifest} <- computeVersionedAndUnversiondName id

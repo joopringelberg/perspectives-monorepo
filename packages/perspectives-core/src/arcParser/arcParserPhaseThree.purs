@@ -66,6 +66,8 @@ import Perspectives.Parsing.Arc.PhaseThree.PerspectiveContextualisation (addAspe
 import Perspectives.Parsing.Arc.PhaseThree.Screens (collectPropertyTypes, collectRoles, handleScreens, roleIdentification2Context, roleIdentification2Step)
 import Perspectives.Parsing.Arc.PhaseThree.SetInvertedQueries (setInvertedQueries)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, lift2, modifyDF, runPhaseTwo_', throwError, withDomeinFile, withFrame)
+import Perspectives.ArcParser.UniqueTypeNames (applyStableIdMappingWith)
+import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
 import Perspectives.Parsing.Arc.Position (ArcPosition, arcParserStartPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
 import Perspectives.Persistent (getDomeinFile)
@@ -99,6 +101,7 @@ import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextA
 import Perspectives.Utilities (prettyPrint)
 import Prelude (Unit, append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=))
 
+-- Currently only used in tests and in loadArcFS - but that has to change to phaseThreeWithMapping.
 phaseThree ::
   DomeinFileRecord ->
   LIST.List AST.StateQualifiedPart ->
@@ -108,10 +111,11 @@ phaseThree df@{id} postponedParts screens = do
   -- Store the DomeinFile in cache. If a prefix for the domain is defined in the file,
   -- phaseThree_ will try to retrieve it.
   void $ storeDomeinFileInCache id (DomeinFile df)
-  result <- phaseThree_ df postponedParts screens 
+  result <- phaseThreeWithMapping_ df postponedParts screens Nothing 
   removeDomeinFileFromCache id
   pure result
 
+-- NOTE THIS FUNCTION IS PROBABLY OBSOLETE (NEVER CALLED)
 phaseThree_ ::
   DomeinFileRecord ->
   LIST.List AST.StateQualifiedPart ->
@@ -121,39 +125,102 @@ phaseThree_ df@{id, referredModels} postponedParts screens = do
   -- We don't expect an error on retrieving the DomeinFile, as we've only just put it into cache!
   indexedContexts <- unions <$> traverse (getDomeinFile >=> pure <<< indexedContexts) referredModels
   indexedRoles <- unions <$> traverse (getDomeinFile >=> pure <<< indexedRoles) referredModels
-  (Tuple ei {dfr, invertedQueries}) <- runPhaseTwo_' 
-    (do
-      addAspectsToExternalRoles
-      checkAspectRoleReferences
-      inferFromAspectRoles
-      qualifyBindings
-      qualifyStateNames
-      compileCalculatedRoles
-      requalifyBindingsToCalculatedRoles
-      compileCalculatedProperties
-      -- As all Calculated roles and Properties are now compiled, we can safely compile public Url calculations.
-      compilePublicUrls
-      qualifyPropertyReferences
-      computeCompleteEnumeratedTypes
-      handlePostponedStateQualifiedParts
-      compileStateQueries
-      contextualisePerspectives
-      -- Now all perspectives are available.
-      -- Check whether actions are allowed given perspectives.
-      handleScreens screens
-      checkPerspectiveModifiers
-      invertPerspectiveObjects
-      -- combinePerspectives
-      addUserRoleGraph
-      checkSynchronization
+  (Tuple ei {dfr, invertedQueries}) <-
+    runPhaseTwo_'
+      (do
+        addAspectsToExternalRoles
+        checkAspectRoleReferences
+        inferFromAspectRoles
+        qualifyBindings
+        qualifyStateNames
+        compileCalculatedRoles
+        requalifyBindingsToCalculatedRoles
+        compileCalculatedProperties
+        -- As all Calculated roles and Properties are now compiled, we can safely compile public Url calculations.
+        compilePublicUrls
+        qualifyPropertyReferences
+        computeCompleteEnumeratedTypes
+        handlePostponedStateQualifiedParts
+        compileStateQueries
+        contextualisePerspectives
+        -- Now all perspectives are available.
+        -- Check whether actions are allowed given perspectives.
+        handleScreens screens
+        checkPerspectiveModifiers
+        invertPerspectiveObjects
+        -- combinePerspectives
+        addUserRoleGraph
+        checkSynchronization
       )
-    df
-    indexedContexts
-    indexedRoles
-    postponedParts 
+      df
+      indexedContexts
+      indexedRoles
+      postponedParts
   case ei of
     (Left e) -> pure $ Left e
     otherwise -> pure $ Right (Tuple dfr invertedQueries)
+
+phaseThreeWithMapping ::
+  DomeinFileRecord ->
+  LIST.List AST.StateQualifiedPart ->
+  LIST.List AST.ScreenE ->
+  Maybe StableIdMapping ->
+  MP (Either MultiplePerspectivesErrors (Tuple DomeinFileRecord StoredQueries))
+phaseThreeWithMapping df@{id} postponedParts screens mMapping = do
+  -- Store the DomeinFile in cache. If a prefix for the domain is defined in the file,
+  -- phaseThree_ will try to retrieve it.
+  void $ storeDomeinFileInCache id (DomeinFile df)
+  result <- phaseThreeWithMapping_ df postponedParts screens mMapping
+  removeDomeinFileFromCache id
+  pure result
+
+-- New entry that accepts an optional sidecar mapping.
+phaseThreeWithMapping_ ::
+  DomeinFileRecord ->
+  LIST.List AST.StateQualifiedPart ->
+  LIST.List AST.ScreenE ->
+  Maybe StableIdMapping ->
+  MP (Either MultiplePerspectivesErrors (Tuple DomeinFileRecord StoredQueries))
+phaseThreeWithMapping_ df@{id, referredModels} postponedParts screens mMapping = do
+  indexedContexts <- unions <$> traverse (getDomeinFile >=> pure <<< indexedContexts) referredModels
+  indexedRoles <- unions <$> traverse (getDomeinFile >=> pure <<< indexedRoles) referredModels
+  let dfMapped = case mMapping of
+        Nothing -> df
+        Just mapping0 -> let (Tuple df' _mapping') = applyStableIdMappingWith mapping0 df in df'
+  (Tuple ei {dfr, invertedQueries}) <-
+    runPhaseTwo_'
+      (do
+        addAspectsToExternalRoles
+        checkAspectRoleReferences
+        inferFromAspectRoles
+        qualifyBindings
+        qualifyStateNames
+        compileCalculatedRoles
+        requalifyBindingsToCalculatedRoles
+        compileCalculatedProperties
+        -- As all Calculated roles and Properties are now compiled, we can safely compile public Url calculations.
+        compilePublicUrls
+        qualifyPropertyReferences
+        computeCompleteEnumeratedTypes
+        handlePostponedStateQualifiedParts
+        compileStateQueries
+        contextualisePerspectives
+        -- Now all perspectives are available.
+        -- Check whether actions are allowed given perspectives.
+        handleScreens screens
+        checkPerspectiveModifiers
+        invertPerspectiveObjects
+        -- combinePerspectives
+        addUserRoleGraph
+        checkSynchronization
+      )
+      dfMapped
+      indexedContexts
+      indexedRoles
+      postponedParts
+  pure $ case ei of
+    Left e -> Left e
+    Right _ -> Right (Tuple dfr invertedQueries)
 
 getDF :: Unit -> PhaseThree DomeinFileRecord
 getDF _ = lift $ State.gets _.dfr

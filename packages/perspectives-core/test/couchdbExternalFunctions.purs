@@ -29,6 +29,7 @@ import Perspectives.Query.UnsafeCompiler (getRoleFunction)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..))
 import Perspectives.SetupCouchdb (setRoleView)
+import Perspectives.Sidecar.StableIdMapping (emptyStableIdMapping)
 import Perspectives.TypePersistence.LoadArc.FS (loadCompileAndCacheArcFile, loadCompileAndCacheArcFile')
 import Test.Perspectives.Utils (assertEqual, developmentRepository, runMonadPerspectivesTransaction, runP, runTestadmin, withSystem)
 import Test.Unit (TestF, suiteOnly, test, testOnly)
@@ -68,7 +69,7 @@ uploadToRepository dfId@(DomeinFileId domeinFileName) = do
       case mdf of
         Left err -> logPerspectivesError $ DomeinFileErrorBoundary "uploadToRepository" (show err) 
         -- Notice that we  supply an empty array instead of the actually compiled InvertedQueries!
-        Right df -> uploadToRepository_ (unsafePartial modelUri2ModelUrl domeinFileName) df []
+        Right df -> uploadToRepository_ (unsafePartial modelUri2ModelUrl domeinFileName) df [] emptyStableIdMapping
     else logPerspectivesError $ DomeinFileErrorBoundary "uploadToRepository" ("This modelURI is not well-formed: " <> domeinFileName)
 
 

@@ -38,3 +38,8 @@ The PDR is being intensively developed by the core team. We appreciate feedback 
 ### License information
 This project is available as open source under the terms of the GPL-3.0-or-later license. For accurate information, please check individual files.
 
+
+## Docs
+
+- Stable ID mapping sidecar: see `docs/stable-id-mapping.md` for how aliases and snapshots are applied between Phase Two and Phase Three.
+

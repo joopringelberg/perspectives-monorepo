@@ -32,7 +32,8 @@
     "copyCore": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com/remotetest",
     "copyCoreToRoot": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com",
     "copyCoreToWWW": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com/www",
-    "build": "rollup -c"
+    "build": "rollup -c",
+    "modulemap": "node build-module-map.mjs > module-map.json"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",

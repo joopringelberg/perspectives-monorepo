@@ -6,6 +6,7 @@ import Control.Monad.Error.Class (class MonadThrow, throwError)
 import Control.Monad.State (StateT, evalStateT, get)
 import Control.Monad.Writer (WriterT, lift, runWriterT, tell)
 import Data.Array (cons, difference, elemIndex, filter, foldM, length, null)
+import Data.Either (Either)
 import Data.Maybe (isJust)
 import Data.Tuple (Tuple(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
@@ -80,3 +81,14 @@ sortTopologically_  :: forall m item label. MonadThrow MultiplePerspectivesError
   ToSort item ->
   m (Array item)
 sortTopologically_ getLabel getDependencies toSort = executeInTopologicalOrder getLabel getDependencies toSort (pure <<< identity)
+
+-- | As sortTopologically_, but returns an Either for error handling. Useful in non-monadic contexts.
+sortTopologicallyEither
+  :: forall item label
+   . Eq label
+  => Show label
+  => (item -> label)
+  -> (item -> Array label)
+  -> Array item
+  -> Either MultiplePerspectivesErrors (Array item)
+sortTopologicallyEither = sortTopologically_
