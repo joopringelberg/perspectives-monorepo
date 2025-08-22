@@ -48,7 +48,7 @@ import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesT
 import Perspectives.Couchdb (DeleteCouchdbDocument(..), DocWithAttachmentInfo(..))
 import Perspectives.Couchdb.Revision (Revision_, changeRevision)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
-import Perspectives.DomeinCache (AttachmentFiles, addAttachments)
+import Perspectives.DomeinCache (AttachmentFiles)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.ErrorLogging (logPerspectivesError)
@@ -62,14 +62,13 @@ import Perspectives.ModelTranslation (ModelTranslation, augmentModelTranslation,
 import Perspectives.ModelTranslation (ModelTranslation, emptyTranslationTable)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, addDocument, deleteDocument, fromBlob, getAttachment, getDocument, retrieveDocumentVersion, toFile, tryGetDocument_)
-import Perspectives.Persistent (getDomeinFile, modelDatabaseName)
 import Perspectives.PerspectivesState (addWarning, getWarnings, resetWarnings, setWarnings)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (resourceIdentifier2DocLocator)
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
-import Perspectives.Sidecar.StableIdMapping (StableIdMapping, emptyStableIdMapping)
+import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_, loadAndCompileArcFileWithSidecar_)
 import Simple.JSON (readJSON, readJSON_, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
@@ -163,13 +162,14 @@ uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping = do
       Nothing -> defaultAttachments empty
       Just atts -> do
         mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping)
+        queryFile <- liftEffect $ toFile "storedQueries.json" "application/json" (unsafeToForeign $ writeJSON invertedQueries)
         attachments' <- traverseWithIndex
           (\attName {content_type} -> Tuple (MediaType content_type) <$> getAttachment splitName.repositoryUrl splitName.documentName attName)
           atts
         -- Now add or overwrite the inverted queries and the stable mapping, assuming translations are present.
         pure $ insert
-          "invertedQueries.json"
-          (Tuple (MediaType "application/json") (Just $ unsafeCoerce invertedQueries))
+          "storedQueries.json"
+          (Tuple (MediaType "application/json") (Just $ unsafeCoerce queryFile))
           (insert
             "stableIdMapping.json"
             (Tuple (MediaType "application/json") (Just $ unsafeCoerce mappingFile))
@@ -190,6 +190,7 @@ uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping = do
       translationsFile <- liftEffect $ unsafeCoerce toFile "translationtable.json" "application/json" (unsafeToForeign $ writeJSON emptyTranslationTable)
       -- Add a skeleton stableIdMapping sidecar.
       mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping)
+      queryFile <- liftEffect $ toFile "storedQueries.json" "application/json" (unsafeToForeign $ writeJSON invertedQueries)
       pure $ insert
         "stableIdMapping.json"
         (Tuple (MediaType "application/json") (Just $ unsafeCoerce mappingFile))
@@ -197,10 +198,10 @@ uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping = do
           "translationtable.json"
           (Tuple (MediaType "application/json") (Just $ unsafeCoerce translationsFile))
           (insert
-          "invertedQueries.json"
-          (Tuple 
-            (MediaType "application/json") 
-            (Just $ unsafeCoerce invertedQueries))
+          "storedQueries.json"
+          (Tuple
+            (MediaType "application/json")
+            (Just $ unsafeCoerce queryFile))
             attachments))
 
 
