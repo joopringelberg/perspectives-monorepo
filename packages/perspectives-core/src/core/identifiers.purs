@@ -412,21 +412,6 @@ type PEIdentifier = String
 
 type Namespace = String
 
--- Used in ContextRoleParser, IndentParser, PerspectSyntax.
--- | A QualifiedName consists of a namespace and a local name.
-data QualifiedName = QualifiedName Namespace LocalName
-
-instance showQualifiedName :: Show QualifiedName where
-  show (QualifiedName mn ln) = if isUrl mn 
-    then mn <> ln 
-    -- temporary hack. CRL is on its way out
-    else if mn == "def"
-      then mn <> ":" <> ln 
-      else mn <> "$" <> ln
-
-instance eqQualifiedName :: Eq QualifiedName where
-  eq (QualifiedName ns1 ln1) (QualifiedName ns2 ln2) = eq ns1 ns2 && eq ln1 ln2
-
 urlRegEx :: Regex
 urlRegEx = unsafeRegex "^http" noFlags
 
