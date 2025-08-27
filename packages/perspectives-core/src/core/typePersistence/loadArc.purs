@@ -44,8 +44,8 @@ import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE(..))
 import Perspectives.Parsing.Arc.IndentParser (position2ArcPosition, runIndentParser)
 import Perspectives.Parsing.Arc.PhaseThree (phaseThreeWithMapping)
-import Perspectives.ArcParser.UniqueTypeNames (applyStableIdMappingWith, extractKeysFromDfr)
-import Perspectives.ArcParser.UniqueTypeNames as UTN
+import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith, extractKeysFromDfr) 
+import Perspectives.Sidecar.UniqueTypeNames as UTN
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping, emptyStableIdMapping)
 import Perspectives.Cuid2 (cuid2)
 import Foreign.Object as OBJ

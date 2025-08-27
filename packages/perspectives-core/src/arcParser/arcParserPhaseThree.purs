@@ -66,7 +66,7 @@ import Perspectives.Parsing.Arc.PhaseThree.PerspectiveContextualisation (addAspe
 import Perspectives.Parsing.Arc.PhaseThree.Screens (collectPropertyTypes, collectRoles, handleScreens, roleIdentification2Context, roleIdentification2Step)
 import Perspectives.Parsing.Arc.PhaseThree.SetInvertedQueries (setInvertedQueries)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, lift2, modifyDF, runPhaseTwo_', throwError, withDomeinFile, withFrame)
-import Perspectives.ArcParser.UniqueTypeNames (applyStableIdMappingWith)
+import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
 import Perspectives.Parsing.Arc.Position (ArcPosition, arcParserStartPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)

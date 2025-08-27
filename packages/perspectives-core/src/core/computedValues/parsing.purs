@@ -66,9 +66,8 @@ import Perspectives.PerspectivesState (addWarning, getWarnings, resetWarnings, s
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedRoleType(..), RoleType(..))
-import Perspectives.ResourceIdentifiers (resourceIdentifier2DocLocator)
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
-import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
+import Perspectives.Sidecar.StableIdMapping (StableIdMapping, loadStableMapping)
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_, loadAndCompileArcFileWithSidecar_)
 import Simple.JSON (readJSON, readJSON_, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
@@ -128,16 +127,9 @@ uploadToRepository ::
 uploadToRepository domeinFileName_ arcSource_ _ = try
   (case head domeinFileName_, head arcSource_ of
     Just domeinFileName, Just arcSource -> do
-      let split = unsafePartial modelUri2ModelUrl domeinFileName
       -- Retrieve existing sidecar (if any) from repository
-      mBlob <- lift $ getAttachment split.repositoryUrl split.documentName "stableIdMapping.json"
-      mMapping <- case mBlob of
-        Nothing -> pure Nothing
-        Just blob -> do
-          txt <- liftAff $ fromBlob blob
-          pure $ case readJSON txt of
-            Right (m :: StableIdMapping) -> Just m
-            _ -> Nothing
+      mMapping <- lift $ loadStableMapping domeinFileName
+      let split = unsafePartial modelUri2ModelUrl domeinFileName
       r <- loadAndCompileArcFileWithSidecar_ (DomeinFileId $ unversionedModelUri domeinFileName) arcSource false mMapping
       case r of
         Left m -> logPerspectivesError $ Custom ("uploadToRepository: " <> show m)
@@ -266,18 +258,8 @@ storeModelLocally_ domeinFileName_ arcSource_ _ = try
   (case head domeinFileName_, head arcSource_ of
     Just domeinFileName, Just arcSource -> do
       -- Load mapping from local models DB (if present)
-      let dfId = DomeinFileId $ unversionedModelUri domeinFileName
-      {database, documentName} <- lift $ resourceIdentifier2DocLocator domeinFileName
-      -- TODO: hier moeten we de naam van de DomeinFile in Couchdb hebben!
-      mLocalMappingBlob <- lift $ getAttachment database documentName "stableIdMapping.json"
-      mLocalMapping <- case mLocalMappingBlob of
-        Nothing -> pure Nothing
-        Just blob -> do
-          txt <- liftAff $ fromBlob blob
-          pure $ case readJSON txt of
-            Right (m :: StableIdMapping) -> Just m
-            _ -> Nothing
-      r <- loadAndCompileArcFileWithSidecar_ dfId arcSource false mLocalMapping
+      mLocalMapping <- lift $ loadStableMapping domeinFileName
+      r <- loadAndCompileArcFileWithSidecar_ (DomeinFileId $ unversionedModelUri domeinFileName) arcSource false mLocalMapping
       case r of
         Left m -> logPerspectivesError $ Custom ("storeModelLocally: " <> show m)
         -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries.

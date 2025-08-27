@@ -603,6 +603,7 @@ roleIsInState stateId ri = getActiveRoleStates_ ri >>= pure <<< isJust <<< elemI
 roleModelName :: RoleInstance ~~> Value
 roleModelName (RoleInstance rid) = maybe Plus.empty (pure <<< Value) (typeUri2ModelUri rid)
 
+-- OBSOLETE
 -- | Return the value of the local property "Name", or return the last segment of the role type name.
 getRoleName :: RoleInstance ~~> Value
 getRoleName = orElse

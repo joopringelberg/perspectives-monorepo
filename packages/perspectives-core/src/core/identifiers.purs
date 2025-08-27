@@ -32,7 +32,7 @@ import Data.String.Regex (Regex, match, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex) 
 import Partial.Unsafe (unsafePartial)
-import Prelude (class Eq, class Show, append, eq, flip, identity, ($), (&&), (<<<), (<>), (==), (||), (+))
+import Prelude (append, flip, identity, ($), (+), (<<<), (<>), (==), (||))
 
 -- | The unsafeRegex function takes a string `pattern` as first argument and uses it as is in a new Regex(`pattern`).
 -- | Hence, in Purescript, we can follow the rules for the new Regex("your pattern") approach.
@@ -245,6 +245,16 @@ typeUri2ModelUri = getFirstMatch typeRegex
 
 typeUri2ModelUri_ :: Partial => TypeUri -> ModelUri
 typeUri2ModelUri_ = fromJust <<< typeUri2ModelUri
+
+splitTypeUri :: TypeUri -> Maybe { modelUri :: ModelUri, localName :: String }
+splitTypeUri s = case match typeRegex s of
+  Nothing -> Nothing
+  Just matches -> case (index matches 1), (index matches 2) of 
+    Just mmodelUri, Just mlocalName -> case mmodelUri, mlocalName of 
+      Just modelUri, Just localName ->
+        Just { modelUri: modelUri, localName: localName }
+      _, _ -> Nothing
+    _, _ -> Nothing
 
 -----------------------------------------------------------
 -- TAKE THE TYPE NAMESPACE FROM A TYPE NAME

@@ -76,10 +76,10 @@ type EnumeratedRoleRecord =
   , mandatory :: Boolean
 
   -- The keys in these objects are the String representations of context types.
-  , fillerInvertedQueries :: InvertedQueryMap
-  , filledInvertedQueries :: InvertedQueryMap
+  , fillerInvertedQueries :: InvertedQueryMap -- OBSOLETE
+  , filledInvertedQueries :: InvertedQueryMap -- OBSOLETE
 
-  , contextInvertedQueries :: OBJ.Object (Array InvertedQuery)
+  , contextInvertedQueries :: OBJ.Object (Array InvertedQuery) -- OBSOLETE
 
   , indexedRole :: Maybe RoleInstance
 

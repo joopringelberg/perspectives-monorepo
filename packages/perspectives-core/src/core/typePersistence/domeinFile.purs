@@ -59,9 +59,11 @@ import Simple.JSON (class ReadForeign, class WriteForeign, read', readJSON', wri
 
 newtype DomeinFile = DomeinFile DomeinFileRecord
 
+-- NOTE: the qualification of the identifiers is in terms of the scheme "model:", 
+-- two forward slashes and an internet namespace, followed by a hash sign.
 type DomeinFileRecord = PouchbdDocumentFields
-  ( id :: DomeinFileId
-  , namespace :: String
+  ( id :: DomeinFileId                                  -- The qualified stable identifier in terms of a CUID
+  , namespace :: String                                 -- The qualified readable name of the model that may vary.
   , contexts :: Object Context
   , enumeratedRoles :: Object EnumeratedRole
   , calculatedRoles :: Object CalculatedRole

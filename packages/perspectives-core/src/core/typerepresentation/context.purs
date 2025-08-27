@@ -63,7 +63,7 @@ type ContextRecord =
 
   , indexedContext :: Maybe ContextInstance
 
-  , roleInvertedQueries :: Object (Array InvertedQuery)
+  , roleInvertedQueries :: Object (Array InvertedQuery) -- OBSOLETE!
 
   , roleAliases :: Object (EnumeratedRoleType)
 

@@ -20,7 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.ArcParser.UniqueTypeNames
+module Perspectives.Sidecar.UniqueTypeNames
   ( -- Key data extracted for heuristic matching (sidecar and fresh parse)
     ContextKey(..)
   , RoleKey(..)

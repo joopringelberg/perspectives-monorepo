@@ -205,6 +205,7 @@ updateModel_ arrWithModelName arrWithDependencies _ = try
   >>= handleExternalStatementError "model://perspectives.domains#UpdateModel"
 
 -- | Also saves the attachments.
+-- | DomeinFileId is the qualified stable identifier in terms of a CUID, extended with @<Version>.
 updateModel' :: DomeinFileId -> Boolean -> Boolean -> MonadPerspectivesTransaction Unit
 updateModel' dfid@(DomeinFileId modelName) withDependencies install = do
   {versionedModelName} <- computeVersionedAndUnversiondName dfid
