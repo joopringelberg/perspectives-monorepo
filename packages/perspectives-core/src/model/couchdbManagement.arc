@@ -723,10 +723,10 @@ domain model://perspectives.domains#CouchdbManagement
       -- to both the cw_servers_and_repositories and to the Repository database.
       perspective on Manifests
         only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
-        props (Description, LocalModelName) verbs (Consult)
-        props (DomeinFileName) verbs (SetPropertyValue, Consult)
+        props (Description, ModelCuid) verbs (Consult)
+        props (DomeinFileName, LocalModelName) verbs (SetPropertyValue, Consult)
         in object state NoLocalModelName
-          props (LocalModelName) verbs (SetPropertyValue)
+          props (ModelCuid) verbs (SetPropertyValue)
       
       action CreateManifest
         create role Manifests
@@ -807,10 +807,10 @@ domain model://perspectives.domains#CouchdbManagement
 
       perspective on Manifests
         only (Create, Fill, Delete, RemoveContext, Remove)
-        props (Description, LocalModelName) verbs (Consult)
-        props (DomeinFileName) verbs (SetPropertyValue, DeleteProperty)
+        props (Description, ModelCuid) verbs (Consult)
+        props (LocalModelName, DomeinFileName) verbs (SetPropertyValue, DeleteProperty)
         in object state NoLocalModelName
-          props (LocalModelName) verbs (SetPropertyValue)
+          props (ModelCuid) verbs (SetPropertyValue)
       action CreateManifest
         create role Manifests
       
@@ -860,7 +860,7 @@ domain model://perspectives.domains#CouchdbManagement
     -- The instances of Repository are published in the cw_servers_and_repositories database.
     public Visitor at extern >> ServerUrl + "cw_servers_and_repositories/" = sys:Me
       perspective on Manifests
-        props (LocalModelName, ModelManifest$External$Name, Description) verbs (Consult)
+        props (LocalModelName, ModelCuid, ModelManifest$External$Name, Description) verbs (Consult)
       perspective on extern
         props (NameSpace_, NameSpace) verbs (Consult)
 
@@ -881,9 +881,9 @@ domain model://perspectives.domains#CouchdbManagement
               markdown <## Manifests
                         A manifest describes a model / App.
                       >
-              without props (Description, LocalModelName)
+              without props (Description, LocalModelName, ModelCuid)
             detail
-              without props (LocalModelName)
+              without props (LocalModelName, ModelCuid)
 
     -- This role is in the public Visitor perspective. These are all models that
     -- are stored in this Repository.
@@ -891,25 +891,30 @@ domain model://perspectives.domains#CouchdbManagement
       aspect sys:ManifestCollection$Manifests
       -- LocalModelName
       state NoLocalModelName = not exists LocalModelName
-      state ReadyToMake = (exists LocalModelName) and not exists binding
+      state ReadyToMake = not exists binding
         on entry
           do for Admin
             letA 
-              manifestname <- (context >> extern >> NameSpace_ + "-" + LocalModelName)
+              cuid <- callExternal util:GenSym() returns String
+              manifestname <- (context >> extern >> NameSpace_ + "-" + cuid)
             in
               -- As the PDR derives this name from the modelURI, we have to name the ModelManifest with its LocalModelName.
               create_ context ModelManifest named manifestname bound to origin
               bind currentactor to Author in origin >> binding >> context
               DomeinFileName = manifestname + ".json" for origin >> binding
+              ModelCuid = cuid for origin >> binding
 
           do for Authors
             letA 
-              manifestname <- (context >> extern >> NameSpace_ + "-" + LocalModelName)
+              cuid <- callExternal util:GenSym() returns String
+              manifestname <- (context >> extern >> NameSpace_ + "-" + cuid)
             in
               -- As the PDR derives this name from the modelURI, we have to name the ModelManifest with its LocalModelName.
               create_ context ModelManifest named manifestname bound to origin
               bind currentactor to Author in origin >> binding >> context
               DomeinFileName = manifestname + ".json" for origin >> binding
+              ModelCuid = cuid for origin >> binding
+
     aspect thing sys:ContextWithNotification$Notifications
 
   case ModelManifest 
@@ -929,8 +934,8 @@ domain model://perspectives.domains#CouchdbManagement
       -- DomeinFileName
       -- Notice that we have to register the LocalModelName on the filled context role in the collection,
       -- so we can create ModelManifest with a user-defined name. 
-      -- The Model URI (the 'logical name' of the model), e.g. model://perspectives.domains#System.
-      property ModelURI (functional) = "model://" + context >> Repository >> Repository$External$NameSpace + "#" + binder Manifests >> LocalModelName >>= first
+      -- The Model URI (the 'logical name' of the model), e.g. model://perspectives.domains#System (DomeinFileUri Readable).
+      property ModelURI (functional) = "model://" + context >> Repository >> Repository$External$NameSpace + "#" + binder Manifests >> (ModelCuid orElse LocalModelName) >>= first
       -- The URL of the Repository (and it will refer to the ServerUrl).
       property RepositoryUrl (functional) = binder Manifests >> context >> extern >> RepositoryUrl
       -- The URL of the Instances database of the Repository.
@@ -1115,7 +1120,10 @@ domain model://perspectives.domains#CouchdbManagement
       -- VersionedModelManifest$External$Build
       -- The Version property is registered on ModelManifest$Versions so we can use it to create a DNS URN for it (it must be a public resource)
       -- PDRDEPENDENCY
+      -- (DomeinFileUri Readable)
       property ModelURI (functional) = binder Versions >> context >> extern >> ModelManifest$External$ModelURI
+      property ModelCuid (functional) = binder Versions >> context >> extern >> ModelManifest$External$ModelCuid
+      -- (DomeinFileUri Readable) plus version.
       property VersionedModelURI = VersionedModelManifest$External$ModelURI + "@" + External$Version
       property ArcFile (File)
         pattern = "text/arc" "Only .arc files (Perspectives Language source files) are allowed, so use `text//arc."
@@ -1160,6 +1168,7 @@ domain model://perspectives.domains#CouchdbManagement
         on entry
           do for Author
             ArcFeedback = callExternal p:ParseAndCompileArc( ModelURI, ArcSource ) returns String
+            -- Even though we set LastChangeDT, state ProcessArc is not exited.
             LastChangeDT = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime
             MustUpload = true
 

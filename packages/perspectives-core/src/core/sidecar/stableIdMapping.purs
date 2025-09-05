@@ -5,35 +5,41 @@
 -- END LICENSE
 
 module Perspectives.Sidecar.StableIdMapping
-  ( StableIdMapping
-  , ContextKeySnapshot, RoleKeySnapshot, PropertyKeySnapshot
+  ( ContextKeySnapshot
+  , DomeinFileIdF(..)
+  , ModelUri(..)
+  , PropertyKeySnapshot
+  , Readable
+  , RoleKeySnapshot
+  , Stable
+  , StableIdMapping
   , emptyStableIdMapping
-  , lookupContextCuid
-  , lookupRoleCuid
-  , lookupPropertyCuid
-  , loadStableMapping
   , idUriForContext
-  , idUriForRole
   , idUriForProperty
-  ) where
+  , idUriForRole
+  , loadStableMapping
+  , lookupContextCuid
+  , lookupPropertyCuid
+  , lookupRoleCuid
+  , PropertyUri(..)
+  , RoleUri(..)
+  , ContextUri(..)
+  )
+  where
 
 import Prelude
 
-import Data.Array (foldl, uncons)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
-import Data.String (Pattern(..), split)
-import Data.String as Str
-import Data.Traversable (traverse)
-import Data.Tuple (Tuple(..))
+import Data.Newtype (class Newtype, unwrap)
 import Effect.Aff.Class (liftAff)
 import Foreign.Object (Object, empty)
 import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
-import Perspectives.Identifiers (DomeinFileName, modelUri2ModelUrl, typeUri2typeNameSpace_)
+import Perspectives.Identifiers (modelUri2ModelUrl, typeUri2typeNameSpace_)
 import Perspectives.Persistence.API (fromBlob, getAttachment)
-import Simple.JSON (readJSON)
+import Simple.JSON (class ReadForeign, class WriteForeign, readJSON)
 
 -- A compact, forward-compatible skeleton mapping sidecar.
 -- Keep this module dependency-light to avoid import cycles.
@@ -78,6 +84,7 @@ type StableIdMapping =
   , contextCuids :: Object String
   , roleCuids :: Object String
   , propertyCuids :: Object String
+  , modelIdentifier :: ModelUri Stable
   }
 
 emptyStableIdMapping :: StableIdMapping
@@ -92,37 +99,38 @@ emptyStableIdMapping =
   , contextCuids: empty
   , roleCuids: empty
   , propertyCuids: empty
+  , modelIdentifier: ModelUri ""
   }
 
 -- Resolve a CUID for an FQN:
 -- 1) Try direct (legacy keys can still exist in *Cuids).
 -- 2) Resolve via alias map to canonical, then lookup in *Cuids.
-lookupContextCuid :: StableIdMapping -> String -> Maybe String
-lookupContextCuid m fqn =
+lookupContextCuid :: StableIdMapping -> ContextUri Readable -> Maybe String
+lookupContextCuid m (ContextUri fqn) =
   case OBJ.lookup fqn m.contextCuids of
     Just v -> Just v
     Nothing -> case OBJ.lookup fqn m.contexts of
       Just canonical -> OBJ.lookup canonical m.contextCuids
       Nothing -> Nothing
 
-lookupRoleCuid :: StableIdMapping -> String -> Maybe String
-lookupRoleCuid m fqn =
+lookupRoleCuid :: StableIdMapping -> RoleUri Readable -> Maybe String
+lookupRoleCuid m (RoleUri fqn) =
   case OBJ.lookup fqn m.roleCuids of
     Just v -> Just v
     Nothing -> case OBJ.lookup fqn m.roles of
       Just canonical -> OBJ.lookup canonical m.roleCuids
       Nothing -> Nothing
 
-lookupPropertyCuid :: StableIdMapping -> String -> Maybe String
-lookupPropertyCuid m fqn =
+lookupPropertyCuid :: StableIdMapping -> PropertyUri Readable -> Maybe String
+lookupPropertyCuid m (PropertyUri fqn) =
   case OBJ.lookup fqn m.propertyCuids of
     Just v -> Just v
     Nothing -> case OBJ.lookup fqn m.properties of
       Just canonical -> OBJ.lookup canonical m.propertyCuids
       Nothing -> Nothing
 
-loadStableMapping :: DomeinFileName -> MonadPerspectives (Maybe StableIdMapping)
-loadStableMapping domeinFileName = do
+loadStableMapping :: ModelUri Stable -> MonadPerspectives (Maybe StableIdMapping)
+loadStableMapping (ModelUri domeinFileName) = do
   let split = unsafePartial modelUri2ModelUrl domeinFileName
   -- Retrieve existing sidecar (if any) from repository
   mBlob <- getAttachment split.repositoryUrl split.documentName "stableIdMapping.json"
@@ -135,42 +143,80 @@ loadStableMapping domeinFileName = do
         _ -> Nothing
 
 idUriForContext
-  :: String                 -- modelUri: "model://domain#mid"
-  -> StableIdMapping
-  -> String                 -- context FQN (canonical)
+  :: StableIdMapping
+  -> ContextUri Readable
   -> Maybe String
-idUriForContext modelUri m ctxFqn =
-  let
-    parts = split (Pattern "$") ctxFqn
-  in case uncons parts of
-    Nothing -> Nothing
-    Just {head:base, tail:rest} ->
-      -- Build ancestor FQNs: base$seg1, base$seg1$seg2, ..., base$...$segN
-      let
-        Tuple _ pathFqns =
-          foldl
-            (\(Tuple cur acc) seg ->
-               let next = cur <> "$" <> seg
-               in Tuple next (acc <> [ next ])
-            )
-            (Tuple base [])
-            rest
-      in do
-        tids <- traverse (lookupContextCuid m) pathFqns
-        pure $ modelUri <> "$" <> Str.joinWith "$" tids
+idUriForContext m cid@(ContextUri ctxFqn) = do 
+  let (namespaceCtxFqn :: String) = typeUri2typeNameSpace_ ctxFqn
+  if namespaceCtxFqn == ctxFqn
+    then Just $ unwrap m.modelIdentifier
+    else
+      do
+        (namespaceTid :: String) <- idUriForContext m (ContextUri namespaceCtxFqn)
+        (localTid :: String) <- lookupContextCuid m cid
+        pure $ namespaceTid <> "$" <> localTid
 
-idUriForRole :: String -> StableIdMapping -> String -> Maybe String
-idUriForRole modelUri m roleFqn = do
+idUriForRole :: StableIdMapping -> RoleUri Readable -> Maybe String
+idUriForRole m rid@(RoleUri roleFqn) = do
   let ctxFqn = typeUri2typeNameSpace_ roleFqn
-  ctxTid <- lookupContextCuid m ctxFqn
-  rolTid <- lookupRoleCuid m roleFqn
-  pure (modelUri <> "$" <> ctxTid <> "$" <> rolTid)
+  ctxTid <- idUriForContext m (ContextUri ctxFqn)
+  rolTid <- lookupRoleCuid m rid
+  pure (ctxTid <> "$" <> rolTid)  
 
-idUriForProperty :: String -> StableIdMapping -> String -> Maybe String
-idUriForProperty modelUri m propFqn = do
+idUriForProperty :: StableIdMapping -> PropertyUri Readable -> Maybe String
+idUriForProperty m (PropertyUri propFqn) = do
   let roleFqn = typeUri2typeNameSpace_ propFqn
-  let ctxFqn  = typeUri2typeNameSpace_ roleFqn
-  ctxTid <- lookupContextCuid m ctxFqn
-  rolTid <- lookupRoleCuid m roleFqn
-  propTid <- lookupPropertyCuid m propFqn
-  pure (modelUri <> "$" <> ctxTid <> "$" <> rolTid <> "$" <> propTid)
+  rolTid <- idUriForRole m (RoleUri roleFqn)
+  propTid <- lookupPropertyCuid m (PropertyUri propFqn)
+  pure (rolTid <> "$" <> propTid)
+
+-- Phantom tag to distinguish shapes at the type level
+foreign import data Readable :: Type
+foreign import data Stable :: Type
+
+newtype ModelUri :: Type -> Type
+-- URIs tagged with their flavor (phantom parameter)
+newtype ModelUri f = ModelUri String
+derive instance newtypeModelUri :: Newtype (ModelUri f) _
+derive newtype instance eqModelUri :: Eq (ModelUri f)
+derive newtype instance ordModelUri :: Ord (ModelUri f)
+derive newtype instance showModelUri :: Show (ModelUri f)
+derive newtype instance ReadForeign (ModelUri f)
+derive newtype instance WriteForeign (ModelUri f)
+
+newtype ContextUri :: forall k. k -> Type
+newtype ContextUri f = ContextUri String
+derive instance newtypeContextUri :: Newtype (ContextUri f) _
+derive newtype instance eqContextUri :: Eq (ContextUri f)
+derive newtype instance ordContextUri :: Ord (ContextUri f)
+derive newtype instance showContextUri :: Show (ContextUri f)
+derive newtype instance ReadForeign (ContextUri f)
+derive newtype instance WriteForeign (ContextUri f)
+
+newtype RoleUri :: forall k. k -> Type
+newtype RoleUri f = RoleUri String
+derive instance newtypeRoleUri :: Newtype (RoleUri f) _
+derive newtype instance eqRoleUri :: Eq (RoleUri f)
+derive newtype instance ordRoleUri :: Ord (RoleUri f)
+derive newtype instance showRoleUri :: Show (RoleUri f)
+derive newtype instance ReadForeign (RoleUri f)
+derive newtype instance WriteForeign (RoleUri f)
+
+newtype PropertyUri :: forall k. k -> Type
+newtype PropertyUri f = PropertyUri String
+derive instance newtypePropertyUri :: Newtype (PropertyUri f) _
+derive newtype instance eqPropertyUri :: Eq (PropertyUri f)
+derive newtype instance ordPropertyUri :: Ord (PropertyUri f)
+derive newtype instance showPropertyUri :: Show (PropertyUri f)
+derive newtype instance ReadForeign (PropertyUri f)
+derive newtype instance WriteForeign (PropertyUri f)
+
+-- Typed DomeinFileId (you can migrate fields to DomeinFileIdF Stable stepwise)
+newtype DomeinFileIdF :: forall k. k -> Type
+newtype DomeinFileIdF f = DomeinFileIdF String
+derive instance newtypeDomeinFileIdF :: Newtype (DomeinFileIdF f) _
+derive newtype instance eqDomeinFileIdF :: Eq (DomeinFileIdF f)
+derive newtype instance ordDomeinFileIdF :: Ord (DomeinFileIdF f)
+derive newtype instance showDomeinFileIdF :: Show (DomeinFileIdF f)
+derive newtype instance ReadForeign (DomeinFileIdF f)
+derive newtype instance WriteForeign (DomeinFileIdF f)

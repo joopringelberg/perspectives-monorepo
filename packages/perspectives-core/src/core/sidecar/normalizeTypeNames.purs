@@ -31,47 +31,83 @@ module Perspectives.Sidecar.NormalizeTypeNames
 import Prelude
 
 import Control.Monad.Reader (Reader, ask, runReaderT)
+import Data.Array (catMaybes, foldM)
+import Data.Map (Map, fromFoldable, lookup, insert, singleton) as Map
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
-import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (Object, fromFoldable, lookup, toUnfoldable)
-import Perspectives.CoreTypes (MonadPerspectives)
+import Foreign.Object (fromFoldable, toUnfoldable)
+import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (splitTypeUri)
+import Perspectives.Instances.ObjectGetters (getProperty)
+import Perspectives.ModelDependencies (modelURI, modelsInUse, versionedDomeinFileName)
+import Perspectives.Names (getMySystem)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), traverseQfd)
+import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.ADT (ADT)
+import Perspectives.Representation.CNF (traverseDPROD)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
-import Perspectives.Representation.Class.Cacheable (ContextType(..))
-import Perspectives.Representation.Class.Context (id)
 import Perspectives.Representation.Class.Property (Property(..)) as Prop
 import Perspectives.Representation.Class.Role (Role(..))
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Value(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
-import Perspectives.Sidecar.StableIdMapping (StableIdMapping, idUriForContext, idUriForProperty, idUriForRole, loadStableMapping)
+import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, idUriForContext, idUriForProperty, idUriForRole, loadStableMapping)
 
-normalizeTypes :: DomeinFile -> MonadPerspectives DomeinFile
-normalizeTypes df@(DomeinFile {referredModels}) = do
-  sidecars <- for referredModels \(DomeinFileId dfn) -> Tuple dfn <$> loadStableMapping dfn
+normalizeTypes :: DomeinFile -> StableIdMapping -> MonadPerspectives DomeinFile
+normalizeTypes df@(DomeinFile {namespace, referredModels}) mapping = do
+  -- Notice that referredModels from a freshly parsed Arc source will be FQNs with names given by the modeller, rather than underlying cuids.
+  cuidMap <- getinstalledModelCuids
+  sidecars <- foldM (\scs (DomeinFileId referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
+      Nothing -> pure scs
+      Just (cuid :: ModelUri Stable) -> do 
+        mmapping <- loadStableMapping cuid
+        case mmapping of 
+          Nothing -> pure scs
+          Just submapping -> pure $ Map.insert (ModelUri referredModel) submapping scs)
+    (Map.singleton (ModelUri namespace) mapping)
+    referredModels
   pure $ unwrap $ runReaderT
     (normalizeTypeNames df)
-    (fromFoldable sidecars)
+    sidecars
 
--- | This monad supports 'ask'. it will return an object whose keys are Model Ids (MIDs).
-type WithSideCars = Reader (Object (Maybe StableIdMapping))
+  where 
+
+    -- A map from DomeinFileName without cuid to DomeinFileId with cuid. 
+    -- Not every installed model need have cuid!
+    getinstalledModelCuids :: MonadPerspectives (Map.Map (ModelUri Readable)(ModelUri Stable))
+    getinstalledModelCuids = do
+      system <- getMySystem
+      modelRoles <- (ContextInstance system) ##= getRoleInstances (ENR $ EnumeratedRoleType modelsInUse)
+      x :: Array (Maybe (Tuple (ModelUri Readable) (ModelUri Stable))) <- for modelRoles \ri -> do
+        mcuid <- ri ##> getProperty (EnumeratedPropertyType versionedDomeinFileName)
+        case mcuid of 
+          Nothing -> pure Nothing
+          Just _ -> do 
+            mdfid <- ri ##> getProperty (EnumeratedPropertyType modelURI)
+            case mdfid of 
+              Nothing -> pure Nothing
+              Just (Value dfid) -> pure $ Just $ Tuple (ModelUri dfid) (ModelUri dfid) -- LET OP! ZE KUNNEN NIET BEIDE DFID ZIJN!!
+      pure $ Map.fromFoldable $ catMaybes x
+
+
+-- | This monad supports 'ask'. `ask` will return an object whose keys are Model Ids (MIDs).
+type WithSideCars = Reader (Map.Map (ModelUri Readable) StableIdMapping)
 
 class NormalizeTypeNames v ident | v -> ident, ident -> v where
   -- | Replace user readable local names given in the model text by Cuids in the given object.
   normalizeTypeNames :: v -> WithSideCars v
+  -- Dit zou van Readable naar Stable moeten zijn.
   fqn2tid :: ident -> WithSideCars ident
 
 instance NormalizeTypeNames DomeinFile DomeinFileId where
-  fqn2tid df = pure df -- TODO. Oppikken uit de data?
+  fqn2tid df = DomeinFileId <<< unwrap <$> fqn2tid (ContextType $ unwrap df)
   normalizeTypeNames (DomeinFile df) = do
     contexts' <- fromFoldable <$> for ((toUnfoldable df.contexts) :: Array (Tuple String Context))
       (\(Tuple ct ctxt) -> Tuple <$> unwrap <$> (fqn2tid <<< ContextType) ct <*> normalizeTypeNames ctxt)
@@ -96,10 +132,9 @@ instance NormalizeTypeNames Context ContextType where
     sidecars <- ask
     ContextType <$> case splitTypeUri fqn of 
       Nothing -> pure fqn -- not a type uri
-      Just { modelUri, localName } -> case lookup modelUri sidecars of 
+      Just { modelUri, localName } -> case Map.lookup ((ModelUri modelUri) :: ModelUri Readable) sidecars of
         Nothing -> pure fqn -- no sidecar for this model
-        Just Nothing -> pure fqn -- no sidecar for this model
-        Just (Just stableIdMapping) -> case idUriForContext modelUri stableIdMapping localName of 
+        (Just stableIdMapping) -> case idUriForContext stableIdMapping (ContextUri fqn) of 
           Nothing -> pure fqn -- no mapping found
           Just cuid -> pure cuid
   normalizeTypeNames (Context cr) = do
@@ -127,10 +162,9 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
     sidecars <- ask
     EnumeratedRoleType <$> case splitTypeUri fqn of 
       Nothing -> pure fqn -- not a type uri
-      Just { modelUri, localName } -> case lookup modelUri sidecars of 
+      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of 
         Nothing -> pure fqn -- no sidecar for this model
-        Just Nothing -> pure fqn -- no sidecar for this model
-        Just (Just stableIdMapping) -> case idUriForRole modelUri stableIdMapping localName of 
+        (Just stableIdMapping) -> case idUriForRole stableIdMapping (RoleUri fqn) of 
           Nothing -> pure fqn -- no mapping found
           Just cuid -> pure cuid
   normalizeTypeNames (EnumeratedRole er) = do
@@ -139,11 +173,14 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
     roleAspects' <- for er.roleAspects fqn2tidRoleInContext
     properties' <- for er.properties fqn2tid
     propertyAliases' <- for er.propertyAliases fqn2tid
+    completeType' <- traverseDPROD fqn2tidRoleInContext er.completeType
     pure $ EnumeratedRole $ er 
       { id = id' 
       , context = context'
       , roleAspects = roleAspects'
+      , properties = properties'
       , propertyAliases = propertyAliases'
+      , completeType = completeType'
       }
 fqn2tidRoleInContext :: RoleInContext -> WithSideCars RoleInContext
 fqn2tidRoleInContext (RoleInContext {role, context}) = (\role' context' -> RoleInContext { role: role', context: context' }) <$> fqn2tid role <*> fqn2tid context
@@ -153,10 +190,9 @@ instance NormalizeTypeNames CalculatedRole CalculatedRoleType where
     sidecars <- ask
     CalculatedRoleType <$> case splitTypeUri fqn of 
       Nothing -> pure fqn -- not a type uri
-      Just { modelUri, localName } -> case lookup modelUri sidecars of 
+      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of 
         Nothing -> pure fqn -- no sidecar for this model
-        Just Nothing -> pure fqn -- no sidecar for this model
-        Just (Just stableIdMapping) -> case idUriForRole modelUri stableIdMapping localName of 
+        (Just stableIdMapping) -> case idUriForRole stableIdMapping (RoleUri fqn) of 
           Nothing -> pure fqn -- no mapping found
           Just cuid -> pure cuid
   normalizeTypeNames (CalculatedRole er) = do
@@ -176,10 +212,9 @@ instance NormalizeTypeNames EnumeratedProperty EnumeratedPropertyType where
     sidecars <- ask
     EnumeratedPropertyType <$> case splitTypeUri fqn of 
       Nothing -> pure fqn -- not a type uri
-      Just { modelUri, localName } -> case lookup modelUri sidecars of 
+      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of 
         Nothing -> pure fqn -- no sidecar for this model
-        Just Nothing -> pure fqn -- no sidecar for this model
-        Just (Just stableIdMapping) -> case idUriForProperty modelUri stableIdMapping localName of 
+        (Just stableIdMapping) -> case idUriForProperty stableIdMapping (PropertyUri fqn) of 
           Nothing -> pure fqn -- no mapping found
           Just cuid -> pure cuid
   normalizeTypeNames (EnumeratedProperty pt) = do
@@ -192,10 +227,9 @@ instance NormalizeTypeNames CalculatedProperty CalculatedPropertyType where
     sidecars <- ask
     CalculatedPropertyType <$> case splitTypeUri fqn of 
       Nothing -> pure fqn -- not a type uri
-      Just { modelUri, localName } -> case lookup modelUri sidecars of 
+      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of 
         Nothing -> pure fqn -- no sidecar for this model
-        Just Nothing -> pure fqn -- no sidecar for this model
-        Just (Just stableIdMapping) -> case idUriForProperty modelUri stableIdMapping localName of 
+        (Just stableIdMapping) -> case idUriForProperty stableIdMapping (PropertyUri fqn) of 
           Nothing -> pure fqn -- no mapping found
           Just cuid -> pure cuid
   normalizeTypeNames (CalculatedProperty pt) = do

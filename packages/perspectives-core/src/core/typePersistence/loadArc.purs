@@ -26,36 +26,39 @@ import Control.Alt (void)
 import Control.Monad.Error.Class (catchError)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (delete, null)
-import Data.Maybe (Maybe(..))
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.List (List(..))
+import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Data.Unit (unit)
-import Foreign.Object (empty)
+import Effect.Class (liftEffect)
+import Foreign.Object (empty, singleton)
+import Foreign.Object as OBJ
 import Parsing (ParseError(..))
+import Partial.Unsafe (unsafePartial)
 import Perspectives.Checking.PerspectivesTypeChecker (checkDomeinFile)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
+import Perspectives.Cuid2 (cuid2)
 import Perspectives.DomeinCache (retrieveDomeinFile, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
+import Perspectives.Identifiers (modelUri2SchemeAndAuthority)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE(..))
 import Perspectives.Parsing.Arc.IndentParser (position2ArcPosition, runIndentParser)
-import Perspectives.Parsing.Arc.PhaseThree (phaseThreeWithMapping)
-import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith, extractKeysFromDfr) 
-import Perspectives.Sidecar.UniqueTypeNames as UTN
-import Perspectives.Sidecar.StableIdMapping (StableIdMapping, emptyStableIdMapping)
-import Perspectives.Cuid2 (cuid2)
-import Foreign.Object as OBJ
-import Effect.Class (liftEffect)
-import Data.Traversable (for)
+import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwoState, runPhaseTwo_')
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors, PerspectivesError(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..))
 import Perspectives.ResourceIdentifiers (takeGuid)
+import Perspectives.Sidecar.NormalizeTypeNames (normalizeTypes)
+import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, emptyStableIdMapping, lookupContextCuid)
+import Perspectives.Sidecar.UniqueTypeNames (extractKeysFromDfr)
+import Perspectives.Sidecar.UniqueTypeNames as UTN
 import Prelude (bind, discard, pure, show, ($), (<<<), (==), (<>))
 
 -- | The functions in this module load Arc files and parse and compile them to DomeinFiles.
@@ -73,23 +76,25 @@ type Source = String
 -- | Parses and compiles the ARC file to a DomeinFile. 
 -- | Parameter `saveInCache` determines whether to cache the DomeinFIle. Does not store the DomeinFile.
 -- | However, will load, cache and store dependencies of the model.
-loadAndCompileArcFile_ :: DomeinFileId -> Source -> Boolean -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple DomeinFile StoredQueries))
-loadAndCompileArcFile_ dfid text saveInCache = do
-  x <- loadAndCompileArcFileWithSidecar_ dfid text saveInCache Nothing
+loadAndCompileArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple DomeinFile StoredQueries))
+loadAndCompileArcFile_ dfid text saveInCache modelCuid = do
+  x <- loadAndCompileArcFileWithSidecar_ dfid text saveInCache Nothing modelCuid
   pure case x of
     Left errs -> Left errs
     Right (Tuple df (Tuple iqs _m)) -> Right (Tuple df iqs)
 
 -- New: sidecar-aware API that returns the updated mapping with results.
-loadAndCompileArcFileWithSidecar_ :: DomeinFileId -> Source -> Boolean -> Maybe StableIdMapping -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple DomeinFile (Tuple StoredQueries StableIdMapping)))
-loadAndCompileArcFileWithSidecar_ dfid@(DomeinFileId dfName) text saveInCache mMapping =
+loadAndCompileArcFileWithSidecar_ :: ModelUri Stable -> Source -> Boolean -> Maybe StableIdMapping -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple DomeinFile (Tuple StoredQueries StableIdMapping)))
+loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCache mMapping modelCuid =
   catchError
     (do
       (r :: Either ParseError ContextE) <- lift $ lift $ runIndentParser text domain
       case r of
         Left e -> pure $ Left [parseError2PerspectivesError e]
         Right ctxt@(ContextE { id: sourceDfid, pos }) ->
-          if sourceDfid == dfName then do
+          -- LET OP: DIT GAAT FALEN VOOR NIEUWE MODELLEN
+          -- If we have a mapping, it is sure to have the enclosing Domein context, so then we can map ModelUri Readable to ModelUri Stable.
+          if sourceDfid == stableModelUri then do
             (Tuple result state :: Tuple (Either MultiplePerspectivesErrors DomeinFile) PhaseTwoState) <-
               lift $ lift $ runPhaseTwo_' (traverseDomain ctxt) defaultDomeinFileRecord empty empty Nil
             case result of
@@ -100,13 +105,13 @@ loadAndCompileArcFileWithSidecar_ dfid@(DomeinFileId dfName) text saveInCache mM
                 for_ (delete id state.referredModels) (lift <<< retrieveDomeinFile)
 
                 (x' :: Either MultiplePerspectivesErrors (Tuple DomeinFileRecord StoredQueries)) <-
-                  lift $ phaseThreeWithMapping dr'' state.postponedStateQualifiedParts state.screens mMapping
+                  lift $ phaseThree dr'' state.postponedStateQualifiedParts state.screens
                 case x' of
                   Left e -> pure $ Left e
                   Right (Tuple correctedDFR@{ referredModels: refModels } invertedQueries) -> do
                     -- Base mapping from caller
                     let mapping0 = case mMapping of
-                          Nothing -> emptyStableIdMapping
+                          Nothing -> emptyStableIdMapping {contextCuids = singleton stableModelUri modelCuid, modelIdentifier = ModelUri $ (unsafePartial $ modelUri2SchemeAndAuthority stableModelUri) <> "#" <> modelCuid}
                           Just m0 -> m0
 
                     -- Extend aliases and compute current key snapshots
@@ -115,13 +120,13 @@ loadAndCompileArcFileWithSidecar_ dfid@(DomeinFileId dfName) text saveInCache mM
 
                     -- Mint new CUIDs for canonicals that need one (author-local, effectful)
                     ctxPairs <- for planned.needCuids.contexts \fqn -> do
-                      v <- liftEffect (cuid2 (dfName <> ":ctx"))
+                      v <- liftEffect (cuid2 (stableModelUri <> ":ctx"))
                       pure (Tuple fqn v)
                     rolPairs <- for planned.needCuids.roles \fqn -> do
-                      v <- liftEffect (cuid2 (dfName <> ":rol"))
+                      v <- liftEffect (cuid2 (stableModelUri <> ":rol"))
                       pure (Tuple fqn v)
                     propPairs <- for planned.needCuids.properties \fqn -> do
-                      v <- liftEffect (cuid2 (dfName <> ":prop"))
+                      v <- liftEffect (cuid2 (stableModelUri <> ":prop"))
                       pure (Tuple fqn v)
 
                     let newCuids =
@@ -132,10 +137,7 @@ loadAndCompileArcFileWithSidecar_ dfid@(DomeinFileId dfName) text saveInCache mM
 
                     let mapping1 = UTN.finalizeCuidAssignments planned.mappingWithAliases newCuids
 
-                    -- Apply aliases (no-op for canonical keys) to ensure semantic consistency
-                    let _ = applyStableIdMappingWith mapping1 correctedDFR
-
-                    -- Run the type checker
+                    -- Run the type checker (NOTE: but a stub, right now).
                     typeCheckErrors <- lift $ checkDomeinFile (DomeinFile correctedDFR)
                     if null typeCheckErrors then do
                       -- Remove the self-referral and add the source.
@@ -145,13 +147,24 @@ loadAndCompileArcFileWithSidecar_ dfid@(DomeinFileId dfName) text saveInCache mM
                         , _id = takeGuid $ unwrap id
                         }
                       if saveInCache then void $ lift $ storeDomeinFileInCache id df else pure unit
-                      pure $ Right $ Tuple df (Tuple invertedQueries mapping1)
+                    
+                      -- Now replace the readable name given by the modeller with a cuid, in FQNs:
+                      normalizedDf <- lift $ normalizeTypes df mapping1
+                      pure $ Right $ Tuple normalizedDf (Tuple invertedQueries mapping1)
                     else
                       pure $ Left typeCheckErrors
           else
-            pure $ Left [ (DomeinFileIdIncompatible dfid (DomeinFileId sourceDfid) pos) ]
+            pure $ Left [ (DomeinFileIdIncompatible stableModelUri (DomeinFileId sourceDfid) pos) ] 
     )
     (\e -> pure $ Left [ Custom (show e) ])
+
+  where 
+    testModelName :: Boolean
+    testModelName = case mMapping of
+      Nothing -> true
+      Just m  -> case lookupContextCuid m (ContextUri stableModelUri) of
+        Nothing -> true
+        Just s  -> s == stableModelUri
 
 type Persister = String -> DomeinFile -> MonadPerspectives (Array PerspectivesError)
 

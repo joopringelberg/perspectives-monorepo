@@ -140,7 +140,7 @@ data PerspectivesError
     | MissingObject ArcPosition ArcPosition
     | NoCalculatedAspect ArcPosition String
 
-    | DomeinFileIdIncompatible DomeinFileId DomeinFileId ArcPosition
+    | DomeinFileIdIncompatible String DomeinFileId ArcPosition
     | PerspectivesFileFormatError String String
 
     -- Screens

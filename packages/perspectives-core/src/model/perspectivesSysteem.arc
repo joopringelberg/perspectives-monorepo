@@ -953,6 +953,7 @@ domain model://perspectives.domains#System
       -- It must be a local DomeinFileId, e.g. perspectives_domains-System.json (WITHOUT the version!)
       -- PDRDEPENDENCY
       property DomeinFileName (mandatory, String)
+      property ModelCuid (String)
       
     context Versions (relational) filledBy VersionedModelManifest
       -- This value must be entered by the user. 

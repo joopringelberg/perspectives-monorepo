@@ -1,6 +1,6 @@
-domain model://joopringelberg.nl#Testsidecar
+domain model://joopringelberg.nl#TestCuids
   use sys for model://perspectives.domains#System
-  use ts for model://joopringelberg.nl#Testsidecar
+  use ts for model://joopringelberg.nl#TestCuids
 
   -------------------------------------------------------------------------------
   ---- SETTING UP
@@ -40,7 +40,7 @@ domain model://joopringelberg.nl#Testsidecar
     aspect sys:RootContext
     external
       aspect sys:RootContext$External
-      property Test6 (String)
+      property Test6 (String) 
     
     user Manager = sys:Me
 
@@ -49,3 +49,5 @@ domain model://joopringelberg.nl#Testsidecar
   case AnotherCase
     thing AnotherThing1
       property Test7 (String)
+      property Test8 (String)
+      property Test9 = Test7 + Test8

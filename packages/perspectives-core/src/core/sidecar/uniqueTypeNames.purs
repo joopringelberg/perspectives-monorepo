@@ -58,9 +58,13 @@ import Data.String.CodeUnits (toCharArray)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object)
 import Foreign.Object as OBJ
+import Partial.Unsafe (unsafePartial)
 import Perspectives.DomeinFile (DomeinFileRecord)
 import Perspectives.ExecuteInTopologicalOrder (sortTopologicallyEither)
 import Perspectives.Identifiers (isModelUri, typeUri2LocalName_, typeUri2typeNameSpace_)
+import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), range)
+import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
+import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Context (enumeratedRoles)
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
@@ -303,10 +307,10 @@ extractKeysFromDfr
      , roles :: OBJ.Object RoleKeySnapshot
      , properties :: OBJ.Object PropertyKeySnapshot
      }
-extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, enumeratedProperties} =
+extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, calculatedRoles:croles, enumeratedProperties, calculatedProperties} =
   { contexts: mapContext contexts
-  , roles: mapRole eroles
-  , properties: mapProp enumeratedProperties
+  , roles: mapErole eroles <> mapCrole croles
+  , properties: mapEProp enumeratedProperties <> mapCProp calculatedProperties
   }
   where
   mapContext :: Object Context -> Object ContextKeySnapshot
@@ -326,8 +330,8 @@ extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, enumeratedProperties} 
                 , aspects: c.contextAspects <#> unwrap
                 }
 
-  mapRole :: Object EnumeratedRole -> Object RoleKeySnapshot
-  mapRole tbl =
+  mapErole :: Object EnumeratedRole -> Object RoleKeySnapshot
+  mapErole tbl =
     OBJ.fromFoldable do
       k <- OBJ.keys tbl
       case OBJ.lookup k tbl of
@@ -343,8 +347,25 @@ extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, enumeratedProperties} 
                 , aspects: []
                 }
 
-  mapProp :: Object EnumeratedProperty -> Object PropertyKeySnapshot
-  mapProp tbl =
+  mapCrole :: Object CalculatedRole -> Object RoleKeySnapshot
+  mapCrole tbl =
+    OBJ.fromFoldable do
+      k <- OBJ.keys tbl
+      case OBJ.lookup k tbl of
+        Nothing -> []
+        Just (CalculatedRole r) ->
+          let canon = unwrap r.id
+          in if canon /= k then [] else
+              pure $ Tuple k
+                { fqn: k
+                , declaringContextFqn: unwrap r.context
+                , properties: []
+                , bindingTypes: []
+                , aspects: []
+                }
+
+  mapEProp :: Object EnumeratedProperty -> Object PropertyKeySnapshot
+  mapEProp tbl =
     OBJ.fromFoldable do
       k <- OBJ.keys tbl
       case OBJ.lookup k tbl of
@@ -356,6 +377,26 @@ extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, enumeratedProperties} 
               in pure $ Tuple k
                     { fqn: k
                     , valueType: show p.range
+                    , facets: []
+                    , aspects: []
+                    , declaringRoleFqn: declaring
+                    }
+
+  mapCProp :: Object CalculatedProperty -> Object PropertyKeySnapshot
+  mapCProp tbl =
+    OBJ.fromFoldable do
+      k <- OBJ.keys tbl
+      case OBJ.lookup k tbl of
+        Nothing -> []
+        Just (CalculatedProperty p) ->
+          let canon = unwrap p.id
+          in if canon /= k then [] else
+              let declaring = unwrap p.role
+              in pure $ Tuple k
+                    { fqn: k
+                    , valueType: unsafePartial case p.calculation of
+                       Q calc -> case range calc of
+                          (VDOM rn _) -> show rn
                     , facets: []
                     , aspects: []
                     , declaringRoleFqn: declaring

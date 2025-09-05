@@ -142,6 +142,26 @@ modelUri2ModelRepository s = let
     "https://" <> secondLevel <> "." <> toplevel <> "/models_" <> intercalate "_" namespaceParts
 
 -----------------------------------------------------------
+-- MODEL URI TO LOCAL NAME (OR CUID)
+-----------------------------------------------------------
+modelUri2LocalName :: Partial => String -> String
+modelUri2LocalName s = let
+    (matches :: NonEmptyArray (Maybe String)) = fromJust $ match newModelRegex s
+    (localModelName :: String) = fromJust $ fromJust $ index matches 2
+  in
+    localModelName
+
+-----------------------------------------------------------
+-- MODEL URI TO SCHEME AND AUTHORITY
+-----------------------------------------------------------
+modelUri2SchemeAndAuthority :: Partial => String -> String
+modelUri2SchemeAndAuthority s = let
+    (matches :: NonEmptyArray (Maybe String)) = fromJust $ match newModelRegex s
+    (authority :: String) = fromJust $ fromJust $ index matches 1
+    (localModelName :: String) = fromJust $ fromJust $ index matches 2
+  in
+    "model://" <> authority
+-----------------------------------------------------------
 -- STRIP A MODEL URI FROM ITS VERSION
 -----------------------------------------------------------
 -- | Remove the version from a model URI. E.g. "model://joopringelberg.nl#TestQueries@1.0" becomes "model://joopringelberg.nl#TestQueries"

@@ -1,0 +1,152 @@
+{
+  "version": 2,
+  "roles": {
+
+  },
+  "roleKeys": {
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Manager": {
+      "properties": [],
+      "fqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Manager",
+      "declaringContextFqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1",
+      "bindingTypes": [],
+      "aspects": []
+    },
+    "model://joopringelberg.nl#TestCuids$External": {
+      "properties": [],
+      "fqn": "model://joopringelberg.nl#TestCuids$External",
+      "declaringContextFqn": "model://joopringelberg.nl#TestCuids",
+      "bindingTypes": [],
+      "aspects": []
+    },
+    "model://joopringelberg.nl#TestCuids$UpgradeSidecar": {
+      "properties": [],
+      "fqn": "model://joopringelberg.nl#TestCuids$UpgradeSidecar",
+      "declaringContextFqn": "model://joopringelberg.nl#TestCuids",
+      "bindingTypes": [],
+      "aspects": []
+    },
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External": {
+      "properties": [
+        "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External$Test6"
+      ],
+      "fqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External",
+      "declaringContextFqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1",
+      "bindingTypes": [],
+      "aspects": []
+    },
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Something": {
+      "properties": [],
+      "fqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Something",
+      "declaringContextFqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1",
+      "bindingTypes": [],
+      "aspects": []
+    },
+    "model://joopringelberg.nl#TestCuids$AnotherCase$External": {
+      "properties": [],
+      "fqn": "model://joopringelberg.nl#TestCuids$AnotherCase$External",
+      "declaringContextFqn": "model://joopringelberg.nl#TestCuids$AnotherCase",
+      "bindingTypes": [],
+      "aspects": []
+    },
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1": {
+      "properties": [
+        "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test9",
+        "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test8",
+        "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test7"
+      ],
+      "fqn": "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1",
+      "declaringContextFqn": "model://joopringelberg.nl#TestCuids$AnotherCase",
+      "bindingTypes": [],
+      "aspects": []
+    }
+  },
+  "roleCuids": {
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Manager": "m1703zucwz",
+    "model://joopringelberg.nl#TestCuids$External": "skptjrwp9c",
+    "model://joopringelberg.nl#TestCuids$UpgradeSidecar": "othir55yx8",
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External": "bnnn8iyqhf",
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Something": "etsa2xmi1o",
+    "model://joopringelberg.nl#TestCuids$AnotherCase$External": "lc3fp3f4pn",
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1": "gqnzi6cx66"
+  },
+  "propertyKeys": {
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test9": {
+      "valueType": "PString",
+      "fqn": "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test9",
+      "facets": [],
+      "declaringRoleFqn": "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1",
+      "aspects": []
+    },
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External$Test6": {
+      "valueType": "PString",
+      "fqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External$Test6",
+      "facets": [],
+      "declaringRoleFqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External",
+      "aspects": []
+    },
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test7": {
+      "valueType": "PString",
+      "fqn": "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test7",
+      "facets": [],
+      "declaringRoleFqn": "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1",
+      "aspects": []
+    },
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test8": {
+      "valueType": "PString",
+      "fqn": "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test8",
+      "facets": [],
+      "declaringRoleFqn": "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1",
+      "aspects": []
+    }
+  },
+  "propertyCuids": {
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test9": "i0d14ek1ir",
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test8": "gfmbfasbyg",
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External$Test6": "zwdf6cth8d",
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test7": "qu3ktu2t3z"
+  },
+  "properties": {
+
+  },
+  "modelIdentifier": "model://joopringelberg.nl#di4uc8xvd8",
+  "contexts": {
+
+  },
+  "contextKeys": {
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1": {
+      "roles": [
+        "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Something"
+      ],
+      "properties": [],
+      "fqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1",
+      "declaringContextFqn": "model://joopringelberg.nl#TestCuids",
+      "aspects": [
+        "model://perspectives.domains#System$RootContext"
+      ]
+    },
+    "model://joopringelberg.nl#TestCuids$AnotherCase": {
+      "roles": [
+        "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1"
+      ],
+      "properties": [],
+      "fqn": "model://joopringelberg.nl#TestCuids$AnotherCase",
+      "declaringContextFqn": "model://joopringelberg.nl#TestCuids",
+      "aspects": []
+    },
+    "model://joopringelberg.nl#TestCuids": {
+      "roles": [
+        "model://joopringelberg.nl#TestCuids$UpgradeSidecar",
+        "model://perspectives.domains#System$PerspectivesSystem$Installer"
+      ],
+      "properties": [],
+      "fqn": "model://joopringelberg.nl#TestCuids",
+      "declaringContextFqn": "model://joopringelberg.nl#TestCuids",
+      "aspects": []
+    }
+  },
+  "contextCuids": {
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1": "as0tmelhjr",
+    "model://joopringelberg.nl#TestCuids$AnotherCase": "xrpwb0srqg",
+    "model://joopringelberg.nl#TestCuids": "di4uc8xvd8"
+  }
+}

@@ -203,6 +203,9 @@ domeinFileName = "model://perspectives.domains#System$ModelManifest$External$Dom
 versionedDomeinFileName :: String
 versionedDomeinFileName = "model://perspectives.domains#System$VersionedModelManifest$External$DomeinFileName"
 
+versionedModelManifestModelCuid :: String
+versionedModelManifestModelCuid = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelCuid"
+
 patch :: String
 patch = "model://perspectives.domains#System$VersionedModelManifest$External$Patch"
 

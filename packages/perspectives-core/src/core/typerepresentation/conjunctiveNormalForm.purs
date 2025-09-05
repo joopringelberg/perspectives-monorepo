@@ -22,10 +22,12 @@
 
 module Perspectives.Representation.CNF where
 
+import Control.Alternative (class Applicative)
 import Data.Array (concat, intercalate, nub, null)
 import Data.Foldable (foldl)
 import Data.Generic.Rep (class Generic)
 import Data.Set (fromFoldable) as SET
+import Data.Traversable (traverse)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Representation.ExpandedADT (ExpandedADT(..))
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
@@ -39,6 +41,9 @@ import Simple.JSON (class ReadForeign, class WriteForeign, readImpl, writeImpl)
 type CNF = DPROD
 data DPROD a = DPROD (Array (DSUM a))
 data DSUM a = DSUM (Array a)
+
+traverseDPROD :: forall a b f. (Applicative f) => (a -> f b) -> DPROD a -> f (DPROD b)
+traverseDPROD f (DPROD ds) = DPROD <$> traverse (\(DSUM sum) -> DSUM <$> traverse f sum) ds
 
 derive instance Generic (DSUM a) _
 instance (WriteForeign a) => WriteForeign (DSUM a) where

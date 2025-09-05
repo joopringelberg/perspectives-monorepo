@@ -39,6 +39,7 @@ import Data.FoldableWithIndex (forWithIndex_)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), isJust)
 import Data.MediaType (MediaType(..))
+import Data.Newtype (unwrap)
 import Data.String (Pattern(..), Replacement(..), replace)
 import Data.Traversable (for, traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
@@ -48,6 +49,7 @@ import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Foreign (unsafeToForeign)
 import Foreign.Object (empty)
+import Partial.Unsafe (unsafePartial)
 import Perspectives.ContextAndRole (rol_property)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction)
 import Perspectives.Couchdb (AttachmentInfo, DeleteCouchdbDocument(..))
@@ -56,6 +58,7 @@ import Perspectives.DomeinFile (DomeinFile(..), addDownStreamAutomaticEffect, ad
 import Perspectives.Error.Boundaries (handleDomeinFileError)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.ExecuteInTopologicalOrder (executeInTopologicalOrder) as TOP
+import Perspectives.Identifiers (modelUri2LocalName)
 import Perspectives.InvertedQuery.Storable (saveInvertedQueries)
 import Perspectives.ModelDependencies (domeinFileName, modelManifest, versionToInstall)
 import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
@@ -66,7 +69,7 @@ import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.Representation.Class.Cacheable (setRevision)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedPropertyType(..))
-import Perspectives.Sidecar.StableIdMapping (loadStableMapping)
+import Perspectives.Sidecar.StableIdMapping (ModelUri(..), loadStableMapping)
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFileWithSidecar_)
 import Simple.JSON (class ReadForeign, read, read', writeJSON)
 
@@ -88,15 +91,16 @@ recompileModelsAtUrl modelsDb manifestsDb = do
     -- This function is similar to recompileModel, but it does not distribute the state notifications and automatic effects over the other models.
     -- However, it does preserve attachments found in the original model.
     recompileModelAtUrl :: UninterpretedDomeinFile -> ExceptT MultiplePerspectivesErrors MonadPerspectivesTransaction UninterpretedDomeinFile
-    recompileModelAtUrl model@(UninterpretedDomeinFile{namespace, _id, _rev, arc, _attachments}) =
+    recompileModelAtUrl model@(UninterpretedDomeinFile{id, namespace, _id, _rev, arc, _attachments}) =
       do
         log ("Recompiling " <> namespace)
         -- Load sidecar from repository DB and compile with it
-        mRepoMapping <- lift $ lift $ loadStableMapping namespace
-        r <- lift $ loadAndCompileArcFileWithSidecar_ (DomeinFileId namespace) arc false mRepoMapping
+        mRepoMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id)
+        -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
+        r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id))
         case r of
           Left m -> logPerspectivesError $ Custom ("recompileModelsAtUrl: " <> show m)
-          Right (Tuple df@(DomeinFile dfr@{id}) (Tuple invertedQueries mapping')) -> lift $ lift do
+          Right (Tuple df@(DomeinFile dfr@{id:id'}) (Tuple invertedQueries mapping')) -> lift $ lift do
             log $  "Recompiled '" <> namespace <> "' succesfully (" <> namespace <> ")!"
             df' <- pure $ DomeinFile dfr { _id = _id, _rev = Just _rev, _attachments = _attachments}
             _rev' <- addDocument modelsDb df' namespace
@@ -109,7 +113,7 @@ recompileModelsAtUrl modelsDb manifestsDb = do
             -- Persist updated sidecar to repository DB
             mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping')
             DeleteCouchdbDocument {rev: newRev2} <- addAttachment modelsDb _id newRev "stableIdMapping.json" mappingFile (MediaType "application/json")
-            setRevision id newRev2
+            setRevision id' newRev2
         pure model
     getVersionedDomeinFileName :: RoleInstance -> MonadPerspectivesTransaction (Maybe String)
     getVersionedDomeinFileName rid = do 
@@ -123,12 +127,14 @@ recompileModelsAtUrl modelsDb manifestsDb = do
 -- | distributes the state notifications and automatic effects over the other models.
 -- | It preserves attachments found in the original model.
 recompileModel :: UninterpretedDomeinFile -> ExceptT MultiplePerspectivesErrors MonadPerspectivesTransaction UninterpretedDomeinFile
-recompileModel model@(UninterpretedDomeinFile{_rev, _id, namespace, arc, _attachments}) =
+recompileModel model@(UninterpretedDomeinFile{_rev, _id, id, namespace, arc, _attachments}) =
   do
     log ("Recompiling " <> namespace)
     -- Load sidecar from local DB and compile with it
-    mlocalMapping <- lift $ lift $ loadStableMapping namespace
-    r <- lift $ loadAndCompileArcFileWithSidecar_ (DomeinFileId namespace) arc false mlocalMapping
+    mlocalMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id)
+    -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
+    -- It should also be the local part of the id.
+    r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mlocalMapping (unsafePartial modelUri2LocalName (unwrap id))
     case r of
       Left m -> logPerspectivesError $ Custom ("recompileModel: " <> show m)
       Right (Tuple df@(DomeinFile drf@{invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects}) (Tuple invertedQueries mapping')) -> lift $ lift do
