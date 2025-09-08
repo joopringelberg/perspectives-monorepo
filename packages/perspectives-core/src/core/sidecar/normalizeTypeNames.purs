@@ -38,6 +38,7 @@ import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (fromFoldable, toUnfoldable)
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
+import Perspectives.Data.EncodableMap (toUnfoldable, fromFoldable) as EM
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (splitTypeUri)
 import Perspectives.Instances.ObjectGetters (getProperty)
@@ -46,6 +47,7 @@ import Perspectives.Names (getMySystem)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), traverseQfd)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.ADT (ADT)
+import Perspectives.Representation.Action (AutomaticAction(..))
 import Perspectives.Representation.CNF (traverseDPROD)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -56,8 +58,10 @@ import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Value(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
-import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, idUriForContext, idUriForProperty, idUriForRole, loadStableMapping)
+import Perspectives.Representation.Sentence (Sentence(..))
+import Perspectives.Representation.State (Notification(..), State(..), StateFulObject(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..))
+import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), idUriForContext, idUriForProperty, idUriForRole, idUriForState, loadStableMapping)
 
 normalizeTypes :: DomeinFile -> StableIdMapping -> MonadPerspectives DomeinFile
 normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
@@ -119,12 +123,15 @@ instance NormalizeTypeNames DomeinFile DomeinFileId where
       (\(Tuple ct rle) -> Tuple <$> unwrap <$> (fqn2tid <<< EnumeratedPropertyType) ct <*> normalizeTypeNames rle)
     calculatedProperties' <- fromFoldable <$> for ((toUnfoldable df.calculatedProperties) :: Array (Tuple String CalculatedProperty))
       (\(Tuple ct rle) -> Tuple <$> unwrap <$> (fqn2tid <<< CalculatedPropertyType) ct <*> normalizeTypeNames rle)
+    states' <- fromFoldable <$> for ((toUnfoldable df.states) :: Array (Tuple String State))
+      (\(Tuple ct st) -> Tuple <$> unwrap <$> (fqn2tid <<< StateIdentifier) ct <*> normalizeTypeNames st)
     pure $ DomeinFile df
       { contexts = contexts'
       , enumeratedRoles = enumeratedRoles'
       , calculatedRoles = calculatedRoles'
       , enumeratedProperties = enumeratedProperties'
       , calculatedProperties = calculatedProperties'
+      , states = states'
       }
 
 instance NormalizeTypeNames Context ContextType where
@@ -241,6 +248,31 @@ instance NormalizeTypeNames CalculatedProperty CalculatedPropertyType where
     calculation' <- normalizeCalculationTypeNames pt.calculation
     pure $ CalculatedProperty $ pt { id = id', role = role', calculation = calculation' }
 
+instance NormalizeTypeNames State StateIdentifier where
+  fqn2tid (StateIdentifier fqn) = do
+    sidecars <- ask
+    StateIdentifier <$> case splitTypeUri fqn of
+      Nothing -> pure fqn -- not a type uri
+      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of
+        Nothing -> pure fqn -- no sidecar for this model
+        (Just stableIdMapping) -> case idUriForState stableIdMapping (StateUri fqn) of
+          Nothing -> pure fqn -- no mapping found
+          Just cuid -> pure cuid
+  normalizeTypeNames (State s) = do 
+    id' <- fqn2tid s.id
+    stateFulObject' <- case s.stateFulObject of
+      Cnt ctype -> Cnt <$> fqn2tid ctype
+      Orole rtype -> Orole <$> fqn2tid rtype
+      Srole rtype -> Srole <$> fqn2tid rtype
+    query' <- normalizeCalculationTypeNames s.query
+    object' <- traverse normalizeQfd s.object
+    subStates' <- for s.subStates fqn2tid
+    notifyOnEntry' <- EM.fromFoldable <$> for (EM.toUnfoldable s.notifyOnEntry) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalizeNotification n
+    notifyOnExit' <- EM.fromFoldable <$> for (EM.toUnfoldable s.notifyOnExit) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalizeNotification n
+    automaticOnEntry' <- EM.fromFoldable <$> for (EM.toUnfoldable s.automaticOnEntry) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalizeAutomaticAction n
+    automaticOnExit' <- EM.fromFoldable <$> for (EM.toUnfoldable s.automaticOnExit) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalizeAutomaticAction n
+    pure $ State s { id = id', stateFulObject = stateFulObject', query = query', object = object', subStates = subStates', notifyOnEntry = notifyOnEntry', notifyOnExit = notifyOnExit', automaticOnEntry = automaticOnEntry', automaticOnExit = automaticOnExit' }
+
 instance NormalizeTypeNames Prop.Property PropertyType where
   fqn2tid (ENP fqn) = ENP <$> fqn2tid fqn
   fqn2tid (CP fqn) = CP <$> fqn2tid fqn
@@ -307,3 +339,23 @@ normalizeQfd qfd = traverseQfd nQfd qfd
   normalizeQueryFunction (CreateFileF s pt) = CreateFileF s <$> fqn2tid pt
   normalizeQueryFunction (FilledF rt ct) = FilledF <$> fqn2tid rt <*> fqn2tid ct
   normalizeQueryFunction f = pure f
+
+normalizeNotification :: Notification -> WithSideCars Notification
+normalizeNotification (ContextNotification facets@{sentence}) = do
+  parts' <- traverse normalizeQfd (unwrap sentence).parts
+  let sentence' = Sentence  (unwrap sentence) { parts = parts' }
+  pure $ ContextNotification facets { sentence = sentence' }
+normalizeNotification (RoleNotification facets@{currentContextCalculation, sentence}) = do
+  parts' <- traverse normalizeQfd (unwrap sentence).parts
+  currentContextCalculation' <- normalizeQfd currentContextCalculation
+  let sentence' = Sentence  (unwrap sentence) { parts = parts' }
+  pure $ RoleNotification facets { currentContextCalculation = currentContextCalculation', sentence = sentence' }
+
+normalizeAutomaticAction :: AutomaticAction -> WithSideCars AutomaticAction
+normalizeAutomaticAction (ContextAction facets@{effect}) = do
+  effect' <- normalizeQfd effect
+  pure $ ContextAction facets { effect = effect' }
+normalizeAutomaticAction (RoleAction facets@{effect, currentContextCalculation}) = do
+  effect' <- normalizeQfd effect
+  currentContextCalculation' <- normalizeQfd currentContextCalculation
+  pure $ RoleAction facets { effect = effect', currentContextCalculation = currentContextCalculation' }

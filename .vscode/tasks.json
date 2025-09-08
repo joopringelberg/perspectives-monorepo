@@ -11,7 +11,9 @@
       "group": {
         "kind": "build",
       },
-      "problemMatcher": ["$tsc"]
+      "problemMatcher": [
+        "$tsc"
+      ]
     },
     {
       "label": "build perspectives-react",
@@ -23,7 +25,9 @@
       "group": {
         "kind": "build",
       },
-      "problemMatcher": ["$tsc"]
+      "problemMatcher": [
+        "$tsc"
+      ]
     },
     {
       "label": "build perspectives-proxy",
@@ -35,12 +39,14 @@
       "group": {
         "kind": "build",
       },
-      "problemMatcher": ["$tsc"]
+      "problemMatcher": [
+        "$tsc"
+      ]
     },
     {
       "label": "build perspectives-core",
       "type": "shell",
-      "command": "spago build && pnpm run build",
+      "command": "pnpm exec spago build && pnpm run build",
       "options": {
         "cwd": "${workspaceFolder}/packages/perspectives-core"
       },

@@ -47,10 +47,19 @@ domain model://joopringelberg.nl#TestCuids
     thing Something
   
   case AnotherCase
+    aspect sys:ContextWithNotification
     state SomeState = exists AnotherThing1
+      on entry
+        notify Manager
+          "Entering SomeState for {Manager >> FirstName}"
       state Nested = 1 == 2
+        on entry
+          do for Manager
+            Test7 = "Hello " for AnotherThing1
 
     user Manager = sys:Me
+      perspective on AnotherThing1
+        props (Test7) verbs (SetPropertyValue)
     thing AnotherThing1
       property Test7 (String)
       property Test8 (String)

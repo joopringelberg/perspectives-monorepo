@@ -1,5 +1,72 @@
 {
-  "version": 2,
+  "version": 3,
+  "states": {
+
+  },
+  "stateKeys": {
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1": {
+      "queryHash": "qfd-596b23ba",
+      "fqn": "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1"
+    },
+    "model://joopringelberg.nl#TestCuids$AnotherCase": {
+      "queryHash": "qfd-cef36f32",
+      "fqn": "model://joopringelberg.nl#TestCuids$AnotherCase"
+    },
+    "model://joopringelberg.nl#TestCuids$AnotherCase$SomeState": {
+      "queryHash": "qfd-a3637d08",
+      "fqn": "model://joopringelberg.nl#TestCuids$AnotherCase$SomeState"
+    },
+    "model://joopringelberg.nl#TestCuids$AnotherCase$SomeState$Nested": {
+      "queryHash": "qfd-107a3ced",
+      "fqn": "model://joopringelberg.nl#TestCuids$AnotherCase$SomeState$Nested"
+    },
+    "model://joopringelberg.nl#TestCuids$AnotherCase$External": {
+      "queryHash": "qfd-cef36f32",
+      "fqn": "model://joopringelberg.nl#TestCuids$AnotherCase$External"
+    },
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Something": {
+      "queryHash": "qfd-523d316c",
+      "fqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Something"
+    },
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External": {
+      "queryHash": "qfd-c8a12621",
+      "fqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External"
+    },
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1": {
+      "queryHash": "qfd-aa80aa22",
+      "fqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1"
+    },
+    "model://joopringelberg.nl#TestCuids$UpgradeSidecar": {
+      "queryHash": "qfd-b3157c5f",
+      "fqn": "model://joopringelberg.nl#TestCuids$UpgradeSidecar"
+    },
+    "model://joopringelberg.nl#TestCuids": {
+      "queryHash": "qfd-f70662e1",
+      "fqn": "model://joopringelberg.nl#TestCuids"
+    },
+    "model://joopringelberg.nl#TestCuids$ReadyToInstall": {
+      "queryHash": "qfd-1a504027",
+      "fqn": "model://joopringelberg.nl#TestCuids$ReadyToInstall"
+    },
+    "model://joopringelberg.nl#TestCuids$External": {
+      "queryHash": "qfd-f70662e1",
+      "fqn": "model://joopringelberg.nl#TestCuids$External"
+    }
+  },
+  "stateCuids": {
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1": "ucuy66yrgd",
+    "model://joopringelberg.nl#TestCuids$AnotherCase": "e2hsrtgjlh",
+    "model://joopringelberg.nl#TestCuids$AnotherCase$SomeState": "j2q6aul4bx",
+    "model://joopringelberg.nl#TestCuids$AnotherCase$SomeState$Nested": "ve5x9xcjn5",
+    "model://joopringelberg.nl#TestCuids$AnotherCase$External": "d1xlrcjclr",
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Something": "uywv7dzs2h",
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External": "cflpee802g",
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1": "m5jkxpwrmn",
+    "model://joopringelberg.nl#TestCuids$UpgradeSidecar": "ayrmn0btyv",
+    "model://joopringelberg.nl#TestCuids": "ts37mjv86r",
+    "model://joopringelberg.nl#TestCuids$ReadyToInstall": "n6c80czkus",
+    "model://joopringelberg.nl#TestCuids$External": "oicbcrgcif"
+  },
   "roles": {
 
   },
@@ -8,6 +75,13 @@
       "properties": [],
       "fqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Manager",
       "declaringContextFqn": "model://joopringelberg.nl#TestCuids$TestStableIdsModel1",
+      "bindingTypes": [],
+      "aspects": []
+    },
+    "model://joopringelberg.nl#TestCuids$AnotherCase$Manager": {
+      "properties": [],
+      "fqn": "model://joopringelberg.nl#TestCuids$AnotherCase$Manager",
+      "declaringContextFqn": "model://joopringelberg.nl#TestCuids$AnotherCase",
       "bindingTypes": [],
       "aspects": []
     },
@@ -61,13 +135,14 @@
     }
   },
   "roleCuids": {
-    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Manager": "m1703zucwz",
-    "model://joopringelberg.nl#TestCuids$External": "skptjrwp9c",
-    "model://joopringelberg.nl#TestCuids$UpgradeSidecar": "othir55yx8",
-    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External": "bnnn8iyqhf",
-    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Something": "etsa2xmi1o",
-    "model://joopringelberg.nl#TestCuids$AnotherCase$External": "lc3fp3f4pn",
-    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1": "gqnzi6cx66"
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Manager": "ycrwzejb0i",
+    "model://joopringelberg.nl#TestCuids$AnotherCase$Manager": "eg8h7s96wv",
+    "model://joopringelberg.nl#TestCuids$External": "xbka2h857d",
+    "model://joopringelberg.nl#TestCuids$UpgradeSidecar": "y2d5mr3goq",
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External": "jr5i6qr5th",
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$Something": "z1pdsuwvuh",
+    "model://joopringelberg.nl#TestCuids$AnotherCase$External": "qdigiy6eyz",
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1": "lkb8kk6mav"
   },
   "propertyKeys": {
     "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test9": {
@@ -100,10 +175,10 @@
     }
   },
   "propertyCuids": {
-    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test9": "i0d14ek1ir",
-    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test8": "gfmbfasbyg",
-    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External$Test6": "zwdf6cth8d",
-    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test7": "qu3ktu2t3z"
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test9": "uw8qw4apl1",
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1$External$Test6": "fcxvy1ksm3",
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test7": "z1bm6g60jz",
+    "model://joopringelberg.nl#TestCuids$AnotherCase$AnotherThing1$Test8": "ewdx43gbjx"
   },
   "properties": {
 
@@ -145,8 +220,8 @@
     }
   },
   "contextCuids": {
-    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1": "as0tmelhjr",
-    "model://joopringelberg.nl#TestCuids$AnotherCase": "xrpwb0srqg",
+    "model://joopringelberg.nl#TestCuids$TestStableIdsModel1": "w0zadto8y2",
+    "model://joopringelberg.nl#TestCuids$AnotherCase": "qsoquliaoz",
     "model://joopringelberg.nl#TestCuids": "di4uc8xvd8"
   }
 }

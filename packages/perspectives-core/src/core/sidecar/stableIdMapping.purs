@@ -18,13 +18,16 @@ module Perspectives.Sidecar.StableIdMapping
   , idUriForContext
   , idUriForProperty
   , idUriForRole
+  , idUriForState
   , loadStableMapping
   , lookupContextCuid
+  , lookupStateCuid
   , lookupPropertyCuid
   , lookupRoleCuid
   , PropertyUri(..)
   , RoleUri(..)
   , ContextUri(..)
+  , StateUri(..)
   ) where
 
 import Prelude
@@ -140,6 +143,14 @@ lookupPropertyCuid m (PropertyUri fqn) =
       Just canonical -> OBJ.lookup canonical m.propertyCuids
       Nothing -> Nothing
 
+lookupStateCuid :: StableIdMapping -> StateUri Readable -> Maybe String
+lookupStateCuid m (StateUri fqn) =
+  case OBJ.lookup fqn m.stateCuids of
+    Just v -> Just v
+    Nothing -> case OBJ.lookup fqn m.states of
+      Just canonical -> OBJ.lookup canonical m.stateCuids
+      Nothing -> Nothing
+
 loadStableMapping :: ModelUri Stable -> MonadPerspectives (Maybe StableIdMapping)
 loadStableMapping (ModelUri domeinFileName) = do
   let split = unsafePartial modelUri2ModelUrl domeinFileName
@@ -179,6 +190,28 @@ idUriForProperty m (PropertyUri propFqn) = do
   rolTid <- idUriForRole m (RoleUri roleFqn)
   propTid <- lookupPropertyCuid m (PropertyUri propFqn)
   pure (rolTid <> "$" <> propTid)
+
+-- States can be declared under a context or a role. Try role first; fall back to context.
+idUriForState :: StableIdMapping -> StateUri Readable -> Maybe String
+idUriForState m (StateUri stateFqn) =
+  -- The simplest case is the root state of a context of role. In that case, we can exchange the fqn 
+  -- for the ContextUri Stable or RoleUri Stable respectively, augmented with the cuid for the state itself.
+  let nsFqn = typeUri2typeNameSpace_ stateFqn
+      tryRole = do
+        rolTid <- idUriForRole m (RoleUri stateFqn)
+        stTid  <- lookupStateCuid m (StateUri stateFqn)
+        pure (rolTid <> "$" <> stTid)
+      tryContext = do
+        ctxTid <- idUriForContext m (ContextUri stateFqn)
+        stTid  <- lookupStateCuid m (StateUri stateFqn)
+        pure (ctxTid <> "$" <> stTid)
+  in case tryRole, tryContext of
+      Just v, _ -> Just v
+      _, Just v -> Just v
+      Nothing, Nothing -> do 
+        stTid  <- lookupStateCuid m (StateUri stateFqn)
+        nameSpaceTid <- idUriForState m (StateUri nsFqn)
+        pure (nameSpaceTid <> "$" <> stTid)
 
 -- Phantom tag to distinguish shapes at the type level
 foreign import data Readable :: Type
@@ -224,6 +257,16 @@ derive newtype instance ordPropertyUri :: Ord (PropertyUri f)
 derive newtype instance showPropertyUri :: Show (PropertyUri f)
 derive newtype instance ReadForeign (PropertyUri f)
 derive newtype instance WriteForeign (PropertyUri f)
+
+newtype StateUri :: forall k. k -> Type
+newtype StateUri f = StateUri String
+
+derive instance newtypeStateUri :: Newtype (StateUri f) _
+derive newtype instance eqStateUri :: Eq (StateUri f)
+derive newtype instance ordStateUri :: Ord (StateUri f)
+derive newtype instance showStateUri :: Show (StateUri f)
+derive newtype instance ReadForeign (StateUri f)
+derive newtype instance WriteForeign (StateUri f)
 
 -- Typed DomeinFileId (you can migrate fields to DomeinFileIdF Stable stepwise)
 newtype DomeinFileIdF :: forall k. k -> Type

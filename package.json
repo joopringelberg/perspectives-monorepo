@@ -14,7 +14,8 @@
     "version:minor": "lerna version minor --yes --no-push --no-lifecycle",
     "version:major": "lerna version major --yes --no-push --no-lifecycle",
     "prepare": "husky",
-    "commit": "cz"
+    "commit": "cz",
+    "fmt": "purs-tidy format-in-place \"packages/*/src/**/*.purs\""
   },
   "devDependencies": {
     "@axe-core/react": "^4.10.2",

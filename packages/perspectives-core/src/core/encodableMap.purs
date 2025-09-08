@@ -26,15 +26,17 @@ module Perspectives.Data.EncodableMap
   , delete
   , empty
   , filterKeys
+  , fromFoldable
   , insert
   , keys
   , lookup
   , removeAll
+  , singleton
+  , toUnfoldable
   , union
   , values
-  , singleton
-  , fromFoldable
-  ) where
+  )
+  where
 
 import Prelude
 
@@ -129,3 +131,6 @@ singleton k v = EncodableMap $ Map.singleton k v
 -- | On key collision, later values take precedence over earlier ones.
 fromFoldable :: forall f k v. Ord k => Foldable f => f (Tuple k v) -> EncodableMap k v
 fromFoldable fd = EncodableMap $ Map.fromFoldable fd
+
+toUnfoldable :: forall k v. EncodableMap k v -> Array (Tuple k v)
+toUnfoldable (EncodableMap mp) = Map.toUnfoldable mp
