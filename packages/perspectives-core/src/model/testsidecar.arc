@@ -56,6 +56,10 @@ domain model://joopringelberg.nl#TestCuids
         on entry
           do for Manager
             Test7 = "Hello " for AnotherThing1
+    state AnotherState = Manager >> FirstName == "Joop"
+      on entry
+        notify Manager
+          "Entering AnotherState for {Manager >> FirstName}"
 
     user Manager = sys:Me
       perspective on AnotherThing1

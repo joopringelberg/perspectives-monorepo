@@ -39,9 +39,10 @@ import Data.Tuple (Tuple(..))
 import Foreign.Object (fromFoldable, toUnfoldable)
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
 import Perspectives.Data.EncodableMap (toUnfoldable, fromFoldable) as EM
-import Perspectives.DomeinFile (DomeinFile(..))
+import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), UpstreamAutomaticEffect(..), UpstreamStateNotification(..))
 import Perspectives.Identifiers (splitTypeUri)
 import Perspectives.Instances.ObjectGetters (getProperty)
+import Perspectives.InvertedQuery (InvertedQuery)
 import Perspectives.ModelDependencies (modelURI, modelsInUse, versionedDomeinFileName)
 import Perspectives.Names (getMySystem)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), traverseQfd)
@@ -55,7 +56,7 @@ import Perspectives.Representation.Class.Property (Property(..)) as Prop
 import Perspectives.Representation.Class.Role (Role(..))
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
-import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
+import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), InvertedQueryKey(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Value(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.Sentence (Sentence(..))
@@ -128,6 +129,13 @@ instance NormalizeTypeNames DomeinFile DomeinFileId where
       (\(Tuple ct st) -> Tuple <$> unwrap <$> (fqn2tid <<< StateIdentifier) ct <*> normalizeTypeNames st)
     views' <- fromFoldable <$> for ((toUnfoldable df.views) :: Array (Tuple String View))
       (\(Tuple ct vw) -> Tuple <$> unwrap <$> (fqn2tid <<< ViewType) ct <*> normalizeTypeNames vw)
+    referredModels' <- for df.referredModels fqn2tid
+    invertedQueriesInOtherDomains' <- fromFoldable <$> for ((toUnfoldable df.invertedQueriesInOtherDomains) :: Array (Tuple String (Array SeparateInvertedQuery)))
+      (\(Tuple ct q) -> Tuple <$> unwrap <$> (fqn2tid <<< DomeinFileId) ct <*> traverse normalizeSeparateInvertedQuery q)
+    upstreamStateNotifications' <- fromFoldable <$> for ((toUnfoldable df.upstreamStateNotifications) :: Array (Tuple String (Array UpstreamStateNotification)))
+      (\(Tuple ct usn) -> Tuple <$> unwrap <$> (fqn2tid <<< DomeinFileId) ct <*> traverse normalizeUpstreamStateNotification usn)
+    upstreamAutomaticEffects' <- fromFoldable <$> for ((toUnfoldable df.upstreamAutomaticEffects) :: Array (Tuple String (Array UpstreamAutomaticEffect)))
+      (\(Tuple ct aae) -> Tuple <$> unwrap <$> (fqn2tid <<< DomeinFileId) ct <*> traverse normalizeAutomaticEffect aae)
     pure $ DomeinFile df
       { contexts = contexts'
       , enumeratedRoles = enumeratedRoles'
@@ -136,6 +144,9 @@ instance NormalizeTypeNames DomeinFile DomeinFileId where
       , calculatedProperties = calculatedProperties'
       , states = states'
       , views = views'
+      , referredModels = referredModels'
+      , upstreamStateNotifications = upstreamStateNotifications'
+      , upstreamAutomaticEffects = upstreamAutomaticEffects'
       }
 
 instance NormalizeTypeNames Context ContextType where
@@ -299,7 +310,6 @@ instance NormalizeTypeNames View ViewType where
     propertyReferences' <- for vw.propertyReferences fqn2tid
     pure $ View $ vw { id = id', role = role', propertyReferences = propertyReferences' }
 
-
 normalizeCalculationTypeNames :: Calculation -> WithSideCars Calculation
 normalizeCalculationTypeNames s@(S _ _) = pure s
 normalizeCalculationTypeNames (Q qfd) = Q <$> normalizeQfd qfd
@@ -380,3 +390,51 @@ normalizeAutomaticAction (RoleAction facets@{effect, currentContextCalculation})
   effect' <- normalizeQfd effect
   currentContextCalculation' <- normalizeQfd currentContextCalculation
   pure $ RoleAction facets { effect = effect', currentContextCalculation = currentContextCalculation' }
+
+normalizeSeparateInvertedQuery :: SeparateInvertedQuery -> WithSideCars SeparateInvertedQuery
+normalizeSeparateInvertedQuery (RoleInvertedQuery enumeratedRoleType typeName invertedQuery) = do
+  enumeratedRoleType' <- fqn2tid enumeratedRoleType
+  ContextType typeName' <- fqn2tid (ContextType typeName)
+  invertedQuery' <- normalizeInvertedQuery invertedQuery
+  pure $ RoleInvertedQuery enumeratedRoleType' typeName' invertedQuery'
+normalizeSeparateInvertedQuery (ContextInvertedQuery contextType roleType invertedQuery) = do
+  contextType' <- fqn2tid contextType
+  EnumeratedRoleType roleType' <- fqn2tid (EnumeratedRoleType roleType)
+  invertedQuery' <- normalizeInvertedQuery invertedQuery
+  pure $ ContextInvertedQuery contextType' roleType' invertedQuery'
+normalizeSeparateInvertedQuery (FillerInvertedQuery invertedQueryKeys typeName invertedQuery) = do
+  invertedQueryKeys' <- for invertedQueryKeys normalizeInvertedQueryKey
+  EnumeratedRoleType typeName' <- fqn2tid (EnumeratedRoleType typeName)
+  invertedQuery' <- normalizeInvertedQuery invertedQuery
+  pure $ FillerInvertedQuery invertedQueryKeys' typeName' invertedQuery'
+normalizeSeparateInvertedQuery (FilledInvertedQuery invertedQueryKeys typeName invertedQuery) = do
+  invertedQueryKeys' <- for invertedQueryKeys normalizeInvertedQueryKey
+  EnumeratedRoleType typeName' <- fqn2tid (EnumeratedRoleType typeName)
+  invertedQuery' <- normalizeInvertedQuery invertedQuery
+  pure $ FilledInvertedQuery invertedQueryKeys' typeName' invertedQuery'
+normalizeSeparateInvertedQuery (OnPropertyDelta invertedQueryKeys typeName invertedQuery) = do
+  invertedQueryKeys' <- for invertedQueryKeys fqn2tid
+  EnumeratedPropertyType typeName' <- fqn2tid (EnumeratedPropertyType typeName)
+  invertedQuery' <- normalizeInvertedQuery invertedQuery
+  pure $ OnPropertyDelta invertedQueryKeys' typeName' invertedQuery'
+
+
+normalizeInvertedQuery :: InvertedQuery -> WithSideCars InvertedQuery
+normalizeInvertedQuery invertedQuery = pure invertedQuery
+
+normalizeInvertedQueryKey :: InvertedQueryKey -> WithSideCars InvertedQueryKey
+normalizeInvertedQueryKey (InvertedQueryKey contextType1 contextType2 enumeratedRoleType) = InvertedQueryKey <$> fqn2tid contextType1 <*> fqn2tid contextType2 <*> fqn2tid enumeratedRoleType
+
+normalizeUpstreamStateNotification :: UpstreamStateNotification -> WithSideCars UpstreamStateNotification
+normalizeUpstreamStateNotification (UpstreamStateNotification usn) = do
+  stateId' <- fqn2tid usn.stateId
+  notification' <- normalizeNotification usn.notification
+  qualifiedUsers' <- for usn.qualifiedUsers fqn2tid
+  pure $ UpstreamStateNotification usn { stateId = stateId', notification = notification' }
+
+normalizeAutomaticEffect :: UpstreamAutomaticEffect -> WithSideCars UpstreamAutomaticEffect
+normalizeAutomaticEffect (UpstreamAutomaticEffect aae) = do
+  stateId' <- fqn2tid aae.stateId
+  automaticAction' <- normalizeAutomaticAction aae.automaticAction
+  qualifiedUsers' <- for aae.qualifiedUsers fqn2tid
+  pure $ UpstreamAutomaticEffect aae { stateId = stateId', automaticAction = automaticAction', qualifiedUsers = qualifiedUsers' }
