@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2019 Joop Ringelberg (joopringelberg@perspect.it), Cor Baars
+// SPDX-FileCopyrightText: 2019 Joop Ringelberg (joopringelberg@gmail.com), Cor Baars
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 "use strict";
@@ -33,9 +33,9 @@ export function _toObjectArray( env ) {
   return accumulator;
 }
 
-export function _fromObjectArray( frames ) {
+export function _fromObjectArray( frames  ) {
   var i = 0;
-  while (i < length( frames ) - 1 ) {
+  while (i < frames.length - 1 ) {
     Object.setPrototypeOf( frames[i], frames[ i + 1]);
     i++;
   }

@@ -1,6 +1,6 @@
   -- BEGIN LICENSE
 -- Perspectives Distributed Runtime
--- SPDX-FileCopyrightText: 2024 Joop Ringelberg (joopringelberg@perspect.it), Cor Baars
+-- SPDX-FileCopyrightText: 2024 Joop Ringelberg (joopringelberg@gmail.com), Cor Baars
 -- SPDX-License-Identifier: GPL-3.0-or-later
 --
 -- This program is free software: you can redistribute it and/or modify

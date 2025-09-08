@@ -1,6 +1,6 @@
 // BEGIN LICENSE
 // Perspectives Distributed Runtime
-// Copyright (C) 2019 Joop Ringelberg (joopringelberg@perspect.it), Cor Baars
+// Copyright (C) 2019 Joop Ringelberg (joopringelberg@gmail.com), Cor Baars
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -19,15 +19,7 @@
 
 // END LICENSE
 
-let EventSource;
-
-if (typeof window === 'undefined') {
-    // Running in Node.js
-    EventSource = require('eventsource');
-} else {
-    // Running in the browser
-    EventSource = window.EventSource;
-}
+const EventSource = window.EventSource;
 
 export function createEventSourceImpl ( databaseUrl, queryParams )
 {

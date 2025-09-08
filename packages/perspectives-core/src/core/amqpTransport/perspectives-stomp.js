@@ -1,6 +1,6 @@
 // BEGIN LICENSE
 // Perspectives Distributed Runtime
-// SPDX-FileCopyrightText: 2019 Joop Ringelberg (joopringelberg@perspect.it), Cor Baars
+// SPDX-FileCopyrightText: 2019 Joop Ringelberg (joopringelberg@gmail.com), Cor Baars
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // This program is free software: you can redistribute it and/or modify
@@ -49,7 +49,7 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
     , passcode: params.passcode
     , host: params.vhost
   };
-  stompClient.debug = function (str)
+  stompClient.debug = function ()
     {
     // console.log(str);
   };
@@ -66,7 +66,7 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
     function()
     {
       // result = {id, unsubscribe}
-      const result = stompClient.subscribe(
+      stompClient.subscribe(
         // publish to amq.topic
         "/topic/" + params.topic,
         // publish to the default exchange.

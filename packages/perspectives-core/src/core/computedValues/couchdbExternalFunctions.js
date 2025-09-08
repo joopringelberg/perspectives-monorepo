@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 Joop Ringelberg (joopringelberg@perspect.it), Cor Baars
+// SPDX-FileCopyrightText: 2023 Joop Ringelberg (joopringelberg@gmail.com), Cor Baars
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 export const validate_doc_update = (function (newDoc, oldDoc, userCtx, secObj)

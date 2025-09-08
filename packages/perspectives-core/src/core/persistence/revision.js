@@ -1,6 +1,6 @@
 // BEGIN LICENSE
 // Perspectives Distributed Runtime
-// Copyright (C) 2019 Joop Ringelberg (joopringelberg@perspect.it), Cor Baars
+// Copyright (C) 2019 Joop Ringelberg (joopringelberg@gmail.com), Cor Baars
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by

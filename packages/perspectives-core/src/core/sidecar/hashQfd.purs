@@ -1,6 +1,6 @@
 -- BEGIN LICENSE
 -- Perspectives Distributed Runtime
--- SPDX-FileCopyrightText: 2019 Joop Ringelberg (joopringelberg@gmail.com), Cor Baars
+-- SPDX-FileCopyrightText: 2025 Joop Ringelberg (joopringelberg@gmail.com), Cor Baars
 -- SPDX-License-Identifier: GPL-3.0-or-later
 --
 -- This program is free software: you can redistribute it and/or modify
@@ -20,13 +20,9 @@
 
 -- END LICENSE
 
-module Perspectives.Representation.Class.Identifiable where
+module  where
 
-import Data.Newtype (class Newtype, unwrap)
+import Prelude
+module  where
 
-class Newtype i String <= Identifiable e i | e -> i where
-  identifier :: e -> i
-  displayName :: e -> String
-
-identifier_ :: forall e i. Identifiable e i => e -> String
-identifier_ x = unwrap (identifier x :: i)
+import Prelude

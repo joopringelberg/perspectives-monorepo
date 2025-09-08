@@ -1,4 +1,5 @@
-// SPDX-FileCopyrightText: 2019 Joop Ringelberg (joopringelberg@perspect.it), Cor Baars
+/* global emit:readonly */
+// SPDX-FileCopyrightText: 2019 Joop Ringelberg (joopringelberg@gmail.com), Cor Baars
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 export const roleView = (function (doc)
