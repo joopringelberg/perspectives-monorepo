@@ -9,6 +9,7 @@ module Perspectives.Sidecar.StableIdMapping
   , DomeinFileIdF(..)
   , ModelUri(..)
   , PropertyKeySnapshot
+  , ViewKeySnapshot
   , StateKeySnapshot
   , Readable
   , RoleKeySnapshot
@@ -18,20 +19,23 @@ module Perspectives.Sidecar.StableIdMapping
   , idUriForContext
   , idUriForProperty
   , idUriForRole
+  , idUriForView
   , idUriForState
   , loadStableMapping
   , lookupContextCuid
+  , lookupViewCuid
   , lookupStateCuid
-  , lookupPropertyCuid
+  , lookupPropertyCuid 
   , lookupRoleCuid
   , PropertyUri(..)
   , RoleUri(..)
   , ContextUri(..)
+  , ViewUri(..)
   , StateUri(..)
   ) where
 
 import Prelude
-
+ 
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype, unwrap)
@@ -74,6 +78,12 @@ type PropertyKeySnapshot =
   , declaringRoleFqn :: String
   }
 
+type ViewKeySnapshot =
+  { fqn :: String
+  , declaringRoleFqn :: String
+  , properties :: Array String
+  }
+
 type StateKeySnapshot =
   { fqn :: String
   , queryHash :: String
@@ -84,34 +94,40 @@ type StableIdMapping =
   , contexts :: Object String
   , roles :: Object String
   , properties :: Object String
+  , views :: Object String
   , states :: Object String
   -- Baseline canonical keys for heuristics on the next compile.
   , contextKeys :: Object ContextKeySnapshot
   , roleKeys :: Object RoleKeySnapshot
   , propertyKeys :: Object PropertyKeySnapshot
+  , viewKeys :: Object ViewKeySnapshot
   , stateKeys :: Object StateKeySnapshot
   -- Stable ids per kind (FQN -> CUID). Canonical entries should have these.
   , contextCuids :: Object String
   , roleCuids :: Object String
   , propertyCuids :: Object String
+  , viewCuids :: Object String
   , stateCuids :: Object String
   , modelIdentifier :: ModelUri Stable
   }
 
 emptyStableIdMapping :: StableIdMapping
 emptyStableIdMapping =
-  { version: 3
+  { version: 4
   , contexts: empty
   , roles: empty
   , properties: empty
+  , views: empty
   , states: empty
   , contextKeys: empty
   , roleKeys: empty
   , propertyKeys: empty
+  , viewKeys: empty
   , stateKeys: empty
   , contextCuids: empty
   , roleCuids: empty
   , propertyCuids: empty
+  , viewCuids: empty
   , stateCuids: empty
   , modelIdentifier: ModelUri ""
   }
@@ -141,6 +157,14 @@ lookupPropertyCuid m (PropertyUri fqn) =
     Just v -> Just v
     Nothing -> case OBJ.lookup fqn m.properties of
       Just canonical -> OBJ.lookup canonical m.propertyCuids
+      Nothing -> Nothing
+
+lookupViewCuid :: StableIdMapping -> ViewUri Readable -> Maybe String
+lookupViewCuid m (ViewUri fqn) =
+  case OBJ.lookup fqn m.viewCuids of
+    Just v -> Just v
+    Nothing -> case OBJ.lookup fqn m.views of
+      Just canonical -> OBJ.lookup canonical m.viewCuids
       Nothing -> Nothing
 
 lookupStateCuid :: StableIdMapping -> StateUri Readable -> Maybe String
@@ -190,6 +214,14 @@ idUriForProperty m (PropertyUri propFqn) = do
   rolTid <- idUriForRole m (RoleUri roleFqn)
   propTid <- lookupPropertyCuid m (PropertyUri propFqn)
   pure (rolTid <> "$" <> propTid)
+
+-- Views are declared under a role; build their identifier by role tid + view cuid.
+idUriForView :: StableIdMapping -> ViewUri Readable -> Maybe String
+idUriForView m (ViewUri viewFqn) = do
+  let roleFqn = typeUri2typeNameSpace_ viewFqn
+  rolTid <- idUriForRole m (RoleUri roleFqn)
+  viewTid <- lookupViewCuid m (ViewUri viewFqn)
+  pure (rolTid <> "$" <> viewTid)
 
 -- States can be declared under a context or a role. Try role first; fall back to context.
 idUriForState :: StableIdMapping -> StateUri Readable -> Maybe String
@@ -257,6 +289,16 @@ derive newtype instance ordPropertyUri :: Ord (PropertyUri f)
 derive newtype instance showPropertyUri :: Show (PropertyUri f)
 derive newtype instance ReadForeign (PropertyUri f)
 derive newtype instance WriteForeign (PropertyUri f)
+
+newtype ViewUri :: forall k. k -> Type
+newtype ViewUri f = ViewUri String
+
+derive instance newtypeViewUri :: Newtype (ViewUri f) _
+derive newtype instance eqViewUri :: Eq (ViewUri f)
+derive newtype instance ordViewUri :: Ord (ViewUri f)
+derive newtype instance showViewUri :: Show (ViewUri f)
+derive newtype instance ReadForeign (ViewUri f)
+derive newtype instance WriteForeign (ViewUri f)
 
 newtype StateUri :: forall k. k -> Type
 newtype StateUri f = StateUri String

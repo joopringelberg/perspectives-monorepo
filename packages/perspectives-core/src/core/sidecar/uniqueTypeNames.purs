@@ -25,17 +25,20 @@ module Perspectives.Sidecar.UniqueTypeNames
     ContextKey(..)
   , RoleKey(..)
   , PropertyKey(..)
+  , ViewKey(..)
   , HeuristicKey(..)
   -- Weights and scoring
   , ContextWeights
   , RoleWeights
   , PropertyWeights
+  , ViewWeights
   , class HeuristicMapping
   , defaultWeights
   , score
   , defaultContextWeights
   , defaultRoleWeights
   , defaultPropertyWeights
+  , defaultViewWeights
   , Score
   -- Ranking helpers
   , rank
@@ -69,11 +72,11 @@ import Perspectives.Representation.Class.Context (enumeratedRoles)
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
-import Perspectives.Representation.TypeIdentifiers (propertytype2string)
 import Perspectives.Representation.State (State(..)) as ST
+import Perspectives.Representation.TypeIdentifiers (propertytype2string, roletype2string)
+import Perspectives.Representation.View (View(..)) as VW
 import Perspectives.Sidecar.HashQFD (qfdSignature)
-import Perspectives.Sidecar.StableIdMapping (PropertyKeySnapshot, RoleKeySnapshot, StableIdMapping, ContextKeySnapshot)
-import Perspectives.Sidecar.StableIdMapping as SIM
+import Perspectives.Sidecar.StableIdMapping (PropertyKeySnapshot, RoleKeySnapshot, StableIdMapping, ContextKeySnapshot, ViewKeySnapshot, StateKeySnapshot)
 
 -- | We match three kinds for now (omit state types): Context, Role, Property
 newtype ContextKey = ContextKey
@@ -104,6 +107,7 @@ data HeuristicKey
   = HContext ContextKey
   | HRole RoleKey
   | HProperty PropertyKey
+  | HView ViewKey
 
 -- | Scoring is a weighted sum of feature similarities.
 type Score = Number
@@ -131,6 +135,13 @@ type PropertyWeights =
   , facetsCommon :: Number
   , aspectsCommon :: Number
   , declaringRoleExact :: Number
+  , nameSimilarity :: Number
+  }
+
+type ViewWeights =
+  { fqnExact :: Number
+  , declaringRoleExact :: Number
+  , propertiesCommon :: Number
   , nameSimilarity :: Number
   }
 
@@ -188,6 +199,24 @@ instance heuristicProperty :: HeuristicMapping PropertyKey PropertyWeights where
         + w.declaringRoleExact * roleScore
         + w.nameSimilarity * nameScore
 
+newtype ViewKey = ViewKey
+  { fqn :: String
+  , declaringRoleFqn :: String
+  , properties :: Array String
+  }
+
+instance heuristicView :: HeuristicMapping ViewKey ViewWeights where
+  defaultWeights = defaultViewWeights
+  score w (ViewKey a) (ViewKey b) =
+    let
+      nameScore = nameSim (typeUri2LocalName_ a.fqn) (typeUri2LocalName_ b.fqn)
+      roleScore = if a.declaringRoleFqn == b.declaringRoleFqn then 1.0 else 0.0
+    in
+      (if a.fqn == b.fqn then w.fqnExact else 0.0)
+        + w.declaringRoleExact * roleScore
+        + w.propertiesCommon * commonFrac a.properties b.properties
+        + w.nameSimilarity * nameScore
+
 defaultContextWeights :: ContextWeights
 defaultContextWeights =
   { fqnExact: 1000.0
@@ -214,6 +243,14 @@ defaultPropertyWeights =
   , facetsCommon: 2.0
   , aspectsCommon: 1.0
   , declaringRoleExact: 50.0
+  , nameSimilarity: 10.0
+  }
+
+defaultViewWeights :: ViewWeights
+defaultViewWeights =
+  { fqnExact: 1000.0
+  , declaringRoleExact: 50.0
+  , propertiesCommon: 2.0
   , nameSimilarity: 10.0
   }
 
@@ -285,11 +322,12 @@ applyStableIdMappingWith mapping0 df =
 -- | in the DomeinFileRecord. We NEVER rename the canonical identifiers here;
 -- | we only add lookups under the alias keys for backwards/forwards compatibility.
 applyAliases :: StableIdMapping -> DomeinFileRecord -> DomeinFileRecord
-applyAliases mapping dfr@{ contexts, enumeratedRoles, enumeratedProperties, states } =
+applyAliases mapping dfr@{ contexts, enumeratedRoles, enumeratedProperties, states, views } =
   dfr
     { contexts = aliasTable contexts mapping.contexts
     , enumeratedRoles = aliasTable enumeratedRoles mapping.roles
     , enumeratedProperties = aliasTable enumeratedProperties mapping.properties
+  , views = aliasTable views mapping.views
     , states = aliasTable states mapping.states
     }
   where
@@ -323,12 +361,14 @@ extractKeysFromDfr
   -> { contexts :: OBJ.Object ContextKeySnapshot
      , roles :: OBJ.Object RoleKeySnapshot
      , properties :: OBJ.Object PropertyKeySnapshot
-     , states :: OBJ.Object SIM.StateKeySnapshot
+  , views :: OBJ.Object ViewKeySnapshot
+     , states :: OBJ.Object StateKeySnapshot
      }
-extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: croles, enumeratedProperties, calculatedProperties, states } =
+extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: croles, enumeratedProperties, calculatedProperties, views, states } =
   { contexts: mapContext contexts
   , roles: mapErole eroles <> mapCrole croles
   , properties: mapEProp enumeratedProperties <> mapCProp calculatedProperties
+  , views: mapView views
   , states: mapState states
   }
   where
@@ -440,8 +480,26 @@ extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: cro
                   , declaringRoleFqn: declaring
                   }
 
+  mapView :: Object VW.View -> Object ViewKeySnapshot
+  mapView tbl =
+    OBJ.fromFoldable do
+      k <- OBJ.keys tbl
+      case OBJ.lookup k tbl of
+        Nothing -> []
+        Just (VW.View v) ->
+          let
+            canon = unwrap v.id
+          in
+            if canon /= k then []
+            else
+              pure $ Tuple k
+                { fqn: k
+                , declaringRoleFqn: roletype2string v.role
+                , properties: v.propertyReferences <#> propertytype2string
+                }
+
   -- States: snapshot canonical entries by FQN and hash of their query
-  mapState :: Object ST.State -> Object SIM.StateKeySnapshot
+  mapState :: Object ST.State -> Object StateKeySnapshot
   mapState tbl =
     OBJ.fromFoldable do
       k <- OBJ.keys tbl
@@ -465,7 +523,8 @@ mergeStableIdMapping
    . { contexts :: OBJ.Object ContextKeySnapshot
      , roles :: OBJ.Object RoleKeySnapshot
      , properties :: OBJ.Object PropertyKeySnapshot
-     , states :: OBJ.Object SIM.StateKeySnapshot
+     , states :: OBJ.Object StateKeySnapshot
+     , views :: OBJ.Object ViewKeySnapshot
      | r
      }
   -> StableIdMapping
@@ -480,6 +539,9 @@ mergeStableIdMapping cur mapping0 =
 
     candidatesP :: Array (Tuple String PropertyKey)
     candidatesP = objToArrayWith snapshotToPropertyKeyCurrent cur.properties
+
+    candidatesV :: Array (Tuple String ViewKey)
+    candidatesV = objToArrayWith snapshotToViewKeyCurrent cur.views
 
     -- For states, we don't use a graded heuristic yet: we require exact (fqn, queryHash).
     -- Build an index of current states by (fqn#hash)
@@ -506,10 +568,11 @@ mergeStableIdMapping cur mapping0 =
       mapping0.contexts
     rolAliases' = buildAliases defaultRoleWeights 0.5 mapping0.roleKeys (snapshotToRoleKeyOld ctxAliases') candidatesR mapping0.roles
     propAliases' = buildAliases defaultPropertyWeights 0.7 mapping0.propertyKeys (snapshotToPropertyKeyOld rolAliases') candidatesP mapping0.properties
-
+    viewAliases' = buildAliases defaultViewWeights 0.7 mapping0.viewKeys (snapshotToViewKeyOld rolAliases') candidatesV mapping0.views
     ctxCuids' = assignCuids ctxAliases' mapping0.contextCuids (OBJ.keys cur.contexts)
     rolCuids' = assignCuids rolAliases' mapping0.roleCuids (OBJ.keys cur.roles)
     propCuids' = assignCuids propAliases' mapping0.propertyCuids (OBJ.keys cur.properties)
+    viewCuids' = assignCuids viewAliases' mapping0.viewCuids (OBJ.keys cur.views)
 
     -- State aliasing: process old snapshots topologically by namespace and normalize parent namespaces through known context/state aliases.
     stateAliases' = buildStateAliasesTopologically mapping0.stateKeys ctxAliases' mapping0.states candStatesIndex
@@ -518,14 +581,17 @@ mergeStableIdMapping cur mapping0 =
       { contexts = ctxAliases'
       , roles = rolAliases'
       , properties = propAliases'
+      , views = viewAliases'
       , states = stateAliases'
       , contextKeys = cur.contexts
       , roleKeys = cur.roles
       , propertyKeys = cur.properties
+      , viewKeys = cur.views
       , stateKeys = cur.states
       , contextCuids = ctxCuids'
       , roleCuids = rolCuids'
       , propertyCuids = propCuids'
+      , viewCuids = viewCuids'
       }
   where
   objToArrayWith :: forall s a. (s -> a) -> OBJ.Object s -> Array (Tuple String a)
@@ -616,7 +682,7 @@ mergeStableIdMapping cur mapping0 =
 
 -- Build state aliases in a parent-first order, normalizing namespaces via context/state alias maps.
 buildStateAliasesTopologically
-  :: OBJ.Object SIM.StateKeySnapshot -- old state snapshots
+  :: OBJ.Object StateKeySnapshot -- old state snapshots
   -> OBJ.Object String -- context alias map
   -> OBJ.Object String -- initial state alias map
   -> OBJ.Object String -- current index (fqn#hash -> fqn)
@@ -725,6 +791,28 @@ snapshotToPropertyKeyOld roleAliases s =
       , declaringRoleFqn: declN
       }
 
+snapshotToViewKeyCurrent :: ViewKeySnapshot -> ViewKey
+snapshotToViewKeyCurrent s =
+  ViewKey
+    { fqn: s.fqn
+    , declaringRoleFqn: s.declaringRoleFqn
+    , properties: s.properties
+    }
+
+snapshotToViewKeyOld :: OBJ.Object String -> ViewKeySnapshot -> ViewKey
+snapshotToViewKeyOld roleAliases s =
+  let
+    decl0 = s.declaringRoleFqn
+    declN = case OBJ.lookup decl0 roleAliases of
+      Just new -> new
+      Nothing -> decl0
+  in
+    ViewKey
+      { fqn: s.fqn
+      , declaringRoleFqn: declN
+      , properties: s.properties
+      }
+
 -- Re-exported helper locally for broader use in this module
 findFirstJust
   :: forall a
@@ -742,30 +830,33 @@ planCuidAssignments
    . { contexts :: OBJ.Object ContextKeySnapshot
      , roles :: OBJ.Object RoleKeySnapshot
      , properties :: OBJ.Object PropertyKeySnapshot
-     , states :: OBJ.Object SIM.StateKeySnapshot
+     , views :: OBJ.Object ViewKeySnapshot
+     , states :: OBJ.Object StateKeySnapshot
      | r
      }
   -> StableIdMapping
   -> { mappingWithAliases :: StableIdMapping
-     , needCuids :: { contexts :: Array String, roles :: Array String, properties :: Array String, states :: Array String }
+  , needCuids :: { contexts :: Array String, roles :: Array String, properties :: Array String, views :: Array String, states :: Array String }
      }
 planCuidAssignments cur mapping0 =
   let
     candidatesC = objToArrayWith snapshotToContextKeyCurrent cur.contexts
     candidatesR = objToArrayWith snapshotToRoleKeyCurrent cur.roles
     candidatesP = objToArrayWith snapshotToPropertyKeyCurrent cur.properties
+    candidatesV = objToArrayWith snapshotToViewKeyCurrent cur.views
 
     contextKeys = OBJ.values mapping0.contextKeys
 
     ctxAliases' = buildContextAliasesTopologically
-      defaultContextWeights
-      0.5
-      mapping0.contextKeys
-      candidatesC
-      mapping0.contexts
+        defaultContextWeights
+        0.5
+        mapping0.contextKeys
+        candidatesC
+        mapping0.contexts
 
     rolAliases' = buildAliases defaultRoleWeights 0.5 mapping0.roleKeys (snapshotToRoleKeyOld ctxAliases') candidatesR mapping0.roles (OBJ.keys mapping0.roleKeys)
     propAliases' = buildAliases defaultPropertyWeights 0.7 mapping0.propertyKeys (snapshotToPropertyKeyOld rolAliases') candidatesP mapping0.properties (OBJ.keys mapping0.propertyKeys)
+    viewAliases' = buildAliases defaultViewWeights 0.7 mapping0.viewKeys (snapshotToViewKeyOld rolAliases') candidatesV mapping0.views (OBJ.keys mapping0.viewKeys)
 
     -- state aliases (exact match fqn+hash with normalized namespace)
     candStatesIndex :: OBJ.Object String
@@ -781,10 +872,12 @@ planCuidAssignments cur mapping0 =
       { contexts = ctxAliases'
       , roles = rolAliases'
       , properties = propAliases'
+      , views = viewAliases'
       , states = stateAliases'
       , contextKeys = cur.contexts
       , roleKeys = cur.roles
       , propertyKeys = cur.properties
+      , viewKeys = cur.views
       , stateKeys = cur.states
       }
 
@@ -802,6 +895,7 @@ planCuidAssignments cur mapping0 =
     needCtx = needs cur.contexts mapping0.contextCuids ctxAliases'
     needRol = needs cur.roles mapping0.roleCuids rolAliases'
     needProp = needs cur.properties mapping0.propertyCuids propAliases'
+    needView = needs cur.views mapping0.viewCuids viewAliases'
     -- For states, plan CUIDs for current canonical states with no cuid and not reusable from alias
     needState =
       let
@@ -814,7 +908,7 @@ planCuidAssignments cur mapping0 =
         filter (\fqn -> not (hasPrev fqn) && reusedFromAlias fqn == Nothing) (OBJ.keys cur.states)
   in
     { mappingWithAliases
-    , needCuids: { contexts: needCtx, roles: needRol, properties: needProp, states: needState }
+    , needCuids: { contexts: needCtx, roles: needRol, properties: needProp, views: needView, states: needState }
     }
   where
   objToArrayWith :: forall s a. (s -> a) -> OBJ.Object s -> Array (Tuple String a)
@@ -883,7 +977,7 @@ planCuidAssignments cur mapping0 =
 -- Finalize CUID assignments: copy existing cuids from oldFqn to newFqn wherever alias old->new exists and new lacks a cuid
 finalizeCuidAssignments
   :: StableIdMapping
-  -> { contexts :: OBJ.Object String, roles :: OBJ.Object String, properties :: OBJ.Object String, states :: OBJ.Object String }
+  -> { contexts :: OBJ.Object String, roles :: OBJ.Object String, properties :: OBJ.Object String, views :: OBJ.Object String, states :: OBJ.Object String }
   -> StableIdMapping
 finalizeCuidAssignments mappingWithAliases newCuids =
   let
@@ -909,18 +1003,21 @@ finalizeCuidAssignments mappingWithAliases newCuids =
     ctxCuidsProp = propagate mappingWithAliases.contexts mappingWithAliases.contextCuids
     rolCuidsProp = propagate mappingWithAliases.roles mappingWithAliases.roleCuids
     propCuidsProp = propagate mappingWithAliases.properties mappingWithAliases.propertyCuids
+    viewCuidsProp = propagate mappingWithAliases.views mappingWithAliases.viewCuids
     stateCuidsProp = propagate mappingWithAliases.states mappingWithAliases.stateCuids
 
     -- 2) add freshly minted cuids (if any)
     ctxCuids' = OBJ.union ctxCuidsProp newCuids.contexts
     rolCuids' = OBJ.union rolCuidsProp newCuids.roles
     propCuids' = OBJ.union propCuidsProp newCuids.properties
+    viewCuids' = OBJ.union viewCuidsProp newCuids.views
     stateCuids' = OBJ.union stateCuidsProp newCuids.states
   in
     mappingWithAliases
       { contextCuids = ctxCuids'
       , roleCuids = rolCuids'
       , propertyCuids = propCuids'
+      , viewCuids = viewCuids'
       , stateCuids = stateCuids'
       }
 

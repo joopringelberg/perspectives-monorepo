@@ -60,8 +60,9 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Val
 import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateFulObject(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..))
-import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), idUriForContext, idUriForProperty, idUriForRole, idUriForState, loadStableMapping)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
+import Perspectives.Representation.View (View(..))
+import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping)
 
 normalizeTypes :: DomeinFile -> StableIdMapping -> MonadPerspectives DomeinFile
 normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
@@ -125,6 +126,8 @@ instance NormalizeTypeNames DomeinFile DomeinFileId where
       (\(Tuple ct rle) -> Tuple <$> unwrap <$> (fqn2tid <<< CalculatedPropertyType) ct <*> normalizeTypeNames rle)
     states' <- fromFoldable <$> for ((toUnfoldable df.states) :: Array (Tuple String State))
       (\(Tuple ct st) -> Tuple <$> unwrap <$> (fqn2tid <<< StateIdentifier) ct <*> normalizeTypeNames st)
+    views' <- fromFoldable <$> for ((toUnfoldable df.views) :: Array (Tuple String View))
+      (\(Tuple ct vw) -> Tuple <$> unwrap <$> (fqn2tid <<< ViewType) ct <*> normalizeTypeNames vw)
     pure $ DomeinFile df
       { contexts = contexts'
       , enumeratedRoles = enumeratedRoles'
@@ -132,6 +135,7 @@ instance NormalizeTypeNames DomeinFile DomeinFileId where
       , enumeratedProperties = enumeratedProperties'
       , calculatedProperties = calculatedProperties'
       , states = states'
+      , views = views'
       }
 
 instance NormalizeTypeNames Context ContextType where
@@ -278,6 +282,23 @@ instance NormalizeTypeNames Prop.Property PropertyType where
   fqn2tid (CP fqn) = CP <$> fqn2tid fqn
   normalizeTypeNames (Prop.E pt) = Prop.E <$> normalizeTypeNames pt
   normalizeTypeNames (Prop.C pt) = Prop.C <$> normalizeTypeNames pt
+
+instance NormalizeTypeNames View ViewType where
+  fqn2tid (ViewType fqn) = do
+    sidecars <- ask
+    ViewType <$> case splitTypeUri fqn of
+      Nothing -> pure fqn -- not a type uri
+      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of
+        Nothing -> pure fqn -- no sidecar for this model
+        (Just stableIdMapping) -> case idUriForView stableIdMapping (ViewUri fqn) of
+          Nothing -> pure fqn -- no mapping found
+          Just cuid -> pure cuid
+  normalizeTypeNames (View vw) = do
+    id' <- fqn2tid vw.id
+    role' <- fqn2tid vw.role
+    propertyReferences' <- for vw.propertyReferences fqn2tid
+    pure $ View $ vw { id = id', role = role', propertyReferences = propertyReferences' }
+
 
 normalizeCalculationTypeNames :: Calculation -> WithSideCars Calculation
 normalizeCalculationTypeNames s@(S _ _) = pure s

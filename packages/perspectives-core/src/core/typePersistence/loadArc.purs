@@ -132,6 +132,9 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                       statePairs <- for planned.needCuids.states \fqn -> do
                         v <- liftEffect (cuid2 (stableModelUri <> ":state"))
                         pure (Tuple fqn v)
+                      viewPairs <- for planned.needCuids.views \fqn -> do
+                        v <- liftEffect (cuid2 (stableModelUri <> ":view"))
+                        pure (Tuple fqn v)
 
                       let
                         newCuids =
@@ -139,6 +142,7 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                           , roles: OBJ.fromFoldable rolPairs
                           , properties: OBJ.fromFoldable propPairs
                           , states: OBJ.fromFoldable statePairs
+                          , views: OBJ.fromFoldable viewPairs
                           }
 
                       let mapping1 = UTN.finalizeCuidAssignments planned.mappingWithAliases newCuids

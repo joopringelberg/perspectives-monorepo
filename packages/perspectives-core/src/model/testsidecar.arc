@@ -64,3 +64,4 @@ domain model://joopringelberg.nl#TestCuids
       property Test7 (String)
       property Test8 (String)
       property Test9 = Test7 + Test8
+      view ThingView (Test7, Test8, Test9)
