@@ -71,6 +71,11 @@ type PropertyKeySnapshot =
   , declaringRoleFqn :: String
   }
 
+type StateKeySnapshot = 
+  { fqn :: String 
+  , queryHash :: String
+  }
+
 type StableIdMapping =
   { version :: Int
   , contexts :: Object String
