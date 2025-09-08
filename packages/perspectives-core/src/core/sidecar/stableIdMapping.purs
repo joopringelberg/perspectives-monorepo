@@ -9,6 +9,7 @@ module Perspectives.Sidecar.StableIdMapping
   , DomeinFileIdF(..)
   , ModelUri(..)
   , PropertyKeySnapshot
+  , StateKeySnapshot
   , Readable
   , RoleKeySnapshot
   , Stable
@@ -81,29 +82,35 @@ type StableIdMapping =
   , contexts :: Object String
   , roles :: Object String
   , properties :: Object String
+  , states :: Object String
   -- Baseline canonical keys for heuristics on the next compile.
   , contextKeys :: Object ContextKeySnapshot
   , roleKeys :: Object RoleKeySnapshot
   , propertyKeys :: Object PropertyKeySnapshot
+  , stateKeys :: Object StateKeySnapshot
   -- Stable ids per kind (FQN -> CUID). Canonical entries should have these.
   , contextCuids :: Object String
   , roleCuids :: Object String
   , propertyCuids :: Object String
+  , stateCuids :: Object String
   , modelIdentifier :: ModelUri Stable
   }
 
 emptyStableIdMapping :: StableIdMapping
 emptyStableIdMapping =
-  { version: 2
+  { version: 3
   , contexts: empty
   , roles: empty
   , properties: empty
+  , states: empty
   , contextKeys: empty
   , roleKeys: empty
   , propertyKeys: empty
+  , stateKeys: empty
   , contextCuids: empty
   , roleCuids: empty
   , propertyCuids: empty
+  , stateCuids: empty
   , modelIdentifier: ModelUri ""
   }
 

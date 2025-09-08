@@ -47,6 +47,10 @@ domain model://joopringelberg.nl#TestCuids
     thing Something
   
   case AnotherCase
+    state SomeState = exists AnotherThing1
+      state Nested = 1 == 2
+
+    user Manager = sys:Me
     thing AnotherThing1
       property Test7 (String)
       property Test8 (String)

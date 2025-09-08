@@ -70,7 +70,10 @@ import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.TypeIdentifiers (propertytype2string)
+import Perspectives.Representation.State (State(..)) as ST
+import Perspectives.Sidecar.HashQFD (qfdSignature)
 import Perspectives.Sidecar.StableIdMapping (PropertyKeySnapshot, RoleKeySnapshot, StableIdMapping, ContextKeySnapshot)
+import Perspectives.Sidecar.StableIdMapping as SIM
 
 -- | We match three kinds for now (omit state types): Context, Role, Property
 newtype ContextKey = ContextKey
@@ -271,11 +274,12 @@ applyStableIdMappingWith mapping0 df =
 -- | in the DomeinFileRecord. We NEVER rename the canonical identifiers here;
 -- | we only add lookups under the alias keys for backwards/forwards compatibility.
 applyAliases :: StableIdMapping -> DomeinFileRecord -> DomeinFileRecord
-applyAliases mapping dfr@{contexts, enumeratedRoles, enumeratedProperties} =
+applyAliases mapping dfr@{contexts, enumeratedRoles, enumeratedProperties, states} =
   dfr
     { contexts = aliasTable contexts mapping.contexts
     , enumeratedRoles = aliasTable enumeratedRoles mapping.roles
     , enumeratedProperties = aliasTable enumeratedProperties mapping.properties
+  , states = aliasTable states mapping.states
     }
   where
   -- | Given a table of entities (by canonical key) and a mapping (alias -> canonicalKey),
@@ -306,11 +310,13 @@ extractKeysFromDfr
   -> { contexts :: OBJ.Object ContextKeySnapshot
      , roles :: OBJ.Object RoleKeySnapshot
      , properties :: OBJ.Object PropertyKeySnapshot
+  , states :: OBJ.Object SIM.StateKeySnapshot
      }
-extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, calculatedRoles:croles, enumeratedProperties, calculatedProperties} =
+extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, calculatedRoles:croles, enumeratedProperties, calculatedProperties, states} =
   { contexts: mapContext contexts
   , roles: mapErole eroles <> mapCrole croles
   , properties: mapEProp enumeratedProperties <> mapCProp calculatedProperties
+  , states: mapState states
   }
   where
   mapContext :: Object Context -> Object ContextKeySnapshot
@@ -402,11 +408,28 @@ extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, calculatedRoles:croles
                     , declaringRoleFqn: declaring
                     }
 
+  -- States: snapshot canonical entries by FQN and hash of their query
+  mapState :: Object ST.State -> Object SIM.StateKeySnapshot
+  mapState tbl =
+    OBJ.fromFoldable do
+      k <- OBJ.keys tbl
+      case OBJ.lookup k tbl of
+        Nothing -> []
+        Just (ST.State s) ->
+          let canon = unwrap s.id
+          in if canon /= k then [] else
+              let qh = unsafePartial case s.query of
+                        Q qfd -> qfdSignature qfd
+                  in pure $ Tuple k { fqn: k, queryHash: qh }
+
 -- Merge the current key snapshots with the previous sidecar to generate/update alias maps.
 mergeStableIdMapping
-  :: { contexts :: OBJ.Object ContextKeySnapshot
+  :: forall r
+   . { contexts :: OBJ.Object ContextKeySnapshot
      , roles :: OBJ.Object RoleKeySnapshot
      , properties :: OBJ.Object PropertyKeySnapshot
+     , states :: OBJ.Object SIM.StateKeySnapshot
+     | r
      }
   -> StableIdMapping
   -> StableIdMapping
@@ -420,6 +443,15 @@ mergeStableIdMapping cur mapping0 =
 
     candidatesP :: Array (Tuple String PropertyKey)
     candidatesP = objToArrayWith snapshotToPropertyKeyCurrent cur.properties
+
+    -- For states, we don't use a graded heuristic yet: we require exact (fqn, queryHash).
+    -- Build an index of current states by (fqn#hash)
+    candStatesIndex :: OBJ.Object String
+    candStatesIndex = OBJ.fromFoldable $ do
+      k <- OBJ.keys cur.states
+      case OBJ.lookup k cur.states of
+        Nothing -> []
+        Just s  -> pure (Tuple (s.fqn <> "#" <> s.queryHash) s.fqn)
 
     contextKeys = OBJ.values mapping0.contextKeys
 
@@ -441,14 +473,19 @@ mergeStableIdMapping cur mapping0 =
     ctxCuids'  = assignCuids ctxAliases'  mapping0.contextCuids  (OBJ.keys cur.contexts)
     rolCuids'  = assignCuids rolAliases'  mapping0.roleCuids     (OBJ.keys cur.roles)
     propCuids' = assignCuids propAliases' mapping0.propertyCuids (OBJ.keys cur.properties)
+
+  -- State aliasing: process old snapshots topologically by namespace and normalize parent namespaces through known context/state aliases.
+    stateAliases' = buildStateAliasesTopologically mapping0.stateKeys ctxAliases' mapping0.states candStatesIndex
   in
     mapping0
       { contexts = ctxAliases'
       , roles = rolAliases'
       , properties = propAliases'
+      , states = stateAliases'
       , contextKeys = cur.contexts
       , roleKeys = cur.roles
       , propertyKeys = cur.properties
+      , stateKeys = cur.states
       , contextCuids = ctxCuids'
       , roleCuids = rolCuids'
       , propertyCuids = propCuids'
@@ -531,6 +568,38 @@ mergeStableIdMapping cur mapping0 =
             Just cuid -> OBJ.insert fqn cuid acc
             Nothing   -> acc
     in foldl go prevCuids currentCanon
+
+-- Build state aliases in a parent-first order, normalizing namespaces via context/state alias maps.
+buildStateAliasesTopologically
+  :: OBJ.Object SIM.StateKeySnapshot   -- old state snapshots
+  -> OBJ.Object String                 -- context alias map
+  -> OBJ.Object String                 -- initial state alias map
+  -> OBJ.Object String                 -- current index (fqn#hash -> fqn)
+  -> OBJ.Object String
+buildStateAliasesTopologically oldStates ctxAliases acc0 curIndex =
+  let olds = OBJ.values oldStates
+      sorted = case sortTopologicallyEither _.fqn (singleton <<< typeUri2typeNameSpace_ <<< _.fqn) olds of
+        Right xs -> xs
+        Left _   -> olds
+      normalizeNs acc ns =
+        case Tuple (OBJ.lookup ns ctxAliases) (OBJ.lookup ns acc) of
+          Tuple (Just newNs) _ -> newNs
+          Tuple _ (Just newNs) -> newNs
+          _ -> ns
+      step acc sOld =
+        let keySame = sOld.fqn <> "#" <> sOld.queryHash
+        in if OBJ.lookup keySame curIndex /= Nothing
+              then acc
+              else
+                let ns0 = typeUri2typeNameSpace_ sOld.fqn
+                    ln  = typeUri2LocalName_ sOld.fqn
+                    ns1 = normalizeNs acc ns0
+                    normFqn = if ns1 == ns0 then sOld.fqn else ns1 <> "$" <> ln
+                    k2 = normFqn <> "#" <> sOld.queryHash
+                in case OBJ.lookup k2 curIndex of
+                      Just newFqn -> OBJ.insert sOld.fqn newFqn acc
+                      Nothing     -> acc
+  in foldl step acc0 sorted
 
   -- uses top-level findFirstJust
 snapshotToContextKeyCurrent :: ContextKeySnapshot -> ContextKey
@@ -615,13 +684,16 @@ findFirstJust ks f =
 
 -- Plan CUID assignments: same stronger property threshold
 planCuidAssignments
-  :: { contexts :: OBJ.Object ContextKeySnapshot
+  :: forall r
+   . { contexts :: OBJ.Object ContextKeySnapshot
      , roles :: OBJ.Object RoleKeySnapshot
      , properties :: OBJ.Object PropertyKeySnapshot
+     , states :: OBJ.Object SIM.StateKeySnapshot
+     | r
      }
   -> StableIdMapping
   -> { mappingWithAliases :: StableIdMapping
-     , needCuids :: { contexts :: Array String, roles :: Array String, properties :: Array String }
+  , needCuids :: { contexts :: Array String, roles :: Array String, properties :: Array String, states :: Array String }
      }
 planCuidAssignments cur mapping0 =
   let
@@ -641,13 +713,25 @@ planCuidAssignments cur mapping0 =
     rolAliases'  = buildAliases defaultRoleWeights      0.5 mapping0.roleKeys     (snapshotToRoleKeyOld ctxAliases')            candidatesR mapping0.roles (OBJ.keys mapping0.roleKeys)
     propAliases' = buildAliases defaultPropertyWeights  0.7 mapping0.propertyKeys (snapshotToPropertyKeyOld rolAliases')        candidatesP mapping0.properties (OBJ.keys mapping0.propertyKeys)
 
+    -- state aliases (exact match fqn+hash with normalized namespace)
+    candStatesIndex :: OBJ.Object String
+    candStatesIndex = OBJ.fromFoldable $ do
+      k <- OBJ.keys cur.states
+      case OBJ.lookup k cur.states of
+        Nothing -> []
+        Just s  -> pure (Tuple (s.fqn <> "#" <> s.queryHash) s.fqn)
+
+    stateAliases' = buildStateAliasesTopologically mapping0.stateKeys ctxAliases' mapping0.states candStatesIndex
+
     mappingWithAliases = mapping0
       { contexts = ctxAliases'
       , roles = rolAliases'
       , properties = propAliases'
+      , states = stateAliases'
       , contextKeys = cur.contexts
       , roleKeys = cur.roles
       , propertyKeys = cur.properties
+      , stateKeys = cur.states
       }
 
     needs :: forall s. OBJ.Object s -> OBJ.Object String -> OBJ.Object String -> Array String
@@ -659,12 +743,20 @@ planCuidAssignments cur mapping0 =
               _ -> Nothing
       in filter (\fqn -> not (hasPrev fqn) && reusedFromAlias fqn == Nothing) (OBJ.keys current)
 
-    needCtx  = needs cur.contexts  mapping0.contextCuids  ctxAliases'
-    needRol  = needs cur.roles     mapping0.roleCuids     rolAliases'
-    needProp = needs cur.properties mapping0.propertyCuids propAliases'
+    needCtx   = needs cur.contexts   mapping0.contextCuids   ctxAliases'
+    needRol   = needs cur.roles      mapping0.roleCuids      rolAliases'
+    needProp  = needs cur.properties mapping0.propertyCuids  propAliases'
+    -- For states, plan CUIDs for current canonical states with no cuid and not reusable from alias
+    needState =
+      let hasPrev fqn = OBJ.lookup fqn mapping0.stateCuids /= Nothing
+          reusedFromAlias fqn = findFirstJust (OBJ.keys stateAliases') \oldFqn ->
+            case OBJ.lookup oldFqn stateAliases' of
+              Just tgt | tgt == fqn -> OBJ.lookup oldFqn mapping0.stateCuids
+              _ -> Nothing
+      in filter (\fqn -> not (hasPrev fqn) && reusedFromAlias fqn == Nothing) (OBJ.keys cur.states)
   in
     { mappingWithAliases
-    , needCuids: { contexts: needCtx, roles: needRol, properties: needProp }
+    , needCuids: { contexts: needCtx, roles: needRol, properties: needProp, states: needState }
     }
   where
   objToArrayWith :: forall s a. (s -> a) -> OBJ.Object s -> Array (Tuple String a)
@@ -725,7 +817,7 @@ planCuidAssignments cur mapping0 =
 -- Finalize CUID assignments: copy existing cuids from oldFqn to newFqn wherever alias old->new exists and new lacks a cuid
 finalizeCuidAssignments
   :: StableIdMapping
-  -> { contexts :: OBJ.Object String, roles :: OBJ.Object String, properties :: OBJ.Object String }
+  -> { contexts :: OBJ.Object String, roles :: OBJ.Object String, properties :: OBJ.Object String, states :: OBJ.Object String }
   -> StableIdMapping
 finalizeCuidAssignments mappingWithAliases newCuids =
   let
@@ -747,19 +839,22 @@ finalizeCuidAssignments mappingWithAliases newCuids =
         prev
         (OBJ.keys aliases)
 
-    -- 1) propagate cuids through aliases
-    ctxCuidsProp  = propagate mappingWithAliases.contexts  mappingWithAliases.contextCuids
-    rolCuidsProp  = propagate mappingWithAliases.roles     mappingWithAliases.roleCuids
-    propCuidsProp = propagate mappingWithAliases.properties mappingWithAliases.propertyCuids
+  -- 1) propagate cuids through aliases
+    ctxCuidsProp   = propagate mappingWithAliases.contexts   mappingWithAliases.contextCuids
+    rolCuidsProp   = propagate mappingWithAliases.roles      mappingWithAliases.roleCuids
+    propCuidsProp  = propagate mappingWithAliases.properties mappingWithAliases.propertyCuids
+    stateCuidsProp = propagate mappingWithAliases.states     mappingWithAliases.stateCuids
 
     -- 2) add freshly minted cuids (if any)
-    ctxCuids'  = OBJ.union ctxCuidsProp  newCuids.contexts
-    rolCuids'  = OBJ.union rolCuidsProp  newCuids.roles
-    propCuids' = OBJ.union propCuidsProp newCuids.properties
+    ctxCuids'    = OBJ.union ctxCuidsProp    newCuids.contexts
+    rolCuids'    = OBJ.union rolCuidsProp    newCuids.roles
+    propCuids'   = OBJ.union propCuidsProp   newCuids.properties
+    stateCuids'  = OBJ.union stateCuidsProp  newCuids.states
   in
     mappingWithAliases
       { contextCuids = ctxCuids'
       , roleCuids = rolCuids'
       , propertyCuids = propCuids'
+      , stateCuids = stateCuids'
       }
 
