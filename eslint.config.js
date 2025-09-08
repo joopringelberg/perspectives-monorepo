@@ -47,7 +47,7 @@ export default [
   },
   // PureScript FFI files configuration
   {
-    files: ['**/packages/perspectives-core/src/core/persistence/*.js'],
+    files: ['**/packages/perspectives-core/src/core/**/*.js'],
     languageOptions: {
       globals: {
         Response: 'readonly',
