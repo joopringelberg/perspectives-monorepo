@@ -28,7 +28,7 @@
 -- | when we feel we can do it.
 -- | Notice that we will actually never encode such values: we replace them with Nothing in the act.
 
-module Perspectives.InvertedQuery where 
+module Perspectives.InvertedQuery where
 
 import Prelude
 
@@ -43,7 +43,7 @@ import Foreign.Object (Object, insert, lookup)
 import Perspectives.Data.EncodableMap (EncodableMap)
 import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription(..), RoleInContext(..), isContextDomain, isRoleDomain, range)
-import Perspectives.Representation.ExplicitSet (ExplicitSet, isElementOf) 
+import Perspectives.Representation.ExplicitSet (ExplicitSet, isElementOf)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, PropertyType, RoleType, StateIdentifier)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
@@ -65,7 +65,7 @@ newtype InvertedQuery = InvertedQuery
   , statesPerProperty :: EncodableMap PropertyType (Array StateIdentifier)
   , selfOnly :: Boolean
   , authorOnly :: Boolean
-}
+  }
 
 derive instance genericInvertedQuery :: Generic InvertedQuery _
 derive instance newtypeInvertedQuery :: Newtype InvertedQuery _
@@ -80,14 +80,17 @@ derive newtype instance WriteForeign InvertedQuery
 derive newtype instance ReadForeign InvertedQuery
 
 instance prettyPrintInvertedQuery :: PrettyPrint InvertedQuery where
-  prettyPrint' t (InvertedQuery{description, users, states, statesPerProperty}) =
-    "\nInvertedQuery " <> prettyPrint' (t <> "  ") description <>
-    ("\n" <> t <> "    users:") <> prettyPrint' (t <> "    ") users <>
-    ("\n" <> t <> "    states:") <> prettyPrint' (t <> "    ") states <>
-    ("\n" <> t <> "    statesPerProperty:") <> prettyPrint' (t <> "    ") statesPerProperty
+  prettyPrint' t (InvertedQuery { description, users, states, statesPerProperty }) =
+    "\nInvertedQuery " <> prettyPrint' (t <> "  ") description
+      <> ("\n" <> t <> "    users:")
+      <> prettyPrint' (t <> "    ") users
+      <> ("\n" <> t <> "    states:")
+      <> prettyPrint' (t <> "    ") states
+      <> ("\n" <> t <> "    statesPerProperty:")
+      <> prettyPrint' (t <> "    ") statesPerProperty
 
 equalDescriptions :: InvertedQuery -> InvertedQuery -> Boolean
-equalDescriptions (InvertedQuery{description:d1}) (InvertedQuery{description:d2}) = d1 == d2
+equalDescriptions (InvertedQuery { description: d1 }) (InvertedQuery { description: d2 }) = d1 == d2
 
 -- | If we find an existing inverted query with the same description, we compare states and users.
 -- | If the new query specifies the same users, we add its states;
@@ -105,63 +108,69 @@ deleteInvertedQueryIndexedByContext q cType qs = case lookup (unwrap cType) qs o
 
 -- | Add an InvertedQuery to (the inverted queries of) an EnumeratedRole type, indexed with ContextType.
 -- | Their first step is `context`.
-addInvertedQueryIndexedByContext ::
-  InvertedQuery ->
-  ContextType ->
-  Object (Array InvertedQuery) ->
-  Array RoleInContext ->
-  EnumeratedRoleType ->
-  Object (Array InvertedQuery)
-addInvertedQueryIndexedByContext q cType qs modifiesRoleInstancesOf role = let
-  q' = if isJust $ elemIndex (RoleInContext{context: cType, role}) modifiesRoleInstancesOf
-    then over InvertedQuery (\qr -> qr {modifies=true}) q
-    else q
-  in case lookup (unwrap cType) qs of
-    Nothing -> insert (unwrap cType) [q'] qs
-    Just x -> insert (unwrap cType) (cons q' x) qs
-
-addInvertedQueryToPropertyIndexedByRole ::
-  InvertedQuery ->
-  EnumeratedRoleType ->
-  Object (Array InvertedQuery) ->
-  MAP.Map EnumeratedRoleType (ExplicitSet EnumeratedPropertyType) ->
-  EnumeratedPropertyType ->
-  Object (Array InvertedQuery)
-addInvertedQueryToPropertyIndexedByRole q eroleType qs modifiesPropertiesOf propertyType = let
-  q' = case MAP.lookup eroleType modifiesPropertiesOf of
-    Nothing -> q
-    Just props -> if isElementOf propertyType props
-      then over InvertedQuery (\qr -> qr {modifies=true}) q
+addInvertedQueryIndexedByContext
+  :: InvertedQuery
+  -> ContextType
+  -> Object (Array InvertedQuery)
+  -> Array RoleInContext
+  -> EnumeratedRoleType
+  -> Object (Array InvertedQuery)
+addInvertedQueryIndexedByContext q cType qs modifiesRoleInstancesOf role =
+  let
+    q' =
+      if isJust $ elemIndex (RoleInContext { context: cType, role }) modifiesRoleInstancesOf then over InvertedQuery (\qr -> qr { modifies = true }) q
       else q
-  in case lookup (unwrap eroleType) qs of
-    Nothing -> insert (unwrap eroleType) [q'] qs
-    Just x -> insert (unwrap eroleType) (cons q' x) qs
+  in
+    case lookup (unwrap cType) qs of
+      Nothing -> insert (unwrap cType) [ q' ] qs
+      Just x -> insert (unwrap cType) (cons q' x) qs
 
-deleteInvertedQueryFromPropertyTypeIndexedByRole ::
-  InvertedQuery ->
-  EnumeratedRoleType ->
-  Object (Array InvertedQuery) ->
-  Object (Array InvertedQuery)
+addInvertedQueryToPropertyIndexedByRole
+  :: InvertedQuery
+  -> EnumeratedRoleType
+  -> Object (Array InvertedQuery)
+  -> MAP.Map EnumeratedRoleType (ExplicitSet EnumeratedPropertyType)
+  -> EnumeratedPropertyType
+  -> Object (Array InvertedQuery)
+addInvertedQueryToPropertyIndexedByRole q eroleType qs modifiesPropertiesOf propertyType =
+  let
+    q' = case MAP.lookup eroleType modifiesPropertiesOf of
+      Nothing -> q
+      Just props ->
+        if isElementOf propertyType props then over InvertedQuery (\qr -> qr { modifies = true }) q
+        else q
+  in
+    case lookup (unwrap eroleType) qs of
+      Nothing -> insert (unwrap eroleType) [ q' ] qs
+      Just x -> insert (unwrap eroleType) (cons q' x) qs
+
+deleteInvertedQueryFromPropertyTypeIndexedByRole
+  :: InvertedQuery
+  -> EnumeratedRoleType
+  -> Object (Array InvertedQuery)
+  -> Object (Array InvertedQuery)
 deleteInvertedQueryFromPropertyTypeIndexedByRole q eroleType qs = case lookup (unwrap eroleType) qs of
   Nothing -> qs
   Just queries -> insert (unwrap eroleType) (delete q queries) qs
 
 -- | Add an InvertedQuery to (the inverted queries of) a Context type, indexed with an EnumeratedRoleType.
 -- | Their first step is `role`.
-addInvertedQueryIndexedByRole ::
-  InvertedQuery ->
-  EnumeratedRoleType ->
-  Object (Array InvertedQuery) ->
-  Array RoleInContext ->
-  ContextType ->
-  Object (Array InvertedQuery)
-addInvertedQueryIndexedByRole q eroleType qs modifiesRoleInstancesOf context = let
-  q' = if isJust $ elemIndex (RoleInContext {context, role: eroleType}) modifiesRoleInstancesOf
-    then over InvertedQuery (\qr -> qr {modifies=true}) q
-    else q
-  in case lookup (unwrap eroleType) qs of
-    Nothing -> insert (unwrap eroleType) [q'] qs
-    Just x -> insert (unwrap eroleType) (cons q' x) qs
+addInvertedQueryIndexedByRole
+  :: InvertedQuery
+  -> EnumeratedRoleType
+  -> Object (Array InvertedQuery)
+  -> Array RoleInContext
+  -> ContextType
+  -> Object (Array InvertedQuery)
+addInvertedQueryIndexedByRole q eroleType qs modifiesRoleInstancesOf context =
+  let
+    q' =
+      if isJust $ elemIndex (RoleInContext { context, role: eroleType }) modifiesRoleInstancesOf then over InvertedQuery (\qr -> qr { modifies = true }) q
+      else q
+  in
+    case lookup (unwrap eroleType) qs of
+      Nothing -> insert (unwrap eroleType) [ q' ] qs
+      Just x -> insert (unwrap eroleType) (cons q' x) qs
 
 deleteInvertedQueryIndexedByRole :: InvertedQuery -> EnumeratedRoleType -> Object (Array InvertedQuery) -> Object (Array InvertedQuery)
 deleteInvertedQueryIndexedByRole q eroleType qs = case lookup (unwrap eroleType) qs of
@@ -169,46 +178,46 @@ deleteInvertedQueryIndexedByRole q eroleType qs = case lookup (unwrap eroleType)
   Just x -> insert (unwrap eroleType) (delete q x) qs
 
 isStateQuery :: InvertedQuery -> Boolean
-isStateQuery (InvertedQuery{users}) = null users
+isStateQuery (InvertedQuery { users }) = null users
 
 -- | This is a Partial function. Do not apply when the description has Nothing for its
 -- | backwards part.
 shouldResultInContextStateQuery :: Partial => InvertedQuery -> Boolean
-shouldResultInContextStateQuery (InvertedQuery{description, users}) = null users &&
+shouldResultInContextStateQuery (InvertedQuery { description, users }) = null users &&
   (isContextDomain $ range $ fromJust $ backwards description)
 
 -- | This is a Partial function. Do not apply when the description has Nothing for its
 -- | backwards part.
 shouldResultInRoleStateQuery :: Partial => InvertedQuery -> Boolean
-shouldResultInRoleStateQuery (InvertedQuery{description, users}) = null users &&
+shouldResultInRoleStateQuery (InvertedQuery { description, users }) = null users &&
   (isRoleDomain $ range $ fromJust $ backwards description)
 
-backwardsQueryResultsInRole ::  Partial => InvertedQuery -> Boolean
-backwardsQueryResultsInRole (InvertedQuery{description}) = (isRoleDomain $ range $ fromJust $ backwards description)
+backwardsQueryResultsInRole :: Partial => InvertedQuery -> Boolean
+backwardsQueryResultsInRole (InvertedQuery { description }) = (isRoleDomain $ range $ fromJust $ backwards description)
 
-backwardsQueryResultsInContext ::  Partial => InvertedQuery -> Boolean
-backwardsQueryResultsInContext (InvertedQuery{description}) = (isContextDomain $ range $ fromJust $ backwards description)
+backwardsQueryResultsInContext :: Partial => InvertedQuery -> Boolean
+backwardsQueryResultsInContext (InvertedQuery { description }) = (isContextDomain $ range $ fromJust $ backwards description)
 
 shouldResultInPerspectiveObject :: InvertedQuery -> Boolean
-shouldResultInPerspectiveObject (InvertedQuery{users}) = not $ null users
+shouldResultInPerspectiveObject (InvertedQuery { users }) = not $ null users
 
 startsWithFilter :: InvertedQuery -> Boolean
-startsWithFilter (InvertedQuery{description}) = startsWithFilter' description
+startsWithFilter (InvertedQuery { description }) = startsWithFilter' description
   where
-    -- | True iff the first backwards step is a FilterF operation.
-    startsWithFilter' :: QueryWithAKink -> Boolean
-    startsWithFilter' (ZQ Nothing _) = false
-    startsWithFilter' (ZQ fd _) = case fd of
-      Just (UQD _ FilterF _ _ _ _) -> true
-      Just (BQD _ (BinaryCombinator ComposeF) first _ _ _ _) -> case first of
-        (UQD _ FilterF _ _ _ _) -> true
-        _ -> false
+  -- | True iff the first backwards step is a FilterF operation.
+  startsWithFilter' :: QueryWithAKink -> Boolean
+  startsWithFilter' (ZQ Nothing _) = false
+  startsWithFilter' (ZQ fd _) = case fd of
+    Just (UQD _ FilterF _ _ _ _) -> true
+    Just (BQD _ (BinaryCombinator ComposeF) first _ _ _ _) -> case first of
+      (UQD _ FilterF _ _ _ _) -> true
       _ -> false
+    _ -> false
 
 -----------------------------------------------------------
 -- UserPropsAndVerbs
 -----------------------------------------------------------
-newtype UserPropsAndVerbs = UserPropsAndVerbs {user :: RoleType, properties :: RelevantProperties}
+newtype UserPropsAndVerbs = UserPropsAndVerbs { user :: RoleType, properties :: RelevantProperties }
 
 derive instance genericUserProps :: Generic UserPropsAndVerbs _
 
@@ -237,6 +246,7 @@ instance monoidRelevantProperties :: Monoid RelevantProperties where
 isEmpty :: RelevantProperties -> Boolean
 isEmpty All = false
 isEmpty (Properties ps) = null ps
+
 --------------------------------------------------------------------------------------------------------------
 ---- QUERYWITHAKINK
 --------------------------------------------------------------------------------------------------------------
@@ -263,10 +273,10 @@ instance eqQueryWithAKink :: Eq QueryWithAKink where
   eq = genericEq
 
 instance WriteForeign QueryWithAKink where
-  writeImpl (ZQ bw fw) = 
-    writeImpl {constructor: "ZQ", bw, fw}
+  writeImpl (ZQ bw fw) =
+    writeImpl { constructor: "ZQ", bw, fw }
 
 instance ReadForeign QueryWithAKink where
-  readImpl f = do 
-    {bw, fw} :: {bw :: Maybe QueryFunctionDescription, fw :: Maybe QueryFunctionDescription} <- read' f
+  readImpl f = do
+    { bw, fw } :: { bw :: Maybe QueryFunctionDescription, fw :: Maybe QueryFunctionDescription } <- read' f
     pure $ ZQ bw fw

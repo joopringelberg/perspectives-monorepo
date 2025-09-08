@@ -20,7 +20,6 @@
 
 -- END LICENSE
 
-
 module Perspectives.CoreTypes
   ( (###=)
   , (###>)
@@ -106,8 +105,7 @@ module Perspectives.CoreTypes
   , type (~~>)
   , type (~~~>)
   , typeOfInstance
-  )
-  where
+  ) where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Reader (ReaderT, lift)
@@ -163,7 +161,7 @@ type DomeinCache = Cache (AVar DomeinFile)
 
 type QueryInstances = Cache (Array InvertedQuery)
 
-type BrokerService = ConnectAndSubscriptionParameters ( url :: String )
+type BrokerService = ConnectAndSubscriptionParameters (url :: String)
 
 type PerspectivesState = PouchdbState PerspectivesExtraState
 
@@ -215,7 +213,7 @@ type PerspectivesExtraState =
 
   -- We want to check on locally stored roles filled with these roles.
   , publicRolesJustLoaded :: Array RoleInstance
- 
+
   , runtimeOptions :: RuntimeOptions
 
   -- We treat the entities as Foreign here and force them to be instances of i in Persistent when we store them into the database.
@@ -234,7 +232,7 @@ type PerspectivesExtraState =
   )
 
 -- | These are options that can be provided to the PDR at startup.
-type RuntimeOptions = 
+type RuntimeOptions =
   -- Default: true. Should be false when someone installs MyContexts on a second device.
   { isFirstInstallation :: Boolean
   -- Default: null. Provide a value to test setup of an experimental new System version.
@@ -243,42 +241,45 @@ type RuntimeOptions =
   , privateKey :: Maybe CryptoKey'
   -- Default: the CryptoKey object that has been created on setting up the installation. This is extractable.
   , publicKey :: Maybe CryptoKey'
-    -- Default: the package number taken from package.json
-  , myContextsVersion :: String 
-}
+  -- Default: the package number taken from package.json
+  , myContextsVersion :: String
+  }
 
 foreign import data CryptoKey' :: Type
-instance ReadForeign CryptoKey' where readImpl = pure <<< unsafeCoerce
-instance WriteForeign CryptoKey' where writeImpl = unsafeCoerce
 
-data RepeatingTransaction = TransactionWithTiming
-  { transaction :: MonadPerspectivesTransaction Unit
-  , interval :: Duration
-  , instanceId :: String
-  , stateId :: StateIdentifier
-  , authoringRole :: RoleType
-  , startMoment :: Maybe Duration
-  , endMoment :: Maybe Duration
-  }
-  |
-  RepeatNtimes 
-  { transaction :: MonadPerspectivesTransaction Unit
-  , interval :: Duration
-  , nrOfTimes :: Int
-  , instanceId :: String
-  , stateId :: StateIdentifier
-  , authoringRole :: RoleType
-  , startMoment :: Maybe Duration
-  , endMoment :: Maybe Duration
-  }
-  |
-  PostponedTransaction
-  { transaction :: MonadPerspectivesTransaction Unit
-  , instanceId :: String
-  , stateId :: StateIdentifier
-  , authoringRole :: RoleType
-  , startMoment :: Duration
-  }
+instance ReadForeign CryptoKey' where
+  readImpl = pure <<< unsafeCoerce
+
+instance WriteForeign CryptoKey' where
+  writeImpl = unsafeCoerce
+
+data RepeatingTransaction
+  = TransactionWithTiming
+      { transaction :: MonadPerspectivesTransaction Unit
+      , interval :: Duration
+      , instanceId :: String
+      , stateId :: StateIdentifier
+      , authoringRole :: RoleType
+      , startMoment :: Maybe Duration
+      , endMoment :: Maybe Duration
+      }
+  | RepeatNtimes
+      { transaction :: MonadPerspectivesTransaction Unit
+      , interval :: Duration
+      , nrOfTimes :: Int
+      , instanceId :: String
+      , stateId :: StateIdentifier
+      , authoringRole :: RoleType
+      , startMoment :: Maybe Duration
+      , endMoment :: Maybe Duration
+      }
+  | PostponedTransaction
+      { transaction :: MonadPerspectivesTransaction Unit
+      , instanceId :: String
+      , stateId :: StateIdentifier
+      , authoringRole :: RoleType
+      , startMoment :: Duration
+      }
 
 data JustInTimeModelLoad = LoadModel DomeinFileId | ModelLoaded | LoadingFailed String | Stop | HotLine (AVar JustInTimeModelLoad)
 
@@ -303,11 +304,11 @@ type AssumptionRegister = F.Object (F.Object (Array CorrelationIdentifier))
 -----------------------------------------------------------
 -- INFORMED ASSUMPTIONS
 -----------------------------------------------------------
-data InformedAssumption =
-  RoleAssumption ContextInstance EnumeratedRoleType
+data InformedAssumption
+  = RoleAssumption ContextInstance EnumeratedRoleType
   | Me ContextInstance
   -- Filler = filler role
-  | Filler RoleInstance                               -- RoleInstance is the role with a binding
+  | Filler RoleInstance -- RoleInstance is the role with a binding
   -- FilledRolesAssumption fillerId filledContextType filledType
   | FilledRolesAssumption RoleInstance ContextType EnumeratedRoleType
   | Property RoleInstance EnumeratedPropertyType
@@ -324,7 +325,8 @@ instance eqInformedAssumption :: Eq InformedAssumption where
 instance showInformedAssumption :: Show InformedAssumption where
   show = genericShow
 
-instance Ord InformedAssumption where compare = genericCompare
+instance Ord InformedAssumption where
+  compare = genericCompare
 
 -----------------------------------------------------------
 -- MONADPERSPECTIVES
@@ -360,8 +362,9 @@ forceTypeArray = ArrayT <<< pure
 -- RUN TYPELEVELGETTER TO GET AN ARRAY OF RESULTS
 -----------------------------------------------------------
 -- | Run a TypeLevelGetter on its argument to obtain the Array of results in MonadPerspectives.
-runTypeLevelToArray :: forall s o.
-  s
+runTypeLevelToArray
+  :: forall s o
+   . s
   -> (s ~~~> o)
   -> MonadPerspectives (Array o)
 runTypeLevelToArray a f = runArrayT (f a)
@@ -382,8 +385,8 @@ infix 1 runTypeLevelToMaybeObject as ###>
 runTypeLevelToObject :: forall s o. Show s => s -> (s ~~~> o) -> (MonadPerspectives) o
 runTypeLevelToObject id tog = runTypeLevelToArray id tog >>= \objects ->
   case head objects of
-  Nothing -> throwError $ error $ "TypeLevelGetter returns no values for '" <> (show id) <> "'."
-  (Just obj) -> pure obj
+    Nothing -> throwError $ error $ "TypeLevelGetter returns no values for '" <> (show id) <> "'."
+    (Just obj) -> pure obj
 
 infix 1 runTypeLevelToObject as ###>>
 
@@ -394,7 +397,7 @@ infix 1 runTypeLevelToObject as ###>>
 
 type AssumptionTracking = (WriterT (ArrayWithoutDoubles InformedAssumption) MonadPerspectives)
 
-type MonadPerspectivesQuery =  ArrayT AssumptionTracking
+type MonadPerspectivesQuery = ArrayT AssumptionTracking
 
 type MPQ = MonadPerspectivesQuery
 
@@ -430,28 +433,32 @@ type RoleGetter = ContextInstance ~~> RoleInstance
 type PropertyValueGetter = RoleInstance ~~> Value
 
 type ContextPropertyValueGetter = ContextInstance ~~> Value
+
 -----------------------------------------------------------
 -- RUN TRACKINGOBJECTSGETTER TO GET ASSUMPTIONS AND AN ARRAY OF RESULTS
 -----------------------------------------------------------
 -- | Run a TrackingObjectsGetter on its argument to obtain both the underlying assumptions and the Array of results in MonadPerspectives.
-runMonadPerspectivesQuery :: forall s o.
-  s
+runMonadPerspectivesQuery
+  :: forall s o
+   . s
   -> (s ~~> o)
   -> (MonadPerspectives (WithAssumptions o))
 runMonadPerspectivesQuery a f = runWriterT (runArrayT (f a))
 
 type WithAssumptions o = Tuple (Array o) (ArrayWithoutDoubles InformedAssumption)
+
 -----------------------------------------------------------
 -- EVAL TRACKINGOBJECTSGETTER TO GET AN ARRAY OF RESULTS
 -----------------------------------------------------------
 -- | Apply a TrackingObjectsGetter to an argument to obtain an Array of results in MonadPerspectives.
-evalMonadPerspectivesQuery :: forall s o.
-  s
+evalMonadPerspectivesQuery
+  :: forall s o
+   . s
   -> (s ~~> o)
   -> (MonadPerspectives (Array o))
 evalMonadPerspectivesQuery a f = do
-    (Tuple result _) <- runMonadPerspectivesQuery a f
-    pure result
+  (Tuple result _) <- runMonadPerspectivesQuery a f
+  pure result
 
 infix 0 evalMonadPerspectivesQuery as ##=
 
@@ -469,8 +476,8 @@ infix 0 evalMonadPerspectivesQueryToMaybeObject as ##>
 runMonadPerspectivesQueryToObject :: forall s o. Show s => s -> (s ~~> o) -> (MonadPerspectives) o
 runMonadPerspectivesQueryToObject id tog = evalMonadPerspectivesQuery id tog >>= \objects ->
   case head objects of
-  Nothing -> throwError $ error $ "ObjectsGetter returns no values for '" <> (show id) <> "' (look for `##>>`)."
-  (Just obj) -> pure obj
+    Nothing -> throwError $ error $ "ObjectsGetter returns no values for '" <> (show id) <> "' (look for `##>>`)."
+    (Just obj) -> pure obj
 
 infix 0 runMonadPerspectivesQueryToObject as ##>>
 
@@ -478,13 +485,14 @@ infix 0 runMonadPerspectivesQueryToObject as ##>>
 -- EXEC TRACKINGOBJECTSGETTER TO GET AN ARRAY INFORMEDASSUMPTIONS
 -----------------------------------------------------------
 -- | Apply a TrackingObjectsGetter to an argument to obtain the informedAssumptions that underly it.
-execMonadPerspectivesQuery :: forall s o.
-  s
+execMonadPerspectivesQuery
+  :: forall s o
+   . s
   -> (s ~~> o)
   -> (MonadPerspectives (Array InformedAssumption))
 execMonadPerspectivesQuery a f = do
-    (Tuple _ assumptions) <- runMonadPerspectivesQuery a f
-    pure (unwrap assumptions)
+  (Tuple _ assumptions) <- runMonadPerspectivesQuery a f
+  pure (unwrap assumptions)
 
 -----------------------------------------------------------
 -- COMPOSE INSTANCE LEVEL AND TYPE LEVEL GETTERS
@@ -497,7 +505,7 @@ liftToInstanceLevel f = ArrayT <<< lift <<< runArrayT <<< f
 -----------------------------------------------------------
 -- | The Transaction accumulates Deltas.
 
-type MonadPerspectivesTransaction =  ReaderT (AVar Transaction) MonadPerspectives
+type MonadPerspectivesTransaction = ReaderT (AVar Transaction) MonadPerspectives
 
 type MPT = MonadPerspectivesTransaction
 
@@ -520,9 +528,9 @@ instance ordOrderedDelta :: Ord OrderedDelta where
 -----------------------------------------------------------
 -- INDEXEDRESOURCE
 -----------------------------------------------------------
-data IndexedResource = 
-  IndexedContext ContextInstance String |
-  IndexedRole RoleInstance String
+data IndexedResource
+  = IndexedContext ContextInstance String
+  | IndexedRole RoleInstance String
 
 -----------------------------------------------------------
 -- CLASS CACHEABLE
@@ -537,7 +545,7 @@ class (Identifiable v i, Revision v, Newtype i String) <= Cacheable v i | v -> i
 -----------------------------------------------------------
 -- CLASS PERSISTENT
 -----------------------------------------------------------
-class (Cacheable v i, WriteForeign v, ReadForeign v) <= Persistent v i | i -> v,  v -> i where
+class (Cacheable v i, WriteForeign v, ReadForeign v) <= Persistent v i | i -> v, v -> i where
   -- | Either a local database name, or a URL that identifies a database to read from, in some Couchdb installation on the internet.
   dbLocalName :: i -> MP String
   addPublicResource :: i -> MonadPerspectives Unit
@@ -547,10 +555,10 @@ class (Cacheable v i, WriteForeign v, ReadForeign v) <= Persistent v i | i -> v,
 
 data IntegrityFix = Missing ResourceToBeStored | FixSucceeded | FixFailed String | StopFixing | FixingHotLine (AVar IntegrityFix)
 
-data ResourceToBeStored = 
-  Ctxt ContextInstance |
-  Rle RoleInstance |
-  Dfile DomeinFileId
+data ResourceToBeStored
+  = Ctxt ContextInstance
+  | Rle RoleInstance
+  | Dfile DomeinFileId
 
 instance Eq ResourceToBeStored where
   eq (Ctxt c1) (Ctxt c2) = eq c1 c2
@@ -571,7 +579,7 @@ instance cacheableDomeinFile :: Cacheable DomeinFile DomeinFileId where
     pure av
   retrieveInternally i = lookup theCache (unwrap i)
   removeInternally i = remove theCache (unwrap i)
-  
+
 instance cacheablePerspectContext :: Cacheable PerspectContext ContextInstance where
   theCache = gets _.contextInstances
   representInternally c = do
@@ -590,19 +598,21 @@ instance cacheablePerspectRol :: Cacheable PerspectRol RoleInstance where
   retrieveInternally i = lookup theCache (unwrap i)
   removeInternally i = remove theCache (unwrap i)
 
-lookup :: forall a.
-  MonadPerspectives (Cache a) ->
-  String ->
-  MonadPerspectives (Maybe a)
+lookup
+  :: forall a
+   . MonadPerspectives (Cache a)
+  -> String
+  -> MonadPerspectives (Maybe a)
 lookup g k = do
   dc <- g
   -- pure $ peek dc k
   liftEffect $ get k defaultGetOptions dc
 
-remove :: forall a.
-  MonadPerspectives (Cache a) ->
-  String ->
-  MonadPerspectives (Maybe a)
+remove
+  :: forall a
+   . MonadPerspectives (Cache a)
+  -> String
+  -> MonadPerspectives (Maybe a)
 remove g k = do
   (dc :: (Cache a)) <- g
   -- ma <- pure $ peek dc k
@@ -618,7 +628,6 @@ instance persistentInstanceDomeinFile :: Persistent DomeinFile DomeinFileId wher
   resourceIdToBeStored id = Dfile id
   typeOfInstance dfid = Dfile dfid
 
-
 instance persistentInstancePerspectContext :: Persistent PerspectContext ContextInstance where
   dbLocalName (ContextInstance id) = pouchdbDatabaseName id
   addPublicResource _ = pure unit
@@ -628,7 +637,7 @@ instance persistentInstancePerspectContext :: Persistent PerspectContext Context
 
 instance persistentInstancePerspectRol :: Persistent PerspectRol RoleInstance where
   dbLocalName (RoleInstance id) = pouchdbDatabaseName id
-  addPublicResource rid = modify \s -> s {publicRolesJustLoaded = cons rid s.publicRolesJustLoaded}
+  addPublicResource rid = modify \s -> s { publicRolesJustLoaded = cons rid s.publicRolesJustLoaded }
   resourceToBeStored rl = Rle $ identifier rl
   resourceIdToBeStored id = Rle id
   typeOfInstance rid = Rle rid
@@ -645,8 +654,10 @@ instance persistentInstancePerspectRol :: Persistent PerspectRol RoleInstance wh
 -- | through a REST interface. Because Pouchdb doesn't support the notion of a read-only 
 -- | database, we separate a writing endpoint from a reading endpoint.
 data StorageScheme = Default DbName | Local DbName | Remote Url
+
 derive instance Generic StorageScheme _
-instance Show StorageScheme where show = genericShow
+instance Show StorageScheme where
+  show = genericShow
 
 type DbName = String
 type Url = String
@@ -658,6 +669,7 @@ type Url = String
 -- The keys are the languages; the values are the translations of the local type name.
 -- They can be translations of any type.
 newtype Translations = Translations (Object String)
+
 derive newtype instance WriteForeign Translations
 derive newtype instance ReadForeign Translations
 
@@ -665,34 +677,40 @@ instance Semigroup Translations where
   append (Translations t1) (Translations t2) = Translations (t1 <> t2)
 
 newtype TranslationTable = TranslationTable (Object Translations)
+
 derive newtype instance ReadForeign TranslationTable
 derive newtype instance WriteForeign TranslationTable
-
 
 -------------------------------------------------------------------------------
 ---- LIBRARY FUNCTION TYPES
 -------------------------------------------------------------------------------
 
 type LibEffect1 = Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
+
 mkLibEffect1 :: String -> ThreeValuedLogic -> LibEffect1 -> Tuple String HiddenFunctionDescription
-mkLibEffect1 name isFunctional f = Tuple name {func: unsafeCoerce f, nArgs: 1, isFunctional, isEffect: true}
+mkLibEffect1 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 1, isFunctional, isEffect: true }
 
 type LibFunc1 = Array String -> (RoleInstance ~~> Value)
+
 mkLibFunc1 :: String -> ThreeValuedLogic -> LibFunc1 -> Tuple String HiddenFunctionDescription
-mkLibFunc1 name isFunctional f = Tuple name {func: unsafeCoerce f, nArgs: 1, isFunctional, isEffect: false}
+mkLibFunc1 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 1, isFunctional, isEffect: false }
 
 type LibEffect2 = Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
-mkLibEffect2 :: String -> ThreeValuedLogic -> LibEffect2 -> Tuple String HiddenFunctionDescription
-mkLibEffect2 name isFunctional f = Tuple name {func: unsafeCoerce f, nArgs: 2, isFunctional, isEffect: true}
 
-type LibFunc2 =  Array String -> Array String -> (RoleInstance ~~> Value)
+mkLibEffect2 :: String -> ThreeValuedLogic -> LibEffect2 -> Tuple String HiddenFunctionDescription
+mkLibEffect2 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 2, isFunctional, isEffect: true }
+
+type LibFunc2 = Array String -> Array String -> (RoleInstance ~~> Value)
+
 mkLibFunc2 :: String -> ThreeValuedLogic -> LibFunc2 -> Tuple String HiddenFunctionDescription
-mkLibFunc2 name isFunctional f = Tuple name {func: unsafeCoerce f, nArgs: 2, isFunctional, isEffect: false}
+mkLibFunc2 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 2, isFunctional, isEffect: false }
 
 type LibEffect3 = Array String -> Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
+
 mkLibEffect3 :: String -> ThreeValuedLogic -> LibEffect3 -> Tuple String HiddenFunctionDescription
-mkLibEffect3 name isFunctional f = Tuple name {func: unsafeCoerce f, nArgs: 3, isFunctional, isEffect: true}
+mkLibEffect3 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 3, isFunctional, isEffect: true }
 
 type LibFunc3 = Array String -> Array String -> Array String -> (RoleInstance ~~> Value)
+
 mkLibFunc3 :: String -> ThreeValuedLogic -> LibFunc3 -> Tuple String HiddenFunctionDescription
-mkLibFunc3 name isFunctional f = Tuple name {func: unsafeCoerce f, nArgs: 3, isFunctional, isEffect: false}
+mkLibFunc3 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 3, isFunctional, isEffect: false }

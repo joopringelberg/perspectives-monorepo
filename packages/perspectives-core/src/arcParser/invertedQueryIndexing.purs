@@ -81,13 +81,13 @@ import Prelude (class Eq, class Ord, Unit, bind, compare, discard, eq, identity,
 -- | Conceptually, the filler fills not only the filled role but also all roles it fills - recursively.
 -- | However, we deal with that outside this function. 
 runtimeIndexForFilledQueries :: Partial => RoleBindingDelta -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
-runtimeIndexForFilledQueries (RoleBindingDelta{filled, filledType:filledRole_destination}) = do 
+runtimeIndexForFilledQueries (RoleBindingDelta { filled, filledType: filledRole_destination }) = do
   filledContext <- context' filled
   filledContext_destination <- contextType_ filledContext
   -- all RoleInContext items in the complete expansion of the declared filler restriction of the filled type, including aspects.
   fillerRoleInContexts <- getEnumeratedRole filledRole_destination >>= completeExpandedFillerRestriction >>= pure <<< maybe [] allLeavesInExpandedADT
-  pure $ ArrayUnions $ fillerRoleInContexts <#> \(RoleInContext{role:fillerRole_origin, context: fillerContext_origin}) -> 
-    RTFilledKey {fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination}
+  pure $ ArrayUnions $ fillerRoleInContexts <#> \(RoleInContext { role: fillerRole_origin, context: fillerContext_origin }) ->
+    RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }
 
 -- | Keys for queries from filler to filled, exactly like runtimeIndexForFilledQueries.
 runtimeIndexForFilledQueries' :: EnumeratedRoleType -> ContextType -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
@@ -96,8 +96,8 @@ runtimeIndexForFilledQueries' filledRole_destination filledContext_destination =
   fillerRoleInContexts <- getEnumeratedRole filledRole_destination >>= completeExpandedFillerRestriction >>= pure <<< maybe [] allLeavesInExpandedADT
   -- Conceptually, the filler fills not only the filled role but also all roles it fills - recursively.
   -- However, we deal with that outside this function. 
-  pure $ ArrayUnions $ fillerRoleInContexts <#> \(RoleInContext{role:fillerRole_origin, context: fillerContext_origin}) -> 
-    RTFilledKey {fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination}
+  pure $ ArrayUnions $ fillerRoleInContexts <#> \(RoleInContext { role: fillerRole_origin, context: fillerContext_origin }) ->
+    RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }
 
 -- | Keys for inverted queries from filler to filled.
 -- | Query the InvertedQueryDatase with these keys computed from a RoleBindingDelta,
@@ -105,81 +105,92 @@ runtimeIndexForFilledQueries' filledRole_destination filledContext_destination =
 runtimeIndexForFillerQueries :: Partial => RoleBindingDelta -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
 runtimeIndexForFillerQueries d = do
   keys <- runtimeIndexForFilledQueries d
-  pure $ keys <#> \(RTFilledKey{fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination}) -> 
-    RTFillerKey { filledRole_origin: filledRole_destination
-                , filledContext_origin: filledContext_destination
-                , fillerRole_destination: fillerRole_origin
-                , fillerContext_destination: fillerContext_origin}
+  pure $ keys <#> \(RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }) ->
+    RTFillerKey
+      { filledRole_origin: filledRole_destination
+      , filledContext_origin: filledContext_destination
+      , fillerRole_destination: fillerRole_origin
+      , fillerContext_destination: fillerContext_origin
+      }
 
 -- | Keys for queries from filler to filled.
 runtimeIndexForFillerQueries' :: EnumeratedRoleType -> ContextType -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
 runtimeIndexForFillerQueries' filledRole_origin filledContext_origin = do
   -- all RoleInContext items in the complete expansion of the declared filler restriction of the filled type, including aspects.
   fillerRoleInContexts <- getEnumeratedRole filledRole_origin >>= completeExpandedFillerRestriction >>= pure <<< maybe [] allLeavesInExpandedADT
-  pure $ ArrayUnions $ fillerRoleInContexts <#> \(RoleInContext{role:fillerRole_destination, context: fillerContext_destination}) -> 
-    RTFillerKey {filledRole_origin, filledContext_origin, fillerRole_destination, fillerContext_destination}
+  pure $ ArrayUnions $ fillerRoleInContexts <#> \(RoleInContext { role: fillerRole_destination, context: fillerContext_destination }) ->
+    RTFillerKey { filledRole_origin, filledContext_origin, fillerRole_destination, fillerContext_destination }
 
 -- | Construct the combination of the role type and its aspects 
 -- with their lexical contexts, and add to that the combination of the role type and the instantiation context type.
 roleContextCombinations :: EnumeratedRoleType -> ContextType -> MonadPerspectives (ArrayUnions (Tuple EnumeratedRoleType ContextType))
-roleContextCombinations roleType instantiationContext = do 
-  roleTypes <- roleType ###= roleAspectsClosure  
+roleContextCombinations roleType instantiationContext = do
+  roleTypes <- roleType ###= roleAspectsClosure
   combinations <- execWriterT $ for roleTypes \role_origin -> do
     lexicalContext <- lift (getPerspectType role_origin >>= pure <<< contextOfRepresentation)
-    if lexicalContext == instantiationContext
-      then pure unit
-      -- Only push this key if it is not a duplicate of the key with the instantiation context!
-      else tell [(Tuple role_origin lexicalContext)]
+    if lexicalContext == instantiationContext then pure unit
+    -- Only push this key if it is not a duplicate of the key with the instantiation context!
+    else tell [ (Tuple role_origin lexicalContext) ]
   pure $ ArrayUnions $ cons (Tuple roleType instantiationContext) combinations
 
 -- | Keys for queries from role to context.
 -- | Query the InvertedQueryDatase with these keys.
 runtimeIndexForContextQueries :: EnumeratedRoleType -> ContextInstance -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
-runtimeIndexForContextQueries r c = contextType_ c >>= roleContextCombinations r >>= 
-  pure <<< (map \(Tuple role_origin context_destination) -> RTContextKey {role_origin, context_destination})
+runtimeIndexForContextQueries r c = contextType_ c >>= roleContextCombinations r >>=
+  pure <<< (map \(Tuple role_origin context_destination) -> RTContextKey { role_origin, context_destination })
 
 -- | Keys for queries from context to role.
 -- | Query the InvertedQueryDatase with these keys.
 runTimeIndexForRoleQueries :: EnumeratedRoleType -> ContextInstance -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
-runTimeIndexForRoleQueries r c = contextType_ c >>= roleContextCombinations r >>= pure <<< (map \(Tuple role_destination context_origin) -> RTRoleKey {context_origin, role_destination})
+runTimeIndexForRoleQueries r c = contextType_ c >>= roleContextCombinations r >>= pure <<< (map \(Tuple role_destination context_origin) -> RTRoleKey { context_origin, role_destination })
 
 -- | Keys for queries from property to role.
 -- | Query the InvertedQueryDatase with these keys.
 runtimeIndexForPropertyQueries :: EnumeratedRoleType -> EnumeratedRoleType -> EnumeratedPropertyType -> EnumeratedPropertyType -> MonadPerspectives (Array RunTimeInvertedQueryKey)
-runtimeIndexForPropertyQueries typeOfInstanceOnPath typeOfPropertyBearingInstance property replacementProperty = 
+runtimeIndexForPropertyQueries typeOfInstanceOnPath typeOfPropertyBearingInstance property replacementProperty =
   let
     aspectRoleType = EnumeratedRoleType $ typeUri2typeNameSpace_ (unwrap property)
   in
     -- Assuming that we never fill a role type with itself.
     if typeOfInstanceOnPath == typeOfPropertyBearingInstance
-      -- The property value is represented on the role instance on the path (1, 3, 5).
-      then if property `isAspectPropertyOf` typeOfPropertyBearingInstance
-        -- The property is an Aspect property (3, 5).
-        then if property /= replacementProperty
-          -- A replacement was used for the aspect property (5).
-          then pure 
-            [ RTPropertyKey { property: replacementProperty, role: typeOfPropertyBearingInstance }
-            , RTPropertyKey { property, role: aspectRoleType} ]
-          -- No replacement was used for the aspect property (it was not contextualized to the role bearing the Aspect) (3).
-          else pure [ RTPropertyKey { property, role: typeOfPropertyBearingInstance }
-                    , RTPropertyKey { property, role: aspectRoleType }]
-        -- The property is NOT an Aspect property (1)
-        else pure [RTPropertyKey {property, role:typeOfPropertyBearingInstance}]
-      -- The property value is represented on a filler of the role instance on the path (2, 4, 6)
-      else if property `isAspectPropertyOf` typeOfInstanceOnPath
-        -- The property is an Aspect property (4, 6).
-        then if property /= replacementProperty
-          -- A replacement was used for the Aspect property (6)
-          then pure [ RTPropertyKey {property: replacementProperty, role: typeOfPropertyBearingInstance} 
-                    , RTPropertyKey {property: property, role: aspectRoleType } ]
-          -- No replacement was used for the aspect property (it was not contextualized to the role bearing the Aspect) (4).
-          else pure [ RTPropertyKey {property, role: typeOfPropertyBearingInstance}
-                    , RTPropertyKey {property, role: aspectRoleType} ]
-        -- The property is NOT an aspect property (2)
-        else pure [RTPropertyKey {property, role: typeOfPropertyBearingInstance}]
+    -- The property value is represented on the role instance on the path (1, 3, 5).
+    then
+      if property `isAspectPropertyOf` typeOfPropertyBearingInstance
+      -- The property is an Aspect property (3, 5).
+      then
+        if property /= replacementProperty
+        -- A replacement was used for the aspect property (5).
+        then pure
+          [ RTPropertyKey { property: replacementProperty, role: typeOfPropertyBearingInstance }
+          , RTPropertyKey { property, role: aspectRoleType }
+          ]
+        -- No replacement was used for the aspect property (it was not contextualized to the role bearing the Aspect) (3).
+        else pure
+          [ RTPropertyKey { property, role: typeOfPropertyBearingInstance }
+          , RTPropertyKey { property, role: aspectRoleType }
+          ]
+      -- The property is NOT an Aspect property (1)
+      else pure [ RTPropertyKey { property, role: typeOfPropertyBearingInstance } ]
+    -- The property value is represented on a filler of the role instance on the path (2, 4, 6)
+    else if property `isAspectPropertyOf` typeOfInstanceOnPath
+    -- The property is an Aspect property (4, 6).
+    then
+      if property /= replacementProperty
+      -- A replacement was used for the Aspect property (6)
+      then pure
+        [ RTPropertyKey { property: replacementProperty, role: typeOfPropertyBearingInstance }
+        , RTPropertyKey { property: property, role: aspectRoleType }
+        ]
+      -- No replacement was used for the aspect property (it was not contextualized to the role bearing the Aspect) (4).
+      else pure
+        [ RTPropertyKey { property, role: typeOfPropertyBearingInstance }
+        , RTPropertyKey { property, role: aspectRoleType }
+        ]
+    -- The property is NOT an aspect property (2)
+    else pure [ RTPropertyKey { property, role: typeOfPropertyBearingInstance } ]
   where
-    isAspectPropertyOf :: EnumeratedPropertyType -> EnumeratedRoleType -> Boolean
-    isAspectPropertyOf (EnumeratedPropertyType propId) (EnumeratedRoleType rtId) = not (propId `startsWithSegments` rtId)
+  isAspectPropertyOf :: EnumeratedPropertyType -> EnumeratedRoleType -> Boolean
+  isAspectPropertyOf (EnumeratedPropertyType propId) (EnumeratedRoleType rtId) = not (propId `startsWithSegments` rtId)
 
 -----------------------------------------------------------
 -- COMPUTING KEYS IN COMPILE TIME
@@ -190,8 +201,8 @@ runtimeIndexForPropertyQueries typeOfInstanceOnPath typeOfPropertyBearingInstanc
 -- | we compute all individual RoleInContext combinations that with certainty describe the origin and those that describe the destination
 -- | of the step and then make all combinations.
 typeLevelKeyForFilledQueries :: Partial => QueryFunctionDescription -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
-typeLevelKeyForFilledQueries qfd | isFilledF (queryFunction qfd) = 
-  do 
+typeLevelKeyForFilledQueries qfd | isFilledF (queryFunction qfd) =
+  do
     -- domain of the qfd represents the filler roles;
     -- All RoleInContext items in the domain of the query.
     (fillerRoleInContexts :: Array RoleInContext) <- pure $ computeCollection singleton (domain2roleInContext $ domain qfd)
@@ -199,9 +210,9 @@ typeLevelKeyForFilledQueries qfd | isFilledF (queryFunction qfd) =
     -- all RoleInContext items in the range of the query.
     (filledRoleInContexts :: Array RoleInContext) <- pure $ computeCollection singleton (domain2roleInContext $ range qfd)
     pure $ ArrayUnions do
-      RoleInContext{role:filledRole_destination, context: filledContext_destination} <- filledRoleInContexts
-      RoleInContext{role:fillerRole_origin, context: fillerContext_origin} <- fillerRoleInContexts
-      pure $ RTFilledKey {fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination}
+      RoleInContext { role: filledRole_destination, context: filledContext_destination } <- filledRoleInContexts
+      RoleInContext { role: fillerRole_origin, context: fillerContext_origin } <- fillerRoleInContexts
+      pure $ RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }
 
 isFilledF :: QueryFunction -> Boolean
 isFilledF qf = case qf of
@@ -211,8 +222,8 @@ isFilledF qf = case qf of
 -- | Compute the keys for the filledBy (Filler) step.
 -- | Is exactly like typeLevelKeyForFilledQueries, but with role and domain reversed.
 typeLevelKeyForFillerQueries :: Partial => QueryFunctionDescription -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
-typeLevelKeyForFillerQueries qfd | isFiller (queryFunction qfd)=
-  do 
+typeLevelKeyForFillerQueries qfd | isFiller (queryFunction qfd) =
+  do
     -- domain of the qfd represents the filler roles;
     -- All RoleInContext items in the domain of the query.
     (fillerRoleInContexts :: Array RoleInContext) <- pure $ computeCollection singleton (domain2roleInContext $ domain qfd)
@@ -220,10 +231,10 @@ typeLevelKeyForFillerQueries qfd | isFiller (queryFunction qfd)=
     -- all RoleInContext items in the range of the query.
     (filledRoleInContexts :: Array RoleInContext) <- pure $ computeCollection singleton (domain2roleInContext $ range qfd)
     pure $ ArrayUnions do
-      RoleInContext{role:filledRole_origin, context: filledContext_origin} <- filledRoleInContexts
-      RoleInContext{role:fillerRole_destination, context: fillerContext_destination} <- fillerRoleInContexts
-      pure $ RTFillerKey {fillerRole_destination, fillerContext_destination, filledRole_origin, filledContext_origin}
-  
+      RoleInContext { role: filledRole_origin, context: filledContext_origin } <- filledRoleInContexts
+      RoleInContext { role: fillerRole_destination, context: fillerContext_destination } <- fillerRoleInContexts
+      pure $ RTFillerKey { fillerRole_destination, fillerContext_destination, filledRole_origin, filledContext_origin }
+
 isFiller :: QueryFunction -> Boolean
 isFiller (DataTypeGetter FillerF) = true
 isFiller (DataTypeGetterWithParameter FillerF _) = true
@@ -232,84 +243,81 @@ isFiller _ = false
 -- | The EnumeratedPropertyType is defined on the EnumeratedRoleType. It is either defined in its namespace, or 
 -- | it is added as an Aspect property. In the latter case, if the (Maybe EnumeratedPropertyType) part is a Just value,
 -- | the PropertyIdentifier it contains is a local alias for the property, given in the definition of the EnumeratedRoleType.
-data PropertyBearer = 
-  PropertyBearer 
-    EnumeratedPropertyType          -- The final property; a value is stored under this key
-    (Maybe EnumeratedPropertyType)  -- The alias; this identifier may have been used in the query
-    EnumeratedRoleType              -- The type of the instance bearing the property (this may be a filler of the instance the query is applied to)
-    EnumeratedRoleType              -- The type of the instance the query is applied to 
+data PropertyBearer =
+  PropertyBearer
+    EnumeratedPropertyType -- The final property; a value is stored under this key
+    (Maybe EnumeratedPropertyType) -- The alias; this identifier may have been used in the query
+    EnumeratedRoleType -- The type of the instance bearing the property (this may be a filler of the instance the query is applied to)
+    EnumeratedRoleType -- The type of the instance the query is applied to 
 
 instance Ord PropertyBearer where
-  compare (PropertyBearer finalprop1 malias1 bearer1 origin1) (PropertyBearer finalprop2 malias2 bearer2 origin2) = 
-    if finalprop1 `eq` finalprop2
-      then if malias1 `eq` malias2
-        then if bearer1 `eq` bearer2
-          then origin1 `compare` origin2
+  compare (PropertyBearer finalprop1 malias1 bearer1 origin1) (PropertyBearer finalprop2 malias2 bearer2 origin2) =
+    if finalprop1 `eq` finalprop2 then
+      if malias1 `eq` malias2 then
+        if bearer1 `eq` bearer2 then origin1 `compare` origin2
         else compare bearer1 bearer2
       else compare malias1 malias2
     else compare finalprop1 finalprop2
-    
 
 instance Eq PropertyBearer where
-  eq (PropertyBearer prop1 mprop1 bearingrole1 querysteprole1) (PropertyBearer prop2 mprop2 bearingrole2 querysteprole2) = 
-    prop1 == prop2 && 
-    mprop1 == mprop2 && 
-    bearingrole1 == bearingrole2 &&
-    querysteprole1 == querysteprole2
+  eq (PropertyBearer prop1 mprop1 bearingrole1 querysteprole1) (PropertyBearer prop2 mprop2 bearingrole2 querysteprole2) =
+    prop1 == prop2
+      && mprop1 == mprop2
+      && bearingrole1 == bearingrole2
+      &&
+        querysteprole1 == querysteprole2
 
 -- | Find the EnumeratedRoleType whose instances can actually store values for the property type.
 -- | If the property type turns out to be an alias, return the original property (the final destination or key under which a value will be stored)
 -- | and include the alias in a Maybe value.
 getPropertyTypeBearingRoleInstances :: EnumeratedPropertyType -> ADT RoleInContext -> MP (ArrayUnions PropertyBearer)
 getPropertyTypeBearingRoleInstances prop adt = ArrayUnions <$> execWriterT (descendInFiller adt)
-  where 
+  where
 
-    descendInFiller :: ADT RoleInContext -> WriterT (Array PropertyBearer) MP Unit
-    descendInFiller adt' = do 
-      -- Using the Traversable instance, we replace all terminal RoleInContext values with one or zero PropertyBearers. 
-      -- We then collect them using foldMapADT (computeCollection) and tell them in the WriterT monad.
-      lift ((for adt' ((getEnumeratedRole <<< roleInContext2Role) >=> getPropertyBearers)) >>= pure <<< computeCollection identity) >>= tell
-      mfiller <- lift (bindingOfADT adt')
-      case mfiller of 
-        Nothing -> pure unit
-        Just filler -> descendInFiller filler
+  descendInFiller :: ADT RoleInContext -> WriterT (Array PropertyBearer) MP Unit
+  descendInFiller adt' = do
+    -- Using the Traversable instance, we replace all terminal RoleInContext values with one or zero PropertyBearers. 
+    -- We then collect them using foldMapADT (computeCollection) and tell them in the WriterT monad.
+    lift ((for adt' ((getEnumeratedRole <<< roleInContext2Role) >=> getPropertyBearers)) >>= pure <<< computeCollection identity) >>= tell
+    mfiller <- lift (bindingOfADT adt')
+    case mfiller of
+      Nothing -> pure unit
+      Just filler -> descendInFiller filler
 
-    getPropertyBearers :: EnumeratedRole -> MP (Array PropertyBearer)
-    getPropertyBearers (EnumeratedRole {propertyAliases, id:eroleType}) = case lookup (unwrap prop) propertyAliases of
-      Just destination -> pure $ [PropertyBearer destination (Just prop) eroleType eroleType]
-      Nothing -> do
-        allProps <- allLocallyRepresentedProperties (ST eroleType)
-        if isJust $ elemIndex (ENP prop) allProps
-          then pure $ [PropertyBearer prop Nothing eroleType eroleType]
-          else pure $ []
-
+  getPropertyBearers :: EnumeratedRole -> MP (Array PropertyBearer)
+  getPropertyBearers (EnumeratedRole { propertyAliases, id: eroleType }) = case lookup (unwrap prop) propertyAliases of
+    Just destination -> pure $ [ PropertyBearer destination (Just prop) eroleType eroleType ]
+    Nothing -> do
+      allProps <- allLocallyRepresentedProperties (ST eroleType)
+      if isJust $ elemIndex (ENP prop) allProps then pure $ [ PropertyBearer prop Nothing eroleType eroleType ]
+      else pure $ []
 
 typeLevelKeyForPropertyQueries :: EnumeratedPropertyType -> QueryFunctionDescription -> MonadPerspectives (Array RunTimeInvertedQueryKey)
-typeLevelKeyForPropertyQueries p qfd = do 
+typeLevelKeyForPropertyQueries p qfd = do
   (ArrayUnions propBearers) <- getPropertyTypeBearingRoleInstances p (unsafePartial domain2roleType $ range qfd)
-  join <$> for propBearers 
-    \(PropertyBearer property replacementProperty typeOfPropertyBearingInstance typeOfInstanceOnPath) -> 
-      runtimeIndexForPropertyQueries 
-        typeOfInstanceOnPath 
-        typeOfPropertyBearingInstance 
-        property 
+  join <$> for propBearers
+    \(PropertyBearer property replacementProperty typeOfPropertyBearingInstance typeOfInstanceOnPath) ->
+      runtimeIndexForPropertyQueries
+        typeOfInstanceOnPath
+        typeOfPropertyBearingInstance
+        property
         -- If no property alias was found, use the original property. runtimeIndexForPropertyQueries handles this.
         (maybe property identity replacementProperty)
 
 -- | Add these keys to an inverted query starting on a Role step.
 typeLevelKeyForRoleQueries :: QueryFunctionDescription -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
 typeLevelKeyForRoleQueries qfd =
-  for 
-    (computeCollection singleton (unsafePartial roleRange qfd)) 
-    (\(RoleInContext{context, role}) -> roleContextCombinations role context) 
-  >>= pure <<< (map \(Tuple role_destination context_origin) -> RTRoleKey {context_origin, role_destination}) <<< join <<< ArrayUnions
+  for
+    (computeCollection singleton (unsafePartial roleRange qfd))
+    (\(RoleInContext { context, role }) -> roleContextCombinations role context)
+    >>= pure <<< (map \(Tuple role_destination context_origin) -> RTRoleKey { context_origin, role_destination }) <<< join <<< ArrayUnions
 
 -- | Add these keys to an inverted query starting on a Context step.
 typeLevelKeyForContextQueries :: QueryFunctionDescription -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
-typeLevelKeyForContextQueries qfd = 
+typeLevelKeyForContextQueries qfd =
   -- Notice that we first collect all leaves and then traverse them with roleContextCombinations. This is because we do not have a Traversable instance of
   -- ADT and this is semantically equivalent.
-  for 
-    (computeCollection singleton (unsafePartial roleDomain qfd)) 
-    (\(RoleInContext{context, role}) -> roleContextCombinations role context) 
-  >>= pure <<< (map \(Tuple role_origin context_destination) -> RTContextKey {role_origin, context_destination}) <<< join <<< ArrayUnions
+  for
+    (computeCollection singleton (unsafePartial roleDomain qfd))
+    (\(RoleInContext { context, role }) -> roleContextCombinations role context)
+    >>= pure <<< (map \(Tuple role_origin context_destination) -> RTContextKey { role_origin, context_destination }) <<< join <<< ArrayUnions

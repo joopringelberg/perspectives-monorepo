@@ -77,9 +77,10 @@ import Unsafe.Coerce (unsafeCoerce)
 -- | runs actions as long as they are triggered, sends deltas to other participants and re-runs active queries
 -- | Create a Transaction with the role in TheWorld that fills SocialEnvironment$Me (which in turn fills PerspectivesSystem$User).
 -- | The authoringRole winds up as 'subject' in deltas.
-runMonadPerspectivesTransaction :: forall o.
-  RoleType ->
-  MonadPerspectivesTransaction o
+runMonadPerspectivesTransaction
+  :: forall o
+   . RoleType
+  -> MonadPerspectivesTransaction o
   -> (MonadPerspectives o)
 runMonadPerspectivesTransaction authoringRole a = runMonadPerspectivesTransaction' shareWithPeers authoringRole a
 
@@ -90,36 +91,37 @@ doNotShareWithPeers :: Boolean
 doNotShareWithPeers = false
 
 -- | Create a Transaction with the role in TheWorld that fills SocialEnvironment$Me (which in turn fills PerspectivesSystem$User).
-runMonadPerspectivesTransaction' :: forall o.
-  Boolean ->
-  RoleType ->
-  MonadPerspectivesTransaction o
+runMonadPerspectivesTransaction'
+  :: forall o
+   . Boolean
+  -> RoleType
+  -> MonadPerspectivesTransaction o
   -> (MonadPerspectives o)
 runMonadPerspectivesTransaction' share authoringRole a = (lift $ createTransaction authoringRole) >>= lift <<< new >>= runReaderT whenFlagIsDown
   where
-    -- | Wait until the TransactionFlag can be taken down, then run the action; raise it again.
-    whenFlagIsDown :: MonadPerspectivesTransaction o
-    whenFlagIsDown = do 
-      -- 0. Only execute the transaction when we can take the flag down.
-      t <- lift $ transactionFlag
-      lift $ lift $ void $ take t
-      transactionNumber <- lift $ nextTransactionNumber
-      AA.modify \trns -> over Transaction (\tr -> tr {transactionNumber = transactionNumber}) trns
-      padding <- lift transactionLevel
-      log (padding <> "Starting " <> (if share then "" else "non-") <> "sharing transaction " <> show transactionNumber)
-      catchError 
-        do 
-          -- Execute the value that accumulates Deltas in a Transaction.
-          r <- a >>= phase1 share authoringRole
-          -- 5. Raise the flag
-          log (padding <> "Ending transaction " <> show transactionNumber)
-          _ <- lift $ lift $ put true t
-          pure r
-        \e -> do 
-          -- 5. Raise the flag
-          log (padding <> "Ending transaction " <> show transactionNumber)
-          _ <- lift $ lift $ put true t
-          throwError e
+  -- | Wait until the TransactionFlag can be taken down, then run the action; raise it again.
+  whenFlagIsDown :: MonadPerspectivesTransaction o
+  whenFlagIsDown = do
+    -- 0. Only execute the transaction when we can take the flag down.
+    t <- lift $ transactionFlag
+    lift $ lift $ void $ take t
+    transactionNumber <- lift $ nextTransactionNumber
+    AA.modify \trns -> over Transaction (\tr -> tr { transactionNumber = transactionNumber }) trns
+    padding <- lift transactionLevel
+    log (padding <> "Starting " <> (if share then "" else "non-") <> "sharing transaction " <> show transactionNumber)
+    catchError
+      do
+        -- Execute the value that accumulates Deltas in a Transaction.
+        r <- a >>= phase1 share authoringRole
+        -- 5. Raise the flag
+        log (padding <> "Ending transaction " <> show transactionNumber)
+        _ <- lift $ lift $ put true t
+        pure r
+      \e -> do
+        -- 5. Raise the flag
+        log (padding <> "Ending transaction " <> show transactionNumber)
+        _ <- lift $ lift $ put true t
+        throwError e
 
 -- | In phase1 we handle:
 -- | createdContexts, createdRoles, rolesToExit and ScheduledAssignments that are a ContextRemoval, a RoleUnbinding or a ExecuteDestructiveEffect.
@@ -127,33 +129,38 @@ runMonadPerspectivesTransaction' share authoringRole a = (lift $ createTransacti
 phase1 :: forall o. Boolean -> RoleType -> o -> MonadPerspectivesTransaction o
 phase1 share authoringRole r = do
   padding <- lift transactionLevel
-  transactionNumber <- AA.gets( \(Transaction tr) -> tr.transactionNumber)
+  transactionNumber <- AA.gets (\(Transaction tr) -> tr.transactionNumber)
   log $ padding <> "Entering phase1 of transaction " <> show transactionNumber
   -- Run monotonic actions, after
   --  * adding all ContextRemovals to the untouchableContexts and
   --  * adding rolesToExit to the untouchableRoles.
-  AA.modify (\t -> over Transaction (\tr -> tr
-    { untouchableRoles = tr.untouchableRoles <> tr.rolesToExit
-    , untouchableContexts = tr.untouchableContexts <> (contextsToBeRemoved tr.scheduledAssignments)
-    })
-    t)
-  (Transaction{createdContexts, createdRoles, rolesToExit, scheduledAssignments}) <- AA.get
+  AA.modify
+    ( \t -> over Transaction
+        ( \tr -> tr
+            { untouchableRoles = tr.untouchableRoles <> tr.rolesToExit
+            , untouchableContexts = tr.untouchableContexts <> (contextsToBeRemoved tr.scheduledAssignments)
+            }
+        )
+        t
+    )
+  (Transaction { createdContexts, createdRoles, rolesToExit, scheduledAssignments }) <- AA.get
   -- AFWIJKING: we initialiseren deze members direct.
   -- Even though we use ContextRemovals here, we cannot remove them from the Transaction as we need them in 
   -- step2 to finally remove the contexts. Keeping them in the Transaction is not optimal as we have to 
   -- filter them on every recursive call to phase1, to see whether they have exited or not.
-  AA.modify (\t -> over Transaction (\tr -> tr {createdContexts = [], createdRoles = [], rolesToExit = []}) t)
+  AA.modify (\t -> over Transaction (\tr -> tr { createdContexts = [], createdRoles = [], rolesToExit = [] }) t)
   ----------------------------------------------------------------
   -- Enter root states for newly created CONTEXTS (guarded)
   ----------------------------------------------------------------
-  unless (null createdContexts) $
-    void $ runSharing share authoringRole $ for createdContexts \cid -> do
-      states <- lift (cid ##= contextType >=> liftToInstanceLevel contextRootStates)
-      if null states
-        then pure unit
+  unless (null createdContexts)
+    $ void
+    $ runSharing share authoringRole
+    $ for createdContexts \cid -> do
+        states <- lift (cid ##= contextType >=> liftToInstanceLevel contextRootStates)
+        if null states then pure unit
         else do
           oldFrame <- lift pushFrame
-          lift $ addBinding "currentcontext" [unwrap cid]
+          lift $ addBinding "currentcontext" [ unwrap cid ]
           void $ for states \st -> do
             let k = stateKeyForContext st cid
             already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
@@ -164,15 +171,16 @@ phase1 share authoringRole r = do
   ----------------------------------------------------------------
   -- Enter root states for newly created ROLES (guarded)
   ----------------------------------------------------------------
-  unless (null createdRoles) $
-    void $ runSharing share authoringRole $ for createdRoles \rid -> do
-      ctxt <- lift (rid ##>> context)
-      states <- lift (rid ##= roleType >=> liftToInstanceLevel roleRootStates)
-      if null states
-        then pure unit
+  unless (null createdRoles)
+    $ void
+    $ runSharing share authoringRole
+    $ for createdRoles \rid -> do
+        ctxt <- lift (rid ##>> context)
+        states <- lift (rid ##= roleType >=> liftToInstanceLevel roleRootStates)
+        if null states then pure unit
         else do
           oldFrame <- lift pushFrame
-          lift $ addBinding "currentcontext" [unwrap ctxt]
+          lift $ addBinding "currentcontext" [ unwrap ctxt ]
           void $ for states \st -> do
             let k = stateKeyForRole st rid
             already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
@@ -183,195 +191,200 @@ phase1 share authoringRole r = do
 
   -- Exit the rootState of roles that are scheduled to be removed, unless we did so before.
   rolesThatHaveNotExited <- lift $ filterA (\rid -> rid ##>> exists' getActiveRoleStates) rolesToExit
-  if not $ null rolesThatHaveNotExited
-    then log (padding <> "Transaction " <> show transactionNumber <> " Roles that have not exited: " <> show rolesThatHaveNotExited)
-    else pure unit
-  if null rolesThatHaveNotExited
-    then pure unit
-    else void $ runSharing share authoringRole (for rolesThatHaveNotExited
-      \rid -> do
-        ctxt <- lift (rid ##>> context)
-        states <- lift (rid ##= roleType >=> liftToInstanceLevel roleRootStates)
-        if null states
-          then pure unit
+  if not $ null rolesThatHaveNotExited then log (padding <> "Transaction " <> show transactionNumber <> " Roles that have not exited: " <> show rolesThatHaveNotExited)
+  else pure unit
+  if null rolesThatHaveNotExited then pure unit
+  else void $ runSharing share authoringRole
+    ( for rolesThatHaveNotExited
+        \rid -> do
+          ctxt <- lift (rid ##>> context)
+          states <- lift (rid ##= roleType >=> liftToInstanceLevel roleRootStates)
+          if null states then pure unit
           else do
             oldFrame <- lift pushFrame
-            lift $ addBinding "currentcontext" [unwrap ctxt]
+            lift $ addBinding "currentcontext" [ unwrap ctxt ]
             queryUpdatesForRole rid
             -- Error boundary.
             catchError (void $ for states (exitingRoleState rid))
-              \e -> do 
+              \e -> do
                 lift $ addWarning (show e)
                 logPerspectivesError $ Custom ("Cannot exit role state for " <> show rid <> ", because " <> show e)
                 lift $ restoreFrame oldFrame
                 throwError e
             lift $ restoreFrame oldFrame
             -- Remove executed keys so re-entry can fire again later in this transaction
-            AA.modify \t -> over Transaction (\tr -> tr
-              { executedStateKeys = foldl
-                  (\acc st -> Set.delete (stateKeyForRole st rid) acc)
-                  tr.executedStateKeys
-                  states
-              }) t
-      )
+            AA.modify \t -> over Transaction
+              ( \tr -> tr
+                  { executedStateKeys = foldl
+                      (\acc st -> Set.delete (stateKeyForRole st rid) acc)
+                      tr.executedStateKeys
+                      states
+                  }
+              )
+              t
+    )
   -- Exit the rootState of contexts that scheduled to be removed, unless we did so before.
-  contextsThatHaveNotExited <- lift $ filterA (\sa -> case sa of
-      ContextRemoval ctxt _ -> ctxt ##>> exists' getActiveStates
-      _ -> pure false)
+  contextsThatHaveNotExited <- lift $ filterA
+    ( \sa -> case sa of
+        ContextRemoval ctxt _ -> ctxt ##>> exists' getActiveStates
+        _ -> pure false
+    )
     scheduledAssignments
-  if null contextsThatHaveNotExited
-    then pure unit
-    else void $ runSharing share authoringRole (for contextsThatHaveNotExited (unsafePartial exitContext))
-    -- First append the collected rolesToExit and ContextRemovals to the untouchableRoles and untouchableContexts
-    -- to preserve the invariant.
-  AA.modify (\t -> over Transaction (\tr -> tr
-    { untouchableRoles = tr.untouchableRoles <> tr.rolesToExit
-    , untouchableContexts = tr.untouchableContexts <> (contextsToBeRemoved tr.scheduledAssignments)
-    -- Remove the ScheduledAssignments in contextsThatHaveNotExited from scheduledAssignments
-    })
-    t)
-  recur <- AA.gets( \(Transaction tr) -> 
-      -- There may be new ContextRemovals scheduled; if so, recur must be true.
-       (not $ null (filter isContextRemoval (difference tr.scheduledAssignments scheduledAssignments)))
-    || (not $ null tr.rolesToExit)
-    || (not $ null tr.createdContexts)
-    || (not $ null tr.createdRoles) )
-  if recur 
-    then phase1 share authoringRole r
-    else do 
-      -- Unbind roles and execute destructive effects.
-      void $ for scheduledAssignments case _ of
-        RoleUnbinding filled mNewFiller msignedDelta -> log (padding <> "Remove filler of " <> unwrap filled) *> changeRoleBinding filled mNewFiller
-        ExecuteDestructiveEffect functionName origin values -> log (padding <> "DestructiveEffect: " <> functionName) *> executeEffect functionName origin values
-        _ -> pure unit
-      -- We never need these again, so remove them from the Transaction.
-      AA.modify \(Transaction tr) -> Transaction $ tr {scheduledAssignments = filter criterium tr.scheduledAssignments}
-      -- Invariant: as we call phase2, there are no rolesToExit, no createdContexts, no createdRoles.
-      -- Nor will there be RoleUnbinding or ExecuteDestructiveEffect items in scheduledAssignments.
-      phase2 share authoringRole r
+  if null contextsThatHaveNotExited then pure unit
+  else void $ runSharing share authoringRole (for contextsThatHaveNotExited (unsafePartial exitContext))
+  -- First append the collected rolesToExit and ContextRemovals to the untouchableRoles and untouchableContexts
+  -- to preserve the invariant.
+  AA.modify
+    ( \t -> over Transaction
+        ( \tr -> tr
+            { untouchableRoles = tr.untouchableRoles <> tr.rolesToExit
+            , untouchableContexts = tr.untouchableContexts <> (contextsToBeRemoved tr.scheduledAssignments)
+            -- Remove the ScheduledAssignments in contextsThatHaveNotExited from scheduledAssignments
+            }
+        )
+        t
+    )
+  recur <- AA.gets
+    ( \(Transaction tr) ->
+        -- There may be new ContextRemovals scheduled; if so, recur must be true.
+        (not $ null (filter isContextRemoval (difference tr.scheduledAssignments scheduledAssignments)))
+          || (not $ null tr.rolesToExit)
+          || (not $ null tr.createdContexts)
+          || (not $ null tr.createdRoles)
+    )
+  if recur then phase1 share authoringRole r
+  else do
+    -- Unbind roles and execute destructive effects.
+    void $ for scheduledAssignments case _ of
+      RoleUnbinding filled mNewFiller msignedDelta -> log (padding <> "Remove filler of " <> unwrap filled) *> changeRoleBinding filled mNewFiller
+      ExecuteDestructiveEffect functionName origin values -> log (padding <> "DestructiveEffect: " <> functionName) *> executeEffect functionName origin values
+      _ -> pure unit
+    -- We never need these again, so remove them from the Transaction.
+    AA.modify \(Transaction tr) -> Transaction $ tr { scheduledAssignments = filter criterium tr.scheduledAssignments }
+    -- Invariant: as we call phase2, there are no rolesToExit, no createdContexts, no createdRoles.
+    -- Nor will there be RoleUnbinding or ExecuteDestructiveEffect items in scheduledAssignments.
+    phase2 share authoringRole r
   where
-    isContextRemoval :: ScheduledAssignment -> Boolean
-    isContextRemoval (ContextRemoval _ _) = true
-    isContextRemoval _ = false
+  isContextRemoval :: ScheduledAssignment -> Boolean
+  isContextRemoval (ContextRemoval _ _) = true
+  isContextRemoval _ = false
 
-    criterium :: ScheduledAssignment -> Boolean
-    criterium (RoleUnbinding _ _ _ ) = false
-    criterium (ExecuteDestructiveEffect _ _ _) = false
-    criterium _ = true
+  criterium :: ScheduledAssignment -> Boolean
+  criterium (RoleUnbinding _ _ _) = false
+  criterium (ExecuteDestructiveEffect _ _ _) = false
+  criterium _ = true
 
 phase2 :: forall o. Boolean -> RoleType -> o -> MonadPerspectivesTransaction o
 phase2 share authoringRole r = do
   padding <- lift transactionLevel
-  transactionNumber <- AA.gets( \(Transaction tr) -> tr.transactionNumber)
-  log $ padding <>  "Entering phase2 of transaction " <> show transactionNumber
+  transactionNumber <- AA.gets (\(Transaction tr) -> tr.transactionNumber)
+  log $ padding <> "Entering phase2 of transaction " <> show transactionNumber
   -- Clear the parent transaction's invertedQueryResults BEFORE (possibly) spawning an embedded transaction,
   -- so they cannot be re-used spuriously in a later phase2.
-  Transaction {createdContexts, createdRoles, rolesToExit, scheduledAssignments, modelsToBeRemoved, invertedQueryResults} <- AA.get
+  Transaction { createdContexts, createdRoles, rolesToExit, scheduledAssignments, modelsToBeRemoved, invertedQueryResults } <- AA.get
   AA.modify \t -> over Transaction (\tr -> tr { invertedQueryResults = [] }) t
   runSharing share authoringRole (recursivelyEvaluateStates invertedQueryResults)
   -- Is there a reason to run phase1 again?
   -- Only if there are new createdContexts, createdRoles, rolesToExit, 
   -- or new scheduledAssignments that are a ContextRemoval, a RoleUnbinding or a ExecuteDestructiveEffect.
-  reRunPhase1 <- AA.gets( \(Transaction tr) -> 
-       (not $ null (filter criterium (tr.scheduledAssignments `difference` scheduledAssignments)))
-    || (not $ null (tr.rolesToExit `difference` rolesToExit))
-    || (not $ null (tr.createdContexts `difference` createdContexts))
-    || (not $ null (tr.createdRoles `difference` createdRoles)) )
-  if reRunPhase1
-    then (log $ padding <> "Rerun phase1 for " <> show transactionNumber) *> phase1 share authoringRole r
-    else do
-      -- Invariant: there are no rolesToExit, no createdContexts, no createdRoles. 
-      -- Nor will there be RoleUnbinding or ExecuteDestructiveEffect items in scheduledAssignments.
-      -- This is because phase1 has no items in these members and apparantly 
-      -- there have been no new items added during state evaluation.
-      -- Notice that there may be ContextRemoval and RoleRemoval items, though!
-      ft <- AA.get
-      (publicRoleTransactions :: TransactionPerUser) <- if share 
-        then lift $ distributeTransaction ft 
-        else pure MAP.empty
+  reRunPhase1 <- AA.gets
+    ( \(Transaction tr) ->
+        (not $ null (filter criterium (tr.scheduledAssignments `difference` scheduledAssignments)))
+          || (not $ null (tr.rolesToExit `difference` rolesToExit))
+          || (not $ null (tr.createdContexts `difference` createdContexts))
+          || (not $ null (tr.createdRoles `difference` createdRoles))
+    )
+  if reRunPhase1 then (log $ padding <> "Rerun phase1 for " <> show transactionNumber) *> phase1 share authoringRole r
+  else do
+    -- Invariant: there are no rolesToExit, no createdContexts, no createdRoles. 
+    -- Nor will there be RoleUnbinding or ExecuteDestructiveEffect items in scheduledAssignments.
+    -- This is because phase1 has no items in these members and apparantly 
+    -- there have been no new items added during state evaluation.
+    -- Notice that there may be ContextRemoval and RoleRemoval items, though!
+    ft <- AA.get
+    (publicRoleTransactions :: TransactionPerUser) <-
+      if share then lift $ distributeTransaction ft
+      else pure MAP.empty
 
-      -- Collect all deltas in order, add the public resource schemes and remove doubles. Then execute.
-      void $ forWithIndex publicRoleTransactions
-        \destination publicRoleTransaction -> case destination of 
-          (PublicDestination userId) -> do
-            userType <- lift $ roleType_ userId
-            mUrl <- lift $ publicUrl_ userType
-            case mUrl of
-              Nothing -> throwError (error $ "A user role type that is neither the system User nor a public role: " <> show userType <> " ('" <> show userId <> "')")
-              Just (Q qfd) -> do 
-                ctxt <- lift $ (userId ##>> context)
-                urlComputer <- lift $ context2propertyValue qfd
-                murl <- lift (ctxt ##> urlComputer)
-                case murl of 
-                  Just (Value url) -> do 
-                    deltas <- expandDeltas publicRoleTransaction url
+    -- Collect all deltas in order, add the public resource schemes and remove doubles. Then execute.
+    void $ forWithIndex publicRoleTransactions
+      \destination publicRoleTransaction -> case destination of
+        (PublicDestination userId) -> do
+          userType <- lift $ roleType_ userId
+          mUrl <- lift $ publicUrl_ userType
+          case mUrl of
+            Nothing -> throwError (error $ "A user role type that is neither the system User nor a public role: " <> show userType <> " ('" <> show userId <> "')")
+            Just (Q qfd) -> do
+              ctxt <- lift $ (userId ##>> context)
+              urlComputer <- lift $ context2propertyValue qfd
+              murl <- lift (ctxt ##> urlComputer)
+              case murl of
+                Just (Value url) -> do
+                  deltas <- expandDeltas publicRoleTransaction url
                   -- These deltas for a public role aren't sent anywhere but executed
                   -- right here. Notice that no changes to local state will result from executing such a transaction.
                   -- (except that public instances will be cached)
                   -- Run embedded, do not share.
-                    lift $ runEmbeddedIfNecessary false authoringRole (executeDeltas deltas)
-                  -- If the URL is not computed, we log this and do nothing. In this installation, there probably should not be a proxy for the public role anyway; but we don't have a way of knowing that on constructing the context.
-                  Nothing -> log (padding <> "Cannot compute a URL to publish to for this user role type and instance: " <> show userType <> " ('" <> show userId <> "')")
-              Just (S _ _) -> throwError (error ("Attempt to acces QueryFunctionDescription of the url of a public role before the expression has been compiled. This counts as a system programming error. User type = " <> (show userType)))
-          Peer _ -> pure unit
-      -- Remove the deltas; we don't want to execute them again.
-      AA.modify (\t -> over Transaction (\tr -> tr {deltas = []}) t)
-      -- Now finally remove contexts and roles.
-      void $ for scheduledAssignments case _ of
-        ContextRemoval ctxt authorizedRole -> lift (log (padding <> "Remove context " <> unwrap ctxt) *> removeContextInstance ctxt authorizedRole)
-        RoleRemoval rid -> lift (log (padding <> "Remove role " <> unwrap rid) *> removeRoleInstance rid)
-        _ -> pure unit
-      -- we can now remove ContextRemovals and RoleRemovals from scheduledAssignments. As these can be the only items left in the collection of scheduledAssignments,
-      -- we can simply reset it.
-      -- We can also remove the untouchables; all resources listed in them have gone, now.
-      AA.modify \t -> over Transaction (\tr -> tr {scheduledAssignments = [], untouchableContexts = [], untouchableRoles = []}) t
-      Transaction {postponedStateEvaluations, correlationIdentifiers} <- AA.get
-      if null postponedStateEvaluations
-        then do 
-          if not $ null modelsToBeRemoved
-            then log (padding <> "Will remove these models: " <> show modelsToBeRemoved)
-            else pure unit
-          lift $ void $ for modelsToBeRemoved tryRemoveEntiteit
-          if not $ null correlationIdentifiers
-            then do
-              log $ padding <> "==========RUNNING EFFECTS IN " <> show transactionNumber <> "============"
-              -- Sort from low to high, so we can never actualise a client side component after it has been removed.
-              for_ (sort correlationIdentifiers) \corrId -> do
-                mEffect <- pure $ lookupActiveSupportedEffect corrId
-                case mEffect of
-                  Nothing -> pure unit
-                  (Just {runner}) -> do
-                    -- logShow corrId
-                    lift $ runner unit
-              -- As this is the end of execution of this Transaction, we don't bother with removing the postponedStateEvaluations.
-              pure r
-            else pure r
-        else do 
-          log $ padding <> "Re-evaluating state evaluations that depend on a removed resource: " <> (show postponedStateEvaluations)
-          if null postponedStateEvaluations
-            then pure unit
-            else (runSharing share authoringRole (evaluateStates (dedupeStateEvaluations postponedStateEvaluations)))
-          AA.modify \t -> over Transaction (\tr -> tr {postponedStateEvaluations = [], modelsToBeRemoved = []}) t
-          phase2 share authoringRole r
+                  lift $ runEmbeddedIfNecessary false authoringRole (executeDeltas deltas)
+                -- If the URL is not computed, we log this and do nothing. In this installation, there probably should not be a proxy for the public role anyway; but we don't have a way of knowing that on constructing the context.
+                Nothing -> log (padding <> "Cannot compute a URL to publish to for this user role type and instance: " <> show userType <> " ('" <> show userId <> "')")
+            Just (S _ _) -> throwError (error ("Attempt to acces QueryFunctionDescription of the url of a public role before the expression has been compiled. This counts as a system programming error. User type = " <> (show userType)))
+        Peer _ -> pure unit
+    -- Remove the deltas; we don't want to execute them again.
+    AA.modify (\t -> over Transaction (\tr -> tr { deltas = [] }) t)
+    -- Now finally remove contexts and roles.
+    void $ for scheduledAssignments case _ of
+      ContextRemoval ctxt authorizedRole -> lift (log (padding <> "Remove context " <> unwrap ctxt) *> removeContextInstance ctxt authorizedRole)
+      RoleRemoval rid -> lift (log (padding <> "Remove role " <> unwrap rid) *> removeRoleInstance rid)
+      _ -> pure unit
+    -- we can now remove ContextRemovals and RoleRemovals from scheduledAssignments. As these can be the only items left in the collection of scheduledAssignments,
+    -- we can simply reset it.
+    -- We can also remove the untouchables; all resources listed in them have gone, now.
+    AA.modify \t -> over Transaction (\tr -> tr { scheduledAssignments = [], untouchableContexts = [], untouchableRoles = [] }) t
+    Transaction { postponedStateEvaluations, correlationIdentifiers } <- AA.get
+    if null postponedStateEvaluations then do
+      if not $ null modelsToBeRemoved then log (padding <> "Will remove these models: " <> show modelsToBeRemoved)
+      else pure unit
+      lift $ void $ for modelsToBeRemoved tryRemoveEntiteit
+      if not $ null correlationIdentifiers then do
+        log $ padding <> "==========RUNNING EFFECTS IN " <> show transactionNumber <> "============"
+        -- Sort from low to high, so we can never actualise a client side component after it has been removed.
+        for_ (sort correlationIdentifiers) \corrId -> do
+          mEffect <- pure $ lookupActiveSupportedEffect corrId
+          case mEffect of
+            Nothing -> pure unit
+            (Just { runner }) -> do
+              -- logShow corrId
+              lift $ runner unit
+        -- As this is the end of execution of this Transaction, we don't bother with removing the postponedStateEvaluations.
+        pure r
+      else pure r
+    else do
+      log $ padding <> "Re-evaluating state evaluations that depend on a removed resource: " <> (show postponedStateEvaluations)
+      if null postponedStateEvaluations then pure unit
+      else (runSharing share authoringRole (evaluateStates (dedupeStateEvaluations postponedStateEvaluations)))
+      AA.modify \t -> over Transaction (\tr -> tr { postponedStateEvaluations = [], modelsToBeRemoved = [] }) t
+      phase2 share authoringRole r
 
   where
-    criterium :: ScheduledAssignment -> Boolean
-    criterium (ContextRemoval _ _) = true
-    criterium (RoleUnbinding _ _ _ ) = true
-    criterium (ExecuteDestructiveEffect _ _ _) = true
-    criterium _ = false
+  criterium :: ScheduledAssignment -> Boolean
+  criterium (ContextRemoval _ _) = true
+  criterium (RoleUnbinding _ _ _) = true
+  criterium (ExecuteDestructiveEffect _ _ _) = true
+  criterium _ = false
 
 -- | Actions performed on behalf of the own user in the course of state transitions will result in deltas that
 -- | must be synchronised with peers, even when the transaction in which this happens is received from a peer
 -- | and thus is non-sharing.
 runSharing :: forall o. Boolean -> RoleType -> MonadPerspectivesTransaction o -> MonadPerspectivesTransaction o
-runSharing share authoringRole t = if share
+runSharing share authoringRole t =
+  if share
   -- We already share, just execute the action.
   then t
   -- Run from within a non-sharing transaction. Run an embedded, sharing transaction.
   else do
     padding <- lift transactionLevel
-    transactionNumber <- AA.gets( \(Transaction tr) -> tr.transactionNumber)
+    transactionNumber <- AA.gets (\(Transaction tr) -> tr.transactionNumber)
     log $ padding <> "run sharing transaction from nonsharing transaction " <> show transactionNumber
     r <- lift $ runEmbeddedTransaction shareWithPeers authoringRole t
     log $ padding <> "returning to nonsharing transaction " <> show transactionNumber <> " from sharing transaction."
@@ -388,28 +401,28 @@ computeStateEvaluations (ContextStateQuery contextInstances) = join <$> do
     (mmyType :: Maybe RoleType) <- cid ##> getMyType
     case mmyType of
       Nothing -> pure []
-      Just (CR myType) -> if isGuestRole myType
-        then do
+      Just (CR myType) ->
+        if isGuestRole myType then do
           (mmguest :: Maybe RoleInstance) <- cid ##> getCalculatedRoleInstances myType
           case mmguest of
             -- If the Guest role is not filled, don't execute bots on its behalf!
             Nothing -> pure []
             otherwise -> pure $ (\state -> ContextStateEvaluation state cid) <$> states
         else pure $ (\state -> ContextStateEvaluation state cid) <$> states
-      Just _ -> pure $ (\state -> ContextStateEvaluation state cid ) <$> states
-      
+      Just _ -> pure $ (\state -> ContextStateEvaluation state cid) <$> states
+
 computeStateEvaluations (RoleStateQuery roleInstances) = join <$> do
   activeInstances <- filterA (\rid -> rid ##>> exists' getActiveRoleStates) roleInstances
   -- If the roleInstance has no recorded states, this means it has been marked for removal
   -- and has exited all its states. We should not do that again!
   for activeInstances \rid -> do
     (mmyType :: Maybe RoleType) <- rid ##> context >=> getMyType
-      -- Neem aspecten hier ook mee!
+    -- Neem aspecten hier ook mee!
     states <- rid ##= roleType >=> liftToInstanceLevel roleRootStates
     case mmyType of
       Nothing -> pure []
-      Just (CR myType) -> if isGuestRole myType
-        then do
+      Just (CR myType) ->
+        if isGuestRole myType then do
           (mmguest :: Maybe RoleInstance) <- rid ##> context >=> getCalculatedRoleInstances myType
           case mmguest of
             Nothing -> pure []
@@ -420,29 +433,30 @@ computeStateEvaluations (RoleStateQuery roleInstances) = join <$> do
 isGuestRole :: CalculatedRoleType -> Boolean
 isGuestRole (CalculatedRoleType cr) = cr `hasLocalName` "Guest"
 
-
 exitContext :: Partial => ScheduledAssignment -> MonadPerspectivesTransaction Unit
 exitContext (ContextRemoval ctxt authorizedRole) = do
   states <- lift (ctxt ##= contextType >=> liftToInstanceLevel contextRootStates)
-  if null states
-    then pure unit
-    else do
-      -- Provide a new frame for the current context variable binding.
-      oldFrame <- lift pushFrame
-      lift $ addBinding "currentcontext" [unwrap ctxt]
-      -- Error boundary.
-      catchError (void $ for states (exitingState ctxt))
-        \e -> do 
-          lift $ addWarning (show e)
-          logPerspectivesError $ Custom ("Cannot exit state, because " <> show e)
-      lift $ restoreFrame oldFrame
-      -- Remove executed keys for these context states
-      AA.modify \t -> over Transaction (\tr -> tr
-        { executedStateKeys = foldl
-            (\acc st -> Set.delete (stateKeyForContext st ctxt) acc)
-            tr.executedStateKeys
-            states
-        }) t
+  if null states then pure unit
+  else do
+    -- Provide a new frame for the current context variable binding.
+    oldFrame <- lift pushFrame
+    lift $ addBinding "currentcontext" [ unwrap ctxt ]
+    -- Error boundary.
+    catchError (void $ for states (exitingState ctxt))
+      \e -> do
+        lift $ addWarning (show e)
+        logPerspectivesError $ Custom ("Cannot exit state, because " <> show e)
+    lift $ restoreFrame oldFrame
+    -- Remove executed keys for these context states
+    AA.modify \t -> over Transaction
+      ( \tr -> tr
+          { executedStateKeys = foldl
+              (\acc st -> Set.delete (stateKeyForContext st ctxt) acc)
+              tr.executedStateKeys
+              states
+          }
+      )
+      t
   -- Adds a RemoveExternalRoleInstance to the current transaction.
   -- Severes the link between the roles and their fillers.
   stateEvaluationAndQueryUpdatesForContext ctxt authorizedRole
@@ -455,52 +469,48 @@ recursivelyEvaluateStates invertedQueryResults = do
   log $ padding <> "Evaluate states"
   (stateEvaluations :: Array StateEvaluation) <- lift $ join <$> traverse computeStateEvaluations invertedQueryResults
   let deduped = dedupeStateEvaluations stateEvaluations
-  if null deduped
-    then pure unit
-    else log (padding <> "==========RUNNING " <> (show $ length deduped) <> " UNIQUE STATE EVALUATIONS============")
+  if null deduped then pure unit
+  else log (padding <> "==========RUNNING " <> (show $ length deduped) <> " UNIQUE STATE EVALUATIONS============")
   evaluateStates deduped
-  Transaction {invertedQueryResults:newResults} <- AA.get
-  if null newResults
-    then pure unit
-    else do
-      AA.modify \t -> over Transaction (\tr -> tr {invertedQueryResults = []}) t
-      recursivelyEvaluateStates newResults
+  Transaction { invertedQueryResults: newResults } <- AA.get
+  if null newResults then pure unit
+  else do
+    AA.modify \t -> over Transaction (\tr -> tr { invertedQueryResults = [] }) t
+    recursivelyEvaluateStates newResults
 
-evaluateStates :: Array StateEvaluation -> MonadPerspectivesTransaction Unit 
+evaluateStates :: Array StateEvaluation -> MonadPerspectivesTransaction Unit
 evaluateStates stateEvaluations' =
   void $ for stateEvaluations' \s -> case s of
     ContextStateEvaluation stateId contextId -> do
       let k = stateKeyForContext stateId contextId
       already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
-      if already
-        then pure unit
-        else do
-          -- Provide a new frame for the current context variable binding.
-            oldFrame <- lift pushFrame
-            lift $ addBinding "currentcontext" [unwrap contextId]
-            (evaluateContextState contextId stateId)
-            lift $ restoreFrame oldFrame
-            -- Register that we executed automatic actions for this (state, context)
-            AA.modify \t -> over Transaction (\tr -> tr { executedStateKeys = Set.insert k tr.executedStateKeys }) t
+      if already then pure unit
+      else do
+        -- Provide a new frame for the current context variable binding.
+        oldFrame <- lift pushFrame
+        lift $ addBinding "currentcontext" [ unwrap contextId ]
+        (evaluateContextState contextId stateId)
+        lift $ restoreFrame oldFrame
+        -- Register that we executed automatic actions for this (state, context)
+        AA.modify \t -> over Transaction (\tr -> tr { executedStateKeys = Set.insert k tr.executedStateKeys }) t
     RoleStateEvaluation stateId roleId -> do
       let k = stateKeyForRole stateId roleId
       already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
-      if already
-        then pure unit
-        else do
-          cid <- lift (roleId ##>> context)
-          oldFrame <- lift pushFrame
-          lift $ addBinding "currentcontext" [unwrap cid]
-          evaluateRoleState roleId stateId
-          lift $ restoreFrame oldFrame
-          AA.modify \t -> over Transaction (\tr -> tr { executedStateKeys = Set.insert k tr.executedStateKeys }) t
+      if already then pure unit
+      else do
+        cid <- lift (roleId ##>> context)
+        oldFrame <- lift pushFrame
+        lift $ addBinding "currentcontext" [ unwrap cid ]
+        evaluateRoleState roleId stateId
+        lift $ restoreFrame oldFrame
+        AA.modify \t -> over Transaction (\tr -> tr { executedStateKeys = Set.insert k tr.executedStateKeys }) t
 
 -- | Run and discard the transaction.
 runSterileTransaction :: forall o. MonadPerspectivesTransaction o -> (MonadPerspectives o)
 runSterileTransaction a =
   (lift $ createTransaction (ENR $ EnumeratedRoleType sysUser))
-  >>= lift <<< new
-  >>= runReaderT a
+    >>= lift <<< new
+    >>= runReaderT a
 
 -- | Run a transaction even though another was already running.
 -- | The transaction flag embedded in PerspectivesState enables us to run just one transaction at a time.
@@ -510,74 +520,74 @@ runSterileTransaction a =
 -- | Obviously, we should only do this when we can reason that no harm will be done.
 -- | This is the case, for example, when we want to parse an ARC file, or when we want to add another model
 -- | to the installation.
-runEmbeddedTransaction :: forall o.
-  Boolean ->
-  RoleType ->
-  MonadPerspectivesTransaction o
+runEmbeddedTransaction
+  :: forall o
+   . Boolean
+  -> RoleType
+  -> MonadPerspectivesTransaction o
   -> (MonadPerspectives o)
 runEmbeddedTransaction share authoringRole a = do
   t <- transactionFlag
   flagIsDown <- isNothing <$> (lift $ tryRead t)
-  if flagIsDown
-    then do
-      -- Because the transactionFlag AVar is empty (== the flag is down), we know a transaction is running.
-      -- 1. Raise the flag.
-      increaseTransactionLevel
-      padding <- transactionLevel
-      _ <- lift $ put true t
-      log $ padding <>  "Starting embedded " <> (if share then "" else "non-") <> "sharing transaction."
-      catchError 
-        do
-          -- 2. Run the transaction (this will lower and raise the flag again, setting it to 1).
-          -- runMonadPerspectivesTransaction has an internal Error Boundary that guarantees the flag is handled.
-          -- In other words, it is guaranteed to be up again when it is finished. But it may throw!
-          result <- runMonadPerspectivesTransaction' share authoringRole a
-          -- 2. Lower it again.
-          log $ padding <> "Ending embedded transaction."
-          decreaseTransactionLevel
-          _ <- lift $ take t
-          pure result
-        \e -> do
-          log (padding <> "Ending embedded transaction in failure: " <> show e) 
-          decreaseTransactionLevel
-          _ <- lift $ take t
-          throwError e
-    else throwError (error "runEmbeddedTransaction is not run inside another transaction.")
+  if flagIsDown then do
+    -- Because the transactionFlag AVar is empty (== the flag is down), we know a transaction is running.
+    -- 1. Raise the flag.
+    increaseTransactionLevel
+    padding <- transactionLevel
+    _ <- lift $ put true t
+    log $ padding <> "Starting embedded " <> (if share then "" else "non-") <> "sharing transaction."
+    catchError
+      do
+        -- 2. Run the transaction (this will lower and raise the flag again, setting it to 1).
+        -- runMonadPerspectivesTransaction has an internal Error Boundary that guarantees the flag is handled.
+        -- In other words, it is guaranteed to be up again when it is finished. But it may throw!
+        result <- runMonadPerspectivesTransaction' share authoringRole a
+        -- 2. Lower it again.
+        log $ padding <> "Ending embedded transaction."
+        decreaseTransactionLevel
+        _ <- lift $ take t
+        pure result
+      \e -> do
+        log (padding <> "Ending embedded transaction in failure: " <> show e)
+        decreaseTransactionLevel
+        _ <- lift $ take t
+        throwError e
+  else throwError (error "runEmbeddedTransaction is not run inside another transaction.")
 
 -- | Runs an embedded transaction if a transaction is being run; just runs it otherwise.
 -- | Has an internal error boundary that guarantees that the flag is restored.
-runEmbeddedIfNecessary :: forall o.
-  Boolean ->
-  RoleType ->
-  MonadPerspectivesTransaction o
+runEmbeddedIfNecessary
+  :: forall o
+   . Boolean
+  -> RoleType
+  -> MonadPerspectivesTransaction o
   -> (MonadPerspectives o)
 runEmbeddedIfNecessary share authoringRole a = do
   t <- transactionFlag
   flagIsDown <- isNothing <$> (lift $ tryRead t)
-  if flagIsDown
-    then do
-      -- Because the transactionFlag AVar is empty (== the flag is down), we know a transaction is running.
-      -- 1. Raise the flag.
-      _ <- lift $ put true t
-      increaseTransactionLevel
-      padding <- transactionLevel
-      log $ padding <> "Starting embedded " <> (if share then "" else "non-") <> "sharing transaction" <> " because it was necessary."
-      -- 2. Run the transaction (this is guaranteed to lower and raise the flag again because of an internal error boundary, setting it to 1 - but it may throw again!).
-      catchError 
-        do
-          result <- runMonadPerspectivesTransaction' share authoringRole a
-          -- 2. Lower it again.
-          log $ padding <> "Ending transaction that needed to be embedded."
-          decreaseTransactionLevel
-          _ <- lift $ take t
-          pure result
-        \e -> do
-          log $ padding <> ("Ending transaction that needed to be embedded in failure. " <> show e)
-          decreaseTransactionLevel
-          _ <- lift $ take t
-          throwError e
+  if flagIsDown then do
+    -- Because the transactionFlag AVar is empty (== the flag is down), we know a transaction is running.
+    -- 1. Raise the flag.
+    _ <- lift $ put true t
+    increaseTransactionLevel
+    padding <- transactionLevel
+    log $ padding <> "Starting embedded " <> (if share then "" else "non-") <> "sharing transaction" <> " because it was necessary."
+    -- 2. Run the transaction (this is guaranteed to lower and raise the flag again because of an internal error boundary, setting it to 1 - but it may throw again!).
+    catchError
+      do
+        result <- runMonadPerspectivesTransaction' share authoringRole a
+        -- 2. Lower it again.
+        log $ padding <> "Ending transaction that needed to be embedded."
+        decreaseTransactionLevel
+        _ <- lift $ take t
+        pure result
+      \e -> do
+        log $ padding <> ("Ending transaction that needed to be embedded in failure. " <> show e)
+        decreaseTransactionLevel
+        _ <- lift $ take t
+        throwError e
 
-    else runMonadPerspectivesTransaction' share authoringRole a
+  else runMonadPerspectivesTransaction' share authoringRole a
 
 -----------------------------------------------------------
 -- EXECUTEEFFECT
@@ -634,19 +644,18 @@ executeEffect functionName origin values = do
 detectPublicStateChanges :: MonadPerspectives Unit
 detectPublicStateChanges = do
   publicRoles <- getPublicRolesJustLoaded
-  if length publicRoles > 0 
-    then do
-      clearPublicRolesJustLoaded
-      runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
-        (void $ for publicRoles f)
-      detectPublicStateChanges
-    else pure unit
-  
-  where 
-    f :: RoleInstance -> MonadPerspectivesTransaction Unit 
-    f filler = do 
-      (filledCandidates :: Array RoleInstance) <- lift $ filler2filledFromDatabase_ (Filler_ filler)
-      void $ for filledCandidates (flip reEvaluatePublicFillerChanges filler)
+  if length publicRoles > 0 then do
+    clearPublicRolesJustLoaded
+    runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+      (void $ for publicRoles f)
+    detectPublicStateChanges
+  else pure unit
+
+  where
+  f :: RoleInstance -> MonadPerspectivesTransaction Unit
+  f filler = do
+    (filledCandidates :: Array RoleInstance) <- lift $ filler2filledFromDatabase_ (Filler_ filler)
+    void $ for filledCandidates (flip reEvaluatePublicFillerChanges filler)
 
 pad :: Int -> String
 pad n = intercalate "" $ replicate n " "
@@ -661,7 +670,7 @@ stateKeyForRole sid rid = unwrap sid <> ":R:" <> unwrap rid
 -- Key for a StateEvaluation (used for per-batch deduplication)
 stateEvalKey :: StateEvaluation -> String
 stateEvalKey (ContextStateEvaluation sid cid) = unwrap sid <> ":C:" <> unwrap cid
-stateEvalKey (RoleStateEvaluation sid rid)    = unwrap sid <> ":R:" <> unwrap rid
+stateEvalKey (RoleStateEvaluation sid rid) = unwrap sid <> ":R:" <> unwrap rid
 
 -- Deduplicate a batch of StateEvaluation values (first occurrence wins)
 dedupeStateEvaluations :: Array StateEvaluation -> Array StateEvaluation
@@ -669,10 +678,11 @@ dedupeStateEvaluations arr =
   let
     go :: Tuple (Set.Set String) (Array StateEvaluation) -> StateEvaluation -> Tuple (Set.Set String) (Array StateEvaluation)
     go (Tuple seen acc) se =
-      let k = stateEvalKey se
-      in if Set.member k seen
-           then Tuple seen acc
-           else Tuple (Set.insert k seen) (cons se acc)
+      let
+        k = stateEvalKey se
+      in
+        if Set.member k seen then Tuple seen acc
+        else Tuple (Set.insert k seen) (cons se acc)
     Tuple _ revAcc = foldl go (Tuple Set.empty []) arr
   in
     reverse revAcc

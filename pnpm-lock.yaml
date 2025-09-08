@@ -47,6 +47,9 @@ importers:
       pnpm:
         specifier: ^10.12.1
         version: 10.12.1
+      purs-tidy:
+        specifier: ^0.11.0
+        version: 0.11.0
       rollup:
         specifier: ^4.44.0
         version: 4.44.0
@@ -5095,6 +5098,10 @@ packages:
   purescript-yoga-subtlecrypto@https://codeload.github.com/rowtype-yoga/purescript-yoga-subtlecrypto/tar.gz/044f10d2cd4de4ac6e55ba748dc8c55a02a65d22:
     resolution: {tarball: https://codeload.github.com/rowtype-yoga/purescript-yoga-subtlecrypto/tar.gz/044f10d2cd4de4ac6e55ba748dc8c55a02a65d22}
     version: 0.0.0
+
+  purs-tidy@0.11.0:
+    resolution: {integrity: sha512-HZ8AS6J7Ka2YVl6Gr/H5NV17TU10yGYUTxVwRd5tKuwsVdFZewXSzZ/HTpWrkhdR2gxSVk0BdnpJhyu//oRc+w==}
+    hasBin: true
 
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
@@ -11287,6 +11294,8 @@ snapshots:
   punycode@2.3.1: {}
 
   purescript-yoga-subtlecrypto@https://codeload.github.com/rowtype-yoga/purescript-yoga-subtlecrypto/tar.gz/044f10d2cd4de4ac6e55ba748dc8c55a02a65d22: {}
+
+  purs-tidy@0.11.0: {}
 
   queue-microtask@1.2.3: {}
 

@@ -66,7 +66,7 @@ defaultCalculatedRole qname dname kindOfRole context pos = CalculatedRole
   , displayName: dname
   , kindOfRole: kindOfRole
 
-  , calculation: S (Simple $ Identity $ ArcPosition{column: 0, line: 0}) false
+  , calculation: S (Simple $ Identity $ ArcPosition { column: 0, line: 0 }) false
   , context: ContextType context
 
   , views: []
@@ -84,7 +84,7 @@ instance showCalculatedRole :: Show CalculatedRole where
   show = genericShow
 
 instance eqCalculatedRole :: Eq CalculatedRole where
-  eq (CalculatedRole {id : id1}) (CalculatedRole {id : id2}) = id1 == id2
+  eq (CalculatedRole { id: id1 }) (CalculatedRole { id: id2 }) = id1 == id2
 
 derive instance newtypeCalculatedRole :: Newtype CalculatedRole _
 
@@ -93,8 +93,8 @@ derive newtype instance WriteForeign CalculatedRole
 
 instance revisionCalculatedRole :: Revision CalculatedRole where
   rev = _._rev <<< unwrap
-  changeRevision s = over CalculatedRole (\vr -> vr {_rev = s})
+  changeRevision s = over CalculatedRole (\vr -> vr { _rev = s })
 
 instance identifiableCalculatedRole :: Identifiable CalculatedRole CalculatedRoleType where
-  identifier (CalculatedRole{id}) = id
-  displayName (CalculatedRole{displayName:d}) = d
+  identifier (CalculatedRole { id }) = id
+  displayName (CalculatedRole { displayName: d }) = d

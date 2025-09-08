@@ -65,15 +65,13 @@ cacheEntity id e = do
       pure av
     Just avar -> do
       empty <- liftAff $ (status >=> pure <<< isEmpty) avar
-      if empty
-        then liftAff $ put e avar *> pure avar
-        else do
-          oldE <- liftAff $ take avar
-          -- If the cache holds a version with a revision that is higher than 
-          -- that of the entity, replace the entities revision.
-          if (rev oldE) > (rev e)
-          then liftAff $ put (changeRevision (rev oldE) e) avar *> pure avar
-          else liftAff $ put e avar *> pure avar
+      if empty then liftAff $ put e avar *> pure avar
+      else do
+        oldE <- liftAff $ take avar
+        -- If the cache holds a version with a revision that is higher than 
+        -- that of the entity, replace the entities revision.
+        if (rev oldE) > (rev e) then liftAff $ put (changeRevision (rev oldE) e) avar *> pure avar
+        else liftAff $ put e avar *> pure avar
 
 -- | Put the entity in the existing AVar (overwriting it completely) or create a new AVar.
 overwriteEntity :: forall a i. Cacheable a i => i -> a -> MonadPerspectives (AVar a)
@@ -84,7 +82,7 @@ overwriteEntity id e = do
       (av :: AVar a) <- representInternally id
       liftAff $ put e av
       pure av
-    Just avar -> do 
+    Just avar -> do
       -- Make the AVar empty.
       _ <- liftAff $ take avar
       -- Put the new value in place.
@@ -102,7 +100,7 @@ retrieveFromCache :: forall a i. Cacheable a i => (AVar a -> Aff a) -> i -> Mona
 retrieveFromCache retrieve id = do
   (mAvar :: Maybe (AVar a)) <- retrieveInternally id
   case mAvar of
-    Nothing -> throwError $ error ("retrieveFromCache needs a locally stored resource for " <>  unwrap id)
+    Nothing -> throwError $ error ("retrieveFromCache needs a locally stored resource for " <> unwrap id)
     (Just avar) -> liftAff $ retrieve avar
 
 tryTakeEntiteitFromCache :: forall a i. Cacheable a i => i -> MonadPerspectives (Maybe a)
@@ -118,7 +116,6 @@ tryRetrieveFromCache retrieve id = do
     Nothing -> pure Nothing
     (Just avar) -> liftAff $ Just <$> retrieve avar
 
-
 -- | Blocks is AVar is empty; does nothing when id is not represented internally.
 setRevision :: forall a i. Cacheable a i => i -> Revision_ -> MonadPerspectives Unit
 setRevision id r = do
@@ -127,8 +124,7 @@ setRevision id r = do
     Nothing -> pure unit
     Just avar -> do
       entity <- liftAff $ take avar
-      if r > rev entity 
-      then liftAff $ put (changeRevision r entity) avar
+      if r > rev entity then liftAff $ put (changeRevision r entity) avar
       else liftAff $ put entity avar
 
 -----------------------------------------------------------

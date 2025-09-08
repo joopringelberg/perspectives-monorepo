@@ -25,8 +25,7 @@ module Perspectives.Sidecar.StableIdMapping
   , PropertyUri(..)
   , RoleUri(..)
   , ContextUri(..)
-  )
-  where
+  ) where
 
 import Prelude
 
@@ -72,8 +71,8 @@ type PropertyKeySnapshot =
   , declaringRoleFqn :: String
   }
 
-type StateKeySnapshot = 
-  { fqn :: String 
+type StateKeySnapshot =
+  { fqn :: String
   , queryHash :: String
   }
 
@@ -158,22 +157,21 @@ idUriForContext
   :: StableIdMapping
   -> ContextUri Readable
   -> Maybe String
-idUriForContext m cid@(ContextUri ctxFqn) = do 
+idUriForContext m cid@(ContextUri ctxFqn) = do
   let (namespaceCtxFqn :: String) = typeUri2typeNameSpace_ ctxFqn
-  if namespaceCtxFqn == ctxFqn
-    then Just $ unwrap m.modelIdentifier
-    else
-      do
-        (namespaceTid :: String) <- idUriForContext m (ContextUri namespaceCtxFqn)
-        (localTid :: String) <- lookupContextCuid m cid
-        pure $ namespaceTid <> "$" <> localTid
+  if namespaceCtxFqn == ctxFqn then Just $ unwrap m.modelIdentifier
+  else
+    do
+      (namespaceTid :: String) <- idUriForContext m (ContextUri namespaceCtxFqn)
+      (localTid :: String) <- lookupContextCuid m cid
+      pure $ namespaceTid <> "$" <> localTid
 
 idUriForRole :: StableIdMapping -> RoleUri Readable -> Maybe String
 idUriForRole m rid@(RoleUri roleFqn) = do
   let ctxFqn = typeUri2typeNameSpace_ roleFqn
   ctxTid <- idUriForContext m (ContextUri ctxFqn)
   rolTid <- lookupRoleCuid m rid
-  pure (ctxTid <> "$" <> rolTid)  
+  pure (ctxTid <> "$" <> rolTid)
 
 idUriForProperty :: StableIdMapping -> PropertyUri Readable -> Maybe String
 idUriForProperty m (PropertyUri propFqn) = do
@@ -189,6 +187,7 @@ foreign import data Stable :: Type
 newtype ModelUri :: Type -> Type
 -- URIs tagged with their flavor (phantom parameter)
 newtype ModelUri f = ModelUri String
+
 derive instance newtypeModelUri :: Newtype (ModelUri f) _
 derive newtype instance eqModelUri :: Eq (ModelUri f)
 derive newtype instance ordModelUri :: Ord (ModelUri f)
@@ -198,6 +197,7 @@ derive newtype instance WriteForeign (ModelUri f)
 
 newtype ContextUri :: forall k. k -> Type
 newtype ContextUri f = ContextUri String
+
 derive instance newtypeContextUri :: Newtype (ContextUri f) _
 derive newtype instance eqContextUri :: Eq (ContextUri f)
 derive newtype instance ordContextUri :: Ord (ContextUri f)
@@ -207,6 +207,7 @@ derive newtype instance WriteForeign (ContextUri f)
 
 newtype RoleUri :: forall k. k -> Type
 newtype RoleUri f = RoleUri String
+
 derive instance newtypeRoleUri :: Newtype (RoleUri f) _
 derive newtype instance eqRoleUri :: Eq (RoleUri f)
 derive newtype instance ordRoleUri :: Ord (RoleUri f)
@@ -216,6 +217,7 @@ derive newtype instance WriteForeign (RoleUri f)
 
 newtype PropertyUri :: forall k. k -> Type
 newtype PropertyUri f = PropertyUri String
+
 derive instance newtypePropertyUri :: Newtype (PropertyUri f) _
 derive newtype instance eqPropertyUri :: Eq (PropertyUri f)
 derive newtype instance ordPropertyUri :: Ord (PropertyUri f)
@@ -226,6 +228,7 @@ derive newtype instance WriteForeign (PropertyUri f)
 -- Typed DomeinFileId (you can migrate fields to DomeinFileIdF Stable stepwise)
 newtype DomeinFileIdF :: forall k. k -> Type
 newtype DomeinFileIdF f = DomeinFileIdF String
+
 derive instance newtypeDomeinFileIdF :: Newtype (DomeinFileIdF f) _
 derive newtype instance eqDomeinFileIdF :: Eq (DomeinFileIdF f)
 derive newtype instance ordDomeinFileIdF :: Ord (DomeinFileIdF f)

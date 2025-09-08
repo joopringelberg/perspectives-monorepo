@@ -41,7 +41,7 @@ type CompiledContextState =
   , automaticOnExit :: Map RoleType (Updater ContextInstance)
   , notifyOnEntry :: Map RoleType (Updater ContextInstance)
   , notifyOnExit :: Map RoleType (Updater ContextInstance)
-  , perspectivesOnEntry :: Map RoleType { properties :: Array PropertyType, selfOnly :: Boolean, authorOnly :: Boolean, isSelfPerspective :: Boolean}
+  , perspectivesOnEntry :: Map RoleType { properties :: Array PropertyType, selfOnly :: Boolean, authorOnly :: Boolean, isSelfPerspective :: Boolean }
   }
 
 -- | A global store of SupportedEffect-s
@@ -57,10 +57,12 @@ retrieveCompiledContextState a = peek contextStateCache (unwrap a)
 
 -- | Remove, from both caches, all compiled states from a particular domain.
 clearModelStates :: DomeinFileId -> Unit
-clearModelStates (DomeinFileId s) = let
-  _ = filterKeys (not $ flip startsWithSegments s) contextStateCache
-  _ = filterKeys (not $ flip startsWithSegments s) roleStateCache
-  in unit
+clearModelStates (DomeinFileId s) =
+  let
+    _ = filterKeys (not $ flip startsWithSegments s) contextStateCache
+    _ = filterKeys (not $ flip startsWithSegments s) roleStateCache
+  in
+    unit
 
 type RoleStateCache = GLStrMap CompiledRoleState
 
@@ -83,12 +85,12 @@ cacheCompiledRoleState a u = const u (poke roleStateCache (unwrap a) u)
 retrieveCompiledRoleState :: StateIdentifier -> (Maybe CompiledRoleState)
 retrieveCompiledRoleState a = peek roleStateCache (unwrap a)
 
-type CompiledAutomaticAction = {updater :: Updater RoleInstance, contextGetter :: RoleInstance ~~> ContextInstance}
-type CompiledNotification = {updater :: (Updater RoleInstance), contextGetter :: RoleInstance ~~> ContextInstance}
+type CompiledAutomaticAction = { updater :: Updater RoleInstance, contextGetter :: RoleInstance ~~> ContextInstance }
+type CompiledNotification = { updater :: (Updater RoleInstance), contextGetter :: RoleInstance ~~> ContextInstance }
 type CompiledStateDependentPerspective =
   { contextGetter :: RoleInstance ~~> ContextInstance
   , properties :: Array PropertyType
   , selfOnly :: Boolean
   , authorOnly :: Boolean
   , isSelfPerspective :: Boolean
-}
+  }

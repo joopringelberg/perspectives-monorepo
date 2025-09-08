@@ -19,7 +19,7 @@
 -- Full text of this license can be found in the LICENSE directory in the projects root.
 
 -- END LICENSE
-module Perspectives.ResourceIdentifiers  where
+module Perspectives.ResourceIdentifiers where
 
 import Prelude
 
@@ -117,8 +117,6 @@ classes Persistent and Cacheable.
 ------------------------------------------------------------
 ------------------------------------------------------------}
 
-
-
 -----------------------------------------------------------
 -- THE LOCAL IDENTIFIER OF A RESOURCE IDENTIFIER
 -----------------------------------------------------------
@@ -139,14 +137,14 @@ guid_ (Model _ g) = g
 -- | Returns an URL for all databases except for IndexedDB.
 databaseLocation :: forall f. ResourceIdentifier -> MonadPouchdb f (Maybe Url)
 databaseLocation s = do
-  r <- parseResourceIdentifier s 
-  case r of 
+  r <- parseResourceIdentifier s
+  case r of
     Default dbName _ -> addBase dbName
     Local dbName _ -> addBase dbName
     Model dbName _ -> addBase dbName
     Remote url _ -> pure $ Just url
     Public url _ -> pure $ Just url
-  where 
+  where
   addBase :: String -> MonadPouchdb f (Maybe String)
   addBase dbname = (map ((flip append) dbname)) <$> getCouchdbBaseURL
 
@@ -156,22 +154,26 @@ databaseLocation s = do
 -- | A DocLocator is a convenient structure to provide arguments to 
 -- | various Pouchdb functions.
 -- | Member `database` is either a Url or a local database name.
-type DocLocator = 
-  { database :: String 
+type DocLocator =
+  { database :: String
   , documentName :: String
   }
 
 resourceIdentifier2DocLocator :: ResourceIdentifier -> MonadPerspectives DocLocator
 resourceIdentifier2DocLocator resId = do
   decomposed <- parseResourceIdentifier resId
-  pure  { database: pouchdbDatabaseName_ decomposed
-        , documentName: guid_ decomposed }
+  pure
+    { database: pouchdbDatabaseName_ decomposed
+    , documentName: guid_ decomposed
+    }
 
 resourceIdentifier2WriteDocLocator :: ResourceIdentifier -> MonadPerspectives DocLocator
 resourceIdentifier2WriteDocLocator resId = do
   decomposed <- parseResourceIdentifier resId
-  pure  { database: pouchdbDatabaseName_ decomposed
-        , documentName: guid_ decomposed }
+  pure
+    { database: pouchdbDatabaseName_ decomposed
+    , documentName: guid_ decomposed
+    }
 
 -----------------------------------------------------------
 -- CREATING IDENTIFIERS
@@ -182,13 +184,13 @@ createResourceIdentifier :: ResourceType -> MonadPerspectivesTransaction Resourc
 createResourceIdentifier ctype = do
   s <- lift $ getSystemIdentifier
   g <- liftEffect $ cuid2 s
-  createResourceIdentifier' ctype g  
+  createResourceIdentifier' ctype g
 
 -- | This function never creates an identifier in the Public scheme.
 -- | Such identifiers are only ever created when processing a Transaction for a publishing Proxy role.
 createResourceIdentifier' :: ResourceType -> String -> MonadPerspectivesTransaction ResourceIdentifier
 createResourceIdentifier' ctype g = do
-  mstorageScheme <- lift $ gets \({typeToStorage}) -> lookup ctype typeToStorage 
+  mstorageScheme <- lift $ gets \({ typeToStorage }) -> lookup ctype typeToStorage
   case mstorageScheme of
     Nothing -> pure $ createDefaultIdentifier g
     Just (CT.Default _) -> pure $ createDefaultIdentifier g
@@ -204,6 +206,7 @@ createDefaultIdentifier :: String -> ResourceIdentifier
 createDefaultIdentifier g = "def:#" <> g
 
 type DbName = String
+
 createLocalIdentifier :: DbName -> String -> ResourceIdentifier
 createLocalIdentifier dbName g = "loc:" <> dbName <> "#" <> g
 
@@ -215,8 +218,8 @@ addPublicScheme s = "pub:" <> s
 
 -- | Add the public scheme and the url unless the identifier is already in the public scheme.
 createPublicIdentifier :: String -> String -> ResourceIdentifier
-createPublicIdentifier url s = if isInPublicScheme s
-  then s
+createPublicIdentifier url s =
+  if isInPublicScheme s then s
   else "pub:" <> url <> "#" <> s
 
 -----------------------------------------------------------
@@ -226,9 +229,9 @@ type Scheme = String
 
 -- | The prefix up to but not including the colon.
 getResourceIdentifierScheme :: ResourceIdentifier -> Maybe Scheme
-getResourceIdentifierScheme s = case match resourceIdentifierRegEx s of 
+getResourceIdentifierScheme s = case match resourceIdentifierRegEx s of
   Nothing -> Nothing
-  Just matches -> case index matches 1, index matches 2 of 
+  Just matches -> case index matches 1, index matches 2 of
     Just (Just scheme), Just (Just rest) -> Just scheme
     _, _ -> Nothing
 
@@ -245,8 +248,8 @@ isInRemoteScheme s = maybe false (eq "rem") (getResourceIdentifierScheme s)
 -- | For all other schemes, take the guid.
 -- | Notice that identifiers that are not well-shaped are returned as such.
 stripNonPublicIdentifiers :: ResourceIdentifier -> String
-stripNonPublicIdentifiers s = if isInPublicScheme s
-  then s
+stripNonPublicIdentifiers s =
+  if isInPublicScheme s then s
   else takeGuid s
 
 -- | Captures everything following the "#" as its first and only capturing group.

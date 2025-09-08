@@ -20,7 +20,6 @@
 
 -- END LICENSE
 
-
 module Perspectives.Persistence.API
   ( Keys(..)
   , addDocuments
@@ -29,8 +28,7 @@ module Perspectives.Persistence.API
   , module Perspectives.Persistence.Authentication
   , module Perspectives.Persistence.Types
   , resetViewIndex
-  )
-  where
+  ) where
 
 import Prelude
 
@@ -77,8 +75,8 @@ import Simple.JSON (class ReadForeign, class WriteForeign, read, read', write)
 -- | Ensures authentication for non-pouchdb databases.
 -- | Database names must comply to rules given in https://docs.couchdb.org/en/stable/api/database/common.html#db
 createDatabase :: forall f. DatabaseName -> MonadPouchdb f Unit
-createDatabase dbname = if startsWithDatabaseEndpoint dbname
-  then do
+createDatabase dbname =
+  if startsWithDatabaseEndpoint dbname then do
     -- A remote database is actually created immediately if it does not exist.
     -- If the server indicates we're not authenticated, ensureAuthentication requests a session and then repeats the action.
     pdb <- ensureAuthentication (Url dbname) (\_ -> liftEffect $ runEffectFn1 createDatabaseImpl dbname)
@@ -91,18 +89,18 @@ createDatabase dbname = if startsWithDatabaseEndpoint dbname
           (Right (dbInfo :: DatabaseInfo)) -> pure unit
       -- Convert the incoming message to a PouchError type.
       (handlePouchError "databaseInfo" dbname)
-    modify \(s@{databases}) -> s {databases = insert dbname pdb databases}
+    modify \(s@{ databases }) -> s { databases = insert dbname pdb databases }
   else do
     mprefix <- getCouchdbBaseURL
     case mprefix of
       Nothing -> do
         pdb <- liftEffect $ runEffectFn1 createDatabaseImpl dbname
-        modify \(s@{databases}) -> s {databases = insert dbname pdb databases}
+        modify \(s@{ databases }) -> s { databases = insert dbname pdb databases }
       Just prefix -> do
         -- A remote database is actually created immediately if it does not exist.
         -- If the server indicates we're not authenticated, ensureAuthentication requests a session and then repeats the action.
         pdb <- ensureAuthentication (Authority prefix) (\_ -> liftEffect $ runEffectFn2 createRemoteDatabaseImpl dbname prefix)
-        modify \(s@{databases}) -> s {databases = insert dbname pdb databases}
+        modify \(s@{ databases }) -> s { databases = insert dbname pdb databases }
 
 endpointRegex :: Regex
 endpointRegex = unsafeRegex "^https?" noFlags
@@ -111,14 +109,16 @@ startsWithDatabaseEndpoint :: DatabaseName -> Boolean
 startsWithDatabaseEndpoint = test endpointRegex
 
 -- | Creates a remote database or a local database, depending on whether the first argument is an Url or not.
-foreign import createDatabaseImpl :: EffectFn1
-  String
-  PouchdbDatabase
+foreign import createDatabaseImpl
+  :: EffectFn1
+       String
+       PouchdbDatabase
 
-foreign import createRemoteDatabaseImpl :: EffectFn2
-  DatabaseName
-  CouchdbUrl
-  PouchdbDatabase
+foreign import createRemoteDatabaseImpl
+  :: EffectFn2
+       DatabaseName
+       CouchdbUrl
+       PouchdbDatabase
 
 -----------------------------------------------------------
 -- DELETE DATABASE
@@ -129,19 +129,20 @@ foreign import createRemoteDatabaseImpl :: EffectFn2
 deleteDatabase :: forall f. DatabaseName -> MonadPouchdb f Unit
 deleteDatabase dbName = withDatabase dbName
   \db -> do
-    modify \(s@{databases}) -> s {databases = delete dbName databases}
+    modify \(s@{ databases }) -> s { databases = delete dbName databases }
     catchError
       do
         f <- lift $ fromEffectFnAff $ deleteDatabaseImpl db
         case (read f) of
           Left e -> throwError $ error ("deleteDatabase: error in decoding result: " <> show e)
-          Right ({ok} :: {ok :: Boolean}) -> if ok
-            then pure unit
+          Right ({ ok } :: { ok :: Boolean }) ->
+            if ok then pure unit
             else throwError $ error ("deleteDatabase did not succeed in deleting '" <> dbName <> "'.")
       -- Convert the incoming message to a PouchError type.
       (handlePouchError "deleteDatabase" dbName)
 
 foreign import deleteDatabaseImpl :: PouchdbDatabase -> EffectFnAff Foreign
+
 -----------------------------------------------------------
 -- ENSUREDATABASE
 -----------------------------------------------------------
@@ -151,26 +152,28 @@ foreign import deleteDatabaseImpl :: PouchdbDatabase -> EffectFnAff Foreign
 -----------------------------------------------------------
 -- | Provides the PouchdbDatabase to the function in MonadPouchdb.
 -- | Ensures authentication.
-withDatabase :: forall f a.
-  DatabaseName ->
-  (PouchdbDatabase -> MonadPouchdb f a) ->
-  MonadPouchdb f a
+withDatabase
+  :: forall f a
+   . DatabaseName
+  -> (PouchdbDatabase -> MonadPouchdb f a)
+  -> MonadPouchdb f a
 withDatabase dbName fun = do
-  if startsWithDatabaseEndpoint dbName
-    then ensureAuthentication (Url dbName) 
-      (\_ -> do
+  if startsWithDatabaseEndpoint dbName then ensureAuthentication (Url dbName)
+    ( \_ -> do
         db <- ensureDatabase
-        fun db)
-    else do 
-      mprefix <- getCouchdbBaseURL
-      case mprefix of
-        Nothing -> do 
-          db <- ensureDatabase
-          fun db
-        Just prefix -> ensureAuthentication (Authority prefix) 
-          (\_ -> do 
+        fun db
+    )
+  else do
+    mprefix <- getCouchdbBaseURL
+    case mprefix of
+      Nothing -> do
+        db <- ensureDatabase
+        fun db
+      Just prefix -> ensureAuthentication (Authority prefix)
+        ( \_ -> do
             db <- ensureDatabase
-            fun db)
+            fun db
+        )
 
   where
 
@@ -179,27 +182,26 @@ withDatabase dbName fun = do
   -- Only used in withDatabase.
   ensureDatabase :: MonadPouchdb f PouchdbDatabase
   ensureDatabase = do
-    mdb <- gets \{databases} -> lookup dbName databases
+    mdb <- gets \{ databases } -> lookup dbName databases
     case mdb of
       Nothing -> do
         -- actually creates a remote database and authenticates if necessary.
         -- If a Pouchdb database, doesn't create and doesn't authenticate. 
         -- However, neither are necessary.
         createDatabase dbName
-        db <- gets \{databases} -> unsafePartial $ fromJust $ lookup dbName databases
+        db <- gets \{ databases } -> unsafePartial $ fromJust $ lookup dbName databases
         -- Access the database to trigger authentication.
         -- lift $ void $ fromEffectFnAff $ databaseInfoImpl db
         pure db
-      Just db -> do 
+      Just db -> do
         -- We have accessed this database before, but we don't know whether
         -- we still have a valid session.
         -- Access the database and throw error if unauthorized.
-        f <- lift $ fromEffectFnAff $ databaseInfoImpl db 
-        case read f of 
+        f <- lift $ fromEffectFnAff $ databaseInfoImpl db
+        case read f of
           Left e -> throwError (error "unauthorized")
           (Right (i :: DatabaseInfo)) -> pure unit
         pure db
-
 
 -----------------------------------------------------------
 -- DATABASEINFO
@@ -247,9 +249,10 @@ cleanupDeletedDocs = cleanupDeletedDocs_ >>> Promise.toAffE >>> liftAff
 cleanupDeletedDocs_ :: DatabaseName -> Effect (Promise.Promise Unit)
 cleanupDeletedDocs_ = runEffectFn1 cleanupDeletedDocsImpl
 
-foreign import cleanupDeletedDocsImpl :: EffectFn1
-  DatabaseName
-  (Promise.Promise Unit)
+foreign import cleanupDeletedDocsImpl
+  :: EffectFn1
+       DatabaseName
+       (Promise.Promise Unit)
 
 -----------------------------------------------------------
 -- REFRESHRECOVERYPOINT
@@ -265,11 +268,12 @@ refreshRecoveryPoint dbName lastSeq = withDatabase dbName
       do
         lift $ fromEffectFnAff $ runEffectFnAff3 replicateOnce origin recovery lastSeq
 
-foreign import replicateOnce :: EffectFn3
-  PouchdbDatabase
-  PouchdbDatabase
-  String
-  String
+foreign import replicateOnce
+  :: EffectFn3
+       PouchdbDatabase
+       PouchdbDatabase
+       String
+       String
 
 -----------------------------------------------------------
 -- RECOVERFROMRECOVERYPOINT
@@ -295,19 +299,19 @@ documentsInDatabase :: forall f. DatabaseName -> Boolean -> MonadPouchdb f Pouch
 documentsInDatabase dbName include_docs = withDatabase dbName
   \db -> catchError
     do
-      f <- lift $ fromEffectFnAff $ runEffectFnAff2 documentsInDatabaseImpl db {include_docs}
+      f <- lift $ fromEffectFnAff $ runEffectFnAff2 documentsInDatabaseImpl db { include_docs }
       case (read f) of
         Left e -> throwError $ error ("documentsInDatabase: error in decoding result: " <> show e)
         Right r -> pure r
     -- Convert the incoming message to a PouchError type.
     (handlePouchError "documentsInDatabase" dbName)
 
-foreign import documentsInDatabaseImpl :: EffectFn2 PouchdbDatabase {include_docs :: Boolean} Foreign
+foreign import documentsInDatabaseImpl :: EffectFn2 PouchdbDatabase { include_docs :: Boolean } Foreign
 
-type Rev = {rev :: String}
+type Rev = { rev :: String }
 type PouchdbAllDocs =
   { offset :: Int
-  , rows :: Array { id :: String, value :: Rev, doc :: Maybe Foreign}
+  , rows :: Array { id :: String, value :: Rev, doc :: Maybe Foreign }
   , total_rows :: Int
   , update_seq :: Maybe Int
   }
@@ -328,9 +332,9 @@ addDocument dbName doc docName = withDatabase dbName
         f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db doc' withoutForce
         case PutCouchdbDocument <$> (read f) of
           Left e -> throwError $ error ("addDocument: error in decoding result: " <> show e)
-          Right (PutCouchdbDocument {rev}) -> pure rev
-      \e -> do 
-        ({status, message} :: PouchError) <- parsePouchError "addDocument" docName e
+          Right (PutCouchdbDocument { rev }) -> pure rev
+      \e -> do
+        ({ status, message } :: PouchError) <- parsePouchError "addDocument" docName e
         case status of
           -- A document update conflict. We handle that by purging the database and adding the document again.
           -- Perspectives has no concept of a shared database. This means that the only source of truth is the PDR.
@@ -350,7 +354,7 @@ addDocument_ dbName doc docName = withDatabase dbName
       f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withoutForce
       case PutCouchdbDocument <$> (read f) of
         Left e -> throwError $ error ("addDocument: error in decoding result: " <> show e)
-        Right (PutCouchdbDocument {rev}) -> pure rev
+        Right (PutCouchdbDocument { rev }) -> pure rev
     -- Promise rejected. Convert the incoming message to a PouchError type.
     (handlePouchError "addDocument_" docName)
 
@@ -361,23 +365,23 @@ resolveDocumentConflict dbName doc docName = withDatabase dbName
   \db -> do
     -- Get all document revisions (including conflicts)
     conflicts <- lift $ fromEffectFnAff $ runEffectFnAff3 getDocumentWithConflictsImpl db docName true
-  
+
     -- Delete all conflict revisions
     case read conflicts of
       Right ({ _conflicts } :: DocumentConflicts) -> do
-        _ <- traverse 
+        _ <- traverse
           (\rev -> lift $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName rev)
           _conflicts
         pure unit
       _ -> pure unit
-    
+
     -- Now try to add the document
     catchError
       do
         f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
         case PutCouchdbDocument <$> (read f) of
           Left e -> throwError $ error ("resolveDocumentConflict: error: " <> show e)
-          Right (PutCouchdbDocument {rev}) -> pure rev
+          Right (PutCouchdbDocument { rev }) -> pure rev
       (handlePouchError "resolveDocumentConflict" docName)
 
 withForce :: Boolean
@@ -399,19 +403,19 @@ forceCleanSave dbName doc docName = withDatabase dbName
     _ <- catchError
       (lift $ void $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName "")
       (\_ -> pure unit)
-    
+
     -- Use PouchDB's internal purge functionality to completely remove document history
     _ <- catchError
       (lift $ void $ fromEffectFnAff $ runEffectFnAff3 purgeDocumentImpl db docName Nothing)
       (\_ -> pure unit)
-    
+
     -- Then add the document as new
     catchError
       do
         f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
         case PutCouchdbDocument <$> (read f) of
           Left e -> throwError $ error ("forceCleanSave: error in decoding result: " <> show e)
-          Right (PutCouchdbDocument {rev}) -> pure rev
+          Right (PutCouchdbDocument { rev }) -> pure rev
       (handlePouchError "forceCleanSave" docName)
 
 -- https://pouchdb.com/api.html#purge
@@ -428,21 +432,22 @@ foreign import bulkDocsImpl :: EffectFn3 PouchdbDatabase Foreign Boolean Foreign
 addDocuments :: forall d f. WriteForeign d => DatabaseName -> Array d -> MonadPouchdb f (Array PutCouchdbDocument)
 addDocuments dbName docs = withDatabase dbName
   \db -> catchError
-    do 
-      f <- lift $ fromEffectFnAff $ runEffectFnAff3 bulkDocsImpl db (write docs) false 
-      case map PutCouchdbDocument <$> (read f) of 
-        Left e ->  throwError $ error ("addDocument: error in decoding result: " <> show e)
+    do
+      f <- lift $ fromEffectFnAff $ runEffectFnAff3 bulkDocsImpl db (write docs) false
+      case map PutCouchdbDocument <$> (read f) of
+        Left e -> throwError $ error ("addDocument: error in decoding result: " <> show e)
         Right resultsPerDoc -> pure resultsPerDoc
     (handlePouchError "`addDocuments` (bulk document add) ran into a parsing error on the results returned from Couchdb." "multiple documents")
 
 -----------------------------------------------------------
 -- DELETE DOCUMENT
 -----------------------------------------------------------
-foreign import deleteDocumentImpl :: EffectFn3
-  PouchdbDatabase
-  DocumentName
-  String
-  Foreign
+foreign import deleteDocumentImpl
+  :: EffectFn3
+       PouchdbDatabase
+       DocumentName
+       String
+       Foreign
 
 -- | Deletes the document.
 -- | Returns true if no revision is supplied, or if the document is deleted correctly.
@@ -458,12 +463,12 @@ deleteDocument dbName docName mrev = case mrev of
           f <- lift $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName rev
           case DeleteCouchdbDocument <$> (read f) of
             Left e -> pure false
-            Right (DeleteCouchdbDocument {ok}) -> case ok of
+            Right (DeleteCouchdbDocument { ok }) -> case ok of
               Just b -> pure b
               Nothing -> pure false
         -- Promise rejected. Convert the incoming message to a PouchError type.
         (handlePouchError "deleteDocument" docName)
-  Nothing -> retrieveDocumentVersion dbName docName >>= case _ of 
+  Nothing -> retrieveDocumentVersion dbName docName >>= case _ of
     -- This takes care of a situation where we do not have the revision in cache.
     -- Without this analysis, we get an infinite loop if the document doesn't exist.
     Nothing -> pure false
@@ -477,13 +482,12 @@ deleteDocument dbName docName mrev = case mrev of
 deleteDocuments :: forall d f. WriteForeign d => DatabaseName -> Array d -> MonadPouchdb f (Array PutCouchdbDocument)
 deleteDocuments dbName docs = withDatabase dbName
   \db -> catchError
-    do 
+    do
       f <- lift $ fromEffectFnAff $ runEffectFnAff3 bulkDocsImpl db (write docs) true
-      case map PutCouchdbDocument <$> (read f) of 
-        Left e ->  throwError $ error ("addDocument: error in decoding result: " <> show e)
+      case map PutCouchdbDocument <$> (read f) of
+        Left e -> throwError $ error ("addDocument: error in decoding result: " <> show e)
         Right resultsPerDoc -> pure resultsPerDoc
     (handlePouchError "`addDocuments` (bulk document add) ran into a parsing error on the results returned from Couchdb." "multiple documents")
-
 
 -----------------------------------------------------------
 -- GET DOCUMENT
@@ -549,10 +553,11 @@ getDocument__ dbName docName = withDatabase dbName
       (lift $ fromEffectFnAff $ runEffectFnAff2 getDocumentImpl db docName)
       (handlePouchError "getDocument_" docName)
 
-foreign import getDocumentImpl :: EffectFn2
-  PouchdbDatabase
-  DocumentName
-  Foreign
+foreign import getDocumentImpl
+  :: EffectFn2
+       PouchdbDatabase
+       DocumentName
+       Foreign
 
 -----------------------------------------------------------
 -- DOCUMENT VERSION
@@ -584,14 +589,16 @@ addAttachment dbName docName rev attachmentName attachment mimetype = withDataba
           Right d -> pure d
       (handlePouchError "addAttachment" docName)
 
-foreign import addAttachmentImpl :: forall attachmentType. EffectFn6
-  PouchdbDatabase
-  DocumentName
-  AttachmentName
-  (Nullable String)
-  attachmentType
-  MediaType
-  Foreign
+foreign import addAttachmentImpl
+  :: forall attachmentType
+   . EffectFn6
+       PouchdbDatabase
+       DocumentName
+       AttachmentName
+       (Nullable String)
+       attachmentType
+       MediaType
+       Foreign
 
 -----------------------------------------------------------
 -- GETATTACHMENT
@@ -601,17 +608,18 @@ getAttachment dbName docName attachmentName = withDatabase dbName
   \db -> catchError
     (lift $ Just <$> (fromEffectFnAff $ runEffectFnAff3 getAttachmentImpl db docName attachmentName))
     -- do
-      -- f <- lift $ fromEffectFnAff $ runEffectFnAff3 getAttachmentImpl db docName attachmentName
-      -- case runExcept $ decode f of
-      --   Left e -> throwError $ error ("addAttachment : error in decoding result: " <> show e)
-      --   Right d -> pure $ Just d
+    -- f <- lift $ fromEffectFnAff $ runEffectFnAff3 getAttachmentImpl db docName attachmentName
+    -- case runExcept $ decode f of
+    --   Left e -> throwError $ error ("addAttachment : error in decoding result: " <> show e)
+    --   Right d -> pure $ Just d
     (handleNotFound "getAttachment" docName)
 
-foreign import getAttachmentImpl :: EffectFn3
-  PouchdbDatabase
-  DocumentName
-  AttachmentName
-  Foreign
+foreign import getAttachmentImpl
+  :: EffectFn3
+       PouchdbDatabase
+       DocumentName
+       AttachmentName
+       Foreign
 
 -----------------------------------------------------------
 -- DESIGN DOCUMENT
@@ -621,7 +629,8 @@ newtype DesignDocument = DesignDocument
   , _rev :: Maybe String
   , views :: Object View
   , validate_doc_update :: Maybe String
-}
+  }
+
 derive newtype instance WriteForeign DesignDocument
 derive newtype instance ReadForeign DesignDocument
 
@@ -641,7 +650,7 @@ addViewToDatabase dbName docname viewname view = do
 type View =
   { map :: String
   , reduce :: Maybe String
-}
+  }
 
 defaultDesignDocumentWithViewsSection :: String -> DesignDocument
 defaultDesignDocumentWithViewsSection n = DesignDocument
@@ -649,10 +658,10 @@ defaultDesignDocumentWithViewsSection n = DesignDocument
   , _rev: Nothing
   , views: empty
   , validate_doc_update: Nothing
-}
+  }
 
 addView :: DesignDocument -> ViewName -> View -> DesignDocument
-addView (DesignDocument r@{views}) name view = DesignDocument r {views = insert name view views}
+addView (DesignDocument r@{ views }) name view = DesignDocument r { views = insert name view views }
 
 -----------------------------------------------------------
 -- GETVIEWONDATABASE
@@ -661,20 +670,23 @@ data Keys a = NoKey | Key a | Keys (Array a)
 
 -- DIT IS WAARSCHIJNLIJK OVERBODIG
 instance WriteForeign a => WriteForeign (Keys a) where
-  writeImpl NoKey = write {constructor: "NoKey"}
-  writeImpl (Key a) = write {constructor: "Key", value: a}
-  writeImpl (Keys as) = write {constructor: "Keys", value: as}
+  writeImpl NoKey = write { constructor: "NoKey" }
+  writeImpl (Key a) = write { constructor: "Key", value: a }
+  writeImpl (Keys as) = write { constructor: "Keys", value: as }
 
 instance (Partial, ReadForeign a) => ReadForeign (Keys a) where
-  readImpl f = 
-    (read' f >>= case _ of 
-      ({constructor} :: {constructor :: String}) | constructor == "NoKey" -> pure NoKey)
-    <|>
-    (read' f >>= case _ of 
-      ({constructor, value} :: {constructor :: String, value :: a}) | constructor == "Key" -> pure $ Key value)
-    <|>
-    (read' f >>= case _ of 
-      ({constructor, value} :: {constructor :: String, value :: Array a}) | constructor == "Keys" -> pure $ Keys value)
+  readImpl f =
+    ( read' f >>= case _ of
+        ({ constructor } :: { constructor :: String }) | constructor == "NoKey" -> pure NoKey
+    )
+      <|>
+        ( read' f >>= case _ of
+            ({ constructor, value } :: { constructor :: String, value :: a }) | constructor == "Key" -> pure $ Key value
+        )
+      <|>
+        ( read' f >>= case _ of
+            ({ constructor, value } :: { constructor :: String, value :: Array a }) | constructor == "Keys" -> pure $ Keys value
+        )
 
 multipleKeys :: Boolean
 multipleKeys = true
@@ -685,64 +697,77 @@ singleKey = false
 noKey :: Boolean
 noKey = false
 
-getViewWithDocs :: forall f doc.
-  ReadForeign doc =>
-  DatabaseName -> ViewName -> Keys String -> MonadPouchdb f (Array doc)
+getViewWithDocs
+  :: forall f doc
+   . ReadForeign doc
+  => DatabaseName
+  -> ViewName
+  -> Keys String
+  -> MonadPouchdb f (Array doc)
 getViewWithDocs dbName viewname keys = withDatabase dbName
   \db -> catchError
     do
-      f <- case keys of 
-        NoKey -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write "") noKey includeDocs false 
+      f <- case keys of
+        NoKey -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write "") noKey includeDocs false
         Key k -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (unsafeToForeign k) singleKey includeDocs false
         -- We have to provide an Array String to the Pouchdb query function when using 'keys'.
         Keys ks -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (unsafeToForeign ks) multipleKeys includeDocs false
       case read f of
         Left e -> throwError $ error ("getViewWithDocs : error in decoding result: " <> show e)
-        Right ((ViewDocResult{rows}) :: (ViewDocResult doc String)) -> do
-          pure (map (\(ViewDocResultRow{doc}) -> doc) rows)
+        Right ((ViewDocResult { rows }) :: (ViewDocResult doc String)) -> do
+          pure (map (\(ViewDocResultRow { doc }) -> doc) rows)
     (handlePouchError "getViewWithDocs" viewname)
 
-getViewOnDatabase :: forall f value key.
-  ReadForeign key =>
-  WriteForeign key =>
-  ReadForeign value =>
-  DatabaseName -> ViewName -> Keys key -> MonadPouchdb f (Array value)
+getViewOnDatabase
+  :: forall f value key
+   . ReadForeign key
+  => WriteForeign key
+  => ReadForeign value
+  => DatabaseName
+  -> ViewName
+  -> Keys key
+  -> MonadPouchdb f (Array value)
 getViewOnDatabase dbName viewname keys = getViewOnDatabase_ dbName viewname keys false {-no refresh-}
 
 -- | Get the view on the database. Notice that the type of the value in the result
 -- | is parameterised and must be an instance of ReadForeign.
-getViewOnDatabase_ :: forall f value key.
-  ReadForeign key =>
-  WriteForeign key =>
-  ReadForeign value =>
-  DatabaseName -> ViewName -> Keys key -> Boolean -> MonadPouchdb f (Array value)
+getViewOnDatabase_
+  :: forall f value key
+   . ReadForeign key
+  => WriteForeign key
+  => ReadForeign value
+  => DatabaseName
+  -> ViewName
+  -> Keys key
+  -> Boolean
+  -> MonadPouchdb f (Array value)
 getViewOnDatabase_ dbName viewname keys forceRefresh = withDatabase dbName
   \db -> catchError
     do
-      f <- case keys of 
+      f <- case keys of
         NoKey -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write "") noKey false forceRefresh
         Key k -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write k) singleKey false forceRefresh
         Keys ks -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write ks) multipleKeys false forceRefresh
       case read f of
         Left e -> throwError $ error ("getViewOnDatabase : error in decoding result: " <> show e)
-        Right ((ViewResult{rows}) :: (ViewResult Foreign key)) -> do
+        Right ((ViewResult { rows }) :: (ViewResult Foreign key)) -> do
           (r :: F (Array value)) <- pure $ traverse
-            (\(ViewResultRow{value}) -> read' value)
+            (\(ViewResultRow { value }) -> read' value)
             rows
           case runExcept r of
             Left e -> throwError (error ("getViewOnDatabase: multiple errors: " <> show e))
             Right results -> pure results
     (handlePouchError "getViewOnDatabase" viewname)
 
-foreign import getViewOnDatabaseImpl ::
-  EffectFn6
-    PouchdbDatabase
-    ViewName
-    Foreign
-    Boolean   -- true iff a key is provided.
-    Boolean   -- when true, include docs.
-    Boolean   -- when true, force refresh of the view.
-    Foreign
+foreign import getViewOnDatabaseImpl
+  :: EffectFn6
+       PouchdbDatabase
+       ViewName
+       Foreign
+       Boolean -- true iff a key is provided.
+       Boolean -- when true, include docs.
+       Boolean -- when true, force refresh of the view.
+       Foreign
 
 -----------------------------------------------------------
 -- RESET A VIEW INDEX
@@ -756,7 +781,6 @@ foreign import resetViewIndexImpl :: EffectFn2 PouchdbDatabase String (Promise B
 
 resetViewIndexImpl_ :: PouchdbDatabase -> String -> Effect (Promise Boolean)
 resetViewIndexImpl_ = runEffectFn2 resetViewIndexImpl
-
 
 -----------------------------------------------------------
 -- SPLIT AN URL INTO A COUCHDB DATABASE URL AND A DOCUMENT NAME
@@ -775,10 +799,10 @@ resetViewIndexImpl_ = runEffectFn2 resetViewIndexImpl
 repositoryFileRegex :: Regex
 repositoryFileRegex = unsafeRegex "^https://([^/]+/)(.*)$" noFlags
 
-splitRepositoryFileUrl :: String -> Maybe {database :: String, document :: String}
+splitRepositoryFileUrl :: String -> Maybe { database :: String, document :: String }
 splitRepositoryFileUrl s = case match repositoryFileRegex s of
   (Just matches) -> case index matches 1, index matches 2 of
-    Just (Just database), Just (Just document) -> Just {database, document}
+    Just (Just database), Just (Just document) -> Just { database, document }
     _, _ -> Nothing
   _ -> Nothing
 
@@ -790,11 +814,12 @@ type MimeType = String
 
 foreign import data File :: Type
 
-foreign import toFileImpl :: EffectFn3
-  FileName
-  MimeType
-  Foreign -- ArrayBuffer or String argument to be turned into a file
-  File
+foreign import toFileImpl
+  :: EffectFn3
+       FileName
+       MimeType
+       Foreign -- ArrayBuffer or String argument to be turned into a file
+       File
 
 toFile :: FileName -> MimeType -> Foreign -> Effect File
 toFile = runEffectFn3 toFileImpl
@@ -805,6 +830,7 @@ fromBlob = fromBlob_ >>> Promise.toAffE
 fromBlob_ :: Foreign -> Effect (Promise.Promise String)
 fromBlob_ = runEffectFn1 fromBlobImpl
 
-foreign import fromBlobImpl :: EffectFn1
-  Foreign
-  (Promise.Promise String)
+foreign import fromBlobImpl
+  :: EffectFn1
+       Foreign
+       (Promise.Promise String)

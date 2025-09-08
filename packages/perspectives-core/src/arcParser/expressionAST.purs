@@ -38,8 +38,8 @@ import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 -- | Step represents an Expression conforming to the grammar given above.
 data Step = Simple SimpleStep | Binary BinaryStep | Unary UnaryStep | PureLet PureLetStep | Computation ComputationStep
 
-data SimpleStep =
-  ArcIdentifier ArcPosition String
+data SimpleStep
+  = ArcIdentifier ArcPosition String
   | ContextTypeIndividual ArcPosition String
   | RoleTypeIndividual ArcPosition String
   | Value ArcPosition Range String
@@ -70,8 +70,8 @@ data SimpleStep =
   | TypeTimeOnlyEnumeratedRole ArcPosition String String
   | TypeTimeOnlyCalculatedRole ArcPosition String
 
-data UnaryStep =
-  LogicalNot ArcPosition Step
+data UnaryStep
+  = LogicalNot ArcPosition Step
   | Exists ArcPosition Step
   | FilledBy ArcPosition Step
   | Fills ArcPosition Step
@@ -80,14 +80,14 @@ data UnaryStep =
   | ContextIndividual ArcPosition String Step
   | RoleIndividual ArcPosition String Step
 
+newtype BinaryStep = BinaryStep { start :: ArcPosition, end :: ArcPosition, operator :: Operator, left :: Step, right :: Step, parenthesised :: Boolean }
 
-newtype BinaryStep = BinaryStep {start :: ArcPosition, end :: ArcPosition, operator :: Operator, left :: Step, right :: Step, parenthesised :: Boolean}
+newtype PureLetStep = PureLetStep { start :: ArcPosition, end :: ArcPosition, bindings :: Array VarBinding, body :: Step }
 
-newtype PureLetStep = PureLetStep {start :: ArcPosition, end :: ArcPosition, bindings:: Array VarBinding, body :: Step}
-
-newtype ComputationStep = ComputationStep {functionName :: String, arguments :: Array Step, computedType :: ComputedType, start :: ArcPosition, end :: ArcPosition}
+newtype ComputationStep = ComputationStep { functionName :: String, arguments :: Array Step, computedType :: ComputedType, start :: ArcPosition, end :: ArcPosition }
 
 data ComputedType = ComputedRange Range | OtherType String
+
 instance Show ComputedType where
   show (ComputedRange r) = show r
   show (OtherType s) = s
@@ -96,6 +96,7 @@ instance Eq ComputedType where
   eq (ComputedRange r1) (ComputedRange r2) = eq r1 r2
   eq (OtherType s1) (OtherType s2) = eq s1 s2
   eq _ _ = false
+
 instance Ord ComputedType where
   compare (ComputedRange r1) (ComputedRange r2) = compare r1 r2
   compare (OtherType s1) (OtherType s2) = compare s1 s2
@@ -103,8 +104,8 @@ instance Ord ComputedType where
 
 data VarBinding = VarBinding String Step
 
-data Operator =
-  Compose ArcPosition
+data Operator
+  = Compose ArcPosition
   | Equals ArcPosition
   | NotEquals ArcPosition
   | LessThan ArcPosition
@@ -135,8 +136,12 @@ data Operator =
   | Millisecond ArcPosition
 
 derive instance genericStep :: Generic Step _
-instance showStep :: Show Step where show s = genericShow s
-instance eqStep :: Eq Step where eq = genericEq
+instance showStep :: Show Step where
+  show s = genericShow s
+
+instance eqStep :: Eq Step where
+  eq = genericEq
+
 derive instance ordStep :: Ord Step
 
 instance prettyPrintStep :: PrettyPrint Step where
@@ -147,25 +152,33 @@ instance prettyPrintStep :: PrettyPrint Step where
   prettyPrint' t (Computation s) = prettyPrint' t s
 
 derive instance genericSimpleStep :: Generic SimpleStep _
-instance showSimpleStep :: Show SimpleStep where show = genericShow
-instance eqSimpleStep :: Eq SimpleStep where eq = genericEq
+instance showSimpleStep :: Show SimpleStep where
+  show = genericShow
+
+instance eqSimpleStep :: Eq SimpleStep where
+  eq = genericEq
+
 derive instance ordSimpleStep :: Ord SimpleStep
 instance prettyPrintSimpleStep :: PrettyPrint SimpleStep where
   prettyPrint' t (ArcIdentifier _ s) = "ArcIdentifier " <> s
-  
+
   prettyPrint' t (ContextTypeIndividual _ s) = "ArcIdentifier " <> s
   prettyPrint' t (RoleTypeIndividual _ s) = "ArcIdentifier " <> s
-  prettyPrint' t (Filler _ embeddingContext) = "Filler " <> (case embeddingContext of
-    Nothing -> ""
-    Just ec -> ec)
-  prettyPrint' t (Filled _ s embeddingContext) = "Filled " <> s <> (case embeddingContext of
-    Nothing -> ""
-    Just ec -> " " <> ec)
+  prettyPrint' t (Filler _ embeddingContext) = "Filler " <>
+    ( case embeddingContext of
+        Nothing -> ""
+        Just ec -> ec
+    )
+  prettyPrint' t (Filled _ s embeddingContext) = "Filled " <> s <>
+    ( case embeddingContext of
+        Nothing -> ""
+        Just ec -> " " <> ec
+    )
   prettyPrint' t (Context _) = "Context"
   prettyPrint' t (Extern _) = "Extern"
   prettyPrint' t (IndexedName _) = "IndexedName"
   prettyPrint' t (SequenceFunction _ s) = "SequenceFunction " <> show s
-  prettyPrint' t (Identity _ ) = "Identity"
+  prettyPrint' t (Identity _) = "Identity"
   prettyPrint' t (Modelname _) = "Modelname"
   prettyPrint' t (Variable _ s) = "Variable " <> s
   prettyPrint' t (Value _ range s) = "Value " <> show range <> " " <> s
@@ -181,15 +194,23 @@ instance prettyPrintSimpleStep :: PrettyPrint SimpleStep where
   prettyPrint' t (PublicContext _ u) = "PublicContext " <> u
 
 derive instance genericBinaryStep :: Generic BinaryStep _
-instance showBinaryStep :: Show BinaryStep where show = genericShow
-instance eqBinaryStep :: Eq BinaryStep where eq s1 s2 = genericEq s1 s2
+instance showBinaryStep :: Show BinaryStep where
+  show = genericShow
+
+instance eqBinaryStep :: Eq BinaryStep where
+  eq s1 s2 = genericEq s1 s2
+
 derive instance ordBinaryStap :: Ord BinaryStep
 instance prettyPrintBinaryStep :: PrettyPrint BinaryStep where
-  prettyPrint' t (BinaryStep {operator, left, right}) = prettyPrint' t operator <> "\n" <> t <> (prettyPrint' (t <> "  ") left) <> "\n" <> t <> (prettyPrint' (t <> "  ") right)
+  prettyPrint' t (BinaryStep { operator, left, right }) = prettyPrint' t operator <> "\n" <> t <> (prettyPrint' (t <> "  ") left) <> "\n" <> t <> (prettyPrint' (t <> "  ") right)
 
 derive instance genericUnaryStep :: Generic UnaryStep _
-instance showUnaryStep :: Show UnaryStep where show = genericShow
-instance eqUnaryStep :: Eq UnaryStep where eq u1 u2 = genericEq u1 u2
+instance showUnaryStep :: Show UnaryStep where
+  show = genericShow
+
+instance eqUnaryStep :: Eq UnaryStep where
+  eq u1 u2 = genericEq u1 u2
+
 derive instance ordUnaryStap :: Ord UnaryStep
 instance prettyPrintUnaryStep :: PrettyPrint UnaryStep where
   prettyPrint' t (LogicalNot _ s) = "LogicalNot " <> prettyPrint' t s
@@ -202,22 +223,34 @@ instance prettyPrintUnaryStep :: PrettyPrint UnaryStep where
   prettyPrint' t (RoleIndividual _ tp s) = "roleindividual (" <> tp <> ") " <> prettyPrint' t s
 
 derive instance genericPureLetStep :: Generic PureLetStep _
-instance showPureLetStep :: Show PureLetStep where show = genericShow
-instance eqPureLetStep :: Eq PureLetStep where eq u1 u2 = genericEq u1 u2
+instance showPureLetStep :: Show PureLetStep where
+  show = genericShow
+
+instance eqPureLetStep :: Eq PureLetStep where
+  eq u1 u2 = genericEq u1 u2
+
 derive instance ordPureLetStep :: Ord PureLetStep
 instance prettyPrintPureLetStep :: PrettyPrint PureLetStep where
-  prettyPrint' t (PureLetStep {bindings, body}) = "LetStep\n" <> intercalate (t <> "\n") (prettyPrint' (t <> "  ") <$> bindings) <> "\n" <> t <> "in\n" <> (prettyPrint' (t <> "  ") body)
+  prettyPrint' t (PureLetStep { bindings, body }) = "LetStep\n" <> intercalate (t <> "\n") (prettyPrint' (t <> "  ") <$> bindings) <> "\n" <> t <> "in\n" <> (prettyPrint' (t <> "  ") body)
 
 derive instance genericVarBinding :: Generic VarBinding _
-instance showVarBinding :: Show VarBinding where show = genericShow
-instance eqVarBinding :: Eq VarBinding where eq = genericEq
+instance showVarBinding :: Show VarBinding where
+  show = genericShow
+
+instance eqVarBinding :: Eq VarBinding where
+  eq = genericEq
+
 derive instance ordVarBinding :: Ord VarBinding
 instance prettyPrintVarBinding :: PrettyPrint VarBinding where
   prettyPrint' t (VarBinding name s) = name <> " = " <> prettyPrint' t s
 
 derive instance genericOperator :: Generic Operator _
-instance showOperator :: Show Operator where show = genericShow
-instance eqOperator :: Eq Operator where eq = genericEq
+instance showOperator :: Show Operator where
+  show = genericShow
+
+instance eqOperator :: Eq Operator where
+  eq = genericEq
+
 derive instance ordOperator :: Ord Operator
 instance prettyPrintOperator :: PrettyPrint Operator where
   prettyPrint' t (Compose _) = "Compose"
@@ -249,11 +282,14 @@ instance prettyPrintOperator :: PrettyPrint Operator where
   prettyPrint' t (Minute _) = "Minute"
   prettyPrint' t (Second _) = "Second"
   prettyPrint' t (Millisecond _) = "Millisecond"
-  
 
 derive instance genericComputationStep :: Generic ComputationStep _
-instance showComputationStep :: Show ComputationStep where show s = genericShow s
-instance eqComputationStep :: Eq ComputationStep where eq c1 c2 = genericEq c1 c2
+instance showComputationStep :: Show ComputationStep where
+  show s = genericShow s
+
+instance eqComputationStep :: Eq ComputationStep where
+  eq c1 c2 = genericEq c1 c2
+
 derive instance ordComputationStep :: Ord ComputationStep
 instance prettyPrintComputationStep :: PrettyPrint ComputationStep where
-  prettyPrint' t (ComputationStep{functionName, arguments, computedType}) = "Computation\n" <> intercalate ("\n" <> t) (prettyPrint' (t <> " ") <$> arguments) <> "\n" <> t <> show computedType
+  prettyPrint' t (ComputationStep { functionName, arguments, computedType }) = "Computation\n" <> intercalate ("\n" <> t) (prettyPrint' (t <> " ") <$> arguments) <> "\n" <> t <> show computedType

@@ -76,12 +76,13 @@ data ContextKind = Domain | Case | Party | Activity | State
 instance WriteForeign ContextKind where
   writeImpl = unsafeToForeign <<< show
 
-instance ReadForeign ContextKind where  
+instance ReadForeign ContextKind where
   readImpl = enumReadForeign
 
 -- | We assume the id is a qualified name.
 defaultContext :: String -> String -> ContextKind -> Maybe String -> ArcPosition -> Maybe PublicStore -> Context
-defaultContext id dname kind context pos public = Context { id: (ContextType id)
+defaultContext id dname kind context pos public = Context
+  { id: (ContextType id)
   , _rev: Nothing
   , displayName: dname
   , kindOfContext: kind
@@ -110,7 +111,7 @@ instance showContext :: Show Context where
   show = genericShow
 
 instance eqContext :: Eq Context where
-  eq (Context {id : id1}) (Context {id : id2}) = id1 == id2
+  eq (Context { id: id1 }) (Context { id: id2 }) = id1 == id2
 
 derive instance newtypeContext :: Newtype Context _
 
@@ -122,12 +123,14 @@ instance ReadForeign Context where
 
 instance revisionContext :: Revision Context where
   rev = _._rev <<< unwrap
-  changeRevision s = over Context (\vr -> vr {_rev = s})
+  changeRevision s = over Context (\vr -> vr { _rev = s })
 
 instance identifiableContext :: Identifiable Context ContextType where
-  identifier (Context{id}) = id
-  displayName (Context{displayName:d}) = d
+  identifier (Context { id }) = id
+  displayName (Context { displayName: d }) = d
 
 derive instance genericContextKind :: Generic ContextKind _
-instance showContextKind :: Show ContextKind where show = genericShow
+instance showContextKind :: Show ContextKind where
+  show = genericShow
+
 derive instance eqContextKind :: Eq ContextKind

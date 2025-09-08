@@ -36,11 +36,11 @@ import Perspectives.Representation.TypeIdentifiers (ContextType, PropertyType, R
 
 type SerialisedPerspective' =
   {
-  ----
-  ---- Type level properties
-  ----
+    ----
+    ---- Type level properties
+    ----
 
-  id :: String
+    id :: String
   , displayName :: String
   , isFunctional :: Boolean
   , isMandatory :: Boolean
@@ -90,7 +90,7 @@ type SerialisedProperty =
 type PropertyFacets =
   { minLength :: Maybe Int
   , maxLength :: Maybe Int
-  , pattern :: Maybe {regex :: String, label :: String}
+  , pattern :: Maybe { regex :: String, label :: String }
   , whiteSpace :: Maybe String
   , enumeration :: Maybe (Array String)
   , maxInclusive :: Maybe String
@@ -106,6 +106,7 @@ type PropertyFacets =
   }
 
 newtype SerialisedPerspective = SerialisedPerspective String
+
 derive instance newtypeSerialisedPerspective :: Newtype SerialisedPerspective _
 
 type RoleInstanceWithProperties =

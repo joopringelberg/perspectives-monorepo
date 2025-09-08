@@ -30,21 +30,28 @@ import Foreign (ForeignError(..), fail)
 import Simple.JSON (class ReadForeign, class WriteForeign, read', writeImpl)
 
 newtype RegExP = RegExP Regex
-instance showRegExP :: Show RegExP where show (RegExP r) = show r
-instance eqRegExP :: Eq RegExP where eq (RegExP r1) (RegExP r2) = eq (show r1) (show r2)
-instance ordRegExP :: Ord RegExP where compare (RegExP r1) (RegExP r2) = compare (show r1) (show r2)
 
-type RegExPRecord = {source :: String, flags :: RegexFlagsRec}
+instance showRegExP :: Show RegExP where
+  show (RegExP r) = show r
+
+instance eqRegExP :: Eq RegExP where
+  eq (RegExP r1) (RegExP r2) = eq (show r1) (show r2)
+
+instance ordRegExP :: Ord RegExP where
+  compare (RegExP r1) (RegExP r2) = compare (show r1) (show r2)
+
+type RegExPRecord = { source :: String, flags :: RegexFlagsRec }
 
 instance writeForeignRegExp :: WriteForeign RegExP where
-  writeImpl (RegExP r) = let
-    (RegexFlags flagsRecord) = flags r
+  writeImpl (RegExP r) =
+    let
+      (RegexFlags flagsRecord) = flags r
     in
-    writeImpl ({ source: (source r), flags: flagsRecord} :: RegExPRecord)
+      writeImpl ({ source: (source r), flags: flagsRecord } :: RegExPRecord)
 
 instance readForeignRegExp :: ReadForeign RegExP where
   readImpl f = do
-    ({source, flags} :: RegExPRecord) <- read' f
+    ({ source, flags } :: RegExPRecord) <- read' f
     parseResult <- pure (regex source (RegexFlags flags))
     case parseResult of
       Left e -> fail (ForeignError ("could not construct regex from source '" <> source <> "' and flags '" <> show flags <> "'. "))

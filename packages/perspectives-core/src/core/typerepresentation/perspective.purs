@@ -92,26 +92,29 @@ instance WriteForeign Perspective where
 instance ReadForeign Perspective where
   readImpl f = Perspective <$> read' f
 
-data StateSpec =
-  ContextState StateIdentifier
+data StateSpec
+  = ContextState StateIdentifier
   | SubjectState StateIdentifier
   | ObjectState StateIdentifier
 
 derive instance genericStateSpec :: Generic StateSpec _
-instance showStateSpec :: Show StateSpec where show = genericShow
+instance showStateSpec :: Show StateSpec where
+  show = genericShow
+
 derive instance eqStateSpec :: Eq StateSpec
 
-instance ordStateSpec :: Ord StateSpec where compare = genericCompare
+instance ordStateSpec :: Ord StateSpec where
+  compare = genericCompare
 
 instance WriteForeign StateSpec where
-  writeImpl (ContextState stateIdentifier) = writeImpl { constructor: "ContextState", stateIdentifier}
-  writeImpl (SubjectState stateIdentifier) = writeImpl { constructor: "SubjectState", stateIdentifier}
-  writeImpl (ObjectState stateIdentifier) = writeImpl { constructor: "ObjectState", stateIdentifier}
+  writeImpl (ContextState stateIdentifier) = writeImpl { constructor: "ContextState", stateIdentifier }
+  writeImpl (SubjectState stateIdentifier) = writeImpl { constructor: "SubjectState", stateIdentifier }
+  writeImpl (ObjectState stateIdentifier) = writeImpl { constructor: "ObjectState", stateIdentifier }
 
 instance ReadForeign StateSpec where
-  readImpl f = do 
-    {constructor, stateIdentifier} :: {constructor :: String, stateIdentifier :: StateIdentifier} <- read' f
-    unsafePartial case constructor of 
+  readImpl f = do
+    { constructor, stateIdentifier } :: { constructor :: String, stateIdentifier :: StateIdentifier } <- read' f
+    unsafePartial case constructor of
       "ContextState" -> pure $ ContextState stateIdentifier
       "SubjectState" -> pure $ SubjectState stateIdentifier
       "ObjectState" -> pure $ ObjectState stateIdentifier
@@ -126,99 +129,111 @@ stateSpec2StateIdentifier (ObjectState s) = s
 -----------------------------------------------------------
 -- | PARTIAL: can only be used after object of Perspective has been compiled in PhaseThree.
 objectOfPerspective :: Partial => Perspective -> ADT RoleInContext
-objectOfPerspective (Perspective {object}) = case range object of
+objectOfPerspective (Perspective { object }) = case range object of
   RDOM adt -> adt
 
 -- | Disregarding state, returns true iff the perspective lets the user apply the
 -- | verb to the property.
 perspectiveSupportsPropertyForVerb :: Perspective -> PropertyType -> PropertyVerb -> Boolean
-perspectiveSupportsPropertyForVerb (Perspective {propertyVerbs}) property verb = find $ MAP.values $ unwrap propertyVerbs
+perspectiveSupportsPropertyForVerb (Perspective { propertyVerbs }) property verb = find $ MAP.values $ unwrap propertyVerbs
   where
-    find :: List (Array PropertyVerbs) -> Boolean
-    find pvs = isJust $ LST.findIndex
-      (\(pva :: Array PropertyVerbs) -> isJust $ findIndex
+  find :: List (Array PropertyVerbs) -> Boolean
+  find pvs = isJust $ LST.findIndex
+    ( \(pva :: Array PropertyVerbs) -> isJust $ findIndex
         (\(PropertyVerbs pset pverbs) -> isElementOf property pset && (isElementOf verb pverbs))
-        pva)
-      pvs
+        pva
+    )
+    pvs
 
 -- | Disregarding state, returns true iff the perspective lets the user apply *some*
 -- | verb to the property.
 perspectiveSupportsProperty :: Perspective -> PropertyType -> Boolean
-perspectiveSupportsProperty (Perspective {propertyVerbs}) property = find $ MAP.values $ unwrap propertyVerbs
+perspectiveSupportsProperty (Perspective { propertyVerbs }) property = find $ MAP.values $ unwrap propertyVerbs
   where
-    find :: List (Array PropertyVerbs) -> Boolean
-    find pvs = isJust $ LST.findIndex
-      (\(pva :: Array PropertyVerbs) -> isJust $ findIndex
+  find :: List (Array PropertyVerbs) -> Boolean
+  find pvs = isJust $ LST.findIndex
+    ( \(pva :: Array PropertyVerbs) -> isJust $ findIndex
         (\(PropertyVerbs pset pverbs) -> isElementOf property pset)
-        pva)
-      pvs
+        pva
+    )
+    pvs
 
 perspectiveSupportsPropertyVerb :: Perspective -> PropertyVerb -> Boolean
-perspectiveSupportsPropertyVerb (Perspective {propertyVerbs}) propertyVerb = find $ MAP.values $ unwrap propertyVerbs
+perspectiveSupportsPropertyVerb (Perspective { propertyVerbs }) propertyVerb = find $ MAP.values $ unwrap propertyVerbs
   where
-    find :: List (Array PropertyVerbs) -> Boolean
-    find pvs = isJust $ LST.findIndex
-      (\(pva :: Array PropertyVerbs) -> isJust $ findIndex
+  find :: List (Array PropertyVerbs) -> Boolean
+  find pvs = isJust $ LST.findIndex
+    ( \(pva :: Array PropertyVerbs) -> isJust $ findIndex
         (\(PropertyVerbs _ pverbs) -> isElementOf propertyVerb pverbs)
-        pva)
-      pvs
+        pva
+    )
+    pvs
 
 perspectiveSupportsPropertyWithOneofVerbs :: Perspective -> PropertyType -> ExplicitSet PropertyVerb -> Boolean
-perspectiveSupportsPropertyWithOneofVerbs (Perspective {propertyVerbs}) property pVerbAlternatives = find $ MAP.values $ unwrap propertyVerbs
+perspectiveSupportsPropertyWithOneofVerbs (Perspective { propertyVerbs }) property pVerbAlternatives = find $ MAP.values $ unwrap propertyVerbs
   where
-    find :: List (Array PropertyVerbs) -> Boolean
-    find pvs = isJust $ LST.findIndex
-      (\(pva :: Array PropertyVerbs) -> isJust $ findIndex
-        (\(PropertyVerbs pset pverbs) -> Empty /= (intersectionPset [pVerbAlternatives, pverbs]) && isElementOf property pset)
-        pva)
-      pvs
+  find :: List (Array PropertyVerbs) -> Boolean
+  find pvs = isJust $ LST.findIndex
+    ( \(pva :: Array PropertyVerbs) -> isJust $ findIndex
+        (\(PropertyVerbs pset pverbs) -> Empty /= (intersectionPset [ pVerbAlternatives, pverbs ]) && isElementOf property pset)
+        pva
+    )
+    pvs
 
 -- | Regardless of state, does the perspective allow for the RoleVerb?
 perspectiveSupportsRoleVerb :: Perspective -> RoleVerb -> Boolean
-perspectiveSupportsRoleVerb (Perspective{roleVerbs}) verb = isJust $ LST.findIndex
+perspectiveSupportsRoleVerb (Perspective { roleVerbs }) verb = isJust $ LST.findIndex
   (\rvs -> hasVerb verb rvs)
   (MAP.values $ unwrap roleVerbs)
 
 perspectiveSupportsRoleVerbs :: Perspective -> Array RoleVerb -> Boolean
-perspectiveSupportsRoleVerbs (Perspective{roleVerbs}) verbs = null verbs || (isJust $ LST.findIndex
-  (\rvs -> hasAllVerbs verbs rvs)
-  (MAP.values $ unwrap roleVerbs))
+perspectiveSupportsRoleVerbs (Perspective { roleVerbs }) verbs = null verbs ||
+  ( isJust $ LST.findIndex
+      (\rvs -> hasAllVerbs verbs rvs)
+      (MAP.values $ unwrap roleVerbs)
+  )
 
 -- | True iff there is at least one state in which the RoleVerb is supported.
 perspectiveSupportsOneOfRoleVerbs :: Perspective -> Array RoleVerb -> Boolean
-perspectiveSupportsOneOfRoleVerbs (Perspective{roleVerbs}) verbs = isJust $ LST.findIndex
+perspectiveSupportsOneOfRoleVerbs (Perspective { roleVerbs }) verbs = isJust $ LST.findIndex
   (\rvs -> hasOneOfTheVerbs verbs rvs)
   (MAP.values $ unwrap roleVerbs)
 
 perspectiveMustBeSynchronized :: Perspective -> Boolean
-perspectiveMustBeSynchronized p@(Perspective {roleVerbs, propertyVerbs, authorOnly}) = not authorOnly &&
-  perspectiveSupportsOneOfRoleVerbs p [Remove, Delete, RemoveContext, DeleteContext] ||
-  perspectiveSupportsPropertyVerb p Consult
+perspectiveMustBeSynchronized p@(Perspective { roleVerbs, propertyVerbs, authorOnly }) =
+  not authorOnly &&
+    perspectiveSupportsOneOfRoleVerbs p [ Remove, Delete, RemoveContext, DeleteContext ] ||
+    perspectiveSupportsPropertyVerb p Consult
 
 -----------------------------------------------------------
 -- PROPERTYVERBS
 -----------------------------------------------------------
 -- NOTE: we might replace (ExplicitSet PropertyType) with RelevantProperties.
 data PropertyVerbs = PropertyVerbs (ExplicitSet PropertyType) (ExplicitSet PropertyVerb)
+
 derive instance genericPropertyVerbs :: Generic PropertyVerbs _
-instance showPropertyVerbs :: Show PropertyVerbs where show = genericShow
+instance showPropertyVerbs :: Show PropertyVerbs where
+  show = genericShow
+
 derive instance eqPropertyVerbs :: Eq PropertyVerbs
 
 instance writeForeignPropertyVerbs :: WriteForeign PropertyVerbs where
-  writeImpl (PropertyVerbs props verbs) = write { properties: write props, verbs: write verbs}
+  writeImpl (PropertyVerbs props verbs) = write { properties: write props, verbs: write verbs }
 
 instance ReadForeign PropertyVerbs where
-  readImpl f = do 
-    {properties, verbs} :: {properties :: ExplicitSet PropertyType, verbs :: ExplicitSet PropertyVerb} <- read' f
+  readImpl f = do
+    { properties, verbs } :: { properties :: ExplicitSet PropertyType, verbs :: ExplicitSet PropertyVerb } <- read' f
     pure $ PropertyVerbs properties verbs
 
 -- Pair each PropertyType will all PropertyVerbs available for it.
 expandPropertyVerbs :: Array PropertyType -> PropertyVerbs -> Array (Tuple PropertyType (Array PropertyVerb))
-expandPropertyVerbs allProps (PropertyVerbs props verbs) = let
-  (verbs' :: Array PropertyVerb) = expandVerbs verbs
-  in (flip Tuple verbs') <$> expandPropSet allProps props
+expandPropertyVerbs allProps (PropertyVerbs props verbs) =
+  let
+    (verbs' :: Array PropertyVerb) = expandVerbs verbs
+  in
+    (flip Tuple verbs') <$> expandPropSet allProps props
 
-expandVerbs ::  ExplicitSet PropertyVerb -> Array PropertyVerb
+expandVerbs :: ExplicitSet PropertyVerb -> Array PropertyVerb
 expandVerbs Universal = allPropertyVerbs
 expandVerbs Empty = []
 expandVerbs (PSet as) = as
@@ -251,29 +266,32 @@ type ModificationSummary =
   , modifiesPropertiesOf :: MAP.Map EnumeratedRoleType (ExplicitSet EnumeratedPropertyType)
   }
 
-newtype PropertyInRole = PropertyInRole { role :: EnumeratedRoleType, property :: PropertyType}
+newtype PropertyInRole = PropertyInRole { role :: EnumeratedRoleType, property :: PropertyType }
 
 -- | PARTIAL: can only be used after object of Perspective has been compiled in PhaseThree.
 createModificationSummary :: Partial => Perspective -> ModificationSummary
-createModificationSummary p@(Perspective{roleVerbs, propertyVerbs}) =
-  { modifiesRoleInstancesOf: if perspectiveSupportsOneOfRoleVerbs p [Remove, RemoveContext, Delete, DeleteContext, Create, CreateAndFill]
-    then commonLeavesInADT $ objectOfPerspective p
-    else []
-  , modifiesRoleBindingOf: if perspectiveSupportsOneOfRoleVerbs p [CreateAndFill, Fill, Unbind, RemoveFiller]
-    then commonLeavesInADT $ objectOfPerspective p
-    else []
+createModificationSummary p@(Perspective { roleVerbs, propertyVerbs }) =
+  { modifiesRoleInstancesOf:
+      if perspectiveSupportsOneOfRoleVerbs p [ Remove, RemoveContext, Delete, DeleteContext, Create, CreateAndFill ] then commonLeavesInADT $ objectOfPerspective p
+      else []
+  , modifiesRoleBindingOf:
+      if perspectiveSupportsOneOfRoleVerbs p [ CreateAndFill, Fill, Unbind, RemoveFiller ] then commonLeavesInADT $ objectOfPerspective p
+      else []
   -- , modifiesPropertiesOf: foldl
   --     (\modifiableProperties (PropertyVerbs props verbs) -> if overlapsPSet (PSet [RemovePropertyValue, DeleteProperty, AddPropertyValue, SetPropertyValue]) verbs
   --       then props <> modifiableProperties
   --       else modifiableProperties)
   --     Empty
   --     (concat $ fromFoldable $ values $ unwrap propertyVerbs)
-  , modifiesPropertiesOf: let
-      (props :: ExplicitSet EnumeratedPropertyType) = foldl
-          (\(modifiableProperties :: ExplicitSet EnumeratedPropertyType) (PropertyVerbs props verbs) -> if overlapsPSet (PSet [RemovePropertyValue, DeleteProperty, AddPropertyValue, SetPropertyValue]) verbs
-            then (props <#> case _ of ENP pt -> pt) <> modifiableProperties
-            else modifiableProperties)
+  , modifiesPropertiesOf:
+      let
+        (props :: ExplicitSet EnumeratedPropertyType) = foldl
+          ( \(modifiableProperties :: ExplicitSet EnumeratedPropertyType) (PropertyVerbs props verbs) ->
+              if overlapsPSet (PSet [ RemovePropertyValue, DeleteProperty, AddPropertyValue, SetPropertyValue ]) verbs then (props <#> case _ of ENP pt -> pt) <> modifiableProperties
+              else modifiableProperties
+          )
           Empty
           (concat $ fromFoldable $ MAP.values $ unwrap propertyVerbs)
-      in MAP.fromFoldable $ (commonLeavesInADT $ objectOfPerspective p) <#> \(RoleInContext{role}) -> Tuple role props
+      in
+        MAP.fromFoldable $ (commonLeavesInADT $ objectOfPerspective p) <#> \(RoleInContext { role }) -> Tuple role props
   }

@@ -21,11 +21,9 @@
 -- END LICENSE
 
 module Perspectives.External.CoreModules
-( addAllExternalFunctions
-, addExternalFunctionForModule
-)
-
-where
+  ( addAllExternalFunctions
+  , addExternalFunctionForModule
+  ) where
 
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
@@ -55,7 +53,7 @@ coreModules = fromFoldable
   , Tuple "model://perspectives.domains#Files" File.externalFunctions
   ]
 
-addAllExternalFunctions :: forall m. Monad m => m Unit 
+addAllExternalFunctions :: forall m. Monad m => m Unit
 addAllExternalFunctions = do
   addExternalFunctions ExternalCouchdb.externalFunctions
   addExternalFunctions Serialise.externalFunctions

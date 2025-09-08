@@ -26,7 +26,7 @@ module Perspectives.Sidecar.UniqueTypeNames
   , RoleKey(..)
   , PropertyKey(..)
   , HeuristicKey(..)
-    -- Weights and scoring
+  -- Weights and scoring
   , ContextWeights
   , RoleWeights
   , PropertyWeights
@@ -37,7 +37,7 @@ module Perspectives.Sidecar.UniqueTypeNames
   , defaultRoleWeights
   , defaultPropertyWeights
   , Score
-    -- Ranking helpers
+  -- Ranking helpers
   , rank
   , rankBest
   , applyStableIdMappingWith
@@ -145,18 +145,19 @@ instance heuristicContext :: HeuristicMapping ContextKey ContextWeights where
     let
       -- typeUri2LocalName geeft een fout voor de domein naam.
       nameScore = compareContextIds a.fqn b.fqn
-    in (if a.fqn == b.fqn then w.fqnExact else 0.0)
-       + w.rolesCommon * commonFrac a.roles b.roles
-       + w.propertiesCommon * commonFrac a.properties b.properties
-       + w.aspectsCommon * commonFrac a.aspects b.aspects
-       + w.nameSimilarity * nameScore
+    in
+      (if a.fqn == b.fqn then w.fqnExact else 0.0)
+        + w.rolesCommon * commonFrac a.roles b.roles
+        + w.propertiesCommon * commonFrac a.properties b.properties
+        + w.aspectsCommon * commonFrac a.aspects b.aspects
+        + w.nameSimilarity * nameScore
     where
-      compareContextIds :: String -> String -> Number
-      compareContextIds x y = if isModelUri x || isModelUri y
-        then if x == y
-          then 1.0
-          else 0.0
-        else nameSim (typeUri2LocalName_ x) (typeUri2LocalName_ y)
+    compareContextIds :: String -> String -> Number
+    compareContextIds x y =
+      if isModelUri x || isModelUri y then
+        if x == y then 1.0
+        else 0.0
+      else nameSim (typeUri2LocalName_ x) (typeUri2LocalName_ y)
 
 instance heuristicRole :: HeuristicMapping RoleKey RoleWeights where
   defaultWeights = defaultRoleWeights
@@ -164,12 +165,13 @@ instance heuristicRole :: HeuristicMapping RoleKey RoleWeights where
     let
       nameScore = nameSim (typeUri2LocalName_ a.fqn) (typeUri2LocalName_ b.fqn)
       declScore = if a.declaringContextFqn == b.declaringContextFqn then 1.0 else 0.0
-    in (if a.fqn == b.fqn then w.fqnExact else 0.0)
-       + w.declaringContextExact * declScore
-       + w.nameSimilarity * nameScore
-       + w.propertiesCommon * commonFrac a.properties b.properties
-       + w.bindingTypesCommon * commonFrac a.bindingTypes b.bindingTypes
-       + w.aspectsCommon * commonFrac a.aspects b.aspects
+    in
+      (if a.fqn == b.fqn then w.fqnExact else 0.0)
+        + w.declaringContextExact * declScore
+        + w.nameSimilarity * nameScore
+        + w.propertiesCommon * commonFrac a.properties b.properties
+        + w.bindingTypesCommon * commonFrac a.bindingTypes b.bindingTypes
+        + w.aspectsCommon * commonFrac a.aspects b.aspects
 
 instance heuristicProperty :: HeuristicMapping PropertyKey PropertyWeights where
   defaultWeights = defaultPropertyWeights
@@ -178,12 +180,13 @@ instance heuristicProperty :: HeuristicMapping PropertyKey PropertyWeights where
       nameScore = nameSim (typeUri2LocalName_ a.fqn) (typeUri2LocalName_ b.fqn)
       valueTypeScore = if a.valueType == b.valueType then 1.0 else 0.0
       roleScore = if a.declaringRoleFqn == b.declaringRoleFqn then 1.0 else 0.0
-    in (if a.fqn == b.fqn then w.fqnExact else 0.0)
-       + w.valueTypeExact * valueTypeScore
-       + w.facetsCommon * commonFrac a.facets b.facets
-       + w.aspectsCommon * commonFrac a.aspects b.aspects
-       + w.declaringRoleExact * roleScore
-       + w.nameSimilarity * nameScore
+    in
+      (if a.fqn == b.fqn then w.fqnExact else 0.0)
+        + w.valueTypeExact * valueTypeScore
+        + w.facetsCommon * commonFrac a.facets b.facets
+        + w.aspectsCommon * commonFrac a.aspects b.aspects
+        + w.declaringRoleExact * roleScore
+        + w.nameSimilarity * nameScore
 
 defaultContextWeights :: ContextWeights
 defaultContextWeights =
@@ -223,8 +226,10 @@ rank
   -> Array (Tuple String a) -- candidates: (cuid, key)
   -> Array (Tuple String Score)
 rank w probe candidates =
-  let withScores = candidates <#> \(Tuple cuid k) -> Tuple cuid (score w probe k)
-  in sortBy (\(Tuple _ s1) (Tuple _ s2) -> compare s2 s1) withScores
+  let
+    withScores = candidates <#> \(Tuple cuid k) -> Tuple cuid (score w probe k)
+  in
+    sortBy (\(Tuple _ s1) (Tuple _ s2) -> compare s2 s1) withScores
 
 -- | Return the best match above a minimal score (if any).
 rankBest
@@ -245,20 +250,24 @@ rankBest w minScore probe candidates =
 -- | Fraction of common unique elements: |A ∩ B| / max(1, max(|A|, |B|))
 commonFrac :: Array String -> Array String -> Number
 commonFrac as bs =
-  let as' = nub as
-      bs' = nub bs
-      interCount = length $ filter (\x -> elem x bs') as'
-      denom = max (length as') (length bs')
-  in if denom == 0 then 0.0 else toNumber interCount / toNumber denom
+  let
+    as' = nub as
+    bs' = nub bs
+    interCount = length $ filter (\x -> elem x bs') as'
+    denom = max (length as') (length bs')
+  in
+    if denom == 0 then 0.0 else toNumber interCount / toNumber denom
 
 -- Jaccard similarity on unique character sets of two local names.
 nameSim :: String -> String -> Number
 nameSim a b =
-  let as = nub (toCharArray a)
-      bs = nub (toCharArray b)
-      interCount = length $ filter (\c -> elem c bs) as
-      denom = length as + length bs - interCount
-  in if denom == 0 then if a == b then 1.0 else 0.0 else toNumber interCount / toNumber denom
+  let
+    as = nub (toCharArray a)
+    bs = nub (toCharArray b)
+    interCount = length $ filter (\c -> elem c bs) as
+    denom = length as + length bs - interCount
+  in
+    if denom == 0 then if a == b then 1.0 else 0.0 else toNumber interCount / toNumber denom
 
 -- Mapping hook ---------------------------------------------------------------
 
@@ -266,20 +275,22 @@ nameSim a b =
 -- | Returns the alias-augmented DomeinFileRecord and the updated mapping.
 applyStableIdMappingWith :: StableIdMapping -> DomeinFileRecord -> Tuple DomeinFileRecord StableIdMapping
 applyStableIdMappingWith mapping0 df =
-  let cur = extractKeysFromDfr df
-      mapping' = mergeStableIdMapping cur mapping0
-  in Tuple (applyAliases mapping' df) mapping'
+  let
+    cur = extractKeysFromDfr df
+    mapping' = mergeStableIdMapping cur mapping0
+  in
+    Tuple (applyAliases mapping' df) mapping'
 
 -- | Add alias keys (from the mapping file) that point to the canonical entries
 -- | in the DomeinFileRecord. We NEVER rename the canonical identifiers here;
 -- | we only add lookups under the alias keys for backwards/forwards compatibility.
 applyAliases :: StableIdMapping -> DomeinFileRecord -> DomeinFileRecord
-applyAliases mapping dfr@{contexts, enumeratedRoles, enumeratedProperties, states} =
+applyAliases mapping dfr@{ contexts, enumeratedRoles, enumeratedProperties, states } =
   dfr
     { contexts = aliasTable contexts mapping.contexts
     , enumeratedRoles = aliasTable enumeratedRoles mapping.roles
     , enumeratedProperties = aliasTable enumeratedProperties mapping.properties
-  , states = aliasTable states mapping.states
+    , states = aliasTable states mapping.states
     }
   where
   -- | Given a table of entities (by canonical key) and a mapping (alias -> canonicalKey),
@@ -290,17 +301,19 @@ applyAliases mapping dfr@{contexts, enumeratedRoles, enumeratedProperties, state
     -> OBJ.Object String
     -> OBJ.Object a
   aliasTable table m =
-    let ks = OBJ.keys m in
-    foldl
-      (\acc aliasKey ->
-        case OBJ.lookup aliasKey m of
-          Nothing -> acc
-          Just canonicalKey -> case OBJ.lookup canonicalKey table of
-            Nothing -> acc
-            Just entity -> OBJ.insert aliasKey entity acc
-      )
-      table
-      ks
+    let
+      ks = OBJ.keys m
+    in
+      foldl
+        ( \acc aliasKey ->
+            case OBJ.lookup aliasKey m of
+              Nothing -> acc
+              Just canonicalKey -> case OBJ.lookup canonicalKey table of
+                Nothing -> acc
+                Just entity -> OBJ.insert aliasKey entity acc
+        )
+        table
+        ks
 
 -- Extract lightweight feature keys from the current DomeinFileRecord for heuristics.
 -- IMPORTANT: only snapshot canonical entries (skip alias keys). We consider an entry canonical
@@ -310,9 +323,9 @@ extractKeysFromDfr
   -> { contexts :: OBJ.Object ContextKeySnapshot
      , roles :: OBJ.Object RoleKeySnapshot
      , properties :: OBJ.Object PropertyKeySnapshot
-  , states :: OBJ.Object SIM.StateKeySnapshot
+     , states :: OBJ.Object SIM.StateKeySnapshot
      }
-extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, calculatedRoles:croles, enumeratedProperties, calculatedProperties, states} =
+extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: croles, enumeratedProperties, calculatedProperties, states } =
   { contexts: mapContext contexts
   , roles: mapErole eroles <> mapCrole croles
   , properties: mapEProp enumeratedProperties <> mapCProp calculatedProperties
@@ -326,8 +339,11 @@ extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, calculatedRoles:croles
       case OBJ.lookup k tbl of
         Nothing -> []
         Just ctxt@(Context c) ->
-          let canon = unwrap c.id
-          in if canon /= k then [] else
+          let
+            canon = unwrap c.id
+          in
+            if canon /= k then []
+            else
               pure $ Tuple k
                 { fqn: k
                 , declaringContextFqn: typeUri2typeNameSpace_ k
@@ -343,8 +359,11 @@ extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, calculatedRoles:croles
       case OBJ.lookup k tbl of
         Nothing -> []
         Just (EnumeratedRole r) ->
-          let canon = unwrap r.id
-          in if canon /= k then [] else
+          let
+            canon = unwrap r.id
+          in
+            if canon /= k then []
+            else
               pure $ Tuple k
                 { fqn: k
                 , declaringContextFqn: unwrap r.context
@@ -360,8 +379,11 @@ extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, calculatedRoles:croles
       case OBJ.lookup k tbl of
         Nothing -> []
         Just (CalculatedRole r) ->
-          let canon = unwrap r.id
-          in if canon /= k then [] else
+          let
+            canon = unwrap r.id
+          in
+            if canon /= k then []
+            else
               pure $ Tuple k
                 { fqn: k
                 , declaringContextFqn: unwrap r.context
@@ -377,16 +399,21 @@ extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, calculatedRoles:croles
       case OBJ.lookup k tbl of
         Nothing -> []
         Just (EnumeratedProperty p) ->
-          let canon = unwrap p.id
-          in if canon /= k then [] else
-              let declaring = unwrap p.role
-              in pure $ Tuple k
-                    { fqn: k
-                    , valueType: show p.range
-                    , facets: []
-                    , aspects: []
-                    , declaringRoleFqn: declaring
-                    }
+          let
+            canon = unwrap p.id
+          in
+            if canon /= k then []
+            else
+              let
+                declaring = unwrap p.role
+              in
+                pure $ Tuple k
+                  { fqn: k
+                  , valueType: show p.range
+                  , facets: []
+                  , aspects: []
+                  , declaringRoleFqn: declaring
+                  }
 
   mapCProp :: Object CalculatedProperty -> Object PropertyKeySnapshot
   mapCProp tbl =
@@ -395,18 +422,23 @@ extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, calculatedRoles:croles
       case OBJ.lookup k tbl of
         Nothing -> []
         Just (CalculatedProperty p) ->
-          let canon = unwrap p.id
-          in if canon /= k then [] else
-              let declaring = unwrap p.role
-              in pure $ Tuple k
-                    { fqn: k
-                    , valueType: unsafePartial case p.calculation of
-                       Q calc -> case range calc of
-                          (VDOM rn _) -> show rn
-                    , facets: []
-                    , aspects: []
-                    , declaringRoleFqn: declaring
-                    }
+          let
+            canon = unwrap p.id
+          in
+            if canon /= k then []
+            else
+              let
+                declaring = unwrap p.role
+              in
+                pure $ Tuple k
+                  { fqn: k
+                  , valueType: unsafePartial case p.calculation of
+                      Q calc -> case range calc of
+                        (VDOM rn _) -> show rn
+                  , facets: []
+                  , aspects: []
+                  , declaringRoleFqn: declaring
+                  }
 
   -- States: snapshot canonical entries by FQN and hash of their query
   mapState :: Object ST.State -> Object SIM.StateKeySnapshot
@@ -416,11 +448,16 @@ extractKeysFromDfr dfr@{contexts, enumeratedRoles:eroles, calculatedRoles:croles
       case OBJ.lookup k tbl of
         Nothing -> []
         Just (ST.State s) ->
-          let canon = unwrap s.id
-          in if canon /= k then [] else
-              let qh = unsafePartial case s.query of
-                        Q qfd -> qfdSignature qfd
-                  in pure $ Tuple k { fqn: k, queryHash: qh }
+          let
+            canon = unwrap s.id
+          in
+            if canon /= k then []
+            else
+              let
+                qh = unsafePartial case s.query of
+                  Q qfd -> qfdSignature qfd
+              in
+                pure $ Tuple k { fqn: k, queryHash: qh }
 
 -- Merge the current key snapshots with the previous sidecar to generate/update alias maps.
 mergeStableIdMapping
@@ -451,7 +488,7 @@ mergeStableIdMapping cur mapping0 =
       k <- OBJ.keys cur.states
       case OBJ.lookup k cur.states of
         Nothing -> []
-        Just s  -> pure (Tuple (s.fqn <> "#" <> s.queryHash) s.fqn)
+        Just s -> pure (Tuple (s.fqn <> "#" <> s.queryHash) s.fqn)
 
     contextKeys = OBJ.values mapping0.contextKeys
 
@@ -461,20 +498,20 @@ mergeStableIdMapping cur mapping0 =
       Right sorted -> sorted
 
     -- Build context aliases in topological order, threading inferred aliases
-    ctxAliases'  = buildContextAliasesTopologically
+    ctxAliases' = buildContextAliasesTopologically
       defaultContextWeights
       0.5
       mapping0.contextKeys
       candidatesC
       mapping0.contexts
-    rolAliases'  = buildAliases defaultRoleWeights      0.5 mapping0.roleKeys     (snapshotToRoleKeyOld ctxAliases')      candidatesR mapping0.roles
-    propAliases' = buildAliases defaultPropertyWeights  0.7 mapping0.propertyKeys (snapshotToPropertyKeyOld rolAliases')  candidatesP mapping0.properties
+    rolAliases' = buildAliases defaultRoleWeights 0.5 mapping0.roleKeys (snapshotToRoleKeyOld ctxAliases') candidatesR mapping0.roles
+    propAliases' = buildAliases defaultPropertyWeights 0.7 mapping0.propertyKeys (snapshotToPropertyKeyOld rolAliases') candidatesP mapping0.properties
 
-    ctxCuids'  = assignCuids ctxAliases'  mapping0.contextCuids  (OBJ.keys cur.contexts)
-    rolCuids'  = assignCuids rolAliases'  mapping0.roleCuids     (OBJ.keys cur.roles)
+    ctxCuids' = assignCuids ctxAliases' mapping0.contextCuids (OBJ.keys cur.contexts)
+    rolCuids' = assignCuids rolAliases' mapping0.roleCuids (OBJ.keys cur.roles)
     propCuids' = assignCuids propAliases' mapping0.propertyCuids (OBJ.keys cur.properties)
 
-  -- State aliasing: process old snapshots topologically by namespace and normalize parent namespaces through known context/state aliases.
+    -- State aliasing: process old snapshots topologically by namespace and normalize parent namespaces through known context/state aliases.
     stateAliases' = buildStateAliasesTopologically mapping0.stateKeys ctxAliases' mapping0.states candStatesIndex
   in
     mapping0
@@ -492,9 +529,12 @@ mergeStableIdMapping cur mapping0 =
       }
   where
   objToArrayWith :: forall s a. (s -> a) -> OBJ.Object s -> Array (Tuple String a)
-  objToArrayWith f o = mapMaybe (\k -> case OBJ.lookup k o of
-    Nothing -> Nothing
-    Just s -> Just (Tuple k (f s))) (OBJ.keys o)
+  objToArrayWith f o = mapMaybe
+    ( \k -> case OBJ.lookup k o of
+        Nothing -> Nothing
+        Just s -> Just (Tuple k (f s))
+    )
+    (OBJ.keys o)
 
   buildAliases
     :: forall s a w
@@ -507,26 +547,28 @@ mergeStableIdMapping cur mapping0 =
     -> OBJ.Object String
     -> OBJ.Object String
   buildAliases w minScore oldSnap toKey candidates acc =
-    let candIndex = OBJ.fromFoldable (candidates <#> \(Tuple k _) -> Tuple k true)
-    in foldl
-      (\acc' oldFqn -> case OBJ.lookup oldFqn oldSnap of
-        Nothing -> acc'
-        Just sOld ->
-          if OBJ.lookup oldFqn candIndex /= Nothing
-            then acc'
-            else case rankBest w minScore (toKey sOld) candidates of
-              Just (Tuple newFqn _) -> OBJ.insert oldFqn newFqn acc'
-              Nothing -> acc')
-      acc
-      (OBJ.keys oldSnap)
+    let
+      candIndex = OBJ.fromFoldable (candidates <#> \(Tuple k _) -> Tuple k true)
+    in
+      foldl
+        ( \acc' oldFqn -> case OBJ.lookup oldFqn oldSnap of
+            Nothing -> acc'
+            Just sOld ->
+              if OBJ.lookup oldFqn candIndex /= Nothing then acc'
+              else case rankBest w minScore (toKey sOld) candidates of
+                Just (Tuple newFqn _) -> OBJ.insert oldFqn newFqn acc'
+                Nothing -> acc'
+        )
+        acc
+        (OBJ.keys oldSnap)
 
   buildContextAliasesTopologically
     :: ContextWeights
     -> Number
-    -> OBJ.Object ContextKeySnapshot   -- old snapshots
+    -> OBJ.Object ContextKeySnapshot -- old snapshots
     -> Array (Tuple String ContextKey) -- current candidates (canonical only)
-    -> OBJ.Object String               -- initial alias map (typically mapping0.contexts)
-    -> OBJ.Object String               -- result alias map
+    -> OBJ.Object String -- initial alias map (typically mapping0.contexts)
+    -> OBJ.Object String -- result alias map
   buildContextAliasesTopologically w minScore oldSnap candidates acc0 =
     let
       candIndex = OBJ.fromFoldable (candidates <#> \(Tuple k _) -> Tuple k true)
@@ -534,90 +576,100 @@ mergeStableIdMapping cur mapping0 =
       -- Topologically sort old snapshots by parent namespace
       sorted = case sortTopologicallyEither _.fqn (singleton <<< typeUri2typeNameSpace_ <<< _.fqn) olds of
         Right xs -> xs
-        Left _   -> olds
+        Left _ -> olds
     in
       foldl
-        (\acc sOld ->
-           let oldFqn = sOld.fqn
-           in if OBJ.lookup oldFqn candIndex /= Nothing
-                then acc
-                else
-                  case rankBest w minScore (snapshotToContextKeyOld acc sOld) candidates of
-                    Just (Tuple newFqn _) -> OBJ.insert oldFqn newFqn acc
-                    Nothing               -> acc
+        ( \acc sOld ->
+            let
+              oldFqn = sOld.fqn
+            in
+              if OBJ.lookup oldFqn candIndex /= Nothing then acc
+              else
+                case rankBest w minScore (snapshotToContextKeyOld acc sOld) candidates of
+                  Just (Tuple newFqn _) -> OBJ.insert oldFqn newFqn acc
+                  Nothing -> acc
         )
         acc0
         sorted
 
   -- Compute new FQN->CUID map from previous map and alias relations.
   assignCuids
-    :: OBJ.Object String        -- alias map (aliasFqn -> canonicalFqn)
-    -> OBJ.Object String        -- previous fqn -> cuid
-    -> Array String             -- current canonical FQNs
+    :: OBJ.Object String -- alias map (aliasFqn -> canonicalFqn)
+    -> OBJ.Object String -- previous fqn -> cuid
+    -> Array String -- current canonical FQNs
     -> OBJ.Object String
   assignCuids aliasMap prevCuids currentCanon =
-    let reuseFromAlias :: String -> Maybe String
-        reuseFromAlias newFqn = findFirstJust (OBJ.keys aliasMap) \oldFqn ->
-          case OBJ.lookup oldFqn aliasMap of
-            Just tgt | tgt == newFqn -> OBJ.lookup oldFqn prevCuids
-            _ -> Nothing
+    let
+      reuseFromAlias :: String -> Maybe String
+      reuseFromAlias newFqn = findFirstJust (OBJ.keys aliasMap) \oldFqn ->
+        case OBJ.lookup oldFqn aliasMap of
+          Just tgt | tgt == newFqn -> OBJ.lookup oldFqn prevCuids
+          _ -> Nothing
 
-        go acc fqn = case OBJ.lookup fqn prevCuids of
+      go acc fqn = case OBJ.lookup fqn prevCuids of
+        Just cuid -> OBJ.insert fqn cuid acc
+        Nothing -> case reuseFromAlias fqn of
           Just cuid -> OBJ.insert fqn cuid acc
-          Nothing -> case reuseFromAlias fqn of
-            Just cuid -> OBJ.insert fqn cuid acc
-            Nothing   -> acc
-    in foldl go prevCuids currentCanon
+          Nothing -> acc
+    in
+      foldl go prevCuids currentCanon
 
 -- Build state aliases in a parent-first order, normalizing namespaces via context/state alias maps.
 buildStateAliasesTopologically
-  :: OBJ.Object SIM.StateKeySnapshot   -- old state snapshots
-  -> OBJ.Object String                 -- context alias map
-  -> OBJ.Object String                 -- initial state alias map
-  -> OBJ.Object String                 -- current index (fqn#hash -> fqn)
+  :: OBJ.Object SIM.StateKeySnapshot -- old state snapshots
+  -> OBJ.Object String -- context alias map
+  -> OBJ.Object String -- initial state alias map
+  -> OBJ.Object String -- current index (fqn#hash -> fqn)
   -> OBJ.Object String
 buildStateAliasesTopologically oldStates ctxAliases acc0 curIndex =
-  let olds = OBJ.values oldStates
-      sorted = case sortTopologicallyEither _.fqn (singleton <<< typeUri2typeNameSpace_ <<< _.fqn) olds of
-        Right xs -> xs
-        Left _   -> olds
-      normalizeNs acc ns =
-        case Tuple (OBJ.lookup ns ctxAliases) (OBJ.lookup ns acc) of
-          Tuple (Just newNs) _ -> newNs
-          Tuple _ (Just newNs) -> newNs
-          _ -> ns
-      step acc sOld =
-        let keySame = sOld.fqn <> "#" <> sOld.queryHash
-        in if OBJ.lookup keySame curIndex /= Nothing
-              then acc
-              else
-                let ns0 = typeUri2typeNameSpace_ sOld.fqn
-                    ln  = typeUri2LocalName_ sOld.fqn
-                    ns1 = normalizeNs acc ns0
-                    normFqn = if ns1 == ns0 then sOld.fqn else ns1 <> "$" <> ln
-                    k2 = normFqn <> "#" <> sOld.queryHash
-                in case OBJ.lookup k2 curIndex of
-                      Just newFqn -> OBJ.insert sOld.fqn newFqn acc
-                      Nothing     -> acc
-  in foldl step acc0 sorted
+  let
+    olds = OBJ.values oldStates
+    sorted = case sortTopologicallyEither _.fqn (singleton <<< typeUri2typeNameSpace_ <<< _.fqn) olds of
+      Right xs -> xs
+      Left _ -> olds
+    normalizeNs acc ns =
+      case Tuple (OBJ.lookup ns ctxAliases) (OBJ.lookup ns acc) of
+        Tuple (Just newNs) _ -> newNs
+        Tuple _ (Just newNs) -> newNs
+        _ -> ns
+    step acc sOld =
+      let
+        keySame = sOld.fqn <> "#" <> sOld.queryHash
+      in
+        if OBJ.lookup keySame curIndex /= Nothing then acc
+        else
+          let
+            ns0 = typeUri2typeNameSpace_ sOld.fqn
+            ln = typeUri2LocalName_ sOld.fqn
+            ns1 = normalizeNs acc ns0
+            normFqn = if ns1 == ns0 then sOld.fqn else ns1 <> "$" <> ln
+            k2 = normFqn <> "#" <> sOld.queryHash
+          in
+            case OBJ.lookup k2 curIndex of
+              Just newFqn -> OBJ.insert sOld.fqn newFqn acc
+              Nothing -> acc
+  in
+    foldl step acc0 sorted
 
-  -- uses top-level findFirstJust
+-- uses top-level findFirstJust
 snapshotToContextKeyCurrent :: ContextKeySnapshot -> ContextKey
 snapshotToContextKeyCurrent s = ContextKey { fqn: s.fqn, declaringContextFqn: s.declaringContextFqn, roles: s.roles, properties: s.properties, aspects: s.aspects }
 
 snapshotToContextKeyOld :: OBJ.Object String -> ContextKeySnapshot -> ContextKey
 snapshotToContextKeyOld ctxAliases s =
-  let decl0 = s.declaringContextFqn
-      declN = case OBJ.lookup decl0 ctxAliases of
-        Just new -> new
-        Nothing  -> decl0
-  in ContextKey 
-    { fqn: s.fqn
-    , declaringContextFqn: declN
-    , roles: s.roles
-    , properties: s.properties
-    , aspects: s.aspects
-    }
+  let
+    decl0 = s.declaringContextFqn
+    declN = case OBJ.lookup decl0 ctxAliases of
+      Just new -> new
+      Nothing -> decl0
+  in
+    ContextKey
+      { fqn: s.fqn
+      , declaringContextFqn: declN
+      , roles: s.roles
+      , properties: s.properties
+      , aspects: s.aspects
+      }
 
 -- Current role snapshot uses canonical declaring context
 snapshotToRoleKeyCurrent :: RoleKeySnapshot -> RoleKey
@@ -633,11 +685,13 @@ snapshotToRoleKeyCurrent s =
 -- Old role snapshot normalized through context alias map
 snapshotToRoleKeyOld :: OBJ.Object String -> RoleKeySnapshot -> RoleKey
 snapshotToRoleKeyOld ctxAliases s =
-  let decl0 = s.declaringContextFqn
-      declN = case OBJ.lookup decl0 ctxAliases of
-        Just new -> new
-        Nothing  -> decl0
-  in RoleKey
+  let
+    decl0 = s.declaringContextFqn
+    declN = case OBJ.lookup decl0 ctxAliases of
+      Just new -> new
+      Nothing -> decl0
+  in
+    RoleKey
       { fqn: s.fqn
       , declaringContextFqn: declN
       , properties: s.properties
@@ -657,19 +711,19 @@ snapshotToPropertyKeyCurrent s =
 
 snapshotToPropertyKeyOld :: OBJ.Object String -> PropertyKeySnapshot -> PropertyKey
 snapshotToPropertyKeyOld roleAliases s =
-  let decl0 = s.declaringRoleFqn
-      declN = case OBJ.lookup decl0 roleAliases of
-        Just new -> new
-        Nothing  -> decl0
-  in PropertyKey 
-    { fqn: s.fqn
-    , valueType: s.valueType
-    , facets: s.facets
-    , aspects: s.aspects
-    , declaringRoleFqn: declN
-    }
-
-
+  let
+    decl0 = s.declaringRoleFqn
+    declN = case OBJ.lookup decl0 roleAliases of
+      Just new -> new
+      Nothing -> decl0
+  in
+    PropertyKey
+      { fqn: s.fqn
+      , valueType: s.valueType
+      , facets: s.facets
+      , aspects: s.aspects
+      , declaringRoleFqn: declN
+      }
 
 -- Re-exported helper locally for broader use in this module
 findFirstJust
@@ -693,7 +747,7 @@ planCuidAssignments
      }
   -> StableIdMapping
   -> { mappingWithAliases :: StableIdMapping
-  , needCuids :: { contexts :: Array String, roles :: Array String, properties :: Array String, states :: Array String }
+     , needCuids :: { contexts :: Array String, roles :: Array String, properties :: Array String, states :: Array String }
      }
 planCuidAssignments cur mapping0 =
   let
@@ -703,15 +757,15 @@ planCuidAssignments cur mapping0 =
 
     contextKeys = OBJ.values mapping0.contextKeys
 
-    ctxAliases'  = buildContextAliasesTopologically
+    ctxAliases' = buildContextAliasesTopologically
       defaultContextWeights
       0.5
       mapping0.contextKeys
       candidatesC
       mapping0.contexts
 
-    rolAliases'  = buildAliases defaultRoleWeights      0.5 mapping0.roleKeys     (snapshotToRoleKeyOld ctxAliases')            candidatesR mapping0.roles (OBJ.keys mapping0.roleKeys)
-    propAliases' = buildAliases defaultPropertyWeights  0.7 mapping0.propertyKeys (snapshotToPropertyKeyOld rolAliases')        candidatesP mapping0.properties (OBJ.keys mapping0.propertyKeys)
+    rolAliases' = buildAliases defaultRoleWeights 0.5 mapping0.roleKeys (snapshotToRoleKeyOld ctxAliases') candidatesR mapping0.roles (OBJ.keys mapping0.roleKeys)
+    propAliases' = buildAliases defaultPropertyWeights 0.7 mapping0.propertyKeys (snapshotToPropertyKeyOld rolAliases') candidatesP mapping0.properties (OBJ.keys mapping0.propertyKeys)
 
     -- state aliases (exact match fqn+hash with normalized namespace)
     candStatesIndex :: OBJ.Object String
@@ -719,7 +773,7 @@ planCuidAssignments cur mapping0 =
       k <- OBJ.keys cur.states
       case OBJ.lookup k cur.states of
         Nothing -> []
-        Just s  -> pure (Tuple (s.fqn <> "#" <> s.queryHash) s.fqn)
+        Just s -> pure (Tuple (s.fqn <> "#" <> s.queryHash) s.fqn)
 
     stateAliases' = buildStateAliasesTopologically mapping0.stateKeys ctxAliases' mapping0.states candStatesIndex
 
@@ -736,33 +790,40 @@ planCuidAssignments cur mapping0 =
 
     needs :: forall s. OBJ.Object s -> OBJ.Object String -> OBJ.Object String -> Array String
     needs current prevCuids aliases =
-      let hasPrev fqn = OBJ.lookup fqn prevCuids /= Nothing
-          reusedFromAlias fqn = findFirstJust (OBJ.keys aliases) \oldFqn ->
-            case OBJ.lookup oldFqn aliases of
-              Just tgt | tgt == fqn -> OBJ.lookup oldFqn prevCuids
-              _ -> Nothing
-      in filter (\fqn -> not (hasPrev fqn) && reusedFromAlias fqn == Nothing) (OBJ.keys current)
+      let
+        hasPrev fqn = OBJ.lookup fqn prevCuids /= Nothing
+        reusedFromAlias fqn = findFirstJust (OBJ.keys aliases) \oldFqn ->
+          case OBJ.lookup oldFqn aliases of
+            Just tgt | tgt == fqn -> OBJ.lookup oldFqn prevCuids
+            _ -> Nothing
+      in
+        filter (\fqn -> not (hasPrev fqn) && reusedFromAlias fqn == Nothing) (OBJ.keys current)
 
-    needCtx   = needs cur.contexts   mapping0.contextCuids   ctxAliases'
-    needRol   = needs cur.roles      mapping0.roleCuids      rolAliases'
-    needProp  = needs cur.properties mapping0.propertyCuids  propAliases'
+    needCtx = needs cur.contexts mapping0.contextCuids ctxAliases'
+    needRol = needs cur.roles mapping0.roleCuids rolAliases'
+    needProp = needs cur.properties mapping0.propertyCuids propAliases'
     -- For states, plan CUIDs for current canonical states with no cuid and not reusable from alias
     needState =
-      let hasPrev fqn = OBJ.lookup fqn mapping0.stateCuids /= Nothing
-          reusedFromAlias fqn = findFirstJust (OBJ.keys stateAliases') \oldFqn ->
-            case OBJ.lookup oldFqn stateAliases' of
-              Just tgt | tgt == fqn -> OBJ.lookup oldFqn mapping0.stateCuids
-              _ -> Nothing
-      in filter (\fqn -> not (hasPrev fqn) && reusedFromAlias fqn == Nothing) (OBJ.keys cur.states)
+      let
+        hasPrev fqn = OBJ.lookup fqn mapping0.stateCuids /= Nothing
+        reusedFromAlias fqn = findFirstJust (OBJ.keys stateAliases') \oldFqn ->
+          case OBJ.lookup oldFqn stateAliases' of
+            Just tgt | tgt == fqn -> OBJ.lookup oldFqn mapping0.stateCuids
+            _ -> Nothing
+      in
+        filter (\fqn -> not (hasPrev fqn) && reusedFromAlias fqn == Nothing) (OBJ.keys cur.states)
   in
     { mappingWithAliases
     , needCuids: { contexts: needCtx, roles: needRol, properties: needProp, states: needState }
     }
   where
   objToArrayWith :: forall s a. (s -> a) -> OBJ.Object s -> Array (Tuple String a)
-  objToArrayWith f o = mapMaybe (\k -> case OBJ.lookup k o of
-    Nothing -> Nothing
-    Just s -> Just (Tuple k (f s))) (OBJ.keys o)
+  objToArrayWith f o = mapMaybe
+    ( \k -> case OBJ.lookup k o of
+        Nothing -> Nothing
+        Just s -> Just (Tuple k (f s))
+    )
+    (OBJ.keys o)
 
   buildAliases
     :: forall s a w
@@ -776,44 +837,49 @@ planCuidAssignments cur mapping0 =
     -> Array String
     -> OBJ.Object String
   buildAliases w minScore oldSnap toKey candidates acc keys =
-    let candIndex = OBJ.fromFoldable (candidates <#> \(Tuple k _) -> Tuple k true)
-    in foldl
-      (\acc' oldFqn -> case OBJ.lookup oldFqn oldSnap of
-        Nothing -> acc'
-        Just sOld ->
-          if OBJ.lookup oldFqn candIndex /= Nothing
-            then acc'
-            else case rankBest w minScore (toKey sOld) candidates of
-              Just (Tuple newFqn _) -> OBJ.insert oldFqn newFqn acc'
-              Nothing -> acc')
-      acc
-      keys
+    let
+      candIndex = OBJ.fromFoldable (candidates <#> \(Tuple k _) -> Tuple k true)
+    in
+      foldl
+        ( \acc' oldFqn -> case OBJ.lookup oldFqn oldSnap of
+            Nothing -> acc'
+            Just sOld ->
+              if OBJ.lookup oldFqn candIndex /= Nothing then acc'
+              else case rankBest w minScore (toKey sOld) candidates of
+                Just (Tuple newFqn _) -> OBJ.insert oldFqn newFqn acc'
+                Nothing -> acc'
+        )
+        acc
+        keys
+
   buildContextAliasesTopologically
     :: ContextWeights
     -> Number
-    -> OBJ.Object ContextKeySnapshot   -- old snapshots
+    -> OBJ.Object ContextKeySnapshot -- old snapshots
     -> Array (Tuple String ContextKey) -- current candidates (canonical only)
-    -> OBJ.Object String               -- initial alias map (typically mapping0.contexts)
-    -> OBJ.Object String               -- result alias map
+    -> OBJ.Object String -- initial alias map (typically mapping0.contexts)
+    -> OBJ.Object String -- result alias map
   buildContextAliasesTopologically w minScore oldSnap candidates acc0 =
     let
       candIndex = OBJ.fromFoldable (candidates <#> \(Tuple k _) -> Tuple k true)
       olds = OBJ.values oldSnap
       sorted = case sortTopologicallyEither _.fqn (singleton <<< typeUri2typeNameSpace_ <<< _.fqn) olds of
         Right xs -> xs
-        Left _   -> olds
+        Left _ -> olds
     in
       foldl
-        (\acc sOld ->
-           let oldFqn = sOld.fqn
-           in if OBJ.lookup oldFqn candIndex /= Nothing
-                then acc
-                else case rankBest w minScore (snapshotToContextKeyOld acc sOld) candidates of
-                  Just (Tuple newFqn _) -> OBJ.insert oldFqn newFqn acc
-                  Nothing               -> acc
+        ( \acc sOld ->
+            let
+              oldFqn = sOld.fqn
+            in
+              if OBJ.lookup oldFqn candIndex /= Nothing then acc
+              else case rankBest w minScore (snapshotToContextKeyOld acc sOld) candidates of
+                Just (Tuple newFqn _) -> OBJ.insert oldFqn newFqn acc
+                Nothing -> acc
         )
         acc0
         sorted
+
 -- Finalize CUID assignments: copy existing cuids from oldFqn to newFqn wherever alias old->new exists and new lacks a cuid
 finalizeCuidAssignments
   :: StableIdMapping
@@ -823,33 +889,33 @@ finalizeCuidAssignments mappingWithAliases newCuids =
   let
     -- Copy existing cuids from oldFqn to newFqn wherever alias old->new exists and new lacks a cuid
     propagate
-      :: OBJ.Object String  -- alias map (aliasFqn -> canonicalFqn)
-      -> OBJ.Object String  -- prev cuids (fqn -> cuid)
-      -> OBJ.Object String  -- result cuids (after propagation)
+      :: OBJ.Object String -- alias map (aliasFqn -> canonicalFqn)
+      -> OBJ.Object String -- prev cuids (fqn -> cuid)
+      -> OBJ.Object String -- result cuids (after propagation)
     propagate aliases prev =
       foldl
-        (\acc oldFqn ->
-          case Tuple (OBJ.lookup oldFqn aliases) (OBJ.lookup oldFqn prev) of
-            Tuple (Just newFqn) (Just cuid) ->
-              case OBJ.lookup newFqn acc of
-                Nothing -> OBJ.insert newFqn cuid acc
-                Just _  -> acc
-            _ -> acc
+        ( \acc oldFqn ->
+            case Tuple (OBJ.lookup oldFqn aliases) (OBJ.lookup oldFqn prev) of
+              Tuple (Just newFqn) (Just cuid) ->
+                case OBJ.lookup newFqn acc of
+                  Nothing -> OBJ.insert newFqn cuid acc
+                  Just _ -> acc
+              _ -> acc
         )
         prev
         (OBJ.keys aliases)
 
-  -- 1) propagate cuids through aliases
-    ctxCuidsProp   = propagate mappingWithAliases.contexts   mappingWithAliases.contextCuids
-    rolCuidsProp   = propagate mappingWithAliases.roles      mappingWithAliases.roleCuids
-    propCuidsProp  = propagate mappingWithAliases.properties mappingWithAliases.propertyCuids
-    stateCuidsProp = propagate mappingWithAliases.states     mappingWithAliases.stateCuids
+    -- 1) propagate cuids through aliases
+    ctxCuidsProp = propagate mappingWithAliases.contexts mappingWithAliases.contextCuids
+    rolCuidsProp = propagate mappingWithAliases.roles mappingWithAliases.roleCuids
+    propCuidsProp = propagate mappingWithAliases.properties mappingWithAliases.propertyCuids
+    stateCuidsProp = propagate mappingWithAliases.states mappingWithAliases.stateCuids
 
     -- 2) add freshly minted cuids (if any)
-    ctxCuids'    = OBJ.union ctxCuidsProp    newCuids.contexts
-    rolCuids'    = OBJ.union rolCuidsProp    newCuids.roles
-    propCuids'   = OBJ.union propCuidsProp   newCuids.properties
-    stateCuids'  = OBJ.union stateCuidsProp  newCuids.states
+    ctxCuids' = OBJ.union ctxCuidsProp newCuids.contexts
+    rolCuids' = OBJ.union rolCuidsProp newCuids.roles
+    propCuids' = OBJ.union propCuidsProp newCuids.properties
+    stateCuids' = OBJ.union stateCuidsProp newCuids.states
   in
     mappingWithAliases
       { contextCuids = ctxCuids'

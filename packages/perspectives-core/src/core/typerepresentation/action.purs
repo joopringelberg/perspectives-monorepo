@@ -24,7 +24,7 @@ module Perspectives.Representation.Action where
 
 import Prelude
 
-import Control.Alt ((<|>)) 
+import Control.Alt ((<|>))
 import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe)
@@ -36,57 +36,66 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.ThreeValuedLogic as THREE
 import Simple.JSON (class ReadForeign, class WriteForeign, read', writeImpl)
 
-data AutomaticAction = 
-  ContextAction (TimeFacets 
-    ( effect :: QueryFunctionDescription )
-    )
-  | 
-  RoleAction (TimeFacets 
-    ( currentContextCalculation :: QueryFunctionDescription
-    , effect :: QueryFunctionDescription )
-    )
+data AutomaticAction
+  = ContextAction
+      ( TimeFacets
+          (effect :: QueryFunctionDescription)
+      )
+  | RoleAction
+      ( TimeFacets
+          ( currentContextCalculation :: QueryFunctionDescription
+          , effect :: QueryFunctionDescription
+          )
+      )
 
-type TimeFacets f = 
+type TimeFacets f =
   { startMoment :: Maybe Duration
-    , endMoment :: Maybe Duration
-    , repeats :: Repeater
-    | f
+  , endMoment :: Maybe Duration
+  , repeats :: Repeater
+  | f
   }
 
 effectOfAction :: AutomaticAction -> QueryFunctionDescription
-effectOfAction (ContextAction {effect}) = effect
+effectOfAction (ContextAction { effect }) = effect
 effectOfAction (RoleAction action) = action.effect
 
 derive instance genericAutomaticAction :: Generic AutomaticAction _
-instance showAutomaticAction :: Show AutomaticAction where show = genericShow
-instance eqAutomaticAction :: Eq AutomaticAction where eq = genericEq
+instance showAutomaticAction :: Show AutomaticAction where
+  show = genericShow
+
+instance eqAutomaticAction :: Eq AutomaticAction where
+  eq = genericEq
 
 instance WriteForeign AutomaticAction where
-  writeImpl (ContextAction r) = writeImpl { constructor: "ContextAction", r}
-  writeImpl (RoleAction r) = writeImpl { constructor: "RoleAction", r}
+  writeImpl (ContextAction r) = writeImpl { constructor: "ContextAction", r }
+  writeImpl (RoleAction r) = writeImpl { constructor: "RoleAction", r }
 
 instance ReadForeign AutomaticAction where
-  readImpl f = 
+  readImpl f =
     -- order matters here!
-    do 
-      {r} :: {r :: TimeFacets ( effect :: QueryFunctionDescription, currentContextCalculation :: QueryFunctionDescription )} <- read' f
+    do
+      { r } :: { r :: TimeFacets (effect :: QueryFunctionDescription, currentContextCalculation :: QueryFunctionDescription) } <- read' f
       pure $ RoleAction r
-    <|>
-    do 
-      {r} :: {r :: TimeFacets ( effect :: QueryFunctionDescription )} <- read' f
-      pure $ ContextAction r
+      <|>
+        do
+          { r } :: { r :: TimeFacets (effect :: QueryFunctionDescription) } <- read' f
+          pure $ ContextAction r
 
 newtype Action = Action QueryFunctionDescription
+
 derive instance genericAction :: Generic Action _
 derive instance newtypeAction :: Newtype Action _
-instance showAction :: Show Action where show = genericShow
-instance eqAction :: Eq Action where eq = genericEq
+instance showAction :: Show Action where
+  show = genericShow
+
+instance eqAction :: Eq Action where
+  eq = genericEq
 
 derive newtype instance WriteForeign Action
 derive newtype instance ReadForeign Action
 
 instance Semigroup Action where
-  append (Action qfd1) (Action qfd2)= Action $ makeSequence qfd1 qfd2
+  append (Action qfd1) (Action qfd2) = Action $ makeSequence qfd1 qfd2
     where
     makeSequence :: QueryFunctionDescription -> QueryFunctionDescription -> QueryFunctionDescription
     makeSequence left right = BQD (domain left) (BinaryCombinator SequenceF) left right (range right) (THREE.and (functional left) (functional right)) (THREE.or (functional left) (functional right))

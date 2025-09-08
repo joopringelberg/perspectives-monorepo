@@ -47,69 +47,70 @@ import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransac
 import Perspectives.RunPerspectives (runPerspectivesWithState)
 import Perspectives.Time (date2String, string2Date, string2Time, time2String, wholeHour)
 
-forkedSystemClocks :: AVar PerspectivesState -> Aff Unit 
-forkedSystemClocks state = do 
+forkedSystemClocks :: AVar PerspectivesState -> Aff Unit
+forkedSystemClocks state = do
   -- At system startup, always make sure the clocks are correct.
-  runPerspectivesWithState 
-    (runMonadPerspectivesTransaction 
-      (ENR $ EnumeratedRoleType sysUser)
-      setClocks)
+  runPerspectivesWithState
+    ( runMonadPerspectivesTransaction
+        (ENR $ EnumeratedRoleType sysUser)
+        setClocks
+    )
     state
   -- Do this again on the next full hour.
   n <- liftEffect nowTime
   delay (fromDuration $ Minutes $ toNumber (sub 60 (fromEnum $ minute n)))
-  runPerspectivesWithState 
-    (runMonadPerspectivesTransaction 
-      (ENR $ EnumeratedRoleType sysUser)
-      setClocks)
+  runPerspectivesWithState
+    ( runMonadPerspectivesTransaction
+        (ENR $ EnumeratedRoleType sysUser)
+        setClocks
+    )
     state
   -- And now repeat every hour.
   runEveryHour
-  
-  where
-    -- Make sure PerspectivesSystem$Extern$CurrentDate equals the current date (with a time component of 00:00, i.e. midnight)
-    -- and that PerspectivesSystem$Extern$CurrentHour equals the current hour.
-    -- This is a zero-op if that is already the case.
-    setClocks :: MonadPerspectivesTransaction Unit
-    setClocks = do 
-      -- Read the registered hour and date.
-      system <- lift $ getMySystem
-      msystemHour <- lift (RoleInstance (buitenRol system) ##> getProperty (EnumeratedPropertyType currentSystemHour))
-      msystemDate <- lift (RoleInstance (buitenRol system) ##> getProperty (EnumeratedPropertyType currentSystemDate))
-      -- read the current time.
-      (machineClockTime :: Time) <- liftEffect $ nowTime
-      (offset :: Minutes) <- liftEffect $ getTimezoneOffset
-      Tuple _ currentTime <- pure $ adjust (negateDuration offset) machineClockTime
-      case msystemHour of 
-        Just (Value systemHour) -> do 
-          systemHour' <- string2Time systemHour
-          -- if the hour of the currentTime is not equal to the systemHour', set the currentTime to the hour of the currentTime.
-          if (hour currentTime) `notEq` (hour systemHour')
-            then setProperty [RoleInstance $ buitenRol system] (EnumeratedPropertyType currentSystemHour)  Nothing
-              [Value $ time2String (wholeHour (hour currentTime))]
-            else pure unit
-        Nothing -> setProperty [RoleInstance $ buitenRol system] (EnumeratedPropertyType currentSystemHour) Nothing [Value $ time2String (wholeHour $ hour currentTime)]
-      -- read the current date.
-      currentDate <- liftEffect $ nowDate
-      case msystemDate of 
-        Just (Value systemDate) -> do 
-          systemDate' <- unsafePartial fromJust <$> string2Date systemDate
-          -- Compare the date component of PerspectivesSystem$CurrentDate with the current date. If it is less, set CurrentDate.
-          if systemDate' < currentDate
-            then setProperty [RoleInstance $ buitenRol system] (EnumeratedPropertyType currentSystemDate) Nothing
-              [Value $ date2String currentDate]
-            else pure unit
-        Nothing -> setProperty [RoleInstance $ buitenRol system] (EnumeratedPropertyType currentSystemDate) Nothing [Value $ date2String currentDate]
-      
-      pure unit
 
-    runEveryHour :: Aff Unit
-    runEveryHour = do
-      delay (fromDuration (Hours 1.0))
-      runPerspectivesWithState 
-        (runMonadPerspectivesTransaction 
+  where
+  -- Make sure PerspectivesSystem$Extern$CurrentDate equals the current date (with a time component of 00:00, i.e. midnight)
+  -- and that PerspectivesSystem$Extern$CurrentHour equals the current hour.
+  -- This is a zero-op if that is already the case.
+  setClocks :: MonadPerspectivesTransaction Unit
+  setClocks = do
+    -- Read the registered hour and date.
+    system <- lift $ getMySystem
+    msystemHour <- lift (RoleInstance (buitenRol system) ##> getProperty (EnumeratedPropertyType currentSystemHour))
+    msystemDate <- lift (RoleInstance (buitenRol system) ##> getProperty (EnumeratedPropertyType currentSystemDate))
+    -- read the current time.
+    (machineClockTime :: Time) <- liftEffect $ nowTime
+    (offset :: Minutes) <- liftEffect $ getTimezoneOffset
+    Tuple _ currentTime <- pure $ adjust (negateDuration offset) machineClockTime
+    case msystemHour of
+      Just (Value systemHour) -> do
+        systemHour' <- string2Time systemHour
+        -- if the hour of the currentTime is not equal to the systemHour', set the currentTime to the hour of the currentTime.
+        if (hour currentTime) `notEq` (hour systemHour') then setProperty [ RoleInstance $ buitenRol system ] (EnumeratedPropertyType currentSystemHour) Nothing
+          [ Value $ time2String (wholeHour (hour currentTime)) ]
+        else pure unit
+      Nothing -> setProperty [ RoleInstance $ buitenRol system ] (EnumeratedPropertyType currentSystemHour) Nothing [ Value $ time2String (wholeHour $ hour currentTime) ]
+    -- read the current date.
+    currentDate <- liftEffect $ nowDate
+    case msystemDate of
+      Just (Value systemDate) -> do
+        systemDate' <- unsafePartial fromJust <$> string2Date systemDate
+        -- Compare the date component of PerspectivesSystem$CurrentDate with the current date. If it is less, set CurrentDate.
+        if systemDate' < currentDate then setProperty [ RoleInstance $ buitenRol system ] (EnumeratedPropertyType currentSystemDate) Nothing
+          [ Value $ date2String currentDate ]
+        else pure unit
+      Nothing -> setProperty [ RoleInstance $ buitenRol system ] (EnumeratedPropertyType currentSystemDate) Nothing [ Value $ date2String currentDate ]
+
+    pure unit
+
+  runEveryHour :: Aff Unit
+  runEveryHour = do
+    delay (fromDuration (Hours 1.0))
+    runPerspectivesWithState
+      ( runMonadPerspectivesTransaction
           (ENR $ EnumeratedRoleType sysUser)
-          setClocks)
-        state
-      runEveryHour
+          setClocks
+      )
+      state
+    runEveryHour
 

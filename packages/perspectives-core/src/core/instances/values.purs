@@ -40,9 +40,7 @@ module Perspectives.Instances.Values
   , value2Number
   , value2Number'
   , writePerspectivesFile
-  )
-  where
-
+  ) where
 
 -- | Parse a date. See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/parse#Date_Time_String_Format for the supported string format of the date.
 
@@ -82,7 +80,7 @@ parseDate s = do
 
 -- | Decode a date from the Epoch format in which it is stored in Couchdb.
 decodeDate :: forall m. MonadError Error m => String -> m DateTime
-decodeDate s = 
+decodeDate s =
   case (read $ unsafeToForeign s) of
     Left e -> throwError $ error "Not a date"
     Right (SerializableDateTime dt) -> pure dt
@@ -110,7 +108,7 @@ parseBool s = throwError (error $ "Cannot parse a bool from '" <> s <> "'.")
 value2Number' :: Value -> Either Error Number
 value2Number' (Value is) = either
   (Left <<< error <<< show)
-  Right 
+  Right
   ((runExcept $ readNumber $ unsafeToForeign is) :: Either (NonEmptyList ForeignError) Number)
 
 -- | An UNSAFE operation!
@@ -145,7 +143,6 @@ value2Date' (Value dt) = case read $ unsafeToForeign dt of
 value2Date :: Value -> SerializableDateTime
 value2Date (Value dt) = fromRight (SerializableDateTime defaultDateTime) $ read $ unsafeToForeign dt
 
-
 date2Value :: SerializableDateTime -> Value
 date2Value (SerializableDateTime sdt) = Value $ show (unwrap $ unInstant (fromDateTime sdt))
 
@@ -160,13 +157,13 @@ type MIME = String
 
 -- Use database and roleFileName to retrieve the role instance; 
 -- use the local name of the PFile property to retrieve the attachment.
-type PerspectivesFile = 
-  { fileName :: String                      -- The name associated with the file on creating or uploading it. Use only client side.
-  , propertyType :: EnumeratedPropertyType  -- The identifier of the attachment of the role instance.
+type PerspectivesFile =
+  { fileName :: String -- The name associated with the file on creating or uploading it. Use only client side.
+  , propertyType :: EnumeratedPropertyType -- The identifier of the attachment of the role instance.
   , mimeType :: MIME
-  , database :: Maybe String                -- The database where the role instance is stored. 
-                                            -- (is Nothing for IndexedDB)
-  , roleFileName :: String                  -- The name of the role instance document. 
+  , database :: Maybe String -- The database where the role instance is stored. 
+  -- (is Nothing for IndexedDB)
+  , roleFileName :: String -- The name of the role instance document. 
   }
 
 parsePerspectivesFile :: String -> Either MultipleErrors PerspectivesFile

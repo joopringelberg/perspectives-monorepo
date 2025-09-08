@@ -64,7 +64,7 @@ import Parsing (ParseError(..))
 loadAndCompileArcFile :: String -> String -> MonadPerspectives (Either MultiplePerspectivesErrors (Tuple DomeinFile StoredQueries))
 loadAndCompileArcFile fileName directoryName = do
   procesDir <- liftEffect cwd
-  loadAndCompileArcFile_ (Path.concat [procesDir, directoryName, fileName <> ".arc"])
+  loadAndCompileArcFile_ (Path.concat [ procesDir, directoryName, fileName <> ".arc" ])
 
 type FilePath = String
 
@@ -72,30 +72,30 @@ loadAndCompileArcFile_ :: FilePath -> MonadPerspectives (Either MultiplePerspect
 loadAndCompileArcFile_ filePath = catchError
   do
     text <- lift $ readTextFile UTF8 filePath
-    (r :: Either ParseError ContextE) <- {-pure $ unwrap $-} lift $ runIndentParser text domain
+    (r :: Either ParseError ContextE) <- {-pure $ unwrap $-}  lift $ runIndentParser text domain
     case r of
-      (Left e) -> pure $ Left [parseError2PerspectivesError e]
+      (Left e) -> pure $ Left [ parseError2PerspectivesError e ]
       (Right ctxt) -> do
         -- liftEffect $ log ((show ctxt) <> "\n\n\n")
-        (Tuple result state :: Tuple (Either MultiplePerspectivesErrors DomeinFile) PhaseTwoState) <- {-pure $ unwrap $-} lift $ runPhaseTwo_' (traverseDomain ctxt) defaultDomeinFileRecord empty empty Nil
+        (Tuple result state :: Tuple (Either MultiplePerspectivesErrors DomeinFile) PhaseTwoState) <- {-pure $ unwrap $-}  lift $ runPhaseTwo_' (traverseDomain ctxt) defaultDomeinFileRecord empty empty Nil
         case result of
           (Left e) -> pure $ Left e
-          (Right (DomeinFile dr'@{id})) -> do
+          (Right (DomeinFile dr'@{ id })) -> do
             -- log (show dr')
-            dr'' <- pure dr' {referredModels = state.referredModels}
+            dr'' <- pure dr' { referredModels = state.referredModels }
             -- logShow state.referredModels
             (x' :: (Either MultiplePerspectivesErrors (Tuple DomeinFileRecord StoredQueries))) <- phaseThree dr'' state.postponedStateQualifiedParts state.screens
             case x' of
-              (Left e) -> do 
+              (Left e) -> do
                 pure $ Left e
-              (Right (Tuple correctedDFR@{referredModels:refModels} invertedQueries)) -> do
+              (Right (Tuple correctedDFR@{ referredModels: refModels } invertedQueries)) -> do
                 -- Remove the self-referral and add the source.
                 df <- pure $ DomeinFile correctedDFR
                   { referredModels = delete id refModels
                   , arc = text
                   }
                 pure $ Right $ Tuple df invertedQueries
-  \e -> pure $ Left [Custom (show e)]
+  \e -> pure $ Left [ Custom (show e) ]
 
 type Persister = DomeinFileId -> DomeinFile -> MonadPerspectives MultiplePerspectivesErrors
 
@@ -110,7 +110,7 @@ loadAndPersistArcFile loadCRL persist fileName directoryName = do
   r <- loadAndCompileArcFile fileName directoryName
   case r of
     Left m -> pure m
-    Right (Tuple df@(DomeinFile {id}) invertedQueries ) -> persist id df *> pure []
+    Right (Tuple df@(DomeinFile { id }) invertedQueries) -> persist id df *> pure []
 
 -- | Load an Arc file from a directory. Parse the file completely. Cache it.
 -- | Loads an instance file, too. If not present, throws an error. Instances are added to the cache.

@@ -26,15 +26,13 @@
 -- | because of the external module Perspectives.Extern.Parsing, that imports PhaseThree via
 -- | Perspectives.TypePersistence.LoadArc.
 
-module Perspectives.External.CoreModuleList
-
-where
+module Perspectives.External.CoreModuleList where
 
 import Data.Array (elemIndex)
 import Data.Maybe (isJust)
 
 coreModules :: Array String
-coreModules = 
+coreModules =
   [ "model://perspectives.domains#Couchdb"
   , "model://perspectives.domains#Serialise"
   , "model://perspectives.domains#Parsing"

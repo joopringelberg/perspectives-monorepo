@@ -93,7 +93,7 @@ instance enumeratedPropertyPropertyClass :: PropertyClass EnumeratedProperty Enu
   isCalculated _ = pure false
   calculation r = do
     context <- enumeratedRoleContextType (role r)
-    pure $ SQD (RDOM (ST $ RoleInContext {context, role: (role r)})) (PropertyGetter (ENP (identifier r))) (VDOM (unwrap r).range (Just $ ENP (identifier r))) (bool2threeValued (unwrap r).functional) (bool2threeValued (unwrap r).mandatory)
+    pure $ SQD (RDOM (ST $ RoleInContext { context, role: (role r) })) (PropertyGetter (ENP (identifier r))) (VDOM (unwrap r).range (Just $ ENP (identifier r))) (bool2threeValued (unwrap r).functional) (bool2threeValued (unwrap r).mandatory)
   constrainingFacets r = (unwrap r).constrainingFacets
 
 rangeOfPropertyType :: PropertyType -> MonadPerspectives Range
@@ -117,34 +117,46 @@ getProperty (ENP e) = getPerspectType e >>= pure <<< E
 getProperty (CP c) = getPerspectType c >>= pure <<< C
 
 propertyTypeIsFunctional :: PropertyType -> MonadPerspectives Boolean
-propertyTypeIsFunctional = getProperty >=> (case _ of
-  E r -> functional r
-  C r -> functional r)
+propertyTypeIsFunctional = getProperty >=>
+  ( case _ of
+      E r -> functional r
+      C r -> functional r
+  )
 
 propertyTypeIsMandatory :: PropertyType -> MonadPerspectives Boolean
-propertyTypeIsMandatory = getProperty >=> (case _ of
-  E r -> mandatory r
-  C r -> mandatory r)
+propertyTypeIsMandatory = getProperty >=>
+  ( case _ of
+      E r -> mandatory r
+      C r -> mandatory r
+  )
 
 propertyTypeIsSelfOnly :: PropertyType -> MonadPerspectives Boolean
-propertyTypeIsSelfOnly = getProperty >=> (case _ of
-  E r -> selfonly r
-  C r -> selfonly r)
+propertyTypeIsSelfOnly = getProperty >=>
+  ( case _ of
+      E r -> selfonly r
+      C r -> selfonly r
+  )
 
 propertyTypeIsAuthorOnly :: PropertyType -> MonadPerspectives Boolean
-propertyTypeIsAuthorOnly = getProperty >=> (case _ of
-  E r -> authoronly r
-  C r -> authoronly r)
+propertyTypeIsAuthorOnly = getProperty >=>
+  ( case _ of
+      E r -> authoronly r
+      C r -> authoronly r
+  )
 
 propertyTypeIsCalculated :: PropertyType -> MonadPerspectives Boolean
-propertyTypeIsCalculated = getProperty >=> (case _ of
-  E r -> pure true
-  C r -> pure false)
+propertyTypeIsCalculated = getProperty >=>
+  ( case _ of
+      E r -> pure true
+      C r -> pure false
+  )
 
 getPropertyTypeFacets :: PropertyType -> MonadPerspectives (Array PropertyFacet)
-getPropertyTypeFacets = getProperty >=> (case _ of
-  E r -> pure $ constrainingFacets r
-  C r -> pure $ constrainingFacets r)
+getPropertyTypeFacets = getProperty >=>
+  ( case _ of
+      E r -> pure $ constrainingFacets r
+      C r -> pure $ constrainingFacets r
+  )
 
 -----------------------------------------------------------
 -- FUNCTIONS ON STRING

@@ -53,20 +53,26 @@ closure_ f a = ArrayT $ do
   r <- runArrayT $ closure f a
   pure $ maybe (cons a r) (const r) (elemIndex a r)
 
-filter :: forall e m a o. Monad m => MonadError e m =>
-  (a -> ArrayT m o) ->
-  (o -> ArrayT m Boolean) ->
-  (a -> ArrayT m o)
+filter
+  :: forall e m a o
+   . Monad m
+  => MonadError e m
+  => (a -> ArrayT m o)
+  -> (o -> ArrayT m Boolean)
+  -> (a -> ArrayT m o)
 filter source criterium a = do
   (r :: o) <- source a
   (passes :: Boolean) <- criterium r
   guard passes
   pure r
 
-filter' :: forall e m a o. Monad m => MonadError e m =>
-  (a -> ArrayT m o) ->
-  (o -> Boolean) ->
-  (a -> ArrayT m o)
+filter'
+  :: forall e m a o
+   . Monad m
+  => MonadError e m
+  => (a -> ArrayT m o)
+  -> (o -> Boolean)
+  -> (a -> ArrayT m o)
 filter' source criterium a = do
   (r :: o) <- source a
   guard (criterium r)
@@ -74,140 +80,173 @@ filter' source criterium a = do
 
 -- | Convert a Perspectives Value to a Purescript Boolean value.
 -- | Just the value "true" is interpreted as true, all other values are interpreted as false.
-toBool :: forall m. Monad m =>
-  (Value -> ArrayT m Boolean)
-toBool v = if v == Value "true"
-  then pure true
+toBool
+  :: forall m
+   . Monad m
+  => (Value -> ArrayT m Boolean)
+toBool v =
+  if v == Value "true" then pure true
   else pure false
 
-cond :: forall m s o. Monad m =>
-  (s -> ArrayT m Boolean) ->
-  (s -> ArrayT m o) ->
-  (s -> ArrayT m o) ->
-  (s -> ArrayT m o)
+cond
+  :: forall m s o
+   . Monad m
+  => (s -> ArrayT m Boolean)
+  -> (s -> ArrayT m o)
+  -> (s -> ArrayT m o)
+  -> (s -> ArrayT m o)
 cond condition thenPart elsePart id = do
   passes <- condition id
   if passes then thenPart id else elsePart id
 
 -- | Prefer the left solution over the right one.
-orElse :: forall m s o. Monad m =>
-  (s -> ArrayT m o) ->
-  (s -> ArrayT m o) ->
-  (s -> ArrayT m o)
+orElse
+  :: forall m s o
+   . Monad m
+  => (s -> ArrayT m o)
+  -> (s -> ArrayT m o)
+  -> (s -> ArrayT m o)
 orElse left right id = ArrayT do
   r <- runArrayT $ left id
-  if null r
-    then runArrayT $ right id
-    else pure r
+  if null r then runArrayT $ right id
+  else pure r
 
 -- | Join the results.
-conjunction :: forall m s o. Eq o => Monad m =>
-  (s -> ArrayT m o) ->
-  (s -> ArrayT m o) ->
-  (s -> ArrayT m o)
+conjunction
+  :: forall m s o
+   . Eq o
+  => Monad m
+  => (s -> ArrayT m o)
+  -> (s -> ArrayT m o)
+  -> (s -> ArrayT m o)
 conjunction left right id = ArrayT do
   l <- runArrayT $ left id
   r <- runArrayT $ right id
   pure $ union l r
 
 -- | Intersect the results.
-intersection :: forall m s o. Eq o => Monad m =>
-  (s -> ArrayT m o) ->
-  (s -> ArrayT m o) ->
-  (s -> ArrayT m o)
+intersection
+  :: forall m s o
+   . Eq o
+  => Monad m
+  => (s -> ArrayT m o)
+  -> (s -> ArrayT m o)
+  -> (s -> ArrayT m o)
 intersection left right id = ArrayT do
   l <- runArrayT $ left id
   r <- runArrayT $ right id
   pure $ intersect l r
 
-logicalAnd :: forall m s. Monad m =>
-  (s -> ArrayT m Value) ->
-  (s -> ArrayT m Value) ->
-  (s -> ArrayT m Value)
+logicalAnd
+  :: forall m s
+   . Monad m
+  => (s -> ArrayT m Value)
+  -> (s -> ArrayT m Value)
+  -> (s -> ArrayT m Value)
 logicalAnd a b c = ArrayT do
   (as :: Array Value) <- runArrayT (a c)
   (bs :: Array Value) <- runArrayT (b c)
   case head as, head bs of
-    Just (Value "true"), Just (Value "true") -> pure [Value "true"]
-    _, _ -> pure [Value "false"]
+    Just (Value "true"), Just (Value "true") -> pure [ Value "true" ]
+    _, _ -> pure [ Value "false" ]
 
-logicalAnd_ :: forall m s. Monad m =>
-  (s -> ArrayT m Boolean) ->
-  (s -> ArrayT m Boolean) ->
-  (s -> ArrayT m Boolean)
+logicalAnd_
+  :: forall m s
+   . Monad m
+  => (s -> ArrayT m Boolean)
+  -> (s -> ArrayT m Boolean)
+  -> (s -> ArrayT m Boolean)
 logicalAnd_ a b c = ArrayT do
   (as :: Array Boolean) <- runArrayT (a c)
   (bs :: Array Boolean) <- runArrayT (b c)
   case head as, head bs of
-    Just true, Just true -> pure [true]
-    _, _ -> pure [false]
+    Just true, Just true -> pure [ true ]
+    _, _ -> pure [ false ]
 
-logicalOr :: forall m s. Monad m =>
-  (s -> ArrayT m Value) ->
-  (s -> ArrayT m Value) ->
-  (s -> ArrayT m Value)
+logicalOr
+  :: forall m s
+   . Monad m
+  => (s -> ArrayT m Value)
+  -> (s -> ArrayT m Value)
+  -> (s -> ArrayT m Value)
 logicalOr a b c = ArrayT do
   (as :: Array Value) <- runArrayT (a c)
   (bs :: Array Value) <- runArrayT (b c)
   case head as, head bs of
-    Just (Value "true"), _ -> pure [Value "true"]
-    _, Just (Value "true") -> pure [Value "true"]
-    _, _ -> pure [Value "false"]
+    Just (Value "true"), _ -> pure [ Value "true" ]
+    _, Just (Value "true") -> pure [ Value "true" ]
+    _, _ -> pure [ Value "false" ]
 
-exists :: forall m s o. Eq o => Monad m =>
-  (s -> ArrayT m o) ->
-  (s -> ArrayT m Value)
+exists
+  :: forall m s o
+   . Eq o
+  => Monad m
+  => (s -> ArrayT m o)
+  -> (s -> ArrayT m Value)
 exists source id = ArrayT do
   r <- runArrayT $ source id
-  pure $ [Value $ show $ HA.not $ null r]
+  pure $ [ Value $ show $ HA.not $ null r ]
 
-exists' :: forall m s o. Eq o => Monad m =>
-  (s -> ArrayT m o) ->
-  (s -> ArrayT m Boolean)
+exists'
+  :: forall m s o
+   . Eq o
+  => Monad m
+  => (s -> ArrayT m o)
+  -> (s -> ArrayT m Boolean)
 exists' source id = ArrayT do
   r <- runArrayT $ source id
-  pure $ [HA.not $ null r]
+  pure $ [ HA.not $ null r ]
 
 -- | Note that if source yields no results, the end result will still be true!
-every :: forall m s. Monad m =>
-  (s -> ArrayT m Boolean) ->
-  (s -> ArrayT m Boolean)
+every
+  :: forall m s
+   . Monad m
+  => (s -> ArrayT m Boolean)
+  -> (s -> ArrayT m Boolean)
 every source id = ArrayT do
   (r :: Array Boolean) <- runArrayT $ source id
-  pure [ala Conj foldMap r]
+  pure [ ala Conj foldMap r ]
 
-some :: forall m s. Monad m =>
-  (s -> ArrayT m Boolean) ->
-  (s -> ArrayT m Boolean)
+some
+  :: forall m s
+   . Monad m
+  => (s -> ArrayT m Boolean)
+  -> (s -> ArrayT m Boolean)
 some source id = ArrayT do
   (r :: Array Boolean) <- runArrayT $ source id
-  pure [ala Disj foldMap r]
+  pure [ ala Disj foldMap r ]
 
-available :: forall s o. Eq o => Newtype o String => Show o =>
-  (s -> MonadPerspectivesQuery o) ->
-  (s -> MonadPerspectivesQuery Value)
+available
+  :: forall s o
+   . Eq o
+  => Newtype o String
+  => Show o
+  => (s -> MonadPerspectivesQuery o)
+  -> (s -> MonadPerspectivesQuery Value)
 available source id = available_ (source >=> pure <<< unwrap) id
 
-available_ :: forall s.
-  (s -> MonadPerspectivesQuery String) ->
-  (s -> MonadPerspectivesQuery Value)
+available_
+  :: forall s
+   . (s -> MonadPerspectivesQuery String)
+  -> (s -> MonadPerspectivesQuery Value)
 available_ source id = ArrayT do
   r <- runArrayT $ source id
   result <- lift $ available' r
-  pure $ [Value $ show result]
+  pure $ [ Value $ show result ]
 
 available' :: Array String -> MonadPerspectives Boolean
 available' ids = do
   result <- foldM
-    (\allAvailable resId -> do
-      mr <- tryGetPerspectEntiteit (RoleInstance resId)
-      case mr of
-        Nothing -> do
-          mc <- tryGetPerspectEntiteit (ContextInstance resId)
-          case mc of
-            Nothing -> pure false
-            _ -> pure allAvailable
-        _ -> pure allAvailable)
+    ( \allAvailable resId -> do
+        mr <- tryGetPerspectEntiteit (RoleInstance resId)
+        case mr of
+          Nothing -> do
+            mc <- tryGetPerspectEntiteit (ContextInstance resId)
+            case mc of
+              Nothing -> pure false
+              _ -> pure allAvailable
+          _ -> pure allAvailable
+    )
     true
     ids
   pure (result HA.&& (HA.not (null ids)))
@@ -215,16 +254,20 @@ available' ids = do
 -- | Implements negation by failure in the sense that if the source returns no values, it is interpreted
 -- | as `false`, hence `not` returns `true`.
 -- | In other words: if we have a Boolean property, the absence of a value for that property is mapped to `false`.
-not :: forall m s. Monad m =>
-  (s -> ArrayT m Value) ->
-  (s -> ArrayT m Value)
+not
+  :: forall m s
+   . Monad m
+  => (s -> ArrayT m Value)
+  -> (s -> ArrayT m Value)
 not source id = ArrayT do
   (r :: Array Value) <- runArrayT $ source id
   map (Value <<< show) <$> not_ r
 
-not' :: forall m s. Monad m =>
-  (s -> ArrayT m Boolean) ->
-  (s -> ArrayT m Boolean)
+not'
+  :: forall m s
+   . Monad m
+  => (s -> ArrayT m Boolean)
+  -> (s -> ArrayT m Boolean)
 not' source id = ArrayT do
   (r :: Array Boolean) <- runArrayT $ source id
   pure (HA.not <$> r)
@@ -236,6 +279,6 @@ not' source id = ArrayT do
 -- | not_ [Value "false"] ==> [true]
 -- | not_ [Value "true"] ==> [false]
 not_ :: forall m. Monad m => Array Value -> m (Array Boolean)
-not_ r = if null r
-  then pure [true]
+not_ r =
+  if null r then pure [ true ]
   else pure $ ((==) (Value "false")) <$> r

@@ -20,10 +20,7 @@
 
 -- END LICENSE
 
-
-module Perspectives.Persistence.State
-
-where
+module Perspectives.Persistence.State where
 
 import Prelude
 
@@ -48,9 +45,9 @@ getCouchdbBaseURL :: forall f. MonadPouchdb f (Maybe Url)
 getCouchdbBaseURL = gets _.couchdbUrl
 
 getCouchdbCredentials :: forall f. MonadPouchdb f (Maybe Credential)
-getCouchdbCredentials = do 
+getCouchdbCredentials = do
   mcbUrl <- gets _.couchdbUrl
-  case mcbUrl of 
+  case mcbUrl of
     Just cbUrl -> do
       credentials :: Object Credential <- gets _.couchdbCredentials
       pure $ lookup cbUrl credentials

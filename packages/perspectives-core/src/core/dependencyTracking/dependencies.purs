@@ -53,7 +53,7 @@ type ApiEffectRunner = Unit -> MP Unit
 
 -- | A SupportedEffect combines an EffectRunner and an array of Assumptions on which it relies.
 -- | We use the Assumptions to unregister an entry from the AssumptionRegister, when the ApiEffect is retracted.
-type SupportedEffect = {runner :: ApiEffectRunner, assumptions:: Array Assumption}
+type SupportedEffect = { runner :: ApiEffectRunner, assumptions :: Array Assumption }
 
 -- | A SupportedEffect is in the ActiveSupportedEffects after it has been requested through the API and
 -- | for as long as it is not retracted. As soon as an Assumption changes, the active SupportedEffects that
@@ -75,58 +75,61 @@ activeSupportedEffects = GLS.newMap unit
 -- | As a result:
 -- |  1. we have cached a newMap SupportedEffect in the ActiveSupportedEffects.
 -- |  2. we have registered the dependency of this SupportedEffect in the AssumptionRegister in the PerspectivesState.
-registerSupportedEffect :: forall a b x. Attachment x => Persistent x a => Newtype b String =>
-  CorrelationIdentifier ->
-  ApiEffect ->
-  (a ~~> b) ->
-  a ->
-  Boolean ->
-  MP Unit
+registerSupportedEffect
+  :: forall a b x
+   . Attachment x
+  => Persistent x a
+  => Newtype b String
+  => CorrelationIdentifier
+  -> ApiEffect
+  -> (a ~~> b)
+  -> a
+  -> Boolean
+  -> MP Unit
 registerSupportedEffect corrId ef q arg onlyOnce = do
   -- Add a newMap effect to activeSupportedEffects, for now with zero assumptions.
-  _ <- if onlyOnce 
-    then pure unit
-    else void $ pure $ GLS.poke activeSupportedEffects (show corrId) {runner: apiEffectRunner, assumptions: []}
+  _ <-
+    if onlyOnce then pure unit
+    else void $ pure $ GLS.poke activeSupportedEffects (show corrId) { runner: apiEffectRunner, assumptions: [] }
   -- then execute the SupportedEffect once
   apiEffectRunner unit
   where
-    -- As an effect runner, needs an argument.
-    apiEffectRunner :: Unit -> MP Unit
-    apiEffectRunner _ = do
-      exists <- entityExists arg
-      if exists
-        then do
-          (Tuple result (informedAssumptions :: ArrayWithoutDoubles InformedAssumption)) <- runMonadPerspectivesQuery arg q
-          assumptions <- pure (map toAssumption (filter canBeUntypedAssumption (unwrap informedAssumptions)))
-          -- destructively set the assumptions in the ActiveSupportedEffects
-          (moldSupports :: Maybe SupportedEffect) <- pure $ GLS.peek activeSupportedEffects (show corrId)
-          -- The original request may be retracted by the client.
-          case moldSupports of
-            Nothing -> liftEffect $ ef (ResultWithWarnings corrId (map unwrap result) [])
-            Just x -> do
-              (oldSupports :: Array Assumption) <- pure x.assumptions
-              -- (oldSupports :: Array Assumption) <- pure <<< unsafePartial $ (fromJust moldSupports).assumptions
-              _ <- pure $ GLS.poke activeSupportedEffects (show corrId) {runner: apiEffectRunner, assumptions: assumptions}
-              -- destructively register the correlationIdentifier with newMap assumptions
-              {no: newMap} <- pure $ partition ((maybe false (const true)) <<< flip elemIndex oldSupports) assumptions
-              for_ newMap (registerDependency corrId)
-              -- destructively deregister the correlationIdentifier from vanished assumptions
-              {no: vanished} <- pure $ partition ((maybe false (const true)) <<< flip elemIndex assumptions) oldSupports
-              for_ vanished (deregisterDependency corrId)
-              -- (Re-)run the effect
-              liftEffect $ ef (ResultWithWarnings corrId (map unwrap result) [])
-              pure unit
-        else do
-          -- Remove this effect and
-          unregisterSupportedEffect corrId
-          -- send an empty result (for the last time).
-          liftEffect $ ef (ResultWithWarnings corrId [] [] )
+  -- As an effect runner, needs an argument.
+  apiEffectRunner :: Unit -> MP Unit
+  apiEffectRunner _ = do
+    exists <- entityExists arg
+    if exists then do
+      (Tuple result (informedAssumptions :: ArrayWithoutDoubles InformedAssumption)) <- runMonadPerspectivesQuery arg q
+      assumptions <- pure (map toAssumption (filter canBeUntypedAssumption (unwrap informedAssumptions)))
+      -- destructively set the assumptions in the ActiveSupportedEffects
+      (moldSupports :: Maybe SupportedEffect) <- pure $ GLS.peek activeSupportedEffects (show corrId)
+      -- The original request may be retracted by the client.
+      case moldSupports of
+        Nothing -> liftEffect $ ef (ResultWithWarnings corrId (map unwrap result) [])
+        Just x -> do
+          (oldSupports :: Array Assumption) <- pure x.assumptions
+          -- (oldSupports :: Array Assumption) <- pure <<< unsafePartial $ (fromJust moldSupports).assumptions
+          _ <- pure $ GLS.poke activeSupportedEffects (show corrId) { runner: apiEffectRunner, assumptions: assumptions }
+          -- destructively register the correlationIdentifier with newMap assumptions
+          { no: newMap } <- pure $ partition ((maybe false (const true)) <<< flip elemIndex oldSupports) assumptions
+          for_ newMap (registerDependency corrId)
+          -- destructively deregister the correlationIdentifier from vanished assumptions
+          { no: vanished } <- pure $ partition ((maybe false (const true)) <<< flip elemIndex assumptions) oldSupports
+          for_ vanished (deregisterDependency corrId)
+          -- (Re-)run the effect
+          liftEffect $ ef (ResultWithWarnings corrId (map unwrap result) [])
+          pure unit
+    else do
+      -- Remove this effect and
+      unregisterSupportedEffect corrId
+      -- send an empty result (for the last time).
+      liftEffect $ ef (ResultWithWarnings corrId [] [])
 
 unregisterSupportedEffect :: CorrelationIdentifier -> MP Unit
 unregisterSupportedEffect corrId = do
   case GLS.peek activeSupportedEffects (show corrId) of
     Nothing -> pure unit
-    Just {assumptions} -> do
+    Just { assumptions } -> do
       void <- pure $ GLS.delete activeSupportedEffects (show corrId)
       for_ assumptions (deregisterDependency corrId)
 
@@ -134,8 +137,8 @@ findDependencies :: Assumption -> MP (Maybe (Array CorrelationIdentifier))
 findDependencies a@(Tuple resource tpe) = do
   r <- queryAssumptionRegister
   (wildCardIdentifiers :: Maybe (Array CorrelationIdentifier)) <- case lookup "def:AnyContext" r of
-      Nothing -> pure Nothing
-      Just (typesForResource :: Object (Array CorrelationIdentifier)) -> pure $ lookup tpe typesForResource
+    Nothing -> pure Nothing
+    Just (typesForResource :: Object (Array CorrelationIdentifier)) -> pure $ lookup tpe typesForResource
 
   case lookup resource r of
     -- The resource "def:AnyContext" serves as a wildcard.
@@ -160,7 +163,7 @@ findMeRequests resource = findDependencies (Tuple (unwrap resource) "model://per
 findRoleRequests :: ContextInstance -> EnumeratedRoleType -> MP (Array CorrelationIdentifier)
 findRoleRequests resource ert = do
   allTypes <- ert ###= roleAspectsClosure
-  concat <$> for allTypes \tpe -> 
+  concat <$> for allTypes \tpe ->
     findDependencies (Tuple (unwrap resource) (unwrap tpe)) >>= \ma -> pure $ maybe [] identity ma
 
 -- Find all correlation identifiers for requests of the form `property <TypeOfProperty`
@@ -208,14 +211,14 @@ findIndexedContextNamesRequests (ContextInstance cid) = do
 
 isRegistered :: CorrelationIdentifier -> Assumption -> MP Boolean
 isRegistered corrId assumption = findDependencies assumption >>= pure <<<
-  (maybe false (maybe false (const true) <<< (elemIndex corrId)) )
+  (maybe false (maybe false (const true) <<< (elemIndex corrId)))
 
 registerDependency :: CorrelationIdentifier -> Assumption -> MP Unit
 registerDependency corrId (Tuple resource tpe) = queryAssumptionRegisterModify \r ->
   case lookup resource r of
-    Nothing -> insert resource (singleton tpe [corrId]) r
+    Nothing -> insert resource (singleton tpe [ corrId ]) r
     Just (typesForResource :: Object (Array CorrelationIdentifier)) -> case lookup tpe typesForResource of
-      Nothing -> insert resource (insert tpe [corrId] typesForResource) r
+      Nothing -> insert resource (insert tpe [ corrId ] typesForResource) r
       Just (correlationIdentifiers :: Array CorrelationIdentifier) -> insert resource (insert tpe (corrId : correlationIdentifiers) typesForResource) r
 
 deregisterDependency :: CorrelationIdentifier -> Assumption -> MP Unit

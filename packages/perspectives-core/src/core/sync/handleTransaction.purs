@@ -20,8 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.Sync.HandleTransaction where 
-
+module Perspectives.Sync.HandleTransaction where
 
 import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Error.Class (catchError, throwError, try)
@@ -94,33 +93,35 @@ import Simple.JSON (readJSON')
 -- or update to the newer model version (have the end user consent).
 
 executeContextDelta :: ContextDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeContextDelta (ContextDelta{deltaType, contextInstance, contextType, roleType, roleInstance, destinationContext, subject} ) signedDelta = do
+executeContextDelta (ContextDelta { deltaType, contextInstance, contextType, roleType, roleInstance, destinationContext, subject }) signedDelta = do
   padding <- lift transactionLevel
   log (padding <> show deltaType <> " to/from " <> show contextInstance <> " and " <> show roleInstance)
   case deltaType of
     -- The subject must be allowed to change the role: they must have a perspective on it that includes:
     --  * the verb CreateAndFill, in case a context role is created;
     --  * the verb Create, in case another role is created.
-    AddRoleInstancesToContext -> (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [Verbs.Create, Verbs.CreateAndFill] Nothing Nothing) >>= case _ of
+    AddRoleInstancesToContext -> (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Create, Verbs.CreateAndFill ] Nothing Nothing) >>= case _ of
       Left e -> handleError e
       -- Takes care of PERSISTENCE of both context and role.
       Right _ -> addRoleInstanceToContext contextInstance roleType (Tuple roleInstance (Just signedDelta))
     -- NOTE: the perspective should always include the Delete verb.
-    MoveRoleInstancesToAnotherContext -> (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [Verbs.Create, Verbs.CreateAndFill] Nothing Nothing) >>= case _ of
+    MoveRoleInstancesToAnotherContext -> (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Create, Verbs.CreateAndFill ] Nothing Nothing) >>= case _ of
       Left e -> handleError e
-      Right _ -> moveRoleInstanceToAnotherContext contextInstance (unsafePartial $ fromJust destinationContext) roleType (Just signedDelta) roleInstance 
+      Right _ -> moveRoleInstanceToAnotherContext contextInstance (unsafePartial $ fromJust destinationContext) roleType (Just signedDelta) roleInstance
     -- As the external role and the context have been constructed before (and apparently have not thrown errors) we just add the delta to the external role
     -- iff it is not present!
-    AddExternalRole -> lift (getPerspectRol roleInstance >>= \rol@(PerspectRol r) -> if isDefaultContextDelta (rol_contextDelta rol)
-      then void $ saveEntiteit_ roleInstance (PerspectRol r {contextDelta = signedDelta})
-      else pure unit)
+    AddExternalRole -> lift
+      ( getPerspectRol roleInstance >>= \rol@(PerspectRol r) ->
+          if isDefaultContextDelta (rol_contextDelta rol) then void $ saveEntiteit_ roleInstance (PerspectRol r { contextDelta = signedDelta })
+          else pure unit
+      )
 
 executeRoleBindingDelta :: RoleBindingDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeRoleBindingDelta (RoleBindingDelta{filled, filler, deltaType, subject}) signedDelta = do
+executeRoleBindingDelta (RoleBindingDelta { filled, filler, deltaType, subject }) signedDelta = do
   padding <- lift transactionLevel
   log (padding <> show deltaType <> " of " <> show filled <> " (to) " <> show filler)
   roleType' <- lift (filled ##>> roleType)
-  (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType' [Verbs.Fill, Verbs.CreateAndFill] Nothing Nothing) >>= case _ of
+  (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType' [ Verbs.Fill, Verbs.CreateAndFill ] Nothing Nothing) >>= case _ of
     Left e -> handleError e
     Right _ -> case deltaType of
       SetFirstBinding -> void $ setFirstBinding filled (unsafePartial $ fromJust filler) (Just signedDelta)
@@ -129,7 +130,7 @@ executeRoleBindingDelta (RoleBindingDelta{filled, filler, deltaType, subject}) s
 
 -- TODO. Wat met SetPropertyValue?
 executeRolePropertyDelta :: RolePropertyDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeRolePropertyDelta d@(RolePropertyDelta{id, roleType, deltaType, values, property, subject}) signedDelta = do
+executeRolePropertyDelta d@(RolePropertyDelta { id, roleType, deltaType, values, property, subject }) signedDelta = do
   padding <- lift transactionLevel
   log (padding <> show deltaType <> " for " <> show id <> " and property " <> show property)
   case deltaType of
@@ -142,17 +143,17 @@ executeRolePropertyDelta d@(RolePropertyDelta{id, roleType, deltaType, values, p
         -- have been made with a perspective of SetPropertyValue.
         Left e -> (lift $ roleHasPerspectiveOnPropertyWithVerb subject id property Verbs.SetPropertyValue) >>= case _ of
           Left e1 -> handleError e1
-          Right _ -> addProperty [id] property (flip Tuple (Just signedDelta) <$> values)
-        Right _ -> addProperty [id] property (flip Tuple (Just signedDelta) <$> values)
+          Right _ -> addProperty [ id ] property (flip Tuple (Just signedDelta) <$> values)
+        Right _ -> addProperty [ id ] property (flip Tuple (Just signedDelta) <$> values)
     RemoveProperty -> (lift $ roleHasPerspectiveOnPropertyWithVerb subject id property Verbs.RemovePropertyValue) >>= case _ of
       Left e -> handleError e
-      Right _ -> removeProperty [id] property (Just signedDelta) values
+      Right _ -> removeProperty [ id ] property (Just signedDelta) values
     DeleteProperty -> (lift $ roleHasPerspectiveOnPropertyWithVerb subject id property Verbs.DeleteProperty) >>= case _ of
       Left e -> handleError e
-      Right _ -> deleteProperty [id] property (Just signedDelta)
+      Right _ -> deleteProperty [ id ] property (Just signedDelta)
     SetProperty -> (lift $ roleHasPerspectiveOnPropertyWithVerb subject id property Verbs.SetPropertyValue) >>= case _ of
       Left e -> handleError e
-      Right _ -> setProperty [id] property (Just signedDelta) values
+      Right _ -> setProperty [ id ] property (Just signedDelta) values
     UploadFile -> do
       -- Do this only when we're executing the Delta for a public role. 
       -- As this is a RolePropertyDelta, it was created when a file was added to the role for a property with a File range. 
@@ -161,37 +162,35 @@ executeRolePropertyDelta d@(RolePropertyDelta{id, roleType, deltaType, values, p
       -- Consequently, if we find, on executing this Delta, that its id is a public resource, we're acting for the public role.
       -- NOT for the 'real' user who uploaded the file.
       -- So, testing whether the id is in the public scheme is an adequate test to detect this case.
-      if isInPublicScheme (unwrap id)
-        then do
-          -- Currently, the id is in the public scheme. Transform to the local scheme, so we can retrieve the attachment locally.
-          storageSchemes <- lift $ gets _.typeToStorage
-          {database, documentName} <- lift $ (addSchemeToResourceIdentifier storageSchemes (RType roleType) (takeGuid (unwrap id)) >>= resourceIdentifier2DocLocator)
-          -- Retrieve the attachment from the local version of the role. 
-          -- Use the last segment of the property type as the attachments name.
-          matt <- lift $ getAttachment database documentName (typeUri2LocalName_ (unwrap property))
-          case matt of 
-            Nothing -> pure unit
-            Just att -> do 
-              -- Add the attachment to the public version of the role.
-              {database:pubDatabase} <- lift $ resourceIdentifier2WriteDocLocator (unwrap id)
-              prol <- lift $ getPerspectRol id
-              mvalue <- lift (id ##> getProperty property)
-              case mvalue of 
-                Nothing -> pure unit
-                Just val -> case parsePerspectivesFile (unwrap val) of
-                  Left e -> pure unit
-                  Right rec -> do 
-                    -- First make sure the cached and saved role are the same and that the role is not waiting to be saved
-                    lift $ forceSaveRole id
-                    success <- lift $ addAttachment id (typeUri2LocalName_ (unwrap property)) att (MediaType rec.mimeType)
-                    if success
-                      then do
-                        -- The revision on the cached version is no longer valid.
-                        -- Neither does it have the new attachment info.
-                        void $ lift $ removeInternally id
-                      else throwError (error ("Could not save file in the database"))
+      if isInPublicScheme (unwrap id) then do
+        -- Currently, the id is in the public scheme. Transform to the local scheme, so we can retrieve the attachment locally.
+        storageSchemes <- lift $ gets _.typeToStorage
+        { database, documentName } <- lift $ (addSchemeToResourceIdentifier storageSchemes (RType roleType) (takeGuid (unwrap id)) >>= resourceIdentifier2DocLocator)
+        -- Retrieve the attachment from the local version of the role. 
+        -- Use the last segment of the property type as the attachments name.
+        matt <- lift $ getAttachment database documentName (typeUri2LocalName_ (unwrap property))
+        case matt of
+          Nothing -> pure unit
+          Just att -> do
+            -- Add the attachment to the public version of the role.
+            { database: pubDatabase } <- lift $ resourceIdentifier2WriteDocLocator (unwrap id)
+            prol <- lift $ getPerspectRol id
+            mvalue <- lift (id ##> getProperty property)
+            case mvalue of
+              Nothing -> pure unit
+              Just val -> case parsePerspectivesFile (unwrap val) of
+                Left e -> pure unit
+                Right rec -> do
+                  -- First make sure the cached and saved role are the same and that the role is not waiting to be saved
+                  lift $ forceSaveRole id
+                  success <- lift $ addAttachment id (typeUri2LocalName_ (unwrap property)) att (MediaType rec.mimeType)
+                  if success then do
+                    -- The revision on the cached version is no longer valid.
+                    -- Neither does it have the new attachment info.
+                    void $ lift $ removeInternally id
+                  else throwError (error ("Could not save file in the database"))
 
-        else pure unit
+      else pure unit
 
 -- TODO. Wat we nodig hebben, is een secundair kanaal naar de client waarin we
 -- fouten en waarschuwingen kunnen sturen.
@@ -203,55 +202,54 @@ handleError e = liftEffect $ log (show e)
 -- | The ConstructExternalRole always precedes the UniverseContextDelta for the context it is the external
 -- | role for. Hence we only have to check whether the external role exists.
 executeUniverseContextDelta :: UniverseContextDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeUniverseContextDelta (UniverseContextDelta{id, contextType, deltaType, subject}) signedDelta = do
+executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, subject }) signedDelta = do
   padding <- lift transactionLevel
   log (padding <> show deltaType <> " with id " <> show id <> " and with type " <> show contextType)
   allTypes <- lift (contextType ###= contextAspectsClosure)
   externalRoleExists <- lift $ entityExists (RoleInstance $ buitenRol $ unwrap id)
-  if externalRoleExists
-    then case deltaType of
-      ConstructEmptyContext -> void $ runExceptT $ lookupOrCreateContextInstance 
-        contextType
-        (Just $ unwrap id)
-        (lift $ do
+  if externalRoleExists then case deltaType of
+    ConstructEmptyContext -> void $ runExceptT $ lookupOrCreateContextInstance
+      contextType
+      (Just $ unwrap id)
+      ( lift $ do
           (exists :: Maybe PerspectContext) <- lift $ tryGetPerspectEntiteit id
           -- This is where we make the operation idempotent. Nothing happens if it already exists.
-          if isNothing exists
-            then do
-              contextInstance <- pure
-                (PerspectContext defaultContextRecord
+          if isNothing exists then do
+            contextInstance <- pure
+              ( PerspectContext defaultContextRecord
                   { _id = takeGuid $ unwrap id
                   , id = id
-                  , displayName = unwrap id 
+                  , displayName = unwrap id
                   , pspType = contextType
                   , allTypes = allTypes
                   , buitenRol = RoleInstance $ buitenRol $ unwrap id
                   , universeContextDelta = signedDelta
-                  , states = [StateIdentifier $ unwrap contextType]
-                  })
-              lift $ void $ saveEntiteit_ id contextInstance
+                  , states = [ StateIdentifier $ unwrap contextType ]
+                  }
+              )
+            lift $ void $ saveEntiteit_ id contextInstance
 
-              -- If the context type has a public role, create an instance of its proxy; but only when the contextId is not a public identifier.
-              -- Proxies are not created for public contexts, as they are not needed.
-              if isInPublicScheme (unwrap id)
-                then pure unit
-                else do
-                  publicRoles <- lift $ (contextType ###= publicUserRole)
-                  void $ for (EnumeratedRoleType <<< roletype2string <$> publicRoles)
-                    \t -> createAndAddRoleInstance 
-                      t 
-                      (unwrap id)
-                      (RolSerialization {id: Nothing, properties: PropertySerialization empty, binding: Nothing})
+            -- If the context type has a public role, create an instance of its proxy; but only when the contextId is not a public identifier.
+            -- Proxies are not created for public contexts, as they are not needed.
+            if isInPublicScheme (unwrap id) then pure unit
+            else do
+              publicRoles <- lift $ (contextType ###= publicUserRole)
+              void $ for (EnumeratedRoleType <<< roletype2string <$> publicRoles)
+                \t -> createAndAddRoleInstance
+                  t
+                  (unwrap id)
+                  (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
 
-              (lift $ findRoleRequests (ContextInstance "def:AnyContext") (externalRoleType contextType)) >>= addCorrelationIdentifiersToTransactie
-              addCreatedContextToTransaction id
-            else pure unit
-          pure id)
-    else logPerspectivesError $ UnauthorizedForContext "auteur" subject contextType
+            (lift $ findRoleRequests (ContextInstance "def:AnyContext") (externalRoleType contextType)) >>= addCorrelationIdentifiersToTransactie
+            addCreatedContextToTransaction id
+          else pure unit
+          pure id
+      )
+  else logPerspectivesError $ UnauthorizedForContext "auteur" subject contextType
 
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 executeUniverseRoleDelta :: UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeUniverseRoleDelta (UniverseRoleDelta{id, roleType, roleInstances, authorizedRole, deltaType, subject}) s = do
+executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, authorizedRole, deltaType, subject }) s = do
   padding <- lift transactionLevel
   log (padding <> show deltaType <> " for/from " <> show id <> " with ids " <> show roleInstances <> " with type " <> show roleType <> " for user role " <> show subject)
   void $ lift $ retrieveDomeinFile (DomeinFileId $ unsafePartial typeUri2ModelUri_ $ unwrap roleType)
@@ -259,98 +257,97 @@ executeUniverseRoleDelta (UniverseRoleDelta{id, roleType, roleInstances, authori
     ConstructEmptyRole -> do
       -- We have to check this case: a user is allowed to create himself.
       -- The role is cached, but not saved. However, when it is added to its context, it will be saved.
-      if userCreatesThemselves
-        then constructAnotherRole_
-        else do
-          -- Check if the author has a perspective on the role to be created that includes
-          -- the verb Create.
-          (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [Verbs.Create, Verbs.CreateAndFill] Nothing Nothing) >>= case _ of
-            Left e -> handleError e
-            Right _ -> constructAnotherRole_
+      if userCreatesThemselves then constructAnotherRole_
+      else do
+        -- Check if the author has a perspective on the role to be created that includes
+        -- the verb Create.
+        (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Create, Verbs.CreateAndFill ] Nothing Nothing) >>= case _ of
+          Left e -> handleError e
+          Right _ -> constructAnotherRole_
     ConstructExternalRole -> do
       -- Notice that merely constructing a role has no consequences for the responsibilities
       -- QUERY UPDATES, RULE TRIGGERING, PERSISTENCE or CURRENTUSER.
       -- If roleType has the aspect model:System$RootContext$External, it can stand alone. These roles can
       -- be created by any user.
       -- PERSISTENCE is handled here.
-      lift (roleType ###>> hasAspect (EnumeratedRoleType rootContext)) >>= if _
-        then void $ lookupOrCreateRoleInstance roleType Nothing constructExternalRole
-        else (lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [Verbs.CreateAndFill] Nothing Nothing) >>= case _ of
+      lift (roleType ###>> hasAspect (EnumeratedRoleType rootContext)) >>=
+        if _ then void $ lookupOrCreateRoleInstance roleType Nothing constructExternalRole
+        else (lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [ Verbs.CreateAndFill ] Nothing Nothing) >>= case _ of
           Left e -> handleError e
           Right _ -> void $ lookupOrCreateRoleInstance roleType Nothing constructExternalRole
     RemoveRoleInstance -> do
       -- We justify the Delete verb with the reasoning that the user is allowed to delete all role instances, he certainly is allowed to delete one.
       -- Similarly, if the user is allowed to remove a contextrole with its filler (requiring RemoveContext), he is allowed to remove the contctrole instance.
-      (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [Verbs.Remove, Verbs.Delete, Verbs.RemoveContext, Verbs.DeleteContext] Nothing Nothing) >>= case _ of
+      (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Remove, Verbs.Delete, Verbs.RemoveContext, Verbs.DeleteContext ] Nothing Nothing) >>= case _ of
         Left e -> handleError e
         -- Right _ -> for_ (toNonEmptyArray roleInstances) removeRoleInstance
         Right _ -> for_ (toNonEmptyArray roleInstances) (scheduleRoleRemoval synchronise)
 
     -- TODO Het lijkt niet nuttig om beide cases te behouden.
     RemoveUnboundExternalRoleInstance -> do
-      (lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [Verbs.DeleteContext, Verbs.RemoveContext] Nothing Nothing) >>= case _ of
+      (lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [ Verbs.DeleteContext, Verbs.RemoveContext ] Nothing Nothing) >>= case _ of
         Left e -> handleError e
         Right _ -> for_ (toArray roleInstances) (flip removeContextIfUnbound authorizedRole)
     RemoveExternalRoleInstance -> do
-      (lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [Verbs.DeleteContext, Verbs.RemoveContext] Nothing Nothing) >>= case _ of
+      (lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [ Verbs.DeleteContext, Verbs.RemoveContext ] Nothing Nothing) >>= case _ of
         Left e -> handleError e
         -- As external roles are always stored the same as their contexts, we can reliably retrieve the context instance id from the role id.
         Right _ -> for_ (ContextInstance <<< deconstructBuitenRol <<< unwrap <$> toArray roleInstances) (scheduleContextRemoval authorizedRole [])
-    where
-      userCreatesThemselves :: Boolean
-      userCreatesThemselves = case subject of
-        ENR r -> r == roleType
-        _ -> false
+  where
+  userCreatesThemselves :: Boolean
+  userCreatesThemselves = case subject of
+    ENR r -> r == roleType
+    _ -> false
 
-      constructAnotherRole_ :: MonadPerspectivesTransaction Unit
-      constructAnotherRole_ = do
-        -- find the number of roleinstances in the context.
-        offset <- (lift (id ##= getRoleInstances (ENR roleType))) >>= pure <<< getNextRolIndex
-        forWithIndex_ (toNonEmptyArray roleInstances) 
-          \i roleInstance -> lookupOrCreateRoleInstance
-            roleType
-            (Just $ unwrap roleInstance)
-            do
-              (exists :: Maybe PerspectRol) <- lift $ tryGetPerspectEntiteit roleInstance
-              -- Here we make constructing another role idempotent. Nothing happens if it already exists.
-              if isNothing exists
-                then void $ constructEmptyRole_ id (offset + i) roleInstance
-                else pure unit
-              pure roleInstance
-
-      constructEmptyRole_ :: ContextInstance -> Int -> RoleInstance -> MonadPerspectivesTransaction Boolean
-      constructEmptyRole_ contextInstance i rolInstanceId = do
-        (exists :: Maybe PerspectRol) <- lift $ tryGetPerspectEntiteit rolInstanceId
-        if isNothing exists
-          then do
-            allTypes <- lift (roleType ###= roleAspectsClosure)
-            role <- pure (PerspectRol defaultRolRecord
-                  { _id = takeGuid $ unwrap rolInstanceId
-                  , id = rolInstanceId
-                  , pspType = roleType
-                  , allTypes = allTypes
-                  , context = contextInstance
-                  , occurrence = i
-                  , universeRoleDelta = s
-                  -- The contextDelta will be added when we handle the corresponding ContextDelta.
-                  , states = [StateIdentifier $ unwrap roleType]
-                  })
-            addCreatedRoleToTransaction rolInstanceId
-            void $ lift $ cacheEntity rolInstanceId role
-            pure true
-          else pure false
-
-      -- PERSISTENCE
-      constructExternalRole  :: MonadPerspectivesTransaction RoleInstance
-      constructExternalRole = do
-        externalRole <- pure (head $ toNonEmptyArray roleInstances)
-        padding <- lift transactionLevel
-        log (padding <> "ConstructExternalRole in " <> show id)
-        -- Here we make constructing an external role idempotent. Nothing happens if it already exists.
-        constructEmptyRole_ id 0 externalRole >>= if _
-          then lift $ void $ saveEntiteit externalRole
+  constructAnotherRole_ :: MonadPerspectivesTransaction Unit
+  constructAnotherRole_ = do
+    -- find the number of roleinstances in the context.
+    offset <- (lift (id ##= getRoleInstances (ENR roleType))) >>= pure <<< getNextRolIndex
+    forWithIndex_ (toNonEmptyArray roleInstances)
+      \i roleInstance -> lookupOrCreateRoleInstance
+        roleType
+        (Just $ unwrap roleInstance)
+        do
+          (exists :: Maybe PerspectRol) <- lift $ tryGetPerspectEntiteit roleInstance
+          -- Here we make constructing another role idempotent. Nothing happens if it already exists.
+          if isNothing exists then void $ constructEmptyRole_ id (offset + i) roleInstance
           else pure unit
-        pure externalRole
+          pure roleInstance
+
+  constructEmptyRole_ :: ContextInstance -> Int -> RoleInstance -> MonadPerspectivesTransaction Boolean
+  constructEmptyRole_ contextInstance i rolInstanceId = do
+    (exists :: Maybe PerspectRol) <- lift $ tryGetPerspectEntiteit rolInstanceId
+    if isNothing exists then do
+      allTypes <- lift (roleType ###= roleAspectsClosure)
+      role <- pure
+        ( PerspectRol defaultRolRecord
+            { _id = takeGuid $ unwrap rolInstanceId
+            , id = rolInstanceId
+            , pspType = roleType
+            , allTypes = allTypes
+            , context = contextInstance
+            , occurrence = i
+            , universeRoleDelta = s
+            -- The contextDelta will be added when we handle the corresponding ContextDelta.
+            , states = [ StateIdentifier $ unwrap roleType ]
+            }
+        )
+      addCreatedRoleToTransaction rolInstanceId
+      void $ lift $ cacheEntity rolInstanceId role
+      pure true
+    else pure false
+
+  -- PERSISTENCE
+  constructExternalRole :: MonadPerspectivesTransaction RoleInstance
+  constructExternalRole = do
+    externalRole <- pure (head $ toNonEmptyArray roleInstances)
+    padding <- lift transactionLevel
+    log (padding <> "ConstructExternalRole in " <> show id)
+    -- Here we make constructing an external role idempotent. Nothing happens if it already exists.
+    constructEmptyRole_ id 0 externalRole >>=
+      if _ then lift $ void $ saveEntiteit externalRole
+      else pure unit
+    pure externalRole
 
 -- | Execute all Deltas in a run that does not distribute.
 -- executeTransaction :: TransactionForPeer -> MonadPerspectives Unit
@@ -363,21 +360,22 @@ executeUniverseRoleDelta (UniverseRoleDelta{id, roleType, roleInstances, authori
 -- | Executes all deltas, which leads to a changed store of resources. 
 -- | Does not change anything if some of the information could not be verified.
 executeTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
-executeTransaction t = try (verifyTransaction t) >>= case _ of 
-  Left e -> logPerspectivesError (Custom $  "Could not execute a transaction. Reason: " <> show e)
+executeTransaction t = try (verifyTransaction t) >>= case _ of
+  Left e -> logPerspectivesError (Custom $ "Could not execute a transaction. Reason: " <> show e)
   Right _ -> executeTransaction' t
-  
-  where 
+
+  where
 
   verifyTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
-  verifyTransaction (TransactionForPeer{deltas, publicKeys}) = void $ ST.runStateT
-    (do
-      -- Verify public key informaton.
-      -- Stop or throw if a key cannot be verified!
-      forWithIndex_ (unwrap publicKeys) verifyPublicKey
-      -- Verify all deltas, using the (now verified) public keys.
-      -- Stop or throw if a delta cannot be verified!
-      for_ deltas verifyDelta_)
+  verifyTransaction (TransactionForPeer { deltas, publicKeys }) = void $ ST.runStateT
+    ( do
+        -- Verify public key informaton.
+        -- Stop or throw if a key cannot be verified!
+        forWithIndex_ (unwrap publicKeys) verifyPublicKey
+        -- Verify all deltas, using the (now verified) public keys.
+        -- Stop or throw if a delta cannot be verified!
+        for_ deltas verifyDelta_
+    )
     Map.empty
 
   -- Verify the deltas that make up the PerspectivesUser instance and his public key. 
@@ -385,55 +383,55 @@ executeTransaction t = try (verifyTransaction t) >>= case _ of
   -- For a author-key combination that is not yet known, will throw up one error on the console 
   -- as the PDR tries to find the author.
   verifyPublicKey :: PerspectivesUser -> PublicKeyInfo -> ST.StateT (Map.Map PerspectivesUser CryptoKey) MonadPerspectivesTransaction Unit
-  verifyPublicKey authorOfKey {key, deltas:keyDeltas} = do
+  verifyPublicKey authorOfKey { key, deltas: keyDeltas } = do
     mcryptoKey <- lift $ lift $ tryGetPublicKey authorOfKey
-    case mcryptoKey of 
-      Nothing -> do 
+    case mcryptoKey of
+      Nothing -> do
         cryptoKey <- liftAff $ deserializeJWK key
-        void $ for keyDeltas \d@(SignedDelta{author}) -> if author == authorOfKey
-          then (lift $ lift $ verifyDelta' d (Just cryptoKey)) >>=
-            case _ of 
+        void $ for keyDeltas \d@(SignedDelta { author }) ->
+          if author == authorOfKey then (lift $ lift $ verifyDelta' d (Just cryptoKey)) >>=
+            case _ of
               Nothing -> throwError (error $ "Cannot verify key of author: " <> show author)
               Just _ -> pure unit
-          else do 
+          else do
             mcryptoKeyOfAuthor <- lift $ lift $ tryGetPublicKey author
-            case mcryptoKeyOfAuthor of 
+            case mcryptoKeyOfAuthor of
               Nothing -> throwError (error $ "No public key known for this author: " <> show author)
-              Just keyOfAuthor -> (lift $ lift $ verifyDelta' d (Just keyOfAuthor)) >>= 
-                case _ of 
+              Just keyOfAuthor -> (lift $ lift $ verifyDelta' d (Just keyOfAuthor)) >>=
+                case _ of
                   Nothing -> throwError (error $ "Cannot verify key of author: " <> show author)
                   Just _ -> void $ ST.modify \s -> Map.insert author keyOfAuthor s
         void $ ST.modify \s -> Map.insert authorOfKey cryptoKey s
       Just cryptoKey -> void $ ST.modify \s -> Map.insert authorOfKey cryptoKey s
 
   verifyDelta_ :: SignedDelta -> ST.StateT (Map.Map PerspectivesUser CryptoKey) MonadPerspectivesTransaction Unit
-  verifyDelta_ d@(SignedDelta{author}) = do
+  verifyDelta_ d@(SignedDelta { author }) = do
     cryptoKey <- ST.gets (Map.lookup author)
     lift $ lift $ verifyDelta' d cryptoKey >>=
-      case _ of 
+      case _ of
         Nothing -> throwError (error $ "Cannot verify delta allegedly by author: " <> show author)
         Just _ -> pure unit
 
 executeTransaction' :: TransactionForPeer -> MonadPerspectivesTransaction Unit
-executeTransaction' t@(TransactionForPeer{deltas, publicKeys}) = do
+executeTransaction' t@(TransactionForPeer { deltas, publicKeys }) = do
 
   -- Add all public key information (possibly leading to more TheWorld$PerspectivesUsers instances).
-  for_ (unwrap publicKeys) \{deltas:keyDeltas} -> void $ for keyDeltas \s@(SignedDelta{encryptedDelta}) -> executeDelta s (Just encryptedDelta)
+  for_ (unwrap publicKeys) \{ deltas: keyDeltas } -> void $ for keyDeltas \s@(SignedDelta { encryptedDelta }) -> executeDelta s (Just encryptedDelta)
 
   -- Process all deltas.
   void $ for deltas verifyAndExcecuteDelta
   where
-    verifyAndExcecuteDelta :: SignedDelta -> MonadPerspectivesTransaction Unit
-    verifyAndExcecuteDelta s = (lift $ verifyDelta s) >>= executeDelta s
+  verifyAndExcecuteDelta :: SignedDelta -> MonadPerspectivesTransaction Unit
+  verifyAndExcecuteDelta s = (lift $ verifyDelta s) >>= executeDelta s
 
-    executeDelta :: SignedDelta -> Maybe String -> MonadPerspectivesTransaction Unit
-    -- For now, we fail silently on deltas that cannot be authenticated.
-    executeDelta s Nothing = pure unit
-    executeDelta s (Just stringifiedDelta) = do 
-      padding <- lift transactionLevel
-      storageSchemes <- lift $ gets _.typeToStorage
-      catchError
-        (case runExcept $ readJSON' stringifiedDelta of
+  executeDelta :: SignedDelta -> Maybe String -> MonadPerspectivesTransaction Unit
+  -- For now, we fail silently on deltas that cannot be authenticated.
+  executeDelta s Nothing = pure unit
+  executeDelta s (Just stringifiedDelta) = do
+    padding <- lift transactionLevel
+    storageSchemes <- lift $ gets _.typeToStorage
+    catchError
+      ( case runExcept $ readJSON' stringifiedDelta of
           Right d1 -> lift (addResourceSchemes storageSchemes d1) >>= flip executeRolePropertyDelta s
           Left _ -> case runExcept $ readJSON' stringifiedDelta of
             Right d2 -> lift (addResourceSchemes storageSchemes d2) >>= flip executeRoleBindingDelta s
@@ -443,8 +441,9 @@ executeTransaction' t@(TransactionForPeer{deltas, publicKeys}) = do
                 Right d4 -> lift ((addResourceSchemes storageSchemes d4)) >>= flip executeUniverseRoleDelta s
                 Left _ -> case runExcept $ readJSON' stringifiedDelta of
                   Right d5 -> lift (addResourceSchemes storageSchemes d5) >>= flip executeUniverseContextDelta s
-                  Left _ -> log (padding <> "Failing to parse and execute: " <> stringifiedDelta))
-        (\e -> liftEffect $ log (padding <> show e))
+                  Left _ -> log (padding <> "Failing to parse and execute: " <> stringifiedDelta)
+      )
+      (\e -> liftEffect $ log (padding <> show e))
 
 -- | All identifiers in deltas in a transaction have been stripped from their storage schemes, except for those with the pub: scheme.
 -- | This function adds public resource schemes for the given storageUrl or, when a different publishing point is found for an identifier,
@@ -455,17 +454,17 @@ executeTransaction' t@(TransactionForPeer{deltas, publicKeys}) = do
 -- | All deltas in this transaction have either been sent to this installation and thus have been verified before, or
 -- | they are created by this installation so verification is meaningless.
 expandDeltas :: TransactionForPeer -> String -> MonadPerspectivesTransaction (Array Delta)
-expandDeltas t@(TransactionForPeer{deltas, publicKeys}) storageUrl = do
+expandDeltas t@(TransactionForPeer { deltas, publicKeys }) storageUrl = do
   contentDeltas :: Array Delta <- catMaybes <$> (for deltas expandDelta)
-  keyDeltas :: Array Delta <- concat <$> for (fromFoldable (ENCMAP.values publicKeys)) \{deltas:kd} -> catMaybes <$> (for kd expandDelta)
-  pure  $ keyDeltas <> contentDeltas
+  keyDeltas :: Array Delta <- concat <$> for (fromFoldable (ENCMAP.values publicKeys)) \{ deltas: kd } -> catMaybes <$> (for kd expandDelta)
+  pure $ keyDeltas <> contentDeltas
 
   where
 
   expandDelta :: SignedDelta -> MonadPerspectivesTransaction (Maybe Delta)
-  expandDelta s@(SignedDelta sr@{author, encryptedDelta, signature}) = do 
+  expandDelta s@(SignedDelta sr@{ author, encryptedDelta, signature }) = do
     -- Use the storageUrl to add a public scheme to the author.
-    s' <- pure $ SignedDelta sr { author = over PerspectivesUser (createPublicIdentifier storageUrl) author}
+    s' <- pure $ SignedDelta sr { author = over PerspectivesUser (createPublicIdentifier storageUrl) author }
     padding <- lift transactionLevel
     case runExcept $ readJSON' encryptedDelta of
       Right (d1 :: RolePropertyDelta) -> notWhenPublicSubject (unwrap d1) (lift $ (Just <<< RPD s' <$> addPublicResourceScheme storageUrl d1))
@@ -480,12 +479,12 @@ expandDeltas t@(TransactionForPeer{deltas, publicKeys}) storageUrl = do
               Left _ -> log (padding <> "Failing to parse and execute: " <> encryptedDelta) *> pure Nothing
 
     where
-      notWhenPublicSubject :: forall f. DeltaRecord f -> MonadPerspectivesTransaction (Maybe Delta) -> MonadPerspectivesTransaction (Maybe Delta)
-      notWhenPublicSubject rec a = (lift $ isPublic rec.subject) >>= if _ then pure Nothing else a
+    notWhenPublicSubject :: forall f. DeltaRecord f -> MonadPerspectivesTransaction (Maybe Delta) -> MonadPerspectivesTransaction (Maybe Delta)
+    notWhenPublicSubject rec a = (lift $ isPublic rec.subject) >>= if _ then pure Nothing else a
 
 executeDeltas :: Array Delta -> MonadPerspectivesTransaction Unit
 -- We use `for` rather than `for_` because the latter folds from the right, starting with the last element.
-executeDeltas deltas = void $ for deltas case _ of 
+executeDeltas deltas = void $ for deltas case _ of
   UCD s d -> executeUniverseContextDelta d s
   URD s d -> executeUniverseRoleDelta d s
   CDD s d -> executeContextDelta d s
@@ -495,7 +494,8 @@ executeDeltas deltas = void $ for deltas case _ of
 -----------------------------------------------------------
 -- COLLECTING DELTAS
 -----------------------------------------------------------
-data Delta = UCD SignedDelta UniverseContextDelta
+data Delta
+  = UCD SignedDelta UniverseContextDelta
   | URD SignedDelta UniverseRoleDelta
   | CDD SignedDelta ContextDelta
   | RBD SignedDelta RoleBindingDelta
@@ -503,7 +503,7 @@ data Delta = UCD SignedDelta UniverseContextDelta
 
 derive instance Generic Delta _
 derive instance Eq Delta
-instance Ord Delta where 
+instance Ord Delta where
   compare (UCD _ u1) (UCD _ u2) = compare u1 u2
   compare (URD _ u1) (URD _ u2) = compare u1 u2
   compare (CDD _ u1) (CDD _ u2) = compare u1 u2

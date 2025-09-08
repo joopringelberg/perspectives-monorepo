@@ -31,11 +31,10 @@
 -- | This again is a good thing, as it may (but need not) happen that a peer will later send a transaction
 -- | that restores the resource that went missing.
 
-
 -- END LICENSE
 module Perspectives.ReferentialIntegrity
-  (fixReferences)
-where
+  ( fixReferences
+  ) where
 
 import Prelude
 
@@ -70,7 +69,6 @@ fixReferences (Ctxt cid) = fixContextReferences cid
 fixReferences (Rle rid) = fixRoleReferences rid
 fixReferences (Dfile did) = pure unit
 
-
 -- | Apply this function when a reference to a context has been found that cannot be retrieved.
 -- | We want all references to this context to be removed.
 -- | Only roles refer to contexts.
@@ -88,18 +86,20 @@ fixContextReferences cid@(ContextInstance c) = do
   rolesToEvaluate <- concat <$> for referringRoles \roleId -> (try $ (getPerspectRol roleId)) >>= handlePerspectRolError' "fixContextReferences" []
     \role -> do
       -- The role that possibly refers to it as one that it fills, loses that reference.
-      affectedRoles <- execWriterT do 
-        case rol_binding role of 
+      affectedRoles <- execWriterT do
+        case rol_binding role of
           Nothing -> pure unit
-          Just filler -> do 
+          Just filler -> do
             lift (filler `fillerNoLongerPointsTo_` roleId)
-            tell [filler]
+            tell [ filler ]
         -- And any roles filled by roleId must no longer refer to it as their filler (binding).
         for_ (rol_gevuldeRollen role) \roleMap ->
-          for_ roleMap (\filledRoles' ->
-            for_ filledRoles' \filled -> do 
-              lift (filled `RA.filledNoLongerPointsTo` roleId)
-              tell [filled])
+          for_ roleMap
+            ( \filledRoles' ->
+                for_ filledRoles' \filled -> do
+                  lift (filled `RA.filledNoLongerPointsTo` roleId)
+                  tell [ filled ]
+            )
       -- PERSISTENCE (finally remove the role instance from cache and database).
       void $ removeEntiteit roleId
       pure affectedRoles
@@ -133,17 +133,17 @@ fixRoleReferences roleId@(RoleInstance r) = do
   for_ filledRoles (flip RA.filledNoLongerPointsTo roleId)
   --- Retrieve the filler that still refers to roleId.
   fillerRoles <- filled2fillerFromDatabase_ roleId
-  for_ fillerRoles 
-    \({filler, filledContextType, filledRoleType}) -> (fillerNoLongerPointsTo filler roleId filledContextType filledRoleType)
+  for_ fillerRoles
+    \({ filler, filledContextType, filledRoleType }) -> (fillerNoLongerPointsTo filler roleId filledContextType filledRoleType)
   -- Now recompute the states of these roles.
   runEmbeddedIfNecessary doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
-    (do 
-      -- Now check the clipboard. It may hold a reference to the role that can no longer be found.
-      (lift $ findItemOnClipboardWithRole roleId) >>= case _ of 
-        Nothing -> pure unit
-        Just item -> void $ scheduleRoleRemoval doNotShareWithPeers item
-      for_ (filledRoles <> (_.filler <$> fillerRoles)) reEvaluateRoleStates
-      for_ ctxts reEvaluateContextStates
+    ( do
+        -- Now check the clipboard. It may hold a reference to the role that can no longer be found.
+        (lift $ findItemOnClipboardWithRole roleId) >>= case _ of
+          Nothing -> pure unit
+          Just item -> void $ scheduleRoleRemoval doNotShareWithPeers item
+        for_ (filledRoles <> (_.filler <$> fillerRoles)) reEvaluateRoleStates
+        for_ ctxts reEvaluateContextStates
     )
   saveMarkedResources
 
@@ -162,9 +162,11 @@ fixRoleReferences roleId@(RoleInstance r) = do
             _ -> cacheAndSave contextId changedContext
 
   removeFromContext :: PerspectContext -> PerspectContext
-  removeFromContext (PerspectContext ct@{rolInContext}) = PerspectContext ct {rolInContext = 
-    mapWithKey (\rtype roles -> delete roleId roles) rolInContext}
-  
+  removeFromContext (PerspectContext ct@{ rolInContext }) = PerspectContext ct
+    { rolInContext =
+        mapWithKey (\rtype roles -> delete roleId roles) rolInContext
+    }
+
 -- This version only changes the administration in the filler; the full version in Perspectives.RoleAssignment changes both sides.
 fillerNoLongerPointsTo :: RoleInstance -> RoleInstance -> ContextType -> EnumeratedRoleType -> MonadPerspectives Unit
 fillerNoLongerPointsTo fillerId filledId filledContextType filledRoleType = (try $ getPerspectRol fillerId) >>=
@@ -179,15 +181,16 @@ fillerNoLongerPointsTo_ fillerId filledId = (try $ getPerspectRol fillerId) >>=
     \(filler :: PerspectRol) -> do
       -- As the context of the filled role has been deleted, we cannot establish its type.
       -- Instead of indexing, we have to filter the entire structure in search of fillerId.
-      cacheAndSave 
+      cacheAndSave
         fillerId
-        (setRol_gevuldeRollen 
-          filler
-          (mapWithKey 
-            (\ctype typeGroup -> mapWithKey 
-              (\rtype filleds -> delete filledId filleds)
-              typeGroup)
-            (rol_gevuldeRollen filler)))
-
-
+        ( setRol_gevuldeRollen
+            filler
+            ( mapWithKey
+                ( \ctype typeGroup -> mapWithKey
+                    (\rtype filleds -> delete filledId filleds)
+                    typeGroup
+                )
+                (rol_gevuldeRollen filler)
+            )
+        )
 

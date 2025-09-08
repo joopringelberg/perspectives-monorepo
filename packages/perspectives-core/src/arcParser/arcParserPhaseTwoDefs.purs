@@ -71,14 +71,14 @@ type PhaseTwoState =
   , perspectives :: MAP.Map (Tuple RoleType Step) Perspective
   , loopdetection :: LoopDetection
   , invertedQueries :: StoredQueries
-}
+  }
 
 data CurrentlyCalculated = Prop CalculatedPropertyType | Role CalculatedRoleType
+
 instance Eq CurrentlyCalculated where
   eq (Prop p1) (Prop p2) = eq p1 p2
   eq (Role p1) (Role p2) = eq p1 p2
   eq _ _ = false
-
 
 type LoopDetection = Array CurrentlyCalculated
 
@@ -94,13 +94,14 @@ throwError = EXCEPT.throwError <<< singleton
 runPhaseTwo' :: forall a m. PhaseTwo' m a -> m (Tuple (Either MultiplePerspectivesErrors a) PhaseTwoState)
 runPhaseTwo' computation = runPhaseTwo_' computation defaultDomeinFileRecord empty empty Nil
 
-runPhaseTwo_' :: forall a m.
-  PhaseTwo' m a ->
-  DomeinFileRecord ->
-  Object ContextType ->
-  Object EnumeratedRoleType ->
-  List StateQualifiedPart ->
-  m (Tuple (Either MultiplePerspectivesErrors a) PhaseTwoState)
+runPhaseTwo_'
+  :: forall a m
+   . PhaseTwo' m a
+  -> DomeinFileRecord
+  -> Object ContextType
+  -> Object EnumeratedRoleType
+  -> List StateQualifiedPart
+  -> m (Tuple (Either MultiplePerspectivesErrors a) PhaseTwoState)
 runPhaseTwo_' computation dfr indexedContexts indexedRoles postponedParts = runStateT (runExceptT computation)
   { bot: false
   , dfr: dfr
@@ -113,7 +114,8 @@ runPhaseTwo_' computation dfr indexedContexts indexedRoles postponedParts = runS
   , screens: Nil
   , perspectives: MAP.empty
   , loopdetection: []
-  , invertedQueries: []}
+  , invertedQueries: []
+  }
 
 -- | Run a computation in `PhaseTwo`, returning Errors or the result of the computation.
 -- | Used in the test modules.
@@ -146,16 +148,16 @@ lift2 :: forall a. MonadPerspectives a -> PhaseThree a
 lift2 = lift <<< lift
 
 subjectIsBot :: PhaseTwo Unit
-subjectIsBot = lift $ void $ modify (\s -> s {bot = true})
+subjectIsBot = lift $ void $ modify (\s -> s { bot = true })
 
 subjectIsNotABot :: PhaseTwo Unit
-subjectIsNotABot = lift $ void $ modify (\s -> s {bot = false})
+subjectIsNotABot = lift $ void $ modify (\s -> s { bot = false })
 
 isSubjectBot :: PhaseTwo Boolean
 isSubjectBot = lift $ gets _.bot
 
 modifyDF :: forall m. MonadState PhaseTwoState m => (DomeinFileRecord -> DomeinFileRecord) -> m Unit
-modifyDF f = void $ modify \s@{dfr} -> s {dfr = f dfr}
+modifyDF f = void $ modify \s@{ dfr } -> s { dfr = f dfr }
 
 getDF :: PhaseTwo DomeinFileRecord
 getDF = lift $ gets _.dfr
@@ -168,27 +170,27 @@ getLoopdetection :: PhaseThree LoopDetection
 getLoopdetection = lift $ gets _.loopdetection
 
 isBeingCalculated :: CurrentlyCalculated -> PhaseThree Boolean
-isBeingCalculated c@(Prop (CalculatedPropertyType _)) = getLoopdetection >>= pure <<< isJust <<< elemIndex c 
-isBeingCalculated c@(Role (CalculatedRoleType _)) = getLoopdetection >>= pure <<< isJust <<< elemIndex c 
+isBeingCalculated c@(Prop (CalculatedPropertyType _)) = getLoopdetection >>= pure <<< isJust <<< elemIndex c
+isBeingCalculated c@(Role (CalculatedRoleType _)) = getLoopdetection >>= pure <<< isJust <<< elemIndex c
 
 loopErrorMessage :: CurrentlyCalculated -> ArcPosition -> ArcPosition -> String
-loopErrorMessage def start end = 
+loopErrorMessage def start end =
   case def of
     (Prop (CalculatedPropertyType p)) -> "(RecursiveDefinition) Property " <> p <> " is defined in terms of itself (between " <> show start <> " and " <> show end <> ")."
     (Role (CalculatedRoleType r)) -> "(RecursiveDefinition) Role " <> r <> " is defined in terms of itself (between " <> show start <> " and " <> show end <> ")."
 
 withCurrentCalculation :: forall a. CurrentlyCalculated -> PhaseThree a -> PhaseThree a
 withCurrentCalculation cc computation = do
-  void $ modify \s@{loopdetection} -> s {loopdetection = cons cc loopdetection}
+  void $ modify \s@{ loopdetection } -> s { loopdetection = cons cc loopdetection }
   r <- computation
-  void $ modify \s@{loopdetection} -> s {loopdetection = maybe [] identity (tail loopdetection)}
+  void $ modify \s@{ loopdetection } -> s { loopdetection = maybe [] identity (tail loopdetection) }
   pure r
 
 getVariableBindings :: forall m. Monad m => PhaseTwo' m (Environment QueryFunctionDescription)
 getVariableBindings = lift $ gets _.variableBindings
 
 addBinding :: forall m. Monad m => String -> QueryFunctionDescription -> PhaseTwo' m Unit
-addBinding varName qfd = void $ modify \s@{variableBindings} -> s {variableBindings = ENV.addVariable varName qfd variableBindings}
+addBinding varName qfd = void $ modify \s@{ variableBindings } -> s { variableBindings = ENV.addVariable varName qfd variableBindings }
 
 lookupVariableBinding :: forall m. Monad m => String -> PhaseTwo' m (Maybe QueryFunctionDescription)
 lookupVariableBinding varName = getVariableBindings >>= pure <<< (ENV.lookup varName)
@@ -197,9 +199,9 @@ lookupVariableBinding varName = getVariableBindings >>= pure <<< (ENV.lookup var
 withFrame :: forall a m. Monad m => PhaseTwo' m a -> PhaseTwo' m a
 withFrame computation = do
   old <- getVariableBindings
-  void $ modify \s@{variableBindings} -> s {variableBindings = (_pushFrame old)}
+  void $ modify \s@{ variableBindings } -> s { variableBindings = (_pushFrame old) }
   r <- computation
-  void $ modify \s@{variableBindings} -> s {variableBindings = old}
+  void $ modify \s@{ variableBindings } -> s { variableBindings = old }
   pure r
 
 -- | withNamespaces only handles the `PREFIX` element of the `ContextPart` Sum.
@@ -210,18 +212,22 @@ withNamespaces pairs pt = do
   -- x is an Object of all models declared with a 'use' statement. All models are qualified, by construction.
   x <- pure $ OBJ.fromFoldable $ map
     (unsafePartial \(PREFIX pre mod) -> Tuple pre mod)
-    (filter (case _ of
-        (PREFIX _ _) -> true
-        otherwise -> false)
-      pairs)
+    ( filter
+        ( case _ of
+            (PREFIX _ _) -> true
+            otherwise -> false
+        )
+        pairs
+    )
   -- x <- pure $ OBJ.fromFoldable $ map (\(PREFIX pre mod) -> Tuple pre mod) pairs
   ns <- lift $ gets _.namespaces
   -- replace keys in ns with values found in x.
-  void $ modify \(s@{namespaces, referredModels}) -> s
+  void $ modify \(s@{ namespaces, referredModels }) -> s
     { namespaces = x `OBJ.union` namespaces
-    , referredModels = referredModels `union` (DomeinFileId <$> values x)}
+    , referredModels = referredModels `union` (DomeinFileId <$> values x)
+    }
   ctxt <- pt
-  void $ modify \s -> s {namespaces = ns}
+  void $ modify \s -> s { namespaces = ns }
   pure ctxt
 
 -- | Expand prefixes to full model names.
@@ -243,7 +249,7 @@ isIndexedRole n = do
   pure $ OBJ.lookup n indexedRoles
 
 -- | Find a perspective in PhaseTwoState.
-findPerspective :: forall m. Monad m => RoleType -> Step -> PhaseTwo' m (Maybe Perspective )
+findPerspective :: forall m. Monad m => RoleType -> Step -> PhaseTwo' m (Maybe Perspective)
 findPerspective subject object = do
   perspectives <- lift $ gets _.perspectives
   pure $ MAP.lookup (Tuple subject object) perspectives
@@ -260,4 +266,4 @@ withDomeinFile ns df mpa = do
 
 -- | Add a StorableInvertedQuery to PhaseTwo State.
 addStorableInvertedQuery :: StorableInvertedQuery -> PhaseThree Unit
-addStorableInvertedQuery siq = void $ modify \s@{invertedQueries} -> s {invertedQueries = cons siq invertedQueries}
+addStorableInvertedQuery siq = void $ modify \s@{ invertedQueries } -> s { invertedQueries = cons siq invertedQueries }

@@ -25,7 +25,6 @@
 
 module Perspectives.DataUpgrade where
 
-
 import Prelude
 
 import Control.Monad.Cont (lift)
@@ -76,13 +75,13 @@ type PDRVersion = String
 
 type Upgrade = Unit -> MonadPerspectives Unit
 
-runDataUpgrades :: MonadPerspectives Unit 
+runDataUpgrades :: MonadPerspectives Unit
 runDataUpgrades = do
   -- Get the current PDR version
   mcurrentVersion <- liftAff $ idbGet "CurrentPDRVersion"
   (installedVersion :: String) <- case mcurrentVersion of
     Just installedVersion -> pure (unsafeCoerce installedVersion)
-    Nothing -> do 
+    Nothing -> do
       -- This mechanism was introduced during development of version 0.25.
       -- Installations existing prior to 0.25 will be brought to heel with these instructions.
       liftAff $ idbSet "CurrentPDRVersion" (unsafeToForeign "0.24")
@@ -97,8 +96,8 @@ runDataUpgrades = do
   -- Similar reasoning holds for updating models. The latest (recommended) version is fetched and installed
   -- locally. This obviously has to happen only once for a model.
   ----------------------------------------------------------------------------------------
-  runUpgrade installedVersion "0.24.1" addFixingUpdates 
-  runUpgrade installedVersion "0.24.2" indexedQueries 
+  runUpgrade installedVersion "0.24.1" addFixingUpdates
+  runUpgrade installedVersion "0.24.2" indexedQueries
   -- runUpgrade installedVersion "0.25.0" updateModels0250
   -- runUpgrade installedVersion "0.25.2" 
   --   (do 
@@ -116,7 +115,7 @@ runDataUpgrades = do
   -- runUpgrade installedVersion "0.25.6" 
   --   (void recompileLocalModels)
   runUpgrade installedVersion "0.26.0"
-    \_ -> do 
+    \_ -> do
       updateModels0260 unit
       void recompileLocalModels
   runUpgrade installedVersion "0.26.3"
@@ -129,84 +128,84 @@ runDataUpgrades = do
   runUpgrade installedVersion "0.26.7"
     updateModels0267
   runUpgrade installedVersion "0.26.9"
-    (\_ -> do
-      updateModels0269
-      addIsSystemModel
-      addSettingsType
-      -- Add IsSystemModel to various models.
-      )
+    ( \_ -> do
+        updateModels0269
+        addIsSystemModel
+        addSettingsType
+    -- Add IsSystemModel to various models.
+    )
   runUpgrade installedVersion "0.26.10"
-    (\_ -> do
-      -- Add IsSystemModel to various models.
-      addIsSystemModel
-      -- Add SettingsType to the system model.
-      addSettingsType)
-  
+    ( \_ -> do
+        -- Add IsSystemModel to various models.
+        addIsSystemModel
+        -- Add SettingsType to the system model.
+        addSettingsType
+    )
+
   runUpgrade installedVersion "0.26.11"
-    (\_ -> do 
-      -- We reload the libraries. They now have translations. 
-      -- This prevents the non-critical error messages on startup.
-      updateModels02611
-      )
-  
+    ( \_ -> do
+        -- We reload the libraries. They now have translations. 
+        -- This prevents the non-critical error messages on startup.
+        updateModels02611
+    )
+
   runUpgrade installedVersion "3.0.6"
-    (\_ -> do
-      runMonadPerspectivesTransaction'
-        false
-        (ENR $ EnumeratedRoleType sysUser)
-        do
-          updateModel_ ["model://perspectives.domains#System@3.0"] ["false"] (RoleInstance "")
-      addSettingsType
-      )
-  
+    ( \_ -> do
+        runMonadPerspectivesTransaction'
+          false
+          (ENR $ EnumeratedRoleType sysUser)
+          do
+            updateModel_ [ "model://perspectives.domains#System@3.0" ] [ "false" ] (RoleInstance "")
+        addSettingsType
+    )
+
   runUpgrade installedVersion "3.0.7"
     (\_ -> void recompileLocalModels)
-  
+
   runUpgrade installedVersion "3.0.8"
-    (\_ -> do
-      -- Add IsSystemModel to various models.
-      runMonadPerspectivesTransaction'
-        false
-        (ENR $ EnumeratedRoleType sysUser)
-        do
-          updateModel_ ["model://perspectives.domains#System@3.0"] ["false"] (RoleInstance "")
-          updateModel_ ["model://perspectives.domains#CouchdbManagement@8.0"] ["false"] (RoleInstance "")
+    ( \_ -> do
+        -- Add IsSystemModel to various models.
+        runMonadPerspectivesTransaction'
+          false
+          (ENR $ EnumeratedRoleType sysUser)
+          do
+            updateModel_ [ "model://perspectives.domains#System@3.0" ] [ "false" ] (RoleInstance "")
+            updateModel_ [ "model://perspectives.domains#CouchdbManagement@8.0" ] [ "false" ] (RoleInstance "")
     )
 
   runUpgrade installedVersion "3.0.9"
-    (\_ -> do
-      -- Add IsSystemModel to various models.
-      runMonadPerspectivesTransaction'
-        false
-        (ENR $ EnumeratedRoleType sysUser)
-        do
-          updateModel_ ["model://perspectives.domains#System@3.0"] ["false"] (RoleInstance "")
-          void $ createAndAddRoleInstance
-              (EnumeratedRoleType $ systemModelName <> "$SystemDataUpgrade") 
+    ( \_ -> do
+        -- Add IsSystemModel to various models.
+        runMonadPerspectivesTransaction'
+          false
+          (ENR $ EnumeratedRoleType sysUser)
+          do
+            updateModel_ [ "model://perspectives.domains#System@3.0" ] [ "false" ] (RoleInstance "")
+            void $ createAndAddRoleInstance
+              (EnumeratedRoleType $ systemModelName <> "$SystemDataUpgrade")
               "def:#perspectives_domains-System_modelRootContext"
-              (RolSerialization {id: Nothing, properties: PropertySerialization empty, binding: Nothing})
-          system <- lift getMySystem
-          void $ createAndAddRoleInstance
-              (EnumeratedRoleType $ theSystem <> "$SystemDataUpgrade") 
+              (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
+            system <- lift getMySystem
+            void $ createAndAddRoleInstance
+              (EnumeratedRoleType $ theSystem <> "$SystemDataUpgrade")
               system
-              (RolSerialization {id: Nothing, properties: PropertySerialization empty, binding: Nothing})
+              (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
     )
   runUpgrade installedVersion "3.0.10"
-    (\_ -> do
-      -- Add IsSystemModel to various models.
-      runMonadPerspectivesTransaction'
-        false
-        (ENR $ EnumeratedRoleType sysUser)
-        do
-          updateModel_ ["model://perspectives.domains#System@3.0"] ["false"] (RoleInstance "")
+    ( \_ -> do
+        -- Add IsSystemModel to various models.
+        runMonadPerspectivesTransaction'
+          false
+          (ENR $ EnumeratedRoleType sysUser)
+          do
+            updateModel_ [ "model://perspectives.domains#System@3.0" ] [ "false" ] (RoleInstance "")
     )
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
   ----------------------------------------------------------------------------------------
   ------- SET CURRENT VERSION
   ----------------------------------------------------------------------------------------
-  if installedVersion `isLowerVersion` pdrVersion
-    then liftAff $ idbSet "CurrentPDRVersion" (unsafeToForeign pdrVersion) 
-    else pure unit
+  if installedVersion `isLowerVersion` pdrVersion then liftAff $ idbSet "CurrentPDRVersion" (unsafeToForeign pdrVersion)
+  else pure unit
 
 ----------------------------------------------------------------------------------------
 ---- RUN UPGRADE
@@ -216,10 +215,12 @@ runDataUpgrades = do
 -- |    * AND
 -- |    * the upgradeVersion argument is lower than or equal to the package version (pdrVersion: the version in package.json)
 runUpgrade :: PDRVersion -> PDRVersion -> Upgrade -> MonadPerspectives Unit
-runUpgrade installedVersion upgradeVersion upgrade = if isLowerVersion installedVersion upgradeVersion && 
-     (isLowerVersion upgradeVersion pdrVersion || upgradeVersion == pdrVersion)
+runUpgrade installedVersion upgradeVersion upgrade =
+  if
+    isLowerVersion installedVersion upgradeVersion &&
+      (isLowerVersion upgradeVersion pdrVersion || upgradeVersion == pdrVersion)
   -- Run the upgrade
-  then do 
+  then do
     log ("Running upgrade to version " <> upgradeVersion)
     pushMessage ("Upgrading to PDR version " <> upgradeVersion)
     upgrade unit
@@ -250,13 +251,13 @@ indexedQueries _ = do
   -- Fix the source of model:System
   (DomeinFile dfr) <- getDomeinFile (DomeinFileId "model://perspectives.domains#System")
   void $ saveEntiteit_ (DomeinFileId "model://perspectives.domains#System")
-    (DomeinFile dfr {arc = replace (Pattern "    state InitMe = not exists Me") (Replacement "\n    external \n      aspect sys:RootContext$External\n    state InitMe = not exists Me") dfr.arc})
+    (DomeinFile dfr { arc = replace (Pattern "    state InitMe = not exists Me") (Replacement "\n    external \n      aspect sys:RootContext$External\n    state InitMe = not exists Me") dfr.arc })
   -- recompile local models.
   modelsDb <- modelsDatabaseName
-  {rows:allModels} <- documentsInDatabase modelsDb includeDocs
+  { rows: allModels } <- documentsInDatabase modelsDb includeDocs
   -- As doc is still uninterpreted, we can only rely on the rows.id member of the PouchdbAllDocs record. These, however, are DomeinFileIdentifiers.
   -- We do not have a useful test on the form of such identifiers.
-  uninterpretedDomeinFiles <- for allModels \({id, doc}) -> case read <$> doc of
+  uninterpretedDomeinFiles <- for allModels \({ id, doc }) -> case read <$> doc of
     Just (Left errs) -> (logPerspectivesError (Custom ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs))) *> pure Nothing
     Nothing -> logPerspectivesError (Custom ("No document retrieved for model '" <> id <> "'.")) *> pure Nothing
     Just (Right (df :: UninterpretedDomeinFile)) -> pure $ Just df
@@ -273,98 +274,96 @@ updateModels0250 _ = runMonadPerspectivesTransaction'
   false
   (ENR $ EnumeratedRoleType sysUser)
   do
-    updateModel_ ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#BodiesWithAccounts@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#CouchdbManagement@2.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#System@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#BodiesWithAccounts@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#CouchdbManagement@2.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#BrokerServices@3.0" ] [ "false" ] (RoleInstance "")
 
 updateModels0254 :: Upgrade
 updateModels0254 _ = runMonadPerspectivesTransaction'
   false
   (ENR $ EnumeratedRoleType sysUser)
   do
-    updateModel_ ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#CouchdbManagement@2.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#System@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#CouchdbManagement@2.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#BrokerServices@3.0" ] [ "false" ] (RoleInstance "")
 
 updateModels0260 :: Upgrade
 updateModels0260 _ = runMonadPerspectivesTransaction'
   false
   (ENR $ EnumeratedRoleType sysUser)
   do
-    updateModel_ ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#BodiesWithAccounts@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#CouchdbManagement@3.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#System@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#BodiesWithAccounts@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#CouchdbManagement@3.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#BrokerServices@3.0" ] [ "false" ] (RoleInstance "")
 
 updateModels0266 :: Upgrade
 updateModels0266 _ = runMonadPerspectivesTransaction'
   false
   (ENR $ EnumeratedRoleType sysUser)
   do
-    updateModel_ ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#CouchdbManagement@6.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#System@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#CouchdbManagement@6.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#BrokerServices@3.0" ] [ "false" ] (RoleInstance "")
 
 updateModels0267 :: Upgrade
 updateModels0267 _ = runMonadPerspectivesTransaction'
   false
   (ENR $ EnumeratedRoleType sysUser)
-  do 
-    updateModel_ ["model://perspectives.domains#System@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#BodiesWithAccounts@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#CouchdbManagement@6.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#BrokerServices@3.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#Disconnect@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#HyperContext@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#Introduction@2.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#SharedFileServices@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#SimpleChat@1.0"] ["false"] (RoleInstance "")
+  do
+    updateModel_ [ "model://perspectives.domains#System@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#BodiesWithAccounts@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#CouchdbManagement@6.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#BrokerServices@3.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#Disconnect@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#HyperContext@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#Introduction@2.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#SharedFileServices@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#SimpleChat@1.0" ] [ "false" ] (RoleInstance "")
 
 ----------------------------------------------------------------------------------------
 ---- VERSION 0.26.8
 ----------------------------------------------------------------------------------------
-updateModels0269:: MonadPerspectives Unit
+updateModels0269 :: MonadPerspectives Unit
 updateModels0269 = runMonadPerspectivesTransaction'
   false
   (ENR $ EnumeratedRoleType sysUser)
   do
-    updateModel_ ["model://perspectives.domains#System@3.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#BodiesWithAccounts@2.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#CouchdbManagement@8.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#BrokerServices@4.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#HyperContext@2.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#SharedFileServices@2.0"] ["false"] (RoleInstance "")
-
+    updateModel_ [ "model://perspectives.domains#System@3.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#BodiesWithAccounts@2.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#CouchdbManagement@8.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#BrokerServices@4.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#HyperContext@2.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#SharedFileServices@2.0" ] [ "false" ] (RoleInstance "")
 
 addIsSystemModel :: MonadPerspectives Unit
 addIsSystemModel = do
   systemId <- getMySystem
-  targets <- (ContextInstance systemId) ##= filter 
+  targets <- (ContextInstance systemId) ##= filter
     ((getRoleInstances (ENR $ EnumeratedRoleType startContexts)) >=> binding)
-    ((getProperty (EnumeratedPropertyType rootName)) >=> \(Value name) -> pure $ isJust $ elemIndex name ["My System", "Broker Services App", "Couchdb Management App", "Hypertext types", "Shared File Services App"])
+    ((getProperty (EnumeratedPropertyType rootName)) >=> \(Value name) -> pure $ isJust $ elemIndex name [ "My System", "Broker Services App", "Couchdb Management App", "Hypertext types", "Shared File Services App" ])
   runMonadPerspectivesTransaction'
     false
-    (ENR $ EnumeratedRoleType sysUser) 
-    (for_ targets \roleInstance -> setProperty [roleInstance] (EnumeratedPropertyType isSystemModel) Nothing [Value "true"])
-
+    (ENR $ EnumeratedRoleType sysUser)
+    (for_ targets \roleInstance -> setProperty [ roleInstance ] (EnumeratedPropertyType isSystemModel) Nothing [ Value "true" ])
 
 addSettingsType :: MonadPerspectives Unit
 addSettingsType = do
   systemId <- getMySystem
-  PerspectRol rec@{allTypes} <- getPerspectRol (RoleInstance $ buitenRol systemId)
-  cacheAndSave (RoleInstance $ buitenRol systemId) (PerspectRol rec {allTypes = [(EnumeratedRoleType settings)] `union` allTypes })
+  PerspectRol rec@{ allTypes } <- getPerspectRol (RoleInstance $ buitenRol systemId)
+  cacheAndSave (RoleInstance $ buitenRol systemId) (PerspectRol rec { allTypes = [ (EnumeratedRoleType settings) ] `union` allTypes })
   saveMarkedResources
 
-updateModels02611:: MonadPerspectives Unit
+updateModels02611 :: MonadPerspectives Unit
 updateModels02611 = runMonadPerspectivesTransaction'
   false
   (ENR $ EnumeratedRoleType sysUser)
   do
-    updateModel_ ["model://perspectives.domains#Couchdb@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#Serialise@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#Sensor@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#Utilities@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#Parsing@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#Files@1.0"] ["false"] (RoleInstance "")
-    updateModel_ ["model://perspectives.domains#RabbitMQ@1.0"] ["false"] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#Couchdb@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#Serialise@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#Sensor@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#Utilities@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#Parsing@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#Files@1.0" ] [ "false" ] (RoleInstance "")
+    updateModel_ [ "model://perspectives.domains#RabbitMQ@1.0" ] [ "false" ] (RoleInstance "")

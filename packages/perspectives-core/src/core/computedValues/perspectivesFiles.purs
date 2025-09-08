@@ -25,22 +25,24 @@ import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 
 fileText :: Array String -> (RoleInstance ~~> Value)
-fileText fileInfo_ _ = try
-  (ArrayT $ case head fileInfo_ of
-    Just v -> do 
-      mText <- lift $ getPFileTextValue v
-      case mText of 
+fileText fileInfo_ _ =
+  try
+    ( ArrayT $ case head fileInfo_ of
+        Just v -> do
+          mText <- lift $ getPFileTextValue v
+          case mText of
+            Nothing -> pure []
+            Just text -> pure [ Value text ]
         Nothing -> pure []
-        Just text -> pure [Value text]
-    Nothing -> pure [])
-  >>= handleExternalFunctionError "model://perspectives.domains#Files$FileText"
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Files$FileText"
 
 getPFileTextValue :: String -> MonadPerspectives (Maybe String)
 getPFileTextValue v = case parsePerspectivesFile v of
   Left e -> pure Nothing
-  Right {propertyType, roleFileName, database, mimeType} -> if isATextType mimeType
-    then do
-      db <- case database of 
+  Right { propertyType, roleFileName, database, mimeType } ->
+    if isATextType mimeType then do
+      db <- case database of
         Just db -> pure db
         Nothing -> entitiesDatabaseName
       (ma :: Maybe Foreign) <- getAttachment db roleFileName (typeUri2couchdbFilename $ unwrap propertyType)
@@ -49,9 +51,9 @@ getPFileTextValue v = case parsePerspectivesFile v of
         Just a -> Just <$> (lift $ fromBlob a)
     else pure Nothing
   where
-    isATextType :: String -> Boolean
-    isATextType s = (isJust $ match (unsafeRegex "^text/" noFlags) s) || 
-      (isJust $ elemIndex s ["application/x-yaml"])
+  isATextType :: String -> Boolean
+  isATextType s = (isJust $ match (unsafeRegex "^text/" noFlags) s) ||
+    (isJust $ elemIndex s [ "application/x-yaml" ])
 
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
 externalFunctions =

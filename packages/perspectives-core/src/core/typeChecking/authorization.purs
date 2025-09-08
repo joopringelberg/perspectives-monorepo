@@ -57,9 +57,8 @@ roleHasPerspectiveOnPropertyWithVerb :: RoleType -> RoleInstance -> EnumeratedPr
 roleHasPerspectiveOnPropertyWithVerb subject roleInstance property verb' = do
   roleType' <- roleInstance ##>> roleType
   (unsafePartial $ hasPerspectiveOnPropertyWithVerb subject roleType' property verb') >>=
-    if _
-      then pure $ Right true
-      else pure $ Left $ UnauthorizedForProperty "Auteur" subject (ENR roleType') (ENP property) verb' Nothing Nothing
+    if _ then pure $ Right true
+    else pure $ Left $ UnauthorizedForProperty "Auteur" subject (ENR roleType') (ENP property) verb' Nothing Nothing
 
 -- | True if the user role represented by the subject argument has a perspective
 -- | on the RoleType that includes an Action with the given Verb,
@@ -67,9 +66,8 @@ roleHasPerspectiveOnPropertyWithVerb subject roleInstance property verb' = do
 roleHasPerspectiveOnRoleWithVerb :: RoleType -> EnumeratedRoleType -> Array RoleVerb -> Maybe ArcPosition -> Maybe ArcPosition -> MonadPerspectives (Either PerspectivesError Boolean)
 roleHasPerspectiveOnRoleWithVerb subject roleType verbs mstart mend = do
   hasVerbs <- unsafePartial (roleType ###= hasPerspectiveOnRoleWithVerbs verbs subject)
-  if ala Disj foldMap hasVerbs
-    then pure $ Right true
-    else pure $ Left $ UnauthorizedForRole "Auteur" subject (ENR roleType) verbs mstart mend
+  if ala Disj foldMap hasVerbs then pure $ Right true
+  else pure $ Left $ UnauthorizedForRole "Auteur" subject (ENR roleType) verbs mstart mend
 
 -- | This function differs from `roleHasPerspectiveOnRoleWithVerb` in that it uses an
 -- | `authorizedRole` (second parameter). This is the role that binds the external role that we scrutinize,
@@ -82,15 +80,14 @@ roleHasPerspectiveOnExternalRoleWithVerbs subject mroleType verbs mstart mend = 
     pure $ Left $ Custom "roleHasPerspectiveOnExternalRoleWithVerb: no authorizedRole provided to construct external role"
   Just rt -> do
     (hasPerspectiveWithVerb subject rt) >>=
-      if _
-        then pure $ Right true
-        else pure $ Left $ UnauthorizedForRole "Auteur" subject rt verbs mstart mend
+      if _ then pure $ Right true
+      else pure $ Left $ UnauthorizedForRole "Auteur" subject rt verbs mstart mend
     where
-      hasPerspectiveWithVerb :: RoleType -> RoleType -> MonadPerspectives Boolean
-      hasPerspectiveWithVerb subjectType authorizedRoleType = do
-        adtOfAuthorizedRoleType <- getRole authorizedRoleType >>= adtOfRole
-        isJust <$> findPerspective subjectType
-          \perspective -> do
-            s <- pure $ perspectiveSupportsOneOfRoleVerbs perspective verbs
-            p <- unsafePartial (perspective `isPerspectiveOnADT` adtOfAuthorizedRoleType)
-            pure (s && p)
+    hasPerspectiveWithVerb :: RoleType -> RoleType -> MonadPerspectives Boolean
+    hasPerspectiveWithVerb subjectType authorizedRoleType = do
+      adtOfAuthorizedRoleType <- getRole authorizedRoleType >>= adtOfRole
+      isJust <$> findPerspective subjectType
+        \perspective -> do
+          s <- pure $ perspectiveSupportsOneOfRoleVerbs perspective verbs
+          p <- unsafePartial (perspective `isPerspectiveOnADT` adtOfAuthorizedRoleType)
+          pure (s && p)

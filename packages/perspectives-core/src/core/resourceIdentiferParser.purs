@@ -29,9 +29,9 @@ type LocalModelName = String
 -- | loc:secretdatabase#0083caf8_6c12_4905_a7ce_1b10a40f0ad8
 -- | rem:https://perspectives.domains/cw_perspectives_domains/#0083caf8_6c12_4905_a7ce_1b10a40f0ad8
 -- | model://perspectives.domains#System
-data DecomposedResourceIdentifier = 
-    Default DatabaseName Guid 
-  | Local DatabaseName Guid 
+data DecomposedResourceIdentifier
+  = Default DatabaseName Guid
+  | Local DatabaseName Guid
   | Remote Url Guid
   | Public Url Guid
   | Model DatabaseName LocalModelName
@@ -41,11 +41,11 @@ resourceIdentifierRegEx :: Regex
 resourceIdentifierRegEx = unsafeRegex "^(\\w+):(.*)$" noFlags
 
 isResourceIdentifier :: ResourceIdentifier -> Boolean
-isResourceIdentifier resId = 
-  case match resourceIdentifierRegEx resId of 
+isResourceIdentifier resId =
+  case match resourceIdentifierRegEx resId of
     Nothing -> false
-    Just matches -> case index matches 1 of 
-      Just (Just scheme) -> case scheme of 
+    Just matches -> case index matches 1 of
+      Just (Just scheme) -> case scheme of
         "def" -> true
         "loc" -> true
         "rem" -> true
@@ -62,35 +62,35 @@ locRegex :: Regex
 locRegex = unsafeRegex "^(\\w+)#([_\\w\\d]+)$" noFlags
 
 parseResourceIdentifier :: forall f. ResourceIdentifier -> MonadPouchdb f DecomposedResourceIdentifier
-parseResourceIdentifier resId = 
-  case match resourceIdentifierRegEx resId of 
+parseResourceIdentifier resId =
+  case match resourceIdentifierRegEx resId of
     Nothing -> throwError (error $ "Cannot parse this resource identifier: " <> resId)
-    Just matches -> case index matches 1, index matches 2 of 
-      Just (Just scheme), Just (Just rest) -> case scheme of 
+    Just matches -> case index matches 1, index matches 2 of
+      Just (Just scheme), Just (Just rest) -> case scheme of
         -- def:#guid
         "def" -> do
           sysId <- getSystemIdentifier
           pure $ Default (sysId <> "_entities") (drop 1 rest)
         -- loc:dbname#guid
         "loc" -> case match locRegex rest of
-          Nothing -> throwError (error $ "Cannot parse this as a Local resource identifier: " <> resId) 
-          Just locMatches -> case index locMatches 1, index locMatches 2 of 
+          Nothing -> throwError (error $ "Cannot parse this as a Local resource identifier: " <> resId)
+          Just locMatches -> case index locMatches 1, index locMatches 2 of
             Just (Just dbName), Just (Just g) -> pure $ Local dbName g
             _, _ -> throwError (error $ "Cannot parse this as a Local resource identifier: " <> resId)
         -- rem:url#guid
         "rem" -> case match publicResourceUrlRegex rest of
           Nothing -> throwError (error $ "Cannot parse this as a Remote resource identifier: " <> resId)
-          Just remMatches -> case index remMatches 1, index remMatches 2 of 
+          Just remMatches -> case index remMatches 1, index remMatches 2 of
             Just (Just url), Just (Just g) -> pure $ Remote (url <> "/") g
             _, _ -> throwError (error $ "Cannot parse this as a Remote resource identifier: " <> resId)
         "pub" -> case match publicResourceUrlRegex rest of
           Nothing -> throwError (error $ "Cannot parse this as a Public resource identifier: " <> resId)
-          Just remMatches -> case index remMatches 1, index remMatches 2 of 
+          Just remMatches -> case index remMatches 1, index remMatches 2 of
             Just (Just url), Just (Just g) -> pure $ Remote (url <> "/") g
             _, _ -> throwError (error $ "Cannot parse this as a Public resource identifier: " <> resId)
         "model" -> do
           sysId <- getSystemIdentifier
-          {documentName} <- pure $ unsafePartial modelUri2ModelUrl resId
+          { documentName } <- pure $ unsafePartial modelUri2ModelUrl resId
           pure $ Model (sysId <> "_models") documentName
         -- "model" -> getSystemIdentifier >>= \sysId -> pure $ Model (sysId <> "_models") (unsafePartial fromJust $ stripPrefix (Pattern "//") (rest <> ".json"))
         -- rest is nu //perspectives.domains#System. Haal '//' eraf, maak er een Local van met default database voor modellen.

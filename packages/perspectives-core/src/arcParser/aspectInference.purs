@@ -19,7 +19,7 @@
 -- Full text of this license can be found in the LICENSE directory in the projects root.
 
 -- END LICENSE
-module Perspectives.Parsing.Arc.AspectInference  where
+module Perspectives.Parsing.Arc.AspectInference where
 
 import Prelude
 
@@ -56,65 +56,64 @@ import Perspectives.Types.ObjectGetters (isMandatory_, isRelational_)
 --    * Add the restrictions on fillers from Aspects to that of the role.
 inferFromAspectRoles :: PhaseThree Unit
 inferFromAspectRoles = do
-  df@{id} <- lift $ State.gets _.dfr
+  df@{ id } <- lift $ State.gets _.dfr
   withDomeinFile
     id
     (DomeinFile df)
     (inferFromAspectRoles' df)
   where
-    inferFromAspectRoles' :: DomeinFileRecord -> PhaseThree Unit
-    inferFromAspectRoles' df@{id, namespace, enumeratedRoles} = do
-      -- We have to execute in topological order, so aspects are handled before they are applied.
-      enumeratedRoles' <- executeInTopologicalOrder
-        identifier_
-        -- Only count aspects defined in this namespace as dependencies for the sorting!
-        (filter (flip startsWithSegments namespace) <<< (map (unwrap <<< roleInContext2Role) <<< _.roleAspects <<< unwrap))
-        (values enumeratedRoles)
-        (inferCardinality >=> inferMandatoriness {->=> inferBinding-} >=> lift <<< lift <<< modifyEnumeratedRoleInDomeinFile id)
-      (DomeinFile dfr') <- lift $ lift $ getDomeinFile id
-      modifyDF \_ -> dfr'
+  inferFromAspectRoles' :: DomeinFileRecord -> PhaseThree Unit
+  inferFromAspectRoles' df@{ id, namespace, enumeratedRoles } = do
+    -- We have to execute in topological order, so aspects are handled before they are applied.
+    enumeratedRoles' <- executeInTopologicalOrder
+      identifier_
+      -- Only count aspects defined in this namespace as dependencies for the sorting!
+      (filter (flip startsWithSegments namespace) <<< (map (unwrap <<< roleInContext2Role) <<< _.roleAspects <<< unwrap))
+      (values enumeratedRoles)
+      (inferCardinality >=> inferMandatoriness {->=> inferBinding-}  >=> lift <<< lift <<< modifyEnumeratedRoleInDomeinFile id)
+    (DomeinFile dfr') <- lift $ lift $ getDomeinFile id
+    modifyDF \_ -> dfr'
 
-    inferCardinality :: EnumeratedRole -> PhaseThree EnumeratedRole
-    inferCardinality r@(EnumeratedRole{functional, roleAspects}) = do
-      isFunctional <- null <$> evalStateT (some aspectIsRelational) (roleInContext2Role <$> roleAspects) <|> pure functional
-      pure $ over EnumeratedRole (\rr -> rr {functional = isFunctional}) r
+  inferCardinality :: EnumeratedRole -> PhaseThree EnumeratedRole
+  inferCardinality r@(EnumeratedRole { functional, roleAspects }) = do
+    isFunctional <- null <$> evalStateT (some aspectIsRelational) (roleInContext2Role <$> roleAspects) <|> pure functional
+    pure $ over EnumeratedRole (\rr -> rr { functional = isFunctional }) r
 
-    aspectIsRelational :: StateT (Array EnumeratedRoleType) PhaseThree EnumeratedRoleType
-    aspectIsRelational = do
-      maspect <- State.gets uncons
-      case maspect of 
-        Nothing -> throwError $ singleton (Custom "Not found") 
-        Just {head, tail} -> do
-          State.put tail
-          -- fail if head is functional; only pass through when head is relational.
-          (lift $ lift $ lift $ isRelational_ head) >>= guard
-          pure head
+  aspectIsRelational :: StateT (Array EnumeratedRoleType) PhaseThree EnumeratedRoleType
+  aspectIsRelational = do
+    maspect <- State.gets uncons
+    case maspect of
+      Nothing -> throwError $ singleton (Custom "Not found")
+      Just { head, tail } -> do
+        State.put tail
+        -- fail if head is functional; only pass through when head is relational.
+        (lift $ lift $ lift $ isRelational_ head) >>= guard
+        pure head
 
-    inferMandatoriness :: EnumeratedRole -> PhaseThree EnumeratedRole
-    inferMandatoriness r@(EnumeratedRole{mandatory, roleAspects}) = do
-      isMandatory <- not <<< null <$> evalStateT (some aspectIsMandatory) (roleInContext2Role <$> roleAspects) <|> pure mandatory
-      pure $ over EnumeratedRole (\rr -> rr {mandatory = isMandatory}) r
+  inferMandatoriness :: EnumeratedRole -> PhaseThree EnumeratedRole
+  inferMandatoriness r@(EnumeratedRole { mandatory, roleAspects }) = do
+    isMandatory <- not <<< null <$> evalStateT (some aspectIsMandatory) (roleInContext2Role <$> roleAspects) <|> pure mandatory
+    pure $ over EnumeratedRole (\rr -> rr { mandatory = isMandatory }) r
 
-    aspectIsMandatory :: StateT (Array EnumeratedRoleType) PhaseThree EnumeratedRoleType
-    aspectIsMandatory = do
-      maspect <- State.gets uncons
-      case maspect of 
-        Nothing -> throwError $ singleton (Custom "Not found") 
-        Just {head, tail} -> do
-          State.put tail
-          -- fail if head is optional; only pass through when head is mandatory.
-          (lift $ lift $ lift $ isMandatory_ head) >>= guard
-          pure head
+  aspectIsMandatory :: StateT (Array EnumeratedRoleType) PhaseThree EnumeratedRoleType
+  aspectIsMandatory = do
+    maspect <- State.gets uncons
+    case maspect of
+      Nothing -> throwError $ singleton (Custom "Not found")
+      Just { head, tail } -> do
+        State.put tail
+        -- fail if head is optional; only pass through when head is mandatory.
+        (lift $ lift $ lift $ isMandatory_ head) >>= guard
+        pure head
 
-    -- TODO: beslis of en hoe de binding restrictie geexpandeerd wordt. Nu laten we het bij de declared binding. Momenteel wordt inferBinding niet toegepast.
-    -- The restriction on role fillers is the SUM of the restrictions of the aspects (including that modelled with the role itself)
-    -- Assuming we've inferred bindings for all aspects _before_ we infer bindings for the role itself, we just have to deal 
-    -- with the direct aspects.
-    inferBinding :: EnumeratedRole -> PhaseThree EnumeratedRole
-    inferBinding r = lift $ lift $ do
-      ownBinding <- binding r
-      -- An aspect may have no binding restrictions.
-      completeBinding <- catMaybes <<< cons ownBinding <$> for (roleInContext2Role <$> (unwrap r).roleAspects) (getEnumeratedRole >=> binding)
-      if null completeBinding
-        then pure r
-        else pure $ over EnumeratedRole (\rr -> rr {binding = Just $ SUM completeBinding}) r
+  -- TODO: beslis of en hoe de binding restrictie geexpandeerd wordt. Nu laten we het bij de declared binding. Momenteel wordt inferBinding niet toegepast.
+  -- The restriction on role fillers is the SUM of the restrictions of the aspects (including that modelled with the role itself)
+  -- Assuming we've inferred bindings for all aspects _before_ we infer bindings for the role itself, we just have to deal 
+  -- with the direct aspects.
+  inferBinding :: EnumeratedRole -> PhaseThree EnumeratedRole
+  inferBinding r = lift $ lift $ do
+    ownBinding <- binding r
+    -- An aspect may have no binding restrictions.
+    completeBinding <- catMaybes <<< cons ownBinding <$> for (roleInContext2Role <$> (unwrap r).roleAspects) (getEnumeratedRole >=> binding)
+    if null completeBinding then pure r
+    else pure $ over EnumeratedRole (\rr -> rr { binding = Just $ SUM completeBinding }) r

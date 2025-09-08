@@ -20,10 +20,7 @@
 
 -- END LICENSE
 
-
-module Perspectives.Persistence.RunEffectAff
-
-where
+module Perspectives.Persistence.RunEffectAff where
 
 import Effect.Aff.Compat (EffectFn3, EffectFnAff)
 import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn4, EffectFn5, EffectFn6)
@@ -31,8 +28,11 @@ import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn4, EffectFn5, EffectFn6)
 -----------------------------------------------------------
 -- RUNEFFECTFNAFF2
 -----------------------------------------------------------
-foreign import runEffectFnAff1 :: forall a r.
-  EffectFn1 a r -> a -> EffectFnAff r
+foreign import runEffectFnAff1
+  :: forall a r
+   . EffectFn1 a r
+  -> a
+  -> EffectFnAff r
 
 -----------------------------------------------------------
 -- RUNEFFECTFNAFF2
@@ -51,29 +51,59 @@ foreign import runEffectFnAff1 :: forall a r.
 -- |  addDocumentImpl' = `runEffectFnAff2 addDocumentImpl`
 -- | And then:
 -- |  `fromEffectFnAff $ addDocumentImpl' db doc`
-foreign import runEffectFnAff2 :: forall a b r.
-  EffectFn2 a b r -> a -> b -> EffectFnAff r
+foreign import runEffectFnAff2
+  :: forall a b r
+   . EffectFn2 a b r
+  -> a
+  -> b
+  -> EffectFnAff r
 
 -----------------------------------------------------------
 -- RUNEFFECTFNAFF3
 -----------------------------------------------------------
-foreign import runEffectFnAff3 :: forall a b c r.
-  EffectFn3 a b c r -> a -> b -> c -> EffectFnAff r
+foreign import runEffectFnAff3
+  :: forall a b c r
+   . EffectFn3 a b c r
+  -> a
+  -> b
+  -> c
+  -> EffectFnAff r
 
 -----------------------------------------------------------
 -- RUNEFFECTFNAFF4
 -----------------------------------------------------------
-foreign import runEffectFnAff4 :: forall a b c d r.
-  EffectFn4 a b c d r -> a -> b -> c -> d -> EffectFnAff r
+foreign import runEffectFnAff4
+  :: forall a b c d r
+   . EffectFn4 a b c d r
+  -> a
+  -> b
+  -> c
+  -> d
+  -> EffectFnAff r
 
 -----------------------------------------------------------
 -- RUNEFFECTFNAFF5
 -----------------------------------------------------------
-foreign import runEffectFnAff5 :: forall a b c d e r.
-  EffectFn5 a b c d e r -> a -> b -> c -> d -> e -> EffectFnAff r
+foreign import runEffectFnAff5
+  :: forall a b c d e r
+   . EffectFn5 a b c d e r
+  -> a
+  -> b
+  -> c
+  -> d
+  -> e
+  -> EffectFnAff r
 
 -----------------------------------------------------------
 -- RUNEFFECTFNAFF6
 -----------------------------------------------------------
-foreign import runEffectFnAff6 :: forall a b c d e f r.
-  EffectFn6 a b c d e f r -> a -> b -> c -> d -> e -> f -> EffectFnAff r
+foreign import runEffectFnAff6
+  :: forall a b c d e f r
+   . EffectFn6 a b c d e f r
+  -> a
+  -> b
+  -> c
+  -> d
+  -> e
+  -> f
+  -> EffectFnAff r

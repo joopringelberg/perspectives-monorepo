@@ -42,5 +42,5 @@ clearEffectulFunctionCaches = do
   _ <- pure clearActiveSupportedEffects
   pure unit
   where
-    clearActiveSupportedEffects :: ActiveSupportedEffects
-    clearActiveSupportedEffects = clear activeSupportedEffects
+  clearActiveSupportedEffects :: ActiveSupportedEffects
+  clearActiveSupportedEffects = clear activeSupportedEffects

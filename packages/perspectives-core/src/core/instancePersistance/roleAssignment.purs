@@ -74,12 +74,11 @@ roleIsMe roleId contextId = (lift $ try $ getPerspectContext contextId) >>=
       handlePerspectRolError "roleIsMe"
         \role -> do
           rt <- lift $ getEnumeratedRole (rol_pspType role)
-          if kindOfRole rt == UserRole || kindOfRole rt == Public || kindOfRole rt == PublicProxy
-            then do
-              (lift $ findMeRequests contextId)  >>= addCorrelationIdentifiersToTransactie
-              lift $ cacheAndSave roleId (changeRol_isMe role true)
-              lift $ cacheAndSave contextId (changeContext_me ctxt (Just roleId))
-            else pure unit
+          if kindOfRole rt == UserRole || kindOfRole rt == Public || kindOfRole rt == PublicProxy then do
+            (lift $ findMeRequests contextId) >>= addCorrelationIdentifiersToTransactie
+            lift $ cacheAndSave roleId (changeRol_isMe role true)
+            lift $ cacheAndSave contextId (changeContext_me ctxt (Just roleId))
+          else pure unit
 
 -- | <fillerId> `fillerNoLongerPointsTo` <filledId>
 -- | Break the link from filler to filled (FILLS link)
@@ -93,10 +92,10 @@ fillerNoLongerPointsTo fillerId filledId = (try $ getPerspectRol fillerId) >>=
   handlePerspectRolError' "fillerNoLongerPointsTo" unit
     \(filler :: PerspectRol) -> (try $ getPerspectRol filledId) >>=
       handlePerspectRolError "fillerNoLongerPointsTo"
-      \(filled :: PerspectRol) -> do
-        filledContextType <- rol_context filled ##>> contextType
-        filler' <- pure $ (removeRol_gevuldeRollen filler filledContextType (rol_pspType filled) filledId)
-        cacheAndSave fillerId filler'
+        \(filled :: PerspectRol) -> do
+          filledContextType <- rol_context filled ##>> contextType
+          filler' <- pure $ (removeRol_gevuldeRollen filler filledContextType (rol_pspType filled) filledId)
+          cacheAndSave fillerId filler'
 
 -- | <fillerId> `fillerPointsTo` <filledId>
 -- | Add the link from filler to filled (FILLS link)
@@ -110,10 +109,10 @@ fillerPointsTo fillerId filledId = (try $ getPerspectRol fillerId) >>=
   handlePerspectRolError' "fillerPointsTo" unit
     \(filler :: PerspectRol) -> (try $ getPerspectRol filledId) >>=
       handlePerspectRolError' "fillerPointsTo" unit
-      \(filled :: PerspectRol) -> do
-        filledContextType <- rol_context filled ##>> contextType
-        filler' <- addRol_gevuldeRollen filler filledContextType (rol_pspType filled) filledId
-        cacheAndSave fillerId filler'
+        \(filled :: PerspectRol) -> do
+          filledContextType <- rol_context filled ##>> contextType
+          filler' <- addRol_gevuldeRollen filler filledContextType (rol_pspType filled) filledId
+          cacheAndSave fillerId filler'
 
 -- | <filledId> `filledNoLongerPointsTo` <fillerId>
 -- | Break the link from Filled to Filler (FILLEDBY link).

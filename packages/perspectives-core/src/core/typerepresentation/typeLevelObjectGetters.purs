@@ -20,9 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.Types.ObjectGetters
-  
-  where
+module Perspectives.Types.ObjectGetters where
 
 import Control.Monad.Error.Class (try)
 import Control.Monad.State (StateT, execStateT, get, put)
@@ -106,16 +104,16 @@ roleRootStates = roleAspectsClosure >=> roleRootState
 
 -- | The locally defined properties (i.e. excluding Aspect properties).
 enumeratedRolePropertyTypes_ :: EnumeratedRoleType -> MonadPerspectives (Array PropertyType)
-enumeratedRolePropertyTypes_ = getEnumeratedRole >=> \(EnumeratedRole{properties}) -> pure properties
+enumeratedRolePropertyTypes_ = getEnumeratedRole >=> \(EnumeratedRole { properties }) -> pure properties
 
 enumeratedRoleContextType :: EnumeratedRoleType -> MonadPerspectives ContextType
 enumeratedRoleContextType = getEnumeratedRole >=> pure <<< _.context <<< unwrap
 
 indexedRoleName :: EnumeratedRoleType -> MonadPerspectives (Maybe RoleInstance)
-indexedRoleName rtype = getEnumeratedRole rtype >>= pure <<< _.indexedRole <<< unwrap 
+indexedRoleName rtype = getEnumeratedRole rtype >>= pure <<< _.indexedRole <<< unwrap
 
 propertyAliases :: EnumeratedRoleType -> MP (OBJ.Object EnumeratedPropertyType)
-propertyAliases rtype = getEnumeratedRole rtype >>= pure <<< _.propertyAliases <<< unwrap 
+propertyAliases rtype = getEnumeratedRole rtype >>= pure <<< _.propertyAliases <<< unwrap
 
 publicUrl_ :: EnumeratedRoleType -> MonadPerspectives (Maybe Calculation)
 publicUrl_ et = getEnumeratedRole et >>= pure <<< _.publicUrl <<< unwrap
@@ -154,7 +152,7 @@ lookForUnqualifiedRoleTypeOfADT s = lookForRoleOfADT (roletype2string >>> areLas
 -- | Constructs the set of all roles in the ADT (recursing on aspects of Enumerated roles)
 -- | and then applies a comparison function to the name passed in and the names of all those roles.
 lookForRoleOfADT :: (RoleType -> Boolean) -> String -> ADT ContextType ~~~> RoleType
-lookForRoleOfADT criterium _ adt =  ArrayT (allRoles adt >>= pure <<< filter criterium)
+lookForRoleOfADT criterium _ adt = ArrayT (allRoles adt >>= pure <<< filter criterium)
 
 ----------------------------------------------------------------------------------------
 ------- FUNCTIONS TO FIND A ROLEINCONTEXT ADT WORKING FROM STRINGS OR ADT'S
@@ -195,21 +193,22 @@ userRole = ArrayT <<< ((getPerspectType :: ContextType -> MonadPerspectives Cont
 
 -- | Returns User RoleTypes that are guaranteed to be Enumerated.
 enumeratedUserRole :: ContextType ~~~> RoleType
-enumeratedUserRole =  ArrayT <<< ((getPerspectType :: ContextType -> MonadPerspectives Context) >=> pure <<< filter isEnumerated <<< ContextClass.userRole)
+enumeratedUserRole = ArrayT <<< ((getPerspectType :: ContextType -> MonadPerspectives Context) >=> pure <<< filter isEnumerated <<< ContextClass.userRole)
   where
-    isEnumerated :: RoleType -> Boolean
-    isEnumerated (ENR _) = true
-    isEnumerated (CR _) = false
+  isEnumerated :: RoleType -> Boolean
+  isEnumerated (ENR _) = true
+  isEnumerated (CR _) = false
 
 -- | Just returns the Enumerated proxies!
 publicUserRole :: ContextType ~~~> RoleType
-publicUserRole = ArrayT <<< 
-  ((getPerspectType :: ContextType -> MonadPerspectives Context) >=> 
-    filterA isPublicProxy <<< ContextClass.userRole)
+publicUserRole = ArrayT <<<
+  ( (getPerspectType :: ContextType -> MonadPerspectives Context) >=>
+      filterA isPublicProxy <<< ContextClass.userRole
+  )
 
 -- | Returns User RoleTypes that are guaranteed to be Calculated.
 calculatedUserRole :: ContextType ~~~> RoleType
-calculatedUserRole =  ArrayT <<< ((getPerspectType :: ContextType -> MonadPerspectives Context) >=> pure <<< filter isCalculatedRole <<< ContextClass.userRole)
+calculatedUserRole = ArrayT <<< ((getPerspectType :: ContextType -> MonadPerspectives Context) >=> pure <<< filter isCalculatedRole <<< ContextClass.userRole)
 
 isCalculatedRole :: RoleType -> Boolean
 isCalculatedRole (ENR _) = false
@@ -229,9 +228,9 @@ allEnumeratedRoles ct = ArrayT do
   rs <- runArrayT $ allRoleTypesInContext ct
   pure $ foldl f [] rs
   where
-    f :: Array EnumeratedRoleType -> RoleType -> Array EnumeratedRoleType
-    f roles (ENR r) = cons r roles
-    f roles _ = roles
+  f :: Array EnumeratedRoleType -> RoleType -> Array EnumeratedRoleType
+  f roles (ENR r) = cons r roles
+  f roles _ = roles
 
 allUnlinkedRoles :: ContextType ~~~> EnumeratedRoleType
 allUnlinkedRoles = COMB.filter allEnumeratedRoles isUnlinked
@@ -239,12 +238,13 @@ allUnlinkedRoles = COMB.filter allEnumeratedRoles isUnlinked
 allRoleTypesInContext :: ContextType ~~~> RoleType
 allRoleTypesInContext = conjunction roleInContext $ conjunction contextRole userRole'
   where
-    userRole' :: ContextType ~~~> RoleType
-    userRole' = ArrayT <<< ((getPerspectType :: ContextType -> MonadPerspectives Context) >=> pure <<< ContextClass.userRole)
+  userRole' :: ContextType ~~~> RoleType
+  userRole' = ArrayT <<< ((getPerspectType :: ContextType -> MonadPerspectives Context) >=> pure <<< ContextClass.userRole)
 
 aspectRoles :: ContextType ~~~> EnumeratedRoleType
 aspectRoles ct@(ContextType contextName) = filter' allEnumeratedRoles
-  (\(EnumeratedRoleType roleName) -> not (roleName `startsWithSegments` contextName)) ct
+  (\(EnumeratedRoleType roleName) -> not (roleName `startsWithSegments` contextName))
+  ct
 
 -- | Returns the name of the model that defines the role type as a String Value.
 contextTypeModelName :: ContextType ~~~> Value
@@ -262,19 +262,20 @@ contextRootStates :: ContextType ~~~> StateIdentifier
 contextRootStates = contextAspectsClosure >=> contextRootState
 
 getPublicStore_ :: ContextType -> MonadPerspectives (Maybe PublicStore)
-getPublicStore_ ctype = getContext ctype >>= pure <<< _.public <<< unwrap 
+getPublicStore_ ctype = getContext ctype >>= pure <<< _.public <<< unwrap
 
 indexedContextName :: ContextType -> MonadPerspectives (Maybe ContextInstance)
-indexedContextName ctype = getContext ctype >>= pure <<< _.indexedContext <<< unwrap 
+indexedContextName ctype = getContext ctype >>= pure <<< _.indexedContext <<< unwrap
 
 publicUrlComputation :: ContextType -> MonadPerspectives (Maybe Calculation)
-publicUrlComputation ctype = 
-  (ctype ###> publicUserRole) >>= case _ of 
+publicUrlComputation ctype =
+  (ctype ###> publicUserRole) >>= case _ of
     Just (ENR r) -> publicUrl_ r
     _ -> pure Nothing
 
 externalRole :: ContextType -> MonadPerspectives EnumeratedRoleType
 externalRole = getPerspectType >=> pure <<< CTCLASS.externalRole
+
 ----------------------------------------------------------------------------------------
 ------- FUNCTIONS OPERATING DIRECTLY ON STATE
 ----------------------------------------------------------------------------------------
@@ -307,14 +308,15 @@ lookForUnqualifiedPropertyType s = lookForProperty (propertytype2string >>> areL
 -- | Enumerated Roles), using a criterium.
 lookForProperty :: (PropertyType -> Boolean) -> ADT EnumeratedRoleType ~~~> PropertyType
 lookForProperty criterium adt = ArrayT (allProperties adt >>= pure <<< filter criterium)
+
 -- lookForProperty criterium = COMB.filter' (ArrayT <<< allProperties) criterium
 
 -- | All properties, computed recursively over binding and Aspects, of the Role.
 propertiesOfRole :: String ~~~> PropertyType
 propertiesOfRole s =
   ArrayT (getPerspectType (EnumeratedRoleType s) >>= allRoleProperties)
-  <|>
-  ArrayT (getPerspectType (CalculatedRoleType s) >>= roleADT >>= allProperties <<< map roleInContext2Role)
+    <|>
+      ArrayT (getPerspectType (CalculatedRoleType s) >>= roleADT >>= allProperties <<< map roleInContext2Role)
 
 ----------------------------------------------------------------------------------------
 ------- FUNCTIONS FOR ASPECTS
@@ -342,7 +344,7 @@ roleTypeAspectsClosure (CR r) = pure $ CR r
 hasAspect :: EnumeratedRoleType -> (EnumeratedRoleType ~~~> Boolean)
 hasAspect aspect roleType = ArrayT do
   aspects <- roleType ###= roleAspectsClosure
-  pure [isJust $ findIndex ((==) aspect) aspects]
+  pure [ isJust $ findIndex ((==) aspect) aspects ]
 
 -- aspect `hasContextAspect` contextType
 -- contextType ##>>> hasContextAspect aspect
@@ -350,21 +352,21 @@ hasAspect aspect roleType = ArrayT do
 hasContextAspect :: ContextType -> (ContextType ~~~> Boolean)
 hasContextAspect aspect contextType = ArrayT do
   aspects <- contextType ###= contextAspectsClosure
-  pure [isJust $ findIndex ((==) aspect) aspects]
+  pure [ isJust $ findIndex ((==) aspect) aspects ]
 
 hasAspectWithLocalName :: String -> (EnumeratedRoleType ~~~> Boolean)
 hasAspectWithLocalName localAspectName roleType = ArrayT do
   aspects <- roleType ###= roleAspectsClosure
-  pure [isJust $ findIndex (test (unsafeRegex (localAspectName <> "$") noFlags)) (unwrap <$> aspects)]
+  pure [ isJust $ findIndex (test (unsafeRegex (localAspectName <> "$") noFlags)) (unwrap <$> aspects) ]
 
 -- We gamble here that the roleSpecialisationView is reliable. 
-getRoleAspectSpecialisations :: EnumeratedRoleType  ~~~> EnumeratedRoleType
+getRoleAspectSpecialisations :: EnumeratedRoleType ~~~> EnumeratedRoleType
 getRoleAspectSpecialisations rn = ArrayT $ try (modelDatabaseName >>= \db -> getViewOnDatabase db "defaultViews/roleSpecialisationsView" (Key $ unwrap rn)) >>=
   handlePerspectRolError' "getAspectSpecialisations" []
     \(roles :: Array EnumeratedRoleType) -> pure roles
 
 -- We gamble here that the contextSpecialisationView is reliable. 
-getContextAspectSpecialisations :: ContextType  ~~~> ContextType
+getContextAspectSpecialisations :: ContextType ~~~> ContextType
 getContextAspectSpecialisations cn = ArrayT $ try (modelDatabaseName >>= \db -> getViewOnDatabase db "defaultViews/contextSpecialisationsView" (Key $ unwrap cn)) >>=
   handlePerspectRolError' "getContextAspectSpecialisations" []
     \(contexts :: Array ContextType) -> pure contexts
@@ -447,8 +449,8 @@ computesDatabaseQueryRole qfd = do
       _ -> pure false
     _ -> pure false
   where
-    isExternal :: ADT RoleInContext -> MonadPerspectives Boolean
-    isExternal = expandUnexpandedLeaves >=> pure <<< computeExpandedBoolean (\(RoleInContext{role}) -> isExternalRole $ unwrap role)
+  isExternal :: ADT RoleInContext -> MonadPerspectives Boolean
+  isExternal = expandUnexpandedLeaves >=> pure <<< computeExpandedBoolean (\(RoleInContext { role }) -> isExternalRole $ unwrap role)
 
 --------------------------------------------------------------------------------------------------
 ---- ALLTYPESINADT
@@ -481,51 +483,55 @@ allTypesInContextADT = ArrayT <<< pure <<< allLeavesInADT >=> contextAspectsClos
 -- | and it is still bound to the second parameter.
 -- | This function yields a single result (it is functional in PL)
 generalisesRoleType :: RoleType -> (RoleType ~~~> Value)
-generalisesRoleType t1 t2 = ArrayT do 
+generalisesRoleType t1 t2 = ArrayT do
   x <- (t1 `generalisesRoleType_` t2)
-  pure [Value $ show x]
+  pure [ Value $ show x ]
 
 -- | t1 <- t2 (NOTICE REVERSED ARROW)
 -- | See `generalisesRoleType.`
 generalisesRoleType_ :: RoleType -> (RoleType -> MonadPerspectives Boolean)
-generalisesRoleType_ t1 t2 = do 
+generalisesRoleType_ t1 t2 = do
   -- expand
   (et1 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t1
   (et2 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t2
   pure (et1 `generalises_` et2)
 
 specialisesRoleType :: RoleType -> (RoleType ~~~> Value)
-specialisesRoleType t1 t2 = ArrayT do 
+specialisesRoleType t1 t2 = ArrayT do
   x <- (t1 `specialisesRoleType_` t2)
-  pure [Value $ show x]
+  pure [ Value $ show x ]
 
 specialisesRoleType_ :: RoleType -> (RoleType -> MonadPerspectives Boolean)
-specialisesRoleType_ t1 t2 = do 
+specialisesRoleType_ t1 t2 = do
   -- expand
   (et1 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t1
   (et2 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t2
   pure (et1 `specialises_` et2)
 
 equalsOrGeneralisesRoleType :: RoleType -> (RoleType ~~~> Value)
-equalsOrGeneralisesRoleType t1 t2 = ArrayT do 
+equalsOrGeneralisesRoleType t1 t2 = ArrayT do
   x <- (t1 `equalsOrGeneralisesRoleType_` t2)
-  pure [Value $ show x]
+  pure [ Value $ show x ]
+
 equalsOrGeneralisesRoleType_ :: RoleType -> (RoleType -> MonadPerspectives Boolean)
-equalsOrGeneralisesRoleType_ t1 t2 = do 
+equalsOrGeneralisesRoleType_ t1 t2 = do
   -- expand
   (et1 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t1
   (et2 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t2
   pure (et1 `equalsOrGeneralises_` et2)
+
 equalsOrSpecialisesRoleType :: RoleType -> (RoleType ~~~> Value)
-equalsOrSpecialisesRoleType t1 t2 = ArrayT do 
+equalsOrSpecialisesRoleType t1 t2 = ArrayT do
   x <- (t1 `equalsOrSpecialisesRoleType_` t2)
-  pure [Value $ show x]
+  pure [ Value $ show x ]
+
 equalsOrSpecialisesRoleType_ :: RoleType -> (RoleType -> MonadPerspectives Boolean)
-equalsOrSpecialisesRoleType_ t1 t2 = do 
+equalsOrSpecialisesRoleType_ t1 t2 = do
   -- expand
   (et1 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t1
   (et2 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t2
   pure (et1 `equalsOrSpecialises_` et2)
+
 -----------------------------------------------------------
 ---- EQUALS, EQUALSORGENERALISES, EQUALSORSPECIALISES FOR ROLE IN CONTEXT
 -----------------------------------------------------------
@@ -537,13 +543,13 @@ equalsOrGeneralisesRoleInContext = flip equalsOrSpecialisesRoleInContext
 -- | left -> right
 -- | Compares with `equalsOrSpecialises`.
 equalsOrSpecialisesRoleInContext :: ADT RoleInContext -> ADT RoleInContext -> MP Boolean
-equalsOrSpecialisesRoleInContext left right = do 
+equalsOrSpecialisesRoleInContext left right = do
   (left' :: CNF RoleInContext) <- toConjunctiveNormalForm_ left
   (right' :: CNF RoleInContext) <- toConjunctiveNormalForm_ right
   pure (left' `equalsOrSpecialises_` right')
 
 equals :: ADT RoleInContext -> ADT RoleInContext -> MP Boolean
-equals left right = do 
+equals left right = do
   (left' :: CNF RoleInContext) <- toConjunctiveNormalForm_ left
   (right' :: CNF RoleInContext) <- toConjunctiveNormalForm_ right
   pure (left' `equals_` right')
@@ -571,7 +577,7 @@ isPerspectiveOnRoleFilledWithRoleType p roleType = do
   case mfillRestriction of
     Nothing -> pure false
     Just fillRestriction -> getRoleADT roleType >>= equalsOrSpecialisesRoleInContext fillRestriction
-  
+
 ----------------------------------------------------------------------------------------
 ------- FUNCTIONS TO FIND VIEWS AND ON VIEWS
 ----------------------------------------------------------------------------------------
@@ -604,7 +610,7 @@ qualifyRoleInDomain :: String -> DomeinFileId ~~~> RoleType
 qualifyRoleInDomain localName namespace = ArrayT do
   (try $ retrieveDomeinFile namespace) >>=
     handleDomeinFileError' "qualifyRoleInDomain" []
-      \(DomeinFile {calculatedRoles, enumeratedRoles}) -> do
+      \(DomeinFile { calculatedRoles, enumeratedRoles }) -> do
         eCandidates <- pure $ map (ENR <<< EnumeratedRoleType) (filter (\id -> id `endsWithSegments` localName) (OBJ.keys enumeratedRoles))
         cCandidates <- pure $ map (CR <<< CalculatedRoleType) (filter (\id -> id `endsWithSegments` localName) (OBJ.keys calculatedRoles))
         pure $ eCandidates <> cCandidates
@@ -613,19 +619,19 @@ qualifyEnumeratedRoleInDomain :: String -> DomeinFileId ~~~> EnumeratedRoleType
 qualifyEnumeratedRoleInDomain localName namespace = ArrayT do
   (try $ retrieveDomeinFile namespace) >>=
     handleDomeinFileError' "qualifyEnumeratedRoleInDomain" []
-      \(DomeinFile {enumeratedRoles}) -> pure $ map EnumeratedRoleType (filter (\id -> id `endsWithSegments` localName) (OBJ.keys enumeratedRoles))
+      \(DomeinFile { enumeratedRoles }) -> pure $ map EnumeratedRoleType (filter (\id -> id `endsWithSegments` localName) (OBJ.keys enumeratedRoles))
 
 qualifyCalculatedRoleInDomain :: String -> DomeinFileId ~~~> CalculatedRoleType
 qualifyCalculatedRoleInDomain localName namespace = ArrayT do
   (try $ retrieveDomeinFile namespace) >>=
     handleDomeinFileError' "qualifyCalculatedRoleInDomain" []
-    \(DomeinFile {calculatedRoles}) -> pure $ map CalculatedRoleType (filter (\id -> id `endsWithSegments` localName) (OBJ.keys calculatedRoles))
+      \(DomeinFile { calculatedRoles }) -> pure $ map CalculatedRoleType (filter (\id -> id `endsWithSegments` localName) (OBJ.keys calculatedRoles))
 
 qualifyContextInDomain :: String -> DomeinFileId ~~~> ContextType
 qualifyContextInDomain localName namespace = ArrayT do
   (try $ retrieveDomeinFile namespace) >>=
     handleDomeinFileError' "qualifyContextInDomain" []
-      \(DomeinFile {contexts}) -> pure $ map ContextType (filter (\id -> id `endsWithSegments` localName) (OBJ.keys contexts))
+      \(DomeinFile { contexts }) -> pure $ map ContextType (filter (\id -> id `endsWithSegments` localName) (OBJ.keys contexts))
 
 ----------------------------------------------------------------------------------------
 ------- USER ROLETYPES WITH A PERSPECTIVE ON A ROLETYPE
@@ -656,18 +662,17 @@ hasPerspectiveOnRoleWithVerbs verbs ur rt = ArrayT ((hasPerspectiveWithVerb ur r
 hasPerspectiveWithVerb :: Partial => RoleType -> EnumeratedRoleType -> Array RoleVerb -> MonadPerspectives Boolean
 hasPerspectiveWithVerb subjectType roleType verbs = do
   objectIsRootUser <- roleType ###>> hasAspect (EnumeratedRoleType rootUser)
-  if objectIsRootUser
-    then pure true
-    else do
-      -- Find for the subject (including its aspects) a perspective
-      --    * whose object adt equals the adt of `roleType` or is a generalisation of it, AND
-      --    * that supports at least one of the requested RoleVerbs.
-      -- (allObjects :: Array EnumeratedRoleType) <- roleType ###= roleAspectsClosure
-      adtOfRoleType <- getEnumeratedRole roleType >>= roleADT
-      isJust <$> findPerspective subjectType
-        \perspective -> do
-          p <- perspective `isPerspectiveOnADT` adtOfRoleType
-          pure (p && (null verbs || perspectiveSupportsOneOfRoleVerbs perspective verbs))
+  if objectIsRootUser then pure true
+  else do
+    -- Find for the subject (including its aspects) a perspective
+    --    * whose object adt equals the adt of `roleType` or is a generalisation of it, AND
+    --    * that supports at least one of the requested RoleVerbs.
+    -- (allObjects :: Array EnumeratedRoleType) <- roleType ###= roleAspectsClosure
+    adtOfRoleType <- getEnumeratedRole roleType >>= roleADT
+    isJust <$> findPerspective subjectType
+      \perspective -> do
+        p <- perspective `isPerspectiveOnADT` adtOfRoleType
+        pure (p && (null verbs || perspectiveSupportsOneOfRoleVerbs perspective verbs))
 
 ----------------------------------------------------------------------------------------
 ------- USER ROLETYPES WITH A PERSPECTIVE ON A PROPERTYTYPE
@@ -690,25 +695,26 @@ propertyIsInPerspectiveOf = flip hasPerspectiveOnProperty
 findPerspective :: RoleType -> (Perspective -> MonadPerspectives Boolean) -> MonadPerspectives (Maybe Perspective)
 findPerspective subjectType criterium = execStateT f Nothing
   where
-    f :: StateT (Maybe Perspective) MonadPerspectives Unit
-    f = do
-      allSubjects <- lift (subjectType ###= roleTypeAspectsClosure)
-      for_ allSubjects
-        \userRole' -> hasBeenFound >>= if _
-          then pure unit
-          else do
-            -- Search in the perspectives of userRole'
-            perspectives <- lift $ perspectivesOfRoleType userRole'
-            for_ perspectives
-              \perspective -> (lift $ criterium perspective) >>= if _
-                then put (Just perspective)
-                else pure unit
-            -- for_ perspectives
-            --   \perspective -> if criterium perspective
-            --     then put (Just perspective)
-            --     else pure unit
-    hasBeenFound :: StateT (Maybe Perspective) MonadPerspectives Boolean
-    hasBeenFound = get >>= pure <<< isJust
+  f :: StateT (Maybe Perspective) MonadPerspectives Unit
+  f = do
+    allSubjects <- lift (subjectType ###= roleTypeAspectsClosure)
+    for_ allSubjects
+      \userRole' -> hasBeenFound >>=
+        if _ then pure unit
+        else do
+          -- Search in the perspectives of userRole'
+          perspectives <- lift $ perspectivesOfRoleType userRole'
+          for_ perspectives
+            \perspective -> (lift $ criterium perspective) >>=
+              if _ then put (Just perspective)
+              else pure unit
+
+  -- for_ perspectives
+  --   \perspective -> if criterium perspective
+  --     then put (Just perspective)
+  --     else pure unit
+  hasBeenFound :: StateT (Maybe Perspective) MonadPerspectives Boolean
+  hasBeenFound = get >>= pure <<< isJust
 
 -- | True iff the subject type has a perspective that includes the property,
 -- | qualified with the given PropertyVerb.
@@ -717,22 +723,23 @@ findPerspective subjectType criterium = execStateT f Nothing
 -- | This function tests whether a user RoleType has a perspective on an object that carries the requested PropertyType.
 hasPerspectiveOnPropertyWithVerb :: Partial => RoleType -> EnumeratedRoleType -> EnumeratedPropertyType -> PropertyVerb -> MonadPerspectives Boolean
 hasPerspectiveOnPropertyWithVerb subjectType roleType property verb =
-    isJust <$> findPerspective
-      subjectType
-      (\perspective -> do 
+  isJust <$> findPerspective
+    subjectType
+    ( \perspective -> do
         a <- pure $ perspectiveSupportsPropertyForVerb perspective (ENP property) verb
         b <- perspective `isPerspectiveOnRoleType` (ENR roleType)
         c <- perspective `isPerspectiveOnRoleFilledWithRoleType` (ENR roleType)
-        pure (a && (b || c)))
+        pure (a && (b || c))
+    )
 
 -- | All role types in a context type that have a perspective on a given object role, with a perspective on the given property.
 rolesWithPerspectiveOnRoleAndProperty :: Partial => RoleType -> PropertyType -> ContextType ~~~> RoleType
 rolesWithPerspectiveOnRoleAndProperty object pt = COMB.filter userRole (propertyIsInPerspectiveOfUser pt)
   where
-    -- voor de user of één van zijn aspecten.
-    propertyIsInPerspectiveOfUser :: PropertyType -> RoleType ~~~> Boolean
-    propertyIsInPerspectiveOfUser property userRole' = lift $ isJust <$> findPerspective userRole'
-      (\perspective -> (&&) <$> (perspective `isPerspectiveOnRoleType` object) <*> (pure $ perspectiveSupportsProperty perspective pt))
+  -- voor de user of één van zijn aspecten.
+  propertyIsInPerspectiveOfUser :: PropertyType -> RoleType ~~~> Boolean
+  propertyIsInPerspectiveOfUser property userRole' = lift $ isJust <$> findPerspective userRole'
+    (\perspective -> (&&) <$> (perspective `isPerspectiveOnRoleType` object) <*> (pure $ perspectiveSupportsProperty perspective pt))
 
 ----------------------------------------------------------------------------------------
 ------- FUNCTIONS FOR PERSPECTIVES
@@ -753,32 +760,36 @@ perspectivesOfRole_ (ENR erole) = perspectivesOfRole erole
 perspectivesOfRole_ (CR crole) = ArrayT (getCalculatedRole crole >>= pure <<< perspectives)
 
 perspectiveObjectQfd :: Perspective -> QueryFunctionDescription
-perspectiveObjectQfd (Perspective{object}) = object
+perspectiveObjectQfd (Perspective { object }) = object
 
 statesPerProperty :: Perspective -> MonadPerspectives (Map.Map PropertyType (Array StateIdentifier))
-statesPerProperty (Perspective{propertyVerbs, object}) = foldWithIndexM f Map.empty (unwrap propertyVerbs)
+statesPerProperty (Perspective { propertyVerbs, object }) = foldWithIndexM f Map.empty (unwrap propertyVerbs)
   where
-    f :: StateSpec ->
-      Map.Map PropertyType (Array StateIdentifier) ->
-      Array PropertyVerbs ->
-      MonadPerspectives (Map.Map PropertyType (Array StateIdentifier))
-    f stateId cum pvArr = do
-      (r1 :: Array (Array PropertyType)) <- traverse (propertyVerbs2PropertyArray object) pvArr
-      pure $ foldr (\prop cum' ->
-        case Map.lookup prop cum' of
-          Nothing -> Map.insert prop [stateSpec2StateIdentifier stateId] cum'
-          Just states -> Map.insert prop (addUnique (stateSpec2StateIdentifier stateId) states) cum')
-        cum
-        (concat r1)
+  f
+    :: StateSpec
+    -> Map.Map PropertyType (Array StateIdentifier)
+    -> Array PropertyVerbs
+    -> MonadPerspectives (Map.Map PropertyType (Array StateIdentifier))
+  f stateId cum pvArr = do
+    (r1 :: Array (Array PropertyType)) <- traverse (propertyVerbs2PropertyArray object) pvArr
+    pure $ foldr
+      ( \prop cum' ->
+          case Map.lookup prop cum' of
+            Nothing -> Map.insert prop [ stateSpec2StateIdentifier stateId ] cum'
+            Just states -> Map.insert prop (addUnique (stateSpec2StateIdentifier stateId) states) cum'
+      )
+      cum
+      (concat r1)
 
 propertiesInPerspective :: Perspective -> MonadPerspectives (Array PropertyType)
-propertiesInPerspective (Perspective{propertyVerbs, object}) = foldWithIndexM f [] (unwrap propertyVerbs)
+propertiesInPerspective (Perspective { propertyVerbs, object }) = foldWithIndexM f [] (unwrap propertyVerbs)
   where
-    f :: StateSpec ->
-      Array PropertyType ->
-      Array PropertyVerbs ->
-      MonadPerspectives (Array PropertyType)
-    f _ cum pvArr = append cum <<< concat <$> traverse (propertyVerbs2PropertyArray object) pvArr
+  f
+    :: StateSpec
+    -> Array PropertyType
+    -> Array PropertyVerbs
+    -> MonadPerspectives (Array PropertyType)
+  f _ cum pvArr = append cum <<< concat <$> traverse (propertyVerbs2PropertyArray object) pvArr
 
 propertyVerbs2PropertyArray :: QueryFunctionDescription -> PropertyVerbs -> MonadPerspectives (Array PropertyType)
 propertyVerbs2PropertyArray object (PropertyVerbs pset _) = case pset of
@@ -787,13 +798,13 @@ propertyVerbs2PropertyArray object (PropertyVerbs pset _) = case pset of
   PSet props -> pure props
 
 roleStates :: Perspective -> Array StateIdentifier
-roleStates (Perspective {roleVerbs}) = stateSpec2StateIdentifier <$> (fromFoldable $ Map.keys (unwrap roleVerbs))
+roleStates (Perspective { roleVerbs }) = stateSpec2StateIdentifier <$> (fromFoldable $ Map.keys (unwrap roleVerbs))
 
 automaticStates :: Perspective -> Array StateIdentifier
-automaticStates (Perspective {automaticStates:s}) = s
+automaticStates (Perspective { automaticStates: s }) = s
 
 actionStates :: Perspective -> Array StateIdentifier
-actionStates (Perspective {actions}) = stateSpec2StateIdentifier <$> (fromFoldable $ Map.keys (unwrap actions))
+actionStates (Perspective { actions }) = stateSpec2StateIdentifier <$> (fromFoldable $ Map.keys (unwrap actions))
 
 -- | perspectiveAspect `isAspectOfPerspective` perspective is true when
 -- | the range of the object of `perspective` equalsOrSpecialises the range of the object of `perspectiveAspect`.
@@ -823,22 +834,26 @@ addPerspectiveTo (Perspective perspectiveAspect) (Perspective perspective) = Per
 -- The function is partial because it should only be used on a QueryFunctionDescription whose range
 -- represents a role type.
 isPerspectiveOnSelf :: Partial => QueryFunctionDescription -> (RoleType ~~~> Boolean)
-isPerspectiveOnSelf qfd = 
-  some (\userRole' -> do 
-    dnf <- lift $ toConjunctiveNormalForm_ (roleRange qfd)
-    (lift $ roleADTOfRoleType userRole') >>= lift <<< toConjunctiveNormalForm_ >>=
-      (\userRoleDNF -> pure (userRoleDNF `equals_` dnf)))
+isPerspectiveOnSelf qfd =
+  some
+    ( \userRole' -> do
+        dnf <- lift $ toConjunctiveNormalForm_ (roleRange qfd)
+        (lift $ roleADTOfRoleType userRole') >>= lift <<< toConjunctiveNormalForm_ >>=
+          (\userRoleDNF -> pure (userRoleDNF `equals_` dnf))
+    )
 
 ----------------------------------------------------------------------------------------
 ------- FUNCTIONS FOR ACTIONS
 ----------------------------------------------------------------------------------------
 type ActionName = String
+
 -- | Note that we assume action names are unique over states for the perspective a user role has on an object.
 getAction :: ActionName -> Perspective -> Maybe Action
-getAction actionName (Perspective{actions}) = LIST.foldl
-  (\maction stateDepActions -> case maction of
-    Just action -> Just action
-    Nothing -> OBJ.lookup actionName stateDepActions)
+getAction actionName (Perspective { actions }) = LIST.foldl
+  ( \maction stateDepActions -> case maction of
+      Just action -> Just action
+      Nothing -> OBJ.lookup actionName stateDepActions
+  )
   Nothing
   (Map.values $ unwrap actions)
 
@@ -847,9 +862,10 @@ getContextAction :: ActionName -> RoleType -> MonadPerspectives (Maybe Action)
 getContextAction actionName userRoleType = do
   stateActionMap <- actionsOfRoleType userRoleType
   pure $ LIST.foldl
-    (\maction (stateDepActions :: OBJ.Object Action) -> case maction of
-      Just action -> Just action
-      Nothing -> OBJ.lookup actionName stateDepActions)
+    ( \maction (stateDepActions :: OBJ.Object Action) -> case maction of
+        Just action -> Just action
+        Nothing -> OBJ.lookup actionName stateDepActions
+    )
     Nothing
     (Map.values stateActionMap)
 

@@ -25,8 +25,7 @@ module Perspectives.Sidecar.NormalizeTypeNames
   , normalizeTypeNames
   , fqn2tid
   , normalizeTypes
-  )
-  where
+  ) where
 
 import Prelude
 
@@ -61,41 +60,42 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), 
 import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, idUriForContext, idUriForProperty, idUriForRole, loadStableMapping)
 
 normalizeTypes :: DomeinFile -> StableIdMapping -> MonadPerspectives DomeinFile
-normalizeTypes df@(DomeinFile {namespace, referredModels}) mapping = do
+normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
   -- Notice that referredModels from a freshly parsed Arc source will be FQNs with names given by the modeller, rather than underlying cuids.
   cuidMap <- getinstalledModelCuids
-  sidecars <- foldM (\scs (DomeinFileId referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
-      Nothing -> pure scs
-      Just (cuid :: ModelUri Stable) -> do 
-        mmapping <- loadStableMapping cuid
-        case mmapping of 
-          Nothing -> pure scs
-          Just submapping -> pure $ Map.insert (ModelUri referredModel) submapping scs)
+  sidecars <- foldM
+    ( \scs (DomeinFileId referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
+        Nothing -> pure scs
+        Just (cuid :: ModelUri Stable) -> do
+          mmapping <- loadStableMapping cuid
+          case mmapping of
+            Nothing -> pure scs
+            Just submapping -> pure $ Map.insert (ModelUri referredModel) submapping scs
+    )
     (Map.singleton (ModelUri namespace) mapping)
     referredModels
   pure $ unwrap $ runReaderT
     (normalizeTypeNames df)
     sidecars
 
-  where 
+  where
 
-    -- A map from DomeinFileName without cuid to DomeinFileId with cuid. 
-    -- Not every installed model need have cuid!
-    getinstalledModelCuids :: MonadPerspectives (Map.Map (ModelUri Readable)(ModelUri Stable))
-    getinstalledModelCuids = do
-      system <- getMySystem
-      modelRoles <- (ContextInstance system) ##= getRoleInstances (ENR $ EnumeratedRoleType modelsInUse)
-      x :: Array (Maybe (Tuple (ModelUri Readable) (ModelUri Stable))) <- for modelRoles \ri -> do
-        mcuid <- ri ##> getProperty (EnumeratedPropertyType versionedDomeinFileName)
-        case mcuid of 
-          Nothing -> pure Nothing
-          Just _ -> do 
-            mdfid <- ri ##> getProperty (EnumeratedPropertyType modelURI)
-            case mdfid of 
-              Nothing -> pure Nothing
-              Just (Value dfid) -> pure $ Just $ Tuple (ModelUri dfid) (ModelUri dfid) -- LET OP! ZE KUNNEN NIET BEIDE DFID ZIJN!!
-      pure $ Map.fromFoldable $ catMaybes x
-
+  -- A map from DomeinFileName without cuid to DomeinFileId with cuid. 
+  -- Not every installed model need have cuid!
+  getinstalledModelCuids :: MonadPerspectives (Map.Map (ModelUri Readable) (ModelUri Stable))
+  getinstalledModelCuids = do
+    system <- getMySystem
+    modelRoles <- (ContextInstance system) ##= getRoleInstances (ENR $ EnumeratedRoleType modelsInUse)
+    x :: Array (Maybe (Tuple (ModelUri Readable) (ModelUri Stable))) <- for modelRoles \ri -> do
+      mcuid <- ri ##> getProperty (EnumeratedPropertyType versionedDomeinFileName)
+      case mcuid of
+        Nothing -> pure Nothing
+        Just _ -> do
+          mdfid <- ri ##> getProperty (EnumeratedPropertyType modelURI)
+          case mdfid of
+            Nothing -> pure Nothing
+            Just (Value dfid) -> pure $ Just $ Tuple (ModelUri dfid) (ModelUri dfid) -- LET OP! ZE KUNNEN NIET BEIDE DFID ZIJN!!
+    pure $ Map.fromFoldable $ catMaybes x
 
 -- | This monad supports 'ask'. `ask` will return an object whose keys are Model Ids (MIDs).
 type WithSideCars = Reader (Map.Map (ModelUri Readable) StableIdMapping)
@@ -130,11 +130,11 @@ instance NormalizeTypeNames DomeinFile DomeinFileId where
 instance NormalizeTypeNames Context ContextType where
   fqn2tid (ContextType fqn) = do
     sidecars <- ask
-    ContextType <$> case splitTypeUri fqn of 
+    ContextType <$> case splitTypeUri fqn of
       Nothing -> pure fqn -- not a type uri
       Just { modelUri, localName } -> case Map.lookup ((ModelUri modelUri) :: ModelUri Readable) sidecars of
         Nothing -> pure fqn -- no sidecar for this model
-        (Just stableIdMapping) -> case idUriForContext stableIdMapping (ContextUri fqn) of 
+        (Just stableIdMapping) -> case idUriForContext stableIdMapping (ContextUri fqn) of
           Nothing -> pure fqn -- no mapping found
           Just cuid -> pure cuid
   normalizeTypeNames (Context cr) = do
@@ -146,25 +146,27 @@ instance NormalizeTypeNames Context ContextType where
     nestedContexts' <- for cr.nestedContexts fqn2tid
     context' <- for cr.context fqn2tid
     roleAliases' <- for cr.roleAliases fqn2tid
-    pure $ Context (cr
-      { id = id'
-      , contextAspects = contextAspects'
-      , rolInContext = rolInContext'
-      , contextRol = contextRol'
-      , gebruikerRol = gebruikerRol'
-      , nestedContexts = nestedContexts'
-      , context = context'
-      , roleAliases = roleAliases'
-      })
+    pure $ Context
+      ( cr
+          { id = id'
+          , contextAspects = contextAspects'
+          , rolInContext = rolInContext'
+          , contextRol = contextRol'
+          , gebruikerRol = gebruikerRol'
+          , nestedContexts = nestedContexts'
+          , context = context'
+          , roleAliases = roleAliases'
+          }
+      )
 
 instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
   fqn2tid (EnumeratedRoleType fqn) = do
     sidecars <- ask
-    EnumeratedRoleType <$> case splitTypeUri fqn of 
+    EnumeratedRoleType <$> case splitTypeUri fqn of
       Nothing -> pure fqn -- not a type uri
-      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of 
+      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of
         Nothing -> pure fqn -- no sidecar for this model
-        (Just stableIdMapping) -> case idUriForRole stableIdMapping (RoleUri fqn) of 
+        (Just stableIdMapping) -> case idUriForRole stableIdMapping (RoleUri fqn) of
           Nothing -> pure fqn -- no mapping found
           Just cuid -> pure cuid
   normalizeTypeNames (EnumeratedRole er) = do
@@ -174,25 +176,26 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
     properties' <- for er.properties fqn2tid
     propertyAliases' <- for er.propertyAliases fqn2tid
     completeType' <- traverseDPROD fqn2tidRoleInContext er.completeType
-    pure $ EnumeratedRole $ er 
-      { id = id' 
+    pure $ EnumeratedRole $ er
+      { id = id'
       , context = context'
       , roleAspects = roleAspects'
       , properties = properties'
       , propertyAliases = propertyAliases'
       , completeType = completeType'
       }
+
 fqn2tidRoleInContext :: RoleInContext -> WithSideCars RoleInContext
-fqn2tidRoleInContext (RoleInContext {role, context}) = (\role' context' -> RoleInContext { role: role', context: context' }) <$> fqn2tid role <*> fqn2tid context
+fqn2tidRoleInContext (RoleInContext { role, context }) = (\role' context' -> RoleInContext { role: role', context: context' }) <$> fqn2tid role <*> fqn2tid context
 
 instance NormalizeTypeNames CalculatedRole CalculatedRoleType where
   fqn2tid (CalculatedRoleType fqn) = do
     sidecars <- ask
-    CalculatedRoleType <$> case splitTypeUri fqn of 
+    CalculatedRoleType <$> case splitTypeUri fqn of
       Nothing -> pure fqn -- not a type uri
-      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of 
+      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of
         Nothing -> pure fqn -- no sidecar for this model
-        (Just stableIdMapping) -> case idUriForRole stableIdMapping (RoleUri fqn) of 
+        (Just stableIdMapping) -> case idUriForRole stableIdMapping (RoleUri fqn) of
           Nothing -> pure fqn -- no mapping found
           Just cuid -> pure cuid
   normalizeTypeNames (CalculatedRole er) = do
@@ -210,11 +213,11 @@ instance NormalizeTypeNames Role RoleType where
 instance NormalizeTypeNames EnumeratedProperty EnumeratedPropertyType where
   fqn2tid (EnumeratedPropertyType fqn) = do
     sidecars <- ask
-    EnumeratedPropertyType <$> case splitTypeUri fqn of 
+    EnumeratedPropertyType <$> case splitTypeUri fqn of
       Nothing -> pure fqn -- not a type uri
-      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of 
+      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of
         Nothing -> pure fqn -- no sidecar for this model
-        (Just stableIdMapping) -> case idUriForProperty stableIdMapping (PropertyUri fqn) of 
+        (Just stableIdMapping) -> case idUriForProperty stableIdMapping (PropertyUri fqn) of
           Nothing -> pure fqn -- no mapping found
           Just cuid -> pure cuid
   normalizeTypeNames (EnumeratedProperty pt) = do
@@ -225,11 +228,11 @@ instance NormalizeTypeNames EnumeratedProperty EnumeratedPropertyType where
 instance NormalizeTypeNames CalculatedProperty CalculatedPropertyType where
   fqn2tid (CalculatedPropertyType fqn) = do
     sidecars <- ask
-    CalculatedPropertyType <$> case splitTypeUri fqn of 
+    CalculatedPropertyType <$> case splitTypeUri fqn of
       Nothing -> pure fqn -- not a type uri
-      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of 
+      Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of
         Nothing -> pure fqn -- no sidecar for this model
-        (Just stableIdMapping) -> case idUriForProperty stableIdMapping (PropertyUri fqn) of 
+        (Just stableIdMapping) -> case idUriForProperty stableIdMapping (PropertyUri fqn) of
           Nothing -> pure fqn -- no mapping found
           Just cuid -> pure cuid
   normalizeTypeNames (CalculatedProperty pt) = do
@@ -251,56 +254,56 @@ normalizeCalculationTypeNames (Q qfd) = Q <$> normalizeQfd qfd
 normalizeQfd :: QueryFunctionDescription -> WithSideCars QueryFunctionDescription
 normalizeQfd qfd = traverseQfd nQfd qfd
   where
-    nQfd :: QueryFunctionDescription -> WithSideCars QueryFunctionDescription
-    nQfd (SQD dom qf ran fun man) = do
-      dom' <- normalizeDomain dom
-      qf' <- normalizeQueryFunction qf
-      ran' <- normalizeDomain ran
-      pure $ SQD dom' qf' ran' fun man
-    nQfd (UQD dom qf subQfd ran fun man) = do
-      dom' <- normalizeDomain dom
-      qf' <- normalizeQueryFunction qf
-      subQfd' <- normalizeQfd subQfd
-      ran' <- normalizeDomain ran
-      pure $ UQD dom' qf' subQfd' ran' fun man
-    nQfd (BQD dom qf subQfd1 subQfd2 ran fun man) = do
-      dom' <- normalizeDomain dom
-      qf' <- normalizeQueryFunction qf
-      subQfd1' <- normalizeQfd subQfd1
-      subQfd2' <- normalizeQfd subQfd2
-      ran' <- normalizeDomain ran
-      pure $ BQD dom' qf' subQfd1' subQfd2' ran' fun man
-    nQfd (MQD dom qf subQfds ran fun man) = do
-      dom' <- normalizeDomain dom
-      qf' <- normalizeQueryFunction qf
-      subQfds' <- for subQfds normalizeQfd 
-      ran' <- normalizeDomain ran
-      pure $ MQD dom' qf' subQfds' ran' fun man
+  nQfd :: QueryFunctionDescription -> WithSideCars QueryFunctionDescription
+  nQfd (SQD dom qf ran fun man) = do
+    dom' <- normalizeDomain dom
+    qf' <- normalizeQueryFunction qf
+    ran' <- normalizeDomain ran
+    pure $ SQD dom' qf' ran' fun man
+  nQfd (UQD dom qf subQfd ran fun man) = do
+    dom' <- normalizeDomain dom
+    qf' <- normalizeQueryFunction qf
+    subQfd' <- normalizeQfd subQfd
+    ran' <- normalizeDomain ran
+    pure $ UQD dom' qf' subQfd' ran' fun man
+  nQfd (BQD dom qf subQfd1 subQfd2 ran fun man) = do
+    dom' <- normalizeDomain dom
+    qf' <- normalizeQueryFunction qf
+    subQfd1' <- normalizeQfd subQfd1
+    subQfd2' <- normalizeQfd subQfd2
+    ran' <- normalizeDomain ran
+    pure $ BQD dom' qf' subQfd1' subQfd2' ran' fun man
+  nQfd (MQD dom qf subQfds ran fun man) = do
+    dom' <- normalizeDomain dom
+    qf' <- normalizeQueryFunction qf
+    subQfds' <- for subQfds normalizeQfd
+    ran' <- normalizeDomain ran
+    pure $ MQD dom' qf' subQfds' ran' fun man
 
-    normalizeDomain :: Domain -> WithSideCars Domain
-    normalizeDomain (RDOM (d :: ADT RoleInContext)) = RDOM <$> (traverse fqn2tidRoleInContext d)
-    normalizeDomain (CDOM (d :: ADT ContextType)) = CDOM <$> (traverse fqn2tid d)
-    normalizeDomain (VDOM r (mp :: Maybe PropertyType)) = VDOM <$> pure r <*> (traverse fqn2tid mp)
-    normalizeDomain d = pure d
+  normalizeDomain :: Domain -> WithSideCars Domain
+  normalizeDomain (RDOM (d :: ADT RoleInContext)) = RDOM <$> (traverse fqn2tidRoleInContext d)
+  normalizeDomain (CDOM (d :: ADT ContextType)) = CDOM <$> (traverse fqn2tid d)
+  normalizeDomain (VDOM r (mp :: Maybe PropertyType)) = VDOM <$> pure r <*> (traverse fqn2tid mp)
+  normalizeDomain d = pure d
 
-    normalizeQueryFunction :: QueryFunction -> WithSideCars QueryFunction
-    normalizeQueryFunction (PropertyGetter pt) = PropertyGetter <$> fqn2tid pt
-    normalizeQueryFunction (Value2Role pt) = Value2Role <$> fqn2tid pt
-    normalizeQueryFunction (RolGetter pt) = RolGetter <$> fqn2tid pt
-    normalizeQueryFunction (RoleTypeConstant pt) = RoleTypeConstant <$> fqn2tid pt
-    normalizeQueryFunction (ContextTypeConstant pt) = ContextTypeConstant <$> fqn2tid pt
-    normalizeQueryFunction (CreateContext ct rt) = CreateContext <$> fqn2tid ct <*> fqn2tid rt
-    normalizeQueryFunction (CreateRootContext ct) = CreateRootContext <$> fqn2tid ct
-    normalizeQueryFunction (CreateContext_ ct) = CreateContext_ <$> fqn2tid ct
-    normalizeQueryFunction (CreateRole rt) = CreateRole <$> fqn2tid rt
-    normalizeQueryFunction (Bind rt) = Bind <$> fqn2tid rt
-    normalizeQueryFunction (Unbind rt) = Unbind <$> traverse fqn2tid rt
-    normalizeQueryFunction (DeleteRole rt) = DeleteRole <$> fqn2tid rt
-    normalizeQueryFunction (DeleteContext rt) = DeleteContext <$> fqn2tid rt
-    normalizeQueryFunction (DeleteProperty pt) = DeleteProperty <$> fqn2tid pt
-    normalizeQueryFunction (AddPropertyValue pt) = AddPropertyValue <$> fqn2tid pt
-    normalizeQueryFunction (RemovePropertyValue pt) = RemovePropertyValue <$> fqn2tid pt
-    normalizeQueryFunction (SetPropertyValue pt) = SetPropertyValue <$> fqn2tid pt
-    normalizeQueryFunction (CreateFileF s pt) = CreateFileF s <$> fqn2tid pt
-    normalizeQueryFunction (FilledF rt ct) = FilledF <$> fqn2tid rt <*> fqn2tid ct
-    normalizeQueryFunction f = pure f
+  normalizeQueryFunction :: QueryFunction -> WithSideCars QueryFunction
+  normalizeQueryFunction (PropertyGetter pt) = PropertyGetter <$> fqn2tid pt
+  normalizeQueryFunction (Value2Role pt) = Value2Role <$> fqn2tid pt
+  normalizeQueryFunction (RolGetter pt) = RolGetter <$> fqn2tid pt
+  normalizeQueryFunction (RoleTypeConstant pt) = RoleTypeConstant <$> fqn2tid pt
+  normalizeQueryFunction (ContextTypeConstant pt) = ContextTypeConstant <$> fqn2tid pt
+  normalizeQueryFunction (CreateContext ct rt) = CreateContext <$> fqn2tid ct <*> fqn2tid rt
+  normalizeQueryFunction (CreateRootContext ct) = CreateRootContext <$> fqn2tid ct
+  normalizeQueryFunction (CreateContext_ ct) = CreateContext_ <$> fqn2tid ct
+  normalizeQueryFunction (CreateRole rt) = CreateRole <$> fqn2tid rt
+  normalizeQueryFunction (Bind rt) = Bind <$> fqn2tid rt
+  normalizeQueryFunction (Unbind rt) = Unbind <$> traverse fqn2tid rt
+  normalizeQueryFunction (DeleteRole rt) = DeleteRole <$> fqn2tid rt
+  normalizeQueryFunction (DeleteContext rt) = DeleteContext <$> fqn2tid rt
+  normalizeQueryFunction (DeleteProperty pt) = DeleteProperty <$> fqn2tid pt
+  normalizeQueryFunction (AddPropertyValue pt) = AddPropertyValue <$> fqn2tid pt
+  normalizeQueryFunction (RemovePropertyValue pt) = RemovePropertyValue <$> fqn2tid pt
+  normalizeQueryFunction (SetPropertyValue pt) = SetPropertyValue <$> fqn2tid pt
+  normalizeQueryFunction (CreateFileF s pt) = CreateFileF s <$> fqn2tid pt
+  normalizeQueryFunction (FilledF rt ct) = FilledF <$> fqn2tid rt <*> fqn2tid ct
+  normalizeQueryFunction f = pure f

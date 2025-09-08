@@ -20,7 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.Time  where
+module Perspectives.Time where
 
 import Prelude
 
@@ -45,13 +45,13 @@ dateTime2String :: DateTime -> String
 dateTime2String dt = unsafeStringify $ unwrap $ unInstant $ fromDateTime dt
 
 string2DateTime :: forall m. MonadError Error m => MonadEffect m => String -> m (Maybe DateTime)
-string2DateTime s = map toDateTime <<< instant <<< Milliseconds <$> parseNumber s 
+string2DateTime s = map toDateTime <<< instant <<< Milliseconds <$> parseNumber s
 
 date2String :: Date -> String
 date2String dt = unsafeStringify $ unwrap $ unInstant $ fromDate dt
 
 string2Date :: forall m. MonadError Error m => MonadEffect m => String -> m (Maybe Date)
-string2Date s = map (date <<< toDateTime) <<< instant <<< Milliseconds <$> parseNumber s 
+string2Date s = map (date <<< toDateTime) <<< instant <<< Milliseconds <$> parseNumber s
 
 time2String :: Time -> String
 time2String t = unsafeStringify $ unwrap $ timeToMillis t
@@ -69,9 +69,9 @@ wholeHour h = Time h (unsafePartial $ fromJust $ toEnum 0) (unsafePartial $ from
 timeToMillis :: Time -> Milliseconds
 timeToMillis t = Milliseconds
   $ 3600000.0 * Int.toNumber (fromEnum (hour t))
-  + 60000.0 * Int.toNumber (fromEnum (minute t))
-  + 1000.0 * Int.toNumber (fromEnum (second t))
-  + Int.toNumber (fromEnum (millisecond t))
+      + 60000.0 * Int.toNumber (fromEnum (minute t))
+      + 1000.0 * Int.toNumber (fromEnum (second t))
+      + Int.toNumber (fromEnum (millisecond t))
 
 millisToTime :: Milliseconds -> Time
 millisToTime (Milliseconds ms') =

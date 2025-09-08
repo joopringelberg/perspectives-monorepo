@@ -32,7 +32,7 @@ import Simple.JSON (class ReadForeign, class WriteForeign)
 -- "Hello $1, how are you?"
 -- The Array of SentenceParts contains the computable parts, where a parts position in the array
 -- corresponds to the replacement identifier in the string.
-newtype Sentence = Sentence {sentence :: String, parts :: Array QueryFunctionDescription}
+newtype Sentence = Sentence { sentence :: String, parts :: Array QueryFunctionDescription }
 
 derive instance newtypeSentence :: Newtype Sentence _
 derive newtype instance showSentence :: Show Sentence

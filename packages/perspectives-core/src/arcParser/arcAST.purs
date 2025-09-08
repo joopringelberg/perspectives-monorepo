@@ -57,21 +57,23 @@ newtype ContextE = ContextE
   , kindOfContext :: ContextKind
   , public :: Maybe PublicStore
   , contextParts :: List ContextPart
-  , pos :: ArcPosition}
+  , pos :: ArcPosition
+  }
 
 type Prefix = String
 type ModelName = String
 
-data ContextPart =
-  RE RoleE |
-  -- User RoleE |
-  STATE StateE |
-  CE ContextE |
-  PREFIX Prefix ModelName |
-  ContextAspect String ArcPosition |
-  IndexedContext String ArcPosition |
-  CSQP (List StateQualifiedPart) |
-  AspectRole String RoleKind ArcPosition
+data ContextPart
+  = RE RoleE
+  |
+    -- User RoleE |
+    STATE StateE
+  | CE ContextE
+  | PREFIX Prefix ModelName
+  | ContextAspect String ArcPosition
+  | IndexedContext String ArcPosition
+  | CSQP (List StateQualifiedPart)
+  | AspectRole String RoleKind ArcPosition
 
 --------------------------------------------------------------------------------
 ---- ROLE
@@ -80,23 +82,24 @@ newtype RoleE = RoleE
   { id :: String
   , kindOfRole :: RoleKind
   , roleParts :: List RolePart
-  , pos :: ArcPosition}
+  , pos :: ArcPosition
+  }
 
 -- TODO: het verschil tussen conjunctie en disjunctie bij FilledByAttribute.
-data RolePart =
-  PE PropertyE |
-  SQP (List StateQualifiedPart) |
-  VE ViewE |
-  FunctionalAttribute Boolean |
-  MandatoryAttribute Boolean |
-  UnlinkedAttribute |
-  FilledBySpecifications FilledBySpecification |
-  Calculation Step Boolean |
-  RoleAspect String ArcPosition (Maybe PropertyMapping) |
-  IndexedRole String ArcPosition |
-  ROLESTATE StateE |
-  Screen ScreenE |
-  PublicUrl Step
+data RolePart
+  = PE PropertyE
+  | SQP (List StateQualifiedPart)
+  | VE ViewE
+  | FunctionalAttribute Boolean
+  | MandatoryAttribute Boolean
+  | UnlinkedAttribute
+  | FilledBySpecifications FilledBySpecification
+  | Calculation Step Boolean
+  | RoleAspect String ArcPosition (Maybe PropertyMapping)
+  | IndexedRole String ArcPosition
+  | ROLESTATE StateE
+  | Screen ScreenE
+  | PublicUrl Step
 
 data FilledBySpecification = Alternatives (NonEmptyList FilledByAttribute) | Combination (NonEmptyList FilledByAttribute)
 data FilledByAttribute = FilledByAttribute String ContextType
@@ -114,6 +117,7 @@ newtype StateE = StateE
   , stateParts :: List StateQualifiedPart
   , subStates :: List StateE
   }
+
 --------------------------------------------------------------------------------
 ---- PROPERTY
 --------------------------------------------------------------------------------
@@ -125,8 +129,8 @@ newtype PropertyE = PropertyE
   , pos :: ArcPosition
   }
 
-data PropertyPart =
-    FunctionalAttribute' Boolean
+data PropertyPart
+  = FunctionalAttribute' Boolean
   | MandatoryAttribute' Boolean
   | SelfonlyAttribute
   | AuthoronlyAttribute
@@ -134,8 +138,8 @@ data PropertyPart =
   | Calculation' Step Boolean
   | Ran Range
 
-data PropertyFacet =
-  MinLength Int
+data PropertyFacet
+  = MinLength Int
   | MaxLength Int
   | Pattern RegExP String
   | WhiteSpace WhiteSpaceRegime
@@ -153,30 +157,30 @@ data PropertyFacet =
 
 instance WriteForeign PropertyFacet where
   writeImpl pf = case pf of
-    (MinLength i) -> writeImpl { constructor: "MinLength", args: writeJSON i}
-    (MaxLength i) -> writeImpl { constructor: "MaxLength", args: writeJSON i}
-    (Pattern regExp s) -> writeImpl {constructor: "Pattern", args: writeJSON {regExp, s}}
-    WhiteSpace wsr -> writeImpl {constructor: "WhiteSpace", args: writeJSON wsr}
-    Enumeration ss -> writeImpl {constructor: "Enumeration", args: writeJSON ss}
-    MaxInclusive s -> writeImpl {constructor: "MaxInclusive", args: writeJSON s}
-    MinInclusive s -> writeImpl {constructor: "MinInclusive", args: writeJSON s}
-    MaxExclusive s -> writeImpl {constructor: "MaxExclusive", args: writeJSON s}
-    MinExclusive s -> writeImpl {constructor: "MinExclusive", args: writeJSON s}
-    TotalDigits i -> writeImpl {constructor: "TotalDigits", args: writeJSON i}
-    FractionDigits i -> writeImpl {constructor: "FractionDigits", args: writeJSON i}
-    MessageProperty -> writeImpl {constructor: "MessageProperty", args: writeJSON ""}
-    MediaProperty -> writeImpl {constructor: "MediaProperty", args: writeJSON ""}
-    ReadableNameProperty -> writeImpl {constructor: "ReadableNameProperty", args: writeJSON ""}
-    SettingProperty -> writeImpl {constructor: "SettingProperty", args: writeJSON ""}
+    (MinLength i) -> writeImpl { constructor: "MinLength", args: writeJSON i }
+    (MaxLength i) -> writeImpl { constructor: "MaxLength", args: writeJSON i }
+    (Pattern regExp s) -> writeImpl { constructor: "Pattern", args: writeJSON { regExp, s } }
+    WhiteSpace wsr -> writeImpl { constructor: "WhiteSpace", args: writeJSON wsr }
+    Enumeration ss -> writeImpl { constructor: "Enumeration", args: writeJSON ss }
+    MaxInclusive s -> writeImpl { constructor: "MaxInclusive", args: writeJSON s }
+    MinInclusive s -> writeImpl { constructor: "MinInclusive", args: writeJSON s }
+    MaxExclusive s -> writeImpl { constructor: "MaxExclusive", args: writeJSON s }
+    MinExclusive s -> writeImpl { constructor: "MinExclusive", args: writeJSON s }
+    TotalDigits i -> writeImpl { constructor: "TotalDigits", args: writeJSON i }
+    FractionDigits i -> writeImpl { constructor: "FractionDigits", args: writeJSON i }
+    MessageProperty -> writeImpl { constructor: "MessageProperty", args: writeJSON "" }
+    MediaProperty -> writeImpl { constructor: "MediaProperty", args: writeJSON "" }
+    ReadableNameProperty -> writeImpl { constructor: "ReadableNameProperty", args: writeJSON "" }
+    SettingProperty -> writeImpl { constructor: "SettingProperty", args: writeJSON "" }
 
 instance ReadForeign PropertyFacet where
   readImpl f = do
-    {constructor, args} :: {constructor :: String, args :: String} <- read' f
-    unsafePartial case constructor of 
+    { constructor, args } :: { constructor :: String, args :: String } <- read' f
+    unsafePartial case constructor of
       "MinLength" -> MinLength <$> readJSON' args
       "MaxLength" -> MaxLength <$> readJSON' args
       "Pattern" -> do
-        {regExp, s} :: {regExp :: RegExP, s :: String} <- readJSON' args
+        { regExp, s } :: { regExp :: RegExP, s :: String } <- readJSON' args
         pure $ Pattern regExp s
       "WhiteSpace" -> WhiteSpace <$> readJSON' args
       "Enumeration" -> Enumeration <$> readJSON' args
@@ -209,36 +213,42 @@ instance Eq PropertyFacet where
   eq SettingProperty SettingProperty = true
   eq _ _ = false
 
-data WhiteSpaceRegime =
-  -- No normalization is done, the value is not changed (this is the behavior required by [XML 1.0 (Second Edition)] for element content)
-  Preserve
+data WhiteSpaceRegime
+  =
+    -- No normalization is done, the value is not changed (this is the behavior required by [XML 1.0 (Second Edition)] for element content)
+    Preserve
   -- All occurrences of #x9 (tab), #xA (line feed) and #xD (carriage return) are replaced with #x20 (space)
   | Replace
   -- After the processing implied by replace, contiguous sequences of #x20's are collapsed to a single #x20, and leading and trailing #x20's are removed.
   | Collapse
 
-instance WriteForeign WhiteSpaceRegime where writeImpl = unsafeToForeign <<< show
-instance ReadForeign WhiteSpaceRegime where readImpl = enumReadForeign
+instance WriteForeign WhiteSpaceRegime where
+  writeImpl = unsafeToForeign <<< show
+
+instance ReadForeign WhiteSpaceRegime where
+  readImpl = enumReadForeign
+
 instance Eq WhiteSpaceRegime where
   eq Preserve Preserve = true
   eq Replace Replace = true
   eq Collapse Collapse = true
   eq _ _ = false
+
 --------------------------------------------------------------------------------
 ---- STATEQUALIFIEDPART
 --------------------------------------------------------------------------------
 -- | In all these types, "subject" (and "user" in NotificationE) may be both qualified and unqualified (this happens when used as a reference).
 -- | However, it is an error for subject to be insufficiently qualified for it to be unique in the model.
-data StateQualifiedPart =
-  R RoleVerbE |
-  P PropertyVerbE |
-  AC ActionE |
-  CA ContextActionE |
-  SO SelfOnly |
-  PO AuthorOnly |
-  N NotificationE |
-  AE AutomaticEffectE |
-  SUBSTATE StateE
+data StateQualifiedPart
+  = R RoleVerbE
+  | P PropertyVerbE
+  | AC ActionE
+  | CA ContextActionE
+  | SO SelfOnly
+  | PO AuthorOnly
+  | N NotificationE
+  | AE AutomaticEffectE
+  | SUBSTATE StateE
 
 --------------------------------------------------------------------------------
 ---- ROLEVERB
@@ -338,9 +348,9 @@ newtype NotificationE = NotificationE
 --------------------------------------------------------------------------------
 ---- SENTENCE
 --------------------------------------------------------------------------------
-newtype SentenceE = SentenceE {parts :: Array SentencePartE, sentence :: String}
-data SentencePartE =
-    HRpart String
+newtype SentenceE = SentenceE { parts :: Array SentencePartE, sentence :: String }
+data SentencePartE
+  = HRpart String
   | CPpart Step
 
 --------------------------------------------------------------------------------
@@ -362,7 +372,9 @@ newtype AutomaticEffectE = AutomaticEffectE
 data StateTransitionE = Entry StateSpecification | Exit StateSpecification
 
 data PropsOrView = AllProperties | Properties (List String) | View String
-instance eqPropsOrView :: Eq PropsOrView where eq = genericEq
+
+instance eqPropsOrView :: Eq PropsOrView where
+  eq = genericEq
 
 --------------------------------------------------------------------------------
 ---- VIEW
@@ -370,24 +382,28 @@ instance eqPropsOrView :: Eq PropsOrView where eq = genericEq
 newtype ViewE = ViewE
   { id :: String
   , viewParts :: List String
-  , pos :: ArcPosition}
+  , pos :: ArcPosition
+  }
 
 --------------------------------------------------------------------------------
 ---- ROLEIDENTIFICATION
 --------------------------------------------------------------------------------
-data RoleIdentification =
-  ExplicitRole ContextType RoleType ArcPosition |
-  ImplicitRole ContextType Step
+data RoleIdentification
+  = ExplicitRole ContextType RoleType ArcPosition
+  | ImplicitRole ContextType Step
 
 roleIdentification2context :: RoleIdentification -> ContextType
 roleIdentification2context (ExplicitRole ct _ _) = ct
 roleIdentification2context (ImplicitRole ct _) = ct
 
 derive instance genericRoleIdentification :: Generic RoleIdentification _
-instance eqRoleIdentification :: Eq RoleIdentification where eq = genericEq
-instance showRoleIdentification :: Show RoleIdentification where 
-  show (ExplicitRole _ rt _) = roletype2string rt 
+instance eqRoleIdentification :: Eq RoleIdentification where
+  eq = genericEq
+
+instance showRoleIdentification :: Show RoleIdentification where
+  show (ExplicitRole _ rt _) = roletype2string rt
   show (ImplicitRole _ s) = "a query"
+
 instance prettyPrintRoleIdentification :: PrettyPrint RoleIdentification where
   prettyPrint' tab (ExplicitRole ct rt pos) = tab <> "ExplicitRole " <> show ct <> " " <> show rt
   prettyPrint' tab (ImplicitRole ct step) = tab <> "ImplicitRole " <> show ct <> "\n" <> (prettyPrint' (tab <> "  ") step)
@@ -400,22 +416,25 @@ type StateLocalName = String
 -- | A StateSpecification identifies a base which represents either a context- or role type,
 -- | and a path of segments that identify a substate of the (root state of) that type.
 -- | NOTE: since we allow reference to aspect states, the SegmentedPath may be a qualified name, too (possibly a prefixed name).
-data StateSpecification =
-    ContextState ContextType (Maybe SegmentedPath)
+data StateSpecification
+  = ContextState ContextType (Maybe SegmentedPath)
   | SubjectState RoleIdentification (Maybe SegmentedPath)
   | ObjectState RoleIdentification (Maybe SegmentedPath)
 
 type SegmentedPath = String
 
 derive instance genericStateSpecification :: Generic StateSpecification _
-instance eqStateSpecification :: Eq StateSpecification where eq = genericEq
-instance showStateSpecification :: Show StateSpecification where 
+instance eqStateSpecification :: Eq StateSpecification where
+  eq = genericEq
+
+instance showStateSpecification :: Show StateSpecification where
   show (ContextState ctype mpath) = "context state " <> unwrap ctype <> showPath mpath
   show (SubjectState r mpath) = "subject state " <> show r <> showPath mpath
   show (ObjectState r mpath) = "subject state " <> show r <> showPath mpath
 
 showPath :: Maybe String -> String
 showPath = maybe "" (append "$")
+
 --------------------------------------------------------------------------------
 ---- SCREEN
 --------------------------------------------------------------------------------
@@ -428,7 +447,7 @@ newtype WhoWhatWhereScreenE = WhoWhatWhereScreenE
   , subject :: RoleIdentification
   , context :: ContextType
   , start :: ArcPosition
-  , end :: ArcPosition 
+  , end :: ArcPosition
   }
 
 newtype FreeFormScreenE = FreeFormScreenE
@@ -450,8 +469,8 @@ data TableFormE = TableFormE (List MarkDownE) TableE FormE
 --------------------------------------------------------------------------------
 ---- SCREENELEMENT
 --------------------------------------------------------------------------------
-data ScreenElement =
-    RowElement RowE
+data ScreenElement
+  = RowElement RowE
   | ColumnElement ColumnE
   | TableElement TableE
   | FormElement FormE
@@ -492,15 +511,15 @@ data TableE = TableE (List MarkDownE) WidgetCommonFields
 --------------------------------------------------------------------------------
 ---- MARKDOWN
 --------------------------------------------------------------------------------
-data MarkDownE = 
-  MarkDownConstant {text :: Step, condition :: Maybe Step, context :: ContextType, start :: ArcPosition, end :: ArcPosition} |
-  MarkDownPerspective {widgetFields :: WidgetCommonFields, condition :: Maybe String, start :: ArcPosition, end :: ArcPosition} |
-  MarkDownExpression {text :: Step, condition :: Maybe Step, context :: ContextType, start :: ArcPosition, end :: ArcPosition} 
+data MarkDownE
+  = MarkDownConstant { text :: Step, condition :: Maybe Step, context :: ContextType, start :: ArcPosition, end :: ArcPosition }
+  | MarkDownPerspective { widgetFields :: WidgetCommonFields, condition :: Maybe String, start :: ArcPosition, end :: ArcPosition }
+  | MarkDownExpression { text :: Step, condition :: Maybe Step, context :: ContextType, start :: ArcPosition, end :: ArcPosition }
 
 --------------------------------------------------------------------------------
 ---- CHAT
 --------------------------------------------------------------------------------
-newtype ChatE = ChatE 
+newtype ChatE = ChatE
   { chatRole :: RoleIdentification
   , messagesProperty :: String
   , mediaProperty :: String
@@ -517,128 +536,170 @@ instance eqContextPart :: Eq ContextPart where
   eq _ _ = false
 
 instance eqRoleE :: Eq RoleE where
-  eq (RoleE{id:id1}) (RoleE{id:id2}) = id1 == id2
+  eq (RoleE { id: id1 }) (RoleE { id: id2 }) = id1 == id2
 
 derive instance genericContextE :: Generic ContextE _
-instance showContextE :: Show ContextE where show = genericShow
+instance showContextE :: Show ContextE where
+  show = genericShow
 
 derive instance genericContextElement :: Generic ContextPart _
-instance showContextElement :: Show ContextPart where show x = genericShow x
+instance showContextElement :: Show ContextPart where
+  show x = genericShow x
 
 derive instance genericRoleE :: Generic RoleE _
-instance showRoleE :: Show RoleE where show = genericShow
+instance showRoleE :: Show RoleE where
+  show = genericShow
 
 derive instance genericRoleElement :: Generic RolePart _
-instance showRoleElement :: Show RolePart where show = genericShow
+instance showRoleElement :: Show RolePart where
+  show = genericShow
 
 derive instance Generic FilledBySpecification _
-instance Show FilledBySpecification where show = genericShow
+instance Show FilledBySpecification where
+  show = genericShow
 
 derive instance Generic FilledByAttribute _
-instance Show FilledByAttribute where show = genericShow
+instance Show FilledByAttribute where
+  show = genericShow
 
 derive instance Generic PropertyMapping _
-instance Show PropertyMapping where show = genericShow
+instance Show PropertyMapping where
+  show = genericShow
 
 derive instance genericStateE :: Generic StateE _
-instance showStateE :: Show StateE where show s = genericShow s
+instance showStateE :: Show StateE where
+  show s = genericShow s
 
 derive instance genericStateQualifiedPart :: Generic StateQualifiedPart _
-instance showStateQualifiedPart :: Show StateQualifiedPart where show = genericShow
+instance showStateQualifiedPart :: Show StateQualifiedPart where
+  show = genericShow
 
 derive instance genericNotificationE :: Generic NotificationE _
-instance showNotificationE :: Show NotificationE where show = genericShow
+instance showNotificationE :: Show NotificationE where
+  show = genericShow
 
 derive instance Generic SentenceE _
-instance Show SentenceE where show = genericShow
+instance Show SentenceE where
+  show = genericShow
 
 derive instance Generic SentencePartE _
-instance Show SentencePartE where show = genericShow
+instance Show SentencePartE where
+  show = genericShow
 
 derive instance genericStateTransitionE :: Generic StateTransitionE _
-instance showStateTransitionE :: Show StateTransitionE where show = genericShow
+instance showStateTransitionE :: Show StateTransitionE where
+  show = genericShow
 
 derive instance genericAutomaticEffectE :: Generic AutomaticEffectE _
-instance showAutomaticEffectE :: Show AutomaticEffectE where show = genericShow
+instance showAutomaticEffectE :: Show AutomaticEffectE where
+  show = genericShow
 
 derive instance genericRoleVerbE :: Generic RoleVerbE _
-instance showRoleVerbE :: Show RoleVerbE where show = genericShow
+instance showRoleVerbE :: Show RoleVerbE where
+  show = genericShow
+
 derive instance newtypeRoleVerbE :: Newtype RoleVerbE _
 
 derive instance genericPropertyVerbE :: Generic PropertyVerbE _
-instance showPropertyVerbE :: Show PropertyVerbE where show = genericShow
+instance showPropertyVerbE :: Show PropertyVerbE where
+  show = genericShow
+
 derive instance newtypePropertyVerbE :: Newtype PropertyVerbE _
 
 derive instance genericSelfOnly :: Generic SelfOnly _
-instance showSelfOnly :: Show SelfOnly where show = genericShow
+instance showSelfOnly :: Show SelfOnly where
+  show = genericShow
 
 derive instance Generic AuthorOnly _
-instance Show AuthorOnly where show = genericShow
+instance Show AuthorOnly where
+  show = genericShow
 
 derive instance genericPropertyE :: Generic PropertyE _
-instance showPropertyE :: Show PropertyE where show = genericShow
+instance showPropertyE :: Show PropertyE where
+  show = genericShow
 
 derive instance genericPropertyElement :: Generic PropertyPart _
-instance showPropertyElement :: Show PropertyPart where show = genericShow
+instance showPropertyElement :: Show PropertyPart where
+  show = genericShow
 
 derive instance genericPropertyFacet :: Generic PropertyFacet _
-instance showPropertyFacet :: Show PropertyFacet where show = genericShow
+instance showPropertyFacet :: Show PropertyFacet where
+  show = genericShow
 
 derive instance genericWhiteSpaceRegime :: Generic WhiteSpaceRegime _
-instance showWhiteSpaceRegime :: Show WhiteSpaceRegime where show = genericShow
+instance showWhiteSpaceRegime :: Show WhiteSpaceRegime where
+  show = genericShow
 
 derive instance genericPropOrView :: Generic PropsOrView _
-instance showPropOrView :: Show PropsOrView where show = genericShow
+instance showPropOrView :: Show PropsOrView where
+  show = genericShow
 
 derive instance genericActionElement :: Generic ActionE _
-instance showActionElement :: Show ActionE where show = genericShow
+instance showActionElement :: Show ActionE where
+  show = genericShow
 
 derive instance genericContextActionElement :: Generic ContextActionE _
-instance showContextActionElement :: Show ContextActionE where show = genericShow
+instance showContextActionElement :: Show ContextActionE where
+  show = genericShow
 
 derive instance genericViewElement :: Generic ViewE _
-instance showViewElement :: Show ViewE where show = genericShow
+instance showViewElement :: Show ViewE where
+  show = genericShow
 
 derive instance Generic ScreenE _
-instance Show ScreenE where show = genericShow
+instance Show ScreenE where
+  show = genericShow
 
 derive instance Generic WhoWhatWhereScreenE _
-instance Show WhoWhatWhereScreenE where show = genericShow
+instance Show WhoWhatWhereScreenE where
+  show = genericShow
 
 derive instance Generic TableFormSectionE _
-instance Show TableFormSectionE where show = genericShow
+instance Show TableFormSectionE where
+  show = genericShow
 
 derive instance Generic FreeFormScreenE _
-instance Show FreeFormScreenE where show = genericShow
+instance Show FreeFormScreenE where
+  show = genericShow
 
 derive instance Generic TableFormE _
-instance Show TableFormE where show = genericShow
+instance Show TableFormE where
+  show = genericShow
 
 derive instance Generic WhatE _
-instance Show WhatE where show = genericShow
+instance Show WhatE where
+  show = genericShow
 
 derive instance genericScreenElement :: Generic ScreenElement _
 instance showScreenElement :: Show ScreenElement where
   show e = genericShow e
 
 derive instance genericTabE :: Generic TabE _
-instance showTabE :: Show TabE where show = genericShow
+instance showTabE :: Show TabE where
+  show = genericShow
 
 derive instance genericRow :: Generic RowE _
-instance showRow :: Show RowE where show = genericShow
+instance showRow :: Show RowE where
+  show = genericShow
 
 derive instance genericColumn :: Generic ColumnE _
-instance showColumn :: Show ColumnE where show = genericShow
+instance showColumn :: Show ColumnE where
+  show = genericShow
 
 derive instance genericTable :: Generic TableE _
-instance showTable :: Show TableE where show = genericShow
+instance showTable :: Show TableE where
+  show = genericShow
 
 derive instance genericForm :: Generic FormE _
-instance showForm :: Show FormE where show = genericShow
+instance showForm :: Show FormE where
+  show = genericShow
 
 derive instance Generic MarkDownE _
-instance Show MarkDownE where show = genericShow
+instance Show MarkDownE where
+  show = genericShow
 
 derive instance Generic ChatE _
-instance Show ChatE where show = genericShow
+instance Show ChatE where
+  show = genericShow
+
 derive instance Newtype ChatE _

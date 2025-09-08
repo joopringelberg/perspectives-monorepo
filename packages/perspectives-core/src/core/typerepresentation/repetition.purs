@@ -20,7 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.Repetition where 
+module Perspectives.Repetition where
 
 import Prelude
 
@@ -34,54 +34,60 @@ import Partial.Unsafe (unsafePartial)
 import Simple.JSON (class ReadForeign, class WriteForeign, read', writeImpl)
 
 -- | Types Duration and DurationComponent have been copied from module Data.Interval.Duration,
-data Duration = 
-  Millisecond Number 
-  | Second Number 
-  | Minute Number 
-  | Hour Number 
+data Duration
+  = Millisecond Number
+  | Second Number
+  | Minute Number
+  | Hour Number
   | Day Number
 
 derive instance genericDuration :: Generic Duration _
-instance showDuration :: Show Duration where show = genericShow
-instance eqDuration :: Eq Duration where eq = genericEq
+instance showDuration :: Show Duration where
+  show = genericShow
+
+instance eqDuration :: Eq Duration where
+  eq = genericEq
 
 instance WriteForeign Duration where
-  writeImpl (Millisecond n) = writeImpl {constructor: "Millisecond", n}
-  writeImpl (Second n) = writeImpl {constructor: "Second", n}
-  writeImpl (Minute n) = writeImpl {constructor: "Minute", n}
-  writeImpl (Hour n) = writeImpl {constructor: "Hour", n}
-  writeImpl (Day n) = writeImpl {constructor: "Day", n}
+  writeImpl (Millisecond n) = writeImpl { constructor: "Millisecond", n }
+  writeImpl (Second n) = writeImpl { constructor: "Second", n }
+  writeImpl (Minute n) = writeImpl { constructor: "Minute", n }
+  writeImpl (Hour n) = writeImpl { constructor: "Hour", n }
+  writeImpl (Day n) = writeImpl { constructor: "Day", n }
 
 instance ReadForeign Duration where
-  readImpl f = do 
-    {constructor, n} :: {constructor :: String, n :: Number} <- read' f
-    unsafePartial case constructor of 
+  readImpl f = do
+    { constructor, n } :: { constructor :: String, n :: Number } <- read' f
+    unsafePartial case constructor of
       "Millisecond" -> pure $ Millisecond n
       "Second" -> pure $ Second n
       "Minute" -> pure $ Minute n
       "Hour" -> pure $ Hour n
       "Day" -> pure $ Day n
 
-data Repeater = 
-  Never
+data Repeater
+  = Never
   | Forever Duration
   | RepeatFor Int Duration
 
 derive instance genericRepeater :: Generic Repeater _
-instance showRepeater :: Show Repeater where show = genericShow
-instance eqRepeater :: Eq Repeater where eq = genericEq
+instance showRepeater :: Show Repeater where
+  show = genericShow
+
+instance eqRepeater :: Eq Repeater where
+  eq = genericEq
 
 instance WriteForeign Repeater where
   writeImpl Never = writeImpl "Never"
-  writeImpl (Forever d) = writeImpl {forever: d}
-  writeImpl (RepeatFor i d) = writeImpl {i, d}
+  writeImpl (Forever d) = writeImpl { forever: d }
+  writeImpl (RepeatFor i d) = writeImpl { i, d }
 
 instance ReadForeign Repeater where
   readImpl f = const Never <$> ((read' f) :: F String)
     <|>
-    Forever <<< _.forever <$> ((read' f) :: F {forever :: Duration})
+      Forever <<< _.forever <$> ((read' f) :: F { forever :: Duration })
     <|>
-    (\{i, d} -> RepeatFor i d) <$> ((read' f) :: F {i :: Int, d :: Duration})
+      (\{ i, d } -> RepeatFor i d) <$> ((read' f) :: F { i :: Int, d :: Duration })
 
 fromDuration :: Duration -> Milliseconds
 fromDuration (Millisecond n) = Milliseconds n

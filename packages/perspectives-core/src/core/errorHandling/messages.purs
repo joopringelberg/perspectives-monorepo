@@ -55,108 +55,108 @@ import Prelude (class Eq, class Show, show, (<<<), (<>))
 -- | Each error should have an ArcPosition.
 data PerspectivesError
   = DefaultPrototype ContextType ContextType
-    | CyclicAspects ArcPosition ContextType
-    | WrongRoleKind RoleType RoleKind RoleKind
-    -- | MissingForUser ArcPosition String
-    | MissingRoleForPropertyAssignment ArcPosition ArcPosition
-    | NotWellFormedName ArcPosition String
-    | RoleMissingInContext ArcPosition String String
-    | UnknownContext ArcPosition String
-    | UnknownRole ArcPosition String
-    | UnknownState ArcPosition String
-    | UnknownProperty ArcPosition String String
-    | UnknownView ArcPosition String
-    | NotAViewOfObject ArcPosition String
-    | NotUniquelyIdentifying ArcPosition String (Array String)
-    | UnknownElementaryQueryStep
-    | IncompatibleQueryArgument ArcPosition Domain Step
-    | ContextHasNoRole (ADT ContextType) String ArcPosition ArcPosition
-    | RoleHasNoProperty (ADT EnumeratedRoleType) String ArcPosition ArcPosition
-    | RoleHasNoEnumeratedProperty (ADT EnumeratedRoleType) String ArcPosition ArcPosition
-    | UniversalRoleHasNoParts
-    | RoleHasNoBinding ArcPosition (ADT EnumeratedRoleType)
-    | RoleCannotHaveBinding ArcPosition ArcPosition String
-    | IncompatibleDomainsForJunction Domain Domain
-    | RoleDoesNotBind ArcPosition RoleType (ADT RoleInContext)
-    | LocalRoleDoesNotBind ArcPosition ArcPosition String (ADT RoleInContext)
-    | IncompatibleComposition ArcPosition Range Domain
-    | IncompatibleDomains ArcPosition ArcPosition
-    | TypesCannotBeCompared ArcPosition Range Range
-    | NotABoolean ArcPosition
-    | WrongTypeForOperator ArcPosition (Array RAN.Range) Domain
-    | MissingValueForAssignment ArcPosition ArcPosition
-    | ArgumentMustBeSequenceFunction ArcPosition
-    | UnknownVariable ArcPosition String
-    | NotALetWithAssignment PureLetStep
-    | NotAPureLet LetStep
-    | CannotCreateCalculatedRole CalculatedRoleType ArcPosition ArcPosition
-    | CannotCreateCalculatedProperty CalculatedPropertyType ArcPosition ArcPosition
-    | CannotModifyCalculatedProperty String ArcPosition ArcPosition
-    | NotAContextDomain QueryFunctionDescription Domain ArcPosition ArcPosition
-    | NotARoleDomain Domain ArcPosition ArcPosition
-    | ValueExpressionNotAllowed Domain ArcPosition ArcPosition
-    | NotAStringDomain QueryFunctionDescription ArcPosition ArcPosition
-    | DomainTypeRequired String Range ArcPosition ArcPosition
-    | NotAContextRole ArcPosition ArcPosition
-    | NotFunctional ArcPosition ArcPosition Step
-    | MaybeNotFunctional ArcPosition ArcPosition Step
-    | WrongPropertyRange ArcPosition ArcPosition RAN.Range RAN.Range
-    | NotAPropertyRange  ArcPosition ArcPosition RAN.Range
-    | WrongNumberOfArguments ArcPosition ArcPosition String Int Int
-    | UnknownExternalFunction ArcPosition ArcPosition String
-    | NotAnEffect ArcPosition ArcPosition String
-    | NotAFunction ArcPosition ArcPosition String
-    | CannotFindContextType ArcPosition ArcPosition String
-    | NoPropertyTypeWithValue ArcPosition ArcPosition
-    | CurrentObjectNotAllowed ArcPosition ArcPosition
-    | CurrentSubjectNotAllowed ArcPosition ArcPosition
-    | FillerRestrictionNotAnAspectSubtype ArcPosition ArcPosition String String
-    | RecursiveDefinition String
-    | ExpressionsShouldBeFunctional Boolean Boolean ArcPosition
-    | NoMonths ArcPosition
-    | NotARootContext ArcPosition ArcPosition ContextType
-    | PropertyCannotBeCalculated String ArcPosition ArcPosition
-    | NotASelfPerspective ArcPosition ArcPosition
+  | CyclicAspects ArcPosition ContextType
+  | WrongRoleKind RoleType RoleKind RoleKind
+  -- | MissingForUser ArcPosition String
+  | MissingRoleForPropertyAssignment ArcPosition ArcPosition
+  | NotWellFormedName ArcPosition String
+  | RoleMissingInContext ArcPosition String String
+  | UnknownContext ArcPosition String
+  | UnknownRole ArcPosition String
+  | UnknownState ArcPosition String
+  | UnknownProperty ArcPosition String String
+  | UnknownView ArcPosition String
+  | NotAViewOfObject ArcPosition String
+  | NotUniquelyIdentifying ArcPosition String (Array String)
+  | UnknownElementaryQueryStep
+  | IncompatibleQueryArgument ArcPosition Domain Step
+  | ContextHasNoRole (ADT ContextType) String ArcPosition ArcPosition
+  | RoleHasNoProperty (ADT EnumeratedRoleType) String ArcPosition ArcPosition
+  | RoleHasNoEnumeratedProperty (ADT EnumeratedRoleType) String ArcPosition ArcPosition
+  | UniversalRoleHasNoParts
+  | RoleHasNoBinding ArcPosition (ADT EnumeratedRoleType)
+  | RoleCannotHaveBinding ArcPosition ArcPosition String
+  | IncompatibleDomainsForJunction Domain Domain
+  | RoleDoesNotBind ArcPosition RoleType (ADT RoleInContext)
+  | LocalRoleDoesNotBind ArcPosition ArcPosition String (ADT RoleInContext)
+  | IncompatibleComposition ArcPosition Range Domain
+  | IncompatibleDomains ArcPosition ArcPosition
+  | TypesCannotBeCompared ArcPosition Range Range
+  | NotABoolean ArcPosition
+  | WrongTypeForOperator ArcPosition (Array RAN.Range) Domain
+  | MissingValueForAssignment ArcPosition ArcPosition
+  | ArgumentMustBeSequenceFunction ArcPosition
+  | UnknownVariable ArcPosition String
+  | NotALetWithAssignment PureLetStep
+  | NotAPureLet LetStep
+  | CannotCreateCalculatedRole CalculatedRoleType ArcPosition ArcPosition
+  | CannotCreateCalculatedProperty CalculatedPropertyType ArcPosition ArcPosition
+  | CannotModifyCalculatedProperty String ArcPosition ArcPosition
+  | NotAContextDomain QueryFunctionDescription Domain ArcPosition ArcPosition
+  | NotARoleDomain Domain ArcPosition ArcPosition
+  | ValueExpressionNotAllowed Domain ArcPosition ArcPosition
+  | NotAStringDomain QueryFunctionDescription ArcPosition ArcPosition
+  | DomainTypeRequired String Range ArcPosition ArcPosition
+  | NotAContextRole ArcPosition ArcPosition
+  | NotFunctional ArcPosition ArcPosition Step
+  | MaybeNotFunctional ArcPosition ArcPosition Step
+  | WrongPropertyRange ArcPosition ArcPosition RAN.Range RAN.Range
+  | NotAPropertyRange ArcPosition ArcPosition RAN.Range
+  | WrongNumberOfArguments ArcPosition ArcPosition String Int Int
+  | UnknownExternalFunction ArcPosition ArcPosition String
+  | NotAnEffect ArcPosition ArcPosition String
+  | NotAFunction ArcPosition ArcPosition String
+  | CannotFindContextType ArcPosition ArcPosition String
+  | NoPropertyTypeWithValue ArcPosition ArcPosition
+  | CurrentObjectNotAllowed ArcPosition ArcPosition
+  | CurrentSubjectNotAllowed ArcPosition ArcPosition
+  | FillerRestrictionNotAnAspectSubtype ArcPosition ArcPosition String String
+  | RecursiveDefinition String
+  | ExpressionsShouldBeFunctional Boolean Boolean ArcPosition
+  | NoMonths ArcPosition
+  | NotARootContext ArcPosition ArcPosition ContextType
+  | PropertyCannotBeCalculated String ArcPosition ArcPosition
+  | NotASelfPerspective ArcPosition ArcPosition
 
-    | UnauthorizedForProperty String RoleType RoleType PropertyType PropertyVerb (Maybe ArcPosition) (Maybe ArcPosition)
-    | UnauthorizedForRole String RoleType RoleType (Array RoleVerb) (Maybe ArcPosition) (Maybe ArcPosition)
-    | UnauthorizedForContext String RoleType ContextType
+  | UnauthorizedForProperty String RoleType RoleType PropertyType PropertyVerb (Maybe ArcPosition) (Maybe ArcPosition)
+  | UnauthorizedForRole String RoleType RoleType (Array RoleVerb) (Maybe ArcPosition) (Maybe ArcPosition)
+  | UnauthorizedForContext String RoleType ContextType
 
-    | MissingPerspective
-    | UserHasNoPerspective RoleType RoleType ArcPosition ArcPosition
-    | PerspectiveCannotBeAuthorOnly String ArcPosition EnumeratedRoleType ArcPosition EnumeratedPropertyType
-    | SelfOnlyNeedsTwoRoles String ArcPosition EnumeratedPropertyType
-    | SelfOnlyShouldBeAuthorOnly String ArcPosition EnumeratedPropertyType
-    | StateDoesNotExist StateIdentifier ArcPosition ArcPosition
-    | NoNotificationAspect ContextType ArcPosition ArcPosition
+  | MissingPerspective
+  | UserHasNoPerspective RoleType RoleType ArcPosition ArcPosition
+  | PerspectiveCannotBeAuthorOnly String ArcPosition EnumeratedRoleType ArcPosition EnumeratedPropertyType
+  | SelfOnlyNeedsTwoRoles String ArcPosition EnumeratedPropertyType
+  | SelfOnlyShouldBeAuthorOnly String ArcPosition EnumeratedPropertyType
+  | StateDoesNotExist StateIdentifier ArcPosition ArcPosition
+  | NoNotificationAspect ContextType ArcPosition ArcPosition
 
-    | RolErrorBoundary String String
-    | ContextErrorBoundary String String
-    | TypeErrorBoundary String String
-    | DomeinFileErrorBoundary String String
-    | ApiErrorBoundary String
-    | RuleErrorBoundary String String
-    | ParserError String ArcPosition
-    | MissingObject ArcPosition ArcPosition
-    | NoCalculatedAspect ArcPosition String
+  | RolErrorBoundary String String
+  | ContextErrorBoundary String String
+  | TypeErrorBoundary String String
+  | DomeinFileErrorBoundary String String
+  | ApiErrorBoundary String
+  | RuleErrorBoundary String String
+  | ParserError String ArcPosition
+  | MissingObject ArcPosition ArcPosition
+  | NoCalculatedAspect ArcPosition String
 
-    | DomeinFileIdIncompatible String DomeinFileId ArcPosition
-    | PerspectivesFileFormatError String String
+  | DomeinFileIdIncompatible String DomeinFileId ArcPosition
+  | PerspectivesFileFormatError String String
 
-    -- Screens
-    | ScreenForUserRoleOnly ArcPosition ArcPosition
-    | WidgetCardinalityMismatch ArcPosition ArcPosition
-    | MarkDownExpressionMustBeFunctional ArcPosition ArcPosition
-    | UnknownMarkDownConditionProperty ArcPosition ArcPosition String RoleType
+  -- Screens
+  | ScreenForUserRoleOnly ArcPosition ArcPosition
+  | WidgetCardinalityMismatch ArcPosition ArcPosition
+  | MarkDownExpressionMustBeFunctional ArcPosition ArcPosition
+  | UnknownMarkDownConditionProperty ArcPosition ArcPosition String RoleType
 
-    | Custom String
+  | Custom String
 
 derive instance eqPerspectivesError :: Eq PerspectivesError
 
 instance showPerspectivesError :: Show PerspectivesError where
   show (DefaultPrototype expected given) = "Invalid type for DefaultPrototype. Expected: '" <> unwrap expected <> "' but found '" <> unwrap given <> "'."
   show (CyclicAspects pos c) = "Context '" <> unwrap c <> "' has cyclic aspects: " <> show pos
-  show (WrongRoleKind roletype expected found) = "Role '" <> show roletype <> "' has kind '" <> show found <> "' but should have kind '" <> show expected<> "'."
+  show (WrongRoleKind roletype expected found) = "Role '" <> show roletype <> "' has kind '" <> show found <> "' but should have kind '" <> show expected <> "'."
   -- show (MissingForUser pos localBotName) = "(MissingForUser) The BotRole '" <> localBotName <> "' should have a 'ForUser' clause: " <> show pos
   show (MissingRoleForPropertyAssignment start end) = "(MissingRoleForPropertyAssignment) The role for this property assignment is not specified (between " <> show start <> "and " <> show end <> ")."
   show (NotWellFormedName pos name) = "(NotWellFormedName) The name '" <> name <> "' is not well-formed (it cannot be expanded to a fully qualified name): " <> show pos
@@ -180,7 +180,7 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (ScreenForUserRoleOnly start end) = "(ScreenForUserRoleOnly) Only a user role may contain a screen definition!"
   show (WidgetCardinalityMismatch start end) = "(WidgetCardinalityMismatch) The cardinality of the Widget and the Role do not suit each other (between " <> show start <> " and " <> show end <> ")."
   show (MarkDownExpressionMustBeFunctional start end) = "(MarkDownExpressionMustBeFunctional) The expression used here to supply MarkDown must be functional! Between " <> show start <> " and " <> show end <> ")."
-  show (UnknownMarkDownConditionProperty start end propname roletype) = "(UnknownMarkDownConditionProperty) The property " <> propname <> " is not a property of the role " <> show roletype <> "! Between " <> show start <> " and " <> show end <> ")." 
+  show (UnknownMarkDownConditionProperty start end propname roletype) = "(UnknownMarkDownConditionProperty) The property " <> propname <> " is not a property of the role " <> show roletype <> "! Between " <> show start <> " and " <> show end <> ")."
   show (ContextHasNoRole ctype qn start end) = "(ContextHasNoRole) The Context-type '" <> show ctype <> "' has no enumerated role with the name '" <> qn <> "' (it may have a calculated role but that cannot be used here). Between " <> show start <> " and " <> show end
   show (RoleHasNoProperty rtype qn start end) = "(RoleHasNoProperty) The Role-type '" <> show rtype <> "' has no property with the name '" <> qn <> "' (between " <> show start <> " and " <> show end <> ")."
   show (RoleHasNoEnumeratedProperty rtype qn start end) = "(RoleHasNoEnumeratedProperty) The Role-type '" <> show rtype <> "' has no enumerated property with the name '" <> qn <> "' (between " <> show start <> " and " <> show end <> "). It may have a calculated property, but we cannot use that in this situation."
@@ -198,8 +198,8 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (MissingValueForAssignment start end) = "(MissingValueForAssignment) This assignment statement needs a value expression on the right: from " <> show start <> " to " <> show end
   show (ArgumentMustBeSequenceFunction pos) = "(ArgumentMustBeSequenceFunction) The right operand of '>>=' must be a monoidal function such as sum, product, minimum, or maximum, at: " <> show pos
   show (UnknownVariable pos varName) = "(UnknownVariable) The variable '" <> varName <> "' is not known at position: " <> show pos
-  show (NotALetWithAssignment (PureLetStep{start, end})) = "(NotALetWithAssignment) This let*-expression does not have an assignment in its body, hence is of no use in a rule. From " <> show start <> " to " <> show end
-  show (NotAPureLet (LetStep{start, end})) = "(NotAPureLet) This let*-expression has an assignment in its body but it is used in a pure expression, so its body should be a pure expression, too. From " <> show start <> " to " <> show end
+  show (NotALetWithAssignment (PureLetStep { start, end })) = "(NotALetWithAssignment) This let*-expression does not have an assignment in its body, hence is of no use in a rule. From " <> show start <> " to " <> show end
+  show (NotAPureLet (LetStep { start, end })) = "(NotAPureLet) This let*-expression has an assignment in its body but it is used in a pure expression, so its body should be a pure expression, too. From " <> show start <> " to " <> show end
   show (CannotCreateCalculatedRole cr start end) = "(CannotCreateCalculatedRole) Can not create an instance of a calculated role (" <> show cr <> ") between: " <> show start <> " and: " <> show end
   show (CannotCreateCalculatedProperty pt start end) = "(CannotCreateCalculatedProperty) Can not change the value of a property that is calculated, between: " <> show start <> " and: " <> show end
   show (CannotModifyCalculatedProperty props start end) = "(CannotModifyCalculatedProperty) Can not change the value these calculated properties (" <> props <> "), between: " <> show start <> " and: " <> show end
@@ -224,9 +224,9 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (FillerRestrictionNotAnAspectSubtype rolePos aspectPos roleName aspectName) = "(FillerRestrictionNotAnAspectSubtype) The role " <> roleName <> " (at " <> show rolePos <> ") has a value for the filledBy clause that is not a subtype of that of its aspect " <> aspectName <> "(at " <> show aspectPos <> ")."
   show (RecursiveDefinition s) = "(RecursiveDefinition) " <> s
   show (ExpressionsShouldBeFunctional left right pos) = "(ExpressionsShouldBeFunctional) The cardinality of the left and right term at " <> show pos <> " should both be functional. The left is " <> showCardinality left <> " and the right is " <> showCardinality right <> "."
-    where 
-      showCardinality :: Boolean -> String 
-      showCardinality b = if b then "functional" else "relational"
+    where
+    showCardinality :: Boolean -> String
+    showCardinality b = if b then "functional" else "relational"
   show (NoMonths pos) = "(NoMonths) It is not allowed to subtract months from or add to a date. Try days or weeks instead."
   show (NotARootContext start end qualifiedContextTypeIdentifier) = "(NotARootContext) " <> (unwrap qualifiedContextTypeIdentifier) <> " is not a RootContext but you try to create it without filling a role with it. Consider using 'create_ context <ContextType> bound to <roleExpression>' between " <> show start <> " and " <> show end <> "."
   show (PropertyCannotBeCalculated prop start end) = "(PropertyCannotBeCalculated) This property cannot be calculated " <> showPosition start end
@@ -235,15 +235,25 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (UnauthorizedForRole author userRole role verbs mstart mend) = "(UnauthorizedForRole) User " <> author <> " in role " <> show userRole <> " has no perspective on role " <> show role <> " that includes at least one of " <> show verbs <> maybeShowPosition mstart mend
   show (UnauthorizedForContext author userRole contextType) = "(UnauthorizedForContext) User " <> author <> " in role " <> show userRole <> " has no perspective on context " <> show contextType
 
-
   show MissingPerspective = "(MissingPerspective) This should be inside a perspective expression."
   show (UserHasNoPerspective subject object start end) = "(UserHasNoPerspective) User " <> roletype2string subject <> " has no perspective on " <> roletype2string object <> " (between " <> show start <> " and " <> show end <> ")."
-  show (PerspectiveCannotBeAuthorOnly userRoleName userRoleStart (EnumeratedRoleType objectRole) objectRoleStart (EnumeratedPropertyType prop)) = "(PerspectiveCannotBeAuthorOnly) `authoronly` on property '" <> prop <> "' of object '" <> objectRole <> "' (starting on " <> show objectRoleStart <> "), \
-    \ is without meaning because user '" <> userRoleName <> "' (from " <> show userRoleStart <> ") is the only userrole with a perspective on it and the userrole is functional"
-  show (SelfOnlyNeedsTwoRoles userRoleName userRoleStart (EnumeratedPropertyType prop)) = "(SelfOnlyNeedsTwoRoles) `selfonly` on property '" <> prop <> "' of user '" <> userRoleName <> "' (from " <> show userRoleStart <> ") \
+  show (PerspectiveCannotBeAuthorOnly userRoleName userRoleStart (EnumeratedRoleType objectRole) objectRoleStart (EnumeratedPropertyType prop)) = "(PerspectiveCannotBeAuthorOnly) `authoronly` on property '" <> prop <> "' of object '" <> objectRole <> "' (starting on " <> show objectRoleStart
+    <>
+      "), \
+      \ is without meaning because user '"
+    <> userRoleName
+    <> "' (from "
+    <> show userRoleStart
+    <> ") is the only userrole with a perspective on it and the userrole is functional"
+  show (SelfOnlyNeedsTwoRoles userRoleName userRoleStart (EnumeratedPropertyType prop)) = "(SelfOnlyNeedsTwoRoles) `selfonly` on property '" <> prop <> "' of user '" <> userRoleName <> "' (from " <> show userRoleStart <>
+    ") \
     \ is meaningless because this users' perspective is the only perspective on it (consider `authoronly` instead)."
-  show (SelfOnlyShouldBeAuthorOnly userRoleName userRoleStart (EnumeratedPropertyType prop)) = "(SelfOnlyShouldBeAuthorOnly) `selfonly` on property '" <> prop <> "' of user '" <> userRoleName <> "' (from " <> show userRoleStart <> ") \
-    \ is meaningless because either '" <> userRoleName <> "' is functional or there is no other user role that can change the property. In both cases `authoronly` is more appropriate."
+  show (SelfOnlyShouldBeAuthorOnly userRoleName userRoleStart (EnumeratedPropertyType prop)) = "(SelfOnlyShouldBeAuthorOnly) `selfonly` on property '" <> prop <> "' of user '" <> userRoleName <> "' (from " <> show userRoleStart
+    <>
+      ") \
+      \ is meaningless because either '"
+    <> userRoleName
+    <> "' is functional or there is no other user role that can change the property. In both cases `authoronly` is more appropriate."
   show (StateDoesNotExist stateId start end) = "(StateDoesNotExist) The state '" <> show stateId <> "' is not modelled (between " <> show start <> " and " <> show end <> ")."
   show (NoNotificationAspect ctype start end) = "(NoNotificationAspect) The context type '" <> show ctype <> "' has no notification aspect: notifications will not be sent to the user " <> showPosition start end
 

@@ -58,8 +58,7 @@ module Perspectives.Persistent
   , tryGetPerspectRol
   , tryRemoveEntiteit
   , updateRevision
-  )
-  where
+  ) where
 
 import Prelude
 
@@ -99,7 +98,7 @@ import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..))
 import Perspectives.ResourceIdentifiers (isInPublicScheme, isInRemoteScheme, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator)
 import Perspectives.ResourceIdentifiers.Parser (ResourceIdentifier)
 import Simple.JSON (class WriteForeign)
- 
+
 fix :: Boolean
 fix = true
 
@@ -115,9 +114,8 @@ getPerspectEntiteit tryToFix id =
         pe <- liftAff $ read avar
         pure pe
       Nothing -> do
-        if isInPublicScheme (unwrap id)
-          then addPublicResource id
-          else pure unit
+        if isInPublicScheme (unwrap id) then addPublicResource id
+        else pure unit
         fetchEntiteit tryToFix id
 
 entitiesDatabaseName :: forall f. MonadPouchdb f String
@@ -138,7 +136,7 @@ getPerspectContext = getPerspectEntiteit fix
 tryGetPerspectContext :: ContextInstance -> MonadPerspectives (Maybe PerspectContext)
 tryGetPerspectContext id = tryGetPerspectEntiteit id
 
-tryGetPerspectRol :: RoleInstance -> MonadPerspectives (Maybe  PerspectRol)
+tryGetPerspectRol :: RoleInstance -> MonadPerspectives (Maybe PerspectRol)
 tryGetPerspectRol id = tryGetPerspectEntiteit id
 
 getPerspectRol :: RoleInstance -> MP PerspectRol
@@ -150,13 +148,13 @@ getDomeinFile = getPerspectEntiteit doNotFix
 
 tryGetPerspectEntiteit :: forall a i. Attachment a => Persistent a i => i -> MonadPerspectives (Maybe a)
 tryGetPerspectEntiteit id = catchError ((getPerspectEntiteit doNotFix id) >>= (pure <<< Just))
-  \e -> do 
+  \e -> do
     -- logPerspectivesError (Custom $ show e)
     pure Nothing
 
 entityExists :: forall a i. Attachment a => Persistent a i => i -> MonadPerspectives Boolean
 entityExists id = catchError ((getPerspectEntiteit doNotFix id) >>= (pure <<< const true))
-  \e ->  do 
+  \e -> do
     -- logPerspectivesError (Custom $ show e)
     pure false
 
@@ -170,12 +168,12 @@ removeEntiteit_ :: forall a i. Persistent a i => i -> a -> MonadPerspectives a
 removeEntiteit_ entId entiteit =
   ensureAuthentication (Resource $ unwrap entId) $ \_ -> do
     -- If on the list of items to be saved, remove!
-    modify \s@{entitiesToBeStored} -> s { entitiesToBeStored = delete (resourceToBeStored entiteit) entitiesToBeStored}
+    modify \s@{ entitiesToBeStored } -> s { entitiesToBeStored = delete (resourceToBeStored entiteit) entitiesToBeStored }
     case (rev entiteit) of
       Nothing -> removeInternally entId *> pure entiteit
       (Just rev) -> do
         void $ removeInternally entId
-        {database, documentName} <- resourceIdentifier2WriteDocLocator (unwrap entId)
+        { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap entId)
         void $ deleteDocument database documentName (Just rev)
         pure entiteit
 
@@ -190,10 +188,10 @@ tryRemoveEntiteit entId = do
 -- | This function must only be called when there is no AVar in cache to represent the resource.
 -- | As an invariant side effect: there is either an AVar that holds the resource, or there is no AVar.
 fetchEntiteit :: forall a i. Attachment a => Persistent a i => Boolean -> i -> MonadPerspectives a
-fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ -> 
+fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
   catchError
     do
-      {database, documentName} <- resourceIdentifier2DocLocator (unwrap id)
+      { database, documentName } <- resourceIdentifier2DocLocator (unwrap id)
       doc <- getDocument database documentName
       -- Returns either the local database name or a URL.
       v <- representInternally id
@@ -201,39 +199,37 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
       pure doc
 
     \e -> do
-      if test decodingErrorRegex (show e)
-        then logPerspectivesError (Custom ("fetchEntiteit: failed to decode resource " <> unwrap id <> ". Parser message: " <> show e))
-        -- Try to fix referential integrity
-        else if tryToFix
-          then internetRequiredButMissing (unwrap id) >>= if _
-            then log ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> ", but there is no internet. Will not try to fix links.")
-            else do 
-              logPerspectivesError 
-                (Custom ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb: " <> show e))
-              missingResourceAVar <- getMissingResource
-              liftAff $ put (Missing $ typeOfInstance id) missingResourceAVar
-              response <- liftAff $ take missingResourceAVar
-              case response of 
-                FixingHotLine av -> do 
-                  result <- liftAff $ take av
-                  case result of 
-                    FixFailed s -> logPerspectivesError (Custom "fetchEntiteit: cannot fix references.")
-                    FixSucceeded -> logPerspectivesError (Custom "fetchEntiteit: succesfully removed all references to missing resource.")
-                    _ -> logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
+      if test decodingErrorRegex (show e) then logPerspectivesError (Custom ("fetchEntiteit: failed to decode resource " <> unwrap id <> ". Parser message: " <> show e))
+      -- Try to fix referential integrity
+      else if tryToFix then internetRequiredButMissing (unwrap id) >>=
+        if _ then log ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> ", but there is no internet. Will not try to fix links.")
+        else do
+          logPerspectivesError
+            (Custom ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb: " <> show e))
+          missingResourceAVar <- getMissingResource
+          liftAff $ put (Missing $ typeOfInstance id) missingResourceAVar
+          response <- liftAff $ take missingResourceAVar
+          case response of
+            FixingHotLine av -> do
+              result <- liftAff $ take av
+              case result of
+                FixFailed s -> logPerspectivesError (Custom "fetchEntiteit: cannot fix references.")
+                FixSucceeded -> logPerspectivesError (Custom "fetchEntiteit: succesfully removed all references to missing resource.")
                 _ -> logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
-          else pure unit
+            _ -> logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
+      else pure unit
       throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
   where
-    decodingErrorRegex :: Regex
-    decodingErrorRegex = unsafeRegex "error in decoding result" noFlags
+  decodingErrorRegex :: Regex
+  decodingErrorRegex = unsafeRegex "error in decoding result" noFlags
 
 -- If the resource is in a scheme that requires an internet connection, 
 -- and the connection is not available, we cannot fix the references.
 -- We do not want to throw an exception, as this is a normal situation.
 -- Instead, we want to notify the user that, being offline, some resources cannot be accessed.
-internetRequiredButMissing :: ResourceIdentifier ->  MonadPerspectives Boolean
-internetRequiredButMissing s = if isInPublicScheme s || isInRemoteScheme s
-  then do 
+internetRequiredButMissing :: ResourceIdentifier -> MonadPerspectives Boolean
+internetRequiredButMissing s =
+  if isInPublicScheme s || isInRemoteScheme s then do
     isOffLine
   else pure false
   where
@@ -257,24 +253,24 @@ saveEntiteit_ entId entiteit = saveEntiteit__ entId (Just entiteit)
 -- | This is the only function that adds to `entitiesToBeStored`.
 saveEntiteit__ :: forall a i. Attachment a => WriteForeign a => Persistent a i => i -> Maybe a -> MonadPerspectives a
 saveEntiteit__ entId mentiteit = do
-  case mentiteit of 
+  case mentiteit of
     -- In this case, we might have an entity in cache. As we want to return the entity,
     -- try to retrieve it. If not present, fails with an error.
     Nothing -> do
-      a <- readEntiteitFromCache entId 
-      modify \s@{entitiesToBeStored} -> if isJust $ elemIndex (resourceToBeStored a) entitiesToBeStored
-        then s
-        else s { entitiesToBeStored = cons (resourceToBeStored a) entitiesToBeStored}
+      a <- readEntiteitFromCache entId
+      modify \s@{ entitiesToBeStored } ->
+        if isJust $ elemIndex (resourceToBeStored a) entitiesToBeStored then s
+        else s { entitiesToBeStored = cons (resourceToBeStored a) entitiesToBeStored }
       -- The version might be updated in the caching process.
       pure a
     Just a -> do
-    -- In this case, we want to replace the entity in cache with the one passed in as the second argument
-    -- and schedule it to be saved to the database.
+      -- In this case, we want to replace the entity in cache with the one passed in as the second argument
+      -- and schedule it to be saved to the database.
       a' <- cacheEntity entId a
       -- Now add to the items to be saved.
-      modify \s@{entitiesToBeStored} -> if isJust $ elemIndex (resourceToBeStored a) entitiesToBeStored
-        then s
-        else s { entitiesToBeStored = cons (resourceToBeStored a) entitiesToBeStored}
+      modify \s@{ entitiesToBeStored } ->
+        if isJust $ elemIndex (resourceToBeStored a) entitiesToBeStored then s
+        else s { entitiesToBeStored = cons (resourceToBeStored a) entitiesToBeStored }
       -- The version might be updated in the caching process.
       liftAff $ read a'
 
@@ -291,24 +287,26 @@ forceSaveDomeinFile dfid = forceSaveEntiteit (Dfile dfid) dfid
 -- | There is no entity in cache or if it is, it is equal to the entity in the database, and
 -- | The entity is not waiting to be saved.
 forceSaveEntiteit :: forall a i. Attachment a => WriteForeign a => Persistent a i => ResourceToBeStored -> i -> MonadPerspectives Unit
-forceSaveEntiteit r entId = do 
+forceSaveEntiteit r entId = do
   mentiteit <- tryReadEntiteitFromCache entId
-  case mentiteit of 
-    Nothing -> modify \s -> s {entitiesToBeStored = delete r s.entitiesToBeStored}
+  case mentiteit of
+    Nothing -> modify \s -> s { entitiesToBeStored = delete r s.entitiesToBeStored }
     Just entiteit -> void $ saveCachedEntiteit r entId
-  
 
 -- | All items will be removed from `entitiesToBeStored`, whether succesfully stored or not..
 saveMarkedResources :: MonadPerspectives Unit
-saveMarkedResources = do 
+saveMarkedResources = do
   (toBeSaved :: Array ResourceToBeStored) <- gets _.entitiesToBeStored
-  for_ toBeSaved \(rs :: ResourceToBeStored) -> try (case rs of 
-    Ctxt c -> void $ saveCachedEntiteit rs (c :: ContextInstance)
-    Rle r -> void $ saveCachedEntiteit rs (r :: RoleInstance)
-    Dfile d -> void $ saveCachedEntiteit rs (d :: DomeinFileId)) >>= case _ of 
-      Left e -> do 
-        logPerspectivesError (Custom ("Could not save resource " <> show rs <> " because: " <> show e)) 
-        modify \s -> s {entitiesToBeStored = delete rs s.entitiesToBeStored}
+  for_ toBeSaved \(rs :: ResourceToBeStored) ->
+    try
+      ( case rs of
+          Ctxt c -> void $ saveCachedEntiteit rs (c :: ContextInstance)
+          Rle r -> void $ saveCachedEntiteit rs (r :: RoleInstance)
+          Dfile d -> void $ saveCachedEntiteit rs (d :: DomeinFileId)
+      ) >>= case _ of
+      Left e -> do
+        logPerspectivesError (Custom ("Could not save resource " <> show rs <> " because: " <> show e))
+        modify \s -> s { entitiesToBeStored = delete rs s.entitiesToBeStored }
       _ -> pure unit
 
 -- | Assumes the entity a has been cached. 
@@ -316,17 +314,17 @@ saveMarkedResources = do
 -- | If the entity is not in cache, it remains in the queue waiting to be saved (it may arrive from a peer).
 -- | This is the only function that removes items from `entitiesToBeStored`.
 saveCachedEntiteit :: forall a i. Attachment a => WriteForeign a => Persistent a i => ResourceToBeStored -> i -> MonadPerspectives a
-saveCachedEntiteit r entId = do 
+saveCachedEntiteit r entId = do
   entiteit <- takeEntiteitFromCache entId
   -- The cache is now blocked, so there is no way to modify the entity. It may be decached; but we have the modified entity in our hands, here.
-  modify \s -> s {entitiesToBeStored = delete r s.entitiesToBeStored}
-  {database, documentName} <- resourceIdentifier2WriteDocLocator (unwrap $ identifier entiteit)
+  modify \s -> s { entitiesToBeStored = delete r s.entitiesToBeStored }
+  { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap $ identifier entiteit)
   mresult <- try $ addDocument database entiteit documentName
-  case mresult of 
+  case mresult of
     -- Restore the avar holding the resource to its filled state, to prevent the main fiber from blocking.
     -- Notice we do not put it back into entitiesToBeStared.
     Left e -> cacheEntity (identifier entiteit) entiteit *> pure entiteit
-    Right (rev :: Revision_) -> do 
+    Right (rev :: Revision_) -> do
       entiteit' <- pure (changeRevision rev entiteit)
       void $ cacheEntity (identifier entiteit) entiteit'
       pure entiteit'
@@ -335,9 +333,9 @@ saveCachedEntiteit r entId = do
 -- | Version is taken from the local models database, not from the repository!
 updateRevision :: forall a i. Persistent a i => i -> MonadPerspectives Unit
 updateRevision entId = do
-  {database, documentName} <- resourceIdentifier2WriteDocLocator (unwrap entId)
+  { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap entId)
   revision <- retrieveDocumentVersion database documentName
-  setRevision entId revision 
+  setRevision entId revision
 
 -----------------------------------------------------------
 -- ADDATTACHMENT
@@ -348,13 +346,13 @@ updateRevision entId = do
 -- |    * the resource is removed from its cache.
 -- | The revision of the document changes if an attachment is added succesfully. By removing it from the cache,
 -- | we make sure to take that into account.
-addAttachment :: forall a i attachmentType. Attachment a => Persistent a i =>  i -> AttachmentName -> attachmentType -> MediaType -> MonadPerspectives Boolean
+addAttachment :: forall a i attachmentType. Attachment a => Persistent a i => i -> AttachmentName -> attachmentType -> MediaType -> MonadPerspectives Boolean
 addAttachment i attachmentName attachment mimetype = do
   saveMarkedResources
   -- The resource identified by i is now in Couchdb and the revision number in cache equals that in couchdb.
   a :: a <- getPerspectEntiteit fix i
-  {database, documentName} <- resourceIdentifier2DocLocator (identifier_ a)
-  DeleteCouchdbDocument {ok} <- P.addAttachment database documentName (rev a) attachmentName attachment mimetype
+  { database, documentName } <- resourceIdentifier2DocLocator (identifier_ a)
+  DeleteCouchdbDocument { ok } <- P.addAttachment database documentName (rev a) attachmentName attachment mimetype
   -- The document in Couchdb now has a higher revision (unless the operation failed, which throws an exception not caught here).
   -- Remove the document from the cache, so it will be retrieved again before it can be used - including the new revision and attachments.
   void $ removeInternally i

@@ -22,7 +22,7 @@
 
 module Perspectives.Persistent.PublicStore where
 
-import Prelude 
+import Prelude
 
 import Data.Generic.Rep (class Generic)
 import Data.Show.Generic (genericShow)
@@ -32,8 +32,10 @@ import Simple.JSON (class ReadForeign, class WriteForeign)
 
 data PublicStore = NAMESPACESTORE
 
-derive instance  Generic PublicStore _
-instance Show PublicStore where show = genericShow
+derive instance Generic PublicStore _
+instance Show PublicStore where
+  show = genericShow
+
 derive instance Eq PublicStore
 
 instance WriteForeign PublicStore where
@@ -49,5 +51,5 @@ instance ReadForeign PublicStore where
 -- |    https://{authority-with-dots}/cw_{subdomains-with-underscores}_{authority-with-underscores}/
 -- | The function is Partial because it should only be applied to a string that matches newModelPattern.
 mapPublicStore :: Partial => PublicStore -> Namespace -> String
-mapPublicStore pStore modelName = case pStore of 
+mapPublicStore pStore modelName = case pStore of
   NAMESPACESTORE -> modelUri2InstancesStore modelName

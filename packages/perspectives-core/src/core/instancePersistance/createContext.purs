@@ -30,7 +30,6 @@ import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), Univ
 import Prelude (bind, discard, pure, unit, void, ($), (<$>), (<<<), (>>=))
 import Simple.JSON (writeJSON)
 
-
 -- | Constructs an empty context, caches it.
 -- | The context contains a UniverseContextDelta, the external role contains a UniverseRoleDelta and ContextDelta.
 -- | However, they have not yet been added to the Transaction. This is because we need to know the users
@@ -51,57 +50,63 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
   allExternalRoleTypes <- lift $ lift (externalRoleType pspType ###= roleAspectsClosure)
   allContextTypes <- lift $ lift (pspType ###= contextAspectsClosure)
   subject <- lift $ getSubject
-  delta <- lift $ signDelta 
-    (writeJSON $ stripResourceSchemes $ UniverseContextDelta
-      { id: contextInstanceId
-      , contextType: pspType
-      , deltaType: ConstructEmptyContext
-      , subject
-    })
+  delta <- lift $ signDelta
+    ( writeJSON $ stripResourceSchemes $ UniverseContextDelta
+        { id: contextInstanceId
+        , contextType: pspType
+        , deltaType: ConstructEmptyContext
+        , subject
+        }
+    )
   contextInstance <- pure
-    (PerspectContext defaultContextRecord
-      { _id = takeGuid $ unwrap contextInstanceId
-      , id = contextInstanceId
-      , displayName  = localName
-      , pspType = pspType
-      , allTypes = allContextTypes
-      , buitenRol = externalRole
-      , universeContextDelta = delta
-      , states = [StateIdentifier $ unwrap pspType]
-      })
-  lift $ lift  $ void $ cacheEntity contextInstanceId contextInstance
+    ( PerspectContext defaultContextRecord
+        { _id = takeGuid $ unwrap contextInstanceId
+        , id = contextInstanceId
+        , displayName = localName
+        , pspType = pspType
+        , allTypes = allContextTypes
+        , buitenRol = externalRole
+        , universeContextDelta = delta
+        , states = [ StateIdentifier $ unwrap pspType ]
+        }
+    )
+  lift $ lift $ void $ cacheEntity contextInstanceId contextInstance
   delta' <- lift $ signDelta
-    (writeJSON $ stripResourceSchemes $ UniverseRoleDelta
-      { id: contextInstanceId
-      , contextType: pspType
-      , roleInstances: (SNEA.singleton externalRole)
-      , roleType: externalRoleType pspType
-      , authorizedRole
-      , deltaType: ConstructExternalRole
-      , subject })
+    ( writeJSON $ stripResourceSchemes $ UniverseRoleDelta
+        { id: contextInstanceId
+        , contextType: pspType
+        , roleInstances: (SNEA.singleton externalRole)
+        , roleType: externalRoleType pspType
+        , authorizedRole
+        , deltaType: ConstructExternalRole
+        , subject
+        }
+    )
   contextDelta <- lift $ signDelta
-    (writeJSON $ stripResourceSchemes $ ContextDelta
-      { contextInstance: contextInstanceId
-      , contextType: pspType
-      , roleType: externalRoleType pspType
-      , roleInstance: externalRole
-      , destinationContext: Nothing
-      , destinationContextType: Nothing
-      , deltaType: AddExternalRole
-      , subject
-      })
+    ( writeJSON $ stripResourceSchemes $ ContextDelta
+        { contextInstance: contextInstanceId
+        , contextType: pspType
+        , roleType: externalRoleType pspType
+        , roleInstance: externalRole
+        , destinationContext: Nothing
+        , destinationContextType: Nothing
+        , deltaType: AddExternalRole
+        , subject
+        }
+    )
   _ <- lift $ lift $ cacheEntity externalRole
-    (PerspectRol defaultRolRecord
-      { _id = takeGuid $ unwrap externalRole
-      , id = externalRole
-      , pspType = externalRoleType pspType
-      , allTypes = allExternalRoleTypes
-      , context = contextInstanceId
-      , binding = Nothing
-      , universeRoleDelta = delta'
-      , contextDelta = contextDelta
-      , states = [StateIdentifier $ unwrap pspType]
-      })
+    ( PerspectRol defaultRolRecord
+        { _id = takeGuid $ unwrap externalRole
+        , id = externalRole
+        , pspType = externalRoleType pspType
+        , allTypes = allExternalRoleTypes
+        , context = contextInstanceId
+        , binding = Nothing
+        , universeRoleDelta = delta'
+        , contextDelta = contextDelta
+        , states = [ StateIdentifier $ unwrap pspType ]
+        }
+    )
   lift $ addCreatedRoleToTransaction externalRole
   -- QUERY UPDATES
   (lift $ lift $ findRoleRequests (ContextInstance "def:AnyContext") (externalRoleType pspType)) >>= lift <<< addCorrelationIdentifiersToTransactie
@@ -111,7 +116,7 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
       forWithIndex_ props \propertyTypeId values ->
         -- PERSISTENCE of the role instance.
         -- CURRENTUSER: there can be no change to the current user.
-        setProperty [externalRole] (EnumeratedPropertyType propertyTypeId) Nothing (Value <$> values)
+        setProperty [ externalRole ] (EnumeratedPropertyType propertyTypeId) Nothing (Value <$> values)
       -- If there were no props, we have to save the external role now.
       if isEmpty props then lift $ void $ saveEntiteit externalRole else pure unit
   pure contextInstance

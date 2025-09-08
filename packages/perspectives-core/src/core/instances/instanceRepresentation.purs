@@ -20,7 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.InstanceRepresentation where 
+module Perspectives.InstanceRepresentation where
 
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..))
@@ -79,19 +79,19 @@ instance showPerspectContext :: Show PerspectContext where
 
 derive newtype instance WriteForeign PerspectContext
 derive newtype instance ReadForeign PerspectContext
- 
+
 instance eqPerspectContext :: Eq PerspectContext where
-  eq (PerspectContext {id : id1}) (PerspectContext {id : id2}) = id1 == id2
+  eq (PerspectContext { id: id1 }) (PerspectContext { id: id2 }) = id1 == id2
 
 derive instance newtypePerspectContext :: Newtype PerspectContext _
 
 instance identifiablePerspectContext :: Identifiable PerspectContext ContextInstance where
-  identifier (PerspectContext{id}) = id
-  displayName (PerspectContext{displayName:d}) = d
+  identifier (PerspectContext { id }) = id
+  displayName (PerspectContext { displayName: d }) = d
 
 instance revisionPerspectContext :: Revision PerspectContext where
   rev = _._rev <<< unwrap
-  changeRevision s = over PerspectContext (\vr -> vr {_rev = s})
+  changeRevision s = over PerspectContext (\vr -> vr { _rev = s })
 
 instance Attachment PerspectContext where
   setAttachment c _ = c
@@ -132,7 +132,7 @@ instance showPerspectRol :: Show PerspectRol where
   show = genericShow
 
 instance eqPerspectRol :: Eq PerspectRol where
-  eq (PerspectRol{id: id1}) (PerspectRol{id: id2}) = eq id1 id2
+  eq (PerspectRol { id: id1 }) (PerspectRol { id: id2 }) = eq id1 id2
 
 derive instance newtypePerspectRol :: Newtype PerspectRol _
 
@@ -141,15 +141,15 @@ derive newtype instance ReadForeign PerspectRol
 
 instance revisionPerspectRol :: Revision PerspectRol where
   rev = _._rev <<< unwrap
-  changeRevision s = over PerspectRol (\vr -> vr {_rev = s})
+  changeRevision s = over PerspectRol (\vr -> vr { _rev = s })
 
 instance identifiablePerspectRol :: Identifiable PerspectRol RoleInstance where
-  identifier (PerspectRol{id}) = id
-  displayName (PerspectRol{id}) = unwrap id
+  identifier (PerspectRol { id }) = id
+  displayName (PerspectRol { id }) = unwrap id
 
 instance Attachment PerspectRol where
-  setAttachment (PerspectRol r) ma = PerspectRol (r {_attachments = ma})
-  getAttachments (PerspectRol {_attachments}) = _attachments
+  setAttachment (PerspectRol r) ma = PerspectRol (r { _attachments = ma })
+  getAttachments (PerspectRol { _attachments }) = _attachments
 
 -----------------------------------------------------------
 -- BINDING

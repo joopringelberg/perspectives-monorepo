@@ -20,10 +20,7 @@
 
 -- END LICENSE
 
-
-module Perspectives.Persistence.Errors
-
-where
+module Perspectives.Persistence.Errors where
 
 import Prelude
 
@@ -43,7 +40,7 @@ import Perspectives.Persistence.Types (DocumentName, PouchError, readPouchError)
 -- | Always re-throws.
 handlePouchError :: forall m a. MonadError Error m => String -> DocumentName -> Error -> m a
 handlePouchError funcName docName e = parsePouchError funcName docName e >>=
-  \({status, message} :: PouchError) -> case status of
+  \({ status, message } :: PouchError) -> case status of
     Nothing -> throwError e
     Just s -> handleError s empty (funcName <> " for " <> docName <> " (" <> message <> ")")
 

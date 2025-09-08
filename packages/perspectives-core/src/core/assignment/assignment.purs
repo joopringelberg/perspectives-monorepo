@@ -42,9 +42,10 @@ data AssignmentStatement
   | EffectFullFunction FunctionName (Array String)
   | DeleteRol EnumeratedRoleType
   | DeleteProperty EnumeratedPropertyType
-  -- TODO: full delete.
 
-newtype LetWithAssignment = LetWithAssignment {variableBindings :: Environment QueryFunctionDescription, assignments:: Array AssignmentStatement}
+-- TODO: full delete.
+
+newtype LetWithAssignment = LetWithAssignment { variableBindings :: Environment QueryFunctionDescription, assignments :: Array AssignmentStatement }
 
 derive instance genericRepAssignmentStatement :: Generic AssignmentStatement _
 
@@ -54,10 +55,11 @@ instance showAssignmentStatement :: Show AssignmentStatement where
 instance eqAssignmentStatement :: Eq AssignmentStatement where
   eq x = genericEq x
 
-type ConstructorRep = {tag :: String, dat :: Array String}
+type ConstructorRep = { tag :: String, dat :: Array String }
 
 derive instance genericRepLetWithAssignment :: Generic LetWithAssignment _
 instance showLetWithAssignment :: Show LetWithAssignment where
   show x = genericShow x
+
 instance eqLetWithAssignment :: Eq LetWithAssignment where
   eq x = genericEq x

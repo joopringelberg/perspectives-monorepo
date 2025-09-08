@@ -38,12 +38,13 @@ import Prelude (bind, flip, pure, (<$>), (<<<), (<>), (>=>))
 type CompiledSentence a = a -> MonadPerspectives String
 
 -- | Compile a Sentence to a function that creates a string out of a RoleInstance.
-compileSentence :: forall a.
-  String ->
-  (QueryFunctionDescription -> MonadPerspectives (a ~~> String)) ->
-  Sentence ->
-  MonadPerspectives (CompiledSentence a)
-compileSentence domain xToString (Sentence {sentence, parts}) = do
+compileSentence
+  :: forall a
+   . String
+  -> (QueryFunctionDescription -> MonadPerspectives (a ~~> String))
+  -> Sentence
+  -> MonadPerspectives (CompiledSentence a)
+compileSentence domain xToString (Sentence { sentence, parts }) = do
   compiledParts <- traverse (xToString >=> pure <<< flip evalMonadPerspectivesQuery)
     parts
   pure \roleId -> do

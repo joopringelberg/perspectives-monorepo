@@ -47,16 +47,17 @@ import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
 import Prelude (Unit, bind, discard, pure, unit, void, ($), (+), (<<<), (>>=), (<>))
 import Simple.JSON (writeJSON)
 
-newPerspectivesState :: 
-  PouchdbUser -> 
-  AVar Boolean -> 
-  AVar RepeatingTransaction -> 
-  AVar JustInTimeModelLoad -> 
-  RuntimeOptions -> 
-  AVar BrokerService -> 
-  AVar IndexedResource -> 
-  AVar IntegrityFix -> 
-  String -> PerspectivesState
+newPerspectivesState
+  :: PouchdbUser
+  -> AVar Boolean
+  -> AVar RepeatingTransaction
+  -> AVar JustInTimeModelLoad
+  -> RuntimeOptions
+  -> AVar BrokerService
+  -> AVar IndexedResource
+  -> AVar IntegrityFix
+  -> String
+  -> PerspectivesState
 newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOptions brokerService indexedResourceToCreate missingResource currentLanguage =
   { rolInstances: newCache defaultCreateOptions
   , contextInstances: newCache defaultCreateOptions
@@ -66,7 +67,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , variableBindings: ENV.empty
   , systemIdentifier: uinfo.systemIdentifier
   , perspectivesUser: PerspectivesUser $ createDefaultIdentifier uinfo.perspectivesUser
-  , couchdbUrl: uinfo.couchdbUrl 
+  , couchdbUrl: uinfo.couchdbUrl
   , couchdbCredentials: case uinfo.couchdbUrl, uinfo.password, uinfo.userName of
       Just url, Just password, Just userName -> singleton url (Credential userName password)
       _, _, _ -> empty
@@ -80,7 +81,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , stompClient: Nothing
   , databases: empty
   , warnings: []
-  , transactionFlag: transFlag 
+  , transactionFlag: transFlag
   , transactionWithTiming
   , modelToLoad
   , transactionFibers: Map.empty
@@ -96,7 +97,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   }
 
 defaultRuntimeOptions :: RuntimeOptions
-defaultRuntimeOptions = 
+defaultRuntimeOptions =
   { isFirstInstallation: true
   , useSystemVersion: null
   , privateKey: Nothing
@@ -135,7 +136,7 @@ queryAssumptionRegister :: MonadPerspectives AssumptionRegister
 queryAssumptionRegister = gets _.queryAssumptionRegister
 
 queryAssumptionRegisterModify :: (AssumptionRegister -> AssumptionRegister) -> MonadPerspectives Unit
-queryAssumptionRegisterModify f = modify \(s@{queryAssumptionRegister: q}) -> s {queryAssumptionRegister = f q}
+queryAssumptionRegisterModify f = modify \(s@{ queryAssumptionRegister: q }) -> s { queryAssumptionRegister = f q }
 
 developmentRepository :: MonadPerspectives String
 developmentRepository = gets _.developmentRepository
@@ -149,7 +150,7 @@ transactionFlag = gets _.transactionFlag
 nextTransactionNumber :: MonadPerspectives Int
 nextTransactionNumber = do
   n <- transactionNumber
-  void $ modify \(s@{transactionNumber:cn}) -> s {transactionNumber = cn + 1}
+  void $ modify \(s@{ transactionNumber: cn }) -> s { transactionNumber = cn + 1 }
   pure n
 
 -- | Increases with two spaces every time we run an embedded transaction.
@@ -158,13 +159,15 @@ transactionLevel = gets _.transactionLevel
 
 -- | Increases the transaction level with two spaces.
 increaseTransactionLevel :: MonadPerspectives Unit
-increaseTransactionLevel = modify \s -> s {transactionLevel = s.transactionLevel <> "  "}
+increaseTransactionLevel = modify \s -> s { transactionLevel = s.transactionLevel <> "  " }
 
 -- | Decreases the transaction level with two spaces.
 decreaseTransactionLevel :: MonadPerspectives Unit
-decreaseTransactionLevel = modify \s -> s {transactionLevel = case stripSuffix (Pattern "  ") s.transactionLevel of
-  Just s' -> s'
-  Nothing -> "" }
+decreaseTransactionLevel = modify \s -> s
+  { transactionLevel = case stripSuffix (Pattern "  ") s.transactionLevel of
+      Just s' -> s'
+      Nothing -> ""
+  }
 
 getBrokerService :: MonadPerspectives BrokerService
 getBrokerService = gets _.brokerService >>= lift <<< read
@@ -178,7 +181,7 @@ stompClient :: MonadPerspectives (Maybe StompClient)
 stompClient = gets _.stompClient
 
 setStompClient :: StompClient -> MonadPerspectives Unit
-setStompClient bs = modify \s -> s {stompClient = Just bs}
+setStompClient bs = modify \s -> s { stompClient = Just bs }
 
 getWarnings :: MonadPerspectives (Array String)
 getWarnings = gets _.warnings
@@ -190,7 +193,7 @@ getPublicRolesJustLoaded :: MonadPerspectives (Array RoleInstance)
 getPublicRolesJustLoaded = gets _.publicRolesJustLoaded
 
 clearPublicRolesJustLoaded :: MonadPerspectives Unit
-clearPublicRolesJustLoaded = modify \s -> s {publicRolesJustLoaded = []}
+clearPublicRolesJustLoaded = modify \s -> s { publicRolesJustLoaded = [] }
 
 getIndexedResourceToCreate :: MonadPerspectives (AVar IndexedResource)
 getIndexedResourceToCreate = gets _.indexedResourceToCreate
@@ -203,16 +206,16 @@ getTranslationTable :: String -> MonadPerspectives (Maybe TranslationTable)
 getTranslationTable domain = gets _.translations >>= pure <<< OBJ.lookup domain
 
 setTranslationTable :: String -> TranslationTable -> MonadPerspectives Unit
-setTranslationTable domain tt = modify \s -> s {translations = OBJ.insert domain tt s.translations}
+setTranslationTable domain tt = modify \s -> s { translations = OBJ.insert domain tt s.translations }
 
 removeTranslationTable :: String -> MonadPerspectives Unit
-removeTranslationTable domain = modify \s -> s {translations = OBJ.delete domain s.translations}
+removeTranslationTable domain = modify \s -> s { translations = OBJ.delete domain s.translations }
 
 getCurrentLanguage :: MonadPerspectives String
 getCurrentLanguage = gets _.currentLanguage
 
 setCurrentLanguage :: String -> MonadPerspectives Unit
-setCurrentLanguage lang = modify \s -> s {currentLanguage = lang}
+setCurrentLanguage lang = modify \s -> s { currentLanguage = lang }
 
 modelsDatabaseName :: MonadPerspectives String
 modelsDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_models")
@@ -221,15 +224,16 @@ getPDRStatusSetter :: MonadPerspectives (String -> Effect Unit)
 getPDRStatusSetter = gets _.setPDRStatus
 
 type PDRStatusMessage = { action :: String, message :: String }
+
 pushMessage :: String -> MonadPerspectives Unit
 pushMessage msg = do
   setPDRStatus <- getPDRStatusSetter
-  liftEffect $ setPDRStatus $ writeJSON {action: "push", message: msg}
+  liftEffect $ setPDRStatus $ writeJSON { action: "push", message: msg }
 
 removeMessage :: String -> MonadPerspectives Unit
 removeMessage msg = do
   setPDRStatus <- getPDRStatusSetter
-  liftEffect $ setPDRStatus $ writeJSON {action: "remove", message: msg}
+  liftEffect $ setPDRStatus $ writeJSON { action: "remove", message: msg }
 
 -----------------------------------------------------------
 -- PERSPECTIVESUSER
@@ -259,13 +263,14 @@ resetCaches = do
   resetContextInstances
 
 resetWarnings :: MonadPerspectives Unit
-resetWarnings = modify \s -> s { warnings = []}
+resetWarnings = modify \s -> s { warnings = [] }
 
 setWarnings :: Array String -> MonadPerspectives Unit
-setWarnings ws = modify \s -> s { warnings = ws}
+setWarnings ws = modify \s -> s { warnings = ws }
 
 addWarning :: String -> MonadPerspectives Unit
 addWarning w = modify \s -> s { warnings = cons w s.warnings }
+
 -----------------------------------------------------------
 -- FUNCTIONS TO HANDLE VARIABLE BINDINGS
 -----------------------------------------------------------
@@ -273,7 +278,7 @@ getVariableBindings :: MonadPerspectives (ENV.Environment (Array String))
 getVariableBindings = gets _.variableBindings
 
 addBinding :: String -> Array String -> MonadPerspectives Unit
-addBinding varName qfd = void $ modify \s@{variableBindings} -> s {variableBindings = ENV.addVariable varName qfd variableBindings}
+addBinding varName qfd = void $ modify \s@{ variableBindings } -> s { variableBindings = ENV.addVariable varName qfd variableBindings }
 
 lookupVariableBinding :: String -> MonadPerspectives (Maybe (Array String))
 lookupVariableBinding varName = getVariableBindings >>= pure <<< (ENV.lookup varName)
@@ -281,47 +286,50 @@ lookupVariableBinding varName = getVariableBindings >>= pure <<< (ENV.lookup var
 withFrame :: forall a. MonadPerspectives a -> MonadPerspectives a
 withFrame computation = do
   old <- getVariableBindings
-  void $ modify \s -> s {variableBindings = (ENV._pushFrame old)}
+  void $ modify \s -> s { variableBindings = (ENV._pushFrame old) }
   r <- computation
-  void $ modify \s -> s {variableBindings = old}
+  void $ modify \s -> s { variableBindings = old }
   pure r
 
 pushFrame :: MonadPerspectives (ENV.Environment (Array String))
 pushFrame = do
   old <- getVariableBindings
-  void $ modify \s -> s {variableBindings = (ENV._pushFrame old)}
+  void $ modify \s -> s { variableBindings = (ENV._pushFrame old) }
   pure old
 
 restoreFrame :: ENV.Environment (Array String) -> MonadPerspectives Unit
-restoreFrame frame = void $ modify \s -> s {variableBindings = frame}
+restoreFrame frame = void $ modify \s -> s { variableBindings = frame }
 
 -----------------------------------------------------------
 -- FUNCTIONS TO MODIFY LRUCACHES IN PERSPECTIVESSTATE
 -----------------------------------------------------------
-insert :: forall a.
-  MonadPerspectives (Cache a) ->
-  String ->
-  a ->
-  MonadPerspectives a
+insert
+  :: forall a
+   . MonadPerspectives (Cache a)
+  -> String
+  -> a
+  -> MonadPerspectives a
 insert g ns av = do
   (dc :: (Cache a)) <- g
   _ <- liftEffect $ set ns av Nothing dc
   -- _ <- pure $ (poke dc ns av)
   pure av
 
-lookup :: forall a.
-  MonadPerspectives (Cache a) ->
-  String ->
-  MonadPerspectives (Maybe a)
+lookup
+  :: forall a
+   . MonadPerspectives (Cache a)
+  -> String
+  -> MonadPerspectives (Maybe a)
 lookup g k = do
   dc <- g
   -- pure $ peek dc k
   liftEffect $ get k defaultGetOptions dc
 
-remove :: forall a.
-  MonadPerspectives (Cache a) ->
-  String ->
-  MonadPerspectives (Maybe a)
+remove
+  :: forall a
+   . MonadPerspectives (Cache a)
+  -> String
+  -> MonadPerspectives (Maybe a)
 remove g k = do
   (dc :: (Cache a)) <- g
   -- ma <- pure $ peek dc k

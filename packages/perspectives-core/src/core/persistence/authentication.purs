@@ -20,10 +20,7 @@
 
 -- END LICENSE
 
-
-module Perspectives.Persistence.Authentication
-
-where
+module Perspectives.Persistence.Authentication where
 
 import Prelude
 
@@ -55,7 +52,7 @@ foreign import isUnauthorized :: Error -> Boolean
 -- | In Resource s, s is a string with a Resource Identifiying Scheme as defined in [Perspectives.ResourceIdentifiers](Perspectives.ResourceIdentifiers.html).
 data AuthoritySource = Resource String | Authority String | Url String
 
-instance Show AuthoritySource where 
+instance Show AuthoritySource where
   show (Resource s) = "Resource " <> s
   show (Authority s) = "Authority " <> s
   show (Url s) = "Url " <> s
@@ -72,30 +69,30 @@ ensureAuthentication authSource a = catchJust
 requestAuthentication :: forall f. AuthoritySource -> MonadPouchdb f Unit
 requestAuthentication authSource = do
   mauthority <- authSource2Authority authSource
-  case mauthority of 
+  case mauthority of
     Just authority -> do
       mcredential <- getCredentials authority
-      case mcredential of 
+      case mcredential of
         Just (Credential username password) -> do
           (rq :: (AJ.Request String)) <- defaultPerspectRequest
-          res <- liftAff $ AJ.request $ rq 
+          res <- liftAff $ AJ.request $ rq
             { method = Left POST
             , url = (authority <> "_session")
             -- NOTE. Couchdb does not accept RequestBody.string (see: https://docs.couchdb.org/en/latest/api/server/authn.html#post--_session). 
             -- But if we use writeJSON, we send a string and Couchdb doesn't interpret it.
-            , content = Just $ RequestBody.json (toJson {name: username, password: password})
+            , content = Just $ RequestBody.json (toJson { name: username, password: password })
             }
           onAccepted_
             (\response _ -> throwError (error $ "Failure in requestAuthentication. " <> "HTTP statuscode " <> show response.status))
             res
-            [StatusCode 200, StatusCode 203]
+            [ StatusCode 200, StatusCode 203 ]
             "requestAuthentication"
             \_ -> pure unit
         -- we do not throw an error, because authentication may have been requested in a situation where it was not necessary.
         Nothing -> logError (error $ "No password found for " <> authority)
     Nothing -> throwError (error $ "Impossible case in requestAuthentication for " <> show authSource)
 
-  where 
+  where
 
   authSource2Authority :: AuthoritySource -> MonadPouchdb f (Maybe Authority)
   authSource2Authority (Resource s) = databaseLocation s
@@ -114,13 +111,13 @@ defaultPerspectRequest = pure
   , withCredentials: true
   , responseFormat: ResponseFormat.string
   , timeout: Nothing
-}
+  }
 
 -- | Looks up the credentials for a given Authority.
 getCredentials :: forall f. Authority -> MonadPouchdb f (Maybe Credential)
-getCredentials authority = do 
+getCredentials authority = do
   credentials <- gets _.couchdbCredentials
   pure $ lookup authority credentials
 
 addCredentials :: forall f. Url -> UserName -> Password -> MonadPouchdb f Unit
-addCredentials url username password = modify \s@{couchdbCredentials} -> s { couchdbCredentials = insert url (Credential username password) couchdbCredentials }
+addCredentials url username password = modify \s@{ couchdbCredentials } -> s { couchdbCredentials = insert url (Credential username password) couchdbCredentials }

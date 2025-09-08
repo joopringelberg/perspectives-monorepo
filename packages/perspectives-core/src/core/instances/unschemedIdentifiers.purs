@@ -3,13 +3,12 @@ module Perspectives.UnschemedIdentifiers
   , unschemeContextInstance
   , unschemePerspectivesUser
   , unschemeRoleInstance
-  )
-  where
+  ) where
 
 import Prelude
 
 import Data.Array.NonEmpty (index)
-import Data.Maybe (Maybe(..)) 
+import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype, over)
 import Data.String.Regex (Regex, match)
 import Data.String.Regex.Flags (noFlags)
@@ -22,10 +21,17 @@ import Simple.JSON (class ReadForeign, class WriteForeign)
 -----------------------------------------------------------
 -- | A type that represents resource identifiers without a storage scheme.
 newtype UnschemedResourceIdentifier = UnschemedResourceIdentifier String
-instance Show UnschemedResourceIdentifier where show (UnschemedResourceIdentifier i) = i
+
+instance Show UnschemedResourceIdentifier where
+  show (UnschemedResourceIdentifier i) = i
+
 derive instance Newtype UnschemedResourceIdentifier _
-instance Eq UnschemedResourceIdentifier where eq (UnschemedResourceIdentifier s1) (UnschemedResourceIdentifier s2) = eq s1 s2
-instance Ord UnschemedResourceIdentifier where compare (UnschemedResourceIdentifier s1) (UnschemedResourceIdentifier s2) = compare s1 s2
+instance Eq UnschemedResourceIdentifier where
+  eq (UnschemedResourceIdentifier s1) (UnschemedResourceIdentifier s2) = eq s1 s2
+
+instance Ord UnschemedResourceIdentifier where
+  compare (UnschemedResourceIdentifier s1) (UnschemedResourceIdentifier s2) = compare s1 s2
+
 derive newtype instance WriteForeign UnschemedResourceIdentifier
 derive newtype instance ReadForeign UnschemedResourceIdentifier
 

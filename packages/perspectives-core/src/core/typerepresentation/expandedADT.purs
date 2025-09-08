@@ -1,4 +1,4 @@
-module Perspectives.Representation.ExpandedADT  where
+module Perspectives.Representation.ExpandedADT where
 
 import Data.Array (fold, intercalate)
 import Data.Eq.Generic (genericEq)
@@ -11,16 +11,15 @@ import Data.Traversable (class Traversable, sequenceDefault, traverse)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 import Prelude (class Eq, class Functor, class HeytingAlgebra, class Ord, class Show, map, show, ($), (<$>), (<*>), (<<<), (<>))
 
-
 ---- EXPANDED ADT
 --------------------------------------------------------------------------------------------------
-data ExpandedADT a =
-  EST a 
+data ExpandedADT a
+  = EST a
   -- The first (ExpandedADT a) functions as a label and is understood to be an EST value.
   -- This value is also included in the second (ExpandedADT a).
   | ECT (ExpandedADT a) (ExpandedADT a)
-  | ESUM (Array (ExpandedADT a)) 
-  | EPROD (Array (ExpandedADT a)) 
+  | ESUM (Array (ExpandedADT a))
+  | EPROD (Array (ExpandedADT a))
 
 derive instance Generic (ExpandedADT a) _
 
@@ -38,7 +37,7 @@ instance Functor ExpandedADT where
 -- The foldmap function of this Foldable instance folds over SUM and PROD in the same way.
 -- For a function that does justice to the notion of `sum` and `product`, see foldMapADT.
 instance Foldable ExpandedADT where
-  foldMap f adt = case adt of 
+  foldMap f adt = case adt of
     EST a -> f a
     ECT label a -> foldMap f a <> foldMap f a
     EPROD as -> fold (foldMap f <$> as)
@@ -60,7 +59,7 @@ instance (Show a) => Show (ExpandedADT a) where
   show (ESUM adts) = "(" <> "ESUM" <> show adts <> ")"
   show (EPROD adts) = "(" <> "EPROD" <> show adts <> ")"
 
-instance (Show a) => PrettyPrint (ExpandedADT a) where 
+instance (Show a) => PrettyPrint (ExpandedADT a) where
   prettyPrint' t a@(EST _) = t <> show a
   prettyPrint' t (ECT label a) = t <> "(ECT " <> show label <> "\n" <> prettyPrint' (t <> "  ") a <> ")"
   prettyPrint' t (EPROD terms) = t <> "(EPROD [\n" <> (intercalate ",\n" $ prettyPrint' (t <> "  ") <$> terms) <> "\n" <> t <> "  ])"

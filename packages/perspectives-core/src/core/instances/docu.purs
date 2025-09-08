@@ -30,6 +30,4 @@
 -- | * [Combinators](Perspectives.Instances.Combinators.html#t:x) are higher order functions to combine basic ObjectGetters.
 -- | * The [ArrayTransformer](Perspectives.DependencyTracking.Array.Trans.html#t:x) provides an abstraction to deal with sequences of values (a role can have multiple instances in a context: just think of the Guest role at a Party).
 
-
-
 module Perspectives.Docu.Instances where

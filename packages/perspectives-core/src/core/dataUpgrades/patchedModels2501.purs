@@ -3,14 +3,14 @@ module Perspectives.DataUpgrade.PatchModels.PDR2501 where
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, fromFoldable)
 
-foreign import bodiesWithAccounts :: String 
-foreign import brokerServices :: String 
-foreign import couchdbManagement :: String 
-foreign import disconnect :: String 
-foreign import hypertext :: String 
-foreign import introduction :: String 
-foreign import perspectivesSysteem :: String 
-foreign import simpleChat :: String 
+foreign import bodiesWithAccounts :: String
+foreign import brokerServices :: String
+foreign import couchdbManagement :: String
+foreign import disconnect :: String
+foreign import hypertext :: String
+foreign import introduction :: String
+foreign import perspectivesSysteem :: String
+foreign import simpleChat :: String
 
 replacements :: Object String
 replacements = fromFoldable
@@ -22,5 +22,5 @@ replacements = fromFoldable
   , Tuple "model://perspectives.domains#Introduction" introduction
   , Tuple "model://perspectives.domains#System" perspectivesSysteem
   , Tuple "model://perspectives.domains#SimpleChat" simpleChat
-  
+
   ]

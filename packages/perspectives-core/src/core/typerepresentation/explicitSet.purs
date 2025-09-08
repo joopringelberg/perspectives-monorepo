@@ -21,7 +21,7 @@
 -- END LICENSE
 
 module Perspectives.Representation.ExplicitSet where
- 
+
 import Prelude
 
 import Data.Array (delete, elemIndex, find, foldM, foldl, intersect, nub, null, uncons)
@@ -44,18 +44,21 @@ instance eqExplicitSet :: Eq a => Eq (ExplicitSet a) where
   eq Universal Universal = true
   eq Empty Empty = true
   eq _ _ = false
+
 instance showExplicitSet :: Show a => Show (ExplicitSet a) where
   show Universal = "Universal"
   show Empty = "Empty"
   show (PSet s) = "PSet " <> show s
+
 instance writeForeignExplicitSet :: WriteForeign a => WriteForeign (ExplicitSet a) where
-  writeImpl Universal = writeImpl {constructor: "Universal", set: ([] :: Array a)}
-  writeImpl Empty = writeImpl {constructor: "Empty", set: ([] :: Array a)}
-  writeImpl (PSet s) = writeImpl {constructor: "PSet", set: s}
+  writeImpl Universal = writeImpl { constructor: "Universal", set: ([] :: Array a) }
+  writeImpl Empty = writeImpl { constructor: "Empty", set: ([] :: Array a) }
+  writeImpl (PSet s) = writeImpl { constructor: "PSet", set: s }
+
 instance ReadForeign a => ReadForeign (ExplicitSet a) where
-  readImpl f = do 
-    {constructor, set} :: {constructor :: String, set :: Array a} <- read' f
-    unsafePartial case constructor of 
+  readImpl f = do
+    { constructor, set } :: { constructor :: String, set :: Array a } <- read' f
+    unsafePartial case constructor of
       "Universal" -> pure Universal
       "Empty" -> pure Empty
       "PSet" -> pure $ PSet set
@@ -77,8 +80,8 @@ instance semigroupExplicitSet :: Semigroup (ExplicitSet a) where
 -----------------------------------------------------------
 -- | Construct a PSet out of an array of PropertySets, handling Universal and Empty.
 unionPset :: forall a. Eq a => Ord a => Array (ExplicitSet a) -> (ExplicitSet a)
-unionPset terms = if isJust (elemIndex Universal terms)
-  then Universal
+unionPset terms =
+  if isJust (elemIndex Universal terms) then Universal
   else PSet (unionOfArrays (unsafePartial elements <$> (delete Empty terms)))
 
 unionOfArrays :: forall a. Ord a => Array (Array a) -> Array a
@@ -87,17 +90,17 @@ unionOfArrays = nub <<< join
 intersectionOfArrays :: forall a. Eq a => Array (Array a) -> Array a
 intersectionOfArrays x = case uncons x of
   Nothing -> []
-  Just {head, tail} -> foldl intersect head tail
+  Just { head, tail } -> foldl intersect head tail
 
 intersectionPset :: forall a. Eq a => Array (ExplicitSet a) -> ExplicitSet a
-intersectionPset terms = if isJust (elemIndex Empty terms)
-  then Empty
-  else let 
+intersectionPset terms =
+  if isJust (elemIndex Empty terms) then Empty
+  else
+    let
       i = (intersectionOfArrays (unsafePartial elements <$> (delete Universal terms)))
     in
-      if null i 
-        then Empty
-        else PSet i  
+      if null i then Empty
+      else PSet i
 
 isElementOf :: forall a. Eq a => a -> ExplicitSet a -> Boolean
 isElementOf a Empty = false
@@ -114,34 +117,34 @@ hasElementM f Empty = pure false
 hasElementM f Universal = pure true
 hasElementM f (PSet arr) = foldM g false arr
   where
-    g found next =
-      if found
-        then pure found
-        else f next
+  g found next =
+    if found then pure found
+    else f next
 
 -- | p `subsetPSet` q is true iff all elements in p are in q.
 subsetPSet :: forall a. Eq a => Ord a => ExplicitSet a -> ExplicitSet a -> Boolean
 subsetPSet p q = case p, q of
-    a, b | a == b -> true
-    Empty, _ -> true
-    _, Empty -> false
-    Universal, _ -> false
-    _, Universal -> true
-    (PSet x), (PSet y) -> subset (fromFoldable x) (fromFoldable y)
+  a, b | a == b -> true
+  Empty, _ -> true
+  _, Empty -> false
+  Universal, _ -> false
+  _, Universal -> true
+  (PSet x), (PSet y) -> subset (fromFoldable x) (fromFoldable y)
 
 overlapsPSet :: forall a. Eq a => Ord a => ExplicitSet a -> ExplicitSet a -> Boolean
 overlapsPSet p q = case p, q of
-    a, b | a == b -> true
-    Empty, _ -> false
-    _, Empty -> false
-    Universal, _ -> true
-    _, Universal -> true
-    (PSet x), (PSet y) -> foldl
-      (\result nextY -> if result
-        then result
-        else isJust $ elemIndex nextY x)
-      false
-      y
+  a, b | a == b -> true
+  Empty, _ -> false
+  _, Empty -> false
+  Universal, _ -> true
+  _, Universal -> true
+  (PSet x), (PSet y) -> foldl
+    ( \result nextY ->
+        if result then result
+        else isJust $ elemIndex nextY x
+    )
+    false
+    y
 
 elements :: forall a. Partial => ExplicitSet a -> Array a
 elements (PSet s) = s

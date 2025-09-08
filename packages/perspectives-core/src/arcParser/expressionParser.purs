@@ -62,9 +62,9 @@ step_ parenthesised = do
   left <- (token.parens (step_ true)) <|> leftSide
   mop <- optionMaybe (unsafePartial operator)
   case mop of
-    Nothing -> do 
+    Nothing -> do
       mdop <- optionMaybe (unsafePartial durationOperator)
-      unsafePartial case mdop of 
+      unsafePartial case mdop of
         Nothing -> pure left
         Just (Year pos) -> pure $ Unary (DurationOperator start (Year pos) left)
         Just (Month pos) -> pure $ Unary (DurationOperator start (Month pos) left)
@@ -79,127 +79,128 @@ step_ parenthesised = do
       end <- getPosition
       case right of
         -- The right expression is binary: leftOfRight <opOfRight> rightOfRight.
-        (Binary (BinaryStep
-          { left: leftOfRight
-          , operator:opOfRight
-          , right: rightOfRight
-          , end: endOfRight
-          , parenthesised: rightParenthesised})) -> 
-            if
-              not rightParenthesised &&
+        ( Binary
+            ( BinaryStep
+                { left: leftOfRight
+                , operator: opOfRight
+                , right: rightOfRight
+                , end: endOfRight
+                , parenthesised: rightParenthesised
+                }
+            )
+        ) ->
+          if
+            not rightParenthesised &&
               ((operatorPrecedence op) > (operatorPrecedence opOfRight))
-
-            -- Regrouping: the parse tree (a op1 (b op2 c)) becomes ((a op1 b) op2 c).
-            -- The expression was: "a op2 b op1 c"
-            -- (op1 = operator with precedence 1, op2 = operator with precedence 2)
-            -- The right expression is binary and not contained in parenthesis, and
-            -- the left operator has higher precedence (than (or equal to) the right operator).
-            then pure $ Binary $ BinaryStep
-              { start
-              , end -- equals endOfRight.
-              , left: Binary (BinaryStep {start, end: endOf(leftOfRight), operator: op, left: left, right: leftOfRight, parenthesised: false})
-              , operator: opOfRight
-              , right: rightOfRight
-              , parenthesised: false
+          -- Regrouping: the parse tree (a op1 (b op2 c)) becomes ((a op1 b) op2 c).
+          -- The expression was: "a op2 b op1 c"
+          -- (op1 = operator with precedence 1, op2 = operator with precedence 2)
+          -- The right expression is binary and not contained in parenthesis, and
+          -- the left operator has higher precedence (than (or equal to) the right operator).
+          then pure $ Binary $ BinaryStep
+            { start
+            , end -- equals endOfRight.
+            , left: Binary (BinaryStep { start, end: endOf (leftOfRight), operator: op, left: left, right: leftOfRight, parenthesised: false })
+            , operator: opOfRight
+            , right: rightOfRight
+            , parenthesised: false
             }
 
-            -- No regrouping.
-            -- The right expression is binary and is contained in parenthesis, OR
-            -- its operator is as precedent as (or more so then) that of the enclosing binary expression.
-            -- Hence, we maintain the right-association that is present in the parse tree: (a op (b op c)).
-            -- The expression is either:
-            --    "a opx (b opy c)"
-            -- (opx and opy have any precedence; precedence does not rule, parenthesis prevail), or:
-            --    "a op1 b op1 c"
-            -- (both operators have equal precedence but we adhere to right-associativity)
-            --    "a op1 b op2 c"
-            -- (op1 = operator with precedence 1, op2 = operator with precedence 2). The parse tree already respects
-            -- the operator precedences.
-            else pure $ Binary $ BinaryStep {start, end, left, operator: op, right, parenthesised}
+          -- No regrouping.
+          -- The right expression is binary and is contained in parenthesis, OR
+          -- its operator is as precedent as (or more so then) that of the enclosing binary expression.
+          -- Hence, we maintain the right-association that is present in the parse tree: (a op (b op c)).
+          -- The expression is either:
+          --    "a opx (b opy c)"
+          -- (opx and opy have any precedence; precedence does not rule, parenthesis prevail), or:
+          --    "a op1 b op1 c"
+          -- (both operators have equal precedence but we adhere to right-associativity)
+          --    "a op1 b op2 c"
+          -- (op1 = operator with precedence 1, op2 = operator with precedence 2). The parse tree already respects
+          -- the operator precedences.
+          else pure $ Binary $ BinaryStep { start, end, left, operator: op, right, parenthesised }
 
         -- The right expression is not binary. No regrouping.
-        otherwise -> pure $ Binary $ BinaryStep {start, end, left, operator: op, right, parenthesised}
+        otherwise -> pure $ Binary $ BinaryStep { start, end, left, operator: op, right, parenthesised }
   where
-    leftSide :: IP Step
-    leftSide = do
-      keyword <- option "" (lookAhead reservedIdentifier)
-      case keyword of
-        "filter" -> reserved "filter" *> step_ parenthesised
-        "letE" -> pureLetStep
-        "callExternal" -> computationStep
-        u | isUnaryKeyword u -> unaryStep
-        _ -> simpleStep
+  leftSide :: IP Step
+  leftSide = do
+    keyword <- option "" (lookAhead reservedIdentifier)
+    case keyword of
+      "filter" -> reserved "filter" *> step_ parenthesised
+      "letE" -> pureLetStep
+      "callExternal" -> computationStep
+      u | isUnaryKeyword u -> unaryStep
+      _ -> simpleStep
 
 simpleStep :: IP Step
-simpleStep = do 
+simpleStep = do
   r <- simpleStep'
-  case r of 
-    id@(Simple (ArcIdentifier _ _)) -> do 
+  case r of
+    id@(Simple (ArcIdentifier _ _)) -> do
       followedByParen <- optionMaybe (lookAhead (token.symbol "("))
       case followedByParen of
         Just _ -> fail "Did you mean to use `callExternal`, `callEffect` or `callDestructiveEffect`?"
         Nothing -> pure id
     other -> pure other
 
-
 simpleStep' :: IP Step
-simpleStep' = 
-  (
-  (Simple <$> (ArcIdentifier <$> getPosition <*> arcIdentifier))
-  <|>
-  -- token brackets seems not to restore parser state when it fails, hence 'try'.
-  Simple <$> (ContextTypeIndividual <$> getPosition <*> try (token.brackets ((reserved "context") *> arcIdentifier)))
-  <|>
-  Simple <$> (RoleTypeIndividual <$> getPosition <*> try (token.brackets ((reserved "role") *> arcIdentifier)))
-  <|>
-  Simple <$> (Filler <$> (getPosition <* reserved "binding") <*> (optionMaybe (reserved "in" *> arcIdentifier)))
-  <|>
-  Simple <$> (Filled <$> (getPosition <* reserved "binder") <*> arcIdentifier <*> (optionMaybe (reserved "in" *> arcIdentifier)))
-  <|>
-  Simple <$> (Context <$> (getPosition <* reserved "context"))
-  <|>
-  Simple <$> (Extern <$> (getPosition <* reserved "extern"))
-  <|>
-  Simple <$> (IndexedName <$> (getPosition <* reserved "indexedName"))
-  <|>
-  Simple <$> (Value <$> getPosition <*> pure PDateTime <*> (parseDateTime >>= pure <<< dateTime2String))
-  <|>
-  Simple <$> (Value <$> getPosition <*> pure PDate <*> (parseDate >>= pure <<< date2String))
-  <|>
-  Simple <$> (Value <$> getPosition <*> pure PTime <*> (parseTime >>= pure <<< time2String))
-  <|>
-  Simple <$> (Value <$> getPosition <*> pure PString <*> token.stringLiteral)
-  <|>
-  Simple <$> (Value <$> getPosition <*> pure PMarkDown <*> markDownLiteral)
-  <|>
-  Simple <$> (Value <$> getPosition <*> pure PBool <*> boolean)
-  <|>
-  Simple <$> (Value <$> getPosition <*> pure PNumber <*> (token.integer >>= pure <<< show))
-  <|>
-  Simple <$> (Value <$> getPosition <*> pure PEmail <*> (email))
-  <|>
-  Simple <$> (PublicRole <$> getPosition <*> (reserved "publicrole" *> pubParser))
-  <|>
-  Simple <$> (PublicContext <$> getPosition <*> (reserved "publiccontext" *> pubParser))
-  <|>
-  Simple <$> (SequenceFunction <$> getPosition <*> sequenceFunction)
-  <|>
-  Simple <$> (Identity <$> getPosition <* reserved "this")
-  <|>
-  Simple <$> (Modelname <$> getPosition <* reserved "modelname")
-  <|>
-  Simple <$> (TypeOfContext <$> (getPosition <* reserved "contextType"))
-  <|>
-  Simple <$> (RoleTypes <$> (getPosition <* reserved "roleTypes"))
-  <|>
-  Simple <$> (SpecialisesRoleType <$> (getPosition <* reserved "specialisesRoleType") <*> arcIdentifier)
-  <|>
-  Simple <$> (IsInState <$> (getPosition <* reserved "isInState") <*> arcIdentifier)
-  <|>
-  Simple <$> (RegEx <$> (getPosition <* reserved "regexp") <*> regexExpression)
-  -- VARIABLE MUST BE LAST!
-  <|>
-  Simple <$> (Variable <$> getPosition <*> lowerCaseName)
+simpleStep' =
+  ( (Simple <$> (ArcIdentifier <$> getPosition <*> arcIdentifier))
+      <|>
+        -- token brackets seems not to restore parser state when it fails, hence 'try'.
+        Simple <$> (ContextTypeIndividual <$> getPosition <*> try (token.brackets ((reserved "context") *> arcIdentifier)))
+      <|>
+        Simple <$> (RoleTypeIndividual <$> getPosition <*> try (token.brackets ((reserved "role") *> arcIdentifier)))
+      <|>
+        Simple <$> (Filler <$> (getPosition <* reserved "binding") <*> (optionMaybe (reserved "in" *> arcIdentifier)))
+      <|>
+        Simple <$> (Filled <$> (getPosition <* reserved "binder") <*> arcIdentifier <*> (optionMaybe (reserved "in" *> arcIdentifier)))
+      <|>
+        Simple <$> (Context <$> (getPosition <* reserved "context"))
+      <|>
+        Simple <$> (Extern <$> (getPosition <* reserved "extern"))
+      <|>
+        Simple <$> (IndexedName <$> (getPosition <* reserved "indexedName"))
+      <|>
+        Simple <$> (Value <$> getPosition <*> pure PDateTime <*> (parseDateTime >>= pure <<< dateTime2String))
+      <|>
+        Simple <$> (Value <$> getPosition <*> pure PDate <*> (parseDate >>= pure <<< date2String))
+      <|>
+        Simple <$> (Value <$> getPosition <*> pure PTime <*> (parseTime >>= pure <<< time2String))
+      <|>
+        Simple <$> (Value <$> getPosition <*> pure PString <*> token.stringLiteral)
+      <|>
+        Simple <$> (Value <$> getPosition <*> pure PMarkDown <*> markDownLiteral)
+      <|>
+        Simple <$> (Value <$> getPosition <*> pure PBool <*> boolean)
+      <|>
+        Simple <$> (Value <$> getPosition <*> pure PNumber <*> (token.integer >>= pure <<< show))
+      <|>
+        Simple <$> (Value <$> getPosition <*> pure PEmail <*> (email))
+      <|>
+        Simple <$> (PublicRole <$> getPosition <*> (reserved "publicrole" *> pubParser))
+      <|>
+        Simple <$> (PublicContext <$> getPosition <*> (reserved "publiccontext" *> pubParser))
+      <|>
+        Simple <$> (SequenceFunction <$> getPosition <*> sequenceFunction)
+      <|>
+        Simple <$> (Identity <$> getPosition <* reserved "this")
+      <|>
+        Simple <$> (Modelname <$> getPosition <* reserved "modelname")
+      <|>
+        Simple <$> (TypeOfContext <$> (getPosition <* reserved "contextType"))
+      <|>
+        Simple <$> (RoleTypes <$> (getPosition <* reserved "roleTypes"))
+      <|>
+        Simple <$> (SpecialisesRoleType <$> (getPosition <* reserved "specialisesRoleType") <*> arcIdentifier)
+      <|>
+        Simple <$> (IsInState <$> (getPosition <* reserved "isInState") <*> arcIdentifier)
+      <|>
+        Simple <$> (RegEx <$> (getPosition <* reserved "regexp") <*> regexExpression)
+      -- VARIABLE MUST BE LAST!
+      <|>
+        Simple <$> (Variable <$> getPosition <*> lowerCaseName)
   ) <?> "binding, binder, context, extern, this, modelname, contextType, roleTypes, specialisesRoleType, a valid variablename (lowercase only) or a number, boolean, string (between double quotes), date (between single quotes), email address or a monoid function (sum, product, minimum, maximum) or count, "
 
 -- | Parses just the regular expression; not "matches", which is interpreted like ">>".
@@ -215,14 +216,16 @@ regexExpression = do
     Right r -> pure $ RegExP r
 
 sequenceFunction :: IP FunctionName
-sequenceFunction = (token.symbol "sum" *> pure AddF
-  <|> token.symbol "product" *> pure MultiplyF
-  <|> token.symbol "minimum" *> pure MinimumF
-  <|> token.symbol "maximum" *> pure MaximumF
-  <|> token.symbol "count" *> pure CountF
-  <|> token.symbol "first" *> pure FirstF
-  ) <?> "sum, product, minimum,\
-\ maximum or count, "
+sequenceFunction =
+  ( token.symbol "sum" *> pure AddF
+      <|> token.symbol "product" *> pure MultiplyF
+      <|> token.symbol "minimum" *> pure MinimumF
+      <|> token.symbol "maximum" *> pure MaximumF
+      <|> token.symbol "count" *> pure CountF
+      <|> token.symbol "first" *> pure FirstF
+  ) <?>
+    "sum, product, minimum,\
+    \ maximum or count, "
 
 -- propertyRange :: IP String
 -- propertyRange = (reserved "Boolean" *> (pure "Boolean")
@@ -233,32 +236,32 @@ sequenceFunction = (token.symbol "sum" *> pure AddF
 --   <|> reserved "DateTime" *> (pure "DateTime")) <?> "Boolean, Number, String or DateTime, "
 
 propertyRange :: IP Range
-propertyRange = (reserved "Boolean" *> (pure $ PBool)
-  <|> reserved "Number" *> (pure $ PNumber)
-  <|> reserved "String" *> (pure $ PString)
-  <|> reserved "DateTime" *> (pure $ PDateTime)
-  <|> reserved "Email" *> (pure $ PEmail)
-  <|> reserved "File" *> (pure $ PFile)
-  <|> reserved "Date" *> (pure $ PDate)
-  <|> reserved "Time" *> (pure $ PTime)
-  <|> reserved "Year" *> (pure $ (PDuration Year_))
-  <|> reserved "Month" *> (pure $ (PDuration Month_))
-  <|> reserved "Week" *> (pure $ (PDuration Week_))
-  <|> reserved "Day" *> (pure $ (PDuration Day_))
-  <|> reserved "Hour" *> (pure $ (PDuration Hour_))
-  <|> reserved "Minute" *> (pure $ (PDuration Minute_))
-  <|> reserved "Second" *> (pure $ (PDuration Second_))
-  <|> reserved "MilliSecond" *> (pure $ (PDuration MilliSecond_))
-  <|> reserved "MarkDown" *> (pure $ PMarkDown)
+propertyRange =
+  ( reserved "Boolean" *> (pure $ PBool)
+      <|> reserved "Number" *> (pure $ PNumber)
+      <|> reserved "String" *> (pure $ PString)
+      <|> reserved "DateTime" *> (pure $ PDateTime)
+      <|> reserved "Email" *> (pure $ PEmail)
+      <|> reserved "File" *> (pure $ PFile)
+      <|> reserved "Date" *> (pure $ PDate)
+      <|> reserved "Time" *> (pure $ PTime)
+      <|> reserved "Year" *> (pure $ (PDuration Year_))
+      <|> reserved "Month" *> (pure $ (PDuration Month_))
+      <|> reserved "Week" *> (pure $ (PDuration Week_))
+      <|> reserved "Day" *> (pure $ (PDuration Day_))
+      <|> reserved "Hour" *> (pure $ (PDuration Hour_))
+      <|> reserved "Minute" *> (pure $ (PDuration Minute_))
+      <|> reserved "Second" *> (pure $ (PDuration Second_))
+      <|> reserved "MilliSecond" *> (pure $ (PDuration MilliSecond_))
+      <|> reserved "MarkDown" *> (pure $ PMarkDown)
   )
 
 -- | Parse a time. Succeeds if the Time component of parseDateTime is empty.
 parseDate :: IP Date
 parseDate = do
   (DateTime date time) <- parseDateTime
-  if time `eq` Time (unsafePartial fromJust (toEnum 0) :: Hour) (unsafePartial fromJust $ toEnum 0) (unsafePartial fromJust $ toEnum 0) (unsafePartial fromJust $ toEnum 0)
-    then pure date
-    else fail "a date without a time component."
+  if time `eq` Time (unsafePartial fromJust (toEnum 0) :: Hour) (unsafePartial fromJust $ toEnum 0) (unsafePartial fromJust $ toEnum 0) (unsafePartial fromJust $ toEnum 0) then pure date
+  else fail "a date without a time component."
 
 -- | Only supports the "hh:mm:ss" and "hh:mm:ss.sss" format. See https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-date-time-string-format.
 parseTime :: IP Time
@@ -290,7 +293,7 @@ parseJSDate = try do
   pure $ unsafePerformEffect $ parse s
 
 isUnaryKeyword :: String -> Boolean
-isUnaryKeyword kw = isJust $ elemIndex kw ["not", "exists", "filledBy", "fills", "available", "roleinstance", "contextinstance"]
+isUnaryKeyword kw = isJust $ elemIndex kw [ "not", "exists", "filledBy", "fills", "available", "roleinstance", "contextinstance" ]
 
 unaryStep :: IP Step
 unaryStep = do
@@ -307,69 +310,70 @@ unaryStep = do
 
 operator :: Partial => IP Operator
 operator =
-  ((Filter <$> (getPosition <* reserved "with"))
-  <|>
-  (Sequence <$> (getPosition <* token.reservedOp ">>="))
-  <|>
-  (Compose <$> (getPosition <* token.reservedOp ">>"))
-  <|>
-  (Equals <$> (getPosition <* token.reservedOp "=="))
-  <|>
-  (NotEquals <$> (getPosition <* token.reservedOp "/="))
-  <|>
-  (LessThan <$> (getPosition <* token.reservedOp "<"))
-  <|>
-  (LessThanEqual <$> (getPosition <* token.reservedOp "<="))
-  <|>
-  (GreaterThan <$> (getPosition <* token.reservedOp ">"))
-  <|>
-  (GreaterThanEqual <$> (getPosition <* token.reservedOp ">="))
-  <|>
-  (LogicalAnd <$> (getPosition <* reserved "and"))
-  <|>
-  (LogicalOr <$> (getPosition <* reserved "or"))
-  <|>
-  (Add <$> (getPosition <* token.reservedOp "+"))
-  <|>
-  (Subtract <$> (getPosition <* token.reservedOp "-"))
-  <|>
-  (Divide <$> (getPosition <* token.reservedOp "/"))
-  <|>
-  (Multiply <$> (getPosition <* token.reservedOp "*"))
-  <|>
-  (Union <$> (getPosition <* reserved "union"))
-  <|>
-  (OrElse <$> (getPosition <* reserved "orElse"))
-  <|>
-  (Intersection <$> (getPosition <* reserved "intersection"))
-  <|>
-  (BindsOp <$> (getPosition <* token.reserved "filledBy"))
-  <|>
-  (FillsOp <$> (getPosition <* token.reserved "fills"))
-  <|>
-  -- NOTICE the trick here: we map "matches" to Compose, so we can use it as an infix operator while it
-  -- builds on the result of the previous step.
-  (Compose <$> (getPosition <* token.reserved "matches"))
+  ( (Filter <$> (getPosition <* reserved "with"))
+      <|>
+        (Sequence <$> (getPosition <* token.reservedOp ">>="))
+      <|>
+        (Compose <$> (getPosition <* token.reservedOp ">>"))
+      <|>
+        (Equals <$> (getPosition <* token.reservedOp "=="))
+      <|>
+        (NotEquals <$> (getPosition <* token.reservedOp "/="))
+      <|>
+        (LessThan <$> (getPosition <* token.reservedOp "<"))
+      <|>
+        (LessThanEqual <$> (getPosition <* token.reservedOp "<="))
+      <|>
+        (GreaterThan <$> (getPosition <* token.reservedOp ">"))
+      <|>
+        (GreaterThanEqual <$> (getPosition <* token.reservedOp ">="))
+      <|>
+        (LogicalAnd <$> (getPosition <* reserved "and"))
+      <|>
+        (LogicalOr <$> (getPosition <* reserved "or"))
+      <|>
+        (Add <$> (getPosition <* token.reservedOp "+"))
+      <|>
+        (Subtract <$> (getPosition <* token.reservedOp "-"))
+      <|>
+        (Divide <$> (getPosition <* token.reservedOp "/"))
+      <|>
+        (Multiply <$> (getPosition <* token.reservedOp "*"))
+      <|>
+        (Union <$> (getPosition <* reserved "union"))
+      <|>
+        (OrElse <$> (getPosition <* reserved "orElse"))
+      <|>
+        (Intersection <$> (getPosition <* reserved "intersection"))
+      <|>
+        (BindsOp <$> (getPosition <* token.reserved "filledBy"))
+      <|>
+        (FillsOp <$> (getPosition <* token.reserved "fills"))
+      <|>
+        -- NOTICE the trick here: we map "matches" to Compose, so we can use it as an infix operator while it
+        -- builds on the result of the previous step.
+        (Compose <$> (getPosition <* token.reserved "matches"))
   ) <?> "with, >>=, >>, ==, /=, <, <=, >, >=, and, or, +, -, /, *, union, intersection, otherwise, filledBy. "
 
 durationOperator :: Partial => IP Operator
 durationOperator =
-  ((Year <$> (getPosition <* (reserved "year" <|> reserved "years")))
-  <|>
-  (Month <$> (getPosition <* (reserved "month" <|> reserved "months")))
-  <|>
-  (Week <$> (getPosition <* (reserved "week" <|> reserved "weeks")))
-  <|>
-  (Day <$> (getPosition <* (reserved "day" <|> reserved "days")))
-  <|>
-  (Hour <$> (getPosition <* (reserved "hour" <|> reserved "hours")))
-  <|>
-  (Minute <$> (getPosition <* (reserved "minute" <|> reserved "minutes")))
-  <|>
-  (Second <$> (getPosition <* (reserved "second" <|> reserved "seconds")))
-  <|>
-  (Millisecond <$> (getPosition <* (reserved "millisecond" <|> reserved "milliseconds"))))
-  <?> "year(s), month(s), week(s), day(s), hour(s), minute(s), second(s), second(s), millisecond(s)"
+  ( (Year <$> (getPosition <* (reserved "year" <|> reserved "years")))
+      <|>
+        (Month <$> (getPosition <* (reserved "month" <|> reserved "months")))
+      <|>
+        (Week <$> (getPosition <* (reserved "week" <|> reserved "weeks")))
+      <|>
+        (Day <$> (getPosition <* (reserved "day" <|> reserved "days")))
+      <|>
+        (Hour <$> (getPosition <* (reserved "hour" <|> reserved "hours")))
+      <|>
+        (Minute <$> (getPosition <* (reserved "minute" <|> reserved "minutes")))
+      <|>
+        (Second <$> (getPosition <* (reserved "second" <|> reserved "seconds")))
+      <|>
+        (Millisecond <$> (getPosition <* (reserved "millisecond" <|> reserved "milliseconds")))
+  )
+    <?> "year(s), month(s), week(s), day(s), hour(s), minute(s), second(s), second(s), millisecond(s)"
 
 operatorPrecedence :: Operator -> Int
 operatorPrecedence (Year _) = 10
@@ -413,110 +417,109 @@ operatorPrecedence (Filter _) = 0
 startOf :: Step -> ArcPosition
 startOf stp = case stp of
   (Simple s) -> startOfSimple s
-  (Binary (BinaryStep{start})) -> start
+  (Binary (BinaryStep { start })) -> start
   (Unary us) -> startOfUnary us
-  (PureLet (PureLetStep {start})) -> start
-  (Computation (ComputationStep {start})) -> start
+  (PureLet (PureLetStep { start })) -> start
+  (Computation (ComputationStep { start })) -> start
 
   where
-    startOfSimple (ArcIdentifier p _) = p
-    startOfSimple (RoleTypeIndividual p _) = p
-    startOfSimple (ContextTypeIndividual p _) = p
-    startOfSimple (Value p _ _) = p
-    startOfSimple (PublicRole p _) = p
-    startOfSimple (PublicContext p _) = p
-    startOfSimple (Filler p _) = p
-    startOfSimple (Filled p _ _) = p
-    startOfSimple (Context p) = p
-    startOfSimple (Extern p) = p
-    startOfSimple (IndexedName p) = p
-    startOfSimple (SequenceFunction p _) = p
-    startOfSimple (Identity p) = p
-    startOfSimple (Modelname p) = p
-    startOfSimple (Variable p _) = p
+  startOfSimple (ArcIdentifier p _) = p
+  startOfSimple (RoleTypeIndividual p _) = p
+  startOfSimple (ContextTypeIndividual p _) = p
+  startOfSimple (Value p _ _) = p
+  startOfSimple (PublicRole p _) = p
+  startOfSimple (PublicContext p _) = p
+  startOfSimple (Filler p _) = p
+  startOfSimple (Filled p _ _) = p
+  startOfSimple (Context p) = p
+  startOfSimple (Extern p) = p
+  startOfSimple (IndexedName p) = p
+  startOfSimple (SequenceFunction p _) = p
+  startOfSimple (Identity p) = p
+  startOfSimple (Modelname p) = p
+  startOfSimple (Variable p _) = p
 
-    startOfSimple (TypeOfContext p) = p
-    startOfSimple (RoleTypes p) = p
-    startOfSimple (SpecialisesRoleType p _) = p
-    startOfSimple (IsInState p _) = p
-    
-    startOfSimple (TypeTimeOnlyContext p _) = p
-    startOfSimple (TypeTimeOnlyEnumeratedRole p _ _) = p
-    startOfSimple (TypeTimeOnlyCalculatedRole p _) = p
-    startOfSimple (RegEx p _) = p
+  startOfSimple (TypeOfContext p) = p
+  startOfSimple (RoleTypes p) = p
+  startOfSimple (SpecialisesRoleType p _) = p
+  startOfSimple (IsInState p _) = p
 
-    startOfUnary (LogicalNot p _) = p
-    startOfUnary (Exists p _) = p
-    startOfUnary (FilledBy p _) = p
-    startOfUnary (Fills p _) = p
-    startOfUnary (Available p _) = p
-    startOfUnary (DurationOperator p _ _) = p
-    startOfUnary (ContextIndividual p _ _) = p
-    startOfUnary (RoleIndividual p _ _) = p
+  startOfSimple (TypeTimeOnlyContext p _) = p
+  startOfSimple (TypeTimeOnlyEnumeratedRole p _ _) = p
+  startOfSimple (TypeTimeOnlyCalculatedRole p _) = p
+  startOfSimple (RegEx p _) = p
 
+  startOfUnary (LogicalNot p _) = p
+  startOfUnary (Exists p _) = p
+  startOfUnary (FilledBy p _) = p
+  startOfUnary (Fills p _) = p
+  startOfUnary (Available p _) = p
+  startOfUnary (DurationOperator p _ _) = p
+  startOfUnary (ContextIndividual p _ _) = p
+  startOfUnary (RoleIndividual p _ _) = p
 
 endOf :: Step -> ArcPosition
 endOf stp = case stp of
   (Simple s) -> endOfSimple s
-  (Binary (BinaryStep{end})) -> end
+  (Binary (BinaryStep { end })) -> end
   (Unary us) -> endOfUnary us
-  (PureLet (PureLetStep {end})) -> end
-  (Computation (ComputationStep {end})) -> end
+  (PureLet (PureLetStep { end })) -> end
+  (Computation (ComputationStep { end })) -> end
 
   where
-    endOfSimple (ArcIdentifier (ArcPosition{line, column}) id) = ArcPosition{line, column: column + length id}
-    endOfSimple (RoleTypeIndividual (ArcPosition{line, column}) id) = ArcPosition{line, column: column + 11 + length id}
-    endOfSimple (ContextTypeIndividual (ArcPosition{line, column}) id) = ArcPosition{line, column: column + 14 + length id}
-    endOfSimple (Value (ArcPosition{line, column}) _ v) = ArcPosition({line, column: column + length v + 1})
-    endOfSimple (PublicRole (ArcPosition{line, column}) url) =  ArcPosition({line, column: column + length url + 1})
-    endOfSimple (PublicContext (ArcPosition{line, column}) url) =  ArcPosition({line, column: column + length url + 1})
-    endOfSimple (Filler (ArcPosition{line, column}) _) = ArcPosition{line, column: column + 7}
-    endOfSimple (Filled (ArcPosition{line, column}) _ _) = ArcPosition{line, column: column + 6}
-    endOfSimple (Context (ArcPosition{line, column})) = ArcPosition{line, column: column + 7}
-    endOfSimple (Extern (ArcPosition{line, column})) = ArcPosition{line, column: column + 6}
-    endOfSimple (IndexedName (ArcPosition{line, column})) = ArcPosition{line, column: column + 11}
-    endOfSimple (SequenceFunction (ArcPosition{line, column}) fname) = ArcPosition{line, column: column + length (show fname)}
-    endOfSimple (Identity (ArcPosition{line, column})) = ArcPosition{line, column: column + 4}
-    endOfSimple (Modelname (ArcPosition{line, column})) = ArcPosition{line, column: column + 9}
-    endOfSimple (Variable (ArcPosition{line, column}) v) = ArcPosition{line, column: column + length v}
+  endOfSimple (ArcIdentifier (ArcPosition { line, column }) id) = ArcPosition { line, column: column + length id }
+  endOfSimple (RoleTypeIndividual (ArcPosition { line, column }) id) = ArcPosition { line, column: column + 11 + length id }
+  endOfSimple (ContextTypeIndividual (ArcPosition { line, column }) id) = ArcPosition { line, column: column + 14 + length id }
+  endOfSimple (Value (ArcPosition { line, column }) _ v) = ArcPosition ({ line, column: column + length v + 1 })
+  endOfSimple (PublicRole (ArcPosition { line, column }) url) = ArcPosition ({ line, column: column + length url + 1 })
+  endOfSimple (PublicContext (ArcPosition { line, column }) url) = ArcPosition ({ line, column: column + length url + 1 })
+  endOfSimple (Filler (ArcPosition { line, column }) _) = ArcPosition { line, column: column + 7 }
+  endOfSimple (Filled (ArcPosition { line, column }) _ _) = ArcPosition { line, column: column + 6 }
+  endOfSimple (Context (ArcPosition { line, column })) = ArcPosition { line, column: column + 7 }
+  endOfSimple (Extern (ArcPosition { line, column })) = ArcPosition { line, column: column + 6 }
+  endOfSimple (IndexedName (ArcPosition { line, column })) = ArcPosition { line, column: column + 11 }
+  endOfSimple (SequenceFunction (ArcPosition { line, column }) fname) = ArcPosition { line, column: column + length (show fname) }
+  endOfSimple (Identity (ArcPosition { line, column })) = ArcPosition { line, column: column + 4 }
+  endOfSimple (Modelname (ArcPosition { line, column })) = ArcPosition { line, column: column + 9 }
+  endOfSimple (Variable (ArcPosition { line, column }) v) = ArcPosition { line, column: column + length v }
 
-    endOfSimple (TypeOfContext (ArcPosition{line, column})) = ArcPosition{line, column: column + 11}
-    endOfSimple (RoleTypes (ArcPosition{line, column})) = ArcPosition{line, column: column + 9}
-    endOfSimple (SpecialisesRoleType (ArcPosition{line, column}) ident) = ArcPosition{line, column: column + 19 + length ident}
-    endOfSimple (IsInState (ArcPosition{line, column}) ident) = ArcPosition{line, column: column + 9 + length ident}
-    
-    endOfSimple (TypeTimeOnlyContext p _) = p
-    endOfSimple (TypeTimeOnlyEnumeratedRole p _ _) = p
-    endOfSimple (TypeTimeOnlyCalculatedRole p _) = p
-    endOfSimple (RegEx (ArcPosition{line, column}) (RegExP r)) = ArcPosition{line, column: column + length (show r) + 1}
+  endOfSimple (TypeOfContext (ArcPosition { line, column })) = ArcPosition { line, column: column + 11 }
+  endOfSimple (RoleTypes (ArcPosition { line, column })) = ArcPosition { line, column: column + 9 }
+  endOfSimple (SpecialisesRoleType (ArcPosition { line, column }) ident) = ArcPosition { line, column: column + 19 + length ident }
+  endOfSimple (IsInState (ArcPosition { line, column }) ident) = ArcPosition { line, column: column + 9 + length ident }
 
-    -- Note that this assumes a single whitespace between 'not' and the step.
-    endOfUnary (LogicalNot (ArcPosition{line, column}) step') = ArcPosition{line: line_(endOf step'), column: col_(endOf step') + 4}
-    endOfUnary (Exists (ArcPosition{line, column}) step') = endOf step'
-    endOfUnary (FilledBy (ArcPosition{line, column}) step') = endOf step'
-    endOfUnary (Fills (ArcPosition{line, column}) step') = endOf step'
-    endOfUnary (Available (ArcPosition{line, column}) step') = endOf step'
-    endOfUnary (DurationOperator _ _ step') = endOf step'
-    endOfUnary (ContextIndividual _ _ step') = endOf step'
-    endOfUnary (RoleIndividual _ _ step') = endOf step'
+  endOfSimple (TypeTimeOnlyContext p _) = p
+  endOfSimple (TypeTimeOnlyEnumeratedRole p _ _) = p
+  endOfSimple (TypeTimeOnlyCalculatedRole p _) = p
+  endOfSimple (RegEx (ArcPosition { line, column }) (RegExP r)) = ArcPosition { line, column: column + length (show r) + 1 }
 
-    col_ :: ArcPosition -> Int
-    col_ (ArcPosition{column}) = column
+  -- Note that this assumes a single whitespace between 'not' and the step.
+  endOfUnary (LogicalNot (ArcPosition { line, column }) step') = ArcPosition { line: line_ (endOf step'), column: col_ (endOf step') + 4 }
+  endOfUnary (Exists (ArcPosition { line, column }) step') = endOf step'
+  endOfUnary (FilledBy (ArcPosition { line, column }) step') = endOf step'
+  endOfUnary (Fills (ArcPosition { line, column }) step') = endOf step'
+  endOfUnary (Available (ArcPosition { line, column }) step') = endOf step'
+  endOfUnary (DurationOperator _ _ step') = endOf step'
+  endOfUnary (ContextIndividual _ _ step') = endOf step'
+  endOfUnary (RoleIndividual _ _ step') = endOf step'
 
-    line_ :: ArcPosition -> Int
-    line_ (ArcPosition{line}) = line
+  col_ :: ArcPosition -> Int
+  col_ (ArcPosition { column }) = column
+
+  line_ :: ArcPosition -> Int
+  line_ (ArcPosition { line }) = line
 
 -- | Parse between single quotes.
 dateTimeLiteral :: IP String
 dateTimeLiteral = (go <?> "date-time") <* token.whiteSpace
   where
-    go :: IP String
-    go = do
-        chars <- between (char '\'') (char '\'' <?> "end of string. ") (many dateChar)
-        pure $ SCU.fromCharArray chars
+  go :: IP String
+  go = do
+    chars <- between (char '\'') (char '\'' <?> "end of string. ") (many dateChar)
+    pure $ SCU.fromCharArray chars
 
-    dateChar :: IP Char
-    dateChar = alphaNum <|> char ':' <|> char '+' <|> char '-' <|> char ' ' <|> char '.'
+  dateChar :: IP Char
+  dateChar = alphaNum <|> char ':' <|> char '+' <|> char '-' <|> char ' ' <|> char '.'
 
 binding :: IP VarBinding
 binding = VarBinding <$> (lowerCaseName <* token.reservedOp "<-") <*> defer \_ -> step
@@ -528,43 +531,44 @@ pureLetStep = do
   bindings <- reserved "letE" *> entireBlock binding
   body <- reserved "in" *> step
   end <- getPosition
-  pure $ PureLet $ PureLetStep {start, end, bindings: fromFoldable bindings, body}
+  pure $ PureLet $ PureLetStep { start, end, bindings: fromFoldable bindings, body }
 
 computationStep :: IP Step
 computationStep = do
   start <- getPosition
   functionName <- reserved "callExternal" *> arcIdentifier
   arguments <- token.symbol "(" *>
-    (((token.symbol ")") *> pure Nil)
-    <|>
-    do
-      first <- step
-      -- By using manyTill we get the errir messages inside arguments to the end user.
-      -- sepBy would hide them.
-      rest <- manyTill (token.comma *> step) (token.symbol ")")
-      pure (Cons first rest))
+    ( ((token.symbol ")") *> pure Nil)
+        <|>
+          do
+            first <- step
+            -- By using manyTill we get the errir messages inside arguments to the end user.
+            -- sepBy would hide them.
+            rest <- manyTill (token.comma *> step) (token.symbol ")")
+            pure (Cons first rest)
+    )
   computedType <- reserved "returns" *> ((OtherType <$> arcIdentifier) <|> (ComputedRange <$> propertyRange))
   end <- getPosition
-  pure $ Computation $ ComputationStep {functionName, arguments: (fromFoldable arguments), computedType, start, end}
+  pure $ Computation $ ComputationStep { functionName, arguments: (fromFoldable arguments), computedType, start, end }
 
 -- | Anything between '<' and '<'
 markDownLiteral :: IP String
 markDownLiteral = (go <?> "MarkDown") <* token.whiteSpace
   where
-    go :: IP String
-    go = do
-        (ArcPosition {column}) <- getPosition
-        chars <- between (char '<') (char '>' <?> "end of MarkDown (>). ") (many markDownChar)
-        pure $ fixIndentation $ trim $ SCU.fromCharArray chars
+  go :: IP String
+  go = do
+    (ArcPosition { column }) <- getPosition
+    chars <- between (char '<') (char '>' <?> "end of MarkDown (>). ") (many markDownChar)
+    pure $ fixIndentation $ trim $ SCU.fromCharArray chars
 
-    markDownChar :: IP Char
-    markDownChar = satisfy \c -> c /= '>'
+  markDownChar :: IP Char
+  markDownChar = satisfy \c -> c /= '>'
 
-    -- Trims the whitespace at the start and end of each line, so that all is removed.
-    -- This allows for the formatting of markdown at any position, where the starting '<' character should be to the left of all markdown lines.
-    fixIndentation :: String -> String
-    fixIndentation s = replace whiteSpaceRegex "\n" s
+  -- Trims the whitespace at the start and end of each line, so that all is removed.
+  -- This allows for the formatting of markdown at any position, where the starting '<' character should be to the left of all markdown lines.
+  fixIndentation :: String -> String
+  fixIndentation s = replace whiteSpaceRegex "\n" s
 
-    whiteSpaceRegex :: Regex
-    whiteSpaceRegex = unsafeRegex "\\s*\\n+\\s*" global
+  whiteSpaceRegex :: Regex
+  whiteSpaceRegex = unsafeRegex "\\s*\\n+\\s*" global
 

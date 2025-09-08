@@ -3,5 +3,8 @@
   "purescript.sourcePath": "packages/perspectives-core/src",
   "purescript.addSpagoSources": true,
   "purescript.buildCommand": "cd packages/perspectives-core && spago build --purs-args '--output ../perspectives-core/output'",
-  "purescript.addNpmPath": true
+  "purescript.addNpmPath": true,
+  "purescript.formatter": "purs-tidy",
+  "purescript.tidyExecPath": "node_modules/.bin/purs-tidy",
+  "editor.formatOnSave": true
 }

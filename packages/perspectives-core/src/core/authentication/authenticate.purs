@@ -28,8 +28,7 @@ module Perspectives.Authenticate
   , signDelta
   , verifyDelta
   , verifyDelta'
-  )
-  where
+  ) where
 
 import Prelude
 
@@ -38,7 +37,7 @@ import Control.Monad.Except (runExcept)
 import Control.Monad.Trans.Class (lift)
 import Control.Promise (Promise, toAffE)
 import Crypto.Subtle.Constants.AES (aesCBC, l256)
-import Crypto.Subtle.Constants.EC as ECConstants 
+import Crypto.Subtle.Constants.EC as ECConstants
 import Crypto.Subtle.Hash (sha1, sha384)
 import Crypto.Subtle.Key.Derive (deriveBits, pbkdf2)
 import Crypto.Subtle.Key.Generate (aes, generateKey)
@@ -89,16 +88,16 @@ signDelta encryptedDelta = do
   deltaBuff :: ArrayBuffer <- liftEffect $ string2buff encryptedDelta
   mcryptoKey <- lift $ gets (_.privateKey <<< _.runtimeOptions)
   case mcryptoKey of
-    Nothing ->  pure $ SignedDelta 
+    Nothing -> pure $ SignedDelta
       { author: over PerspectivesUser stripNonPublicIdentifiers author
       , encryptedDelta
       , signature: Nothing
       }
-    Just cryptoKey -> do 
+    Just cryptoKey -> do
       signatureBuff <- lift $ lift $ sign (ecdsa sha384) (unsafeCoerce cryptoKey) deltaBuff
       (int8array :: Uint8Array) <- liftEffect $ whole signatureBuff
       (signature :: String) <- liftAff $ bytesToBase64DataUrl int8array
-      sd <- pure $ SignedDelta 
+      sd <- pure $ SignedDelta
         { author: over PerspectivesUser stripNonPublicIdentifiers author
         , encryptedDelta
         , signature: Just signature
@@ -107,33 +106,32 @@ signDelta encryptedDelta = do
 
 -- | Returns Nothing if the delta cannot be verified; a string representation of the Delta in the SignedDelta otherwise.
 verifyDelta :: SignedDelta -> MonadPerspectives (Maybe String)
-verifyDelta d@(SignedDelta{author, encryptedDelta, signature}) = getPublicKey author >>= verifyDelta' d
+verifyDelta d@(SignedDelta { author, encryptedDelta, signature }) = getPublicKey author >>= verifyDelta' d
 
 verifyDelta' :: SignedDelta -> Maybe CryptoTypes.CryptoKey -> MonadPerspectives (Maybe String)
-verifyDelta' (SignedDelta{author, encryptedDelta, signature}) mcryptoKey = do
-  case signature, mcryptoKey of 
+verifyDelta' (SignedDelta { author, encryptedDelta, signature }) mcryptoKey = do
+  case signature, mcryptoKey of
     Nothing, Nothing -> pure $ Just encryptedDelta
-    Nothing, Just _ ->  pure $ Just encryptedDelta
+    Nothing, Just _ -> pure $ Just encryptedDelta
     Just s, Nothing -> throwError (error $ "No public key found for " <> show author)
-    Just signature', Just cryptoKey -> do 
+    Just signature', Just cryptoKey -> do
       signatureBuff <- buffer <$> (liftAff $ dataUrlToBytes signature')
       deltaBuff <- liftAff $ liftEffect $ string2buff encryptedDelta
       trusted <- liftAff $ verify (ecdsa sha384) cryptoKey signatureBuff deltaBuff
-      if trusted
-        then pure $ Just encryptedDelta
-        else pure Nothing
+      if trusted then pure $ Just encryptedDelta
+      else pure Nothing
 
 -- | Get the public key of a peer.
 getPublicKey :: PerspectivesUser -> MonadPerspectives (Maybe CryptoTypes.CryptoKey)
 getPublicKey author = do
   mrawKey <- (perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier author) ##> getProperty (EnumeratedPropertyType perspectivesUsersPublicKey)
-  case mrawKey of 
-    Nothing -> pure Nothing 
+  case mrawKey of
+    Nothing -> pure Nothing
     Just (Value rawKey) -> lift (Just <$> deserializeJWK rawKey)
 
-tryGetPublicKey  :: PerspectivesUser -> MonadPerspectives (Maybe CryptoTypes.CryptoKey)
-tryGetPublicKey author = entityExists (perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier author) >>= if _ 
-  then getPublicKey author
+tryGetPublicKey :: PerspectivesUser -> MonadPerspectives (Maybe CryptoTypes.CryptoKey)
+tryGetPublicKey author = entityExists (perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier author) >>=
+  if _ then getPublicKey author
   else pure Nothing
 
 deserializeJWK :: String -> Aff CryptoTypes.CryptoKey
@@ -142,7 +140,7 @@ deserializeJWK rawKey = do
   -- Even though `importKey` specifies a `buffer` as second argument, the Crypto.subtle API specifies a JSON object.
   case runExcept (parseJSON rawKey) of
     Left e -> throwError (error $ "Cannot parse JWK json: " <> show e)
-    Right jwk -> importKey CryptoTypes.jwk (unsafeCoerce jwk) (ec ECConstants.ecdsa ECConstants.p384) true [CryptoTypes.verify]
+    Right jwk -> importKey CryptoTypes.jwk (unsafeCoerce jwk) (ec ECConstants.ecdsa ECConstants.p384) true [ CryptoTypes.verify ]
 
 -- | Get my private key (to sign a delta).
 -- | This is used on system startup. It takes the private key from IndexedDB 
@@ -160,7 +158,7 @@ getMyPublicKey = do
   PerspectivesUser id <- getPerspectivesUser
   publicKey <- lift $ getCryptoKey $ (takeGuid id) <> publicKeyString
   for publicKey
-    \key -> lift $ do 
+    \key -> lift $ do
       jwk <- CryptoTypes.exportKey CryptoTypes.jwk key
       -- NOTE. The Purescript library Crypto.Subtle contains an error here. `exportKey` always returns an ArrayBuffer,
       -- but https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/exportKey#return_value clearly states that in case
@@ -208,34 +206,34 @@ pbkdf2_import = unsafeCoerce "PBKDF2"
 createPassword :: Password -> Aff String
 createPassword password = do
   -- Generate a random salt
-  (key :: CryptoTypes.CryptoKey) <- generateKey (aes aesCBC l256) true [CryptoTypes.encrypt, CryptoTypes.decrypt]
+  (key :: CryptoTypes.CryptoKey) <- generateKey (aes aesCBC l256) true [ CryptoTypes.encrypt, CryptoTypes.decrypt ]
   (salt :: ArrayBuffer) <- CryptoTypes.exportKey CryptoTypes.raw key
   -- Convert the password to an ArrayBuffer and import it into a CryptoTypes.CryptoKey.
   (passwordData :: ArrayBuffer) <- liftEffect $ execPut $ putStringUtf8 password
-  (baseKey :: CryptoTypes.CryptoKey) <- importKey CryptoTypes.raw passwordData pbkdf2_import false [CryptoTypes.deriveBits]
+  (baseKey :: CryptoTypes.CryptoKey) <- importKey CryptoTypes.raw passwordData pbkdf2_import false [ CryptoTypes.deriveBits ]
   -- Now derive a key from the password and the salt.
   (derivedKey :: ArrayBuffer) <- deriveBits (pbkdf2 sha1 salt 10000) baseKey 8
   -- Finally, convert to a hexadecimal string representation.
   liftEffect $ arrayBufferToHexString derivedKey
 
-  where 
+  where
 
-    putStringUtf8 :: forall m. MonadEffect m => String -> PutM m Unit
-    putStringUtf8 s = do
-      textEncoder <- liftEffect Encoder.new
-      let (stringbuf :: ArrayBuffer) = buffer $ Encoder.encode s textEncoder
-      -- Put a 32-bit big-endian length for the utf8 string, in bytes.
-      putUint32be $ fromInt $ byteLength stringbuf
-      putArrayBuffer stringbuf
+  putStringUtf8 :: forall m. MonadEffect m => String -> PutM m Unit
+  putStringUtf8 s = do
+    textEncoder <- liftEffect Encoder.new
+    let (stringbuf :: ArrayBuffer) = buffer $ Encoder.encode s textEncoder
+    -- Put a 32-bit big-endian length for the utf8 string, in bytes.
+    putUint32be $ fromInt $ byteLength stringbuf
+    putArrayBuffer stringbuf
 
   -- Function to convert an ArrayBuffer to a hexadecimal string
-    arrayBufferToHexString :: ArrayBuffer -> Effect String
-    arrayBufferToHexString buffer = do
-      (int8array :: Int8Array) <- whole buffer
-      arr <- toArray int8array
-      pure $ foldMap toHex arr 
-      where
-        toHex :: Int -> String
-        toHex int = case toStringAs hexadecimal int of
-          s | length s == 1 -> "0" <> s
-          s -> s
+  arrayBufferToHexString :: ArrayBuffer -> Effect String
+  arrayBufferToHexString buffer = do
+    (int8array :: Int8Array) <- whole buffer
+    arr <- toArray int8array
+    pure $ foldMap toHex arr
+    where
+    toHex :: Int -> String
+    toHex int = case toStringAs hexadecimal int of
+      s | length s == 1 -> "0" <> s
+      s -> s

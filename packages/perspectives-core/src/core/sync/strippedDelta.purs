@@ -50,15 +50,15 @@ import Prelude (Unit, bind, discard, map, pure, void, ($), (<$>), (<<<), (>>=))
 class StrippedDelta d where
   stripResourceSchemes :: d -> d
   addResourceSchemes :: Map ResourceType StorageScheme -> d -> MonadPerspectives d
-  addPublicResourceScheme :: String -> d -> MonadPerspectives d 
+  addPublicResourceScheme :: String -> d -> MonadPerspectives d
 
 instance StrippedDelta UniverseContextDelta where
-  stripResourceSchemes (UniverseContextDelta r) = UniverseContextDelta r 
+  stripResourceSchemes (UniverseContextDelta r) = UniverseContextDelta r
     { id = over ContextInstance stripNonPublicIdentifiers r.id
     }
   addResourceSchemes storageSchemes (UniverseContextDelta r) = do
     id <- ContextInstance <$> (addSchemeToResourceIdentifier storageSchemes (CType r.contextType)) (unwrap r.id)
-    pure $ UniverseContextDelta r 
+    pure $ UniverseContextDelta r
       { id = id
       }
   addPublicResourceScheme url (UniverseContextDelta r) = do
@@ -69,23 +69,23 @@ instance StrippedDelta UniverseContextDelta where
     void $ decache rec.id
     pure $ UniverseContextDelta rec
 
-instance StrippedDelta UniverseRoleDelta where 
-  stripResourceSchemes (UniverseRoleDelta r) = UniverseRoleDelta r 
+instance StrippedDelta UniverseRoleDelta where
+  stripResourceSchemes (UniverseRoleDelta r) = UniverseRoleDelta r
     { id = over ContextInstance stripNonPublicIdentifiers r.id
     , roleInstances = over SerializableNonEmptyArray (map (over RoleInstance stripNonPublicIdentifiers)) r.roleInstances
     }
   addResourceSchemes storageSchemes (UniverseRoleDelta r) = do
-    id <- ContextInstance <$> (addSchemeToResourceIdentifier storageSchemes (CType r.contextType)) (unwrap r.id) 
-    roleInstances <- (traverse (addSchemeToResourceIdentifier storageSchemes (RType r.roleType) <<< unwrap )) r.roleInstances
-    pure $ UniverseRoleDelta r 
+    id <- ContextInstance <$> (addSchemeToResourceIdentifier storageSchemes (CType r.contextType)) (unwrap r.id)
+    roleInstances <- (traverse (addSchemeToResourceIdentifier storageSchemes (RType r.roleType) <<< unwrap)) r.roleInstances
+    pure $ UniverseRoleDelta r
       { id = id
       , roleInstances = RoleInstance <$> roleInstances
       }
 
-    --  UniverseRoleDelta r 
-    -- { id = over ContextInstance (addSchemeToResourceIdentifier storageSchemes (CType r.contextType)) r.id
-    -- , roleInstances = over SerializableNonEmptyArray (map (over RoleInstance (addSchemeToResourceIdentifier storageSchemes (RType r.roleType)))) r.roleInstances
-    -- }
+  --  UniverseRoleDelta r 
+  -- { id = over ContextInstance (addSchemeToResourceIdentifier storageSchemes (CType r.contextType)) r.id
+  -- , roleInstances = over SerializableNonEmptyArray (map (over RoleInstance (addSchemeToResourceIdentifier storageSchemes (RType r.roleType)))) r.roleInstances
+  -- }
   addPublicResourceScheme url (UniverseRoleDelta r) = do
     curl <- addOwnStorageScheme (CType r.contextType) (unwrap r.id) >>= getUrlForPublishing url <<< ContextInstance
     rec <- pure r
@@ -97,7 +97,7 @@ instance StrippedDelta UniverseRoleDelta where
     pure $ UniverseRoleDelta rec
 
 instance StrippedDelta ContextDelta where
-  stripResourceSchemes (ContextDelta r) = ContextDelta r 
+  stripResourceSchemes (ContextDelta r) = ContextDelta r
     { contextInstance = over ContextInstance stripNonPublicIdentifiers r.contextInstance
     , roleInstance = over RoleInstance stripNonPublicIdentifiers r.roleInstance
     , destinationContext = maybe Nothing (Just <<< (over ContextInstance stripNonPublicIdentifiers)) r.destinationContext
@@ -108,22 +108,22 @@ instance StrippedDelta ContextDelta where
     destinationContext <- case r.destinationContext, r.destinationContextType of
       Just dc, Just dct -> Just <$> (ContextInstance <$> (addSchemeToResourceIdentifier storageSchemes (CType dct)) (unwrap dc))
       _, _ -> pure Nothing
-    pure $ ContextDelta r 
+    pure $ ContextDelta r
       { contextInstance = contextInstance
       , roleInstance = roleInstance
       , destinationContext = destinationContext
       }
-  addPublicResourceScheme url (ContextDelta r) = do 
+  addPublicResourceScheme url (ContextDelta r) = do
     curl <- addOwnStorageScheme (CType r.contextType) (unwrap r.contextInstance) >>= getUrlForPublishing url <<< ContextInstance
-    durl <- case r.destinationContext, r.destinationContextType of 
+    durl <- case r.destinationContext, r.destinationContextType of
       Just dc, Just dctype -> Just <$> (addOwnStorageScheme (CType dctype) (unwrap dc) >>= getUrlForPublishing url <<< ContextInstance)
       _, _ -> pure Nothing
     rec <- pure $ r
       { contextInstance = over ContextInstance (createPublicIdentifier curl) r.contextInstance
       , roleInstance = over RoleInstance (createPublicIdentifier curl) r.roleInstance
       , destinationContext = case r.destinationContext, durl of
-        Just (ContextInstance dc), Just url' -> Just (ContextInstance (createPublicIdentifier url' dc))
-        _, _ -> Nothing
+          Just (ContextInstance dc), Just url' -> Just (ContextInstance (createPublicIdentifier url' dc))
+          _, _ -> Nothing
       }
     void $ decache rec.contextInstance
     void $ decache rec.roleInstance
@@ -131,12 +131,12 @@ instance StrippedDelta ContextDelta where
     pure $ ContextDelta rec
 
 instance StrippedDelta RoleBindingDelta where
-  stripResourceSchemes (RoleBindingDelta r) = RoleBindingDelta r 
+  stripResourceSchemes (RoleBindingDelta r) = RoleBindingDelta r
     { filled = over RoleInstance stripNonPublicIdentifiers r.filled
     , filler = maybe Nothing (Just <<< (over RoleInstance stripNonPublicIdentifiers)) r.filler
     , oldFiller = maybe Nothing (Just <<< (over RoleInstance stripNonPublicIdentifiers)) r.oldFiller
     }
-  addResourceSchemes storageSchemes (RoleBindingDelta r) = do 
+  addResourceSchemes storageSchemes (RoleBindingDelta r) = do
     filled <- RoleInstance <$> addSchemeToResourceIdentifier storageSchemes (RType r.filledType) (unwrap r.filled)
     filler <- case r.filler, r.fillerType of
       Just f, Just ft -> Just <<< RoleInstance <$> addSchemeToResourceIdentifier storageSchemes (RType ft) (unwrap f)
@@ -144,18 +144,18 @@ instance StrippedDelta RoleBindingDelta where
     oldFiller <- unsafePartial case r.oldFiller, r.oldFillerType of
       Just f, Just ft -> Just <<< RoleInstance <$> addSchemeToResourceIdentifier storageSchemes (RType ft) (unwrap f)
       _, _ -> pure Nothing
-    pure $ RoleBindingDelta r 
+    pure $ RoleBindingDelta r
       { filled = filled
       , filler = filler
       , oldFiller = oldFiller
       }
   addPublicResourceScheme url (RoleBindingDelta r) = do
-    fillerUrl <- case r.filler, r.fillerType of 
+    fillerUrl <- case r.filler, r.fillerType of
       Just f, Just ftype -> addOwnStorageScheme (RType ftype) (unwrap f) >>= context' <<< RoleInstance >>= getUrlForPublishing url
-      _, _ -> pure url 
+      _, _ -> pure url
     filledUrl <- addOwnStorageScheme (RType r.filledType) (unwrap r.filled) >>= context' <<< RoleInstance >>= getUrlForPublishing url
     rec <- pure $ r
-      { filled = over RoleInstance (createPublicIdentifier filledUrl) r.filled 
+      { filled = over RoleInstance (createPublicIdentifier filledUrl) r.filled
       , filler = maybe Nothing (Just <<< (over RoleInstance (createPublicIdentifier fillerUrl))) r.filler
       , oldFiller = maybe Nothing (Just <<< (over RoleInstance (createPublicIdentifier fillerUrl))) r.oldFiller
       }
@@ -165,27 +165,27 @@ instance StrippedDelta RoleBindingDelta where
     pure $ RoleBindingDelta rec
 
 instance StrippedDelta RolePropertyDelta where
-  stripResourceSchemes (RolePropertyDelta r) = RolePropertyDelta r 
+  stripResourceSchemes (RolePropertyDelta r) = RolePropertyDelta r
     { id = over RoleInstance stripNonPublicIdentifiers r.id
     }
-  addResourceSchemes storageSchemes (RolePropertyDelta r) = do 
+  addResourceSchemes storageSchemes (RolePropertyDelta r) = do
     id <- RoleInstance <$> addSchemeToResourceIdentifier storageSchemes (RType r.roleType) (unwrap r.id)
-    pure $ RolePropertyDelta r 
+    pure $ RolePropertyDelta r
       { id = id
       }
   addPublicResourceScheme url (RolePropertyDelta r) = do
     ctxt <- addOwnStorageScheme (RType r.roleType) (unwrap r.id) >>= context' <<< RoleInstance
     url' <- getUrlForPublishing url ctxt
     rec <- pure r
-        { id = over RoleInstance (createPublicIdentifier url') r.id }
+      { id = over RoleInstance (createPublicIdentifier url') r.id }
     void $ decache rec.id
     pure $ RolePropertyDelta rec
 
 -- | Given a default value for the url, return the actual url that should be used to publish the context identifier.
 -- | Stores a value for `publicUrl` in the context instance if it didn't have one (most likely the value NONE).
 getUrlForPublishing :: String -> ContextInstance -> MonadPerspectives String
-getUrlForPublishing defaultUrl cid =  publicUrl cid >>= case _ of 
-  Just NONE -> pure defaultUrl 
+getUrlForPublishing defaultUrl cid = publicUrl cid >>= case _ of
+  Just NONE -> pure defaultUrl
   Just (URL url) -> pure url
   -- the context instance doesn't have a public url associated with it.
   Nothing -> do
@@ -196,21 +196,21 @@ getUrlForPublishing defaultUrl cid =  publicUrl cid >>= case _ of
         -- Save NONE in context instance.
         setPublicUrl (Just NONE)
         pure defaultUrl
-      Just url -> do 
+      Just url -> do
         -- save URL url in context instance
         setPublicUrl (Just (URL url))
         pure url
-  where 
+  where
   -- | Stores the publicUrl with the context instance. Notice that we regard this to be a form of caching.
   -- | As there is no DeltaType describing PublicUrls, they are not synchronized.
   setPublicUrl :: (Maybe PublicUrl) -> MonadPerspectives Unit
-  setPublicUrl murl = do 
+  setPublicUrl murl = do
     ctxt <- getPerspectContext cid
     void $ cacheEntity cid ctxt
     void $ saveEntiteit cid
 
 addOwnStorageScheme :: ResourceType -> String -> MonadPerspectives ResourceIdentifier
-addOwnStorageScheme rtype s = do 
+addOwnStorageScheme rtype s = do
   storageSchemes <- gets _.typeToStorage
   addSchemeToResourceIdentifier storageSchemes rtype s
 
@@ -222,17 +222,16 @@ addOwnStorageScheme rtype s = do
 -- | an URL; make it a Default scheme otherwise
 -- | This function will never create a resource identifier with the model: scheme.
 addSchemeToResourceIdentifier :: Map ResourceType StorageScheme -> ResourceType -> String -> MonadPerspectives ResourceIdentifier
-addSchemeToResourceIdentifier map t s = if isInPublicScheme s
-  then addSchemeToResourceIdentifier map t (takeGuid s) >>= exists >>= if _
-    then addSchemeToResourceIdentifier map t (takeGuid s) 
+addSchemeToResourceIdentifier map t s =
+  if isInPublicScheme s then addSchemeToResourceIdentifier map t (takeGuid s) >>= exists >>=
+    if _ then addSchemeToResourceIdentifier map t (takeGuid s)
     else pure s
-  else if isUrl s
-    then pure $ addPublicScheme s
-    else case lookup t map of
-      Nothing -> pure $ createDefaultIdentifier s
-      Just (Default _) -> pure $ createDefaultIdentifier s
-      Just (Local dbName) -> pure $ createLocalIdentifier dbName s
-      Just (Remote url) -> pure $ createRemoteIdentifier url s
+  else if isUrl s then pure $ addPublicScheme s
+  else case lookup t map of
+    Nothing -> pure $ createDefaultIdentifier s
+    Just (Default _) -> pure $ createDefaultIdentifier s
+    Just (Local dbName) -> pure $ createLocalIdentifier dbName s
+    Just (Remote url) -> pure $ createRemoteIdentifier url s
   where
   exists :: ResourceIdentifier -> MonadPerspectives Boolean
   exists r = case t of

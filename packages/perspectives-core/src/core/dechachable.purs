@@ -37,7 +37,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleIns
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId)
 import Perspectives.ResourceIdentifiers (resourceIdentifier2DocLocator)
 
-class Persistent v i <= Decacheable v i | i -> v,  v -> i where
+class Persistent v i <= Decacheable v i | i -> v, v -> i where
   decache :: i -> MonadPerspectives Unit
 
 instance Decacheable DomeinFile DomeinFileId where
@@ -50,14 +50,14 @@ instance Decacheable PerspectRol RoleInstance where
   decache dfid = decache_ dfid
 
 decache_ :: forall v i. Attachment v => Decacheable v i => i -> MonadPerspectives Unit
-decache_ id = entityIsInDatabase id >>= if _ 
-  then isWaitingToBeSaved (resourceIdToBeStored id) >>= 
+decache_ id = entityIsInDatabase id >>=
+  if _ then isWaitingToBeSaved (resourceIdToBeStored id) >>=
     if _
-      -- Even though the entity is in the database, we have lined it up to be saved which 
-      -- at least suggests it has been changed in cache wrt the database version.
-      then pure unit
-      -- Remove the AVar from cache; not merely empty it.
-      else void $ removeInternally id
+    -- Even though the entity is in the database, we have lined it up to be saved which 
+    -- at least suggests it has been changed in cache wrt the database version.
+    then pure unit
+    -- Remove the AVar from cache; not merely empty it.
+    else void $ removeInternally id
   else pure unit
 
 isWaitingToBeSaved :: ResourceToBeStored -> MonadPerspectives Boolean
@@ -67,7 +67,7 @@ isWaitingToBeSaved r = do
 
 entityIsInDatabase :: forall a i. Attachment a => Persistent a i => i -> MonadPerspectives Boolean
 entityIsInDatabase id = do
-  {database, documentName} <- resourceIdentifier2DocLocator (unwrap id)
+  { database, documentName } <- resourceIdentifier2DocLocator (unwrap id)
   (mdoc :: Maybe a) <- tryGetDocument database documentName
   pure $ isJust mdoc
 

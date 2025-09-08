@@ -151,10 +151,12 @@ withPos :: forall m s a. Monad m => IndentParser m s a -> IndentParser m s a
 withPos x = do
   a <- get'
   p <- position
-  r <- put' p *> catchError x (\e -> do
-    -- Restore the original reference position
-    put' a
-    throwError e)
+  r <- put' p *> catchError x
+    ( \e -> do
+        -- Restore the original reference position
+        put' a
+        throwError e
+    )
   put' a *> pure r
 
 -- | Ensures the current indentation level matches that of the reference

@@ -35,8 +35,8 @@ import Simple.JSON (class ReadForeign, class WriteForeign, read', writeImpl)
 -- | Represents consequtively the query inversion results for
 -- |   * the State query for context state. These inversions are exclusively used to evaluate the states of a context instance.
 -- |   * the State query for role state.
-data InvertedQueryResult =
-    ContextStateQuery (Array ContextInstance)
+data InvertedQueryResult
+  = ContextStateQuery (Array ContextInstance)
   | RoleStateQuery (Array RoleInstance)
 
 derive instance genericInvertedQueryResult :: Generic InvertedQueryResult _
@@ -45,22 +45,22 @@ instance showInvertedQueryResult :: Show InvertedQueryResult where
   show = genericShow
 
 instance WriteForeign InvertedQueryResult where
-  writeImpl (ContextStateQuery cis) = writeImpl {constructor: "ContextStateQuery", cis}
-  writeImpl (RoleStateQuery ris) = writeImpl {constructor: "RoleStateQuery", ris}
+  writeImpl (ContextStateQuery cis) = writeImpl { constructor: "ContextStateQuery", cis }
+  writeImpl (RoleStateQuery ris) = writeImpl { constructor: "RoleStateQuery", ris }
 
 instance ReadForeign InvertedQueryResult where
-  readImpl f = 
+  readImpl f =
     do
-      {cis} :: {constructor :: String, cis :: Array ContextInstance} <- read' f
+      { cis } :: { constructor :: String, cis :: Array ContextInstance } <- read' f
       pure $ ContextStateQuery cis
-    <|>
-    do
-      {ris} :: {constructor :: String, ris :: Array RoleInstance} <- read' f
-      pure $ RoleStateQuery ris
+      <|>
+        do
+          { ris } :: { constructor :: String, ris :: Array RoleInstance } <- read' f
+          pure $ RoleStateQuery ris
 
 instance eqInvertedQueryResult :: Eq InvertedQueryResult where
   eq = genericEq
-  
+
 instance prettyPrintInvertedQueryResult :: PrettyPrint InvertedQueryResult where
   prettyPrint' t (ContextStateQuery ci) = "ContextStateQuery " <> (show ci)
   prettyPrint' t (RoleStateQuery ri) = "RoleStateQuery " <> (show ri)

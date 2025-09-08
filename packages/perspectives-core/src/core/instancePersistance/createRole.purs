@@ -31,7 +31,6 @@
 
 module Perspectives.Instances.CreateRole where
 
-
 import Control.Monad.Writer (lift)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -55,35 +54,39 @@ import Simple.JSON (writeJSON)
 
 -- | `localName` should be the local name of the roleType.
 -- | The role instance is cached.
-constructEmptyRole ::
-  ContextInstance ->
-  EnumeratedRoleType ->
-  Int ->
-  RoleInstance ->
-  MonadPerspectivesTransaction PerspectRol
+constructEmptyRole
+  :: ContextInstance
+  -> EnumeratedRoleType
+  -> Int
+  -> RoleInstance
+  -> MonadPerspectivesTransaction PerspectRol
 constructEmptyRole contextInstance roleType i rolInstanceId = do
   subject <- getSubject
   allTypes <- lift (roleType ###= roleAspectsClosure)
   contextType <- lift $ contextType_ contextInstance
-  delta <- signDelta 
-    (writeJSON $ stripResourceSchemes $ UniverseRoleDelta
-      { id: contextInstance
-      , contextType
-      , roleInstances: (SNEA.singleton rolInstanceId)
-      , roleType
-      , authorizedRole: Nothing
-      , deltaType: ConstructEmptyRole
-      , subject })
-  role <- pure (PerspectRol defaultRolRecord
-    { _id = takeGuid $ unwrap rolInstanceId
-    , id = rolInstanceId
-    , pspType = roleType
-    , allTypes = allTypes
-    , context = contextInstance
-    , occurrence = i
-    , universeRoleDelta = delta
-    , states = [StateIdentifier $ unwrap roleType]
-    })
+  delta <- signDelta
+    ( writeJSON $ stripResourceSchemes $ UniverseRoleDelta
+        { id: contextInstance
+        , contextType
+        , roleInstances: (SNEA.singleton rolInstanceId)
+        , roleType
+        , authorizedRole: Nothing
+        , deltaType: ConstructEmptyRole
+        , subject
+        }
+    )
+  role <- pure
+    ( PerspectRol defaultRolRecord
+        { _id = takeGuid $ unwrap rolInstanceId
+        , id = rolInstanceId
+        , pspType = roleType
+        , allTypes = allTypes
+        , context = contextInstance
+        , occurrence = i
+        , universeRoleDelta = delta
+        , states = [ StateIdentifier $ unwrap roleType ]
+        }
+    )
   void $ lift $ cacheEntity rolInstanceId role
   addCreatedRoleToTransaction rolInstanceId
   pure role

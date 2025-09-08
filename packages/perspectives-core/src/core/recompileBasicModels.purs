@@ -78,56 +78,56 @@ recompileModelsAtUrl :: Url -> Url -> MonadPerspectivesTransaction Unit
 recompileModelsAtUrl modelsDb manifestsDb = do
   manifests :: Array RoleInstance <- lift $ getSafeViewOnDatabase manifestsDb "defaultViews/roleView" (Key modelManifest)
   versionsToCompile <- traverse getVersionedDomeinFileName manifests >>= pure <<< catMaybes
-  {rows:allModels} <- lift $ documentsInDatabase modelsDb includeDocs
-  uninterpretedDomeinFiles <- for (filter (isJust <<< (flip elemIndex versionsToCompile) <<< _.id) allModels) \({id, doc}) -> case read <$> doc of
+  { rows: allModels } <- lift $ documentsInDatabase modelsDb includeDocs
+  uninterpretedDomeinFiles <- for (filter (isJust <<< (flip elemIndex versionsToCompile) <<< _.id) allModels) \({ id, doc }) -> case read <$> doc of
     Just (Left errs) -> (logPerspectivesError (Custom ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs))) *> pure Nothing
     Nothing -> logPerspectivesError (Custom ("No document retrieved for model '" <> id <> "'.")) *> pure Nothing
     Just (Right (df :: UninterpretedDomeinFile)) -> pure $ Just df
   r <- runExceptT (executeInTopologicalOrder (catMaybes uninterpretedDomeinFiles) recompileModelAtUrl)
-  case r of 
-    Left errors -> logPerspectivesError (Custom ("recompileModelsAtUrl: " <> show errors)) 
+  case r of
+    Left errors -> logPerspectivesError (Custom ("recompileModelsAtUrl: " <> show errors))
     _ -> pure unit
   where
-    -- This function is similar to recompileModel, but it does not distribute the state notifications and automatic effects over the other models.
-    -- However, it does preserve attachments found in the original model.
-    recompileModelAtUrl :: UninterpretedDomeinFile -> ExceptT MultiplePerspectivesErrors MonadPerspectivesTransaction UninterpretedDomeinFile
-    recompileModelAtUrl model@(UninterpretedDomeinFile{id, namespace, _id, _rev, arc, _attachments}) =
-      do
-        log ("Recompiling " <> namespace)
-        -- Load sidecar from repository DB and compile with it
-        mRepoMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id)
-        -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
-        r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id))
-        case r of
-          Left m -> logPerspectivesError $ Custom ("recompileModelsAtUrl: " <> show m)
-          Right (Tuple df@(DomeinFile dfr@{id:id'}) (Tuple invertedQueries mapping')) -> lift $ lift do
-            log $  "Recompiled '" <> namespace <> "' succesfully (" <> namespace <> ")!"
-            df' <- pure $ DomeinFile dfr { _id = _id, _rev = Just _rev, _attachments = _attachments}
-            _rev' <- addDocument modelsDb df' namespace
-            attachments <- case _attachments of
-              Nothing -> pure empty
-              Just atts ->  traverseWithIndex
-                (\attName {content_type} -> Tuple (MediaType content_type) <$> getAttachment modelsDb _id attName)
-                atts
-            newRev <- execStateT (addAttachments modelsDb _id attachments) _rev'
-            -- Persist updated sidecar to repository DB
-            mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping')
-            DeleteCouchdbDocument {rev: newRev2} <- addAttachment modelsDb _id newRev "stableIdMapping.json" mappingFile (MediaType "application/json")
-            setRevision id' newRev2
-        pure model
-    getVersionedDomeinFileName :: RoleInstance -> MonadPerspectivesTransaction (Maybe String)
-    getVersionedDomeinFileName rid = do 
-      r <- lift $ getPerspectRol rid
-      case head $ rol_property r (EnumeratedPropertyType domeinFileName), head $ rol_property r (EnumeratedPropertyType  versionToInstall) of
-        Just (Value dfName), Just (Value version) -> pure $ Just $ (replace (Pattern ".json") (Replacement "") dfName) <> "@" <> version <> ".json"
-        _, _ -> pure Nothing
+  -- This function is similar to recompileModel, but it does not distribute the state notifications and automatic effects over the other models.
+  -- However, it does preserve attachments found in the original model.
+  recompileModelAtUrl :: UninterpretedDomeinFile -> ExceptT MultiplePerspectivesErrors MonadPerspectivesTransaction UninterpretedDomeinFile
+  recompileModelAtUrl model@(UninterpretedDomeinFile { id, namespace, _id, _rev, arc, _attachments }) =
+    do
+      log ("Recompiling " <> namespace)
+      -- Load sidecar from repository DB and compile with it
+      mRepoMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id)
+      -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
+      r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id))
+      case r of
+        Left m -> logPerspectivesError $ Custom ("recompileModelsAtUrl: " <> show m)
+        Right (Tuple df@(DomeinFile dfr@{ id: id' }) (Tuple invertedQueries mapping')) -> lift $ lift do
+          log $ "Recompiled '" <> namespace <> "' succesfully (" <> namespace <> ")!"
+          df' <- pure $ DomeinFile dfr { _id = _id, _rev = Just _rev, _attachments = _attachments }
+          _rev' <- addDocument modelsDb df' namespace
+          attachments <- case _attachments of
+            Nothing -> pure empty
+            Just atts -> traverseWithIndex
+              (\attName { content_type } -> Tuple (MediaType content_type) <$> getAttachment modelsDb _id attName)
+              atts
+          newRev <- execStateT (addAttachments modelsDb _id attachments) _rev'
+          -- Persist updated sidecar to repository DB
+          mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping')
+          DeleteCouchdbDocument { rev: newRev2 } <- addAttachment modelsDb _id newRev "stableIdMapping.json" mappingFile (MediaType "application/json")
+          setRevision id' newRev2
+      pure model
 
+  getVersionedDomeinFileName :: RoleInstance -> MonadPerspectivesTransaction (Maybe String)
+  getVersionedDomeinFileName rid = do
+    r <- lift $ getPerspectRol rid
+    case head $ rol_property r (EnumeratedPropertyType domeinFileName), head $ rol_property r (EnumeratedPropertyType versionToInstall) of
+      Just (Value dfName), Just (Value version) -> pure $ Just $ (replace (Pattern ".json") (Replacement "") dfName) <> "@" <> version <> ".json"
+      _, _ -> pure Nothing
 
 -- | As this function recompiles a model stored in the local models database, it not only actually recompiles the source, but also
 -- | distributes the state notifications and automatic effects over the other models.
 -- | It preserves attachments found in the original model.
 recompileModel :: UninterpretedDomeinFile -> ExceptT MultiplePerspectivesErrors MonadPerspectivesTransaction UninterpretedDomeinFile
-recompileModel model@(UninterpretedDomeinFile{_rev, _id, id, namespace, arc, _attachments}) =
+recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _attachments }) =
   do
     log ("Recompiling " <> namespace)
     -- Load sidecar from local DB and compile with it
@@ -137,16 +137,16 @@ recompileModel model@(UninterpretedDomeinFile{_rev, _id, id, namespace, arc, _at
     r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mlocalMapping (unsafePartial modelUri2LocalName (unwrap id))
     case r of
       Left m -> logPerspectivesError $ Custom ("recompileModel: " <> show m)
-      Right (Tuple df@(DomeinFile drf@{invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects}) (Tuple invertedQueries mapping')) -> lift $ lift do
-        log $  "Recompiled '" <> namespace <> "' succesfully!"
+      Right (Tuple df@(DomeinFile drf@{ invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects }) (Tuple invertedQueries mapping')) -> lift $ lift do
+        log $ "Recompiled '" <> namespace <> "' succesfully!"
         -- We have to add the _id here manually.
-        df' <- pure $ DomeinFile drf { _id = _id, _attachments = _attachments}
+        df' <- pure $ DomeinFile drf { _id = _id, _attachments = _attachments }
         storeDomeinFileInCouchdbPreservingAttachments df'
         saveInvertedQueries invertedQueries
         -- Persist updated sidecar mapping back to local DB
         db <- modelDatabaseName
         mRev <- retrieveDocumentVersion db _id
-        mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping') 
+        mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping')
         void $ addAttachment db _id mRev "stableIdMapping.json" mappingFile (MediaType "application/json")
 
         -- Distribute upstream state notifications over the other domains.
@@ -154,17 +154,16 @@ recompileModel model@(UninterpretedDomeinFile{_rev, _id, id, namespace, arc, _at
           \domainName notifications -> do
             (try $ getDomeinFile (DomeinFileId domainName)) >>=
               handleDomeinFileError "recompileModel"
-              \(DomeinFile dfr) -> do
-                (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ notifications addDownStreamNotification) dfr))
+                \(DomeinFile dfr) -> do
+                  (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ notifications addDownStreamNotification) dfr))
         -- Distribute upstream automatic effects over the other domains.
         forWithIndex_ upstreamAutomaticEffects
           \domainName automaticEffects -> do
             (try $ getDomeinFile (DomeinFileId domainName)) >>=
               handleDomeinFileError "recompileModel"
-              \(DomeinFile dfr) -> do
-                (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ automaticEffects addDownStreamAutomaticEffect) dfr))
+                \(DomeinFile dfr) -> do
+                  (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ automaticEffects addDownStreamAutomaticEffect) dfr))
     pure model
-
 
 --------------------------------------------------------------------------------------------
 -- TOPOLOGICAL SORTING
@@ -177,17 +176,20 @@ type ToSort = Array UninterpretedDomeinFile
 type SortedLabels = Array String
 type Skipped = Array UninterpretedDomeinFile
 
-executeInTopologicalOrder :: forall m. MonadThrow MultiplePerspectivesErrors m =>
-  ToSort ->
-  (UninterpretedDomeinFile -> m UninterpretedDomeinFile) ->
-  m Boolean
-executeInTopologicalOrder toSort action = TOP.executeInTopologicalOrder
-  (\(UninterpretedDomeinFile{namespace}) -> namespace)
-  (\(UninterpretedDomeinFile{namespace, referredModels}) -> difference referredModels [namespace])
-  toSort
-  action
+executeInTopologicalOrder
+  :: forall m
+   . MonadThrow MultiplePerspectivesErrors m
+  => ToSort
+  -> (UninterpretedDomeinFile -> m UninterpretedDomeinFile)
+  -> m Boolean
+executeInTopologicalOrder toSort action =
+  TOP.executeInTopologicalOrder
+    (\(UninterpretedDomeinFile { namespace }) -> namespace)
+    (\(UninterpretedDomeinFile { namespace, referredModels }) -> difference referredModels [ namespace ])
+    toSort
+    action
     >>=
-    \sorted -> pure $ null (toSort `difference` sorted)
+      \sorted -> pure $ null (toSort `difference` sorted)
 
 newtype UninterpretedDomeinFile = UninterpretedDomeinFile
   { _rev :: String
@@ -204,7 +206,7 @@ instance readForeignUninterpretedDomeinFile :: ReadForeign UninterpretedDomeinFi
 
 derive instance genericUninterpretedDomeinFile :: Generic UninterpretedDomeinFile _
 instance showUninterpretedDomeinFiles :: Show UninterpretedDomeinFile where
-  show (UninterpretedDomeinFile {namespace, referredModels}) = namespace <> " <- " <> show referredModels
+  show (UninterpretedDomeinFile { namespace, referredModels }) = namespace <> " <- " <> show referredModels
 
 instance Eq UninterpretedDomeinFile where
-  eq (UninterpretedDomeinFile {namespace:id1}) (UninterpretedDomeinFile {namespace:id2}) = id1 == id2
+  eq (UninterpretedDomeinFile { namespace: id1 }) (UninterpretedDomeinFile { namespace: id2 }) = id1 == id2

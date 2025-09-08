@@ -65,7 +65,7 @@ instance eqOutgoingTransaction :: Eq OutgoingTransaction where
   eq (OutgoingTransaction t1) (OutgoingTransaction t2) = eq t1 t2
 
 instance ordOutgoingTransaction :: Ord OutgoingTransaction where
-  compare (OutgoingTransaction {transaction: t1}) (OutgoingTransaction {transaction: t2}) = compare t1 t2
+  compare (OutgoingTransaction { transaction: t1 }) (OutgoingTransaction { transaction: t2 }) = compare t1 t2
 
 instance Attachment OutgoingTransaction where
   getAttachments o = Nothing

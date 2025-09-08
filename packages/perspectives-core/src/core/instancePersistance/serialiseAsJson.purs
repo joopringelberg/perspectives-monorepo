@@ -65,14 +65,17 @@ import Unsafe.Coerce (unsafeCoerce)
 -- | the RoleType (representing a User); the second should be the external role of the
 -- | context instance to be serialised.
 serialiseFor :: Array RoleType -> RoleInstance -> MPQ Value
-serialiseFor userTypes externalRoleId = try 
-  (ArrayT $ case ARR.head userTypes of
-    Nothing -> pure []
-    Just u -> do
-      lift $ ARR.singleton <$> serialisedAsDeltasForUserType (ContextInstance $ deconstructBuitenRol $ unwrap externalRoleId) u)
-  >>= handleExternalFunctionError "model://perspectives.domains#Serialise$SerialiseFor"
-    -- (sers :: Array ContextSerialization) <- lift $ execStateT (serialiseAsJsonFor_ u (ContextInstance $ deconstructBuitenRol $ unwrap externalRoleId)) []
-    -- pure $ ARR.singleton $ Value $ unsafeStringify $ encode sers
+serialiseFor userTypes externalRoleId =
+  try
+    ( ArrayT $ case ARR.head userTypes of
+        Nothing -> pure []
+        Just u -> do
+          lift $ ARR.singleton <$> serialisedAsDeltasForUserType (ContextInstance $ deconstructBuitenRol $ unwrap externalRoleId) u
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Serialise$SerialiseFor"
+
+-- (sers :: Array ContextSerialization) <- lift $ execStateT (serialiseAsJsonFor_ u (ContextInstance $ deconstructBuitenRol $ unwrap externalRoleId)) []
+-- pure $ ARR.singleton $ Value $ unsafeStringify $ encode sers
 
 -- TODO. This function is not used.
 serialiseAsJsonFor :: RoleInstance -> ContextInstance -> MonadPerspectives (Array ContextSerialization)
@@ -92,8 +95,8 @@ type ContextsDone m = StateT (Array ContextSerialization) m
 hasContextBeenDone :: forall m. Monad m => ContextInstance -> (ContextsDone m) Boolean
 hasContextBeenDone c = gets \ctxts -> isJust $ find hasId ctxts
   where
-    hasId :: ContextSerialization -> Boolean
-    hasId (ContextSerialization{id}) = eq id (Just $ unwrap c)
+  hasId :: ContextSerialization -> Boolean
+  hasId (ContextSerialization { id }) = eq id (Just $ unwrap c)
 
 -- | Save work done.
 contextHasBeenDone :: forall m. Monad m => ContextSerialization -> (ContextsDone m) (Array ContextSerialization)
@@ -102,7 +105,7 @@ contextHasBeenDone ser = modify \sers -> snoc sers ser
 -----------------------------------------------------------------------------------------
 ---- SERIALIZING
 -----------------------------------------------------------------------------------------
-type Collecting =  (ContextsDone MonadPerspectives)
+type Collecting = (ContextsDone MonadPerspectives)
 
 lift2Coll :: forall a. MonadPerspectives a -> Collecting a
 lift2Coll = lift
@@ -110,11 +113,11 @@ lift2Coll = lift
 -- TODO. This function is not used as it has been replaced in serialiseFor with delta serialisation.
 -- NOTICE that it accesses the PerspectContext member rolInContext directly. It will miss unlinked role instances!
 -- NOTICE that selfonly properties are not implemented!
-serialiseAsJsonFor_:: RoleType -> ContextInstance -> Collecting Unit
+serialiseAsJsonFor_ :: RoleType -> ContextInstance -> Collecting Unit
 serialiseAsJsonFor_ userType cid = do
-  (PerspectContext{pspType, rolInContext}) <- lift2Coll $ getPerspectContext cid
+  (PerspectContext { pspType, rolInContext }) <- lift2Coll $ getPerspectContext cid
   (rollen :: OBJ.Object (SerializableNonEmptyArray RolSerialization)) <- traverse serialiseRoleInstances (OBJ.toUnfoldable rolInContext) >>= catMaybes >>> OBJ.fromFoldable >>> pure
-  PerspectRol{properties} <- lift $ getPerspectRol (externalRole cid)
+  PerspectRol { properties } <- lift $ getPerspectRol (externalRole cid)
   (externeProperties :: OBJ.Object (Array String)) <- lift $ execWriterT $ forWithIndex_ properties serialisePropertiesFor
   void $ contextHasBeenDone $ ContextSerialization
     { id: Just (unwrap cid)
@@ -125,95 +128,100 @@ serialiseAsJsonFor_ userType cid = do
     }
 
   where
-    serialiseRoleInstances :: Tuple String (Array RoleInstance) -> Collecting (Maybe (Tuple String (SerializableNonEmptyArray RolSerialization)))
-    serialiseRoleInstances (Tuple roleTypeId roleInstances) = do
-      -- Now for each role, decide if the user may see it.
-      allowed <- lift $ (userType ###>> unsafePartial roleIsInPerspectiveOf (EnumeratedRoleType roleTypeId))
-      if allowed
-        then case fromArray roleInstances of
-          Nothing -> pure Nothing
-          Just roleInstances' -> do
-            rolesAsJson <- traverse (serialiseRoleInstance cid (EnumeratedRoleType roleTypeId)) roleInstances'
-            pure $ Just $ Tuple roleTypeId (SerializableNonEmptyArray rolesAsJson)
-        else pure Nothing
+  serialiseRoleInstances :: Tuple String (Array RoleInstance) -> Collecting (Maybe (Tuple String (SerializableNonEmptyArray RolSerialization)))
+  serialiseRoleInstances (Tuple roleTypeId roleInstances) = do
+    -- Now for each role, decide if the user may see it.
+    allowed <- lift $ (userType ###>> unsafePartial roleIsInPerspectiveOf (EnumeratedRoleType roleTypeId))
+    if allowed then case fromArray roleInstances of
+      Nothing -> pure Nothing
+      Just roleInstances' -> do
+        rolesAsJson <- traverse (serialiseRoleInstance cid (EnumeratedRoleType roleTypeId)) roleInstances'
+        pure $ Just $ Tuple roleTypeId (SerializableNonEmptyArray rolesAsJson)
+    else pure Nothing
 
-    serialiseRoleInstance :: ContextInstance -> EnumeratedRoleType -> RoleInstance -> Collecting RolSerialization
-    serialiseRoleInstance cid' roleTypeId roleInstance = do
-      PerspectRol{binding, properties} <- lift $ getPerspectRol roleInstance
-      (properties' :: (OBJ.Object (Array String))) <- lift $ execWriterT $ forWithIndex_ properties serialisePropertiesFor
-      case binding of
-        Nothing -> pure $ RolSerialization {id: Just (unwrap roleInstance), properties: (PropertySerialization properties'), binding: Nothing}
-        Just b -> do
-          c <- lift (b ##>> context)
-          doneBefore <- hasContextBeenDone c
-          typeOfBinding <- lift (b ##>> roleType)
-          allowed <- lift (userType ###>> unsafePartial roleIsInPerspectiveOf typeOfBinding)
-          -- TODO. Serialiseer de context niet als de ander er al een rol bij speelt!
-          if allowed && not doneBefore then serialiseAsJsonFor_ userType c else pure unit
-          pure $ RolSerialization {id: Just (unwrap roleInstance), properties: (PropertySerialization properties'), binding: if allowed then map unwrap binding else Nothing}
+  serialiseRoleInstance :: ContextInstance -> EnumeratedRoleType -> RoleInstance -> Collecting RolSerialization
+  serialiseRoleInstance cid' roleTypeId roleInstance = do
+    PerspectRol { binding, properties } <- lift $ getPerspectRol roleInstance
+    (properties' :: (OBJ.Object (Array String))) <- lift $ execWriterT $ forWithIndex_ properties serialisePropertiesFor
+    case binding of
+      Nothing -> pure $ RolSerialization { id: Just (unwrap roleInstance), properties: (PropertySerialization properties'), binding: Nothing }
+      Just b -> do
+        c <- lift (b ##>> context)
+        doneBefore <- hasContextBeenDone c
+        typeOfBinding <- lift (b ##>> roleType)
+        allowed <- lift (userType ###>> unsafePartial roleIsInPerspectiveOf typeOfBinding)
+        -- TODO. Serialiseer de context niet als de ander er al een rol bij speelt!
+        if allowed && not doneBefore then serialiseAsJsonFor_ userType c else pure unit
+        pure $ RolSerialization { id: Just (unwrap roleInstance), properties: (PropertySerialization properties'), binding: if allowed then map unwrap binding else Nothing }
 
-    serialisePropertiesFor :: String -> Array Value -> WriterT (OBJ.Object (Array String)) MonadPerspectives Unit
-    serialisePropertiesFor propertyTypeId values = do
-      -- For each set of Property Values, add a RolePropertyDelta if the user may see it.
-      propAllowed <- lift (userType ###>> propertyIsInPerspectiveOf (EnumeratedPropertyType propertyTypeId))
-      isAuthorOnly <- lift $ propertyTypeIsAuthorOnly (ENP $ EnumeratedPropertyType propertyTypeId)
-      if propAllowed && not isAuthorOnly then tell (OBJ.singleton propertyTypeId (unwrap <$> values)) else pure unit
+  serialisePropertiesFor :: String -> Array Value -> WriterT (OBJ.Object (Array String)) MonadPerspectives Unit
+  serialisePropertiesFor propertyTypeId values = do
+    -- For each set of Property Values, add a RolePropertyDelta if the user may see it.
+    propAllowed <- lift (userType ###>> propertyIsInPerspectiveOf (EnumeratedPropertyType propertyTypeId))
+    isAuthorOnly <- lift $ propertyTypeIsAuthorOnly (ENP $ EnumeratedPropertyType propertyTypeId)
+    if propAllowed && not isAuthorOnly then tell (OBJ.singleton propertyTypeId (unwrap <$> values)) else pure unit
 
 -- | This function expects an instance of type sys:Invitation, creates a channel and binds it to the Invitation
 -- | in the role PrivateChannel.
 addChannel :: ContextInstance -> MPT Unit
-addChannel invitation = try
-  (do
-    mCouchdburl <- lift $ getCouchdbBaseURL
-    case mCouchdburl of
-      Nothing -> throwError $ (error "addChannel expects a couchdbUrl.")
-      Just url -> createChannel url >>= \channel -> do
-        void $ createAndAddRoleInstance
-          (EnumeratedRoleType privateChannel)
-          (unwrap invitation)
-          (RolSerialization{id: Nothing, properties: PropertySerialization OBJ.empty, binding: Just (buitenRol $ unwrap channel)})
-        lift $ setChannelReplication url channel)
-  >>= handleExternalStatementError "model://perspectives.domains#Serialise$AddChannel"
+addChannel invitation =
+  try
+    ( do
+        mCouchdburl <- lift $ getCouchdbBaseURL
+        case mCouchdburl of
+          Nothing -> throwError $ (error "addChannel expects a couchdbUrl.")
+          Just url -> createChannel url >>= \channel -> do
+            void $ createAndAddRoleInstance
+              (EnumeratedRoleType privateChannel)
+              (unwrap invitation)
+              (RolSerialization { id: Nothing, properties: PropertySerialization OBJ.empty, binding: Just (buitenRol $ unwrap channel) })
+            lift $ setChannelReplication url channel
+    )
+    >>= handleExternalStatementError "model://perspectives.domains#Serialise$AddChannel"
 
 -- | Create a database with the given name, if it does not yet exist (it may exist if the Initiator uses the same
 -- | Couchdb installation as the ConnectedPartner).
 -- | Also set up sync with the post database.
 createCopyOfChannelDatabase :: Array String -> ContextInstance -> MPT Unit
-createCopyOfChannelDatabase arrWithChannelName invitation = try 
-  (case ARR.head arrWithChannelName of
-    Just channelName -> void $ lift $ withCouchdbUrl \url -> do
-      -- If the database existed prior to this line, nothing is created.
-      void $ createDatabase channelName
-      mchannelContext <- invitation ##> (getEnumeratedRoleInstances (EnumeratedRoleType privateChannel) >=> binding >=> context)
-      case mchannelContext of
-        Just channelContext -> setChannelReplication url channelContext
+createCopyOfChannelDatabase arrWithChannelName invitation =
+  try
+    ( case ARR.head arrWithChannelName of
+        Just channelName -> void $ lift $ withCouchdbUrl \url -> do
+          -- If the database existed prior to this line, nothing is created.
+          void $ createDatabase channelName
+          mchannelContext <- invitation ##> (getEnumeratedRoleInstances (EnumeratedRoleType privateChannel) >=> binding >=> context)
+          case mchannelContext of
+            Just channelContext -> setChannelReplication url channelContext
+            Nothing -> pure unit
         Nothing -> pure unit
-    Nothing -> pure unit)
-  >>= handleExternalStatementError "model://perspectives.domains#Serialise$CreateCopyOfChannelDatabase"
+    )
+    >>= handleExternalStatementError "model://perspectives.domains#Serialise$CreateCopyOfChannelDatabase"
 
 addConnectedPartnerToChannel :: Array String -> Array String -> (ContextInstance -> MPT Unit)
-addConnectedPartnerToChannel userArr channelArr cid = try
-  (do
-    -- log $ "addConnectedPartnerToChannel " <> show userArr <> " en " <> show channelArr
-    case ARR.head userArr of
-      Nothing -> throwError (error "addConnectedPartnerToChannel did not get a value for the first argument.")
-      Just r -> do
-        sysUser <- lift ((RoleInstance r) ##> bottom)
-        case sysUser of
-          Nothing -> throwError (error "addConnectedPartnerToChannel: first argument is not a User Role (this error may not occur).")
-          Just usr -> case ARR.head channelArr of
-            Nothing -> throwError (error "addConnectedPartnerToChannel did not get a value for the second argument.")
-            Just channelId -> do
-              -- log $ "addConnectedPartnerToChannel " <> show usr <> " en " <> show channelId
-              addPartnerToChannel usr (ContextInstance channelId))
-  >>= handleExternalStatementError "model://perspectives.domains#Serialise$AddConnectedPartnerToChannel"
+addConnectedPartnerToChannel userArr channelArr cid =
+  try
+    ( do
+        -- log $ "addConnectedPartnerToChannel " <> show userArr <> " en " <> show channelArr
+        case ARR.head userArr of
+          Nothing -> throwError (error "addConnectedPartnerToChannel did not get a value for the first argument.")
+          Just r -> do
+            sysUser <- lift ((RoleInstance r) ##> bottom)
+            case sysUser of
+              Nothing -> throwError (error "addConnectedPartnerToChannel: first argument is not a User Role (this error may not occur).")
+              Just usr -> case ARR.head channelArr of
+                Nothing -> throwError (error "addConnectedPartnerToChannel did not get a value for the second argument.")
+                Just channelId -> do
+                  -- log $ "addConnectedPartnerToChannel " <> show usr <> " en " <> show channelId
+                  addPartnerToChannel usr (ContextInstance channelId)
+    )
+    >>= handleExternalStatementError "model://perspectives.domains#Serialise$AddConnectedPartnerToChannel"
 
 -- | An Array of External functions. Each External function is inserted into the ExternalFunctionCache and can be retrieved
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
 externalFunctions =
-  [ Tuple "model://perspectives.domains#Serialise$SerialiseFor" {func: unsafeCoerce serialiseFor, nArgs: 1, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Serialise$AddChannel" {func: unsafeCoerce addChannel, nArgs: 0, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Serialise$AddConnectedPartnerToChannel" {func: unsafeCoerce addConnectedPartnerToChannel, nArgs: 2, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Serialise$CreateCopyOfChannelDatabase" {func: unsafeCoerce createCopyOfChannelDatabase, nArgs: 1, isFunctional: True, isEffect: true}
+  [ Tuple "model://perspectives.domains#Serialise$SerialiseFor" { func: unsafeCoerce serialiseFor, nArgs: 1, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Serialise$AddChannel" { func: unsafeCoerce addChannel, nArgs: 0, isFunctional: True, isEffect: true }
+  , Tuple "model://perspectives.domains#Serialise$AddConnectedPartnerToChannel" { func: unsafeCoerce addConnectedPartnerToChannel, nArgs: 2, isFunctional: True, isEffect: true }
+  , Tuple "model://perspectives.domains#Serialise$CreateCopyOfChannelDatabase" { func: unsafeCoerce createCopyOfChannelDatabase, nArgs: 1, isFunctional: True, isEffect: true }
   ]

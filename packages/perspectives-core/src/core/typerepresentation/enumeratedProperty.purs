@@ -76,7 +76,7 @@ defaultEnumeratedProperty id dn role range pos = EnumeratedProperty
   , pos: pos
   , onPropertyDelta: empty
   , constrainingFacets: []
-}
+  }
 
 derive instance genericRepEnumeratedProperty :: Generic EnumeratedProperty _
 
@@ -84,7 +84,7 @@ instance showEnumeratedProperty :: Show EnumeratedProperty where
   show = genericShow
 
 instance eqEnumeratedProperty :: Eq EnumeratedProperty where
-  eq (EnumeratedProperty {id : id1}) (EnumeratedProperty {id : id2}) = id1 == id2
+  eq (EnumeratedProperty { id: id1 }) (EnumeratedProperty { id: id2 }) = id1 == id2
 
 derive instance newtypeEnumeratedProperty :: Newtype EnumeratedProperty _
 
@@ -94,8 +94,8 @@ derive newtype instance WriteForeign EnumeratedProperty
 
 instance revisionEnumeratedProperty :: Revision EnumeratedProperty where
   rev = _._rev <<< unwrap
-  changeRevision s = over EnumeratedProperty (\vr -> vr {_rev = s})
+  changeRevision s = over EnumeratedProperty (\vr -> vr { _rev = s })
 
 instance identifiableEnumeratedProperty :: Identifiable EnumeratedProperty EnumeratedPropertyType where
-  identifier (EnumeratedProperty{id}) = id
-  displayName (EnumeratedProperty{displayName:d}) = d
+  identifier (EnumeratedProperty { id }) = id
+  displayName (EnumeratedProperty { displayName: d }) = d

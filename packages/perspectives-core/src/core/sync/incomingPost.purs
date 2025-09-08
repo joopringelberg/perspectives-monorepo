@@ -63,38 +63,40 @@ incomingPost url = do
   -- Create an EventSource
   (es :: EventSource) <- liftEffect $ createEventSource (base <> post) Nothing true
   -- Save in state, so we can close it.
-  void $ modify \s -> s {post = Just es}
+  void $ modify \s -> s { post = Just es }
   -- Produce new Transaction documents
   (transactionProducer :: DocProducer (PerspectivesExtraState) TransactionForPeer) <- pure $ docProducer es
   -- Handle them.
   void $ runProcess $ transactionProducer $$ transactionConsumer post
   where
-    transactionConsumer :: String -> Consumer (Either MultipleErrors (Tuple String (Maybe TransactionForPeer))) MonadPerspectives Unit
-    transactionConsumer database = forever do
-      change <- await
-      case change of
-        -- TODO: iets met deze errors doen? Loggen, naar support sturen...
-        Left me -> pure unit
-        Right (Tuple _ Nothing) -> pure unit
-        Right (Tuple id (Just t)) -> do
-          -- Delete the document
-          _ <- lift $ deleteDocument database id Nothing
-          padding <- lift transactionLevel
-          log $ padding <> "Executing incoming post transaction"
-          lift (runMonadPerspectivesTransaction'
-            false
-            (ENR $ EnumeratedRoleType sysUser)
-            (executeTransaction t))
+  transactionConsumer :: String -> Consumer (Either MultipleErrors (Tuple String (Maybe TransactionForPeer))) MonadPerspectives Unit
+  transactionConsumer database = forever do
+    change <- await
+    case change of
+      -- TODO: iets met deze errors doen? Loggen, naar support sturen...
+      Left me -> pure unit
+      Right (Tuple _ Nothing) -> pure unit
+      Right (Tuple id (Just t)) -> do
+        -- Delete the document
+        _ <- lift $ deleteDocument database id Nothing
+        padding <- lift transactionLevel
+        log $ padding <> "Executing incoming post transaction"
+        lift
+          ( runMonadPerspectivesTransaction'
+              false
+              (ENR $ EnumeratedRoleType sysUser)
+              (executeTransaction t)
+          )
 
 -----------------------------------------------------------
 -- GETCOUCHDBBASEURLWITHCREDENTIALS
 -----------------------------------------------------------
 -- | Returns a Url in the format http://user:password@{domain}:{port}/
-getCouchdbBaseURLWithCredentials :: forall f . String -> MonadPouchdb f String
+getCouchdbBaseURLWithCredentials :: forall f. String -> MonadPouchdb f String
 getCouchdbBaseURLWithCredentials url = do
   mcredential :: Maybe Credential <- getCouchdbCredentials
-  case mcredential of 
-    Just (Credential username password) -> do 
+  case mcredential of
+    Just (Credential username password) -> do
       case match domainRegex url of
         Nothing -> throwError (error $ "getCouchdbBaseURLWithCredentials: couchdbHost not well-formed: " <> url)
         Just matches | length matches < 3 -> throwError (error $ "getCouchdbBaseURLWithCredentials: couchdbHost not well-formed: " <> url)
@@ -103,5 +105,5 @@ getCouchdbBaseURLWithCredentials url = do
           _, _ -> throwError (error $ "getCouchdbBaseURLWithCredentials: couchdbHost not well-formed: " <> url)
     Nothing -> throwError (error $ "getCouchdbBaseURLWithCredentials: no password for " <> url)
   where
-    domainRegex :: Regex
-    domainRegex = unsafeRegex "^(https?\\:\\/\\/)(.*)$" noFlags
+  domainRegex :: Regex
+  domainRegex = unsafeRegex "^(https?\\:\\/\\/)(.*)$" noFlags

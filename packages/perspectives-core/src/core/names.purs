@@ -20,9 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.Names
-
-where
+module Perspectives.Names where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Data.Array (head)
@@ -57,15 +55,17 @@ expandIndexedNames defaults expandedName =
     Nothing -> expandedName
 
 expandNamespaces :: OBJ.Object String -> String -> String
-expandNamespaces namespaces s = if isTypeUri s then s else
-  case deconstructPrefix s of
-    (Just pre) -> do
-      case OBJ.lookup pre namespaces of
-        (Just modelName) -> case deconstructLocalNameFromCurie s of
-          (Just ln) -> (modelName <> "$" <> ln )
+expandNamespaces namespaces s =
+  if isTypeUri s then s
+  else
+    case deconstructPrefix s of
+      (Just pre) -> do
+        case OBJ.lookup pre namespaces of
+          (Just modelName) -> case deconstructLocalNameFromCurie s of
+            (Just ln) -> (modelName <> "$" <> ln)
+            Nothing -> s
           Nothing -> s
-        Nothing -> s
-    Nothing -> s
+      Nothing -> s
 
 defaultNamespaces :: OBJ.Object String
 defaultNamespaces = OBJ.fromFoldable
@@ -114,10 +114,10 @@ findIndexedContextName cid = gets _.indexedContexts >>= pure <<< head <<< OBJ.ke
 -- REMOVE INDEXED NAMES
 -----------------------------------------------------------
 removeIndexedRole :: String -> MonadPerspectives Unit
-removeIndexedRole s = modify \r -> r {indexedRoles = OBJ.delete s r.indexedRoles}
+removeIndexedRole s = modify \r -> r { indexedRoles = OBJ.delete s r.indexedRoles }
 
 removeIndexedContext :: String -> MonadPerspectives Unit
-removeIndexedContext s = modify \r -> r {indexedContexts = OBJ.delete s r.indexedContexts}
+removeIndexedContext s = modify \r -> r { indexedContexts = OBJ.delete s r.indexedContexts }
 
 -----------------------------------------------------------
 -- SYSTEM AND USER

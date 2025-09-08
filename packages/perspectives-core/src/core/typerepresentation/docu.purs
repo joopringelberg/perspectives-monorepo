@@ -45,5 +45,4 @@
 -- | * [Property](Perspectives.Representation.Class.Property.html#t:x) over `EnumeratedProperty` and `CalculatedProperty`
 -- | * [Action](Perspectives.Representation.Class.Action.html#t:x)
 
-
 module Perspectives.Docu.TypeRepresentation where

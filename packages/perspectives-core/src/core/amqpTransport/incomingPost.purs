@@ -22,8 +22,7 @@
 module Perspectives.AMQP.IncomingPost
   ( incomingPost
   , retrieveBrokerService
-  )
-  where
+  ) where
 
 import Control.Coroutine (Consumer, Producer, await, runProcess, ($$))
 import Control.Monad.Rec.Class (forever)
@@ -65,9 +64,9 @@ incomingPost = do
   cleanupDeletedDocs post
   removeMessage "Cleaning up post database"
   setConnectionState false
-  {topic, queueId, login, passcode, vhost, url} <- getBrokerService
+  { topic, queueId, login, passcode, vhost, url } <- getBrokerService
   -- Create a Stomp Client: url
-  stpClient <- liftEffect $ createStompClient( url )
+  stpClient <- liftEffect $ createStompClient (url)
   -- Save the client in state.
   setStompClient stpClient
   -- Create a messageProducer: ConnectAndSubscriptionParameters
@@ -81,71 +80,75 @@ incomingPost = do
   void $ runProcess $ transactionProducer $$ transactionConsumer
 
   where
-    transactionConsumer :: Consumer (Either MultipleErrors (StructuredMessage TransactionForPeer)) MonadPerspectives Unit
-    transactionConsumer = do
-      postDB <- lift $ postDatabaseName
-      forever do
-        change <- await
-        case change of
-          Left me -> case head me of
-            ForeignError "noConnection" -> lift $ setConnectionState false
-            ForeignError "connection" -> lift $ setConnectionState true *> sendOutgoingPost
-            TypeMismatch "receipt" docId -> void $ lift $ deleteDocument postDB docId Nothing
-            _ -> log ("Perspectives.AMQP.IncomingPost.transactionConsumer: " <> show me)
-          Right {body, ack} -> do
-            -- NOTE. Transaction execution seems to be so slow, that the connection can be lOst before we acknowledge.
-            -- In that case, the broker resends the message.
-            -- That is why we acknowledge first.
-            -- The risk is that the PDR may not handle the message fully and then it is lost.
-            lift $ acknowledge ack
-            lift do 
-              padding <- transactionLevel
-              log $ padding <> "Executing incoming post transaction"
-              runMonadPerspectivesTransaction'
-                false
-                (ENR $ EnumeratedRoleType sysUser)
-                (executeTransaction body)
-              detectPublicStateChanges
+  transactionConsumer :: Consumer (Either MultipleErrors (StructuredMessage TransactionForPeer)) MonadPerspectives Unit
+  transactionConsumer = do
+    postDB <- lift $ postDatabaseName
+    forever do
+      change <- await
+      case change of
+        Left me -> case head me of
+          ForeignError "noConnection" -> lift $ setConnectionState false
+          ForeignError "connection" -> lift $ setConnectionState true *> sendOutgoingPost
+          TypeMismatch "receipt" docId -> void $ lift $ deleteDocument postDB docId Nothing
+          _ -> log ("Perspectives.AMQP.IncomingPost.transactionConsumer: " <> show me)
+        Right { body, ack } -> do
+          -- NOTE. Transaction execution seems to be so slow, that the connection can be lOst before we acknowledge.
+          -- In that case, the broker resends the message.
+          -- That is why we acknowledge first.
+          -- The risk is that the PDR may not handle the message fully and then it is lost.
+          lift $ acknowledge ack
+          lift do
+            padding <- transactionLevel
+            log $ padding <> "Executing incoming post transaction"
+            runMonadPerspectivesTransaction'
+              false
+              (ENR $ EnumeratedRoleType sysUser)
+              (executeTransaction body)
+            detectPublicStateChanges
 
-    setConnectionState :: Boolean -> MonadPerspectives Unit
-    setConnectionState c = do
-      mySystem <- getMySystem
-      padding <- transactionLevel
-      log $ padding <> "Setting connection state to " <> show c
-      void $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser) (setProperty [RoleInstance $ buitenRol mySystem] (EnumeratedPropertyType connectedToAMQPBroker) Nothing [Value $ show c])
-      pure unit
+  setConnectionState :: Boolean -> MonadPerspectives Unit
+  setConnectionState c = do
+    mySystem <- getMySystem
+    padding <- transactionLevel
+    log $ padding <> "Setting connection state to " <> show c
+    void $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser) (setProperty [ RoleInstance $ buitenRol mySystem ] (EnumeratedPropertyType connectedToAMQPBroker) Nothing [ Value $ show c ])
+    pure unit
 
-    -- | Send all transactions that have accumulated in the post database while we had no connection to the Broker.
-    sendOutgoingPost :: MonadPerspectives Unit
-    sendOutgoingPost = do
-      postDB <- postDatabaseName
-      (waitingTransactions :: Array String) <- documentsInDatabase postDB excludeDocs >>= _.rows >>> map _.id >>> pure
-      mstompClient <- stompClient
-      case mstompClient of
-        -- TODO. Order transactions to increasing timestamps (TransactionForPeer, timeStamp)
-        Just stompClient -> do
-          (transactions :: Array OutgoingTransaction) <- sort <<< nub <$> traverse (getDocument_ postDB) waitingTransactions
-          -- We do not delete here; only when we receive the receipt.
-          void $ for transactions \(OutgoingTransaction{_id, receiver, transaction}) -> liftEffect $ sendToTopic stompClient receiver _id (writeJSON transaction)
-        _ -> pure unit
+  -- | Send all transactions that have accumulated in the post database while we had no connection to the Broker.
+  sendOutgoingPost :: MonadPerspectives Unit
+  sendOutgoingPost = do
+    postDB <- postDatabaseName
+    (waitingTransactions :: Array String) <- documentsInDatabase postDB excludeDocs >>= _.rows >>> map _.id >>> pure
+    mstompClient <- stompClient
+    case mstompClient of
+      -- TODO. Order transactions to increasing timestamps (TransactionForPeer, timeStamp)
+      Just stompClient -> do
+        (transactions :: Array OutgoingTransaction) <- sort <<< nub <$> traverse (getDocument_ postDB) waitingTransactions
+        -- We do not delete here; only when we receive the receipt.
+        void $ for transactions \(OutgoingTransaction { _id, receiver, transaction }) -> liftEffect $ sendToTopic stompClient receiver _id (writeJSON transaction)
+      _ -> pure unit
 
 -- | Construct the BrokerService from the database, if possible, and set it in PerspectivesState.
 retrieveBrokerService :: MonadPerspectives Unit
-retrieveBrokerService = lookupIndexedContext myBrokers >>= (\mbrokers -> case mbrokers of
-  Nothing -> pure Nothing
-  Just brokers -> brokers ##> 
-    getRoleInstances (CR $ CalculatedRoleType brokerServiceContractInUse) 
-    >=> context
-    >=> getRoleInstances (ENR $ EnumeratedRoleType accountHolder) 
-    >=> constructBrokerServiceForUser) >>= setBrokerService
-
+retrieveBrokerService = lookupIndexedContext myBrokers
+  >>=
+    ( \mbrokers -> case mbrokers of
+        Nothing -> pure Nothing
+        Just brokers ->
+          brokers ##>
+            getRoleInstances (CR $ CalculatedRoleType brokerServiceContractInUse)
+            >=> context
+            >=> getRoleInstances (ENR $ EnumeratedRoleType accountHolder)
+            >=> constructBrokerServiceForUser
+    )
+  >>= setBrokerService
 
 -- | Construct a BrokerService object for a particular AccountHolder.
 constructBrokerServiceForUser :: RoleInstance -> MonadPerspectivesQuery BrokerService
 constructBrokerServiceForUser accountHolder = do
   (Value login) <- getProperty (EnumeratedPropertyType accountHolderName) accountHolder
   (Value passcode) <- getProperty (EnumeratedPropertyType accountHolderPassword) accountHolder
-  
+
   brokerContractExternal <- (context >=> externalRole) accountHolder
   endpointGetter <- lift $ lift $ getPropertyFunction brokerEndpoint
   (Value url) <- endpointGetter brokerContractExternal
@@ -158,7 +161,7 @@ constructBrokerServiceForUser accountHolder = do
   -- one for each PerspectivesSystem (i.e. one for each installation).
   perspectivesUser <- lift $ lift $ getPerspectivesUser
   pure $
-    { topic : (takeGuid $ unwrap perspectivesUser)
+    { topic: (takeGuid $ unwrap perspectivesUser)
     , queueId
     , login
     , passcode

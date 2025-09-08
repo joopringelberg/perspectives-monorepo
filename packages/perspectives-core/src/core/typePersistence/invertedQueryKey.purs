@@ -20,7 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.InvertedQueryKey  where
+module Perspectives.InvertedQueryKey where
 
 import Prelude
 
@@ -33,31 +33,37 @@ import Simple.JSON (class ReadForeign, class WriteForeign, read', write)
 -- RUNTIME KEYS FOR INVERTED QUERIES
 -- Runtime keys identify exactly one path through instance space.
 -----------------------------------------------------------
-type PropertyKeyFields = 
+type PropertyKeyFields =
   { property :: EnumeratedPropertyType
-  , role :: EnumeratedRoleType}
+  , role :: EnumeratedRoleType
+  }
 
-type RoleKeyFields = 
+type RoleKeyFields =
   { context_origin :: ContextType
-  , role_destination :: EnumeratedRoleType}
+  , role_destination :: EnumeratedRoleType
+  }
+
 type ContextKeyFields =
   { role_origin :: EnumeratedRoleType
-  , context_destination :: ContextType}
+  , context_destination :: ContextType
+  }
 
-type FillerKeyFields = 
+type FillerKeyFields =
   { filledRole_origin :: EnumeratedRoleType
   , filledContext_origin :: ContextType
   , fillerRole_destination :: EnumeratedRoleType
-  , fillerContext_destination :: ContextType}
+  , fillerContext_destination :: ContextType
+  }
 
-type FilledKeyFields = 
+type FilledKeyFields =
   { fillerRole_origin :: EnumeratedRoleType
   , fillerContext_origin :: ContextType
   , filledRole_destination :: EnumeratedRoleType
-  , filledContext_destination :: ContextType}
+  , filledContext_destination :: ContextType
+  }
 
-data RunTimeInvertedQueryKey = 
-    RTPropertyKey PropertyKeyFields
+data RunTimeInvertedQueryKey
+  = RTPropertyKey PropertyKeyFields
   | RTRoleKey RoleKeyFields
   | RTContextKey ContextKeyFields
   -- The filler step takes us from a filled role to its filler.
@@ -67,21 +73,21 @@ data RunTimeInvertedQueryKey =
   | RTFilledKey FilledKeyFields
 
 instance WriteForeign RunTimeInvertedQueryKey where
-  writeImpl (RTPropertyKey r) = write { keyType: "RTPropertyKey", fields: r}
-  writeImpl (RTRoleKey r) = write { keyType: "RTRoleKey", fields: r}
-  writeImpl (RTContextKey r) = write { keyType: "RTContextKey", fields: r}
-  writeImpl (RTFillerKey r) = write { keyType: "RTFillerKey", fields: r}
-  writeImpl (RTFilledKey r) = write { keyType: "RTFilledKey", fields: r}  
+  writeImpl (RTPropertyKey r) = write { keyType: "RTPropertyKey", fields: r }
+  writeImpl (RTRoleKey r) = write { keyType: "RTRoleKey", fields: r }
+  writeImpl (RTContextKey r) = write { keyType: "RTContextKey", fields: r }
+  writeImpl (RTFillerKey r) = write { keyType: "RTFillerKey", fields: r }
+  writeImpl (RTFilledKey r) = write { keyType: "RTFilledKey", fields: r }
 
 instance ReadForeign RunTimeInvertedQueryKey where
   readImpl f = do
-    {keyType} :: {keyType :: String} <- read' f
-    case keyType of 
-      "RTPropertyKey" -> RTPropertyKey <<< _.fields <$> ((read' f) :: F {fields :: PropertyKeyFields})
-      "RTRoleKey" -> RTRoleKey <<< _.fields <$> ((read' f) :: F {fields :: RoleKeyFields})
-      "RTContextKey" -> RTContextKey <<< _.fields <$> ((read' f) :: F {fields :: ContextKeyFields})
-      "RTFillerKey" -> RTFillerKey <<< _.fields <$> ((read' f) :: F {fields :: FillerKeyFields})
-      "RTFilledKey" -> RTFilledKey <<< _.fields <$> ((read' f) :: F {fields :: FilledKeyFields})
+    { keyType } :: { keyType :: String } <- read' f
+    case keyType of
+      "RTPropertyKey" -> RTPropertyKey <<< _.fields <$> ((read' f) :: F { fields :: PropertyKeyFields })
+      "RTRoleKey" -> RTRoleKey <<< _.fields <$> ((read' f) :: F { fields :: RoleKeyFields })
+      "RTContextKey" -> RTContextKey <<< _.fields <$> ((read' f) :: F { fields :: ContextKeyFields })
+      "RTFillerKey" -> RTFillerKey <<< _.fields <$> ((read' f) :: F { fields :: FillerKeyFields })
+      "RTFilledKey" -> RTFilledKey <<< _.fields <$> ((read' f) :: F { fields :: FilledKeyFields })
       key -> fail $ ForeignError $ "Unknown constructor for InvertedQueryKey: " <> key
 
 instance Eq RunTimeInvertedQueryKey where
@@ -103,12 +109,12 @@ instance Show RunTimeInvertedQueryKey where
 -- | Use these keys for the Couchdb views.
 -- | Note that the keys must be unique PER VIEW, not in an absolute sense. 
 serializeInvertedQueryKey :: RunTimeInvertedQueryKey -> String
-serializeInvertedQueryKey (RTPropertyKey {property, role}) = unwrap property <> unwrap role
-serializeInvertedQueryKey (RTRoleKey {context_origin, role_destination}) = 
+serializeInvertedQueryKey (RTPropertyKey { property, role }) = unwrap property <> unwrap role
+serializeInvertedQueryKey (RTRoleKey { context_origin, role_destination }) =
   unwrap context_origin <> unwrap role_destination
-serializeInvertedQueryKey (RTContextKey {role_origin, context_destination}) = 
+serializeInvertedQueryKey (RTContextKey { role_origin, context_destination }) =
   unwrap role_origin <> unwrap context_destination
-serializeInvertedQueryKey (RTFillerKey {filledRole_origin, filledContext_origin, fillerRole_destination, fillerContext_destination}) = 
+serializeInvertedQueryKey (RTFillerKey { filledRole_origin, filledContext_origin, fillerRole_destination, fillerContext_destination }) =
   unwrap filledRole_origin <> unwrap filledContext_origin <> unwrap fillerRole_destination <> unwrap fillerContext_destination
-serializeInvertedQueryKey (RTFilledKey {fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination}) = 
+serializeInvertedQueryKey (RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }) =
   unwrap fillerRole_origin <> unwrap fillerContext_origin <> unwrap filledRole_destination <> unwrap filledContext_destination

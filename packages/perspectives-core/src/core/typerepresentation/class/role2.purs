@@ -72,7 +72,7 @@ class (Show r, Identifiable r i, PersistentType r i) <= RoleClass r i | r -> i, 
   contextActions :: r -> Map StateSpec (Object Action)
   displayName :: r -> String
   pos :: r -> ArcPosition
-  
+
 -----------------------------------------------------------
 -- CALCULATED ROLE INSTANCE
 -----------------------------------------------------------
@@ -106,8 +106,8 @@ instance enumeratedRoleRoleClass :: RoleClass EnumeratedRole EnumeratedRoleType 
   binding (EnumeratedRole r) = pure r.binding
   functional r = pure (unwrap r).functional
   mandatory r = pure (unwrap r).mandatory
-  calculation r = if (unwrap r).unlinked
-    then pure $ SQD
+  calculation r =
+    if (unwrap r).unlinked then pure $ SQD
       (CDOM $ context r)
       (DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF (identifier_ r))
       (RDOM $ declaredType r)
@@ -131,9 +131,9 @@ instance enumeratedRoleRoleClass :: RoleClass EnumeratedRole EnumeratedRoleType 
 -- | Only if the type has no aspects and no filler restriction do we construct it as a Simple Type (ST); 
 -- | otherwise we construct an UnExpanded Type (UET)
 declaredType :: EnumeratedRole -> (ADT RoleInContext)
-declaredType (EnumeratedRole r) = if null r.roleAspects && isNothing r.binding
-  then ST $ RoleInContext {context: r.context, role: r.id}
-  else UET $ RoleInContext {context: r.context, role: r.id}
+declaredType (EnumeratedRole r) =
+  if null r.roleAspects && isNothing r.binding then ST $ RoleInContext { context: r.context, role: r.id }
+  else UET $ RoleInContext { context: r.context, role: r.id }
 
 -- | The (possibly compound) restriction on fillers of the role as it has been declared, expressed as an Abstract Data Type of role in context.
 declaredFillerRestriction :: EnumeratedRole -> Maybe (ADT RoleInContext)
@@ -150,47 +150,47 @@ declaredAspectFillerRestrictions (EnumeratedRole r) = PROD <<< catMaybes <$> (fo
 
 -- | The product of the declared filler restrictions of the role and of the declared aspect filler restrictions, possibly Nothing.
 completeDeclaredFillerRestriction :: EnumeratedRole -> MP (Maybe (ADT RoleInContext))
-completeDeclaredFillerRestriction role@(EnumeratedRole r) = do 
+completeDeclaredFillerRestriction role@(EnumeratedRole r) = do
   dafr <- declaredAspectFillerRestrictions role
-  asr <- unsafePartial case dafr of 
+  asr <- unsafePartial case dafr of
     PROD x -> pure x
   case declaredFillerRestriction role of
-    Nothing -> if null asr 
-      then pure $ Nothing 
+    Nothing ->
+      if null asr then pure $ Nothing
       else pure $ Just $ PROD asr
-    Just (dfr :: ADT (RoleInContext)) -> if null asr
-      then pure $ Just dfr
+    Just (dfr :: ADT (RoleInContext)) ->
+      if null asr then pure $ Just dfr
       else pure $ Just $ PROD $ cons dfr asr
 
 -- | The sum of the declared aspects and the declared type.
 declaredTypeWithoutFiller :: EnumeratedRole -> MP (ADT RoleInContext)
 declaredTypeWithoutFiller role@(EnumeratedRole r) = do
   aspectTypes <- declaredAspects role
-  pure $ PROD [(declaredType role), aspectTypes]
+  pure $ PROD [ (declaredType role), aspectTypes ]
 
 -- | The sum of the declared aspect types, the complete declared filler restriction and the aspect types.
 completeDeclaredType :: EnumeratedRole -> MP (ADT RoleInContext)
 completeDeclaredType role@(EnumeratedRole r) = do
   -- Will be a PROD.
   aspectTypes <- declaredAspects role
-  case declaredFillerRestriction role, aspectTypes of 
+  case declaredFillerRestriction role, aspectTypes of
     Nothing, PROD [] -> pure $ declaredType role
-    Nothing, _ -> pure $ PROD [(declaredType role), aspectTypes]
-    Just fr, PROD [] -> pure $ PROD [(declaredType role), fr]
-    Just fr, _ -> pure $ PROD [(declaredType role), fr, aspectTypes]
+    Nothing, _ -> pure $ PROD [ (declaredType role), aspectTypes ]
+    Just fr, PROD [] -> pure $ PROD [ (declaredType role), fr ]
+    Just fr, _ -> pure $ PROD [ (declaredType role), fr, aspectTypes ]
 
 -----------------------------------------------------------
 -- TYPE EXPANSION
 -----------------------------------------------------------
 -- | The recursive ('complete') expansion of the ADT. This takes care of aspects and fillers.
 expandUnexpandedLeaves :: ADT RoleInContext -> MP (ExpandedADT RoleInContext)
-expandUnexpandedLeaves = expand $ unsafePartial 
+expandUnexpandedLeaves = expand $ unsafePartial
   -- the function below is intentionally and responsibly Partial, because 
   -- by construction `expand` only applies it to the two cases below.
-  case _ of 
+  case _ of
     (ST a) -> pure $ EST a
-    UET a -> do 
-      role@(EnumeratedRole{roleAspects, binding}) <- getEnumeratedRole (roleInContext2Role a)
+    UET a -> do
+      role@(EnumeratedRole { roleAspects, binding }) <- getEnumeratedRole (roleInContext2Role a)
       -- Expand filler restriction
       (mexpandedFiller :: Maybe (ExpandedADT RoleInContext)) <- traverse expandUnexpandedLeaves binding
       -- Expand aspects
@@ -198,28 +198,28 @@ expandUnexpandedLeaves = expand $ unsafePartial
       -- the function below is responsibly Partial, because
       -- we know by construction that the declared type of a role 
       -- is either ST or UET.
-      case declaredType role of 
-        ST ric -> case mexpandedFiller of 
+      case declaredType role of
+        ST ric -> case mexpandedFiller of
           Nothing -> pure $ ECT (EST ric) (EPROD $ nub $ cons (EST a) expandedAspects')
           Just expandedFiller -> pure $ ECT (EST ric) (EPROD $ nub $ cons (EST a) (cons expandedFiller expandedAspects'))
-        UET ric -> case mexpandedFiller of 
+        UET ric -> case mexpandedFiller of
           Nothing -> pure $ ECT (EST ric) (EPROD $ nub $ cons (EST a) expandedAspects')
           Just expandedFiller -> pure $ ECT (EST ric) (EPROD $ nub $ cons (EST a) (cons expandedFiller expandedAspects'))
 
 -- | The recursive expansion of all aspects of the ADT. NOT INCLUDING FILLERS!
 expandAspects :: ADT RoleInContext -> MP (ExpandedADT RoleInContext)
-expandAspects = expand $ unsafePartial 
+expandAspects = expand $ unsafePartial
   -- the function below is intentionally and responsibly Partial, because 
   -- by construction `expand` only applies it to the two cases below.
-  case _ of 
+  case _ of
     (ST a) -> pure $ EST a
-    UET a -> do 
-      role@(EnumeratedRole{roleAspects}) <- getEnumeratedRole (roleInContext2Role a)
+    UET a -> do
+      role@(EnumeratedRole { roleAspects }) <- getEnumeratedRole (roleInContext2Role a)
       expandedAspects' <- for roleAspects (getEnumeratedRole <<< roleInContext2Role >=> declaredTypeWithoutFiller >=> expandAspects)
       -- the function below is responsibly Partial, because
       -- we know by construction that the declared type of a role 
       -- is either ST or UET.
-      case declaredType role of 
+      case declaredType role of
         ST ric -> pure $ ECT (EST ric) (EPROD $ nub $ cons (EST a) expandedAspects')
         UET ric -> pure $ ECT (EST ric) (EPROD $ nub $ cons (EST a) expandedAspects')
 
@@ -245,30 +245,30 @@ completeExpandedFillerRestriction = completeDeclaredFillerRestriction >=> traver
 -----------------------------------------------------------
 getRoleADT :: RoleType -> MP (ADT RoleInContext)
 getRoleADT (ENR enr) = getEnumeratedRole enr >>= roleADT
-getRoleADT (CR cr) = getCalculatedRole cr >>= roleADT 
+getRoleADT (CR cr) = getCalculatedRole cr >>= roleADT
 
 -----------------------------------------------------------
 -- EXPAND ROLETYPE
 -----------------------------------------------------------
 completeExpandedRoleType :: RoleType -> MP (ExpandedADT RoleInContext)
 completeExpandedRoleType (ENR enr) = getEnumeratedRole enr >>= completeExpandedType
-completeExpandedRoleType (CR cr) = getCalculatedRole cr >>= 
-  roleADT >>= 
-  expandUnexpandedLeaves
+completeExpandedRoleType (CR cr) = getCalculatedRole cr
+  >>= roleADT
+  >>=
+    expandUnexpandedLeaves
 
 -----------------------------------------------------------
 -- ADT RoleInContext TO DNF
 -- NOTICE: this function can be applied only when member `completeType` of EnumeratedRoleType has been constructed in Perspectives.Parsing.Arc.PhaseThree.
 -----------------------------------------------------------
 toConjunctiveNormalForm_ :: ADT RoleInContext -> MP (CNF RoleInContext)
-toConjunctiveNormalForm_ adt = case adt of 
-  ST (RoleInContext{role}) -> getEnumeratedRole role >>= pure <<< _.completeType <<< unwrap
+toConjunctiveNormalForm_ adt = case adt of
+  ST (RoleInContext { role }) -> getEnumeratedRole role >>= pure <<< _.completeType <<< unwrap
   -- In the disjunctive normal form we have no UET.
   -- We have a tree built from EST, ECT, ESUM and EPROD.
-  UET (RoleInContext{role}) -> getEnumeratedRole role >>= pure <<< _.completeType <<< unwrap
+  UET (RoleInContext { role }) -> getEnumeratedRole role >>= pure <<< _.completeType <<< unwrap
   SUM as -> for as toConjunctiveNormalForm_ >>= pure <<< unsafePartial distribute
   PROD as -> for as toConjunctiveNormalForm_ >>= pure <<< unsafePartial flattenProducts
-
 
 -----------------------------------------------------------
 -- CONTEXTOFADT
@@ -313,6 +313,7 @@ identifierOfRole (C e) = identifier_ e
 posOfRole :: Role -> ArcPosition
 posOfRole (E e) = pos e
 posOfRole (C e) = pos e
+
 -----------------------------------------------------------
 -- FUNCTIONS ON ROLETYPE
 -----------------------------------------------------------
@@ -324,28 +325,32 @@ getRole (CR c) = getPerspectType c >>= pure <<< C
 -- | Does not include the binding, for (ENR (EnumeratedRoleType e)).
 rangeOfRoleCalculation :: RoleType -> MonadPerspectives (ADT EnumeratedRoleType)
 rangeOfRoleCalculation = getRole >=> getCalculation >=> case _ of
-    SQD _ _ (RDOM adt) _ _ -> pure $ roleInContext2Role <$> adt
-    UQD _ _ _ (RDOM adt) _ _ -> pure $ roleInContext2Role <$> adt
-    BQD _ _ _ _ (RDOM adt) _ _ -> pure $ roleInContext2Role <$> adt
-    MQD _ _ _ (RDOM adt) _ _ -> pure $ roleInContext2Role <$> adt
-    otherwise -> empty -- NB: The Alt instance of Aff throws an error on empty!
+  SQD _ _ (RDOM adt) _ _ -> pure $ roleInContext2Role <$> adt
+  UQD _ _ _ (RDOM adt) _ _ -> pure $ roleInContext2Role <$> adt
+  BQD _ _ _ _ (RDOM adt) _ _ -> pure $ roleInContext2Role <$> adt
+  MQD _ _ _ (RDOM adt) _ _ -> pure $ roleInContext2Role <$> adt
+  otherwise -> empty -- NB: The Alt instance of Aff throws an error on empty!
 
 roleTypeIsFunctional :: RoleType -> MonadPerspectives Boolean
-roleTypeIsFunctional = getRole >=> (case _ of
-  E r -> functional r
-  C r -> functional r)
+roleTypeIsFunctional = getRole >=>
+  ( case _ of
+      E r -> functional r
+      C r -> functional r
+  )
 
 roleTypeIsMandatory :: RoleType -> MonadPerspectives Boolean
-roleTypeIsMandatory = getRole >=> (case _ of
-  E r -> mandatory r
-  C r -> mandatory r)
+roleTypeIsMandatory = getRole >=>
+  ( case _ of
+      E r -> mandatory r
+      C r -> mandatory r
+  )
 
 bindingOfRole :: RoleType -> MonadPerspectives (Maybe (ADT RoleInContext))
 bindingOfRole = getRole >=> binding'
   where
-    binding' :: Role -> MonadPerspectives (Maybe (ADT RoleInContext))
-    binding' (E r) = binding r
-    binding' (C r) = binding r
+  binding' :: Role -> MonadPerspectives (Maybe (ADT RoleInContext))
+  binding' (E r) = binding r
+  binding' (C r) = binding r
 
 contextOfRoleType :: RoleType -> MonadPerspectives (ADT ContextType)
 contextOfRoleType (ENR e) = getPerspectType e >>= pure <<< context
@@ -378,10 +383,10 @@ roleADTOfRoleType (CR r) = getPerspectType r >>= rangeOfCalculatedRole
 rangeOfCalculatedRole :: CalculatedRole -> MonadPerspectives (ADT RoleInContext)
 rangeOfCalculatedRole cr = calculation cr >>= roleCalculationRange
   where
-    roleCalculationRange :: QueryFunctionDescription -> MonadPerspectives (ADT RoleInContext)
-    roleCalculationRange qfd = case range qfd of
-      (RDOM x) -> pure x
-      otherwise -> throwError (error ("range of calculation of a calculated role is not a role Domain."))
+  roleCalculationRange :: QueryFunctionDescription -> MonadPerspectives (ADT RoleInContext)
+  roleCalculationRange qfd = case range qfd of
+    (RDOM x) -> pure x
+    otherwise -> throwError (error ("range of calculation of a calculated role is not a role Domain."))
 
 displayNameOfRoleType :: RoleType -> MonadPerspectives String
 displayNameOfRoleType (ENR e) = getEnumeratedRole e >>= pure <<< displayName
@@ -412,10 +417,11 @@ type CollectorOverEnumeratedRoleExpansion a = EnumeratedRole -> MP (Array a)
 
 -- | From an EnumeratedRole, compute over its complete expansion a set by applying the extractor to each leaf in the expansion.
 collectOverEnumeratedRoleExpansion :: forall a. Ord a => ExtractorOnEnumeratedRole a -> CollectorOverEnumeratedRoleExpansion a
-collectOverEnumeratedRoleExpansion f role = 
-  completeExpandedType role >>= 
-  typeToRole >>= 
-  pure <<< computeExpandedCollection f
+collectOverEnumeratedRoleExpansion f role =
+  completeExpandedType role
+    >>= typeToRole
+    >>=
+      pure <<< computeExpandedCollection f
 
 -- | From an ADT RoleInContext, compute over its entire structure a set by applying the collector to each leaf.
 collectOverRoleInContextADT :: forall a. Ord a => CollectorOverEnumeratedRoleExpansion a -> ADT EnumeratedRoleType -> MP (Array a)
@@ -423,11 +429,12 @@ collectOverRoleInContextADT f = traverse (getEnumeratedRole >=> f) >=> pure <<< 
 
 -- | Expand an EnumeratedRole over Aspects, then apply a monadic function to all leaves and collect the results.
 collectOverEnumeratedRoleExpansionWithoutFillers :: forall a. Ord a => ExtractorOnEnumeratedRole a -> CollectorOverEnumeratedRoleExpansion a
-collectOverEnumeratedRoleExpansionWithoutFillers f role = 
-  declaredTypeWithoutFiller role >>= 
-  expandAspects >>= 
-  typeToRole >>= 
-  pure <<< computeExpandedCollection f
+collectOverEnumeratedRoleExpansionWithoutFillers f role =
+  declaredTypeWithoutFiller role
+    >>= expandAspects
+    >>= typeToRole
+    >>=
+      pure <<< computeExpandedCollection f
 
 --------------------------------------------------------------------------------------------------
 ---- PROPERTY SETS
@@ -469,7 +476,7 @@ allRoles = traverse getContext >=> pure <<< computeCollection roles
 -- | All views, computed recursively over binding and Aspects, of the Role ADT.
 allViews :: ADT EnumeratedRoleType -> MP (Array ViewType)
 allViews = collectOverRoleInContextADT allViewsOfRole
- 
+
 allViewsOfRole :: EnumeratedRole -> MP (Array ViewType)
 allViewsOfRole = collectOverEnumeratedRoleExpansion (_.views <<< unwrap)
 
@@ -488,20 +495,21 @@ allViewsOfRole = collectOverEnumeratedRoleExpansion (_.views <<< unwrap)
 -- TODO: hernoem naar fillerOfADT
 bindingOfADT :: ADT RoleInContext -> MP (Maybe (ADT RoleInContext))
 bindingOfADT = expandAndReduce (unsafePartial fillerADT)
-  where 
-    fillerADT :: Partial => ADT RoleInContext -> MP (Maybe (ADT RoleInContext))
-    fillerADT adt = case adt of 
-      ST a -> getEnumeratedRole (roleInContext2Role a) >>= pure <<< declaredFillerRestriction
-      UET a -> getEnumeratedRole (roleInContext2Role a) >>= pure <<< declaredFillerRestriction
+  where
+  fillerADT :: Partial => ADT RoleInContext -> MP (Maybe (ADT RoleInContext))
+  fillerADT adt = case adt of
+    ST a -> getEnumeratedRole (roleInContext2Role a) >>= pure <<< declaredFillerRestriction
+    UET a -> getEnumeratedRole (roleInContext2Role a) >>= pure <<< declaredFillerRestriction
 
 -----------------------------------------------------------
 -- BOOLEANS
 -----------------------------------------------------------
 adtIsFunctional :: ADT RoleInContext -> MonadPerspectives Boolean
-adtIsFunctional adt = 
-  expandUnexpandedLeaves adt >>=
-  typeToRole >>=
-  pure <<< computeExpandedBoolean \(EnumeratedRole{functional}) -> functional
+adtIsFunctional adt =
+  expandUnexpandedLeaves adt
+    >>= typeToRole
+    >>=
+      pure <<< computeExpandedBoolean \(EnumeratedRole { functional }) -> functional
 
 -----------------------------------------------------------
 -- EXTERNALROLEOFADT
@@ -509,4 +517,4 @@ adtIsFunctional adt =
 -- | The external role of an ADT ContextType
 externalRoleOfADT :: ADT ContextType -> MP (ADT RoleInContext)
 -- TODO: handle CalculatedRole.
-externalRoleOfADT = pure <<< map \ctype -> RoleInContext {context: ctype, role: EnumeratedRoleType $ buitenRol (unwrap ctype)}
+externalRoleOfADT = pure <<< map \ctype -> RoleInContext { context: ctype, role: EnumeratedRoleType $ buitenRol (unwrap ctype) }

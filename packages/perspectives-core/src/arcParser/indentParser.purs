@@ -69,8 +69,7 @@ module Perspectives.Parsing.Arc.IndentParser
   , upperLeft
   , withArcParserState
   , withEntireBlock
-  )
-  where
+  ) where
 
 import Prim.Row
 
@@ -136,7 +135,7 @@ initialArcParserState =
   , state: ContextState (ContextType "") Nothing
   , onEntry: Nothing
   , onExit: Nothing
-}
+  }
 
 getArcParserState :: IP ArcParserState
 getArcParserState = lift $ lift $ get
@@ -151,21 +150,23 @@ getCurrentState :: IP StateSpecification
 getCurrentState = getArcParserState >>= pure <<< _.state
 
 getObject :: IP RoleIdentification
-getObject = getArcParserState >>= \{object} -> case object of
+getObject = getArcParserState >>= \{ object } -> case object of
   Nothing -> fail "No object is in scope. "
   Just o -> pure o
 
 getSubject :: IP RoleIdentification
-getSubject = getArcParserState >>= \{subject} -> case subject of
+getSubject = getArcParserState >>= \{ subject } -> case subject of
   Nothing -> fail "No subject is in scope. "
   Just s -> pure s
 
 inSubContext :: forall a. String -> IP a -> IP a
 inSubContext subContextName p = do
-  oldState@{currentContext} <- getArcParserState
-  void $ modifyArcParserState \s -> s {currentContext = case unwrap currentContext of
-    "" -> ContextType subContextName
-    m -> ContextType (m <> "$" <> subContextName)}
+  oldState@{ currentContext } <- getArcParserState
+  void $ modifyArcParserState \s -> s
+    { currentContext = case unwrap currentContext of
+        "" -> ContextType subContextName
+        m -> ContextType (m <> "$" <> subContextName)
+    }
   -- getCurrentContext >>= \c -> log ("Entered context " <> show c)
   result <- p
   -- log ("Restoring context " <> show currentContext)
@@ -174,8 +175,8 @@ inSubContext subContextName p = do
 
 withArcParserState :: forall a. StateSpecification -> IP a -> IP a
 withArcParserState stateDeterminant a = do
-  oldState@{state} <- getArcParserState
-  void $ modifyArcParserState \s -> s {state = stateDeterminant}
+  oldState@{ state } <- getArcParserState
+  void $ modifyArcParserState \s -> s { state = stateDeterminant }
   -- log ("State now is " <> show stateDeterminant)
   result <- a
   -- log ("Restoring state " <> show state)
@@ -185,22 +186,26 @@ withArcParserState stateDeterminant a = do
 getStateIdentifier :: IP StateSpecification
 getStateIdentifier = getArcParserState >>= pure <<< _.state
 
-setLabel :: forall a l r'. IsSymbol l =>
-  Cons l (Maybe a) r' (currentContext :: ContextType
-  , subject :: Maybe RoleIdentification
-  , object :: Maybe RoleIdentification
-  , state :: StateSpecification
-  , onEntry :: Maybe StateTransitionE
-  , onExit :: Maybe StateTransitionE
-  ) =>
-  Proxy l -> a -> IP Unit
+setLabel
+  :: forall a l r'
+   . IsSymbol l
+  => Cons l (Maybe a) r'
+       ( currentContext :: ContextType
+       , subject :: Maybe RoleIdentification
+       , object :: Maybe RoleIdentification
+       , state :: StateSpecification
+       , onEntry :: Maybe StateTransitionE
+       , onExit :: Maybe StateTransitionE
+       )
+  => Proxy l
+  -> a
+  -> IP Unit
 setLabel l newValue = do
   (oldValue :: Maybe a) <- getArcParserState >>= pure <<< Record.get l
-  if isNothing oldValue
-    then void $ modifyArcParserState \s -> Record.set l (Just newValue) s
-    else do
-      -- log ("failing in setLabel with " <> reflectSymbol l)
-      fail (reflectSymbol l <> " is already specified in the context. ")
+  if isNothing oldValue then void $ modifyArcParserState \s -> Record.set l (Just newValue) s
+  else do
+    -- log ("failing in setLabel with " <> reflectSymbol l)
+    fail (reflectSymbol l <> " is already specified in the context. ")
 
 -- | Referring to the lexical analysis of the source text,
 -- | sets the current user (the user having a perspective).
@@ -213,15 +218,20 @@ setSubject = setLabel (Proxy :: Proxy "subject")
 setObject :: RoleIdentification -> IP Unit
 setObject = setLabel (Proxy :: Proxy "object")
 
-protectLabel :: forall a l r' b. IsSymbol l =>
-  Cons l (Maybe a) r' (currentContext :: ContextType
-  , subject :: Maybe RoleIdentification
-  , object :: Maybe RoleIdentification
-  , state :: StateSpecification
-  , onEntry :: Maybe StateTransitionE
-  , onExit :: Maybe StateTransitionE
-  ) =>
-  Proxy l -> IP b -> IP b
+protectLabel
+  :: forall a l r' b
+   . IsSymbol l
+  => Cons l (Maybe a) r'
+       ( currentContext :: ContextType
+       , subject :: Maybe RoleIdentification
+       , object :: Maybe RoleIdentification
+       , state :: StateSpecification
+       , onEntry :: Maybe StateTransitionE
+       , onExit :: Maybe StateTransitionE
+       )
+  => Proxy l
+  -> IP b
+  -> IP b
 protectLabel l f = do
   (oldValue :: Maybe a) <- getArcParserState >>= pure <<< Record.get l
   void $ modifyArcParserState \s -> Record.set l Nothing s
@@ -244,18 +254,16 @@ protectOnExit = protectLabel (Proxy :: Proxy "onExit")
 -- | Stores a fully qualified state identifier.
 setOnEntry :: StateSpecification -> IP Unit
 setOnEntry stateId = do
-  {onEntry} <- getArcParserState
-  if isNothing onEntry
-    then void $ modifyArcParserState \s -> s {onEntry = Just (Entry stateId)}
-    else fail "on entry is already specified. "
+  { onEntry } <- getArcParserState
+  if isNothing onEntry then void $ modifyArcParserState \s -> s { onEntry = Just (Entry stateId) }
+  else fail "on entry is already specified. "
 
 -- | Stores a fully qualified state identifier.
 setOnExit :: StateSpecification -> IP Unit
 setOnExit stateId = do
-  {onExit} <- getArcParserState
-  if isNothing onExit
-    then void $ modifyArcParserState \s -> s {onExit = Just (Exit stateId)}
-    else fail "on exit is already specified. "
+  { onExit } <- getArcParserState
+  if isNothing onExit then void $ modifyArcParserState \s -> s { onExit = Just (Exit stateId) }
+  else fail "on exit is already specified. "
 
 -- | Apply a parser, keeping only the parsed result.
 runIndentParser :: forall a. String -> IP a -> Aff (Either ParseError a)
@@ -286,7 +294,7 @@ put' :: ArcPosition -> IP Unit
 put' p = lift (put $ arcPosition2Position p)
 
 upperLeft :: ArcPosition
-upperLeft = ArcPosition{line: 0, column: 0}
+upperLeft = ArcPosition { line: 0, column: 0 }
 
 arcPosition2Position :: ArcPosition -> Position
 arcPosition2Position = unsafeCoerce
@@ -299,11 +307,11 @@ position2ArcPosition = unsafeCoerce
 -- | consumed, combining them with `f`.
 withEntireBlock :: forall a b c. (a -> List b -> c) -> IP a -> IP b -> IP c
 withEntireBlock f a p = withPos $ do
-    r1 <- a
-    isIndented' <- isIndented
-    (isNextLine' :: Boolean) <- isNextLine
-    r2 <- if (isIndented' && isNextLine') then entireBlock1 p else pure Nil
-    pure (f r1 r2)
+  r1 <- a
+  isIndented' <- isIndented
+  (isNextLine' :: Boolean) <- isNextLine
+  r2 <- if (isIndented' && isNextLine') then entireBlock1 p else pure Nil
+  pure (f r1 r2)
 
 -- | Parses a block of lines at the same indentation level with pr.
 -- | All lines at that level, or until the end of file, must be consumed by pr.
@@ -312,9 +320,11 @@ withEntireBlock f a p = withPos $ do
 -- | Also, if pr fails but consumes input and leaves the parser position to the left of the reference, the entire block
 -- | succeeds.
 entireBlock :: forall x. IP x -> IP (List x)
-entireBlock pr = (withPos
-  ((many $ checkIndent *> pr)
-    >>= unlessOutdented (pr >>= pure <<< singleton))
+entireBlock pr =
+  ( withPos
+      ( (many $ checkIndent *> pr)
+          >>= unlessOutdented (pr >>= pure <<< singleton)
+      )
   )
 
 -- | Applies parser `p` iff the current location of the parser is not outdented with respect
@@ -322,12 +332,12 @@ entireBlock pr = (withPos
 -- | has not been reached). Otherwise returns a.
 unlessOutdented :: forall a. IP a -> a -> IP a
 unlessOutdented p a = do
-    (indentParserPosition :: ArcPosition) <- get'
-    (parserPosition :: ArcPosition) <- getPosition
-    if sourceColumn parserPosition < sourceColumn indentParserPosition &&
-      sourceLine parserPosition > sourceLine indentParserPosition
-      then pure a
-      else (eof *> pure a <|> p)
+  (indentParserPosition :: ArcPosition) <- get'
+  (parserPosition :: ArcPosition) <- getPosition
+  if
+    sourceColumn parserPosition < sourceColumn indentParserPosition &&
+      sourceLine parserPosition > sourceLine indentParserPosition then pure a
+  else (eof *> pure a <|> p)
 
 -- | Parses a block of lines at the same indentation level with pr, at least one line.
 -- | All lines at that level, or until the end of file, must be consumed by pr.
@@ -336,9 +346,11 @@ unlessOutdented p a = do
 -- | Also, if pr fails but consumes input and leaves the parser position to the left of the reference, the entire block
 -- | succeeds.
 entireBlock1 :: forall x. IP x -> IP (List x)
-entireBlock1 pr = (withPos
-  ((some $ checkIndent *> pr)
-  >>= unlessOutdented (pr >>= pure <<< singleton))
+entireBlock1 pr =
+  ( withPos
+      ( (some $ checkIndent *> pr)
+          >>= unlessOutdented (pr >>= pure <<< singleton)
+      )
   )
 
 -- | If the current position is on a line below and to the right of the reference point,
@@ -350,25 +362,23 @@ nestedBlock :: forall x. IP x -> IP (List x)
 nestedBlock p = do
   ind <- isIndented
   nl <- isNextLine
-  if ind && nl
-    then entireBlock1 p
-    else pure Nil
+  if ind && nl then entireBlock1 p
+  else pure Nil
 
 optionalNestedBlock :: forall x. IP x -> IP (List x)
 optionalNestedBlock p = do
   ind <- isIndented
   nl <- isNextLine
-  if ind && nl
-    then entireBlock p
-    else pure Nil
+  if ind && nl then entireBlock p
+  else pure Nil
 
 -- | True iff the Parser Position is further to the right than the reference position.
 -- NOTE: this is the same as Parsing.Indent.indented' but returns a Boolean.
 isIndented :: IP Boolean
 isIndented = do
-    (indentParserPosition :: ArcPosition) <- get'
-    (parserPosition :: ArcPosition) <- getPosition
-    pure $ not (sourceColumn parserPosition <= sourceColumn indentParserPosition)
+  (indentParserPosition :: ArcPosition) <- get'
+  (parserPosition :: ArcPosition) <- getPosition
+  pure $ not (sourceColumn parserPosition <= sourceColumn indentParserPosition)
 
 isSameOrIndented :: IP Boolean
 isSameOrIndented = do
@@ -376,8 +386,10 @@ isSameOrIndented = do
   (indentParserPosition :: ArcPosition) <- get'
   -- The current position.
   (parserPosition :: ArcPosition) <- getPosition
-  pure ((not (sourceColumn parserPosition <= sourceColumn indentParserPosition)) ||
-    (sourceLine parserPosition == sourceLine indentParserPosition))
+  pure
+    ( (not (sourceColumn parserPosition <= sourceColumn indentParserPosition)) ||
+        (sourceLine parserPosition == sourceLine indentParserPosition)
+    )
 
 -- | Parses only when outdented with respect to the level of reference, but does not change internal state
 outdented' :: IP Unit
@@ -401,25 +413,25 @@ sameOrOutdented' = do
 
 isNextLine :: IP Boolean
 isNextLine = do
-    (indentParserPosition :: ArcPosition) <- get'
-    (parserPosition :: ArcPosition) <- getPosition
-    pure (sourceLine parserPosition > sourceLine indentParserPosition)
+  (indentParserPosition :: ArcPosition) <- get'
+  (parserPosition :: ArcPosition) <- getPosition
+  pure (sourceLine parserPosition > sourceLine indentParserPosition)
 
 sourceColumn :: ArcPosition -> Int
-sourceColumn (ArcPosition {line: _, column: c}) = c
+sourceColumn (ArcPosition { line: _, column: c }) = c
 
 sourceLine :: ArcPosition -> Int
-sourceLine (ArcPosition {line: l, column: _}) = l
+sourceLine (ArcPosition { line: l, column: _ }) = l
 
 setSourceLine :: ArcPosition -> Int -> ArcPosition
-setSourceLine (ArcPosition {line: _, column: c}) l = ArcPosition {line: l, column: c}
+setSourceLine (ArcPosition { line: _, column: c }) l = ArcPosition { line: l, column: c }
 
 -- | Parses only on lines that are lower than the reference (unless the end of the input stream has been reached).
 nextLine :: IP Unit
 nextLine = do
-    pos <- getPosition
-    s   <- get'
-    if sourceLine pos > sourceLine s then pure unit else (eof <|> fail "not on the next line. ")
+  pos <- getPosition
+  s <- get'
+  if sourceLine pos > sourceLine s then pure unit else (eof <|> fail "not on the next line. ")
 
 containsTab :: IP Boolean
 containsTab = do

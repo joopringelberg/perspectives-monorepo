@@ -1,4 +1,4 @@
-  -- BEGIN LICENSE
+-- BEGIN LICENSE
 -- Perspectives Distributed Runtime
 -- SPDX-FileCopyrightText: 2019 Joop Ringelberg (joopringelberg@gmail.com), Cor Baars
 -- SPDX-License-Identifier: GPL-3.0-or-later
@@ -81,12 +81,12 @@ sensorFunctions = fromFoldable
 
 currentDate :: Partial => SensorFunction
 currentDate device sensor = case device, sensor of
-  "clock", "now" ->do 
+  "clock", "now" -> do
     dt <- liftEffect (unsafeCoerce nowDateTime)
     pure $ unsafeCoerce $ write (SerializableDateTime dt)
 
 cacheSize :: Partial => SensorFunction
-cacheSize device sensor = show <$> case device, sensor of 
+cacheSize device sensor = show <$> case device, sensor of
   "contextcache", "size" -> do
     cache <- gets _.contextInstances
     liftEffect $ size cache
@@ -102,13 +102,15 @@ cacheSize device sensor = show <$> case device, sensor of
 
 -- | Read a value from a Sensor on a Device.
 readSensor :: Array Device -> Array Sensor -> RoleInstance -> MonadPerspectivesQuery Value
-readSensor device' sensor' _ = try 
-  (case head device', head sensor' of
-    Just device, Just sensor -> ArrayT case lookup (Tuple device sensor) sensorFunctions of
-      Nothing -> pure []
-      Just f -> lift $ singleton <<< Value <$> f device sensor
-    _, _ -> ArrayT $ pure [])
-  >>= handleExternalFunctionError "model://perspectives.domains#Sensor$ReadSensor"
+readSensor device' sensor' _ =
+  try
+    ( case head device', head sensor' of
+        Just device, Just sensor -> ArrayT case lookup (Tuple device sensor) sensorFunctions of
+          Nothing -> pure []
+          Just f -> lift $ singleton <<< Value <$> f device sensor
+        _, _ -> ArrayT $ pure []
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Sensor$ReadSensor"
 
 -- | An Array of External functions. Each External function is inserted into the ExternalFunctionCache and can be retrieved
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.

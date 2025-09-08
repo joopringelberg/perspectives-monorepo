@@ -28,8 +28,8 @@ import Data.Foldable (intercalate)
 import Data.Newtype (unwrap)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType, EnumeratedRoleType, RoleType, StateIdentifier, roletype2string)
 
-data PerspectivesWarning =
-    ModelLacksModelId String
+data PerspectivesWarning
+  = ModelLacksModelId String
   | ModelLacksUrl String
   | PropertySynchronizationIncomplete EnumeratedPropertyType RoleType (Array RoleType)
   | RoleSynchronizationIncomplete EnumeratedRoleType RoleType (Array RoleType)
@@ -46,6 +46,6 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (RoleSynchronizationIncomplete role source destinations) = "(RoleSynchronizationIncomplete) New (and removed) instances of role type:\n\t'" <> (unwrap role) <> "'\n by:\n\t'" <> roletype2string source <> "'\n cannot be sent to:\n\t* " <> intercalate "\n\t* " (map roletype2string destinations) <> "."
   show (RoleBindingSynchronizationIncomplete role source destinations) = "(RoleBindingSynchronizationIncomplete) Filling (and emptying) instances of role type:\n\t'" <> (unwrap role) <> "'\n by:\n\t'" <> roletype2string source <> "'\n cannot be communicated with:\n\t* " <> intercalate "\n\t* " (map roletype2string destinations) <> "."
   show (NotificationError stateId) = "(NotificationError) Error on notifying in state " <> unwrap stateId
-  show (AutomaticActionError stateId) = "(AutomaticActionError) Error on executing automatic action in state " <> unwrap stateId 
+  show (AutomaticActionError stateId) = "(AutomaticActionError) Error on executing automatic action in state " <> unwrap stateId
   show (ExternalFunctionError fname errorstring) = "(ExternalFunctionError) External library function '" <> fname <> "' results in an error: " <> errorstring
   show (NoTranslations domain) = "(NoTranslations) No translations found for domain '" <> domain <> "'."

@@ -60,21 +60,26 @@ instance contextContextClass :: ContextClass Context where
   defaultPrototype = _.defaultPrototype <<< unwrap
   roleInContext = _.rolInContext <<< unwrap
   contextRole = _.contextRol <<< unwrap
-  externalRole (Context{id}) = externalRoleType id
+  externalRole (Context { id }) = externalRoleType id
   userRole = _.gebruikerRol <<< unwrap
   nestedContexts = _.nestedContexts <<< unwrap
   position = _.pos <<< unwrap
   roles r = roleInContext r <> contextRole r <> userRole r
-  enumeratedRoles r = (foldMap (case _ of
-    ENR e -> [e]
-    _ -> [])) (roles r)
-  rolesInContext c@(Context r) = (\role -> RoleInContext{context: r.id, role}) <$> (enumeratedRoles c)
-  contextADT (Context{id, contextAspects}) = if null contextAspects 
-    then ST id
+  enumeratedRoles r =
+    ( foldMap
+        ( case _ of
+            ENR e -> [ e ]
+            _ -> []
+        )
+    ) (roles r)
+  rolesInContext c@(Context r) = (\role -> RoleInContext { context: r.id, role }) <$> (enumeratedRoles c)
+  contextADT (Context { id, contextAspects }) =
+    if null contextAspects then ST id
     else UET id
-  contextAspectsADT c@(Context{contextAspects}) = let
-    aspects = UET <$> contextAspects in
-      if null aspects
-        then ST $ identifier c
-        else PROD (cons (ST $ identifier c) aspects)
+  contextAspectsADT c@(Context { contextAspects }) =
+    let
+      aspects = UET <$> contextAspects
+    in
+      if null aspects then ST $ identifier c
+      else PROD (cons (ST $ identifier c) aspects)
 

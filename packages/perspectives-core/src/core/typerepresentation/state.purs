@@ -56,28 +56,29 @@ type StateRecord =
   , subStates :: Array StateIdentifier
   }
 
-data StateDependentPerspective =
-  ContextPerspective
-    { properties :: Array PropertyType
-    , selfOnly :: Boolean
-    , authorOnly :: Boolean
-    , isSelfPerspective :: Boolean
-  } |
-  RolePerspective
-    { currentContextCalculation :: QueryFunctionDescription
-    , properties :: Array PropertyType
-    , selfOnly :: Boolean
-    , authorOnly :: Boolean
-    , isSelfPerspective :: Boolean
-    }
+data StateDependentPerspective
+  = ContextPerspective
+      { properties :: Array PropertyType
+      , selfOnly :: Boolean
+      , authorOnly :: Boolean
+      , isSelfPerspective :: Boolean
+      }
+  | RolePerspective
+      { currentContextCalculation :: QueryFunctionDescription
+      , properties :: Array PropertyType
+      , selfOnly :: Boolean
+      , authorOnly :: Boolean
+      , isSelfPerspective :: Boolean
+      }
 
 derive instance genericStateDependentPerspective :: Generic StateDependentPerspective _
-instance showStateDependentPerspective :: Show StateDependentPerspective where show = genericShow
-instance eqStateDependentPerspective :: Eq StateDependentPerspective where eq = genericEq
+instance showStateDependentPerspective :: Show StateDependentPerspective where
+  show = genericShow
 
+instance eqStateDependentPerspective :: Eq StateDependentPerspective where
+  eq = genericEq
 
-
-type StateDependentPerspective_ = 
+type StateDependentPerspective_ =
   { constructor :: String
   , currentContextCalculation :: Maybe QueryFunctionDescription
   , properties :: Array PropertyType
@@ -85,16 +86,18 @@ type StateDependentPerspective_ =
   , authorOnly :: Boolean
   , isSelfPerspective :: Boolean
   }
+
 instance WriteForeign StateDependentPerspective where
-  writeImpl (ContextPerspective {properties, selfOnly, authorOnly, isSelfPerspective}) = writeImpl 
-    ({ constructor: "ContextPerspective"
-    , currentContextCalculation: Nothing
-    , properties
-    , selfOnly
-    , authorOnly
-    , isSelfPerspective
-    } :: StateDependentPerspective_)
-  writeImpl (RolePerspective {properties, selfOnly, authorOnly, isSelfPerspective, currentContextCalculation}) = writeImpl 
+  writeImpl (ContextPerspective { properties, selfOnly, authorOnly, isSelfPerspective }) = writeImpl
+    ( { constructor: "ContextPerspective"
+      , currentContextCalculation: Nothing
+      , properties
+      , selfOnly
+      , authorOnly
+      , isSelfPerspective
+      } :: StateDependentPerspective_
+    )
+  writeImpl (RolePerspective { properties, selfOnly, authorOnly, isSelfPerspective, currentContextCalculation }) = writeImpl
     { constructor: "RolePerspective"
     , currentContextCalculation: Just currentContextCalculation
     , properties
@@ -105,15 +108,15 @@ instance WriteForeign StateDependentPerspective where
 
 instance ReadForeign StateDependentPerspective where
   readImpl f = do
-    {constructor, properties, currentContextCalculation, selfOnly, authorOnly, isSelfPerspective} :: StateDependentPerspective_ <- read' f
+    { constructor, properties, currentContextCalculation, selfOnly, authorOnly, isSelfPerspective } :: StateDependentPerspective_ <- read' f
     unsafePartial case constructor of
-      "ContextPerspective" -> pure $ ContextPerspective {properties, selfOnly, authorOnly, isSelfPerspective}
-      "RolePerspective" -> 
-        pure $ RolePerspective {properties, selfOnly, authorOnly, isSelfPerspective, currentContextCalculation: unsafePartial fromJust currentContextCalculation}
+      "ContextPerspective" -> pure $ ContextPerspective { properties, selfOnly, authorOnly, isSelfPerspective }
+      "RolePerspective" ->
+        pure $ RolePerspective { properties, selfOnly, authorOnly, isSelfPerspective, currentContextCalculation: unsafePartial fromJust currentContextCalculation }
 
 constructState :: StateIdentifier -> Calculation -> StateFulObject -> Array StateIdentifier -> State
 constructState id condition stateFulObject subStates = State
-  {id: id
+  { id: id
   , stateFulObject
   , query: condition
   , object: Nothing -- used to compute the objects in enteringState, to bind to "currentobject".
@@ -124,72 +127,80 @@ constructState id condition stateFulObject subStates = State
   , perspectivesOnEntry: empty
   , subStates
   }
+
 derive instance newtypeState :: Newtype State _
 
 derive instance genericState :: Generic State _
-instance showState :: Show State where show = genericShow
-instance eqState :: Eq State where eq = genericEq
+instance showState :: Show State where
+  show = genericShow
 
+instance eqState :: Eq State where
+  eq = genericEq
 
 derive newtype instance WriteForeign State
 derive newtype instance ReadForeign State
 
 data NotificationLevel = Alert
+
 derive instance genericNotificationLevel :: Generic NotificationLevel _
-instance showNotificationLevel :: Show NotificationLevel where show = genericShow
-instance eqNotificationLevel :: Eq NotificationLevel where eq = genericEq
+instance showNotificationLevel :: Show NotificationLevel where
+  show = genericShow
 
-
+instance eqNotificationLevel :: Eq NotificationLevel where
+  eq = genericEq
 
 instance identifiableState :: Identifiable State StateIdentifier where
-  identifier (State{id}) = id
-  displayName (State{id}) = (unwrap id)
+  identifier (State { id }) = id
+  displayName (State { id }) = (unwrap id)
 
 instance revisionState :: Revision State where
   rev _ = Nothing
   changeRevision _ s = s
 
-
 data StateFulObject = Cnt ContextType | Orole EnumeratedRoleType | Srole EnumeratedRoleType
+
 derive instance genericStateFulObject :: Generic StateFulObject _
-instance showStateFulObject :: Show StateFulObject where show = genericShow
-instance eqStateFulObject :: Eq StateFulObject where eq = genericEq
+instance showStateFulObject :: Show StateFulObject where
+  show = genericShow
 
-
+instance eqStateFulObject :: Eq StateFulObject where
+  eq = genericEq
 
 instance WriteForeign StateFulObject where
-  writeImpl (Cnt typ) = writeImpl { constructor: "Cnt", typ}
-  writeImpl (Orole typ) = writeImpl { constructor: "Orole", typ}
-  writeImpl (Srole typ) = writeImpl { constructor: "Srole", typ}
+  writeImpl (Cnt typ) = writeImpl { constructor: "Cnt", typ }
+  writeImpl (Orole typ) = writeImpl { constructor: "Orole", typ }
+  writeImpl (Srole typ) = writeImpl { constructor: "Srole", typ }
 
 instance ReadForeign StateFulObject where
-  readImpl f = do 
-    {constructor, typ} :: {constructor :: String, typ :: String}<- read' f
-    unsafePartial case constructor of 
+  readImpl f = do
+    { constructor, typ } :: { constructor :: String, typ :: String } <- read' f
+    unsafePartial case constructor of
       "Cnt" -> pure $ Cnt $ ContextType typ
       "Orole" -> pure $ Orole $ EnumeratedRoleType typ
       "Srole" -> pure $ Srole $ EnumeratedRoleType typ
 
-data Notification = 
-  ContextNotification (TimeFacets (sentence :: Sentence, domain :: String) )
-  |
-  RoleNotification (TimeFacets (currentContextCalculation :: QueryFunctionDescription, sentence :: Sentence, domain :: String))
+data Notification
+  = ContextNotification (TimeFacets (sentence :: Sentence, domain :: String))
+  | RoleNotification (TimeFacets (currentContextCalculation :: QueryFunctionDescription, sentence :: Sentence, domain :: String))
 
 derive instance genericNotification :: Generic Notification _
-instance showNotification :: Show Notification where show = genericShow
-instance eqNotification :: Eq Notification where eq = genericEq
+instance showNotification :: Show Notification where
+  show = genericShow
+
+instance eqNotification :: Eq Notification where
+  eq = genericEq
 
 instance WriteForeign Notification where
-  writeImpl (ContextNotification r) = writeImpl { constructor: "ContextNotification", r}
-  writeImpl (RoleNotification r) = writeImpl { constructor: "RoleNotification", r}
+  writeImpl (ContextNotification r) = writeImpl { constructor: "ContextNotification", r }
+  writeImpl (RoleNotification r) = writeImpl { constructor: "RoleNotification", r }
 
-instance ReadForeign Notification where  
-  readImpl f = 
+instance ReadForeign Notification where
+  readImpl f =
     -- Order matters here!
-    do 
-      {r} :: {r :: TimeFacets ( sentence :: Sentence, currentContextCalculation :: QueryFunctionDescription, domain :: String )} <- read' f
+    do
+      { r } :: { r :: TimeFacets (sentence :: Sentence, currentContextCalculation :: QueryFunctionDescription, domain :: String) } <- read' f
       pure $ RoleNotification r
-    <|>
-    do 
-      {r} :: {r :: TimeFacets ( sentence :: Sentence, domain :: String )} <- read' f
-      pure $ ContextNotification r
+      <|>
+        do
+          { r } :: { r :: TimeFacets (sentence :: Sentence, domain :: String) } <- read' f
+          pure $ ContextNotification r

@@ -86,9 +86,10 @@ instance bindArrayT :: Monad m => Bind (ArrayT m) where
   -- bind :: forall a b. ArrayT m a -> (a -> ArrayT m b) -> ArrayT m b
   bind (ArrayT x) f = ArrayT (x >>= g)
     where
-      -- g :: Array a -> m (Array b)
-      g as = map concat (traverse unwrap (map f as))
-      -- g as = map concat (unwrap (traverse f as))
+    -- g :: Array a -> m (Array b)
+    g as = map concat (traverse unwrap (map f as))
+
+-- g as = map concat (unwrap (traverse f as))
 
 -- h :: forall a b m. Eq b => Monad m => (a -> ArrayT m b) -> Array a -> m (Array b)
 -- h f as = map concat (unwrap (traverse f as))
@@ -113,11 +114,11 @@ instance altArrayT :: (Monad m, MonadError e m) => Alt (ArrayT m) where
     a1' <- try (runArrayT a1)
     case a1' of
       Left _ -> runArrayT a2
-      Right candidates -> if null candidates
-          then runArrayT a2
-          else pure candidates
+      Right candidates ->
+        if null candidates then runArrayT a2
+        else pure candidates
 
-instance plusArrayT :: (Monad m, MonadError e m) => Plus (ArrayT m)  where
+instance plusArrayT :: (Monad m, MonadError e m) => Plus (ArrayT m) where
   empty = ArrayT $ pure []
 
 instance alternativeArrayT :: (Monad m, MonadError e m) => Alternative (ArrayT m)
@@ -138,6 +139,6 @@ instance monadAffArrayT ∷ MonadAff m => MonadAff (ArrayT m) where
   liftAff a = lift (liftAff a)
 
 firstOfSequence :: forall f a. Monad f => Array a -> ArrayT f a
-firstOfSequence as = case head as of 
+firstOfSequence as = case head as of
   Nothing -> ArrayT $ pure []
-  Just a -> ArrayT $ pure [a]
+  Just a -> ArrayT $ pure [ a ]

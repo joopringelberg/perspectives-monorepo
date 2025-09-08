@@ -30,12 +30,12 @@ import Prelude (bind, map, not, pure, ($), (<<<), (>=>), (>>=))
 -- We must do this because the public version will never have a useful version of 'isMe'. Neither will it 
 -- bottom out in a role that has a value for 'isMe': it will be public roles all to the bottom.
 isMe :: RoleInstance -> MP Boolean
-isMe ri = if isInPublicScheme (unwrap ri)
-  then isPublicIdentifierMe ri
+isMe ri =
+  if isInPublicScheme (unwrap ri) then isPublicIdentifierMe ri
   else tryGetPerspectRol ri >>= case _ of
     Nothing -> pure false
-    Just rol -> if rol_isMe rol
-      then pure true
+    Just rol ->
+      if rol_isMe rol then pure true
       else case rol_binding rol of
         Nothing -> pure false
         Just b -> isMe b
@@ -60,29 +60,31 @@ notIsMe = isMe >=> pure <<< not
 getMyType :: ContextInstance ~~> RoleType
 getMyType ctxt = getPreferredUserRoleType ctxt
   <|>
-  (getMe >=> map ENR <<< roleType) ctxt
+    (getMe >=> map ENR <<< roleType) ctxt
   <|>
-  -- NOTE: this is a safety measure that catches cases where the 'me' administration has gone wrong.
-  findMeInEnumeratedRoles ctxt
+    -- NOTE: this is a safety measure that catches cases where the 'me' administration has gone wrong.
+    findMeInEnumeratedRoles ctxt
   <|>
-  findMeInUnlinkedRoles ctxt
+    findMeInUnlinkedRoles ctxt
   <|>
-  findMeInCalculatedRoles ctxt
+    findMeInCalculatedRoles ctxt
   where
-    findMeInEnumeratedRoles :: ContextInstance ~~> RoleType
-    findMeInEnumeratedRoles = (contextType >=> Combinators.filter (liftToInstanceLevel $ contextAspectsClosure >=> enumeratedUserRole) (computesMe ctxt))
+  findMeInEnumeratedRoles :: ContextInstance ~~> RoleType
+  findMeInEnumeratedRoles = (contextType >=> Combinators.filter (liftToInstanceLevel $ contextAspectsClosure >=> enumeratedUserRole) (computesMe ctxt))
 
-    findMeInCalculatedRoles :: ContextInstance ~~> RoleType
-    findMeInCalculatedRoles = (contextType >=> Combinators.filter 
-      (liftToInstanceLevel $ contextAspectsClosure >=> calculatedUserRole)
-      (computesMe ctxt))
+  findMeInCalculatedRoles :: ContextInstance ~~> RoleType
+  findMeInCalculatedRoles =
+    ( contextType >=> Combinators.filter
+        (liftToInstanceLevel $ contextAspectsClosure >=> calculatedUserRole)
+        (computesMe ctxt)
+    )
 
-    findMeInUnlinkedRoles ::  ContextInstance ~~> RoleType
-    findMeInUnlinkedRoles = Combinators.filter (Combinators.filter (contextType >=> liftToInstanceLevel (contextAspectsClosure >=> enumeratedUserRole)) isUnlinked) (computesMe ctxt)
-      where
-        isUnlinked :: RoleType ~~> Boolean
-        isUnlinked (ENR rt) = lift $ lift $ isUnlinked_ rt
-        isUnlinked (CR _) = pure false
+  findMeInUnlinkedRoles :: ContextInstance ~~> RoleType
+  findMeInUnlinkedRoles = Combinators.filter (Combinators.filter (contextType >=> liftToInstanceLevel (contextAspectsClosure >=> enumeratedUserRole)) isUnlinked) (computesMe ctxt)
+    where
+    isUnlinked :: RoleType ~~> Boolean
+    isUnlinked (ENR rt) = lift $ lift $ isUnlinked_ rt
+    isUnlinked (CR _) = pure false
 
 getAllMyRoleTypes :: ContextInstance ~~> RoleType
 getAllMyRoleTypes ctxt = ((contextType >=> Combinators.filter (liftToInstanceLevel userRole) (computesMe ctxt)) ctxt)

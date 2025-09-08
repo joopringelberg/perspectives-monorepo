@@ -66,9 +66,9 @@ checkContext c = do
     (Just pt) -> do
       (lift $ try $ getPerspectContext pt) >>=
         handlePerspectContextError "checkContext"
-        \(p :: PerspectContext) -> if (pspType p == identifier c)
-          then pure unit
-          else fail $ DefaultPrototype (identifier c :: ContextType) (pspType p)
+          \(p :: PerspectContext) ->
+            if (pspType p == identifier c) then pure unit
+            else fail $ DefaultPrototype (identifier c :: ContextType) (pspType p)
 
   -- 2. The graph formed by the contextAspects may not be cyclic.
   -- I.e. when traversing the graph, the next node to be visited may not be in the path
@@ -86,41 +86,39 @@ checkContext c = do
   -- TODO. #13 Check Aspect restrictions
 
   where
-    checkRoleKind :: RoleKind -> RoleType -> PF Unit
-    checkRoleKind kind (r :: RoleType) = do
-      k <- lift $ rolekind r
-      if (k == kind)
-        then pure unit
-        else fail $ WrongRoleKind r kind k
+  checkRoleKind :: RoleKind -> RoleType -> PF Unit
+  checkRoleKind kind (r :: RoleType) = do
+    k <- lift $ rolekind r
+    if (k == kind) then pure unit
+    else fail $ WrongRoleKind r kind k
 
-    checkEnumeratedRole :: RoleKind -> EnumeratedRoleType -> PF Unit
-    checkEnumeratedRole kind r = do
-      rr@(EnumeratedRole{roleAspects, binding, pos, displayName}) <- lift $ getPerspectType r
-      if (kindOfRole rr == kind)
-        then pure unit
-        else fail $ WrongRoleKind (ENR r) kind (kindOfRole rr)
-      -- The restrictions on filling this role must be equal to or a specialisation of 
-      -- that of its aspects.
-      for_ roleAspects \(QT.RoleInContext{role}) -> do
-        EnumeratedRole{binding:maspectBinding, pos:aspectPos, displayName:aspectDisplayName} <- lift $ getEnumeratedRole role
-        case maspectBinding, binding of
-          Just aspectBinding, Just bnd -> 
-            -- aspectBinding -> bnd
-            (lift $ aspectBinding `equalsOrGeneralisesRoleInContext` bnd) >>= if _
-              then pure unit
-              else fail $ FillerRestrictionNotAnAspectSubtype pos aspectPos displayName aspectDisplayName
-          _, _ -> pure unit
+  checkEnumeratedRole :: RoleKind -> EnumeratedRoleType -> PF Unit
+  checkEnumeratedRole kind r = do
+    rr@(EnumeratedRole { roleAspects, binding, pos, displayName }) <- lift $ getPerspectType r
+    if (kindOfRole rr == kind) then pure unit
+    else fail $ WrongRoleKind (ENR r) kind (kindOfRole rr)
+    -- The restrictions on filling this role must be equal to or a specialisation of 
+    -- that of its aspects.
+    for_ roleAspects \(QT.RoleInContext { role }) -> do
+      EnumeratedRole { binding: maspectBinding, pos: aspectPos, displayName: aspectDisplayName } <- lift $ getEnumeratedRole role
+      case maspectBinding, binding of
+        Just aspectBinding, Just bnd ->
+          -- aspectBinding -> bnd
+          (lift $ aspectBinding `equalsOrGeneralisesRoleInContext` bnd) >>=
+            if _ then pure unit
+            else fail $ FillerRestrictionNotAnAspectSubtype pos aspectPos displayName aspectDisplayName
+        _, _ -> pure unit
 
-    throwOnCycle :: Array ContextType -> Context -> MP Unit
-    throwOnCycle path next = if (isJust $ elemIndex (identifier next) path)
-      then (throwError (error "cyclic"))
-      else for_
-        (contextAspects next)
-        (getPerspectType >=> throwOnCycle (cons (identifier c) path))
+  throwOnCycle :: Array ContextType -> Context -> MP Unit
+  throwOnCycle path next =
+    if (isJust $ elemIndex (identifier next) path) then (throwError (error "cyclic"))
+    else for_
+      (contextAspects next)
+      (getPerspectType >=> throwOnCycle (cons (identifier c) path))
 
-    rolekind :: RoleType -> MP RoleKind
-    rolekind (ENR r) = (getPerspectType r :: MP EnumeratedRole) >>= pure <<< kindOfRole
-    rolekind (CR r) = (getPerspectType r :: MP CalculatedRole) >>= pure <<< kindOfRole
+  rolekind :: RoleType -> MP RoleKind
+  rolekind (ENR r) = (getPerspectType r :: MP EnumeratedRole) >>= pure <<< kindOfRole
+  rolekind (CR r) = (getPerspectType r :: MP CalculatedRole) >>= pure <<< kindOfRole
 
 -----------------------------------------------------------
 -- CHECKBINDING
@@ -133,7 +131,7 @@ checkBinding filledType filler = do
   -- (mrestriction :: Maybe (ExpandedADT QT.RoleInContext)) <- getEnumeratedRole filledType >>= completeExpandedFillerRestriction
   (mrestriction :: Maybe (CNF QT.RoleInContext)) <- getEnumeratedRole filledType >>= completeDeclaredFillerRestriction >>= traverse toConjunctiveNormalForm_
   (fillerType :: CNF QT.RoleInContext) <- completeRuntimeType filler >>= toConjunctiveNormalForm_
-  case mrestriction of 
+  case mrestriction of
     -- restriction -> fillerType
     Just restriction -> pure (fillerType `equalsOrSpecialises_` restriction)
     Nothing -> pure true

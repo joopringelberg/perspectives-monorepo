@@ -39,16 +39,17 @@ getSelectedRoleFromClipboard = do
   -- Get the SelectedClipboardItem.
   -- Then get its ClipboardData and return that.
   mysystem <- getMySystem
-  (ContextInstance mysystem) ##> ((getRoleInstances (CR $ CalculatedRoleType selectedClipboardItem)) >=> binding) 
+  (ContextInstance mysystem) ##> ((getRoleInstances (CR $ CalculatedRoleType selectedClipboardItem)) >=> binding)
 
 -- | Given a role instance that might have been saved on the clipboard, 
 -- | returns the item on the clipboard that holds it.
 findItemOnClipboardWithRole :: RoleInstance -> MonadPerspectives (Maybe RoleInstance)
 findItemOnClipboardWithRole rid = do
   mysystem <- getMySystem
-  ((ContextInstance mysystem) ##> filter
-    (getRoleInstances (ENR $ EnumeratedRoleType itemsOnClipboard))
-    (binding >=> \r -> pure (r == rid)))
+  ( (ContextInstance mysystem) ##> filter
+      (getRoleInstances (ENR $ EnumeratedRoleType itemsOnClipboard))
+      (binding >=> \r -> pure (r == rid))
+  )
 
 -- | returns all items on the clipboard (not the roles that have been saved on the clipboard: that are the fillers).
 allItemsOnClipboard :: MonadPerspectives (Maybe RoleInstance)

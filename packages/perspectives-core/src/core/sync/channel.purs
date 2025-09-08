@@ -74,17 +74,21 @@ createChannelContext couchdbUrl channelName = case splitCouchdbUrl couchdbUrl of
       { id: Just channelName
       , prototype: Nothing
       , ctype: channel
-      , rollen: fromFoldable [(Tuple channelInitiator $
-        SNA.singleton (RolSerialization
-          { id: Nothing
-          , properties: PropertySerialization $ fromFoldable
-            [
-              Tuple addressHost [host]
-            , Tuple addressPort [(show port)]
-            ]
-          , binding: Just "sys:Me" })
-         )]
-      , externeProperties: PropertySerialization $ fromFoldable [Tuple channelDatabase [channelName]]
+      , rollen: fromFoldable
+          [ ( Tuple channelInitiator $
+                SNA.singleton
+                  ( RolSerialization
+                      { id: Nothing
+                      , properties: PropertySerialization $ fromFoldable
+                          [ Tuple addressHost [ host ]
+                          , Tuple addressPort [ (show port) ]
+                          ]
+                      , binding: Just "sys:Me"
+                      }
+                  )
+            )
+          ]
+      , externeProperties: PropertySerialization $ fromFoldable [ Tuple channelDatabase [ channelName ] ]
       }
     case eChannel of
       Left e -> throwError (error ("createChannel could not create channel: " <> show e))
@@ -96,15 +100,17 @@ addPartnerToChannel (RoleInstance usr) (ContextInstance channel) = do
   couchdbUrl <- lift $ getCouchdbBaseURL
   case splitCouchdbUrl <$> couchdbUrl of
     Just (Just (Tuple host port)) -> do
-       void $ createAndAddRoleInstance (EnumeratedRoleType channelPartner)
+      void $ createAndAddRoleInstance (EnumeratedRoleType channelPartner)
         channel
-        (RolSerialization
-          { id: Nothing
-          , properties: PropertySerialization $ fromFoldable
-            [ Tuple addressHost [host]
-            , Tuple addressPort [show port]
-            ],
-          binding: Just usr})
+        ( RolSerialization
+            { id: Nothing
+            , properties: PropertySerialization $ fromFoldable
+                [ Tuple addressHost [ host ]
+                , Tuple addressPort [ show port ]
+                ]
+            , binding: Just usr
+            }
+        )
     _ -> throwError $ error ("addPartnerToChannel received not a well-formed couchdbUrl: " <> (show couchdbUrl))
 
 type Host = String
@@ -131,13 +137,13 @@ getYouFromChannel = do
 
 setAddress :: Host -> Port -> Array RoleInstance -> MPT Unit
 setAddress host port rl = do
-  setProperty rl (EnumeratedPropertyType addressHost) Nothing [Value host]
-  setProperty rl (EnumeratedPropertyType addressPort) Nothing [Value (show port)]
+  setProperty rl (EnumeratedPropertyType addressHost) Nothing [ Value host ]
+  setProperty rl (EnumeratedPropertyType addressPort) Nothing [ Value (show port) ]
 
 setRelayAddress :: Host -> Port -> Array RoleInstance -> MPT Unit
 setRelayAddress host port rl = do
-  setProperty rl (EnumeratedPropertyType addressRelayHost) Nothing [Value host]
-  setProperty rl (EnumeratedPropertyType addressRelayPort) Nothing [Value (show port)]
+  setProperty rl (EnumeratedPropertyType addressRelayHost) Nothing [ Value host ]
+  setProperty rl (EnumeratedPropertyType addressRelayPort) Nothing [ Value (show port) ]
 
 -- | Regardless whether I am the Initiator or the ConnectedPartner, set my host and port value.
 setMyAddress :: Host -> Port -> ContextInstance -> MonadPerspectivesTransaction Unit
@@ -205,33 +211,31 @@ setChannelReplication couchdbUrl channel = do
                     -- RELAYHOST
                     Just (Value h) -> do
                       -- if h equals the host of this PDR, just stop.
-                      if myHost == h
-                        then pure unit
-                        else do
-                          relayPort <- getPropertyFunction "sys:PhysicalContext$UserWithAddress$RelayPort"
-                          portValue <- you ##> relayPort
-                          case portValue of
-                            Nothing -> pure unit
-                            -- REPLICATE LOCAL CHANNEL TO RELAYHOST, JUST TRANSACTIONS AUTHORED BY ME.
-                            -- Push local copy of channel to RelayHost. Author = me
-                            Just (Value p) -> do
-                              me <- getUserIdentifier
-                              setPushAndPullReplication couchdbUrl channelId h p me
+                      if myHost == h then pure unit
+                      else do
+                        relayPort <- getPropertyFunction "sys:PhysicalContext$UserWithAddress$RelayPort"
+                        portValue <- you ##> relayPort
+                        case portValue of
+                          Nothing -> pure unit
+                          -- REPLICATE LOCAL CHANNEL TO RELAYHOST, JUST TRANSACTIONS AUTHORED BY ME.
+                          -- Push local copy of channel to RelayHost. Author = me
+                          Just (Value p) -> do
+                            me <- getUserIdentifier
+                            setPushAndPullReplication couchdbUrl channelId h p me
                 Just (Value yourHost) -> do
                   -- HOST
                   -- if h equals the host of this PDR, just stop.
-                  if myHost == yourHost
-                    then pure unit
-                    else do
-                      getPort <- getPropertyFunction "sys:PhysicalContext$UserWithAddress$Port"
-                      portValue <- you ##> getPort
-                      case portValue of
-                        Nothing -> pure unit
-                        -- REPLICATE LOCAL CHANNEL TO HOST, JUST TRANSACTIONS AUTHORED BY ME.
-                        -- Push local copy of channel to PeerHost. Author = me
-                        Just (Value yourPort) -> do
-                          me <- getUserIdentifier
-                          setPushReplication couchdbUrl channelId yourHost yourPort me
+                  if myHost == yourHost then pure unit
+                  else do
+                    getPort <- getPropertyFunction "sys:PhysicalContext$UserWithAddress$Port"
+                    portValue <- you ##> getPort
+                    case portValue of
+                      Nothing -> pure unit
+                      -- REPLICATE LOCAL CHANNEL TO HOST, JUST TRANSACTIONS AUTHORED BY ME.
+                      -- Push local copy of channel to PeerHost. Author = me
+                      Just (Value yourPort) -> do
+                        me <- getUserIdentifier
+                        setPushReplication couchdbUrl channelId yourHost yourPort me
 
 -- | Split an url of the form host:port into its two constituents.
 splitCouchdbUrl :: String -> Maybe (Tuple String String)
@@ -239,8 +243,8 @@ splitCouchdbUrl s = case (getFirstMatch couchdbUrlRegex s), (getSecondMatch couc
   Just source, Just target -> Just $ Tuple source target
   _, _ -> Nothing
   where
-    couchdbUrlRegex :: Regex
-    couchdbUrlRegex = unsafeRegex "^(.*):(.*)$" noFlags
+  couchdbUrlRegex :: Regex
+  couchdbUrlRegex = unsafeRegex "^(.*):(.*)$" noFlags
 
 postDbName :: MonadPerspectives String
 postDbName = do
@@ -294,10 +298,11 @@ localReplication base source target author = do
     (source <> "_" <> target)
     (base <> source)
     (base <> target)
-    (maybe
-      (Just $ selectOnFieldNotEqual "author" me)
-      (\a -> Just $ selectOnFieldEqual "author" a)
-      author)
+    ( maybe
+        (Just $ selectOnFieldNotEqual "author" me)
+        (\a -> Just $ selectOnFieldEqual "author" a)
+        author
+    )
 
 -- | Stop replicating the channel to the post database.
 -- | Stop replicating the channel database to the remote version.
@@ -319,14 +324,13 @@ endChannelReplication couchdbUrl channel = do
         Left e -> log $ show e
         Right _ -> pure unit
   where
-    splitChannelId :: String -> Maybe (Tuple String String)
-    splitChannelId s = case (getFirstMatch channelRegEx s), (getSecondMatch channelRegEx s) of
-      Just source, Just target -> Just $ Tuple source target
-      _, _ -> Nothing
+  splitChannelId :: String -> Maybe (Tuple String String)
+  splitChannelId s = case (getFirstMatch channelRegEx s), (getSecondMatch channelRegEx s) of
+    Just source, Just target -> Just $ Tuple source target
+    _, _ -> Nothing
 
-    channelRegEx :: Regex
-    channelRegEx = unsafeRegex "^(.*)_(.*)$" noFlags
-
+  channelRegEx :: Regex
+  channelRegEx = unsafeRegex "^(.*)_(.*)$" noFlags
 
 -- Not used.
 getYourHostAndPort :: ContextInstance -> MonadPerspectives (Maybe (Tuple Host Port_))

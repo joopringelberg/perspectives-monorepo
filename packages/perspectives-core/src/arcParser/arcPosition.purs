@@ -27,7 +27,7 @@ import Prelude
 import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
 import Simple.JSON (class ReadForeign, class WriteForeign)
- 
+
 -- | `Position` represents the position of the parser in the input.
 -- |
 -- | - `line` is the current line in the input
@@ -43,12 +43,15 @@ derive newtype instance ReadForeign ArcPosition
 
 derive instance genericArcPosition :: Generic ArcPosition _
 instance showArcPosition :: Show ArcPosition where
-  show (ArcPosition {line, column}) = "line " <> show line <> ", column " <> show column
+  show (ArcPosition { line, column }) = "line " <> show line <> ", column " <> show column
 
 -- | Because we want two expressions to be equal regardless of where in the text they
 -- | occur, we make all instances of ArcPosition equal to each other.
-instance eqArcPosition :: Eq ArcPosition where eq a b = true
-instance ordArcPosition :: Ord ArcPosition where compare a b = EQ
+instance eqArcPosition :: Eq ArcPosition where
+  eq a b = true
+
+instance ordArcPosition :: Ord ArcPosition where
+  compare a b = EQ
 
 arcParserStartPosition :: ArcPosition
-arcParserStartPosition = ArcPosition{line: 1, column: 1}
+arcParserStartPosition = ArcPosition { line: 1, column: 1 }

@@ -51,206 +51,205 @@ perspectDef :: IndentLanguageDef
 --                 , reservedNames   = [ "intern","extern"]
 --                 }
 perspectDef = LanguageDef
-                { commentStart    : "{-"
-                , commentEnd      : "-}"
-                , commentLine     : "--"
-                , nestedComments:  false
-                , identStart      : upper
-                , identLetter:     alphaNum <|> oneOf ['_']
-                , opStart:         op'
-                , opLetter:        op'
-                , reservedOpNames : ["="]
-                , reservedNames   :
-                  -- Contexts
-                  [ "domain"
-                  , "case"
-                  , "party"
-                  , "state"
-                  , "activity"
-                  , "use"
-                  , "indexed"
-                  , "aspect"
-                  , "public"
-                  , "private"
+  { commentStart: "{-"
+  , commentEnd: "-}"
+  , commentLine: "--"
+  , nestedComments: false
+  , identStart: upper
+  , identLetter: alphaNum <|> oneOf [ '_' ]
+  , opStart: op'
+  , opLetter: op'
+  , reservedOpNames: [ "=" ]
+  , reservedNames:
+      -- Contexts
+      [ "domain"
+      , "case"
+      , "party"
+      , "state"
+      , "activity"
+      , "use"
+      , "indexed"
+      , "aspect"
+      , "public"
+      , "private"
 
-                  -- Roles
-                  , "thing"
-                  , "user"
-                  , "context"
-                  , "external"
-                  , "properties"
-                  , "for"
-                  , "at"
+      -- Roles
+      , "thing"
+      , "user"
+      , "context"
+      , "external"
+      , "properties"
+      , "for"
+      , "at"
 
-                  -- Properties
-                  , "property"
-                  , "mandatory"
-                  , "relational"
-                  , "functional"
-                  , "unlinked"
-                  , "not"
-                  , "Number"
-                  , "String"
-                  , "DateTime"
-                  , "Date"
-                  , "Time"
-                  , "Boolean"
-                  , "verbs"
-                  , "File"
-                  , "file"
-                  , "Email"
-                  , "Year"
-                  , "Month"
-                  , "Week"
-                  , "Day"
-                  , "Hour"
-                  , "Minute"
-                  , "Second"
-                  , "Millisecond"
-                  , "year"
-                  , "month"
-                  , "week"
-                  , "day"
-                  , "hour"
-                  , "minute"
-                  , "second"
-                  , "millisecond"
-                  , "years"
-                  , "months"
-                  , "weeks"
-                  , "days"
-                  , "hours"
-                  , "minutes"
-                  , "seconds"
-                  , "milliseconds"
+      -- Properties
+      , "property"
+      , "mandatory"
+      , "relational"
+      , "functional"
+      , "unlinked"
+      , "not"
+      , "Number"
+      , "String"
+      , "DateTime"
+      , "Date"
+      , "Time"
+      , "Boolean"
+      , "verbs"
+      , "File"
+      , "file"
+      , "Email"
+      , "Year"
+      , "Month"
+      , "Week"
+      , "Day"
+      , "Hour"
+      , "Minute"
+      , "Second"
+      , "Millisecond"
+      , "year"
+      , "month"
+      , "week"
+      , "day"
+      , "hour"
+      , "minute"
+      , "second"
+      , "millisecond"
+      , "years"
+      , "months"
+      , "weeks"
+      , "days"
+      , "hours"
+      , "minutes"
+      , "seconds"
+      , "milliseconds"
 
-                  -- PropertyFacets
-                  , "minLength"
-                  , "maxLength"
-                  , "pattern"
-                  , "whiteSpace"
-                  , "enumeration"
-                  , "maxInclusive"
-                  , "minInclusive"
-                  , "maxExclusive"
-                  , "minExclusive"
-                  , "totalDigits"
-                  , "fractionDigits"
-                  , "messageProperty"
-                  , "mediaProperty"
-                  , "readableName"
-                  , "regexp"
-                  , "setting"
+      -- PropertyFacets
+      , "minLength"
+      , "maxLength"
+      , "pattern"
+      , "whiteSpace"
+      , "enumeration"
+      , "maxInclusive"
+      , "minInclusive"
+      , "maxExclusive"
+      , "minExclusive"
+      , "totalDigits"
+      , "fractionDigits"
+      , "messageProperty"
+      , "mediaProperty"
+      , "readableName"
+      , "regexp"
+      , "setting"
 
-                  -- Perspectives
-                  , "perspective"
-                  , "on"
-                  , "of"
-                  , "view"
-                  , "props"
-                  , "roleverbs"
-                  , "all"
-                  , "only"
-                  , "except"
-                  , "defaults"
-                  , "default"
-                  , "selfonly"
-                  , "authoronly"
+      -- Perspectives
+      , "perspective"
+      , "on"
+      , "of"
+      , "view"
+      , "props"
+      , "roleverbs"
+      , "all"
+      , "only"
+      , "except"
+      , "defaults"
+      , "default"
+      , "selfonly"
+      , "authoronly"
 
-                  -- States
-                  , "in"
-                  , "entry"
-                  , "exit"
-                  , "notify"
-                  , "do"
-                  , "action"
-                  , "object"
-                  , "subject"
+      -- States
+      , "in"
+      , "entry"
+      , "exit"
+      , "notify"
+      , "do"
+      , "action"
+      , "object"
+      , "subject"
 
-                  -- Repeating
-                  , "every"
-                  , "maximally"
-                  , "times"
-                  , "Milliseconds"
-                  , "Seconds"
-                  , "Minutes"
-                  , "Hours"
-                  , "Days"
+      -- Repeating
+      , "every"
+      , "maximally"
+      , "times"
+      , "Milliseconds"
+      , "Seconds"
+      , "Minutes"
+      , "Hours"
+      , "Days"
 
+      -- Queries
+      , "filter"
 
-                  -- Queries
-                  , "filter"
+      -- Expressions
+      , "remove"
+      , "create"
+      , "create_"
+      , "bound"
+      , "named"
+      , "move"
+      , "bind"
+      , "bind_"
+      , "unbind"
+      , "unbind_"
+      , "delete"
+      , "callEffect"
+      , "callDestructiveEffect"
+      , "letE"
+      , "letA"
+      , "callExternal"
+      , "exists"
+      , "filledBy"
+      , "fills"
+      , "available"
+      , "with"
+      , "from"
+      , "role"
+      , "matches"
+      , "publicrole"
+      , "publiccontext"
+      , "isInState"
+      , "contextinstance"
+      , "roleinstance"
 
-                  -- Expressions
-                  , "remove"
-                  , "create"
-                  , "create_"
-                  , "bound"
-                  , "named"
-                  , "move"
-                  , "bind"
-                  , "bind_"
-                  , "unbind"
-                  , "unbind_"
-                  , "delete"
-                  , "callEffect"
-                  , "callDestructiveEffect"
-                  , "letE"
-                  , "letA"
-                  , "callExternal"
-                  , "exists"
-                  , "filledBy"
-                  , "fills"
-                  , "available"
-                  , "with"
-                  , "from"
-                  , "role"
-                  , "matches"
-                  , "publicrole"
-                  , "publiccontext"
-                  , "isInState"
-                  , "contextinstance"
-                  , "roleinstance"
+      -- Functions in expressions
+      , "specialisesRoleType"
+      , "roleTypes"
+      , "contextType"
+      , "modelname"
+      , "returns"
 
-                  -- Functions in expressions
-                  , "specialisesRoleType"
-                  , "roleTypes"
-                  , "contextType"
-                  , "modelname"
-                  , "returns"
+      -- Operators in expressions
+      , "union"
+      , "intersection"
+      , "orElse"
+      , "and"
+      , "or"
 
-                  -- Operators in expressions
-                  , "union"
-                  , "intersection"
-                  , "orElse"
-                  , "and"
-                  , "or"
+      -- Screens
+      , "screen"
+      , "tab"
+      , "row"
+      , "column"
+      , "form"
+      , "markdown"
+      , "when"
+      , "table"
+      , "chat"
+      , "messages"
+      , "media"
+      , "who"
+      , "what"
+      , "where"
+      , "master"
+      , "detail"
+      , "without"
 
-                  -- Screens
-                  , "screen"
-                  , "tab"
-                  , "row"
-                  , "column"
-                  , "form"
-                  , "markdown"
-                  , "when"
-                  , "table"
-                  , "chat"
-                  , "messages"
-                  , "media"
-                  , "who"
-                  , "what"
-                  , "where"
-                  , "master"
-                  , "detail"
-                  , "without"
-
-                  ]
-                , caseSensitive:   true
-                }
+      ]
+  , caseSensitive: true
+  }
   where
-    op' :: forall m . (Monad m) => ParserT String m Char
-    op' = oneOf [':', '!', '%', '&', '*', '+', '<', '=', '>', '?', '@', '\\', '^', '|', '-', '~']
+  op' :: forall m. (Monad m) => ParserT String m Char
+  op' = oneOf [ ':', '!', '%', '&', '*', '+', '<', '=', '>', '?', '@', '\\', '^', '|', '-', '~' ]
 
 -----------------------------------------------------------
 -- reservedIdentifier
@@ -259,24 +258,22 @@ perspectDef = LanguageDef
 reservedIdentifier :: StringPositionParser
 reservedIdentifier = token.lexeme $ try go
   where
-    go :: StringPositionParser
-    go = do
-        name <- ident
-        if (isReservedPerspectivesName name)
-           then pure name
-           else fail ("not a reserved word " <> show name <> "(or unexpected end of input), ")
+  go :: StringPositionParser
+  go = do
+    name <- ident
+    if (isReservedPerspectivesName name) then pure name
+    else fail ("not a reserved word " <> show name <> "(or unexpected end of input), ")
 
-    isReservedPerspectivesName :: String -> Boolean
-    isReservedPerspectivesName = isReservedName perspectDef
+  isReservedPerspectivesName :: String -> Boolean
+  isReservedPerspectivesName = isReservedName perspectDef
 
-
-    ident :: StringPositionParser
-    ident = go' perspectDef <?> "identifier, "
-      where
-        go' :: IndentLanguageDef -> StringPositionParser
-        go' (LanguageDef languageDef) = do
-            cs <- Array.many languageDef.identLetter
-            pure $ SCU.fromCharArray cs
+  ident :: StringPositionParser
+  ident = go' perspectDef <?> "identifier, "
+    where
+    go' :: IndentLanguageDef -> StringPositionParser
+    go' (LanguageDef languageDef) = do
+      cs <- Array.many languageDef.identLetter
+      pure $ SCU.fromCharArray cs
 
 -----------------------------------------------------------
 -- Identifiers & Reserved words
@@ -284,23 +281,24 @@ reservedIdentifier = token.lexeme $ try go
 -- We need isReservedName but it is not exported from Parsing.Token.
 -----------------------------------------------------------
 
-isReservedName :: forall m . Monad m => GenLanguageDef String m -> String -> Boolean
+isReservedName :: forall m. Monad m => GenLanguageDef String m -> String -> Boolean
 isReservedName langDef@(LanguageDef languageDef) name =
-    isReserved (theReservedNames langDef) caseName
+  isReserved (theReservedNames langDef) caseName
   where
-    caseName | languageDef.caseSensitive  = name
-             | otherwise                  = toLower name
+  caseName
+    | languageDef.caseSensitive = name
+    | otherwise = toLower name
 
 isReserved :: Array String -> String -> Boolean
 isReserved names name =
-    case Array.uncons names of
-        Nothing -> false
-        Just { head: r, tail: rs } -> case (compare r name) of
-                                        LT  -> isReserved rs name
-                                        EQ  -> true
-                                        GT  -> false
+  case Array.uncons names of
+    Nothing -> false
+    Just { head: r, tail: rs } -> case (compare r name) of
+      LT -> isReserved rs name
+      EQ -> true
+      GT -> false
 
-theReservedNames :: forall m . Monad m => GenLanguageDef String m -> Array String
+theReservedNames :: forall m. Monad m => GenLanguageDef String m -> Array String
 theReservedNames (LanguageDef languageDef)
-    | languageDef.caseSensitive = Array.sort languageDef.reservedNames
-    | otherwise                 = Array.sort $ map toLower languageDef.reservedNames
+  | languageDef.caseSensitive = Array.sort languageDef.reservedNames
+  | otherwise = Array.sort $ map toLower languageDef.reservedNames

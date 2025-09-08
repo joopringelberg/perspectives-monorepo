@@ -20,7 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.Instances.ObjectGetters where 
+module Perspectives.Instances.ObjectGetters where
 
 import Control.Monad.Error.Class (try)
 import Control.Monad.Writer (WriterT, execWriter, execWriterT, lift, tell)
@@ -82,38 +82,41 @@ import Prelude (class Show, Unit, append, bind, discard, eq, flip, identity, joi
 externalRole :: ContextInstance ~~> RoleInstance
 externalRole ci = ArrayT $ (try $ lift $ getContextMember IP.externalRole ci) >>=
   handlePerspectContextError' "externalRole" []
-    \erole -> (tell $ ArrayWithoutDoubles [External ci]) *> pure [erole]
+    \erole -> (tell $ ArrayWithoutDoubles [ External ci ]) *> pure [ erole ]
 
 getEnumeratedRoleInstances :: EnumeratedRoleType -> (ContextInstance ~~> RoleInstance)
 getEnumeratedRoleInstances rn c = ArrayT $ (lift $ try $ getPerspectContext c >>= flip context_rolInContext rn) >>=
   handlePerspectContextError' "getEnumeratedRoleInstances" []
-    \(Tuple rn' instances) -> (tell $ ArrayWithoutDoubles [RoleAssumption c (EnumeratedRoleType rn')]) *> pure instances
+    \(Tuple rn' instances) -> (tell $ ArrayWithoutDoubles [ RoleAssumption c (EnumeratedRoleType rn') ]) *> pure instances
 
 getEnumeratedRoleInstances_ :: EnumeratedRoleType -> (ContextInstance ~~> RoleInstance)
 getEnumeratedRoleInstances_ rn c = ArrayT $ (lift $ try $ getPerspectContext c >>= flip context_rolInContext_ rn) >>=
   handlePerspectContextError' "getEnumeratedRoleInstances_" []
-    \instances -> (tell $ ArrayWithoutDoubles [RoleAssumption c rn]) *> pure instances
+    \instances -> (tell $ ArrayWithoutDoubles [ RoleAssumption c rn ]) *> pure instances
 
 getUnlinkedRoleInstances :: EnumeratedRoleType -> (ContextInstance ~~> RoleInstance)
-getUnlinkedRoleInstances rn c = ArrayT $ try 
-  (lift do
-    db <- entitiesDatabaseName
-    filledRolesInDatabase :: Array RoleInstance <- getSafeViewOnDatabase db "defaultViews/roleFromContext" (Key [unwrap rn, takeGuid (unwrap c)])
-    filledRolesInCache :: Array RoleInstance <- (do 
-      cache <- roleCache
-      cachedRoleAvars <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-      cachedRoles <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
-      pure $ rol_id <$> filter (roleFromContextFilter rn c) cachedRoles
-      )
-    pure $ filledRolesInDatabase `union` filledRolesInCache)
-  >>=
-  handlePerspectRolError' "getUnlinkedRoleInstances" []
-    \(roles :: Array RoleInstance) -> (tell $ ArrayWithoutDoubles [RoleAssumption c rn]) *> pure roles
+getUnlinkedRoleInstances rn c = ArrayT $
+  try
+    ( lift do
+        db <- entitiesDatabaseName
+        filledRolesInDatabase :: Array RoleInstance <- getSafeViewOnDatabase db "defaultViews/roleFromContext" (Key [ unwrap rn, takeGuid (unwrap c) ])
+        filledRolesInCache :: Array RoleInstance <-
+          ( do
+              cache <- roleCache
+              cachedRoleAvars <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
+              cachedRoles <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              pure $ rol_id <$> filter (roleFromContextFilter rn c) cachedRoles
+          )
+        pure $ filledRolesInDatabase `union` filledRolesInCache
+    )
+    >>=
+      handlePerspectRolError' "getUnlinkedRoleInstances" []
+        \(roles :: Array RoleInstance) -> (tell $ ArrayWithoutDoubles [ RoleAssumption c rn ]) *> pure roles
 
 -- | Because we never change the type of a Context, we have no real need
 -- | to track it as a dependency.
 contextType :: ContextInstance ~~> ContextType
-contextType cid  = ArrayT $ (lift $ try $ getContextMember (\c -> [context_pspType c]) cid) >>=
+contextType cid = ArrayT $ (lift $ try $ getContextMember (\c -> [ context_pspType c ]) cid) >>=
   handlePerspectContextError' "contextType" [] (pure <<< identity)
 
 contextType_ :: ContextInstance -> MP ContextType
@@ -128,20 +131,20 @@ getMe :: ContextInstance ~~> RoleInstance
 getMe ctxt = ArrayT $ (try $ lift $ getPerspectContext ctxt) >>=
   handlePerspectContextError' "getMe" []
     \c -> do
-      tell $ ArrayWithoutDoubles [Me ctxt]
+      tell $ ArrayWithoutDoubles [ Me ctxt ]
       pure $ maybe [] singleton (context_me c)
 
 getPreferredUserRoleType :: ContextInstance ~~> RoleType
 getPreferredUserRoleType ctxt = ArrayT $ (try $ lift $ getPerspectContext ctxt) >>=
   handlePerspectRolError' "getPreferredUserRoleType" []
     \c -> do
-      tell $ ArrayWithoutDoubles [Me ctxt]
+      tell $ ArrayWithoutDoubles [ Me ctxt ]
       pure $ maybe [] singleton (context_preferredUserRoleType c)
 
 getActiveStates :: ContextInstance ~~> StateIdentifier
 getActiveStates ci = ArrayT $ (try $ lift $ getContextMember IP.states ci) >>=
   handlePerspectContextError' "getActiveStates" []
-    \states -> (tell $ ArrayWithoutDoubles [State ci]) *> pure states
+    \states -> (tell $ ArrayWithoutDoubles [ State ci ]) *> pure states
 
 getActiveStates_ :: ContextInstance -> MonadPerspectives (Array StateIdentifier)
 getActiveStates_ ci = (try $ getContextMember IP.states ci) >>=
@@ -160,11 +163,12 @@ getContextActions userRoleType userRoleInstance cid = ArrayT do
   cType <- lift $ contextType_ cid
   -- Try each state of the subject and each state of the context
   singleton <<< fromFoldable <$> foldM
-    (\(cumulatedActions :: Array (Tuple String String)) (nextState :: SP.StateSpec) -> case Map.lookup nextState stateActionMap of
-      Nothing -> pure cumulatedActions
-      Just (actions :: Object Action) -> do 
-        moreActions <- for (keys actions) \actionName -> Tuple actionName <$> (lift $ translateType (qualifyWith (unwrap cType) actionName))
-        pure (cumulatedActions <> moreActions))
+    ( \(cumulatedActions :: Array (Tuple String String)) (nextState :: SP.StateSpec) -> case Map.lookup nextState stateActionMap of
+        Nothing -> pure cumulatedActions
+        Just (actions :: Object Action) -> do
+          moreActions <- for (keys actions) \actionName -> Tuple actionName <$> (lift $ translateType (qualifyWith (unwrap cType) actionName))
+          pure (cumulatedActions <> moreActions)
+    )
     []
     ((SP.ContextState <$> contextStates) <> (SP.SubjectState <$> userStates))
 
@@ -175,9 +179,9 @@ contextModelName (ContextInstance cid) = maybe Plus.empty (pure <<< Value) (type
 indexedContextName :: ContextInstance ~~> Value
 indexedContextName = contextType >=> \cType -> ArrayT $ do
   (CONTEXT.Context c) <- lift $ getContext cType
-  case c.indexedContext of 
+  case c.indexedContext of
     Nothing -> pure []
-    Just i -> pure [Value $ unwrap i]
+    Just i -> pure [ Value $ unwrap i ]
 
 publicUrl :: ContextInstance -> MonadPerspectives (Maybe PublicUrl)
 publicUrl ci = (try $ getContextMember context_publicUrl ci) >>=
@@ -190,32 +194,32 @@ publicUrl ci = (try $ getContextMember context_publicUrl ci) >>=
 context :: RoleInstance ~~> ContextInstance
 context rid = ArrayT $ (lift $ try $ getPerspectRol rid) >>= handlePerspectRolError' "context" []
   \(r :: IP.PerspectRol) -> do
-  -- See: Implementing the Functional Reactive Pattern for a full justification of not
-  -- recording an assumption.
-  -- In short: a client who requests the context of rid, must have another request
-  -- that yields rid in the first place. This request is dependent on that other
-  -- request, client side. This means that, if rid is removed, the client is notified
-  -- of that change and consequently is no longer interested in its context.
-  tell $ ArrayWithoutDoubles [Context rid]
-  pure $ [rol_context r]
+    -- See: Implementing the Functional Reactive Pattern for a full justification of not
+    -- recording an assumption.
+    -- In short: a client who requests the context of rid, must have another request
+    -- that yields rid in the first place. This request is dependent on that other
+    -- request, client side. This means that, if rid is removed, the client is notified
+    -- of that change and consequently is no longer interested in its context.
+    tell $ ArrayWithoutDoubles [ Context rid ]
+    pure $ [ rol_context r ]
 
 context_ :: RoleInstance -> MonadPerspectives (Array ContextInstance)
 context_ rid = (try $ getPerspectRol rid) >>=
   handlePerspectRolError' "context_" []
-  (pure <<< singleton <<< rol_context)
+    (pure <<< singleton <<< rol_context)
 
 context' :: RoleInstance -> MonadPerspectives ContextInstance
-context' rid = getPerspectRol rid >>=  pure <<< rol_context
+context' rid = getPerspectRol rid >>= pure <<< rol_context
 
 binding :: RoleInstance ~~> RoleInstance
 binding r = ArrayT $ (lift $ try $ getPerspectRol r) >>=
   handlePerspectRolError' "binding" []
-  \(role :: IP.PerspectRol) -> do
-    tell $ ArrayWithoutDoubles [Filler r]
-    case rol_binding role of
-      Nothing -> pure []
-      (Just b) -> pure [b]
-    
+    \(role :: IP.PerspectRol) -> do
+      tell $ ArrayWithoutDoubles [ Filler r ]
+      case rol_binding role of
+        Nothing -> pure []
+        (Just b) -> pure [ b ]
+
 binding_ :: RoleInstance -> MonadPerspectives (Maybe RoleInstance)
 binding_ r = (try $ getPerspectRol r) >>=
   handlePerspectRolError' "binding_" Nothing
@@ -225,22 +229,22 @@ binding_ r = (try $ getPerspectRol r) >>=
         (Just b) -> pure $ Just b
 
 completeRuntimeType :: RoleInstance -> MP (ADT RoleInContext)
-completeRuntimeType rid = do 
-  role <- roleType_ rid >>= getEnumeratedRole 
+completeRuntimeType rid = do
+  role <- roleType_ rid >>= getEnumeratedRole
   crt <- declaredTypeWithoutFiller role
   mb <- binding_ rid
-  case mb of 
+  case mb of
     Nothing -> do
       mrestrictions <- completeDeclaredFillerRestriction role
-      case mrestrictions of 
+      case mrestrictions of
         Nothing -> pure crt
-        Just restrictions -> pure $ PROD [crt, restrictions]
-    Just b -> (\adt -> PROD[crt, adt]) <$> completeRuntimeType b
+        Just restrictions -> pure $ PROD [ crt, restrictions ]
+    Just b -> (\adt -> PROD [ crt, adt ]) <$> completeRuntimeType b
 
 allFillers :: RoleInstance -> MonadPerspectives (Array RoleInstance)
-allFillers rid = do 
+allFillers rid = do
   mfiller <- binding_ rid
-  case mfiller of 
+  case mfiller of
     Nothing -> pure []
     Just filler -> cons filler <$> (allFillers filler)
 
@@ -248,7 +252,7 @@ bottom :: RoleInstance ~~> RoleInstance
 bottom r = ArrayT do
   (bs :: Array RoleInstance) <- runArrayT $ binding r
   case head bs of
-    Nothing -> pure [r]
+    Nothing -> pure [ r ]
     Just b -> runArrayT $ bottom b
 
 -- | The most deeply nested role in the chain.
@@ -263,13 +267,12 @@ bottom_ r = do
 perspectivesUsersRole_ :: RoleInstance -> MP (Maybe PerspectivesUser)
 perspectivesUsersRole_ r = do
   EnumeratedRoleType rt <- roleType_ r
-  if rt == perspectivesUsers
-    then pure $ Just (roleInstance2PerspectivesUser r)
-    else do 
-      (mbinding :: Maybe RoleInstance) <- binding_ r
-      case mbinding of
-        Nothing -> pure Nothing
-        Just b -> perspectivesUsersRole_ b
+  if rt == perspectivesUsers then pure $ Just (roleInstance2PerspectivesUser r)
+  else do
+    (mbinding :: Maybe RoleInstance) <- binding_ r
+    case mbinding of
+      Nothing -> pure Nothing
+      Just b -> perspectivesUsersRole_ b
 
 -- | From the instance of a Role (fillerId) of any kind, find the instances of the Role of the given
 -- | type (filledType) that are filled with it. The type of filledType (EnumeratedRoleType) may
@@ -279,161 +282,188 @@ getFilledRoles :: ContextType -> EnumeratedRoleType -> (RoleInstance ~~> RoleIns
 getFilledRoles filledContextType filledType fillerId = ArrayT $ (lift $ try $ getPerspectRol fillerId) >>=
   handlePerspectRolError' "getFilledRoles" []
     \(filler :: IP.PerspectRol) -> case rol_gevuldeRol filler filledContextType filledType of
-      {context:ct, role, instances} -> do
+      { context: ct, role, instances } -> do
         -- FilledRolesAssumption RoleInstance ContextType EnumeratedRoleType
-        tell $ ArrayWithoutDoubles [FilledRolesAssumption fillerId ct role]
+        tell $ ArrayWithoutDoubles [ FilledRolesAssumption fillerId ct role ]
         pure instances
 
 getRecursivelyFilledRoles' :: ContextType -> EnumeratedRoleType -> (RoleInstance ~~> RoleInstance)
-getRecursivelyFilledRoles' filledContextType filledType fillerId = ArrayT do 
+getRecursivelyFilledRoles' filledContextType filledType fillerId = ArrayT do
   -- As we perform a depth-first search, the same assumption may occur multiple times.
   results <- lift $ nub <$> (execWriterT $ depthFirst fillerId)
   for_ results (tell <<< ArrayWithoutDoubles <<< fst)
   pure $ join (snd <$> results)
   where
-    depthFirst ::RoleInstance -> WriterT (Array (Tuple (Array InformedAssumption) (Array RoleInstance))) MonadPerspectives Unit
-    depthFirst rid = do 
-      Tuple rids (ArrayWithoutDoubles ass) <- lift $ runMonadPerspectivesQuery rid (getFilledRoles filledContextType filledType)
-      if null rids
-      -- LET OP: nemen we de assumpties `ass` wel mee?
-        -- Not found. Now see if any other filled role eventually fills an instance of filledType.
-        then do 
-          -- The first index of the filledRoles administration is the String representation of the type of the context of the filled role, 
-          -- the second is the string representation of the type of the filled role.
-          filledRoles <- lift $ getFilledRolesAdministration rid
-          -- All these filled roles are an assumption, whether or not they lead to a result. 
-          -- This is because one of them may later actually fill an instance of the filledType and then we want to know.
-          tell [Tuple ass rids, (Tuple 
-            (concat (values <$> (forWithIndex filledRoles (\contextOfFilledRole filledRoles' -> 
-              (keys filledRoles') <#> (\typeOfFilledRole -> FilledRolesAssumption fillerId (ContextType contextOfFilledRole) (EnumeratedRoleType typeOfFilledRole))))) )
-            [])]
-          for_ (concat $ concat $ values <$> values filledRoles) depthFirst
-        -- Found. 
-        else do 
-          tell [Tuple ass rids]
-    getFilledRolesAdministration :: RoleInstance -> MonadPerspectives (Object (Object (Array RoleInstance)))
-    getFilledRolesAdministration rid = (try $ getPerspectRol rid) >>=
-      handlePerspectRolError' "getRecursivelyFilledRoles'" empty
-        \(filler :: IP.PerspectRol) -> pure (rol_gevuldeRollen filler)
+  depthFirst :: RoleInstance -> WriterT (Array (Tuple (Array InformedAssumption) (Array RoleInstance))) MonadPerspectives Unit
+  depthFirst rid = do
+    Tuple rids (ArrayWithoutDoubles ass) <- lift $ runMonadPerspectivesQuery rid (getFilledRoles filledContextType filledType)
+    if null rids
+    -- LET OP: nemen we de assumpties `ass` wel mee?
+    -- Not found. Now see if any other filled role eventually fills an instance of filledType.
+    then do
+      -- The first index of the filledRoles administration is the String representation of the type of the context of the filled role, 
+      -- the second is the string representation of the type of the filled role.
+      filledRoles <- lift $ getFilledRolesAdministration rid
+      -- All these filled roles are an assumption, whether or not they lead to a result. 
+      -- This is because one of them may later actually fill an instance of the filledType and then we want to know.
+      tell
+        [ Tuple ass rids
+        , ( Tuple
+              ( concat
+                  ( values <$>
+                      ( forWithIndex filledRoles
+                          ( \contextOfFilledRole filledRoles' ->
+                              (keys filledRoles') <#> (\typeOfFilledRole -> FilledRolesAssumption fillerId (ContextType contextOfFilledRole) (EnumeratedRoleType typeOfFilledRole))
+                          )
+                      )
+                  )
+              )
+              []
+          )
+        ]
+      for_ (concat $ concat $ values <$> values filledRoles) depthFirst
+    -- Found. 
+    else do
+      tell [ Tuple ass rids ]
 
+  getFilledRolesAdministration :: RoleInstance -> MonadPerspectives (Object (Object (Array RoleInstance)))
+  getFilledRolesAdministration rid = (try $ getPerspectRol rid) >>=
+    handlePerspectRolError' "getRecursivelyFilledRoles'" empty
+      \(filler :: IP.PerspectRol) -> pure (rol_gevuldeRollen filler)
 
 getAllFilledRoles_ :: RoleInstance -> MonadPerspectives (Array RoleInstance)
 getAllFilledRoles_ rid = (try $ getPerspectRol rid) >>=
   handlePerspectRolError' "getAllFilledRoles_" []
     \(filler :: IP.PerspectRol) -> pure $ concat $ concat (values <$> values (rol_gevuldeRollen filler))
 
-
 getAllFilledRoles :: RoleInstance ~~> RoleInstance
-getAllFilledRoles rid = ArrayT ((lift (try $ getPerspectRol rid)) >>=
-  handlePerspectRolError' "getAllFilledRoles" []
-    \(filler :: IP.PerspectRol) -> do 
-      tell $ ArrayWithoutDoubles $ execWriter 
-        (forWithIndex_ (rol_gevuldeRollen filler) (\contexttype filleds -> 
-          forWithIndex_ filleds (\filledRoleType _ -> 
-            tell [FilledRolesAssumption rid (ContextType contexttype) (EnumeratedRoleType filledRoleType)])))
-      pure $ concat $ concat (values <$> values (rol_gevuldeRollen filler)))
+getAllFilledRoles rid = ArrayT
+  ( (lift (try $ getPerspectRol rid)) >>=
+      handlePerspectRolError' "getAllFilledRoles" []
+        \(filler :: IP.PerspectRol) -> do
+          tell $ ArrayWithoutDoubles $ execWriter
+            ( forWithIndex_ (rol_gevuldeRollen filler)
+                ( \contexttype filleds ->
+                    forWithIndex_ filleds
+                      ( \filledRoleType _ ->
+                          tell [ FilledRolesAssumption rid (ContextType contexttype) (EnumeratedRoleType filledRoleType) ]
+                      )
+                )
+            )
+          pure $ concat $ concat (values <$> values (rol_gevuldeRollen filler))
+  )
 
 getRecursivelyAllFilledRoles :: RoleInstance -> MonadPerspectives (Array RoleInstance)
-getRecursivelyAllFilledRoles rid = do 
+getRecursivelyAllFilledRoles rid = do
   all <- getAllFilledRoles_ rid
   append all <<< join <$> for all getRecursivelyAllFilledRoles
 
 -- | Select by providing a filler and retrieve all roles that are filled by it.
 -- | Is especially useful for a public filler, as that carries no inverse administration of the (private) roles it fills.
 getFilledRolesFromDatabase :: RoleInstance ~~> RoleInstance
-getFilledRolesFromDatabase rid = ArrayT $ try 
-  (lift $ filler2filledFromDatabase_ (Filler_ rid))
-  >>=
-  handlePerspectRolError' "getFilledRolesFromDatabase" []
-    \(roles :: Array RoleInstance) -> (tell $ ArrayWithoutDoubles [Filler rid]) *> pure roles
+getFilledRolesFromDatabase rid = ArrayT $
+  try
+    (lift $ filler2filledFromDatabase_ (Filler_ rid))
+    >>=
+      handlePerspectRolError' "getFilledRolesFromDatabase" []
+        \(roles :: Array RoleInstance) -> (tell $ ArrayWithoutDoubles [ Filler rid ]) *> pure roles
 
 -- | Select by providing a filler and retrieve all roles that still refer to it as their filler.
 -- | Only useful when the filler itself can no longer be retrieved.
 filler2filledFromDatabase_ :: Filler_ -> MonadPerspectives (Array RoleInstance)
-filler2filledFromDatabase_ (Filler_ filler) = try 
-  (do
-    db <- entitiesDatabaseName
-    filledRolesInDatabase :: Array RoleInstance <- getSafeViewOnDatabase db "defaultViews/filler2filledView" (Key $ unwrap filler)
-    filledRolesInCache :: Array RoleInstance <- (do 
-      cache <- roleCache
-      cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-      cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
-      pure $ rol_id <$> filter (filler2filledFilter filler) cachedRoles
-      )
-    pure $ filledRolesInDatabase `union` filledRolesInCache
-  )
-  >>=
-  handlePerspectRolError' "filler2filledFromDatabase_" []
-    \(roles :: Array RoleInstance) -> pure roles
+filler2filledFromDatabase_ (Filler_ filler) =
+  try
+    ( do
+        db <- entitiesDatabaseName
+        filledRolesInDatabase :: Array RoleInstance <- getSafeViewOnDatabase db "defaultViews/filler2filledView" (Key $ unwrap filler)
+        filledRolesInCache :: Array RoleInstance <-
+          ( do
+              cache <- roleCache
+              cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
+              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              pure $ rol_id <$> filter (filler2filledFilter filler) cachedRoles
+          )
+        pure $ filledRolesInDatabase `union` filledRolesInCache
+    )
+    >>=
+      handlePerspectRolError' "filler2filledFromDatabase_" []
+        \(roles :: Array RoleInstance) -> pure roles
 
 -- | Select by providing a filled and retrieve the filler that still refers to it.
 -- | Only useful when the filled itself can no longer be retrieved.
 filled2fillerFromDatabase_ :: RoleInstance -> MonadPerspectives (Array FillerInfo)
-filled2fillerFromDatabase_ rid = try 
-  (do
-    db <- entitiesDatabaseName
-    -- FillerInfo provides, for a given filler, the type of the filled role and the type of the context.
-    fillerRolesInDatabase :: Array FillerInfo <- getSafeViewOnDatabase_ (_.filler) db "defaultViews/filled2fillerView" (Key $ unwrap rid)
-    fillerRoleInCache :: Array FillerInfo <- (do 
-      cache <- roleCache
-      cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-      -- There may be empty AVars.
-      cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
-      for (filter (filled2fillerFilter rid) cachedRoles)
-        (\filler@(PerspectRol{id, pspType, context:cid}) -> do
-          filledContextType <- contextType_ cid 
-          -- By construction we know there will be a result.
-          pure $ unsafePartial fromJust $ filled2FillerInfo rid filler)
-      )
-    pure $ fillerRolesInDatabase `union` fillerRoleInCache
-  )
-  >>=
-  handlePerspectRolError' "filled2fillerFromDatabase_" []
-    \(infos :: Array FillerInfo) -> pure infos
+filled2fillerFromDatabase_ rid =
+  try
+    ( do
+        db <- entitiesDatabaseName
+        -- FillerInfo provides, for a given filler, the type of the filled role and the type of the context.
+        fillerRolesInDatabase :: Array FillerInfo <- getSafeViewOnDatabase_ (_.filler) db "defaultViews/filled2fillerView" (Key $ unwrap rid)
+        fillerRoleInCache :: Array FillerInfo <-
+          ( do
+              cache <- roleCache
+              cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
+              -- There may be empty AVars.
+              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              for (filter (filled2fillerFilter rid) cachedRoles)
+                ( \filler@(PerspectRol { id, pspType, context: cid }) -> do
+                    filledContextType <- contextType_ cid
+                    -- By construction we know there will be a result.
+                    pure $ unsafePartial fromJust $ filled2FillerInfo rid filler
+                )
+          )
+        pure $ fillerRolesInDatabase `union` fillerRoleInCache
+    )
+    >>=
+      handlePerspectRolError' "filled2fillerFromDatabase_" []
+        \(infos :: Array FillerInfo) -> pure infos
 
 -- | Select by providing a role and retrieve the context that (still) refers to it.
 -- | Only useful when the role itself can no longer be retrieved.
 role2contextFromDatabase_ :: RoleInstance -> MonadPerspectives (Array ContextInstance)
-role2contextFromDatabase_ rid = try 
-  (do
-    db <- entitiesDatabaseName
-    contextInDatabase :: Array ContextInstance <- getSafeViewOnDatabase db "defaultViews/role2ContextView" (Key $ unwrap rid)
-    contextInCache :: Array ContextInstance <- (do 
-      cache <- contextCache
-      cachedContextAvars :: Array (AVar IP.PerspectContext) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-      cachedContexts :: Array IP.PerspectContext <- catMaybes <$> (lift $ traverse tryRead cachedContextAvars)
-      pure $ context_id <$> filter (context2RoleFilter rid) cachedContexts
-      )
-    pure $ contextInDatabase `union` contextInCache
-  )
-  >>=
-  handlePerspectContextError' "role2contextFromDatabase_" []
-    \(contexts :: Array ContextInstance) -> pure contexts
+role2contextFromDatabase_ rid =
+  try
+    ( do
+        db <- entitiesDatabaseName
+        contextInDatabase :: Array ContextInstance <- getSafeViewOnDatabase db "defaultViews/role2ContextView" (Key $ unwrap rid)
+        contextInCache :: Array ContextInstance <-
+          ( do
+              cache <- contextCache
+              cachedContextAvars :: Array (AVar IP.PerspectContext) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
+              cachedContexts :: Array IP.PerspectContext <- catMaybes <$> (lift $ traverse tryRead cachedContextAvars)
+              pure $ context_id <$> filter (context2RoleFilter rid) cachedContexts
+          )
+        pure $ contextInDatabase `union` contextInCache
+    )
+    >>=
+      handlePerspectContextError' "role2contextFromDatabase_" []
+        \(contexts :: Array ContextInstance) -> pure contexts
 
 -- | Select by providing a context and retrieve all roles that still refer to it as their context.
 -- | Only useful when the context itself can no longer be retrieved.
 context2roleFromDatabase_ :: ContextInstance -> MonadPerspectives (Array RoleInstance)
-context2roleFromDatabase_ cid = try 
-  (do
-    db <- entitiesDatabaseName
-    contextRolesInDatabase :: Array RoleInstance <- getSafeViewOnDatabase db "defaultViews/context2RoleView" (Key $ unwrap cid)
-    contextRolesInCache :: Array RoleInstance <- (do 
-      cache <- roleCache
-      cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-      cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
-      pure $ rol_id <$> filter (role2ContextFilter cid) cachedRoles
-      )
-    pure $ contextRolesInDatabase `union` contextRolesInCache
-  )
-  >>=
-  handlePerspectRolError' "getContextRolesFromDatabase_" []
-    \(roles :: Array RoleInstance) -> pure roles
+context2roleFromDatabase_ cid =
+  try
+    ( do
+        db <- entitiesDatabaseName
+        contextRolesInDatabase :: Array RoleInstance <- getSafeViewOnDatabase db "defaultViews/context2RoleView" (Key $ unwrap cid)
+        contextRolesInCache :: Array RoleInstance <-
+          ( do
+              cache <- roleCache
+              cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
+              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              pure $ rol_id <$> filter (role2ContextFilter cid) cachedRoles
+          )
+        pure $ contextRolesInDatabase `union` contextRolesInCache
+    )
+    >>=
+      handlePerspectRolError' "getContextRolesFromDatabase_" []
+        \(roles :: Array RoleInstance) -> pure roles
 
 getProperty :: EnumeratedPropertyType -> (RoleInstance ~~> Value)
 getProperty pn r = ArrayT $ (lift $ try $ getPerspectRol r) >>=
   handlePerspectRolError' "getProperty" []
-    \((IP.PerspectRol{properties}) :: IP.PerspectRol) -> do
-      tell $ ArrayWithoutDoubles [Property r pn]
+    \((IP.PerspectRol { properties }) :: IP.PerspectRol) -> do
+      tell $ ArrayWithoutDoubles [ Property r pn ]
       case (lookup (unwrap pn) properties) of
         Nothing -> pure []
         (Just p) -> pure p
@@ -448,11 +478,11 @@ makeBoolean f = f >>> map (((==) "true") <<< unwrap)
 getUnqualifiedProperty :: LocalName -> (RoleInstance ~~> Value)
 getUnqualifiedProperty ln r = ArrayT $ (lift $ try $ getPerspectRol r) >>=
   handlePerspectRolError' "getUnqualifiedProperty" []
-    \(role@(IP.PerspectRol{properties}) :: IP.PerspectRol) -> case findIndex (test (unsafeRegex (ln <> "$") noFlags)) (keys properties) of
+    \(role@(IP.PerspectRol { properties }) :: IP.PerspectRol) -> case findIndex (test (unsafeRegex (ln <> "$") noFlags)) (keys properties) of
       Nothing -> pure []
       (Just i) -> do
         pn <- pure (unsafePartial $ fromJust (index (keys $ rol_properties role) i))
-        tell $ ArrayWithoutDoubles [Property r (EnumeratedPropertyType pn)]
+        tell $ ArrayWithoutDoubles [ Property r (EnumeratedPropertyType pn) ]
         -- tell [assumption (unwrap r) pn]
         case (lookup pn properties) of
           Nothing -> pure []
@@ -461,7 +491,7 @@ getUnqualifiedProperty ln r = ArrayT $ (lift $ try $ getPerspectRol r) >>=
 -- | Because we never change the type of a Role, we have no real need
 -- | to track it as a dependency.
 roleType :: RoleInstance ~~> EnumeratedRoleType
-roleType = ArrayT <<< lift <<< (getRolMember \r -> [rol_pspType r])
+roleType = ArrayT <<< lift <<< (getRolMember \r -> [ rol_pspType r ])
 
 roleType_ :: RoleInstance -> MP EnumeratedRoleType
 roleType_ = getRolMember rol_pspType
@@ -472,22 +502,24 @@ allRoleTypes_ = getRolMember rol_allTypes
 hasType :: EnumeratedRoleType -> RoleInstance ~~> Boolean
 hasType rt rid = ArrayT do
   t <- lift $ getRolMember rol_pspType rid
-  pure $ [eq t rt]
+  pure $ [ eq t rt ]
 
 -- | All the roles that bind the role instance.
 allRoleBinders :: RoleInstance ~~> RoleInstance
 allRoleBinders r = ArrayT $ (lift $ try $ getPerspectRol r) >>=
   handlePerspectRolError' "allRoleBinders" []
-    \((IP.PerspectRol{filledRoles}) :: IP.PerspectRol) ->
+    \((IP.PerspectRol { filledRoles }) :: IP.PerspectRol) ->
       foldWithIndexM
-        (\cIndex (vals :: Array RoleInstance) (roleMap :: Object (Array RoleInstance)) -> do
-          vals' <- foldWithIndexM
-            (\rIndex (cum :: Array RoleInstance) (vals' :: Array RoleInstance) -> do
-              tell $ ArrayWithoutDoubles [FilledRolesAssumption r (ContextType cIndex)(EnumeratedRoleType rIndex)]
-              pure (cum <> vals'))
-            []
-            roleMap
-          pure (vals <> vals'))
+        ( \cIndex (vals :: Array RoleInstance) (roleMap :: Object (Array RoleInstance)) -> do
+            vals' <- foldWithIndexM
+              ( \rIndex (cum :: Array RoleInstance) (vals' :: Array RoleInstance) -> do
+                  tell $ ArrayWithoutDoubles [ FilledRolesAssumption r (ContextType cIndex) (EnumeratedRoleType rIndex) ]
+                  pure (cum <> vals')
+              )
+              []
+              roleMap
+            pure (vals <> vals')
+        )
         []
         filledRoles
 
@@ -499,14 +531,13 @@ type Filled = RoleInstance
 -- | filled `filledBy_` filler
 filledBy_ :: Filled_ -> Filler_ -> MP Boolean
 filledBy_ (Filled_ filled) (Filler_ filler) =
-  if filled == filler
-    then pure true
-    else do
-      -- NOTE: binding is: get the filler
-      mfiller <- binding_ filled
-      case mfiller of 
-        Nothing -> pure false
-        Just nextFilled -> (Filled_ nextFilled) `filledBy_` (Filler_ filler)
+  if filled == filler then pure true
+  else do
+    -- NOTE: binding is: get the filler
+    mfiller <- binding_ filled
+    case mfiller of
+      Nothing -> pure false
+      Just nextFilled -> (Filled_ nextFilled) `filledBy_` (Filler_ filler)
 
 -- | filled ##= filledBy filler
 -- | equals:
@@ -514,23 +545,23 @@ filledBy_ (Filled_ filled) (Filler_ filler) =
 filledBy :: Filler_ -> Filled_ ~~> Boolean
 filledBy filler filled = ArrayT $ do
   b <- lift (filled `filledBy_` filler)
-  pure [b]
+  pure [ b ]
 
-filledByOperator :: (RoleInstance ~~> RoleInstance) ->
-  (RoleInstance ~~> RoleInstance) ->
-  (RoleInstance ~~> Value)
+filledByOperator
+  :: (RoleInstance ~~> RoleInstance)
+  -> (RoleInstance ~~> RoleInstance)
+  -> (RoleInstance ~~> Value)
 filledByOperator sourceOfFilledRoles sourceOfFillerRoles = fillsOperator sourceOfFillerRoles sourceOfFilledRoles
 
-
 -- Filler ##= (fillsCombinator (RoleInstance ~~> Filled)) RoleInstance
-fillsCombinator :: (RoleInstance ~~> Filled) ->
-  (Filler ~~> Value)
+fillsCombinator
+  :: (RoleInstance ~~> Filled)
+  -> (Filler ~~> Value)
 fillsCombinator sourceOfFilledRoles filler = ArrayT do
   (bools :: Array Boolean) <- runArrayT $ (sourceOfFilledRoles >=> filledBy (Filler_ filler) <<< Filled_) filler
   -- If there are no bindingRoles, this function must return false.
-  if null bools
-    then pure [Value $ show false]
-    else pure [Value $ show $ ala Conj foldMap bools]
+  if null bools then pure [ Value $ show false ]
+  else pure [ Value $ show $ ala Conj foldMap bools ]
 
 -- | Is Filled (ultimately) filled by Filler?
 -- | Recursively checks each filler of filled until filler is found or the bottom has been reached.
@@ -547,50 +578,55 @@ fills_ = flip filledBy_
 fills :: Filler_ -> Filled_ ~~> Boolean
 fills filler filled = ArrayT $ do
   b <- lift (filler `fills_` filled)
-  pure [b]
+  pure [ b ]
 
 newtype Filler_ = Filler_ RoleInstance
-derive instance Newtype Filler_ _
-instance Show Filler_ where show (Filler_ s) = show s
 
-newtype Filled_  = Filled_ RoleInstance
+derive instance Newtype Filler_ _
+instance Show Filler_ where
+  show (Filler_ s) = show s
+
+newtype Filled_ = Filled_ RoleInstance
+
 derive instance Newtype Filled_ _
-instance Show Filled_ where show (Filled_ s) = show s
-  
+instance Show Filled_ where
+  show (Filled_ s) = show s
+
 -- | A boolean operator for Arc expressions.
 -- | Is true if the (first) filler ultimately fills the (first) filled.
-fillsOperator :: (RoleInstance ~~> Filled) ->
-  (RoleInstance ~~> Filler) ->
-  (RoleInstance ~~> Value)
+fillsOperator
+  :: (RoleInstance ~~> Filled)
+  -> (RoleInstance ~~> Filler)
+  -> (RoleInstance ~~> Value)
 fillsOperator sourceOfFillerRoles sourceOfFilledRoles originRole = ArrayT do
   fillerRoles <- runArrayT (sourceOfFillerRoles originRole)
   filledRoles <- runArrayT (sourceOfFilledRoles originRole)
   case head fillerRoles, head filledRoles of
     Just fillerRole, Just filledRole | length fillerRoles == 1 && length filledRoles == 1 -> do
       result <- (unsafePartial fromJust <<< head) <$> (runArrayT $ (fills (Filler_ fillerRole)) (Filled_ filledRole))
-      pure [Value $ show result]
-    _, _ -> pure [Value $ show false]
+      pure [ Value $ show result ]
+    _, _ -> pure [ Value $ show false ]
 
 -- Filled ##= (filledByCombinator (RoleInstance ~~> Filler)) RoleInstance
-filledByCombinator :: (RoleInstance ~~> Filled) ->
-  (Filler ~~> Value)
+filledByCombinator
+  :: (RoleInstance ~~> Filled)
+  -> (Filler ~~> Value)
 filledByCombinator sourceOfFillerRoles filled = ArrayT do
   (bools :: Array Boolean) <- runArrayT $ (sourceOfFillerRoles >=> \filler -> filledBy (Filler_ filler) (Filled_ filled)) filled
   -- If there are no bindingRoles, this function must return false.
-  if null bools
-    then pure [Value $ show false]
-    else pure [Value $ show $ ala Conj foldMap bools]
+  if null bools then pure [ Value $ show false ]
+  else pure [ Value $ show $ ala Conj foldMap bools ]
 
 -- | Returns all the instances of the same role (including the argument instance!).
 siblings :: RoleInstance ~~> RoleInstance
 siblings rid = ArrayT $ (lift $ try $ getPerspectRol rid) >>=
   handlePerspectRolError' "siblings" []
-    \(IP.PerspectRol{pspType, context:ctxt}) -> runArrayT $ getEnumeratedRoleInstances pspType ctxt
+    \(IP.PerspectRol { pspType, context: ctxt }) -> runArrayT $ getEnumeratedRoleInstances pspType ctxt
 
 getActiveRoleStates :: RoleInstance ~~> StateIdentifier
 getActiveRoleStates ri = ArrayT $ (try $ lift $ getRolMember (_.states <<< unwrap) ri) >>=
   handlePerspectRolError' "getActiveRoleStates" []
-    \states -> (tell $ ArrayWithoutDoubles [RoleState ri]) *> pure states
+    \states -> (tell $ ArrayWithoutDoubles [ RoleState ri ]) *> pure states
 
 getActiveRoleStates_ :: RoleInstance -> MonadPerspectives (Array StateIdentifier)
 getActiveRoleStates_ ci = (try $ getRolMember (_.states <<< unwrap) ci) >>=
@@ -613,18 +649,18 @@ getRoleName = orElse
 indexedRoleName :: RoleInstance ~~> Value
 indexedRoleName = roleType >=> \rType -> ArrayT $ do
   (EnumeratedRole r) <- lift $ getEnumeratedRole rType
-  case r.indexedRole of 
+  case r.indexedRole of
     Nothing -> pure []
-    Just i -> pure [Value $ unwrap i]
+    Just i -> pure [ Value $ unwrap i ]
 
 -----------------------------------------------------------
 -- TRANSFORM THE AUTHOR OF A DELTA INTO A RESOURCEIDENTIFIER
 -----------------------------------------------------------
 deltaAuthor2ResourceIdentifier :: PerspectivesUser -> PerspectivesUser
-deltaAuthor2ResourceIdentifier (PerspectivesUser author) = if isInPublicScheme author 
-    then PerspectivesUser $ author
-    -- TheWorld$PerspectivesUser must be in the default storage.
-    else PerspectivesUser $ createDefaultIdentifier author 
+deltaAuthor2ResourceIdentifier (PerspectivesUser author) =
+  if isInPublicScheme author then PerspectivesUser $ author
+  -- TheWorld$PerspectivesUser must be in the default storage.
+  else PerspectivesUser $ createDefaultIdentifier author
 
 isUserRole :: RoleInstance -> MonadPerspectives Boolean
 isUserRole rl = roleType_ rl >>= getEnumeratedRole >>= (\role -> pure $ ((kindOfRole role) == UserRole))

@@ -22,11 +22,11 @@
 
 -- | This module gives a tiny wrapper around idb-keyval (https://www.npmjs.com/package/idb-keyval).
 
-module IDBKeyVal  
-
-(idbGet, idbSet, clear)
-
-where
+module IDBKeyVal
+  ( idbGet
+  , idbSet
+  , clear
+  ) where
 
 import Prelude
 

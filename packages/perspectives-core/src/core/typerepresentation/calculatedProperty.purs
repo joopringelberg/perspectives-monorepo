@@ -53,17 +53,18 @@ type CalculatedPropertyRecord =
   , constrainingFacets :: Maybe (Array PropertyFacet)
 
   , pos :: ArcPosition
-  } 
+  }
 
 defaultCalculatedProperty :: String -> String -> String -> ArcPosition -> CalculatedProperty
 defaultCalculatedProperty id dn role pos = CalculatedProperty
   { id: CalculatedPropertyType id
   , _rev: Nothing
   , displayName: dn
-  , calculation: S (Simple $ Identity $ ArcPosition{column: 0, line: 0}) false
+  , calculation: S (Simple $ Identity $ ArcPosition { column: 0, line: 0 }) false
   , role: EnumeratedRoleType role
   , constrainingFacets: Nothing
-  , pos: pos}
+  , pos: pos
+  }
 
 derive instance genericRepCalculatedProperty :: Generic CalculatedProperty _
 
@@ -71,7 +72,7 @@ instance showCalculatedProperty :: Show CalculatedProperty where
   show = genericShow
 
 instance eqCalculatedProperty :: Eq CalculatedProperty where
-  eq (CalculatedProperty {id : id1}) (CalculatedProperty {id : id2}) = id1 == id2
+  eq (CalculatedProperty { id: id1 }) (CalculatedProperty { id: id2 }) = id1 == id2
 
 derive instance newtypeCalculatedProperty :: Newtype CalculatedProperty _
 
@@ -81,8 +82,8 @@ derive newtype instance ReadForeign CalculatedProperty
 
 instance revisionCalculatedProperty :: Revision CalculatedProperty where
   rev = _._rev <<< unwrap
-  changeRevision s = over CalculatedProperty (\vr -> vr {_rev = s})
+  changeRevision s = over CalculatedProperty (\vr -> vr { _rev = s })
 
 instance identifiableCalculatedProperty :: Identifiable CalculatedProperty CalculatedPropertyType where
-  identifier (CalculatedProperty{id}) = id
-  displayName (CalculatedProperty{displayName:d}) = d
+  identifier (CalculatedProperty { id }) = id
+  displayName (CalculatedProperty { displayName: d }) = d

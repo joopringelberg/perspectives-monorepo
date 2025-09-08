@@ -20,11 +20,10 @@
 
 -- END LICENSE
 
-
 module Perspectives.Persistence.Types where
 
 import Prelude
- 
+
 import Control.Alt ((<|>))
 import Control.Monad.Except (runExcept)
 import Control.Monad.Reader (ReaderT, runReaderT)
@@ -59,11 +58,12 @@ type DatabaseName = String
 -----------------------------------------------------------
 -- POUCHDBDOCUMENTFIELDS
 -----------------------------------------------------------
-type PouchbdDocumentFields f = 
+type PouchbdDocumentFields f =
   { _id :: String
   , _rev :: Revision_
   | f
   }
+
 -----------------------------------------------------------
 -- POUCHDBSTATE
 -----------------------------------------------------------
@@ -79,7 +79,8 @@ type PouchdbState f =
   -- Each account is in the name of the systemIdentifier.
   -- TODO: de values moeten een combinatie van username en paswoord worden!
   , couchdbCredentials :: Object Credential
-  | f}
+  | f
+  }
 
 data Credential = Credential UserName Password
 
@@ -88,16 +89,17 @@ instance Semigroup Credential where
   append c1 c2 = c1
 
 type PouchdbUser =
-  { systemIdentifier :: String        -- the schemaless string
-  , perspectivesUser :: String        -- the schemaless string
-  , userName :: Maybe String          -- this MAY be equal to perspectivesUser but it is not required.
+  { systemIdentifier :: String -- the schemaless string
+  , perspectivesUser :: String -- the schemaless string
+  , userName :: Maybe String -- this MAY be equal to perspectivesUser but it is not required.
   , password :: Maybe String
   , couchdbUrl :: Maybe String
   }
 
 type PouchdbExtraState f =
   ( databases :: Object PouchdbDatabase
-  | f)
+  | f
+  )
 
 type CouchdbUrl = String
 
@@ -106,6 +108,7 @@ decodePouchdbUser' = read
 
 encodePouchdbUser' :: PouchdbUser -> Foreign
 encodePouchdbUser' = write
+
 -----------------------------------------------------------
 -- MONADPOUCHDB
 -----------------------------------------------------------
@@ -116,20 +119,27 @@ type MonadPouchdb f = ReaderT (AVar (PouchdbState f)) Aff
 -----------------------------------------------------------
 -- | Run an action in MonadPouchdb, given a username and password etc.
 -- | Its primary use is in addAttachment_ (to add an attachment using the default "admin" account).
-runMonadPouchdb :: forall a. UserName -> Password -> PerspectivesUser -> SystemIdentifier -> Maybe Url -> MonadPouchdb () a
+runMonadPouchdb
+  :: forall a
+   . UserName
+  -> Password
+  -> PerspectivesUser
+  -> SystemIdentifier
+  -> Maybe Url
+  -> MonadPouchdb () a
   -> Aff a
 runMonadPouchdb userName password perspectivesUser systemId couchdbUrl mp = do
   (rf :: AVar (PouchdbState ())) <- new $
     { systemIdentifier: systemId
     , perspectivesUser
     , couchdbUrl
-    , couchdbCredentials: maybe empty ((flip singleton) (Credential userName password)) couchdbUrl 
+    , couchdbCredentials: maybe empty ((flip singleton) (Credential userName password)) couchdbUrl
     , databases: empty
     -- compat
     -- , couchdbPassword: password
     -- , couchdbHost: "https://127.0.0.1"
     -- , couchdbPort: 6984
-  }
+    }
   runReaderT mp rf
 
 -----------------------------------------------------------
@@ -142,15 +152,15 @@ type PouchError =
   , error :: Either Boolean String
   -- , reason :: String -- Skip; at most a duplicate of message.
   , docId :: Maybe String
-}
+  }
 
 readPouchError :: String -> Either MultipleErrors PouchError
 readPouchError s = runExcept do
   inter <- readJSON' s
   error <- Left <$> readImpl inter.error <|> Right <$> readImpl inter.error
-  pure inter {error = error}
+  pure inter { error = error }
 
 -----------------------------------------------------------
 -- DOCUMENTWITHREVISION
 -----------------------------------------------------------
-type DocumentWithRevision = {_rev :: Maybe String}
+type DocumentWithRevision = { _rev :: Maybe String }

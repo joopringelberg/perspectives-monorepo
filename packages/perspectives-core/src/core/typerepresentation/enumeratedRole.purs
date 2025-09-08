@@ -104,7 +104,7 @@ defaultEnumeratedRole qname dname kindOfRole context pos = EnumeratedRole
   , context: ContextType context
   -- This means: no restrictions. In order to prohibit a filler, the modeller should have specified "None"
   , binding: Nothing
-  , completeType: DPROD [DSUM [RoleInContext {context: ContextType context, role: EnumeratedRoleType qname}]]
+  , completeType: DPROD [ DSUM [ RoleInContext { context: ContextType context, role: EnumeratedRoleType qname } ] ]
 
   , views: []
 
@@ -133,7 +133,7 @@ instance showEnumeratedRole :: Show EnumeratedRole where
   show = genericShow
 
 instance eqEnumeratedRole :: Eq EnumeratedRole where
-  eq (EnumeratedRole {id : id1}) (EnumeratedRole {id : id2}) = id1 == id2
+  eq (EnumeratedRole { id: id1 }) (EnumeratedRole { id: id2 }) = id1 == id2
 
 derive instance newtypeEnumeratedRole :: Newtype EnumeratedRole _
 
@@ -144,11 +144,11 @@ instance ReadForeign EnumeratedRole where
 
 instance revisionEnumeratedRole :: Revision EnumeratedRole where
   rev = _._rev <<< unwrap
-  changeRevision s = over EnumeratedRole (\vr -> vr {_rev = s})
+  changeRevision s = over EnumeratedRole (\vr -> vr { _rev = s })
 
 instance identifiableEnumeratedRole :: Identifiable EnumeratedRole EnumeratedRoleType where
-  identifier (EnumeratedRole{id}) = id
-  displayName (EnumeratedRole{displayName:d}) = d
+  identifier (EnumeratedRole { id }) = id
+  displayName (EnumeratedRole { displayName: d }) = d
 
 -----------------------------------------------------------
 -- INVERTEDQUERYKEY
@@ -165,43 +165,53 @@ fillerRole :: InvertedQueryKey -> EnumeratedRoleType
 fillerRole (InvertedQueryKey _ _ rt) = rt
 
 derive instance genericInvertedQueryKey :: Generic InvertedQueryKey _
-instance eqInvertedQueryKey :: Eq InvertedQueryKey where eq = genericEq
-instance ordInvertedQueryKey :: Ord InvertedQueryKey where compare = genericCompare
-instance showInvertedQueryKey :: Show InvertedQueryKey where show = genericShow
+instance eqInvertedQueryKey :: Eq InvertedQueryKey where
+  eq = genericEq
+
+instance ordInvertedQueryKey :: Ord InvertedQueryKey where
+  compare = genericCompare
+
+instance showInvertedQueryKey :: Show InvertedQueryKey where
+  show = genericShow
 
 instance WriteForeign InvertedQueryKey where
-  writeImpl (InvertedQueryKey ct1 ct2 ert) = writeImpl {ct1, ct2, ert}
+  writeImpl (InvertedQueryKey ct1 ct2 ert) = writeImpl { ct1, ct2, ert }
+
 instance ReadForeign InvertedQueryKey where
-  readImpl f = do 
-    {ct1, ct2, ert} :: {ct1 :: ContextType, ct2 :: ContextType, ert :: EnumeratedRoleType} <- read' f
+  readImpl f = do
+    { ct1, ct2, ert } :: { ct1 :: ContextType, ct2 :: ContextType, ert :: EnumeratedRoleType } <- read' f
     pure $ InvertedQueryKey ct1 ct2 ert
 
 type InvertedQueryMap = EncodableMap InvertedQueryKey (Array InvertedQuery)
 
 -- | Add an InvertedQuery to a PropertyType, indexed with an EnumeratedRoleType.
 -- | Computes whether the InvertedQuery can be modified.
-addInvertedQueryIndexedByTripleKeys ::
-  InvertedQuery ->
-  Array InvertedQueryKey ->
-  InvertedQueryMap ->
-  Array RoleInContext ->
-  EnumeratedRoleType ->
-  InvertedQueryMap
+addInvertedQueryIndexedByTripleKeys
+  :: InvertedQuery
+  -> Array InvertedQueryKey
+  -> InvertedQueryMap
+  -> Array RoleInContext
+  -> EnumeratedRoleType
+  -> InvertedQueryMap
 addInvertedQueryIndexedByTripleKeys q@(InvertedQuery qr) keys iqs modifiesRoleBindingOf role = foldl
-  (\qs key -> let
-    q' = if isJust $ elemIndex (RoleInContext {context: startContext key, role}) modifiesRoleBindingOf
-      then InvertedQuery (qr {modifies=true})
-      else q
-    in case lookup key qs of
-      Nothing -> insert key [q] qs
-      Just x -> insert key (cons q x) qs)
+  ( \qs key ->
+      let
+        q' =
+          if isJust $ elemIndex (RoleInContext { context: startContext key, role }) modifiesRoleBindingOf then InvertedQuery (qr { modifies = true })
+          else q
+      in
+        case lookup key qs of
+          Nothing -> insert key [ q ] qs
+          Just x -> insert key (cons q x) qs
+  )
   iqs
   keys
 
 deleteInvertedQueryIndexedByTripleKeys :: InvertedQuery -> Array InvertedQueryKey -> InvertedQueryMap -> InvertedQueryMap
 deleteInvertedQueryIndexedByTripleKeys q keys iqs = foldl
-  (\qs key -> case lookup key qs of
-    Nothing -> qs
-    Just x -> insert key (delete q x) qs)
+  ( \qs key -> case lookup key qs of
+      Nothing -> qs
+      Just x -> insert key (delete q x) qs
+  )
   iqs
   keys

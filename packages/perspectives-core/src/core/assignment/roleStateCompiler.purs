@@ -82,74 +82,73 @@ import Perspectives.Types.ObjectGetters (hasContextAspect, subStates_)
 -- | The function can be safely applied (with `unsafePartial`), however.
 compileState :: Partial => StateIdentifier -> MP CompiledRoleState
 compileState stateId = do
-    State {id, query, automaticOnEntry, automaticOnExit, notifyOnEntry, notifyOnExit, perspectivesOnEntry} <- getState stateId
-    (automaticOnEntry' :: Map RoleType CompiledAutomaticAction) <- traverseWithIndex compileEffect (unwrap automaticOnEntry)
-    (automaticOnExit' :: Map RoleType CompiledAutomaticAction) <- traverseWithIndex compileEffect (unwrap automaticOnExit)
-    (notifyOnEntry' :: Map RoleType CompiledNotification) <- traverseWithIndex
-      (\subject notification -> compileNotification notification subject)
-      (unwrap notifyOnEntry)
-    (notifyOnExit' :: Map RoleType CompiledNotification) <- traverseWithIndex
-      (\subject notification -> compileNotification notification subject)
-      (unwrap notifyOnExit)
-    (perspectivesOnEntry' :: Map RoleType CompiledStateDependentPerspective) <- traverseWithIndex
-      (\subject (RolePerspective{currentContextCalculation, properties, selfOnly, authorOnly, isSelfPerspective}) -> do 
+  State { id, query, automaticOnEntry, automaticOnExit, notifyOnEntry, notifyOnExit, perspectivesOnEntry } <- getState stateId
+  (automaticOnEntry' :: Map RoleType CompiledAutomaticAction) <- traverseWithIndex compileEffect (unwrap automaticOnEntry)
+  (automaticOnExit' :: Map RoleType CompiledAutomaticAction) <- traverseWithIndex compileEffect (unwrap automaticOnExit)
+  (notifyOnEntry' :: Map RoleType CompiledNotification) <- traverseWithIndex
+    (\subject notification -> compileNotification notification subject)
+    (unwrap notifyOnEntry)
+  (notifyOnExit' :: Map RoleType CompiledNotification) <- traverseWithIndex
+    (\subject notification -> compileNotification notification subject)
+    (unwrap notifyOnExit)
+  (perspectivesOnEntry' :: Map RoleType CompiledStateDependentPerspective) <- traverseWithIndex
+    ( \subject (RolePerspective { currentContextCalculation, properties, selfOnly, authorOnly, isSelfPerspective }) -> do
         contextGetter <- role2context currentContextCalculation
-        pure {contextGetter, properties, selfOnly, authorOnly, isSelfPerspective})
-      (unwrap perspectivesOnEntry)
+        pure { contextGetter, properties, selfOnly, authorOnly, isSelfPerspective }
+    )
+    (unwrap perspectivesOnEntry)
 
-    -- We postpone compiling substates until they're asked for.
-    (lhs :: (RoleInstance ~~> Value)) <- role2propertyValue $ unsafePartial case query of Q qfd -> qfd
-    pure $ cacheCompiledRoleState stateId
-      { query: lhs
-      , objectGetter: Nothing
-      , automaticOnEntry: automaticOnEntry'
-      , automaticOnExit: automaticOnExit'
-      , notifyOnEntry: notifyOnEntry'
-      , notifyOnExit: notifyOnExit'
-      , perspectivesOnEntry: perspectivesOnEntry'
-      }
+  -- We postpone compiling substates until they're asked for.
+  (lhs :: (RoleInstance ~~> Value)) <- role2propertyValue $ unsafePartial case query of Q qfd -> qfd
+  pure $ cacheCompiledRoleState stateId
+    { query: lhs
+    , objectGetter: Nothing
+    , automaticOnEntry: automaticOnEntry'
+    , automaticOnExit: automaticOnExit'
+    , notifyOnEntry: notifyOnEntry'
+    , notifyOnExit: notifyOnExit'
+    , perspectivesOnEntry: perspectivesOnEntry'
+    }
   where
-    compileEffect :: Partial => RoleType -> AutomaticAction -> MP CompiledAutomaticAction
-    compileEffect subject (RoleAction r@{effect, currentContextCalculation}) = do
-      contextGetter <- role2context currentContextCalculation
-      updater' <- compileAssignmentFromRole effect >>= pure <<< withAuthoringRole subject
-      updater <- addTimeFacets updater' r subject stateId
-      pure {updater, contextGetter}
-    
-    compileNotification :: Partial => Notification -> RoleType -> MP CompiledNotification
-    compileNotification (RoleNotification r@{sentence, currentContextCalculation, domain}) subject = do
-      compiledSentence <- compileRoleSentence domain sentence
-      contextGetter <- role2context currentContextCalculation
-      updater' <- pure $ notify compiledSentence contextGetter
-      updater <- addTimeFacets updater' r subject stateId
-      pure {updater, contextGetter}
-    
+  compileEffect :: Partial => RoleType -> AutomaticAction -> MP CompiledAutomaticAction
+  compileEffect subject (RoleAction r@{ effect, currentContextCalculation }) = do
+    contextGetter <- role2context currentContextCalculation
+    updater' <- compileAssignmentFromRole effect >>= pure <<< withAuthoringRole subject
+    updater <- addTimeFacets updater' r subject stateId
+    pure { updater, contextGetter }
+
+  compileNotification :: Partial => Notification -> RoleType -> MP CompiledNotification
+  compileNotification (RoleNotification r@{ sentence, currentContextCalculation, domain }) subject = do
+    compiledSentence <- compileRoleSentence domain sentence
+    contextGetter <- role2context currentContextCalculation
+    updater' <- pure $ notify compiledSentence contextGetter
+    updater <- addTimeFacets updater' r subject stateId
+    pure { updater, contextGetter }
+
 -- | This function is applied without knowing whether state condition is valid.
 -- | Put an error boundary around this function.
 evaluateRoleState :: RoleInstance -> StateIdentifier -> MonadPerspectivesTransaction Unit
 evaluateRoleState roleId stateId = do
   roleIsInState' <- conditionSatisfied roleId stateId
-  case roleIsInState' of 
-    Determined roleIsInState -> if roleIsInState
-      then do
+  case roleIsInState' of
+    Determined roleIsInState ->
+      if roleIsInState then do
         roleWasInState <- lift $ isActive stateId roleId
-        if roleWasInState
-          then do
-            padding <- lift transactionLevel
-            log (padding <> "Already in role state " <> unwrap stateId <> ": " <> unwrap roleId)
-            subStates <- lift $ subStates_ stateId
-            for_ subStates (evaluateRoleState roleId)
-          else enteringRoleState roleId stateId
+        if roleWasInState then do
+          padding <- lift transactionLevel
+          log (padding <> "Already in role state " <> unwrap stateId <> ": " <> unwrap roleId)
+          subStates <- lift $ subStates_ stateId
+          for_ subStates (evaluateRoleState roleId)
+        else enteringRoleState roleId stateId
       else do
         roleWasInState <- lift $ isActive stateId roleId
-        if roleWasInState
-          then exitingRoleState roleId stateId
-          else pure unit
-    Undetermined -> modify 
-      (\t -> over Transaction
-        (\tr -> tr { postponedStateEvaluations = cons (RoleStateEvaluation stateId roleId) tr.postponedStateEvaluations }) 
-        t )
-
+        if roleWasInState then exitingRoleState roleId stateId
+        else pure unit
+    Undetermined -> modify
+      ( \t -> over Transaction
+          (\tr -> tr { postponedStateEvaluations = cons (RoleStateEvaluation stateId roleId) tr.postponedStateEvaluations })
+          t
+      )
 
 -- | This function is only called (and should only be called) on states whose condition is valid.
 -- | On entering a state, we register that state with the role instance and trigger client query updates.
@@ -159,14 +158,14 @@ evaluateRoleState roleId stateId = do
 -- |
 -- | Put an error boundary around this function.
 -- | Ensure that the current context is available in the environment before applying this function!
-enteringRoleState :: RoleInstance  -> StateIdentifier -> MonadPerspectivesTransaction Unit
+enteringRoleState :: RoleInstance -> StateIdentifier -> MonadPerspectivesTransaction Unit
 enteringRoleState roleId stateId = do
   padding <- lift transactionLevel
   log (padding <> "Entering role state " <> unwrap stateId <> " for role " <> unwrap roleId)
   -- Add the state identifier to the states in the role instance, triggering query updates
   -- just before running the current Transaction is finished.
   setActiveRoleState stateId roleId
-  {automaticOnEntry, notifyOnEntry, perspectivesOnEntry} <- getCompiledState stateId
+  { automaticOnEntry, notifyOnEntry, perspectivesOnEntry } <- getCompiledState stateId
   -- Run automatic actions in the current Transaction, but only if
   -- the end user fills the allowedUser role in this context.
   -- NOTE that the userRoleType is computed prior to executing the transaction.
@@ -175,46 +174,45 @@ enteringRoleState roleId stateId = do
   -- fills the allowdUser RoleType.
   me <- lift getPerspectivesUser
   mySystem <- lift $ getMySystem
-  forWithIndex_ automaticOnEntry \(allowedUser :: RoleType) {updater, contextGetter} -> whenRightUser 
+  forWithIndex_ automaticOnEntry \(allowedUser :: RoleType) { updater, contextGetter } -> whenRightUser
     roleId
-    contextGetter 
-    allowedUser 
+    contextGetter
+    allowedUser
     \currentactors cid rid -> do
       oldFrame <- lift pushFrame
       -- no need to add currentcontext for context states; a binding has been added compile time.
-      lift $ addBinding "currentcontext" [(unwrap cid)]
+      lift $ addBinding "currentcontext" [ (unwrap cid) ]
       lift $ addBinding "currentactor" (unwrap <$> currentactors)
       catchError
         (updater rid)
-        \e -> 
+        \e ->
           -- setInActiveRoleState stateId roleId 
           lift $ addWarning (padding <> "Error in automatic action in state " <> show stateId <> " of role instance " <> show roleId <> ": " <> show e)
       lift $ restoreFrame oldFrame
 
-  forWithIndex_ notifyOnEntry \(allowedUser :: RoleType) ({contextGetter, updater} :: CompiledNotification) -> whenRightUser 
-    roleId 
+  forWithIndex_ notifyOnEntry \(allowedUser :: RoleType) ({ contextGetter, updater } :: CompiledNotification) -> whenRightUser
+    roleId
     contextGetter
-    allowedUser 
+    allowedUser
     \notifiedUsers cid rid -> do
       oldFrame <- lift pushFrame
-      lift $ addBinding "currentcontext" [(unwrap cid)]
+      lift $ addBinding "currentcontext" [ (unwrap cid) ]
       lift $ addBinding "notifieduser" (unwrap <$> notifiedUsers)
       updater rid
       lift $ restoreFrame oldFrame
 
-
-  State {stateFulObject, object} <- lift $ getState stateId
+  State { stateFulObject, object } <- lift $ getState stateId
   case object of
     Nothing -> pure unit
-    Just objectQfd -> forWithIndex_ perspectivesOnEntry \(allowedUser :: RoleType) {contextGetter, properties, selfOnly, authorOnly, isSelfPerspective} -> do
+    Just objectQfd -> forWithIndex_ perspectivesOnEntry \(allowedUser :: RoleType) { contextGetter, properties, selfOnly, authorOnly, isSelfPerspective } -> do
       currentcontext <- lift $ (roleId ##>> contextGetter)
       userInstances <- lift (currentcontext ##= COMB.filter (getRoleInstances allowedUser) (COMB.not' (filledBy (Filler_ $ perspectivesUser2RoleInstance me)) <<< Filled_))
       case fromArray userInstances of
         Nothing -> pure unit
         -- As the user gets a new perspective, he should have the corresonding resources. Hence we serialise them as Deltas and 
         -- add these to the transaction.
-        Just u' -> if authorOnly
-          then pure unit
+        Just u' ->
+          if authorOnly then pure unit
           else case stateFulObject of
             -- The users acquire a perspective on the subject because it enters a state. The users should only see this instance.
             Orole _ -> serialiseRoleInstancesAndProperties
@@ -226,20 +224,20 @@ enteringRoleState roleId stateId = do
               isSelfPerspective
             -- The alternative must be Srole. When a subject (=the user) enters a state and then acquires a new perspective, it is valid for all instances - but just for the user role that enters that state!
             Srole _ -> serialiseRoleInstancesAndProperties
-                currentcontext
-                (unsafePartial fromJust (fromArray [roleId]))
-                objectQfd
-                properties
-                selfOnly
-                isSelfPerspective
+              currentcontext
+              (unsafePartial fromJust (fromArray [ roleId ]))
+              objectQfd
+              properties
+              selfOnly
+              isSelfPerspective
             --  Finally, the last case must be Cnt. When a context enters a state and then all users acquires a new perspective on all instances.
             _ -> serialiseRoleInstancesAndProperties
-                currentcontext
-                u'
-                objectQfd
-                properties
-                selfOnly
-                isSelfPerspective
+              currentcontext
+              u'
+              objectQfd
+              properties
+              selfOnly
+              isSelfPerspective
 
   -- Recur.
   subStates <- lift $ subStates_ stateId
@@ -251,9 +249,8 @@ whenRightUser roleId contextGetter allowedUser updater = do
   currentactors <- lift $ (contextId ##= (getRoleInstances allowedUser))
   -- Find the actor(s) that the system user ultimately fills.
   actorsThatAreMe <- lift (filterA isMe currentactors)
-  if null actorsThatAreMe
-    then pure unit
-    else updater actorsThatAreMe contextId roleId
+  if null actorsThatAreMe then pure unit
+  else updater actorsThatAreMe contextId roleId
 
 -- | Creates a Notificaton role in either the User's System context, or in the context of the role that enters the state 
 -- | of which the user is notified. In both cases, the Notification role is filled with the external role of the context
@@ -261,20 +258,22 @@ whenRightUser roleId contextGetter allowedUser updater = do
 notify :: CompiledSentence RoleInstance -> (RoleInstance ~~> ContextInstance) -> RoleInstance -> MonadPerspectivesTransaction Unit
 notify compiledSentence contextGetter roleId = do
   currentcontext <- lift $ (roleId ##>> contextGetter)
-  lift $ addBinding "currentcontext" [(unwrap currentcontext)]
-  storeNotificationInContext <- lift (currentcontext ##>> (contextType >=> liftToInstanceLevel  (hasContextAspect (ContextType contextWithNotification))))
+  lift $ addBinding "currentcontext" [ (unwrap currentcontext) ]
+  storeNotificationInContext <- lift (currentcontext ##>> (contextType >=> liftToInstanceLevel (hasContextAspect (ContextType contextWithNotification))))
   sentenceText <- lift $ compiledSentence roleId
   mySystem <- lift $ getMySystem
   void $ createAndAddRoleInstance
     (EnumeratedRoleType notifications)
-    (if storeNotificationInContext
-      then (unwrap currentcontext)
-      else mySystem)
-    (RolSerialization
-      { id: Nothing
-      , properties: PropertySerialization $ singleton notificationMessage
-        [sentenceText]
-      , binding: Just $ buitenRol (unwrap currentcontext)})
+    ( if storeNotificationInContext then (unwrap currentcontext)
+      else mySystem
+    )
+    ( RolSerialization
+        { id: Nothing
+        , properties: PropertySerialization $ singleton notificationMessage
+            [ sentenceText ]
+        , binding: Just $ buitenRol (unwrap currentcontext)
+        }
+    )
 
 -- | This function is only called on states that the role was in before. Moreover, it (the role) is no longer in
 -- | the parent state of this state, hence we should exit it. We do not check the condition.
@@ -295,53 +294,51 @@ exitingRoleState roleId stateId = do
   subStates <- lift $ subStates_ stateId
   for_ subStates \subStateId -> do
     roleWasInSubState <- lift $ isActive subStateId roleId
-    if roleWasInSubState
-      then exitingRoleState roleId subStateId
-      else pure unit
+    if roleWasInSubState then exitingRoleState roleId subStateId
+    else pure unit
   -- Remove the state identifier from the states in the role instance, triggering query updates
   -- just before running the current Transaction is finished.
   setInActiveRoleState stateId roleId
-  
+
   -- Stop all repeating processes associated with this state.
   fibers <- lift $ gets _.transactionFibers
   case lookup (Tuple (unwrap roleId) stateId) fibers of
     Nothing -> pure unit
-    Just f -> do 
+    Just f -> do
       lift $ lift $ killFiber (error "Stopped execution of repeating action in state") f
-      lift $ modify \s@{transactionFibers} -> s {transactionFibers = delete (Tuple (unwrap roleId) stateId) transactionFibers}
+      lift $ modify \s@{ transactionFibers } -> s { transactionFibers = delete (Tuple (unwrap roleId) stateId) transactionFibers }
 
-  {automaticOnExit, notifyOnExit} <- getCompiledState stateId
+  { automaticOnExit, notifyOnExit } <- getCompiledState stateId
   -- Run automatic actions in the current Transaction, but only if
   -- the end user fills the allowedUser role in this context.
   -- NOTE that the userRoleType is computed prior to executing the transaction.
   -- It may happen that during the transaction, the end user is put into another role (too).
   -- So we really should compute the userRoleType only now - or check if the end user (sys:Me) ultimately
   -- fills the allowdUser RoleType.
-  forWithIndex_ automaticOnExit \(allowedUser :: RoleType) {updater, contextGetter} -> whenRightUser 
+  forWithIndex_ automaticOnExit \(allowedUser :: RoleType) { updater, contextGetter } -> whenRightUser
     roleId
-    contextGetter 
-    allowedUser 
+    contextGetter
+    allowedUser
     \currentactors cid rid -> do
       oldFrame <- lift pushFrame
       -- no need to add currentcontext for context states; a binding has been added compile time.
-      lift $ addBinding "currentcontext" [(unwrap cid)]
+      lift $ addBinding "currentcontext" [ (unwrap cid) ]
       lift $ addBinding "currentactor" (unwrap <$> currentactors)
       updater rid
       lift $ restoreFrame oldFrame
 
-  forWithIndex_ notifyOnExit \(allowedUser :: RoleType) ({contextGetter, updater} :: CompiledNotification) -> whenRightUser 
-    roleId 
+  forWithIndex_ notifyOnExit \(allowedUser :: RoleType) ({ contextGetter, updater } :: CompiledNotification) -> whenRightUser
+    roleId
     contextGetter
-    allowedUser 
+    allowedUser
     \notifiedUsers cid rid -> do
       oldFrame <- lift pushFrame
-      lift $ addBinding "currentcontext" [(unwrap cid)]
+      lift $ addBinding "currentcontext" [ (unwrap cid) ]
       lift $ addBinding "notifieduser" (unwrap <$> notifiedUsers)
       updater rid
       lift $ restoreFrame oldFrame
 
-  
-  -- (notify roleId me)
+-- (notify roleId me)
 
 -- | Absence of a condition result is interpreted as false.
 conditionSatisfied :: RoleInstance -> StateIdentifier -> MonadPerspectivesTransaction ConditionResult
@@ -349,9 +346,8 @@ conditionSatisfied roleId stateId = do
   compiledState <- getCompiledState stateId
   (Tuple bools (ArrayWithoutDoubles a0) :: WithAssumptions Value) <- lift $ runMonadPerspectivesQuery roleId compiledState.query
   d <- isUndetermined a0
-  if (not null a0) && d 
-    then pure Undetermined
-    else pure $ Determined $ (not null bools) && (alaF Conj foldMap (eq (Value "true")) bools)
+  if (not null a0) && d then pure Undetermined
+  else pure $ Determined $ (not null bools) && (alaF Conj foldMap (eq (Value "true")) bools)
 
 getCompiledState :: StateIdentifier -> MonadPerspectivesTransaction CompiledRoleState
 getCompiledState stateId = case retrieveCompiledRoleState stateId of

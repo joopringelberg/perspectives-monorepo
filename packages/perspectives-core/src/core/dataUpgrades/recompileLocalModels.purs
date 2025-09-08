@@ -47,10 +47,10 @@ recompileLocalModels =
   do
     addAllExternalFunctions
     modelsDb <- modelsDatabaseName
-    {rows:allModels} <- documentsInDatabase modelsDb includeDocs
+    { rows: allModels } <- documentsInDatabase modelsDb includeDocs
     -- As doc is still uninterpreted, we can only rely on the rows.id member of the PouchdbAllDocs record. These, however, are DomeinFileIdentifiers.
     -- We do not have a useful test on the form of such identifiers.
-    uninterpretedDomeinFiles <- for allModels \({id, doc}) -> case JSON.read <$> doc of
+    uninterpretedDomeinFiles <- for allModels \({ id, doc }) -> case JSON.read <$> doc of
       Just (Left errs) -> (logPerspectivesError (Custom ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs))) *> pure Nothing
       Nothing -> logPerspectivesError (Custom ("No document retrieved for model '" <> id <> "'.")) *> pure Nothing
       Just (Right (df :: UninterpretedDomeinFile)) -> pure $ Just df
@@ -61,14 +61,14 @@ recompileLocalModels =
       (runExceptT (executeInTopologicalOrder (catMaybes uninterpretedDomeinFiles) recompileModel))
     case r of
       Left errors -> logPerspectivesError (Custom ("recompileLocalModels: " <> show errors)) *> pure false
-      Right success -> do 
+      Right success -> do
         saveMarkedResources
         pure success
   where
 
-    clearInvertedQueriesDatabase :: MonadPerspectives Unit
-    clearInvertedQueriesDatabase = do
-      db <- invertedQueryDatabaseName
-      deleteDatabase db
-      createDatabase db
-      setupInvertedQueryDatabase
+  clearInvertedQueriesDatabase :: MonadPerspectives Unit
+  clearInvertedQueriesDatabase = do
+    db <- invertedQueryDatabaseName
+    deleteDatabase db
+    createDatabase db
+    setupInvertedQueryDatabase

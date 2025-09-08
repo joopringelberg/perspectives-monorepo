@@ -28,7 +28,7 @@ import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic)
 import Prelude ((<$>), unit)
 
-type HiddenFunctionDescription = {func :: HiddenFunction, nArgs :: Int, isFunctional :: ThreeValuedLogic, isEffect :: Boolean}
+type HiddenFunctionDescription = { func :: HiddenFunction, nArgs :: Int, isFunctional :: ThreeValuedLogic, isEffect :: Boolean }
 
 type HiddenFunctionCache = GLStrMap HiddenFunctionDescription
 
@@ -45,7 +45,7 @@ lookupHiddenFunctionCardinality :: String -> Maybe ThreeValuedLogic
 lookupHiddenFunctionCardinality name = _.isFunctional <$> peek hiddenFunctionCache name
 
 hiddenFunctionInsert :: String -> HiddenFunction -> Int -> ThreeValuedLogic -> Boolean -> HiddenFunctionCache
-hiddenFunctionInsert name func nArgs isFunctional isEffect = poke hiddenFunctionCache name {func, nArgs, isFunctional, isEffect}
+hiddenFunctionInsert name func nArgs isFunctional isEffect = poke hiddenFunctionCache name { func, nArgs, isFunctional, isEffect }
 
 lookupHiddenFunctionIsEffect :: String -> Boolean
 lookupHiddenFunctionIsEffect name = maybe false _.isEffect (peek hiddenFunctionCache name)

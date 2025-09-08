@@ -42,8 +42,8 @@ import Parsing (fail)
 import Parsing.Combinators (lookAhead, manyTill, option, optionMaybe, (<?>))
 
 assignment :: IP Assignment
-assignment = isPropertyAssignment >>= if _
-  then propertyAssignment
+assignment = isPropertyAssignment >>=
+  if _ then propertyAssignment
   else roleAssignment
 
 roleAssignment :: IP Assignment
@@ -89,7 +89,7 @@ roleRemoval = do
   reserved "role"
   roleExpression <- step
   end <- getPosition
-  pure $ RemoveRole {start, end, roleExpression}
+  pure $ RemoveRole { start, end, roleExpression }
 
 contextRemoval :: IP Assignment
 contextRemoval = do
@@ -98,7 +98,7 @@ contextRemoval = do
   reserved "context"
   roleExpression <- step
   end <- getPosition
-  pure $ RemoveContext {start, end, roleExpression}
+  pure $ RemoveContext { start, end, roleExpression }
 
 roleCreation :: IP Assignment
 roleCreation = do
@@ -108,7 +108,7 @@ roleCreation = do
   -- Check indentiation to prevent confusion of 'in' with the 'in' of the letA.
   contextExpression <- optionMaybe (indented' *> reserved "in" *> step)
   end <- getPosition
-  pure $ CreateRole {start, end, roleIdentifier, localName, contextExpression}
+  pure $ CreateRole { start, end, roleIdentifier, localName, contextExpression }
 
 -- createContext ContextType [bound to RoleType] [in <contextExpression>]
 createContext :: IP Assignment
@@ -120,7 +120,7 @@ createContext = withPos do
   -- Check indentiation to prevent confusion of 'in' with the 'in' of the letA.
   contextExpression <- optionMaybe (indented' *> reserved "in" *> step)
   end <- getPosition
-  pure $ CreateContext {start, end, contextTypeIdentifier, localName, roleTypeIdentifier, contextExpression}
+  pure $ CreateContext { start, end, contextTypeIdentifier, localName, roleTypeIdentifier, contextExpression }
 
 -- createContext_ ContextType bound to <roleExpression>
 createContext_ :: IP Assignment
@@ -130,7 +130,7 @@ createContext_ = do
   localName <- optionMaybe (reserved "named" *> step)
   roleExpression <- reserved "bound" *> reserved "to" *> step
   end <- getPosition
-  pure $ CreateContext_ {start, end, contextTypeIdentifier, localName, roleExpression}
+  pure $ CreateContext_ { start, end, contextTypeIdentifier, localName, roleExpression }
 
 move :: IP Assignment
 move = do
@@ -138,7 +138,7 @@ move = do
   roleExpression <- (reserved "move" *> step)
   contextExpression <- optionMaybe (reserved "to" *> step)
   end <- getPosition
-  pure $ Move {start, end, roleExpression, contextExpression}
+  pure $ Move { start, end, roleExpression, contextExpression }
 
 bind' :: IP Assignment
 bind' = do
@@ -147,7 +147,7 @@ bind' = do
   roleIdentifier <- reserved "to" *> arcIdentifier
   contextExpression <- optionMaybe (reserved "in" *> step)
   end <- getPosition
-  pure $ Bind {start, end, bindingExpression, roleIdentifier, contextExpression}
+  pure $ Bind { start, end, bindingExpression, roleIdentifier, contextExpression }
 
 bind_ :: IP Assignment
 bind_ = do
@@ -155,7 +155,7 @@ bind_ = do
   bindingExpression <- (reserved "bind_" *> step)
   binderExpression <- reserved "to" *> step
   end <- getPosition
-  pure $ Bind_ {start, end, bindingExpression, binderExpression}
+  pure $ Bind_ { start, end, bindingExpression, binderExpression }
 
 unbind :: IP Assignment
 unbind = do
@@ -163,7 +163,7 @@ unbind = do
   bindingExpression <- (reserved "unbind" *> step)
   roleIdentifier <- optionMaybe (reserved "from" *> arcIdentifier)
   end <- getPosition
-  pure $ Unbind {start, end, bindingExpression, roleIdentifier}
+  pure $ Unbind { start, end, bindingExpression, roleIdentifier }
 
 unbind_ :: IP Assignment
 unbind_ = do
@@ -171,7 +171,7 @@ unbind_ = do
   bindingExpression <- (reserved "unbind_" *> step)
   binderExpression <- reserved "from" *> step
   end <- getPosition
-  pure $ Unbind_ {start, end, bindingExpression, binderExpression}
+  pure $ Unbind_ { start, end, bindingExpression, binderExpression }
 
 isPropertyAssignment :: IP Boolean
 isPropertyAssignment = do
@@ -181,10 +181,11 @@ isPropertyAssignment = do
     "delete", "role" -> pure false
     "create", "file" -> pure true
     _, _ -> isJust <$> optionMaybe (lookAhead (arcIdentifier *> assignmentOperator))
-  -- keyword <- option "" (lookAhead reservedIdentifier)
-  -- case keyword of
-  --   "delete" -> pure true
-  --   otherwise -> isJust <$> optionMaybe (lookAhead (arcIdentifier *> assignmentOperator))
+
+-- keyword <- option "" (lookAhead reservedIdentifier)
+-- case keyword of
+--   "delete" -> pure true
+--   otherwise -> isJust <$> optionMaybe (lookAhead (arcIdentifier *> assignmentOperator))
 
 propertyAssignment :: IP Assignment
 propertyAssignment = do
@@ -194,71 +195,71 @@ propertyAssignment = do
     "create" -> fileCreation
     _ -> propertyAssignment'
   where
-    propertyAssignment' :: IP Assignment
-    propertyAssignment' = do
-      start <- getPosition
-      propertyIdentifier <- arcIdentifier
-      op <- assignmentOperator
-      val <- step
-      end <- getPosition
-      roleExpression <- optionMaybe (reserved "for" *> step)
-      pure $ PropertyAssignment {start, end, propertyIdentifier, operator: op, valueExpression: val, roleExpression}
+  propertyAssignment' :: IP Assignment
+  propertyAssignment' = do
+    start <- getPosition
+    propertyIdentifier <- arcIdentifier
+    op <- assignmentOperator
+    val <- step
+    end <- getPosition
+    roleExpression <- optionMaybe (reserved "for" *> step)
+    pure $ PropertyAssignment { start, end, propertyIdentifier, operator: op, valueExpression: val, roleExpression }
 
-    propertyDeletion :: IP Assignment
-    propertyDeletion = do
-      start <- getPosition
-      reserved "delete"
-      reserved "property"
-      propertyIdentifier <- arcIdentifier
-      roleExpression <- optionMaybe (reserved "from" *> step)
-      end <- getPosition
-      pure $ DeleteProperty {start, end, propertyIdentifier, roleExpression}
-    
-    -- create file "myModel.arc" as "text/arc" in Model [for origin]
-    --    "domain ..."
-    fileCreation :: IP Assignment
-    fileCreation = do 
-      start <- getPosition
-      reserved "create"
-      reserved "file"
-      fileNameExpression <- step
-      mimeType <- reserved "as" *> parseMimeType
-      propertyIdentifier <- reserved "in" *> arcIdentifier
-      roleExpression <- optionMaybe (reserved "for" *> step)
-      -- next line, indented
-      contentExpression <- indented' *> step
-      end <- getPosition
-      pure $ CreateFile
-        { start
-        , end
-        , fileNameExpression
-        , mimeType
-        , propertyIdentifier
-        , roleExpression 
-        , contentExpression
-          }
-      where 
-      fileRegex :: Regex
-      fileRegex = unsafeRegex "^[^\\./]+\\.[^\\./]+$" noFlags
+  propertyDeletion :: IP Assignment
+  propertyDeletion = do
+    start <- getPosition
+    reserved "delete"
+    reserved "property"
+    propertyIdentifier <- arcIdentifier
+    roleExpression <- optionMaybe (reserved "from" *> step)
+    end <- getPosition
+    pure $ DeleteProperty { start, end, propertyIdentifier, roleExpression }
 
-      mimeRegex :: Regex
-      mimeRegex = unsafeRegex "^[^\\./]+/[^\\./]+$" noFlags
+  -- create file "myModel.arc" as "text/arc" in Model [for origin]
+  --    "domain ..."
+  fileCreation :: IP Assignment
+  fileCreation = do
+    start <- getPosition
+    reserved "create"
+    reserved "file"
+    fileNameExpression <- step
+    mimeType <- reserved "as" *> parseMimeType
+    propertyIdentifier <- reserved "in" *> arcIdentifier
+    roleExpression <- optionMaybe (reserved "for" *> step)
+    -- next line, indented
+    contentExpression <- indented' *> step
+    end <- getPosition
+    pure $ CreateFile
+      { start
+      , end
+      , fileNameExpression
+      , mimeType
+      , propertyIdentifier
+      , roleExpression
+      , contentExpression
+      }
+    where
+    fileRegex :: Regex
+    fileRegex = unsafeRegex "^[^\\./]+\\.[^\\./]+$" noFlags
 
-      parseMimeType :: IP String
-      parseMimeType = do 
-        m <- token.stringLiteral
-        case match mimeRegex m of
-          Nothing -> fail ("The string '" <> m <> "' is not a valid text MIME type. ")
-          Just _ -> pure m
+    mimeRegex :: Regex
+    mimeRegex = unsafeRegex "^[^\\./]+/[^\\./]+$" noFlags
+
+    parseMimeType :: IP String
+    parseMimeType = do
+      m <- token.stringLiteral
+      case match mimeRegex m of
+        Nothing -> fail ("The string '" <> m <> "' is not a valid text MIME type. ")
+        Just _ -> pure m
 
 assignmentOperator :: IP AssignmentOperator
 assignmentOperator =
   (DeleteFrom <$> (getPosition <* token.reservedOp "=-"))
-  <|>
-  (AddTo <$> (getPosition <* token.reservedOp "=+"))
-  <|>
-  ((Set <$> (getPosition <* token.reservedOp "="))
-  ) <?> "=, =+, =-. "
+    <|>
+      (AddTo <$> (getPosition <* token.reservedOp "=+"))
+    <|>
+      ( (Set <$> (getPosition <* token.reservedOp "="))
+      ) <?> "=, =+, =-. "
 
 roleDeletion :: IP Assignment
 roleDeletion = do
@@ -268,7 +269,7 @@ roleDeletion = do
   roleIdentifier <- arcIdentifier
   contextExpression <- optionMaybe (reserved "from" *> step)
   end <- getPosition
-  pure $ DeleteRole {start, end, roleIdentifier, contextExpression}
+  pure $ DeleteRole { start, end, roleIdentifier, contextExpression }
 
 contextDeletion :: IP Assignment
 contextDeletion = do
@@ -280,39 +281,41 @@ contextDeletion = do
   contextRoleIdentifier <- arcIdentifier
   contextExpression <- optionMaybe (reserved "from" *> step)
   end <- getPosition
-  pure $ DeleteContext {start, end, contextRoleIdentifier, contextExpression}
+  pure $ DeleteContext { start, end, contextRoleIdentifier, contextExpression }
 
 callEffect :: IP Assignment
 callEffect = do
   start <- getPosition
   effectName <- reserved "callEffect" *> arcIdentifier
   arguments <- token.symbol "(" *>
-    (((token.symbol ")") *> pure Nil)
-    <|>
-    do
-      first <- step
-      -- By using manyTill we get the error messages inside arguments to the end user.
-      -- sepBy would hide them.
-      rest <- manyTill (token.comma *> step) (token.symbol ")")
-      pure (Cons first rest))
+    ( ((token.symbol ")") *> pure Nil)
+        <|>
+          do
+            first <- step
+            -- By using manyTill we get the error messages inside arguments to the end user.
+            -- sepBy would hide them.
+            rest <- manyTill (token.comma *> step) (token.symbol ")")
+            pure (Cons first rest)
+    )
   end <- getPosition
-  pure $ ExternalEffect {start, end, effectName, arguments: (fromFoldable arguments)}
+  pure $ ExternalEffect { start, end, effectName, arguments: (fromFoldable arguments) }
 
 callDestructiveEffect :: IP Assignment
 callDestructiveEffect = do
   start <- getPosition
   effectName <- reserved "callDestructiveEffect" *> arcIdentifier
   arguments <- token.symbol "(" *>
-    (((token.symbol ")") *> pure Nil)
-    <|>
-    do
-      first <- step
-      -- By using manyTill we get the error messages inside arguments to the end user.
-      -- sepBy would hide them.
-      rest <- manyTill (token.comma *> step) (token.symbol ")")
-      pure (Cons first rest))
+    ( ((token.symbol ")") *> pure Nil)
+        <|>
+          do
+            first <- step
+            -- By using manyTill we get the error messages inside arguments to the end user.
+            -- sepBy would hide them.
+            rest <- manyTill (token.comma *> step) (token.symbol ")")
+            pure (Cons first rest)
+    )
   end <- getPosition
-  pure $ ExternalDestructiveEffect {start, end, effectName, arguments: (fromFoldable arguments)}
+  pure $ ExternalDestructiveEffect { start, end, effectName, arguments: (fromFoldable arguments) }
 
 -- | A let with assignments: letA <binding>+ in <assignment>+.
 letWithAssignment :: IP LetStep
@@ -323,7 +326,7 @@ letWithAssignment = withPos do
   -- assignments <- reserved "in" *> nestedBlock assignment
   assignments <- reserved "in" *> withPos (manyTill assignment outdented')
   end <- getPosition
-  pure $ LetStep {start, end, bindings: fromFoldable bindings, assignments: fromFoldable assignments}
+  pure $ LetStep { start, end, bindings: fromFoldable bindings, assignments: fromFoldable assignments }
 
 letABinding :: IP LetABinding
 letABinding = do
@@ -332,14 +335,13 @@ letABinding = do
   case first, second of
     "create", "role" -> Stat <$> pure varName <*> roleCreation
     "create", "context" -> Stat <$> pure varName <*> createContext
-    _, _ -> do 
+    _, _ -> do
       -- We must parse the entire expression. So after parsing the position is either equal to the starting position,
       -- or indented to the left (outdented).
-      me <- optionMaybe (step <* sameOrOutdented' )
+      me <- optionMaybe (step <* sameOrOutdented')
       case me of
         Nothing -> fail "Expected `create role` or `create context` or a functional expression here. "
         Just e -> pure $ Expr (VarBinding varName e)
-
 
 -- | Looking ahead, find at least one reserved identifier, two if possible.
 -- | If only one is found, returns Tuple <theword> "".

@@ -34,6 +34,4 @@
 -- | * [representation of instances](Perspectives.Docu.Instances.html#t:x)
 -- | * [persistence of instances](Perspectives.Docu.InstancePersistence.html#t:x)
 
-
-
 module Perspectives.Docu.Main where

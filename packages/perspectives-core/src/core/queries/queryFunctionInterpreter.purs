@@ -21,17 +21,16 @@
 -- END LICENSE
 
 -- TODO
-  --  A case expression contains unreachable cases:
-  --
-  --   (MQD dom fun args ran _ _)                 a
-  --   (BQD _ (BinaryCombinator g) f1 f2 ran _ _) a
-  --   (BQD _ (BinaryCombinator g) f1 f2 _ _ _)   a
-  --   (BQD _ (BinaryCombinator g) f1 f2 ran _ _) a
-  --   (BQD _ (BinaryCombinator g) f1 f2 _ _ _)   a
-  --   ...
-  --
-  -- in binding group interpret, getterFromPropertyType, getDynamicPropertyGetter
-
+--  A case expression contains unreachable cases:
+--
+--   (MQD dom fun args ran _ _)                 a
+--   (BQD _ (BinaryCombinator g) f1 f2 ran _ _) a
+--   (BQD _ (BinaryCombinator g) f1 f2 _ _ _)   a
+--   (BQD _ (BinaryCombinator g) f1 f2 ran _ _) a
+--   (BQD _ (BinaryCombinator g) f1 f2 _ _ _)   a
+--   ...
+--
+-- in binding group interpret, getterFromPropertyType, getDynamicPropertyGetter
 
 module Perspectives.Query.Interpreter where
 
@@ -108,9 +107,9 @@ interpretUQD (UQD _ (BindVariable varName) f1 _ _ _) a = ArrayT do
   pure values
 interpretUQD (UQD _ WithFrame f1 _ _ _) a = do
   old <- lift2MPQ getVariableBindings
-  void $ lift $ lift $ modify \s@{variableBindings} -> s {variableBindings = (_pushFrame old)}
+  void $ lift $ lift $ modify \s@{ variableBindings } -> s { variableBindings = (_pushFrame old) }
   x <- interpret f1 a
-  void $ lift $ lift $ modify \s@{variableBindings} -> s {variableBindings = old}
+  void $ lift $ lift $ modify \s@{ variableBindings } -> s { variableBindings = old }
   pure x
 interpretUQD (UQD _ (UnaryCombinator ExistsF) f1 _ _ _) a = ArrayT do
   (r :: Array DependencyPath) <- runArrayT $ interpret f1 a
@@ -123,49 +122,51 @@ interpretUQD (UQD _ (UnaryCombinator FilledByF) sourceOfFillerRoles _ _ _) a = d
     (R filledRole), (R fillerRole) -> do
       -- b <- lift $ lift (boundRole ##>> fills bindingRole)
       b <- lift $ lift ((Filled_ filledRole) ##>> filledBy (Filler_ fillerRole))
-      if b
-        then pure (consOnMainPath (V "FilledByF" (Value "true")) fillerRoleL)
-        else pure (consOnMainPath (V "FilledByF" (Value "false")) fillerRoleL)
+      if b then pure (consOnMainPath (V "FilledByF" (Value "true")) fillerRoleL)
+      else pure (consOnMainPath (V "FilledByF" (Value "false")) fillerRoleL)
     _, _ -> pure (consOnMainPath (V "FilledByF" (Value "false")) fillerRoleL)
 
-interpretUQD (UQD _ (UnaryCombinator FillsF) sourceOfFilledRoles _ _ _) a =  do
+interpretUQD (UQD _ (UnaryCombinator FillsF) sourceOfFilledRoles _ _ _) a = do
   (filledRoleL :: DependencyPath) <- interpret sourceOfFilledRoles a
   -- If the head boundRole is a RoleInstance and a `bindsRole` head boundRole is true,
   -- cons V (Value "true") op boundRole
   case a.head, filledRoleL.head of
     (R fillerRole), (R filledRole) -> do
       b <- lift $ lift ((Filled_ filledRole) ##>> fills (Filler_ fillerRole))
-      if b
-        then pure (consOnMainPath (V "FillsF" (Value "true")) filledRoleL)
-        else pure (consOnMainPath (V "FillsF" (Value "false")) filledRoleL)
+      if b then pure (consOnMainPath (V "FillsF" (Value "true")) filledRoleL)
+      else pure (consOnMainPath (V "FillsF" (Value "false")) filledRoleL)
     _, _ -> pure (consOnMainPath (V "FillsF" (Value "false")) filledRoleL)
 
 interpretUQD (UQD _ (UnaryCombinator AvailableF) f1 _ _ _) a = ArrayT do
   (r :: Array DependencyPath) <- runArrayT $ interpret f1 a
   result <- lift $ available' (toString <$> r)
-  pure $ [consOnMainPath (V "AvailableF" (Value $ show result)) a]
+  pure $ [ consOnMainPath (V "AvailableF" (Value $ show result)) a ]
 
 interpretUQD (UQD _ (UnaryCombinator ContextIndividualF) contextExpr _ _ _) a = ArrayT do
   (paths :: Array DependencyPath) <- runArrayT $ interpret contextExpr a
-  pure (paths <#> \r@{head} -> unsafePartial $ case head of 
-    (V _ (Value cid)) -> consOnMainPath (C (ContextInstance cid)) r)
+  pure
+    ( paths <#> \r@{ head } -> unsafePartial $ case head of
+        (V _ (Value cid)) -> consOnMainPath (C (ContextInstance cid)) r
+    )
 
 interpretUQD (UQD _ (UnaryCombinator RoleIndividualF) roleExpr _ _ _) a = ArrayT do
   (paths :: Array DependencyPath) <- runArrayT $ interpret roleExpr a
-  pure (paths <#> \r@{head} -> unsafePartial $ case head of 
-    (V _ (Value rid)) -> consOnMainPath (R (RoleInstance rid)) r)
+  pure
+    ( paths <#> \r@{ head } -> unsafePartial $ case head of
+        (V _ (Value rid)) -> consOnMainPath (R (RoleInstance rid)) r
+    )
 
 interpretUQD (UQD _ (UnaryCombinator NotF) f1 _ _ _) a = ArrayT do
   (r :: Array DependencyPath) <- runArrayT $ interpret f1 a
   -- The DescriptionCompiler ensures that we have only Value type heads.
   result <- lift $ not_ (Value <<< toString <$> r)
-  pure $ [consOnMainPath (V "NotF" (Value $ show result)) a]
+  pure $ [ consOnMainPath (V "NotF" (Value $ show result)) a ]
 
 interpretUQD (UQD _ FilterF criterium _ _ _) a = ArrayT do
   (r :: Array DependencyPath) <- runArrayT $ interpret criterium a
-  case head r of 
+  case head r of
     Just l -> unsafePartial $ case l.head of
-      (V _ (Value "true")) -> pure $ [appendPaths a l]
+      (V _ (Value "true")) -> pure $ [ appendPaths a l ]
       (V _ (Value "false")) -> pure []
     _ -> pure []
 
@@ -200,11 +201,10 @@ interpretBQD (BQD _ (BinaryCombinator SequenceF) f1 f2 _ _ _) a = ArrayT $ do
 
 interpretBQD (BQD _ (BinaryCombinator IntersectionF) f1 f2 _ _ _) a = ArrayT do
   (f1r :: Array DependencyPath) <- runArrayT $ interpret f1 a
-  if null f1r
-    then do
-      f2r <- runArrayT $ interpret f2 a
-      pure $ f1r `union` f2r
-    else pure f1r
+  if null f1r then do
+    f2r <- runArrayT $ interpret f2 a
+    pure $ f1r `union` f2r
+  else pure f1r
 
 interpretBQD (BQD _ (BinaryCombinator UnionF) f1 f2 _ _ _) a = ArrayT do
   (l :: Array DependencyPath) <- runArrayT $ interpret f1 a
@@ -220,22 +220,25 @@ interpretBQD (BQD _ (BinaryCombinator FilledByF) sourceOfFilledRoles sourceOfFil
       case filledRolesh.head, fillerRolesh.head of
         R filled, R filler -> do
           result <- lift ((Filled_ filled) ##>> (filledBy (Filler_ filler)))
-          pure [{ head: (V "" (Value $ show result))
-                , mainPath: Nothing
-                , supportingPaths: allPaths filledRolesh `union` allPaths fillerRolesh
-                }]
+          pure
+            [ { head: (V "" (Value $ show result))
+              , mainPath: Nothing
+              , supportingPaths: allPaths filledRolesh `union` allPaths fillerRolesh
+              }
+            ]
         _, _ -> throwError (error $ "'binds' expects two roles, but got: " <> show filledRolesh.head <> " and " <> show fillerRolesh.head)
     Just filledRolesh, Just fillerRolesh -> throwError (error $ "'binds' expects at most a single role instance on both the left and right side")
-    _, _ -> pure [{ head: (V "" (Value "false"))
-                , mainPath: Nothing
-                , supportingPaths: []
-                }]
+    _, _ -> pure
+      [ { head: (V "" (Value "false"))
+        , mainPath: Nothing
+        , supportingPaths: []
+        }
+      ]
 
-interpretBQD (BQD _(BinaryCombinator OrElseF) f1 f2 ran fun man) a = ArrayT do
+interpretBQD (BQD _ (BinaryCombinator OrElseF) f1 f2 ran fun man) a = ArrayT do
   fr1 <- runArrayT (interpret f1 a)
-  if null fr1
-    then runArrayT (interpret f2 a)
-    else pure fr1
+  if null fr1 then runArrayT (interpret f2 a)
+  else pure fr1
 
 interpretBQD (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _ _) a = ArrayT
   case f2 of
@@ -243,7 +246,7 @@ interpretBQD (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _ _) a = Array
     -- This was parsed as `SequenceFunction f` and is now compiled as `UnaryCombinator f` in an SQD.
     -- Notice by the domain and range that we assume functions that are Monoids.
     -- Notice the strangeness of compiling a binary expression into an SQD description.
-    SQD dom (UnaryCombinator fname) _ _ _-> do 
+    SQD dom (UnaryCombinator fname) _ _ _ -> do
       case fname of
         -- we can count anything and the result is a number.
         CountF -> do
@@ -251,18 +254,20 @@ interpretBQD (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _ _) a = Array
           -- Now count the results in a and return that. We add the Dependency that holds the count to the path and it becomes the new head.
           -- For a sequence function, there is no single path that leads to the result. We consider the result to be the main path.
           -- All other paths (both main and supporting) of the result paths are combined in the supporting paths.
-          pure [{ head: (V (show fname) (Value $ show $ length result))
-                , mainPath: Just $ singleton (V (show fname) (Value $ show $ length result))
-                , supportingPaths: concat (allPaths <$> result)
-                }]    
+          pure
+            [ { head: (V (show fname) (Value $ show $ length result))
+              , mainPath: Just $ singleton (V (show fname) (Value $ show $ length result))
+              , supportingPaths: concat (allPaths <$> result)
+              }
+            ]
         -- We can also try to take the first element of a sequence of whatever type.
         FirstF -> do
           (result :: Array DependencyPath) <- runArrayT (interpret f1 a)
           case head result of
             Nothing -> pure []
-            Just h -> pure [h]
+            Just h -> pure [ h ]
         _ -> case ran of
-          (VDOM rangeType _) -> 
+          (VDOM rangeType _) ->
             case fname of
               AddF -> do
                 (result :: Array DependencyPath) <- runArrayT (interpret f1 a)
@@ -273,151 +278,172 @@ interpretBQD (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _ _) a = Array
                   PString -> do
                     (strs :: Array String) <- pure $ (unwrap <<< dependencyToValue <<< _.head) <$> result
                     sum <- pure (foldl (\cumulator nr -> cumulator <> nr) "" strs)
-                    pure [{ head: (V (show fname) (Value $ show sum))
-                          , mainPath: Just $ singleton (V (show fname) (Value $ show $ length result))
-                          , supportingPaths: concat (allPaths <$> result)
-                          }]
-              
+                    pure
+                      [ { head: (V (show fname) (Value $ show sum))
+                        , mainPath: Just $ singleton (V (show fname) (Value $ show $ length result))
+                        , supportingPaths: concat (allPaths <$> result)
+                        }
+                      ]
+
               MaximumF -> do
                 (result :: Array DependencyPath) <- runArrayT (interpret f1 a)
-                unsafePartial case rangeType of 
+                unsafePartial case rangeType of
                   PNumber -> largestNumber fname result
                   PDuration _ -> largestNumber fname result
                   PString -> do
                     (strs :: Array String) <- pure $ (unwrap <<< dependencyToValue <<< _.head) <$> result
-                    pure [{ head: (V (show fname) (Value $ show (maximum strs)))
-                          , mainPath: Just $ singleton (V (show fname) (Value $ show (maximum strs)))
-                          , supportingPaths: concat (allPaths <$> result)
-                          }]
+                    pure
+                      [ { head: (V (show fname) (Value $ show (maximum strs)))
+                        , mainPath: Just $ singleton (V (show fname) (Value $ show (maximum strs)))
+                        , supportingPaths: concat (allPaths <$> result)
+                        }
+                      ]
 
               MinimumF -> do
                 (result :: Array DependencyPath) <- runArrayT (interpret f1 a)
-                unsafePartial case rangeType of 
+                unsafePartial case rangeType of
                   PNumber -> smallestNumber fname result
                   PDuration _ -> smallestNumber fname result
                   PString -> do
                     (strs :: Array String) <- pure $ (unwrap <<< dependencyToValue <<< _.head) <$> result
-                    pure [{ head: (V (show fname) (Value $ show (minimum strs)))
-                          , mainPath: Just $ singleton (V (show fname) (Value $ show (minimum strs)))
-                          , supportingPaths: concat (allPaths <$> result)
-                          }]
+                    pure
+                      [ { head: (V (show fname) (Value $ show (minimum strs)))
+                        , mainPath: Just $ singleton (V (show fname) (Value $ show (minimum strs)))
+                        , supportingPaths: concat (allPaths <$> result)
+                        }
+                      ]
 
               _ -> throwError (error $ show $ ArgumentMustBeSequenceFunction arcParserStartPosition)
           _ -> throwError $ (error $ show $ ArgumentMustBeSequenceFunction arcParserStartPosition)
     _ -> throwError $ (error $ show $ ArgumentMustBeSequenceFunction arcParserStartPosition)
   where
-    addNumbers :: FunctionName -> Array DependencyPath -> AssumptionTracking (Array DependencyPath)
-    addNumbers fname result = do
-      (nrs :: Array Number) <- traverse (parseNumber <<< unwrap <<< dependencyToValue <<< _.head) result
-      sum <- pure (foldl (\cumulator nr -> cumulator + nr) 0.0 nrs)
-      pure [{ head: (V (show fname) (Value $ show sum))
-            , mainPath: Just $ singleton (V (show fname) (Value $ show $ length result))
-            , supportingPaths: concat (allPaths <$> result)
-            }]
-    smallestNumber :: FunctionName -> Array DependencyPath -> AssumptionTracking (Array DependencyPath)
-    smallestNumber fname result = do
-      (nrs :: Array Number) <- traverse (parseNumber <<< unwrap <<< dependencyToValue <<< _.head) result
-      pure [{ head: (V (show fname) (Value $ show (maximum nrs)))
-            , mainPath: Just $ singleton (V (show fname) (Value $ show (maximum nrs)))
-            , supportingPaths: concat (allPaths <$> result)
-            }]
-    largestNumber :: FunctionName -> Array DependencyPath -> AssumptionTracking (Array DependencyPath)
-    largestNumber fname result = do
-      (nrs :: Array Number) <- traverse (parseNumber <<< unwrap <<< dependencyToValue <<< _.head) result
-      pure [{ head: (V (show fname) (Value $ show (maximum nrs)))
-            , mainPath: Just $ singleton (V (show fname) (Value $ show (minimum nrs)))
-            , supportingPaths: concat (allPaths <$> result)
-            }]
+  addNumbers :: FunctionName -> Array DependencyPath -> AssumptionTracking (Array DependencyPath)
+  addNumbers fname result = do
+    (nrs :: Array Number) <- traverse (parseNumber <<< unwrap <<< dependencyToValue <<< _.head) result
+    sum <- pure (foldl (\cumulator nr -> cumulator + nr) 0.0 nrs)
+    pure
+      [ { head: (V (show fname) (Value $ show sum))
+        , mainPath: Just $ singleton (V (show fname) (Value $ show $ length result))
+        , supportingPaths: concat (allPaths <$> result)
+        }
+      ]
 
-interpretBQD (BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = case fun of 
+  smallestNumber :: FunctionName -> Array DependencyPath -> AssumptionTracking (Array DependencyPath)
+  smallestNumber fname result = do
+    (nrs :: Array Number) <- traverse (parseNumber <<< unwrap <<< dependencyToValue <<< _.head) result
+    pure
+      [ { head: (V (show fname) (Value $ show (maximum nrs)))
+        , mainPath: Just $ singleton (V (show fname) (Value $ show (maximum nrs)))
+        , supportingPaths: concat (allPaths <$> result)
+        }
+      ]
+
+  largestNumber :: FunctionName -> Array DependencyPath -> AssumptionTracking (Array DependencyPath)
+  largestNumber fname result = do
+    (nrs :: Array Number) <- traverse (parseNumber <<< unwrap <<< dependencyToValue <<< _.head) result
+    pure
+      [ { head: (V (show fname) (Value $ show (maximum nrs)))
+        , mainPath: Just $ singleton (V (show fname) (Value $ show (minimum nrs)))
+        , supportingPaths: concat (allPaths <$> result)
+        }
+      ]
+
+interpretBQD (BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = case fun of
 
   -- The compiler only allows f1 and f2 if they're functional.
-  g | isJust $ elemIndex g [EqualsF, NotEqualsF] -> ArrayT do
+  g | isJust $ elemIndex g [ EqualsF, NotEqualsF ] -> ArrayT do
     -- Both are singleton arrays, or empty.
     (fr1 :: Array DependencyPath) <- runArrayT (interpret f1 a)
     fr2 <- runArrayT (interpret f2 a)
     unsafePartial $ case g of
       EqualsF -> case head fr1, head fr2 of
-        Just fr1h, Just fr2h -> pure [unsafePartial applyValueFunction (functionOnStrings \x y -> show (x == y)) fr1h fr2h]
+        Just fr1h, Just fr2h -> pure [ unsafePartial applyValueFunction (functionOnStrings \x y -> show (x == y)) fr1h fr2h ]
         _, _ -> pure []
       NotEqualsF -> case head fr1, head fr2 of
-        Just fr1h, Just fr2h -> pure [unsafePartial applyValueFunction (functionOnStrings \x y -> show (x `notEq` y)) fr1h fr2h]
+        Just fr1h, Just fr2h -> pure [ unsafePartial applyValueFunction (functionOnStrings \x y -> show (x `notEq` y)) fr1h fr2h ]
         _, _ -> pure []
 
   -- The Description Compiler makes sure we only have Value types that can be ordered, here.
   -- It also ensures the f1 and f2 are functional.
-  g | isJust $ elemIndex g [LessThanF, LessThanEqualF, GreaterThanF, GreaterThanEqualF] -> ArrayT do
+  g | isJust $ elemIndex g [ LessThanF, LessThanEqualF, GreaterThanF, GreaterThanEqualF ] -> ArrayT do
     -- Both are singleton arrays, or empty.
     (fr1 :: Array DependencyPath) <- runArrayT (interpret f1 a)
     fr2 <- runArrayT (interpret f2 a)
     case head fr1, head fr2 of
       Just fr1h, Just fr2h -> unsafePartial $ case ran of
-        VDOM PString _ -> pure [unsafePartial applyValueFunction (functionOnStrings \x y -> show $ (orderFunction g) x y) fr1h fr2h]
-        VDOM PBool _ -> pure [unsafePartial applyValueFunction (functionOnBooleans (orderFunction g)) fr1h fr2h]
-        VDOM PNumber _ -> pure [unsafePartial $ applyValueFunction (\x y -> bool2Value ((orderFunction g) (value2Number x) (value2Number y))) fr1h fr2h]
-        VDOM PDate _ -> pure [unsafePartial applyValueFunction (\x y -> bool2Value ((orderFunction g) (value2Date x) (value2Date y))) fr1h fr2h] 
-        VDOM PEmail _ -> pure [unsafePartial applyValueFunction (functionOnStrings \x y -> show $ (orderFunction g) x y) fr1h fr2h]
+        VDOM PString _ -> pure [ unsafePartial applyValueFunction (functionOnStrings \x y -> show $ (orderFunction g) x y) fr1h fr2h ]
+        VDOM PBool _ -> pure [ unsafePartial applyValueFunction (functionOnBooleans (orderFunction g)) fr1h fr2h ]
+        VDOM PNumber _ -> pure [ unsafePartial $ applyValueFunction (\x y -> bool2Value ((orderFunction g) (value2Number x) (value2Number y))) fr1h fr2h ]
+        VDOM PDate _ -> pure [ unsafePartial applyValueFunction (\x y -> bool2Value ((orderFunction g) (value2Date x) (value2Date y))) fr1h fr2h ]
+        VDOM PEmail _ -> pure [ unsafePartial applyValueFunction (functionOnStrings \x y -> show $ (orderFunction g) x y) fr1h fr2h ]
       _, _ -> pure []
 
   -- The Description Compiler ensuers we have only PBool Value types and that both f1 and f2 are functional.
-  g | isJust $ elemIndex g [AndF, OrF] -> ArrayT do
-      -- Both are singleton arrays, or empty.
-      (fr1 :: Array DependencyPath) <- runArrayT (interpret f1 a)
-      fr2 <- runArrayT (interpret f2 a)
-      case head fr1, head fr2 of
-        Just fr1h, Just fr2h -> do
-          bfunction <- if g == AndF then pure (&&) else pure (||)
-          pure [unsafePartial applyValueFunction (functionOnBooleans bfunction) fr1h fr2h]
-        _, _ -> pure []
-
-  -- The Description Compiler ensures we have only Value types on which these operations are valid and that both f1 and f2 are functional.
-  g | isJust $ elemIndex g [AddF, SubtractF, DivideF, MultiplyF] -> ArrayT do
+  g | isJust $ elemIndex g [ AndF, OrF ] -> ArrayT do
     -- Both are singleton arrays, or empty.
     (fr1 :: Array DependencyPath) <- runArrayT (interpret f1 a)
     fr2 <- runArrayT (interpret f2 a)
     case head fr1, head fr2 of
-      Just fr1h, Just fr2h -> if range f1 `eq` range f2
-        then do
-          (result :: Array String) <- (performNumericOperation'
-            g
-            ran
-            (unsafePartial mapNumericOperator g ran)
-            [(unwrap $ unsafePartial dependencyToValue $ _.head fr1h)]
-            [(unwrap $ unsafePartial dependencyToValue $ _.head fr2h)]
+      Just fr1h, Just fr2h -> do
+        bfunction <- if g == AndF then pure (&&) else pure (||)
+        pure [ unsafePartial applyValueFunction (functionOnBooleans bfunction) fr1h fr2h ]
+      _, _ -> pure []
+
+  -- The Description Compiler ensures we have only Value types on which these operations are valid and that both f1 and f2 are functional.
+  g | isJust $ elemIndex g [ AddF, SubtractF, DivideF, MultiplyF ] -> ArrayT do
+    -- Both are singleton arrays, or empty.
+    (fr1 :: Array DependencyPath) <- runArrayT (interpret f1 a)
+    fr2 <- runArrayT (interpret f2 a)
+    case head fr1, head fr2 of
+      Just fr1h, Just fr2h ->
+        if range f1 `eq` range f2 then do
+          (result :: Array String) <-
+            ( performNumericOperation'
+                g
+                ran
+                (unsafePartial mapNumericOperator g ran)
+                [ (unwrap $ unsafePartial dependencyToValue $ _.head fr1h) ]
+                [ (unwrap $ unsafePartial dependencyToValue $ _.head fr2h) ]
             )
-          pure [{ head: (V (show g) (Value $ unsafePartial fromJust $ head result))
-            , mainPath: Nothing
-            , supportingPaths: (allPaths fr1h) `union` (allPaths fr2h)
-            }]
-        else if isDateOrTime (unsafePartial domain2PropertyRange $ range f1) && isPDuration (unsafePartial domain2PropertyRange $ range f2)
-          then do 
-            (result :: Array String) <- (performNumericOperation'
-              g
-              ran
-              (unsafePartial mapDurationOperator g (range f2))
-              [(unwrap $ unsafePartial dependencyToValue $ _.head fr1h)]
-              [(unwrap $ unsafePartial dependencyToValue $ _.head fr2h)]
-              )
-            pure [{ head: (V (show g) (Value $ unsafePartial fromJust $ head result))
+          pure
+            [ { head: (V (show g) (Value $ unsafePartial fromJust $ head result))
               , mainPath: Nothing
               , supportingPaths: (allPaths fr1h) `union` (allPaths fr2h)
-              }]
-          else do 
-            (result :: Array String) <- (performNumericOperation'
-              g
-              ran
-              (unsafePartial mapDurationOperator g (range f1))
-              [(unwrap $ unsafePartial dependencyToValue $ _.head fr2h)]
-              [(unwrap $ unsafePartial dependencyToValue $ _.head fr1h)]
-              )
-            pure [{ head: (V (show g) (Value $ unsafePartial fromJust $ head result))
+              }
+            ]
+        else if isDateOrTime (unsafePartial domain2PropertyRange $ range f1) && isPDuration (unsafePartial domain2PropertyRange $ range f2) then do
+          (result :: Array String) <-
+            ( performNumericOperation'
+                g
+                ran
+                (unsafePartial mapDurationOperator g (range f2))
+                [ (unwrap $ unsafePartial dependencyToValue $ _.head fr1h) ]
+                [ (unwrap $ unsafePartial dependencyToValue $ _.head fr2h) ]
+            )
+          pure
+            [ { head: (V (show g) (Value $ unsafePartial fromJust $ head result))
               , mainPath: Nothing
               , supportingPaths: (allPaths fr1h) `union` (allPaths fr2h)
-              }]
+              }
+            ]
+        else do
+          (result :: Array String) <-
+            ( performNumericOperation'
+                g
+                ran
+                (unsafePartial mapDurationOperator g (range f1))
+                [ (unwrap $ unsafePartial dependencyToValue $ _.head fr2h) ]
+                [ (unwrap $ unsafePartial dependencyToValue $ _.head fr1h) ]
+            )
+          pure
+            [ { head: (V (show g) (Value $ unsafePartial fromJust $ head result))
+              , mainPath: Nothing
+              , supportingPaths: (allPaths fr1h) `union` (allPaths fr2h)
+              }
+            ]
       Just fr1h, Nothing -> pure fr1
       Nothing, Just fr2h -> pure fr2
-      Nothing, Nothing -> pure [a]
-
+      Nothing, Nothing -> pure [ a ]
 
   _ -> ArrayT $ pure []
 
@@ -441,42 +467,42 @@ interpretMQD (MQD dom fun args ran _ _) a = do
   case unsafePartial $ fromJust $ lookupHiddenFunctionNArgs functionName of
     0 -> do
       r <- (unsafe1argFunction f) lastArgument
-      pure a {head = domain2Dependency ran r}
+      pure a { head = domain2Dependency ran r }
     1 -> do
       r <- (unsafe2argFunction f)
-        [ ( toString (first argValues))]
+        [ (toString (first argValues)) ]
         lastArgument
-      pure a {head = domain2Dependency ran r}
+      pure a { head = domain2Dependency ran r }
     2 -> do
       r <- (unsafe3argFunction f)
-        [ ( toString (first argValues))]
-        [ ( toString (second argValues))]
+        [ (toString (first argValues)) ]
+        [ (toString (second argValues)) ]
         lastArgument
-      pure a {head = domain2Dependency ran r}
+      pure a { head = domain2Dependency ran r }
     3 -> do
       r <- (unsafe4argFunction f)
-        [ ( toString (first argValues))]
-        [ ( toString (second argValues))]
-        [ ( toString (third argValues))]
+        [ (toString (first argValues)) ]
+        [ (toString (second argValues)) ]
+        [ (toString (third argValues)) ]
         lastArgument
-      pure a {head = domain2Dependency ran r}
+      pure a { head = domain2Dependency ran r }
     4 -> do
       r <- (unsafe5argFunction f)
-        [ ( toString (first argValues))]
-        [ ( toString (second argValues))]
-        [ ( toString (third argValues))]
-        [ ( toString (fourth argValues))]
+        [ (toString (first argValues)) ]
+        [ (toString (second argValues)) ]
+        [ (toString (third argValues)) ]
+        [ (toString (fourth argValues)) ]
         lastArgument
-      pure a {head = domain2Dependency ran r}
+      pure a { head = domain2Dependency ran r }
     5 -> do
       r <- (unsafe6argFunction f)
-        [ ( toString (first argValues))]
-        [ ( toString (second argValues))]
-        [ ( toString (third argValues))]
-        [ ( toString (fourth argValues))]
-        [ ( toString (fifth argValues))]
+        [ (toString (first argValues)) ]
+        [ (toString (second argValues)) ]
+        [ (toString (third argValues)) ]
+        [ (toString (fourth argValues)) ]
+        [ (toString (fifth argValues)) ]
         lastArgument
-      pure a {head = domain2Dependency ran r}
+      pure a { head = domain2Dependency ran r }
     otherwise -> throwError (error "Too many arguments for external core module: maximum is 4")
 
 -----------------------------------------------------------
@@ -487,20 +513,20 @@ interpretSQD (SQD _ (DataTypeGetter IdentityF) _ _ _) a = pure a
 
 interpretSQD (SQD dom (DataTypeGetter ModelNameF) _ _ _) a = do
   result <- unsafePartial case dom, a.head of
-    RDOM _, R rid  -> roleModelName rid
+    RDOM _, R rid -> roleModelName rid
     CDOM _, C cid -> contextModelName cid
     VDOM _ (Just pt), V _ _ -> pure $ Value $ propertytype2string pt
     ContextKind, CT ct -> unsafeCoerce contextTypeModelName' ct
-    RoleKind, RT rt ->  unsafeCoerce roleTypeModelName' rt
-  pure $ a {head = V "ModelNameF" result}
+    RoleKind, RT rt -> unsafeCoerce roleTypeModelName' rt
+  pure $ a { head = V "ModelNameF" result }
 
-interpretSQD (SQD dom (Constant range value) _ _ _) a = pure a {head = V "ConstantF" (Value value)}
+interpretSQD (SQD dom (Constant range value) _ _ _) a = pure a { head = V "ConstantF" (Value value) }
 
 interpretSQD (SQD dom (RoleIndividual individual) _ _ _) a = ArrayT do
   mi <- lift $ lookupIndexedRole (unwrap individual)
   case mi of
-    Nothing -> pure [a]
-    Just i -> pure $ [consOnMainPath (R i) a]
+    Nothing -> pure [ a ]
+    Just i -> pure $ [ consOnMainPath (R i) a ]
 -- An indexed individual is private to a PerspectivesUser. As we use this interpreter to calculate what to 
 -- serialise, we should stop here. The receiving users will substitute whatever role instance that is this
 -- indexed individual to them. We need not, indeed cannot, send them that.
@@ -512,135 +538,133 @@ interpretSQD (SQD dom (VariableLookup varName) range _ _) a = do
   r <- lookup varName "ignore"
   -- We do not need to record the dependencies of the computation behind the variable,
   -- as we recorded them before actually storing the result in the variable.
-  pure a {head = domain2Dependency range r}
+  pure a { head = domain2Dependency range r }
 
 interpretSQD qfd a = case a.head of
-    -----------------------------------------------------------
-    -- ContextInstance
-    -----------------------------------------------------------
-    (C cid) -> case qfd of
-      (SQD _ (RolGetter (ENR (EnumeratedRoleType r))) _ _ _) -> if
-        isExternalRole r
-          then (flip consOnMainPath a) <<< R <$> externalRole cid
-          else (flip consOnMainPath a) <<< R <$> getEnumeratedRoleInstances (EnumeratedRoleType r) cid
-      (SQD _ (RolGetter (CR cr)) _ _ _) -> do
-        (ct :: CalculatedRole) <- lift $ lift $ getPerspectType cr
-        (lift $ lift $ calculation ct) >>= flip interpret a
-      (SQD _ (DataTypeGetter ExternalRoleF) _ _ _) -> (flip consOnMainPath a) <<< R <$> externalRole cid
-      (SQD _ (TypeGetter TypeOfContextF) _ _ _) -> (flip consOnMainPath a) <<< CT <$> contextType cid
-      (SQD _ (DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeName) _ _ _) -> (flip consOnMainPath a) <<< R <$> getUnlinkedRoleInstances (EnumeratedRoleType roleTypeName) cid
+  -----------------------------------------------------------
+  -- ContextInstance
+  -----------------------------------------------------------
+  (C cid) -> case qfd of
+    (SQD _ (RolGetter (ENR (EnumeratedRoleType r))) _ _ _) ->
+      if
+        isExternalRole r then (flip consOnMainPath a) <<< R <$> externalRole cid
+      else (flip consOnMainPath a) <<< R <$> getEnumeratedRoleInstances (EnumeratedRoleType r) cid
+    (SQD _ (RolGetter (CR cr)) _ _ _) -> do
+      (ct :: CalculatedRole) <- lift $ lift $ getPerspectType cr
+      (lift $ lift $ calculation ct) >>= flip interpret a
+    (SQD _ (DataTypeGetter ExternalRoleF) _ _ _) -> (flip consOnMainPath a) <<< R <$> externalRole cid
+    (SQD _ (TypeGetter TypeOfContextF) _ _ _) -> (flip consOnMainPath a) <<< CT <$> contextType cid
+    (SQD _ (DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeName) _ _ _) -> (flip consOnMainPath a) <<< R <$> getUnlinkedRoleInstances (EnumeratedRoleType roleTypeName) cid
 
-      otherwise -> throwError (error $ "(head=ContextInstance) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show cid)
+    otherwise -> throwError (error $ "(head=ContextInstance) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show cid)
 
-    -----------------------------------------------------------
-    -- RoleInstance
-    -----------------------------------------------------------
-    dep@(R rid) -> case qfd of
-      -- TODO. We moeten hier niet de ADT van het domein nemen. We passen immers toe op de dependency. We moeten dus een ADT opstellen voor de dependency!
-      (SQD _ (PropertyGetter (ENP (EnumeratedPropertyType pt))) _ _ _) -> getDynamicPropertyGetter pt rid >>= \(leadingDependencies :: DependencyPath) -> do
-        -- We apply the property getter to the head of a. This results in a DependencyPath with or without value.
-        -- Lets call this result PropResult.
-        --  * when with a value, that value is PropResult.head; PropResult.mainPath starts with that value and ends with a.head.
-        --  * when without a value, the PropResult.head is the role bearing the property or the bottom of the chain; PropResult.mainPath starts with that role and ends with a.head.
-        -- Invariant: PropResult.mainPath ends with a.head, which is the source of the 'propertyquery' we apply to it.
-        -- We then would compose a.mainPath with PropResult.mainPath.
-        -- The result is a mainPath whose first part is PropResult.mainPath, which is
-        -- followed by the a.mainPath. The head is the head of PropResult.
-        -- However, this causes a.head to appear twice in the mainPath:
-        --  * once as the head of `a` (and thus the first dependency of a.mainPath)
-        --  * once as the end of PropResult.mainPath.
-        -- Hence, we remove the first dependency from a.mainPath before composing it with PropResult.mainPath.
-        reducedMainPath <- case tail <$> a.mainPath of
-          Just l@(Cons _ _) -> pure $ Just $ unsafePartial fromJust $ fromList l
-          otherwise -> pure Nothing
-        pure ({head: a.head, mainPath: reducedMainPath, supportingPaths: a.supportingPaths} #>> leadingDependencies)
+  -----------------------------------------------------------
+  -- RoleInstance
+  -----------------------------------------------------------
+  dep@(R rid) -> case qfd of
+    -- TODO. We moeten hier niet de ADT van het domein nemen. We passen immers toe op de dependency. We moeten dus een ADT opstellen voor de dependency!
+    (SQD _ (PropertyGetter (ENP (EnumeratedPropertyType pt))) _ _ _) -> getDynamicPropertyGetter pt rid >>= \(leadingDependencies :: DependencyPath) -> do
+      -- We apply the property getter to the head of a. This results in a DependencyPath with or without value.
+      -- Lets call this result PropResult.
+      --  * when with a value, that value is PropResult.head; PropResult.mainPath starts with that value and ends with a.head.
+      --  * when without a value, the PropResult.head is the role bearing the property or the bottom of the chain; PropResult.mainPath starts with that role and ends with a.head.
+      -- Invariant: PropResult.mainPath ends with a.head, which is the source of the 'propertyquery' we apply to it.
+      -- We then would compose a.mainPath with PropResult.mainPath.
+      -- The result is a mainPath whose first part is PropResult.mainPath, which is
+      -- followed by the a.mainPath. The head is the head of PropResult.
+      -- However, this causes a.head to appear twice in the mainPath:
+      --  * once as the head of `a` (and thus the first dependency of a.mainPath)
+      --  * once as the end of PropResult.mainPath.
+      -- Hence, we remove the first dependency from a.mainPath before composing it with PropResult.mainPath.
+      reducedMainPath <- case tail <$> a.mainPath of
+        Just l@(Cons _ _) -> pure $ Just $ unsafePartial fromJust $ fromList l
+        otherwise -> pure Nothing
+      pure ({ head: a.head, mainPath: reducedMainPath, supportingPaths: a.supportingPaths } #>> leadingDependencies)
 
-      (SQD _ (PropertyGetter (CP pt)) _ _ _) -> do
-        (cp :: CalculatedProperty) <- lift2MPQ $ getPerspectType pt
-        (lift2MPQ $ PC.calculation cp) >>= flip interpret a
-      (SQD _ (DataTypeGetter ContextF) _ _ _) -> (flip consOnMainPath a) <<< C <$> context rid
-      (SQD _ (DataTypeGetter FillerF) ran _ _) -> composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
-      (SQD _ (DataTypeGetterWithParameter FillerF _) ran _ _) -> composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
-      (SQD _ (FilledF roleType contextType) _ _ _ ) -> composePaths a <$> getRecursivelyFilledRoles contextType roleType rid
+    (SQD _ (PropertyGetter (CP pt)) _ _ _) -> do
+      (cp :: CalculatedProperty) <- lift2MPQ $ getPerspectType pt
+      (lift2MPQ $ PC.calculation cp) >>= flip interpret a
+    (SQD _ (DataTypeGetter ContextF) _ _ _) -> (flip consOnMainPath a) <<< C <$> context rid
+    (SQD _ (DataTypeGetter FillerF) ran _ _) -> composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
+    (SQD _ (DataTypeGetterWithParameter FillerF _) ran _ _) -> composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
+    (SQD _ (FilledF roleType contextType) _ _ _) -> composePaths a <$> getRecursivelyFilledRoles contextType roleType rid
 
-      otherwise -> throwError (error $ "(head=RoleInstance) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show rid)
+    otherwise -> throwError (error $ "(head=RoleInstance) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show rid)
 
-    -----------------------------------------------------------
-    -- Value
-    -----------------------------------------------------------
-    (V _ val) -> case qfd of
+  -----------------------------------------------------------
+  -- Value
+  -----------------------------------------------------------
+  (V _ val) -> case qfd of
 
-      -- We merely change the type of the head from Value to a RoleInstance.
-      (SQD dom (Value2Role _) _ _ _) -> pure a {head = R $ RoleInstance $ unwrap $ unsafePartial dependencyToValue a.head}
+    -- We merely change the type of the head from Value to a RoleInstance.
+    (SQD dom (Value2Role _) _ _ _) -> pure a { head = R $ RoleInstance $ unwrap $ unsafePartial dependencyToValue a.head }
 
+    otherwise -> throwError (error $ "(head is Value) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show val)
 
-      otherwise -> throwError (error $ "(head is Value) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show val)
+  -----------------------------------------------------------
+  -- ContextKind
+  -----------------------------------------------------------
+  (CT contextType) -> case qfd of
+    (SQD _ (TypeGetter RoleTypesF) _ _ _) -> (flip consOnMainPath a) <<< RT <$> (liftToInstanceLevel allRoleTypesInContext) contextType
 
-    -----------------------------------------------------------
-    -- ContextKind
-    -----------------------------------------------------------
-    (CT contextType) -> case qfd of
-      (SQD _ (TypeGetter RoleTypesF) _ _ _) -> (flip consOnMainPath a) <<< RT <$> (liftToInstanceLevel allRoleTypesInContext) contextType
+    otherwise -> throwError (error $ "(head is ContextKind) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show contextType)
+  -----------------------------------------------------------
+  -- RoleKind
+  -----------------------------------------------------------
+  (RT roleType) -> case qfd of
 
-      otherwise -> throwError (error $ "(head is ContextKind) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show contextType)
-    -----------------------------------------------------------
-    -- RoleKind
-    -----------------------------------------------------------
-    (RT roleType) -> case qfd of
+    (SQD _ (DataTypeGetterWithParameter SpecialisesRoleTypeF parameter) _ _ _) -> (flip consOnMainPath a) <<< V "SpecialisesRoleType" <$> (liftToInstanceLevel ((flip generalisesRoleType) (ENR $ EnumeratedRoleType parameter)) roleType)
 
-      (SQD _ (DataTypeGetterWithParameter SpecialisesRoleTypeF parameter) _ _ _ ) -> (flip consOnMainPath a) <<< V "SpecialisesRoleType" <$> (liftToInstanceLevel ((flip generalisesRoleType) (ENR $ EnumeratedRoleType parameter)) roleType)
-
-      otherwise -> throwError (error $ "(head is RoleKind) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show roleType)
+    otherwise -> throwError (error $ "(head is RoleKind) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show roleType)
 
 -- NOTE: in contrast with Perspectives.Instances.ObjectGetters.getRecursivelyFilledRoles', this function returns
 -- no result if filled role is found.
 getRecursivelyFilledRoles :: ContextType -> EnumeratedRoleType -> (RoleInstance ~~> DependencyPath)
 getRecursivelyFilledRoles filledContextType filledType fillerId = ArrayT $ execWriterT $ depthFirst fillerId (singletonPath (R fillerId))
   where
-    depthFirst :: RoleInstance -> DependencyPath ->  WriterT (Array DependencyPath) AssumptionTracking Unit
-    depthFirst rid depPath = do
-      r <- lift $ runArrayT $ getFilledRoles filledContextType filledType rid
-      if null r
-        then do 
-          allFilleds <- lift $ lift $ getAllFilledRoles_ rid
-          for_ allFilleds \filled -> depthFirst filled (consOnMainPath (R filled) depPath)
-        else for_ r \filled -> tell [consOnMainPath (R filled) depPath]
-
+  depthFirst :: RoleInstance -> DependencyPath -> WriterT (Array DependencyPath) AssumptionTracking Unit
+  depthFirst rid depPath = do
+    r <- lift $ runArrayT $ getFilledRoles filledContextType filledType rid
+    if null r then do
+      allFilleds <- lift $ lift $ getAllFilledRoles_ rid
+      for_ allFilleds \filled -> depthFirst filled (consOnMainPath (R filled) depPath)
+    else for_ r \filled -> tell [ consOnMainPath (R filled) depPath ]
 
 -- | For each Role dependency, push a Role assumption.
 pushAssumptionsForDependencyPath :: Partial => DependencyPath -> AssumptionTracking Unit
-pushAssumptionsForDependencyPath dp = for_ (allPaths dp) 
-  (\path -> for_ path 
-    (\a -> case a of 
-      R rid -> do
-        cType <- lift (rid ##>> (context >=> contextType))
-        rType <- lift (rid ##>> roleType)
-        tell $ ArrayWithoutDoubles[FilledRolesAssumption rid cType rType]
-      _ -> pure unit))
+pushAssumptionsForDependencyPath dp = for_ (allPaths dp)
+  ( \path -> for_ path
+      ( \a -> case a of
+          R rid -> do
+            cType <- lift (rid ##>> (context >=> contextType))
+            rType <- lift (rid ##>> roleType)
+            tell $ ArrayWithoutDoubles [ FilledRolesAssumption rid cType rType ]
+          _ -> pure unit
+      )
+  )
 
 getFillerTypeRecursively :: ADT RoleInContext -> RoleInstance ~~> DependencyPath
-getFillerTypeRecursively adt r = do 
+getFillerTypeRecursively adt r = do
   adtCnf <- lift $ lift $ toConjunctiveNormalForm_ adt
   ArrayT $ (lift $ try $ getPerspectRol r) >>=
     handlePerspectRolError' "getFillerTypeRecursively" [] (depthFirst adtCnf)
-    where
-    depthFirst :: CNF RoleInContext -> PerspectRol -> AssumptionTracking (Array DependencyPath)
-    depthFirst adtCnf role =
-        case rol_binding role of
-          Nothing -> pure []
-          Just b -> do
-            bRole <- lift $ getPerspectRol b
-            roleCnf <- lift (getEnumeratedRole (rol_pspType bRole) >>= pure <<< _.completeType <<< unwrap)
-            if roleCnf `equalsOrSpecialises_` adtCnf
-              then pure [snocOnMainPath (singletonPath (R b)) (R $ rol_id role)]
-              else map (flip snocOnMainPath (R $ rol_id role)) <$> depthFirst adtCnf bRole
+  where
+  depthFirst :: CNF RoleInContext -> PerspectRol -> AssumptionTracking (Array DependencyPath)
+  depthFirst adtCnf role =
+    case rol_binding role of
+      Nothing -> pure []
+      Just b -> do
+        bRole <- lift $ getPerspectRol b
+        roleCnf <- lift (getEnumeratedRole (rol_pspType bRole) >>= pure <<< _.completeType <<< unwrap)
+        if roleCnf `equalsOrSpecialises_` adtCnf then pure [ snocOnMainPath (singletonPath (R b)) (R $ rol_id role) ]
+        else map (flip snocOnMainPath (R $ rol_id role)) <$> depthFirst adtCnf bRole
 
 toBool :: List Dependency -> Boolean
 toBool (Cons (V _ (Value s)) _) = s == "true"
 toBool _ = false
 
 toString :: DependencyPath -> String
-toString {head} = case head of
+toString { head } = case head of
   (V _ (Value s)) -> s
   (C (ContextInstance c)) -> c
   (R (RoleInstance r)) -> r
@@ -655,44 +679,41 @@ getDynamicPropertyGetter :: String -> RoleInstance ~~> DependencyPath
 getDynamicPropertyGetter p rid = do
   (rt :: EnumeratedRoleType) <- roleType rid
   (pt :: PropertyType) <- lift2MPQ $ getPropertyType p
-  case pt of 
-    CP _ -> do 
+  case pt of
+    CP _ -> do
       allProps <- lift2MPQ $ allLocallyRepresentedProperties (ST rt)
       -- Special case for the 'property of last resort' that is inserted in serialised perspectives for roles without properties.
-      if (isJust $ elemIndex pt allProps) || pt == (CP $ CalculatedPropertyType roleWithId)
-        then getterFromPropertyType pt rid
-        else getItFromTheFiller rid
+      if (isJust $ elemIndex pt allProps) || pt == (CP $ CalculatedPropertyType roleWithId) then getterFromPropertyType pt rid
+      else getItFromTheFiller rid
     ENP eprop -> getPropertyFromTelescope rt eprop
 
   where
-    getPropertyFromTelescope :: EnumeratedRoleType -> EnumeratedPropertyType ~~> DependencyPath
-    getPropertyFromTelescope roleType eprop = do 
-      allProps <- lift2MPQ $ allLocallyRepresentedProperties (ST roleType)
-      if isJust $ elemIndex (ENP eprop) allProps
-        then ArrayT do 
-          r <- runArrayT $ getterFromPropertyType (ENP eprop) rid
-          if null r
-            -- Even though the property is represented on this role, we choose to search the rest of the chain.
-            then runArrayT $ getItFromTheFiller rid
-            else pure r
-        else do 
-          -- We must take aliases of the actual role type into account.
-          aliases <- catchError (lift $ lift $ propertyAliases roleType)
-            \e -> pure OBJ.empty
-          case OBJ.lookup (unwrap eprop) aliases of
-            Just destination -> ArrayT do 
-              r <- runArrayT $ getterFromPropertyType (ENP destination) rid
-              if null r
-                then runArrayT $ getItFromTheFiller rid
-                else pure r
-            Nothing -> getItFromTheFiller rid
+  getPropertyFromTelescope :: EnumeratedRoleType -> EnumeratedPropertyType ~~> DependencyPath
+  getPropertyFromTelescope roleType eprop = do
+    allProps <- lift2MPQ $ allLocallyRepresentedProperties (ST roleType)
+    if isJust $ elemIndex (ENP eprop) allProps then ArrayT do
+      r <- runArrayT $ getterFromPropertyType (ENP eprop) rid
+      if null r
+      -- Even though the property is represented on this role, we choose to search the rest of the chain.
+      then runArrayT $ getItFromTheFiller rid
+      else pure r
+    else do
+      -- We must take aliases of the actual role type into account.
+      aliases <- catchError (lift $ lift $ propertyAliases roleType)
+        \e -> pure OBJ.empty
+      case OBJ.lookup (unwrap eprop) aliases of
+        Just destination -> ArrayT do
+          r <- runArrayT $ getterFromPropertyType (ENP destination) rid
+          if null r then runArrayT $ getItFromTheFiller rid
+          else pure r
+        Nothing -> getItFromTheFiller rid
 
-    getItFromTheFiller :: RoleInstance ~~> DependencyPath
-    getItFromTheFiller roleInstance = do
-      (bnd :: Maybe RoleInstance) <- lift2MPQ $ binding_ roleInstance
-      case bnd of
-        Nothing -> empty
-        Just bnd' -> (flip snocOnMainPath (R roleInstance)) <$> getDynamicPropertyGetter p bnd'
+  getItFromTheFiller :: RoleInstance ~~> DependencyPath
+  getItFromTheFiller roleInstance = do
+    (bnd :: Maybe RoleInstance) <- lift2MPQ $ binding_ roleInstance
+    case bnd of
+      Nothing -> empty
+      Just bnd' -> (flip snocOnMainPath (R roleInstance)) <$> getDynamicPropertyGetter p bnd'
 
 -- NOTE. HOW do we handle no results?
 -- | From a PropertyType, retrieve or construct a function to get values for that Property from a Role instance.
@@ -705,15 +726,15 @@ getterFromPropertyType (ENP ep@(EnumeratedPropertyType id)) roleId = ArrayT do
     Nothing -> pure []
     otherwise -> pure ((V id <$> vals) <#> \dep -> consOnMainPath dep (singletonPath $ R roleId))
 getterFromPropertyType (CP cp@(CalculatedPropertyType id)) roleId =
-  (lift $ lift $ getPerspectType cp) >>=
-    lift <<< lift <<< PC.calculation >>=
+  (lift $ lift $ getPerspectType cp)
+    >>= lift <<< lift <<< PC.calculation
+    >>=
       \calc -> do
         old <- lift $ lift $ pushFrame
-        lift $ lift (addBinding "currentobject" [unwrap roleId])
+        lift $ lift (addBinding "currentobject" [ unwrap roleId ])
         r <- interpret calc (singletonPath (R roleId))
         lift $ lift $ restoreFrame old
         pure r
-
 
 unsafe1argFunction :: HiddenFunction -> String ~~> String
 unsafe1argFunction = unsafeCoerce

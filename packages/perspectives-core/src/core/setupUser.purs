@@ -37,15 +37,15 @@ import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionF
 import Prelude (Unit, bind, discard, void, ($), (>>=))
 
 modelDirectory :: String
-modelDirectory = "./src/model" 
+modelDirectory = "./src/model"
 
 -- | Set up by adding model:System and dependencies to the users' models database. This will add the model instances, too.
 -- | This function also ensures CURRENTUSER.
 -- | Note that the repository should have model://perspectives.domains#Couchdb, model://perspectives.domains#Serialise and model://perspectives.domains#System.
 setupUser :: Maybe UninterpretedTransactionForPeer -> MonadPerspectives Unit
-setupUser uninterpretedIdentityDoc = do 
-  entitiesDatabaseName >>= setRoleView 
-  entitiesDatabaseName >>= setRoleFromContextView 
+setupUser uninterpretedIdentityDoc = do
+  entitiesDatabaseName >>= setRoleView
+  entitiesDatabaseName >>= setRoleFromContextView
   -- OBSOLETE. Remove if testing shows the current definitioin of pendingInvitations works.
   entitiesDatabaseName >>= setPendingInvitationView
   entitiesDatabaseName >>= setContextView
@@ -58,13 +58,13 @@ setupUser uninterpretedIdentityDoc = do
   setupInvertedQueryDatabase
 
   modelDatabaseName >>= setRoleSpecialisationsView
-  modelDatabaseName >>= setContextSpecialisationsView 
+  modelDatabaseName >>= setContextSpecialisationsView
   -- Finally, upload model:System to perspect_models.
-  void $ runMonadPerspectivesTransaction 
-    (ENR $ EnumeratedRoleType sysUser) 
-    (do 
-      modify (over Transaction \t -> t { identityDocument = uninterpretedIdentityDoc })
-      addModelToLocalStore (DomeinFileId systemModelName) isInitialLoad
+  void $ runMonadPerspectivesTransaction
+    (ENR $ EnumeratedRoleType sysUser)
+    ( do
+        modify (over Transaction \t -> t { identityDocument = uninterpretedIdentityDoc })
+        addModelToLocalStore (DomeinFileId systemModelName) isInitialLoad
     )
 
 setupInvertedQueryDatabase :: MonadPerspectives Unit
@@ -74,12 +74,12 @@ setupInvertedQueryDatabase = do
   invertedQueryDatabaseName >>= setRTRoleKeyView
   invertedQueryDatabaseName >>= setRTContextKeyView
   invertedQueryDatabaseName >>= setRTFillerKeyView
-  invertedQueryDatabaseName >>= setRTFilledKeyView  
+  invertedQueryDatabaseName >>= setRTFilledKeyView
 
 reSetupUser :: MonadPerspectives Unit
 reSetupUser = do
-  entitiesDatabaseName >>= setRoleView 
-  entitiesDatabaseName >>= setRoleFromContextView 
+  entitiesDatabaseName >>= setRoleView
+  entitiesDatabaseName >>= setRoleFromContextView
   -- OBSOLETE. Remove if testing shows the current definitioin of pendingInvitations works.
   entitiesDatabaseName >>= setPendingInvitationView
   entitiesDatabaseName >>= setContextView
@@ -88,7 +88,7 @@ reSetupUser = do
   entitiesDatabaseName >>= setFilled2FillerView
   entitiesDatabaseName >>= setContext2RoleView
   entitiesDatabaseName >>= setRole2ContextView
-  DomeinFile {referredModels} <- getDomeinFile (DomeinFileId systemModelName)
+  DomeinFile { referredModels } <- getDomeinFile (DomeinFileId systemModelName)
   -- INSTALLATION / MODEL DEPENDENCY HERE: we assume these models will have been installed.
   void $ runMonadPerspectivesTransaction (ENR $ EnumeratedRoleType sysUser)
     do

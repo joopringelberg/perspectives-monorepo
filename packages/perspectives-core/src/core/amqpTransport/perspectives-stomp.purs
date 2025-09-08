@@ -27,7 +27,6 @@
 -- |  * https://stomp-js.github.io/api-docs/latest/classes/Client.html
 
 module Perspectives.AMQP.Stomp
-
   ( messageProducer
   , StompClient
   , createStompClient
@@ -42,9 +41,7 @@ module Perspectives.AMQP.Stomp
   , StructuredMessage
   , ConnectAndSubscriptionParameters
   , QueueId
-  )
-
-where
+  ) where
 
 import Prelude
 
@@ -91,11 +88,11 @@ createStompClient stompUrl = runEffectFn1 createStompClientImpl stompUrl
 type QueueId = String
 
 type ConnectAndSubscriptionParameters p =
-  { topic :: String       -- the routing / binding key
-  , queueId :: QueueId    -- the (secret) identification of the queue that we subscribe to.
-  , login :: String       -- RabbitMQ login name
-  , passcode :: String    -- RabbitMQ password
-  , vhost :: String       -- vhost name on the RabbitMQ server that the user credentials belong to.
+  { topic :: String -- the routing / binding key
+  , queueId :: QueueId -- the (secret) identification of the queue that we subscribe to.
+  , login :: String -- RabbitMQ login name
+  , passcode :: String -- RabbitMQ password
+  , vhost :: String -- vhost name on the RabbitMQ server that the user credentials belong to.
   | p
   }
 
@@ -106,23 +103,27 @@ type AcknowledgeFunction = EffectFn1 AcknowledgementHeaders Unit
 
 type Message =
   { body :: String
-  , ack :: AcknowledgeFunction}
+  , ack :: AcknowledgeFunction
+  }
 
-foreign import connectAndSubscribeImpl :: forall p. EffectFn5
-  StompClient
-  (ConnectAndSubscriptionParameters p)
-  (Message -> Step Message Unit)
-  (Unit -> Step Message Unit)
-  (Emitter Effect Message Unit)
-  Unit
+foreign import connectAndSubscribeImpl
+  :: forall p
+   . EffectFn5
+       StompClient
+       (ConnectAndSubscriptionParameters p)
+       (Message -> Step Message Unit)
+       (Unit -> Step Message Unit)
+       (Emitter Effect Message Unit)
+       Unit
 
 -- | Takes an EventSource and produces a function that takes an Emitter.
 -- | Apply `produce` or `produce'` to it to create a Producer of Foreign.
-connectAndSubscribe :: forall p.
-  StompClient ->
-  (ConnectAndSubscriptionParameters p) ->
-  (Emitter Effect Message Unit) ->
-  Effect Unit
+connectAndSubscribe
+  :: forall p
+   . StompClient
+  -> (ConnectAndSubscriptionParameters p)
+  -> (Emitter Effect Message Unit)
+  -> Effect Unit
 connectAndSubscribe stompClient params = runEffectFn5 connectAndSubscribeImpl
   stompClient
   params
@@ -138,26 +139,27 @@ messageProducer' stompClient params = produce' (connectAndSubscribe stompClient 
 
 type StructuredMessage f =
   { body :: f
-  , ack :: AcknowledgeFunction}
+  , ack :: AcknowledgeFunction
+  }
 
 messageProducer :: forall t f p. ReadForeign t => StompClient -> ConnectAndSubscriptionParameters p -> Producer (Either MultipleErrors (StructuredMessage t)) (MonadPouchdb f) Unit
 messageProducer stompClient params = (messageProducer' stompClient params) $~ (forever (transform decodeMessage))
   where
-    decodeMessage :: Message -> Either MultipleErrors (StructuredMessage t)
-    decodeMessage {body, ack} = case runExcept $ readJSON' body of
-      Left e -> case body of
-            "noConnection" -> Left $ singleton $ ForeignError "noConnection"
-            "connection" -> Left $ singleton $ ForeignError "connection"
-            -- NOTICE that we misuse / overload the TypeMismatch constructor here for our purposes.
-            s | isAReceipt s -> Left $ singleton (TypeMismatch "receipt" (unsafePartial $ fromJust $ getReceipt s))
-            otherwise -> Left $ cons (ForeignError body) e
-      Right m -> Right {body: m, ack}
+  decodeMessage :: Message -> Either MultipleErrors (StructuredMessage t)
+  decodeMessage { body, ack } = case runExcept $ readJSON' body of
+    Left e -> case body of
+      "noConnection" -> Left $ singleton $ ForeignError "noConnection"
+      "connection" -> Left $ singleton $ ForeignError "connection"
+      -- NOTICE that we misuse / overload the TypeMismatch constructor here for our purposes.
+      s | isAReceipt s -> Left $ singleton (TypeMismatch "receipt" (unsafePartial $ fromJust $ getReceipt s))
+      otherwise -> Left $ cons (ForeignError body) e
+    Right m -> Right { body: m, ack }
 
-    isAReceipt :: String -> Boolean
-    isAReceipt = isJust <<< getReceipt
+  isAReceipt :: String -> Boolean
+  isAReceipt = isJust <<< getReceipt
 
-    getReceipt :: String -> Maybe String
-    getReceipt = getFirstMatch (unsafeRegex "receipt:(.+)" noFlags)
+  getReceipt :: String -> Maybe String
+  getReceipt = getFirstMatch (unsafeRegex "receipt:(.+)" noFlags)
 
 -----------------------------------------------------------
 -- ACKNOWLEDGE

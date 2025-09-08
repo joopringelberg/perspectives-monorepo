@@ -20,9 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.DomeinFile
- 
-  where
+module Perspectives.DomeinFile where
 
 import Control.Monad.State (State, execState, modify)
 import Data.Array (cons)
@@ -62,8 +60,8 @@ newtype DomeinFile = DomeinFile DomeinFileRecord
 -- NOTE: the qualification of the identifiers is in terms of the scheme "model:", 
 -- two forward slashes and an internet namespace, followed by a hash sign.
 type DomeinFileRecord = PouchbdDocumentFields
-  ( id :: DomeinFileId                                  -- The qualified stable identifier in terms of a CUID (DomeinFileUri Stable)
-  , namespace :: String                                 -- The qualified readable name of the model that may vary. (DomeinFileUri Readable)
+  ( id :: DomeinFileId -- The qualified stable identifier in terms of a CUID (DomeinFileUri Stable)
+  , namespace :: String -- The qualified readable name of the model that may vary. (DomeinFileUri Readable)
   , contexts :: Object Context
   , enumeratedRoles :: Object EnumeratedRole
   , calculatedRoles :: Object CalculatedRole
@@ -93,15 +91,15 @@ instance showDomeinFile :: Show DomeinFile where
   show = genericShow
 
 instance eqDomeinFile :: Eq DomeinFile where
-  eq (DomeinFile {id:id1}) (DomeinFile {id:id2}) = eq id1 id2
+  eq (DomeinFile { id: id1 }) (DomeinFile { id: id2 }) = eq id1 id2
 
 instance identifiableDomeinFile :: Identifiable DomeinFile DomeinFileId where
-  identifier (DomeinFile{id}) = id
-  displayName (DomeinFile{namespace}) = namespace
+  identifier (DomeinFile { id }) = id
+  displayName (DomeinFile { namespace }) = namespace
 
 instance revisionDomeinFile :: Revision DomeinFile where
   rev = _._rev <<< unwrap
-  changeRevision s = over DomeinFile (\vr -> vr {_rev = s})
+  changeRevision s = over DomeinFile (\vr -> vr { _rev = s })
 
 instance Attachment DomeinFile where
   setAttachment d _ = d
@@ -119,8 +117,12 @@ newtype UpstreamStateNotification = UpstreamStateNotification
   }
 
 derive instance Generic UpstreamStateNotification _
-instance Show UpstreamStateNotification where show = genericShow
-instance Eq UpstreamStateNotification where eq = genericEq
+instance Show UpstreamStateNotification where
+  show = genericShow
+
+instance Eq UpstreamStateNotification where
+  eq = genericEq
+
 derive newtype instance WriteForeign UpstreamStateNotification
 derive newtype instance ReadForeign UpstreamStateNotification
 
@@ -135,24 +137,33 @@ newtype UpstreamAutomaticEffect = UpstreamAutomaticEffect
   }
 
 derive instance Generic UpstreamAutomaticEffect _
-instance Show UpstreamAutomaticEffect where show = genericShow
-instance Eq UpstreamAutomaticEffect where eq = genericEq
+instance Show UpstreamAutomaticEffect where
+  show = genericShow
+
+instance Eq UpstreamAutomaticEffect where
+  eq = genericEq
+
 derive newtype instance WriteForeign UpstreamAutomaticEffect
 derive newtype instance ReadForeign UpstreamAutomaticEffect
 
 -------------------------------------------------------------------------------
 ---- INVERTEDQUERYCOLLECTION
 -------------------------------------------------------------------------------
-data SeparateInvertedQuery =
-  -- Type of the role instance; Type of the context instance to store on; InvertedQuery
-  RoleInvertedQuery EnumeratedRoleType TypeName InvertedQuery |                  -- `role` step
-  -- Type of the context of the role instance; Type of the role instance to store on; InvertedQuery
-  ContextInvertedQuery ContextType TypeName InvertedQuery |                      -- `context` step
-  -- Triple keys; Type of the role instance to store on; InvertedQuery
-  FillerInvertedQuery (Array InvertedQueryKey) TypeName InvertedQuery |        -- `filledBy` step
-  FilledInvertedQuery (Array InvertedQueryKey) TypeName InvertedQuery |           -- `fills` step
-  -- EnumeratedRoleTypes to index with; EnumeratedProperty to store on; InvertedQuery
-  OnPropertyDelta (Array EnumeratedRoleType) TypeName InvertedQuery              -- `Value2Role` step.
+data SeparateInvertedQuery
+  =
+    -- Type of the role instance; Type of the context instance to store on; InvertedQuery
+    RoleInvertedQuery EnumeratedRoleType TypeName InvertedQuery
+  | -- `role` step
+    -- Type of the context of the role instance; Type of the role instance to store on; InvertedQuery
+    ContextInvertedQuery ContextType TypeName InvertedQuery
+  | -- `context` step
+    -- Triple keys; Type of the role instance to store on; InvertedQuery
+    FillerInvertedQuery (Array InvertedQueryKey) TypeName InvertedQuery
+  | -- `filledBy` step
+    FilledInvertedQuery (Array InvertedQueryKey) TypeName InvertedQuery
+  | -- `fills` step
+    -- EnumeratedRoleTypes to index with; EnumeratedProperty to store on; InvertedQuery
+    OnPropertyDelta (Array EnumeratedRoleType) TypeName InvertedQuery -- `Value2Role` step.
 
 type TypeName = String
 
@@ -164,31 +175,33 @@ instance showSeparateInvertedQuery :: Show SeparateInvertedQuery where
 derive instance eqSeparateInvertedQuery :: Eq SeparateInvertedQuery
 
 instance WriteForeign SeparateInvertedQuery where
-  writeImpl (RoleInvertedQuery key typeName invertedQuery) = writeImpl { constructor: "RoleInvertedQuery", key: writeJSON key, typeName, invertedQuery}
-  writeImpl (ContextInvertedQuery key typeName invertedQuery) = writeImpl { constructor: "ContextInvertedQuery", key: writeJSON key, typeName, invertedQuery}
-  writeImpl (FillerInvertedQuery key typeName invertedQuery) = writeImpl { constructor: "FillerInvertedQuery", key: writeJSON key, typeName, invertedQuery}
-  writeImpl (FilledInvertedQuery key typeName invertedQuery) = writeImpl { constructor: "FilledInvertedQuery", key: writeJSON key, typeName, invertedQuery}
-  writeImpl (OnPropertyDelta key typeName invertedQuery) = writeImpl { constructor: "OnPropertyDelta", key: writeJSON key, typeName, invertedQuery}
+  writeImpl (RoleInvertedQuery key typeName invertedQuery) = writeImpl { constructor: "RoleInvertedQuery", key: writeJSON key, typeName, invertedQuery }
+  writeImpl (ContextInvertedQuery key typeName invertedQuery) = writeImpl { constructor: "ContextInvertedQuery", key: writeJSON key, typeName, invertedQuery }
+  writeImpl (FillerInvertedQuery key typeName invertedQuery) = writeImpl { constructor: "FillerInvertedQuery", key: writeJSON key, typeName, invertedQuery }
+  writeImpl (FilledInvertedQuery key typeName invertedQuery) = writeImpl { constructor: "FilledInvertedQuery", key: writeJSON key, typeName, invertedQuery }
+  writeImpl (OnPropertyDelta key typeName invertedQuery) = writeImpl { constructor: "OnPropertyDelta", key: writeJSON key, typeName, invertedQuery }
 
 instance ReadForeign SeparateInvertedQuery where
   readImpl f = do
-    {constructor, key, typeName, invertedQuery} :: {constructor :: String, key :: String, typeName :: TypeName, invertedQuery :: InvertedQuery } <- read' f
-    unsafePartial case constructor of 
-      "RoleInvertedQuery" ->  (\k -> RoleInvertedQuery k typeName invertedQuery) <$> readJSON' key
-      "ContextInvertedQuery" ->  (\k -> ContextInvertedQuery k typeName invertedQuery) <$> readJSON' key
-      "FillerInvertedQuery" ->  (\k -> FillerInvertedQuery k typeName invertedQuery) <$> readJSON' key
-      "FilledInvertedQuery" ->  (\k -> FilledInvertedQuery k typeName invertedQuery) <$> readJSON' key
-      "OnPropertyDelta" ->  (\k -> OnPropertyDelta k typeName invertedQuery) <$> readJSON' key
+    { constructor, key, typeName, invertedQuery } :: { constructor :: String, key :: String, typeName :: TypeName, invertedQuery :: InvertedQuery } <- read' f
+    unsafePartial case constructor of
+      "RoleInvertedQuery" -> (\k -> RoleInvertedQuery k typeName invertedQuery) <$> readJSON' key
+      "ContextInvertedQuery" -> (\k -> ContextInvertedQuery k typeName invertedQuery) <$> readJSON' key
+      "FillerInvertedQuery" -> (\k -> FillerInvertedQuery k typeName invertedQuery) <$> readJSON' key
+      "FilledInvertedQuery" -> (\k -> FilledInvertedQuery k typeName invertedQuery) <$> readJSON' key
+      "OnPropertyDelta" -> (\k -> OnPropertyDelta k typeName invertedQuery) <$> readJSON' key
 
 addInvertedQueryForDomain :: TypeName -> InvertedQuery -> (TypeName -> InvertedQuery -> SeparateInvertedQuery) -> DomeinFileRecord -> DomeinFileRecord
-addInvertedQueryForDomain typeName iq collectionConstructor dfr@{invertedQueriesInOtherDomains} = case typeUri2ModelUri typeName of
+addInvertedQueryForDomain typeName iq collectionConstructor dfr@{ invertedQueriesInOtherDomains } = case typeUri2ModelUri typeName of
   Nothing -> dfr
-  Just modelName -> let
-    invertedQueriesInOtherDomains' = case lookup modelName invertedQueriesInOtherDomains of
-      Nothing -> insert modelName [collectionConstructor typeName iq] invertedQueriesInOtherDomains
-      Just separateQueries -> insert modelName (cons (collectionConstructor typeName iq) separateQueries) invertedQueriesInOtherDomains
+  Just modelName ->
+    let
+      invertedQueriesInOtherDomains' = case lookup modelName invertedQueriesInOtherDomains of
+        Nothing -> insert modelName [ collectionConstructor typeName iq ] invertedQueriesInOtherDomains
+        Just separateQueries -> insert modelName (cons (collectionConstructor typeName iq) separateQueries) invertedQueriesInOtherDomains
     in
-    dfr {invertedQueriesInOtherDomains = invertedQueriesInOtherDomains'}
+      dfr { invertedQueriesInOtherDomains = invertedQueriesInOtherDomains' }
+
 -------------------------------------------------------------------------------
 -------------------------------------------------------------------------------
 
@@ -213,7 +226,7 @@ defaultDomeinFileRecord =
   , userGraph: UserGraph $ EM.empty
   , screens: EM.empty
   , _attachments: Nothing
-}
+  }
 
 defaultDomeinFile :: DomeinFile
 defaultDomeinFile = DomeinFile defaultDomeinFileRecord
@@ -221,43 +234,47 @@ defaultDomeinFile = DomeinFile defaultDomeinFileRecord
 type DomeinFileEnumeratedRoles = Object EnumeratedRole
 
 setRevision :: String -> DomeinFile -> DomeinFile
-setRevision vs (DomeinFile dff) = DomeinFile $ dff {_rev = Just vs}
+setRevision vs (DomeinFile dff) = DomeinFile $ dff { _rev = Just vs }
 
 -- | Returns a table with indexed names as key and ContextType as value.
 indexedContexts :: DomeinFile -> Object ContextType
-indexedContexts (DomeinFile{contexts}) = execState indexedContexts_ empty
+indexedContexts (DomeinFile { contexts }) = execState indexedContexts_ empty
   where
-    indexedContexts_ :: State (Object ContextType) Unit
-    indexedContexts_ = for_ contexts \(Context{id, indexedContext}) -> case indexedContext of
-      Nothing -> pure unit
-      Just i -> void $ modify \table -> insert (unwrap i) id table
+  indexedContexts_ :: State (Object ContextType) Unit
+  indexedContexts_ = for_ contexts \(Context { id, indexedContext }) -> case indexedContext of
+    Nothing -> pure unit
+    Just i -> void $ modify \table -> insert (unwrap i) id table
 
 -- | Returns a table with indexed names as key and ContextType as value.
 indexedRoles :: DomeinFile -> Object EnumeratedRoleType
-indexedRoles (DomeinFile{enumeratedRoles}) = execState indexedRoles_ empty
+indexedRoles (DomeinFile { enumeratedRoles }) = execState indexedRoles_ empty
   where
-    indexedRoles_ :: State (Object EnumeratedRoleType) Unit
-    indexedRoles_ = for_ enumeratedRoles \(EnumeratedRole{id, indexedRole}) -> case indexedRole of
-      Nothing -> pure unit
-      Just i -> void $ modify \table -> insert (unwrap i) id table
+  indexedRoles_ :: State (Object EnumeratedRoleType) Unit
+  indexedRoles_ = for_ enumeratedRoles \(EnumeratedRole { id, indexedRole }) -> case indexedRole of
+    Nothing -> pure unit
+    Just i -> void $ modify \table -> insert (unwrap i) id table
 
 addUpstreamNotification :: UpstreamStateNotification -> StateIdentifier -> DomeinFileRecord -> DomeinFileRecord
-addUpstreamNotification notification (StateIdentifier s) dfr@{upstreamStateNotifications} = let 
+addUpstreamNotification notification (StateIdentifier s) dfr@{ upstreamStateNotifications } =
+  let
     domeinName = unsafePartial fromJust $ typeUri2ModelUri s
-  in 
-    dfr 
-      {upstreamStateNotifications = case lookup domeinName upstreamStateNotifications of
-        Nothing -> insert domeinName [notification] upstreamStateNotifications
-        Just ns -> insert domeinName (cons notification ns) upstreamStateNotifications}
+  in
+    dfr
+      { upstreamStateNotifications = case lookup domeinName upstreamStateNotifications of
+          Nothing -> insert domeinName [ notification ] upstreamStateNotifications
+          Just ns -> insert domeinName (cons notification ns) upstreamStateNotifications
+      }
 
 addUpstreamAutomaticEffect :: UpstreamAutomaticEffect -> StateIdentifier -> DomeinFileRecord -> DomeinFileRecord
-addUpstreamAutomaticEffect effect (StateIdentifier s) dfr@{upstreamAutomaticEffects} = let 
+addUpstreamAutomaticEffect effect (StateIdentifier s) dfr@{ upstreamAutomaticEffects } =
+  let
     domeinName = unsafePartial fromJust $ typeUri2ModelUri s
-  in 
-    dfr 
-      {upstreamAutomaticEffects = case lookup domeinName upstreamAutomaticEffects of
-        Nothing -> insert domeinName [effect] upstreamAutomaticEffects
-        Just ns -> insert domeinName (cons effect ns) upstreamAutomaticEffects}
+  in
+    dfr
+      { upstreamAutomaticEffects = case lookup domeinName upstreamAutomaticEffects of
+          Nothing -> insert domeinName [ effect ] upstreamAutomaticEffects
+          Just ns -> insert domeinName (cons effect ns) upstreamAutomaticEffects
+      }
 
 addDownStreamNotification :: UpstreamStateNotification -> State DomeinFileRecord Unit
 addDownStreamNotification = modifyDownstreamNotification true
@@ -266,20 +283,18 @@ removeDownStreamNotification :: UpstreamStateNotification -> State DomeinFileRec
 removeDownStreamNotification = modifyDownstreamNotification false
 
 modifyDownstreamNotification :: Boolean -> UpstreamStateNotification -> State DomeinFileRecord Unit
-modifyDownstreamNotification add (UpstreamStateNotification{stateId, isOnEntry, notification, qualifiedUsers}) = void $ modify \dfr@{states} ->
-  case lookup (unwrap stateId) states of 
+modifyDownstreamNotification add (UpstreamStateNotification { stateId, isOnEntry, notification, qualifiedUsers }) = void $ modify \dfr@{ states } ->
+  case lookup (unwrap stateId) states of
     Nothing -> dfr
-    Just s -> dfr {states = insert (unwrap stateId) (modifyState s) states}
-    where
-    modifyState :: PEState.State -> PEState.State
-    modifyState (PEState.State sr@{notifyOnEntry, notifyOnExit}) = 
-      if isOnEntry 
-        then if add
-          then PEState.State sr {notifyOnEntry = addAll notification notifyOnEntry qualifiedUsers}
-          else PEState.State sr {notifyOnEntry = removeAll notification notifyOnEntry qualifiedUsers}
-        else if add
-          then PEState.State sr {notifyOnExit = addAll notification notifyOnExit qualifiedUsers}
-          else PEState.State sr {notifyOnExit = removeAll notification notifyOnExit qualifiedUsers}
+    Just s -> dfr { states = insert (unwrap stateId) (modifyState s) states }
+  where
+  modifyState :: PEState.State -> PEState.State
+  modifyState (PEState.State sr@{ notifyOnEntry, notifyOnExit }) =
+    if isOnEntry then
+      if add then PEState.State sr { notifyOnEntry = addAll notification notifyOnEntry qualifiedUsers }
+      else PEState.State sr { notifyOnEntry = removeAll notification notifyOnEntry qualifiedUsers }
+    else if add then PEState.State sr { notifyOnExit = addAll notification notifyOnExit qualifiedUsers }
+    else PEState.State sr { notifyOnExit = removeAll notification notifyOnExit qualifiedUsers }
 
 addDownStreamAutomaticEffect :: UpstreamAutomaticEffect -> State DomeinFileRecord Unit
 addDownStreamAutomaticEffect = modifyDownstreamAutomaticEffect true
@@ -288,18 +303,16 @@ removeDownStreamAutomaticEffect :: UpstreamAutomaticEffect -> State DomeinFileRe
 removeDownStreamAutomaticEffect = modifyDownstreamAutomaticEffect false
 
 modifyDownstreamAutomaticEffect :: Boolean -> UpstreamAutomaticEffect -> State DomeinFileRecord Unit
-modifyDownstreamAutomaticEffect add (UpstreamAutomaticEffect{stateId, isOnEntry, automaticAction, qualifiedUsers}) = void $ modify \dfr@{states} ->
-  case lookup (unwrap stateId) states of 
+modifyDownstreamAutomaticEffect add (UpstreamAutomaticEffect { stateId, isOnEntry, automaticAction, qualifiedUsers }) = void $ modify \dfr@{ states } ->
+  case lookup (unwrap stateId) states of
     Nothing -> dfr
-    Just s -> dfr {states = insert (unwrap stateId) (modifyState s) states}
-    where
-    modifyState :: PEState.State -> PEState.State
-    modifyState (PEState.State sr@{automaticOnEntry, automaticOnExit}) = 
-      if isOnEntry 
-        then if add
-          then PEState.State sr {automaticOnEntry = addAll automaticAction automaticOnEntry qualifiedUsers}
-          else PEState.State sr {automaticOnEntry = removeAll automaticAction automaticOnEntry qualifiedUsers}
-        else if add
-          then PEState.State sr {automaticOnExit = addAll automaticAction automaticOnExit qualifiedUsers}
-          else PEState.State sr {automaticOnExit = removeAll automaticAction automaticOnExit qualifiedUsers}
+    Just s -> dfr { states = insert (unwrap stateId) (modifyState s) states }
+  where
+  modifyState :: PEState.State -> PEState.State
+  modifyState (PEState.State sr@{ automaticOnEntry, automaticOnExit }) =
+    if isOnEntry then
+      if add then PEState.State sr { automaticOnEntry = addAll automaticAction automaticOnEntry qualifiedUsers }
+      else PEState.State sr { automaticOnEntry = removeAll automaticAction automaticOnEntry qualifiedUsers }
+    else if add then PEState.State sr { automaticOnExit = addAll automaticAction automaticOnExit qualifiedUsers }
+    else PEState.State sr { automaticOnExit = removeAll automaticAction automaticOnExit qualifiedUsers }
 

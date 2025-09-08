@@ -20,7 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.Representation.Range where 
+module Perspectives.Representation.Range where
 
 import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
@@ -40,18 +40,21 @@ data Range = PString | PBool | PNumber | PDate | PDateTime | PTime | PEmail | PF
 
 derive instance genericRange :: Generic Range _
 
-instance eqRange :: Eq Range where eq = genericEq
+instance eqRange :: Eq Range where
+  eq = genericEq
+
 derive instance ordRange :: Ord Range
 
 instance writeForeignRange :: WriteForeign Range where
-  writeImpl (PDuration d) = write {range: "PDuration", dtype: show d}
-  writeImpl r = write ({ range: show r, dtype: Nothing} :: { range :: String, dtype :: Maybe String})
-  -- writeImpl = unsafeToForeign <<< show
+  writeImpl (PDuration d) = write { range: "PDuration", dtype: show d }
+  writeImpl r = write ({ range: show r, dtype: Nothing } :: { range :: String, dtype :: Maybe String })
+
+-- writeImpl = unsafeToForeign <<< show
 
 instance readForeignRange :: ReadForeign Range where
   readImpl f = do
-    (d :: { range :: String, dtype :: Maybe String}) <- readImpl f
-    unsafePartial case d.range of 
+    (d :: { range :: String, dtype :: Maybe String }) <- readImpl f
+    unsafePartial case d.range of
       -- "PDuration" -> PDuration $ unsafePartial $ fromJust d.dtype
       "PDuration" -> PDuration <$> enumReadForeign (unsafeCoerce (unsafePartial $ fromJust d.dtype))
       "PString" -> pure PString
@@ -63,7 +66,8 @@ instance readForeignRange :: ReadForeign Range where
       "PEmail" -> pure PEmail
       "PFile" -> pure PFile
       "PMarkDown" -> pure PMarkDown
-  -- readImpl r = enumReadForeign r
+
+-- readImpl r = enumReadForeign r
 
 instance rangeShow :: Show Range where
   show = genericShow
@@ -71,25 +75,29 @@ instance rangeShow :: Show Range where
 data Duration_ = Year_ | Month_ | Week_ | Day_ | Hour_ | Minute_ | Second_ | MilliSecond_
 
 derive instance Generic Duration_ _
-instance Show Duration_ where show = genericShow
-instance Eq Duration_ where eq = genericEq
+instance Show Duration_ where
+  show = genericShow
+
+instance Eq Duration_ where
+  eq = genericEq
+
 derive instance Ord Duration_
 
 isDateOrTime :: Range -> Boolean
-isDateOrTime r = case r of 
+isDateOrTime r = case r of
   PDateTime -> true
   PDate -> true
   PTime -> true
   _ -> false
 
 isDate :: Range -> Boolean
-isDate r = case r of 
+isDate r = case r of
   PDateTime -> true
   PDate -> true
   _ -> false
 
 isTime :: Range -> Boolean
-isTime r = case r of 
+isTime r = case r of
   PTime -> true
   _ -> false
 

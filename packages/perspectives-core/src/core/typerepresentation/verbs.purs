@@ -38,17 +38,17 @@ import Simple.JSON (class ReadForeign, class WriteForeign, read', write, writeIm
 -- ROLEVERB
 -----------------------------------------------------------
 
-data RoleVerb =
-    Remove            -- Remove a single instance
-  | RemoveContext     -- Remove a contextrole instance together with its context.
-  | Delete            -- Remove all instances
-  | DeleteContext     -- Delete all contextrole instances together with their contexts.
-  | Create            -- Create an instance
-  | CreateAndFill     -- CreateAndFill <RoleType> with <roleExpr>
-  | Fill              -- <functionalRoleExpr> with <functionalRoleExpr>
-  | Unbind            -- <roleExpr> from <RoleType>, i.e. remove all binders of type <RoleType>
-  | RemoveFiller      -- <functionalRoleExpr> from <functionalRoleExpr>
-  | Move              -- Move an instance from one context to another.
+data RoleVerb
+  = Remove -- Remove a single instance
+  | RemoveContext -- Remove a contextrole instance together with its context.
+  | Delete -- Remove all instances
+  | DeleteContext -- Delete all contextrole instances together with their contexts.
+  | Create -- Create an instance
+  | CreateAndFill -- CreateAndFill <RoleType> with <roleExpr>
+  | Fill -- <functionalRoleExpr> with <functionalRoleExpr>
+  | Unbind -- <roleExpr> from <RoleType>, i.e. remove all binders of type <RoleType>
+  | RemoveFiller -- <functionalRoleExpr> from <functionalRoleExpr>
+  | Move -- Move an instance from one context to another.
 
 derive instance genericRepRoleVerb :: Generic RoleVerb _
 instance writeForeignRoleVerb :: WriteForeign RoleVerb where
@@ -56,6 +56,7 @@ instance writeForeignRoleVerb :: WriteForeign RoleVerb where
 
 instance showRoleVerb :: Show RoleVerb where
   show = genericShow
+
 instance eqRoleVerb :: Eq RoleVerb where
   eq = genericEq
 
@@ -66,28 +67,32 @@ instance ReadForeign RoleVerb where
 -- PROPERTYVERB
 -----------------------------------------------------------
 
-data PropertyVerb =
-    Consult
-  | RemovePropertyValue   -- Remove a single value.
-  | DeleteProperty        -- Remove all values.
-  | AddPropertyValue      -- Add a single value.
-  | SetPropertyValue      -- Replace all values.
+data PropertyVerb
+  = Consult
+  | RemovePropertyValue -- Remove a single value.
+  | DeleteProperty -- Remove all values.
+  | AddPropertyValue -- Add a single value.
+  | SetPropertyValue -- Replace all values.
 
-instance writeForeignPropertyVerb :: WriteForeign PropertyVerb where writeImpl = unsafeToForeign <<< show
+instance writeForeignPropertyVerb :: WriteForeign PropertyVerb where
+  writeImpl = unsafeToForeign <<< show
 
-instance ReadForeign PropertyVerb where readImpl = enumReadForeign
+instance ReadForeign PropertyVerb where
+  readImpl = enumReadForeign
 
 derive instance genericRepPropertyVerb :: Generic PropertyVerb _
 
 instance showPropertyVerb :: Show PropertyVerb where
   show = genericShow
+
 instance eqPropertyVerb :: Eq PropertyVerb where
   eq = genericEq
+
 instance ordPropertyVerb :: Ord PropertyVerb where
   compare pv1 pv2 = compare (show pv1) (show pv2)
 
 allPropertyVerbs :: Array PropertyVerb
-allPropertyVerbs = [Consult, RemovePropertyValue, DeleteProperty, AddPropertyValue, SetPropertyValue]
+allPropertyVerbs = [ Consult, RemovePropertyValue, DeleteProperty, AddPropertyValue, SetPropertyValue ]
 
 -----------------------------------------------------------
 -- ROLEVERBLIST
@@ -96,19 +101,21 @@ data RoleVerbList = All | Including (Array RoleVerb) | Excluding (Array RoleVerb
 
 derive instance genericRoleVerbList :: Generic RoleVerbList _
 
-instance showRoleVerbList :: Show RoleVerbList where show = genericShow
+instance showRoleVerbList :: Show RoleVerbList where
+  show = genericShow
+
 derive instance eqRoleVerbList :: Eq RoleVerbList
 
-type RoleVerbList_ = { constructor :: String, roleVerbs :: Array RoleVerb}
+type RoleVerbList_ = { constructor :: String, roleVerbs :: Array RoleVerb }
 
 instance WriteForeign RoleVerbList where
-  writeImpl All = writeImpl ({constructor: "All", roleVerbs: []} :: RoleVerbList_)
-  writeImpl (Including roleVerbs) = writeImpl {constructor: "Including", roleVerbs}
-  writeImpl (Excluding roleVerbs) = writeImpl {constructor: "Excluding", roleVerbs}
+  writeImpl All = writeImpl ({ constructor: "All", roleVerbs: [] } :: RoleVerbList_)
+  writeImpl (Including roleVerbs) = writeImpl { constructor: "Including", roleVerbs }
+  writeImpl (Excluding roleVerbs) = writeImpl { constructor: "Excluding", roleVerbs }
 
 instance ReadForeign RoleVerbList where
-  readImpl f = do 
-    ({constructor, roleVerbs} :: RoleVerbList_) <- read' f
+  readImpl f = do
+    ({ constructor, roleVerbs } :: RoleVerbList_) <- read' f
     case constructor of
       "All" -> pure All
       "Including" -> pure $ Including roleVerbs
@@ -118,16 +125,16 @@ instance ReadForeign RoleVerbList where
 instance ordRoleVerbList :: Ord RoleVerbList where
   compare All _ = GT
   compare _ All = LT
-  compare l1 l2 = let
+  compare l1 l2 =
+    let
       v1 = roleVerbList2Verbs l1
       v2 = roleVerbList2Verbs l2
     in
       if null $ difference v1 v2
-        -- v1 subset v2
-        then LT
-        else if null $ difference v2 v1
-          then GT
-          else EQ
+      -- v1 subset v2
+      then LT
+      else if null $ difference v2 v1 then GT
+      else EQ
 
 instance semigroupRoleVerbList :: Semigroup RoleVerbList where
   append l1 l2 = Including ((roleVerbList2Verbs l1) <> (roleVerbList2Verbs l2))
@@ -148,7 +155,7 @@ roleVerbList2Verbs (Excluding excluded) = difference allVerbs excluded
 roleVerbList2Verbs (Including v) = v
 
 allVerbs :: Array RoleVerb
-allVerbs = [Remove, Delete, Create, CreateAndFill, Fill, Unbind, RemoveFiller, Move, RemoveContext, DeleteContext]
+allVerbs = [ Remove, Delete, Create, CreateAndFill, Fill, Unbind, RemoveFiller, Move, RemoveContext, DeleteContext ]
 
 hasOneOfTheVerbs :: Array RoleVerb -> RoleVerbList -> Boolean
 hasOneOfTheVerbs vs All = true

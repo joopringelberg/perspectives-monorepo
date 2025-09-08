@@ -27,8 +27,7 @@ module Perspectives.Assignment.SerialiseAsDeltas
   , serialisedAsDeltasFor
   , serialisedAsDeltasForUserType
   , serialisedAsDeltasFor_
-  )
-  where
+  ) where
 
 import Control.Monad.AvarMonadAsk (get) as AMA
 import Control.Monad.Error.Class (throwError, try)
@@ -77,7 +76,7 @@ import Simple.JSON (unsafeStringify, write)
 
 serialisedAsDeltasFor :: ContextInstance -> RoleInstance -> MonadPerspectivesTransaction Unit
 serialisedAsDeltasFor cid userId = do
-  userType <- lift $  roleType_ userId
+  userType <- lift $ roleType_ userId
   serialisedAsDeltasFor_ cid userId (ENR userType)
 
 -- | Construct a Transaction that represents a context for a particular user role.
@@ -85,14 +84,16 @@ serialisedAsDeltasFor cid userId = do
 serialisedAsDeltasForUserType :: ContextInstance -> RoleType -> MonadPerspectives Value
 serialisedAsDeltasForUserType cid userType = do
   me <- getUserIdentifier
-  (Transaction{timeStamp, deltas, publicKeys}) <- (execMonadPerspectivesTransaction
-    -- The authoringRole is used on *constructing* deltas. However, here we merely *read* deltas from the
-    -- context- and role representations. So this value is in effect ignored.
-    (ENR $ EnumeratedRoleType sysUser)
-    -- NOTE: we provide serialisedAsDeltasFor_ with the fictive PerspectivesUser we created for this purpose, as
-    -- the user for whom we serialise. As we don't know the real
-    -- user identifier (we serialise for a type!) we use it as a stand in.
-    (serialisedAsDeltasFor_ cid (RoleInstance "def:#serializationuser") userType)) >>= addPublicKeysToTransaction
+  (Transaction { timeStamp, deltas, publicKeys }) <-
+    ( execMonadPerspectivesTransaction
+        -- The authoringRole is used on *constructing* deltas. However, here we merely *read* deltas from the
+        -- context- and role representations. So this value is in effect ignored.
+        (ENR $ EnumeratedRoleType sysUser)
+        -- NOTE: we provide serialisedAsDeltasFor_ with the fictive PerspectivesUser we created for this purpose, as
+        -- the user for whom we serialise. As we don't know the real
+        -- user identifier (we serialise for a type!) we use it as a stand in.
+        (serialisedAsDeltasFor_ cid (RoleInstance "def:#serializationuser") userType)
+    ) >>= addPublicKeysToTransaction
   author <- getPerspectivesUser
   perspectivesSystem <- ContextInstance <$> getMySystem
   tfp <- pure $ TransactionForPeer
@@ -101,44 +102,45 @@ serialisedAsDeltasForUserType cid userType = do
     , timeStamp
     , deltas: _.delta <<< unwrap <$> deltas
     , publicKeys
-  }
+    }
   pure $ Value $ unsafeStringify $ write tfp
   where
-    -- | Execute a value in MonadPerspectivesTransaction, discard the result and return the transaction.
-    execMonadPerspectivesTransaction :: forall o.
-      RoleType ->
-      MonadPerspectivesTransaction o ->
-      MonadPerspectives Transaction
-    execMonadPerspectivesTransaction authoringRole a =
-      (lift $ createTransaction authoringRole)
+  -- | Execute a value in MonadPerspectivesTransaction, discard the result and return the transaction.
+  execMonadPerspectivesTransaction
+    :: forall o
+     . RoleType
+    -> MonadPerspectivesTransaction o
+    -> MonadPerspectives Transaction
+  execMonadPerspectivesTransaction authoringRole a =
+    (lift $ createTransaction authoringRole)
       >>= lift <<< new
       >>= runReaderT run
-        where
-          run :: MonadPerspectivesTransaction Transaction
-          run = do
-            void a
-            AMA.get
+    where
+    run :: MonadPerspectivesTransaction Transaction
+    run = do
+      void a
+      AMA.get
 
 liftToMPT :: forall a. MonadPerspectives a -> MonadPerspectivesTransaction a
 liftToMPT = lift
 
 -- | The `userId` must be an instance of the `userType`, otherwise we cannot establish whether
 -- | a perspective is a self-perspective.
-serialisedAsDeltasFor_:: ContextInstance -> RoleInstance -> RoleType -> MonadPerspectivesTransaction Unit
+serialisedAsDeltasFor_ :: ContextInstance -> RoleInstance -> RoleType -> MonadPerspectivesTransaction Unit
 serialisedAsDeltasFor_ cid userId userType =
   -- All Roletypes the user may see in this context, expressed as Perspectives.
-   (liftToMPT (userType ###= perspectivesClosure_) >>= traverse_ (serialisePerspectiveForUser cid (NA.singleton userId) userType))
+  (liftToMPT (userType ###= perspectivesClosure_) >>= traverse_ (serialisePerspectiveForUser cid (NA.singleton userId) userType))
 
 -- | Add Deltas to the transaction of the peers ultimately filling the given user roles, to provide
 -- | them with a complete account of the perspective on the context instance.
-serialisePerspectiveForUser ::
-  ContextInstance ->
-  NA.NonEmptyArray RoleInstance ->
-  RoleType ->
-  Perspective ->
-  MonadPerspectivesTransaction Unit
-serialisePerspectiveForUser cid users userRoleType p@(Perspective{object, propertyVerbs, selfOnly, authorOnly, isSelfPerspective}) = if authorOnly
-  then pure unit 
+serialisePerspectiveForUser
+  :: ContextInstance
+  -> NA.NonEmptyArray RoleInstance
+  -> RoleType
+  -> Perspective
+  -> MonadPerspectivesTransaction Unit
+serialisePerspectiveForUser cid users userRoleType p@(Perspective { object, propertyVerbs, selfOnly, authorOnly, isSelfPerspective }) =
+  if authorOnly then pure unit
   else do
     (visiblePropertyTypes :: Array PropertyType) <- liftToMPT $ propertiesInPerspective p
     serialiseRoleInstancesAndProperties cid users object (nub visiblePropertyTypes) selfOnly isSelfPerspective
@@ -146,17 +148,24 @@ serialisePerspectiveForUser cid users userRoleType p@(Perspective{object, proper
 -- | MODEL DEPENDENCY IN THIS FUNCTION. The correct operation of this function depends on
 -- | model:System. The role model:System$PerspectivesSystem$User should have a property with
 -- | local name "Id". Instances need not have a value for that property.
-serialiseRoleInstancesAndProperties ::
-  ContextInstance ->                   -- The context instance for which we serialise roles and properties.
-  NA.NonEmptyArray RoleInstance ->     -- User Role instances to serialise for. These have a single type.
-  QueryFunctionDescription ->          -- Find object role instances with this description.
-  Array PropertyType ->                -- PropertyTypes whose values on the role instances should be serialised.
-  Boolean ->                           -- true iff the perspective is selfonly.
-  Boolean ->                           -- true iff the object of the perspective equals its subject.
+serialiseRoleInstancesAndProperties
+  :: ContextInstance
+  -> -- The context instance for which we serialise roles and properties.
+  NA.NonEmptyArray RoleInstance
+  -> -- User Role instances to serialise for. These have a single type.
+  QueryFunctionDescription
+  -> -- Find object role instances with this description.
+  Array PropertyType
+  -> -- PropertyTypes whose values on the role instances should be serialised.
+  Boolean
+  -> -- true iff the perspective is selfonly.
+  Boolean
+  -> -- true iff the object of the perspective equals its subject.
   MonadPerspectivesTransaction Unit
 serialiseRoleInstancesAndProperties cid users object properties selfOnly isPerspectiveOnSelf = do
   -- We know that object has a role range.
-  properties' <- if isPerspectiveOnSelf
+  properties' <-
+    if isPerspectiveOnSelf
     -- To ensure that the receiving user of a self-perspective actually receives the full role telescope, we add
     -- the following property. In terms of communication it will be neutral as the receiver obviously has access to his own 
     -- PublicKey.
@@ -169,35 +178,36 @@ serialiseRoleInstancesAndProperties cid users object properties selfOnly isPersp
   -- If the perspective is selfOnly, then each of the users can only receive his own role and properties.
   -- This means that the users and (the role instances in) rinstances should be the same collection.
   -- in that case, call serialiseDependency on a pair consisting of the instance (one of rinstances, each represented by a Dependency) and a user that is that same instance.
-  if selfOnly
-    then do
-      for_ (join (allPaths <$> rinstances))
-        \(dependencies :: NonEmptyList Dependency) -> do
-          -- The head will be a user role because of selfOnly.
-          oneUserOnly <- unsafePartial case head dependencies of
-            R r -> pure [r]
-          serialiseDependencies oneUserOnly dependencies
-          for_ properties'
-            \pt -> do 
-                (vals :: Array DependencyPath) <- liftToMPT ((singletonPath (R $ unsafePartial fromJust $ ARR.head oneUserOnly)) ##= getPropertyValues pt)
-                for_ (join (allPaths <$> vals)) (serialiseDependencies oneUserOnly)
-    else do
-      for_ (join (allPaths <$> rinstances)) (serialiseDependencies (toArray users))
-      for_ properties'
-        \pt -> do
-          isSelfOnlyProperty <- lift $ propertyTypeIsSelfOnly pt
-          for_ (_.head <$> rinstances)
-            \(dep :: Dependency) -> do
-              (vals :: Array DependencyPath) <- liftToMPT ((singletonPath dep) ##= getPropertyValues pt)
-              if isSelfOnlyProperty
-                then for_ (join (allPaths <$> vals)) 
-                  (serialiseDependencies (unsafePartial case dep of 
-                    R oneUserOnly -> [oneUserOnly]))
-                else for_ (join (allPaths <$> vals)) (serialiseDependencies (toArray users))
+  if selfOnly then do
+    for_ (join (allPaths <$> rinstances))
+      \(dependencies :: NonEmptyList Dependency) -> do
+        -- The head will be a user role because of selfOnly.
+        oneUserOnly <- unsafePartial case head dependencies of
+          R r -> pure [ r ]
+        serialiseDependencies oneUserOnly dependencies
+        for_ properties'
+          \pt -> do
+            (vals :: Array DependencyPath) <- liftToMPT ((singletonPath (R $ unsafePartial fromJust $ ARR.head oneUserOnly)) ##= getPropertyValues pt)
+            for_ (join (allPaths <$> vals)) (serialiseDependencies oneUserOnly)
+  else do
+    for_ (join (allPaths <$> rinstances)) (serialiseDependencies (toArray users))
+    for_ properties'
+      \pt -> do
+        isSelfOnlyProperty <- lift $ propertyTypeIsSelfOnly pt
+        for_ (_.head <$> rinstances)
+          \(dep :: Dependency) -> do
+            (vals :: Array DependencyPath) <- liftToMPT ((singletonPath dep) ##= getPropertyValues pt)
+            if isSelfOnlyProperty then for_ (join (allPaths <$> vals))
+              ( serialiseDependencies
+                  ( unsafePartial case dep of
+                      R oneUserOnly -> [ oneUserOnly ]
+                  )
+              )
+            else for_ (join (allPaths <$> vals)) (serialiseDependencies (toArray users))
 
 getPropertyValues :: PropertyType -> DependencyPath ~~> DependencyPath
-getPropertyValues pt dep = (lift $ lift $ propertyTypeIsAuthorOnly pt) >>= if _ 
-  then ArrayT $ pure []
+getPropertyValues pt dep = (lift $ lift $ propertyTypeIsAuthorOnly pt) >>=
+  if _ then ArrayT $ pure []
   else do
     calc <- lift $ lift $ (PClass.getProperty >=> PClass.getCalculation) pt
     -- Calculate the DependencyPath that leads to the filler whose type supports the property. Start from that.
@@ -207,29 +217,29 @@ getPropertyValues pt dep = (lift $ lift $ propertyTypeIsAuthorOnly pt) >>= if _
 
   where
   computePathToFillerWithProperty :: Partial => DependencyPath ~~> DependencyPath
-  computePathToFillerWithProperty path@{head} = ArrayT case head of 
-    R rid -> do 
+  computePathToFillerWithProperty path@{ head } = ArrayT case head of
+    R rid -> do
       localProps <- lift $ (roleType_ >=> allLocallyRepresentedProperties <<< ST) rid
       if isJust $ elemIndex pt localProps
-        -- The type of the role instance support the property. Return the path
-        then pure [path]
-        -- The type of the role instance doesn't support the property. Compute the path that leads to its filler
-        else do 
-          mfiller <- lift $ binding_ rid
-          case mfiller of
-            -- We cannot find the filler that supports this property.
-            Nothing -> pure []
-            -- Contintue with the filler and add a step to the path.
-            Just b -> runArrayT $ computePathToFillerWithProperty (consOnMainPath (R b) path)
+      -- The type of the role instance support the property. Return the path
+      then pure [ path ]
+      -- The type of the role instance doesn't support the property. Compute the path that leads to its filler
+      else do
+        mfiller <- lift $ binding_ rid
+        case mfiller of
+          -- We cannot find the filler that supports this property.
+          Nothing -> pure []
+          -- Contintue with the filler and add a step to the path.
+          Just b -> runArrayT $ computePathToFillerWithProperty (consOnMainPath (R b) path)
 
 -- | Adds deltas to the current transaction for the given users and for the dependencies in the List of Dependency-s.
 serialiseDependencies :: Array RoleInstance -> NonEmptyList Dependency -> MonadPerspectivesTransaction Unit
 serialiseDependencies users deps = void $ runStateT (serialiseDependencies_ users deps) []
 
-serialiseDependencies_ ::
-  Array RoleInstance ->
-  NonEmptyList Dependency ->
-  StateT (Array Dependency) MonadPerspectivesTransaction Unit
+serialiseDependencies_
+  :: Array RoleInstance
+  -> NonEmptyList Dependency
+  -> StateT (Array Dependency) MonadPerspectivesTransaction Unit
 serialiseDependencies_ users deps = void $ foldM
   (serialiseDependency users)
   Nothing
@@ -237,28 +247,27 @@ serialiseDependencies_ users deps = void $ foldM
 
 -- Always returns the second argument in Maybe.
 -- | `users` will not always be model:System$PerspectivesSystem$User instances.
-serialiseDependency ::
-  Array RoleInstance ->
-  Maybe Dependency ->
-  Dependency ->
-  StateT (Array Dependency) MonadPerspectivesTransaction (Maybe Dependency)
+serialiseDependency
+  :: Array RoleInstance
+  -> Maybe Dependency
+  -> Dependency
+  -> StateT (Array Dependency) MonadPerspectivesTransaction (Maybe Dependency)
 serialiseDependency users mpreviousDependency currentDependency = do
   -- We serialise a role dependency as soon as we see it, hence we analyse the currentDependency.
   case currentDependency of
     (R roleId) -> do
       seenBefore <- gets \depsSeenBefore -> isJust $ elemIndex currentDependency depsSeenBefore
-      if seenBefore
-        then pure unit
-        else lift $ addDeltasForRole roleId
+      if seenBefore then pure unit
+      else lift $ addDeltasForRole roleId
     otherwise -> pure unit
 
   case mpreviousDependency, currentDependency of
     Just first@(R roleId1), (R roleId2) -> do
-      lift $ addBindingDelta roleId1 roleId2 >>= if _
-        then pure unit
-        else addBindingDelta roleId2 roleId1 >>= if _
-          then pure unit
-          else do 
+      lift $ addBindingDelta roleId1 roleId2 >>=
+        if _ then pure unit
+        else addBindingDelta roleId2 roleId1 >>=
+          if _ then pure unit
+          else do
             padding <- lift transactionLevel
             log (padding <> "serialiseDependency finds two role dependencies without binding: " <> show mpreviousDependency <> ", " <> show currentDependency)
     Just (V ptypeString (Value val)), (R roleId) -> lift $ addPropertyDelta roleId ptypeString val
@@ -266,47 +275,46 @@ serialiseDependency users mpreviousDependency currentDependency = do
   pure $ Just currentDependency
 
   where
-    -- | Returns true iff the binding of the first argument equals the second argument.
-    addBindingDelta :: RoleInstance -> RoleInstance -> MonadPerspectivesTransaction Boolean
-    addBindingDelta roleId1 roleId2 = (liftToMPT $ try $ getPerspectRol roleId2) >>= handlePerspectRolError' "addBindingDelta" false
-      \(PerspectRol{binding, bindingDelta}) -> case binding of
-        Just b -> if b == roleId1
-          then traverse_ (\bd -> addDelta $ DeltaInTransaction {users, delta: bd}) bindingDelta *> pure true
-          else pure false
-        Nothing -> pure false
+  -- | Returns true iff the binding of the first argument equals the second argument.
+  addBindingDelta :: RoleInstance -> RoleInstance -> MonadPerspectivesTransaction Boolean
+  addBindingDelta roleId1 roleId2 = (liftToMPT $ try $ getPerspectRol roleId2) >>= handlePerspectRolError' "addBindingDelta" false
+    \(PerspectRol { binding, bindingDelta }) -> case binding of
+      Just b ->
+        if b == roleId1 then traverse_ (\bd -> addDelta $ DeltaInTransaction { users, delta: bd }) bindingDelta *> pure true
+        else pure false
+      Nothing -> pure false
 
-    addPropertyDelta :: RoleInstance -> PropertyName -> String -> MonadPerspectivesTransaction Unit
-    addPropertyDelta roleId ptypeString val = (liftToMPT $ try $ getPerspectRol roleId) >>=
-      handlePerspectRolError "addPropertyDelta"
-        \(PerspectRol{propertyDeltas}) -> case lookup ptypeString propertyDeltas of
-          Nothing -> pure unit
-          Just x -> case lookup val x of
-            Nothing -> throwError (error $ "No propertyDelta for value " <> val <> " on " <> show roleId)
-            Just pdelta -> addDelta $ DeltaInTransaction {users, delta: pdelta}
+  addPropertyDelta :: RoleInstance -> PropertyName -> String -> MonadPerspectivesTransaction Unit
+  addPropertyDelta roleId ptypeString val = (liftToMPT $ try $ getPerspectRol roleId) >>=
+    handlePerspectRolError "addPropertyDelta"
+      \(PerspectRol { propertyDeltas }) -> case lookup ptypeString propertyDeltas of
+        Nothing -> pure unit
+        Just x -> case lookup val x of
+          Nothing -> throwError (error $ "No propertyDelta for value " <> val <> " on " <> show roleId)
+          Just pdelta -> addDelta $ DeltaInTransaction { users, delta: pdelta }
 
-    addDeltasForRole :: RoleInstance -> MonadPerspectivesTransaction Unit
-    addDeltasForRole roleId = do
-      (liftToMPT $ try $ getPerspectRol roleId) >>=
-        handlePerspectRolError "addDeltasForRole"
-          \(PerspectRol{context, universeRoleDelta, contextDelta}) -> do
-            (liftToMPT $ try $ getPerspectContext context) >>=
-              handlePerspectContextError "addDeltasForRole"
-                \(PerspectContext{universeContextDelta, buitenRol}) -> do
-                  (liftToMPT $ try $ getPerspectRol buitenRol) >>=
-                    handlePerspectRolError "addDeltasForRole"
-                      \(PerspectRol{universeRoleDelta: eRoleDelta, contextDelta: eContextDelta}) -> do
-                        -- ORDER IS OF THE ESSENCE, HERE!!
-                        addDelta $ DeltaInTransaction {users, delta: eRoleDelta}
-                        addDelta $ DeltaInTransaction {users, delta: universeContextDelta}
-                        addDelta $ DeltaInTransaction {users, delta: eContextDelta}
-                        addDelta $ DeltaInTransaction {users, delta: universeRoleDelta}
-                        addDelta $ DeltaInTransaction {users, delta: contextDelta}
+  addDeltasForRole :: RoleInstance -> MonadPerspectivesTransaction Unit
+  addDeltasForRole roleId = do
+    (liftToMPT $ try $ getPerspectRol roleId) >>=
+      handlePerspectRolError "addDeltasForRole"
+        \(PerspectRol { context, universeRoleDelta, contextDelta }) -> do
+          (liftToMPT $ try $ getPerspectContext context) >>=
+            handlePerspectContextError "addDeltasForRole"
+              \(PerspectContext { universeContextDelta, buitenRol }) -> do
+                (liftToMPT $ try $ getPerspectRol buitenRol) >>=
+                  handlePerspectRolError "addDeltasForRole"
+                    \(PerspectRol { universeRoleDelta: eRoleDelta, contextDelta: eContextDelta }) -> do
+                      -- ORDER IS OF THE ESSENCE, HERE!!
+                      addDelta $ DeltaInTransaction { users, delta: eRoleDelta }
+                      addDelta $ DeltaInTransaction { users, delta: universeContextDelta }
+                      addDelta $ DeltaInTransaction { users, delta: eContextDelta }
+                      addDelta $ DeltaInTransaction { users, delta: universeRoleDelta }
+                      addDelta $ DeltaInTransaction { users, delta: contextDelta }
 
+  withContext :: Boolean
+  withContext = true
 
-    withContext :: Boolean
-    withContext = true
-
-    withoutContext :: Boolean
-    withoutContext = false
+  withoutContext :: Boolean
+  withoutContext = false
 
 type PropertyName = String

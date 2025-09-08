@@ -39,7 +39,7 @@ import Prelude (class Monad, bind, discard, flip, pure, unit, void, ($), (<$>), 
 type SymbolHandler m = String -> m String
 
 f :: forall m. Monad m => String -> ReaderT (SymbolHandler m) m String
-f s = do 
+f s = do
   g <- ask
   lift (g s)
 
@@ -49,9 +49,9 @@ expandPrefix s = runReaderT (scan s) expandNamespace
 
 -- | On detecting a namespace for which no model is yet available, load that model.
 ensureModel :: forall s. ScanSymbols s => s -> MonadPerspectives s
-ensureModel s = runReaderT (scan s) 
-  \symbol -> if isTypeUri symbol 
-    then do 
+ensureModel s = runReaderT (scan s)
+  \symbol ->
+    if isTypeUri symbol then do
       case typeUri2typeNameSpace symbol of
         Just namespace -> void $ retrieveDomeinFile (DomeinFileId namespace)
         Nothing -> pure unit
@@ -63,7 +63,7 @@ class ScanSymbols s where
 
 instance containsPrefixesStep :: ScanSymbols Step where
   scan (Simple s) = Simple <$> scan s
-  scan (Binary s) = Binary <$> scan s 
+  scan (Binary s) = Binary <$> scan s
   scan (Unary s) = Unary <$> scan s
   scan (PureLet s) = PureLet <$> scan s
   scan (Computation s) = Computation <$> scan s
@@ -81,7 +81,6 @@ instance containsPrefixesSimpleStep :: ScanSymbols SimpleStep where
   scan (TypeTimeOnlyContext pos s) = TypeTimeOnlyContext pos <$> f s
   scan (TypeTimeOnlyEnumeratedRole pos s1 s2) = TypeTimeOnlyEnumeratedRole pos <$> f s1 <*> f s2
   scan (TypeTimeOnlyCalculatedRole pos s) = TypeTimeOnlyCalculatedRole pos <$> f s
-  
 
   scan x = pure x
 
@@ -89,10 +88,10 @@ instance containsPrefixesVarBinding :: ScanSymbols VarBinding where
   scan (VarBinding s step) = VarBinding s <$> scan step
 
 instance containsPrefixesBinaryStep :: ScanSymbols BinaryStep where
-  scan (BinaryStep r@{left, right}) = do
+  scan (BinaryStep r@{ left, right }) = do
     eleft <- scan left
     eright <- scan right
-    pure $ BinaryStep r {left = eleft, right = eright}
+    pure $ BinaryStep r { left = eleft, right = eright }
 
 instance containsPrefixesUnaryStep :: ScanSymbols UnaryStep where
   scan (LogicalNot pos s) = LogicalNot pos <$> scan s
@@ -105,168 +104,168 @@ instance containsPrefixesUnaryStep :: ScanSymbols UnaryStep where
   scan (RoleIndividual pos tp s) = RoleIndividual pos <$> f tp <*> scan s
 
 instance containsPrefixesLetStep :: ScanSymbols LetStep where
-  scan (LetStep r@{bindings, assignments}) = do
+  scan (LetStep r@{ bindings, assignments }) = do
     ebindings <- traverse scan bindings
     eassignments <- traverse scan assignments
-    pure $ LetStep r {bindings = ebindings, assignments = eassignments}
+    pure $ LetStep r { bindings = ebindings, assignments = eassignments }
 
 instance containsPrefixesLetABinding :: ScanSymbols LetABinding where
   scan (Expr varbinding) = Expr <$> scan varbinding
   scan (Stat varname assignment) = Stat <$> pure varname <*> scan assignment
 
 instance containsPrefixesPureLetStep :: ScanSymbols PureLetStep where
-  scan (PureLetStep r@{bindings, body}) = do
+  scan (PureLetStep r@{ bindings, body }) = do
     ebindings <- traverse scan bindings
     ebody <- scan body
-    pure $ PureLetStep r {bindings = ebindings, body = ebody}
+    pure $ PureLetStep r { bindings = ebindings, body = ebody }
 
 instance containsPrefixesComputationStep :: ScanSymbols ComputationStep where
-  scan (ComputationStep r@{functionName, arguments, computedType}) = do
+  scan (ComputationStep r@{ functionName, arguments, computedType }) = do
     efunctionName <- f functionName
     earguments <- traverse scan arguments
     ecomputedType <- scan computedType
-    pure $ ComputationStep r {functionName = efunctionName, arguments = earguments, computedType = ecomputedType}
+    pure $ ComputationStep r { functionName = efunctionName, arguments = earguments, computedType = ecomputedType }
 
 instance ScanSymbols ComputedType where
   scan (OtherType s) = OtherType <$> f s
   scan x = pure x
 
 instance containsPrefixesAssignment :: ScanSymbols Assignment where
-  scan (RemoveRole r@{roleExpression}) = do
+  scan (RemoveRole r@{ roleExpression }) = do
     eroleExpression <- scan roleExpression
-    pure $ RemoveRole r{roleExpression = eroleExpression}
-  scan (RemoveContext r@{roleExpression}) = do
+    pure $ RemoveRole r { roleExpression = eroleExpression }
+  scan (RemoveContext r@{ roleExpression }) = do
     eroleExpression <- scan roleExpression
-    pure $ RemoveContext r{roleExpression = eroleExpression}
-  scan (CreateRole r@{contextExpression, roleIdentifier, localName}) = do
+    pure $ RemoveContext r { roleExpression = eroleExpression }
+  scan (CreateRole r@{ contextExpression, roleIdentifier, localName }) = do
     econtextExpression <- traverse scan contextExpression
     eroleIdentifier <- f roleIdentifier
     elocalName <- traverse scan localName
-    pure $ CreateRole r {contextExpression = econtextExpression, roleIdentifier = eroleIdentifier, localName = elocalName}
-  scan (CreateContext r@{contextExpression, contextTypeIdentifier, roleTypeIdentifier, localName}) = do
+    pure $ CreateRole r { contextExpression = econtextExpression, roleIdentifier = eroleIdentifier, localName = elocalName }
+  scan (CreateContext r@{ contextExpression, contextTypeIdentifier, roleTypeIdentifier, localName }) = do
     econtextTypeIdentifier <- f contextTypeIdentifier
     eroleTypeIdentifier <- traverse f roleTypeIdentifier
     econtextExpression <- traverse scan contextExpression
     elocalName <- traverse scan localName
-    pure $ CreateContext r {contextExpression = econtextExpression, localName = elocalName, contextTypeIdentifier = econtextTypeIdentifier, roleTypeIdentifier = eroleTypeIdentifier}  
-  scan (CreateContext_ r@{roleExpression, contextTypeIdentifier}) = do
+    pure $ CreateContext r { contextExpression = econtextExpression, localName = elocalName, contextTypeIdentifier = econtextTypeIdentifier, roleTypeIdentifier = eroleTypeIdentifier }
+  scan (CreateContext_ r@{ roleExpression, contextTypeIdentifier }) = do
     eroleExpression <- scan roleExpression
     econtextTypeIdentifier <- f contextTypeIdentifier
-    pure $ CreateContext_ r {roleExpression = eroleExpression, contextTypeIdentifier = econtextTypeIdentifier}
-  scan (Move r@{roleExpression, contextExpression}) = do
+    pure $ CreateContext_ r { roleExpression = eroleExpression, contextTypeIdentifier = econtextTypeIdentifier }
+  scan (Move r@{ roleExpression, contextExpression }) = do
     econtextExpression <- traverse scan contextExpression
     eroleExpression <- scan roleExpression
-    pure $ Move r{roleExpression = eroleExpression, contextExpression = econtextExpression}
-  scan (Bind r@{bindingExpression, contextExpression, roleIdentifier}) = do
+    pure $ Move r { roleExpression = eroleExpression, contextExpression = econtextExpression }
+  scan (Bind r@{ bindingExpression, contextExpression, roleIdentifier }) = do
     eroleIdentifier <- f roleIdentifier
     ebindingExpression <- scan bindingExpression
     econtextExpression <- traverse scan contextExpression
-    pure $ Bind r {bindingExpression = ebindingExpression, contextExpression = econtextExpression, roleIdentifier = eroleIdentifier}
-  scan (Bind_ r@{bindingExpression, binderExpression}) = do
+    pure $ Bind r { bindingExpression = ebindingExpression, contextExpression = econtextExpression, roleIdentifier = eroleIdentifier }
+  scan (Bind_ r@{ bindingExpression, binderExpression }) = do
     ebindingExpression <- scan bindingExpression
     ebinderExpression <- scan binderExpression
-    pure $ Bind_ r {binderExpression = ebinderExpression, bindingExpression = ebindingExpression}
-  scan (Unbind r@{bindingExpression, roleIdentifier}) = do
+    pure $ Bind_ r { binderExpression = ebinderExpression, bindingExpression = ebindingExpression }
+  scan (Unbind r@{ bindingExpression, roleIdentifier }) = do
     eroleIdentifier <- traverse f roleIdentifier
     ebindingExpression <- scan bindingExpression
-    pure $ Unbind r {bindingExpression = ebindingExpression, roleIdentifier = eroleIdentifier}
-  scan (Unbind_ r@{bindingExpression, binderExpression}) = do
+    pure $ Unbind r { bindingExpression = ebindingExpression, roleIdentifier = eroleIdentifier }
+  scan (Unbind_ r@{ bindingExpression, binderExpression }) = do
     ebindingExpression <- scan bindingExpression
     ebinderExpression <- scan binderExpression
-    pure $ Unbind_ r {bindingExpression = ebindingExpression, binderExpression = ebinderExpression}
-  scan (DeleteRole r@{contextExpression, roleIdentifier}) = do
+    pure $ Unbind_ r { bindingExpression = ebindingExpression, binderExpression = ebinderExpression }
+  scan (DeleteRole r@{ contextExpression, roleIdentifier }) = do
     eroleIdentifier <- f roleIdentifier
     econtextExpression <- traverse scan contextExpression
-    pure $ DeleteRole r{contextExpression = econtextExpression, roleIdentifier = eroleIdentifier}
-  scan (DeleteContext r@{contextExpression, contextRoleIdentifier}) = do
+    pure $ DeleteRole r { contextExpression = econtextExpression, roleIdentifier = eroleIdentifier }
+  scan (DeleteContext r@{ contextExpression, contextRoleIdentifier }) = do
     econtextRoleIdentifier <- f contextRoleIdentifier
     econtextExpression <- traverse scan contextExpression
-    pure $ DeleteContext r{contextExpression = econtextExpression, contextRoleIdentifier = econtextRoleIdentifier}
-  scan (DeleteProperty r@{roleExpression, propertyIdentifier}) = do
+    pure $ DeleteContext r { contextExpression = econtextExpression, contextRoleIdentifier = econtextRoleIdentifier }
+  scan (DeleteProperty r@{ roleExpression, propertyIdentifier }) = do
     epropertyIdentifier <- f propertyIdentifier
     eroleExpression <- traverse scan roleExpression
-    pure $ DeleteProperty r{roleExpression = eroleExpression, propertyIdentifier = epropertyIdentifier}
-  scan (PropertyAssignment r@{valueExpression, roleExpression, propertyIdentifier}) = do
+    pure $ DeleteProperty r { roleExpression = eroleExpression, propertyIdentifier = epropertyIdentifier }
+  scan (PropertyAssignment r@{ valueExpression, roleExpression, propertyIdentifier }) = do
     epropertyIdentifier <- f propertyIdentifier
     eroleExpression <- traverse scan roleExpression
     evalueExpression <- scan valueExpression
-    pure $ PropertyAssignment r {valueExpression = evalueExpression, roleExpression = eroleExpression, propertyIdentifier = epropertyIdentifier}
-  scan (CreateFile r@{roleExpression, propertyIdentifier, fileNameExpression, contentExpression}) = do
+    pure $ PropertyAssignment r { valueExpression = evalueExpression, roleExpression = eroleExpression, propertyIdentifier = epropertyIdentifier }
+  scan (CreateFile r@{ roleExpression, propertyIdentifier, fileNameExpression, contentExpression }) = do
     eRoleExpression <- traverse scan roleExpression
     epropertyIdentifier <- f propertyIdentifier
     eContentExpression <- scan contentExpression
     eFileNameExpression <- scan fileNameExpression
-    pure $ CreateFile r {roleExpression = eRoleExpression, fileNameExpression = eFileNameExpression, contentExpression = eContentExpression, propertyIdentifier = epropertyIdentifier}
-  scan (ExternalEffect r@{effectName, arguments}) = do
+    pure $ CreateFile r { roleExpression = eRoleExpression, fileNameExpression = eFileNameExpression, contentExpression = eContentExpression, propertyIdentifier = epropertyIdentifier }
+  scan (ExternalEffect r@{ effectName, arguments }) = do
     eeffectName <- f effectName
     earguments <- traverse scan arguments
-    pure $ ExternalEffect r {effectName = eeffectName, arguments = earguments}
-  scan (ExternalDestructiveEffect r@{effectName, arguments}) = do
+    pure $ ExternalEffect r { effectName = eeffectName, arguments = earguments }
+  scan (ExternalDestructiveEffect r@{ effectName, arguments }) = do
     eeffectName <- f effectName
     earguments <- traverse scan arguments
-    pure $ ExternalEffect r {effectName = eeffectName, arguments = earguments}
+    pure $ ExternalEffect r { effectName = eeffectName, arguments = earguments }
 
 instance containsPrefixesStateQualifiedPart :: ScanSymbols StateQualifiedPart where
   scan (R r) = R <$> (scan r)
   scan (P p) = P <$> (scan p)
-  scan (AC (ActionE r@{subject, object, state, effect})) = do
+  scan (AC (ActionE r@{ subject, object, state, effect })) = do
     subject' <- scan subject
     object' <- scan object
     state' <- scan state
     effect' <- scan effect
-    pure (AC (ActionE r {subject = subject', object = object', state = state', effect = effect'}))
-  scan (CA (ContextActionE r@{subject, object, state, effect})) = do
+    pure (AC (ActionE r { subject = subject', object = object', state = state', effect = effect' }))
+  scan (CA (ContextActionE r@{ subject, object, state, effect })) = do
     subject' <- scan subject
     state' <- scan state
     effect' <- scan effect
-    pure (CA (ContextActionE r {subject = subject', state = state', effect = effect'}))
-  scan (SO (SelfOnly r@{subject, object, state})) = do
+    pure (CA (ContextActionE r { subject = subject', state = state', effect = effect' }))
+  scan (SO (SelfOnly r@{ subject, object, state })) = do
     subject' <- scan subject
     object' <- scan object
     state' <- scan state
-    pure (SO (SelfOnly r {subject = subject', object = object', state = state'}))
-  scan (PO (AuthorOnly r@{subject, object, state})) = do
+    pure (SO (SelfOnly r { subject = subject', object = object', state = state' }))
+  scan (PO (AuthorOnly r@{ subject, object, state })) = do
     subject' <- scan subject
     object' <- scan object
     state' <- scan state
-    pure (PO (AuthorOnly r {subject = subject', object = object', state = state'}))
-  scan (N (NotificationE r@{user, transition, message, object})) = do
+    pure (PO (AuthorOnly r { subject = subject', object = object', state = state' }))
+  scan (N (NotificationE r@{ user, transition, message, object })) = do
     user' <- scan user
     transition' <- scan transition
     message' <- scan message
     object' <- traverse scan object
-    pure (N (NotificationE r {user = user', transition = transition', message = message', object = object'}))
-  scan (AE (AutomaticEffectE r@{subject, object, transition, effect})) = do
+    pure (N (NotificationE r { user = user', transition = transition', message = message', object = object' }))
+  scan (AE (AutomaticEffectE r@{ subject, object, transition, effect })) = do
     subject' <- scan subject
     object' <- traverse scan object
     transition' <- scan transition
     effect' <- scan effect
-    pure (AE (AutomaticEffectE r {subject = subject', object = object', transition = transition', effect = effect'}))
+    pure (AE (AutomaticEffectE r { subject = subject', object = object', transition = transition', effect = effect' }))
   scan (SUBSTATE s) = SUBSTATE <$> scan s
 
 instance ScanSymbols SentenceE where
-  scan (SentenceE {sentence, parts}) = do 
+  scan (SentenceE { sentence, parts }) = do
     parts' <- traverse scan parts
-    pure $ SentenceE {sentence, parts: parts'}
+    pure $ SentenceE { sentence, parts: parts' }
 
 instance containsPrefixesSentencPart :: ScanSymbols SentencePartE where
   scan (HRpart s) = pure $ HRpart s
   scan (CPpart c) = CPpart <$> scan c
 
 instance expandPrefixRoleVerbE :: ScanSymbols RoleVerbE where
-  scan (RoleVerbE r@{subject, object, state}) = do
+  scan (RoleVerbE r@{ subject, object, state }) = do
     subject' <- scan subject
     object' <- scan object
     state' <- scan state
-    pure (RoleVerbE r {subject = subject', object = object', state = state'})
+    pure (RoleVerbE r { subject = subject', object = object', state = state' })
 
 instance expandPrefixPropertyE :: ScanSymbols PropertyVerbE where
-  scan (PropertyVerbE r@{subject, object, state, propsOrView}) = do
+  scan (PropertyVerbE r@{ subject, object, state, propsOrView }) = do
     subject' <- scan subject
     object' <- scan object
     state' <- scan state
     propsOrView' <- scan propsOrView
-    pure (PropertyVerbE r {subject = subject', object = object', state = state', propsOrView = propsOrView'})
+    pure (PropertyVerbE r { subject = subject', object = object', state = state', propsOrView = propsOrView' })
 
 instance containsPrefixesPropsOrView :: ScanSymbols PropsOrView where
   scan (View s) = View <$> (f s)
@@ -296,29 +295,29 @@ instance containsprefixesStatements :: ScanSymbols Statements where
   scan (Statements stmts) = Statements <$> traverse scan stmts
 
 instance containsPrefixesStateE :: ScanSymbols StateE where
-  scan (StateE r@{condition, stateParts, subStates}) = do
+  scan (StateE r@{ condition, stateParts, subStates }) = do
     condition' <- scan condition
     stateParts' <- traverse scan stateParts
     subStates' <- traverse scan subStates
-    pure (StateE r {condition = condition', stateParts = stateParts', subStates = subStates'})
+    pure (StateE r { condition = condition', stateParts = stateParts', subStates = subStates' })
 
 instance containsPrefixesCalculation :: ScanSymbols Calculation where
   scan (S stp isFunctional) = flip S isFunctional <$> scan stp
   scan q@(Q _) = pure q
 
 instance containsPrefixesScreenE :: ScanSymbols ScreenE where
-  scan s = case s of 
-    (WWW (WhoWhatWhereScreenE r@{who, what, whereTo, subject, start, end})) -> do
-      who' <- case who of 
+  scan s = case s of
+    (WWW (WhoWhatWhereScreenE r@{ who, what, whereTo, subject, start, end })) -> do
+      who' <- case who of
         TableFormSectionE markdown tableForm -> TableFormSectionE <$> traverse scan markdown <*> traverse scan tableForm
       what' <- scan what
-      whereTo' <- case whereTo of 
+      whereTo' <- case whereTo of
         TableFormSectionE markdown tableForm -> TableFormSectionE <$> traverse scan markdown <*> traverse scan tableForm
       subject' <- scan subject
-      pure (WWW (WhoWhatWhereScreenE r {who = who', what = what', whereTo = whereTo', subject = subject'}))
-    (ClassicScreen (FreeFormScreenE rec@{tabs, rows, columns, subject})) -> do
+      pure (WWW (WhoWhatWhereScreenE r { who = who', what = what', whereTo = whereTo', subject = subject' }))
+    (ClassicScreen (FreeFormScreenE rec@{ tabs, rows, columns, subject })) -> do
       subject' <- scan subject
-      tabs' <- case tabs of 
+      tabs' <- case tabs of
         Nothing -> pure Nothing
         Just tbs -> Just <$> traverse scan tbs
       rows' <- case rows of
@@ -327,7 +326,7 @@ instance containsPrefixesScreenE :: ScanSymbols ScreenE where
       columns' <- case columns of
         Nothing -> pure Nothing
         Just cols -> Just <$> traverse scan cols
-      pure $ ClassicScreen $ FreeFormScreenE rec {rows = rows', columns = columns', subject = subject', tabs = tabs'}
+      pure $ ClassicScreen $ FreeFormScreenE rec { rows = rows', columns = columns', subject = subject', tabs = tabs' }
 
 instance ScanSymbols TableFormE where
   scan (TableFormE markdown table form) = do
@@ -340,9 +339,9 @@ instance ScanSymbols WhatE where
   scan (TableForms (TableFormSectionE markdowns tableforms)) = TableForms <$> (TableFormSectionE <$> traverse scan markdowns <*> traverse scan tableforms)
   scan (FreeFormScreen c) = FreeFormScreen <$> scan c
 
-instance ScanSymbols FreeFormScreenE where 
-  scan (FreeFormScreenE r@{tabs, rows, columns, subject}) = do
-    tabs' <- case tabs of 
+instance ScanSymbols FreeFormScreenE where
+  scan (FreeFormScreenE r@{ tabs, rows, columns, subject }) = do
+    tabs' <- case tabs of
       Nothing -> pure Nothing
       Just tbs -> Just <$> traverse scan tbs
     rows' <- case rows of
@@ -352,35 +351,34 @@ instance ScanSymbols FreeFormScreenE where
       Nothing -> pure Nothing
       Just cols -> Just <$> traverse scan cols
     subject' <- scan subject
-    pure $ FreeFormScreenE r {tabs = tabs', rows = rows', columns = columns', subject = subject'}
+    pure $ FreeFormScreenE r { tabs = tabs', rows = rows', columns = columns', subject = subject' }
 
 instance containsPrefixesTableE :: ScanSymbols TableE where
-  scan (TableE markdown wcf)= TableE <$> traverse scan markdown <*> expandPrefixWidgetCommonFields wcf
+  scan (TableE markdown wcf) = TableE <$> traverse scan markdown <*> expandPrefixWidgetCommonFields wcf
 
 instance containsPrefixesFormE :: ScanSymbols FormE where
-  scan (FormE markdown wcf)= FormE <$> traverse scan markdown <*> expandPrefixWidgetCommonFields wcf
+  scan (FormE markdown wcf) = FormE <$> traverse scan markdown <*> expandPrefixWidgetCommonFields wcf
 
 instance ScanSymbols MarkDownE where
-  scan (MarkDownConstant {text, condition, context, start, end}) = do 
+  scan (MarkDownConstant { text, condition, context, start, end }) = do
     condition' <- traverse scan condition
-    pure $ MarkDownConstant {text, condition:condition', context, start, end}
-  scan (MarkDownExpression {text, condition, context, start, end}) = do 
+    pure $ MarkDownConstant { text, condition: condition', context, start, end }
+  scan (MarkDownExpression { text, condition, context, start, end }) = do
     text' <- scan text
     condition' <- traverse scan condition
-    pure $ MarkDownExpression {text:text', condition:condition', context, start, end}
-  scan (MarkDownPerspective {widgetFields, condition, start, end}) = do 
+    pure $ MarkDownExpression { text: text', condition: condition', context, start, end }
+  scan (MarkDownPerspective { widgetFields, condition, start, end }) = do
     widgetFields' <- expandPrefixWidgetCommonFields widgetFields
     condition' <- traverse f condition
-    pure $ MarkDownPerspective {widgetFields:widgetFields', condition:condition', start, end}
+    pure $ MarkDownPerspective { widgetFields: widgetFields', condition: condition', start, end }
 
-
-expandPrefixWidgetCommonFields :: forall m. Monad m => WidgetCommonFields-> ReaderT (SymbolHandler m) m WidgetCommonFields
-expandPrefixWidgetCommonFields cf@{perspective} = do
-    perspective' <- scan perspective
-    pure cf {perspective = perspective'}
+expandPrefixWidgetCommonFields :: forall m. Monad m => WidgetCommonFields -> ReaderT (SymbolHandler m) m WidgetCommonFields
+expandPrefixWidgetCommonFields cf@{ perspective } = do
+  perspective' <- scan perspective
+  pure cf { perspective = perspective' }
 
 instance containsPrefixesRowE :: ScanSymbols RowE where
-  scan (RowE scrEls) = RowE <$> (traverse scan scrEls) 
+  scan (RowE scrEls) = RowE <$> (traverse scan scrEls)
 
 instance containsPrefixesColumnE :: ScanSymbols ColumnE where
   scan (ColumnE scrEls) = ColumnE <$> (traverse scan scrEls)
@@ -391,11 +389,11 @@ instance containsPrefixesTabE :: ScanSymbols TabE where
     pure $ TabE title isDefault scrEls'
 
 instance ScanSymbols ChatE where
-  scan (ChatE {chatRole, messagesProperty, mediaProperty, start, end}) = do
+  scan (ChatE { chatRole, messagesProperty, mediaProperty, start, end }) = do
     chatRole' <- scan chatRole
     messagesProperty' <- f messagesProperty
     mediaProperty' <- f mediaProperty
-    pure $ ChatE{ chatRole: chatRole', messagesProperty: messagesProperty', mediaProperty: mediaProperty', start, end}
+    pure $ ChatE { chatRole: chatRole', messagesProperty: messagesProperty', mediaProperty: mediaProperty', start, end }
 
 instance containsPrefixesScreenElement :: ScanSymbols ScreenElement where
   scan (RowElement r) = RowElement <$> scan r

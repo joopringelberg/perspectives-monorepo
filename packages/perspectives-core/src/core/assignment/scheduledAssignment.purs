@@ -41,9 +41,10 @@ import Perspectives.Representation.TypeIdentifiers (RoleType, StateIdentifier)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 
-data ScheduledAssignment =
-  -- The RoleType is the AuthorizedRole: a role of kind ContextRole that the modifying user is authorized for.
-  ContextRemoval ContextInstance (Maybe RoleType)
+data ScheduledAssignment
+  =
+    -- The RoleType is the AuthorizedRole: a role of kind ContextRole that the modifying user is authorized for.
+    ContextRemoval ContextInstance (Maybe RoleType)
   | RoleRemoval RoleInstance
   -- The first RoleInstance has its binding modified; the second RoleInstance, if present, is the new binding.
   | RoleUnbinding RoleInstance (Maybe RoleInstance) (Maybe SignedDelta)
@@ -54,7 +55,8 @@ data ScheduledAssignment =
 
 derive instance genericScheduledAssignment :: Generic ScheduledAssignment _
 
-instance showScheduledAssignment :: Show ScheduledAssignment where show = genericShow
+instance showScheduledAssignment :: Show ScheduledAssignment where
+  show = genericShow
 
 instance prettyPrintScheduledAssignment :: PrettyPrint ScheduledAssignment where
   prettyPrint' t sa = show sa
@@ -65,21 +67,20 @@ instance eqScheduledAssignment :: Eq ScheduledAssignment where
 contextsToBeRemoved :: Array ScheduledAssignment -> Array ContextInstance
 contextsToBeRemoved assignments = unsafePartial getContext <$> filter isContextRemoval assignments
   where
-    getContext :: Partial => ScheduledAssignment -> ContextInstance
-    getContext (ContextRemoval cid _) = cid
+  getContext :: Partial => ScheduledAssignment -> ContextInstance
+  getContext (ContextRemoval cid _) = cid
 
-    isContextRemoval :: ScheduledAssignment -> Boolean
-    isContextRemoval (ContextRemoval _ _) = true
-    isContextRemoval _ = false
-
+  isContextRemoval :: ScheduledAssignment -> Boolean
+  isContextRemoval (ContextRemoval _ _) = true
+  isContextRemoval _ = false
 
 -----------------------------------------------------------
 -- STATE EXECUTION
 -----------------------------------------------------------
 -- | A StateEvaluation is a combination of an instance of a Context and a State type.
-data StateEvaluation =
-  ContextStateEvaluation StateIdentifier ContextInstance |
-  RoleStateEvaluation StateIdentifier RoleInstance
+data StateEvaluation
+  = ContextStateEvaluation StateIdentifier ContextInstance
+  | RoleStateEvaluation StateIdentifier RoleInstance
 
 derive instance genericStateEvaluation :: Generic StateEvaluation _
 

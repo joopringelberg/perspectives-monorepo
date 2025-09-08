@@ -71,25 +71,26 @@ type DependencyPath =
 
 -- | As there is no empty DependencyPath, we need a singleton-like function.
 singletonPath :: Dependency -> DependencyPath
-singletonPath d = {head: d, mainPath: Just $ singleton d, supportingPaths: []}
+singletonPath d = { head: d, mainPath: Just $ singleton d, supportingPaths: [] }
 
 -- | The new dependency becomes the head and is added to front of the mainPath (it becomes the first element).
 consOnMainPath :: Dependency -> DependencyPath -> DependencyPath
-consOnMainPath d p@{mainPath} = p {head = d, mainPath = Just $ maybe (singleton d) (cons d) mainPath}
+consOnMainPath d p@{ mainPath } = p { head = d, mainPath = Just $ maybe (singleton d) (cons d) mainPath }
+
 -- consOnMainPath d p@{mainPath} = p {head = d, mainPath = cons d <$> mainPath}
 
 -- | The new dependency is added to end of the mainPath (it becomes the last element).
 -- | The head is untouched.
 snocOnMainPath :: DependencyPath -> Dependency -> DependencyPath
-snocOnMainPath p@{mainPath} d = p {mainPath = Just $ maybe (singleton d) (flip snoc d) mainPath}
+snocOnMainPath p@{ mainPath } d = p { mainPath = Just $ maybe (singleton d) (flip snoc d) mainPath }
 
 addAsSupportingPaths :: Array (NonEmptyList Dependency) -> DependencyPath -> DependencyPath
-addAsSupportingPaths paths dp@({supportingPaths}) = dp {supportingPaths = paths <> supportingPaths}
+addAsSupportingPaths paths dp@({ supportingPaths }) = dp { supportingPaths = paths <> supportingPaths }
 
 -- | All paths in the second argument are added as a supporting path to the first argument.
 -- | In other words, the main path of the first argument is the main path of the result.
 appendPaths :: DependencyPath -> DependencyPath -> DependencyPath
-appendPaths dp1@{supportingPaths} dp2 = dp1 {supportingPaths = supportingPaths <> allPaths dp2}
+appendPaths dp1@{ supportingPaths } dp2 = dp1 { supportingPaths = supportingPaths <> allPaths dp2 }
 
 -- | Compose two DependencyPaths in a way that reflects two consequtive steps in a query:
 -- |  - the head is the head of the second DependencyPath.
@@ -99,13 +100,13 @@ appendPaths dp1@{supportingPaths} dp2 = dp1 {supportingPaths = supportingPaths <
 -- | by the right path (second argument). As the mainPath gives us dependencies from value to source, the
 -- | second mainPath is put in front (to the left) of the first mainPath to construct the composition mainPath.
 composePaths :: DependencyPath -> DependencyPath -> DependencyPath
-composePaths {mainPath, supportingPaths} {head, mainPath:mp2, supportingPaths:sp2} =
+composePaths { mainPath, supportingPaths } { head, mainPath: mp2, supportingPaths: sp2 } =
   { head
   , mainPath: case mainPath of
       Nothing -> mp2
       otherwise -> map (<>) mp2 <*> mainPath
   , supportingPaths: supportingPaths <> sp2
-}
+  }
 
 infixr 9 composePaths as #>>
 
@@ -121,8 +122,8 @@ allPaths dp = case dp.mainPath of
 -- |    `applyValueFunction (functionOnNumbers (+))`
 -- | Can be applied to two DependencyPaths.
 applyValueFunction :: Partial => (Value -> Value -> Value) -> DependencyPath -> DependencyPath -> DependencyPath
-applyValueFunction f dp1@{head: h1} dp2@{head: h2} =
-  { head: (V "" (f (dependencyToValue h1) (dependencyToValue  h2)))
+applyValueFunction f dp1@{ head: h1 } dp2@{ head: h2 } =
+  { head: (V "" (f (dependencyToValue h1) (dependencyToValue h2)))
   , mainPath: Nothing
   , supportingPaths: allPaths dp1 `ARR.union` allPaths dp2
   }
@@ -136,7 +137,7 @@ dependencyToValue (V propName v) = v
 -- | Wrap a binary function on Number values to become a binary function on Value values.
 -- | Note that this is an UNSAFE function!
 functionOnNumbers :: (Number -> Number -> Number) -> (Value -> Value -> Value)
-functionOnNumbers f a b = number2Value (f (value2Number a) (value2Number b)) 
+functionOnNumbers f a b = number2Value (f (value2Number a) (value2Number b))
 
 -- | Wrap a binary function on String values to become a binary function on Value values.
 functionOnStrings :: (String -> String -> String) -> (Value -> Value -> Value)

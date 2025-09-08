@@ -20,8 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.Parsing.Arc.Identifiers
-  where
+module Perspectives.Parsing.Arc.Identifiers where
 
 import Control.Alt (void, (<|>))
 import Data.Array (cons, elemIndex, intercalate, many)
@@ -81,10 +80,9 @@ segmentedName = try do
 -- | Parses gimyu.
 regexFlags' :: IP String
 regexFlags' = do
-  (chars :: Array Char) <- many (satisfy (\c -> isJust $ elemIndex c ['g', 'i', 'm', 'y', 'u']))
+  (chars :: Array Char) <- many (satisfy (\c -> isJust $ elemIndex c [ 'g', 'i', 'm', 'y', 'u' ]))
   _ <- whiteSpace
   pure $ fromCharArray chars
-
 
 stringUntilNewline :: IP String
 stringUntilNewline = do
@@ -99,7 +97,7 @@ lowerCaseName = try do
   void token.whiteSpace
   pure $ fromCharArray (cons f r)
 
-lower ::  IP Char
+lower :: IP Char
 lower = satisfy (isLower <<< codePointFromChar) <?> "lowercase letter, "
 
 boolean :: IP String
@@ -108,13 +106,12 @@ boolean = token.symbol "true" <|> token.symbol "false"
 email :: IP String
 email = try do
   chars <- many (satisfy (not <<< isSpace <<< codePointFromChar))
-  if (test emailRegExp (fromCharArray chars))
-    then whiteSpace *> pure (fromCharArray chars)
-    else fail "Not a valid email addres. "
+  if (test emailRegExp (fromCharArray chars)) then whiteSpace *> pure (fromCharArray chars)
+  else fail "Not a valid email addres. "
   where
-    -- See: https://regexlib.com/REDetails.aspx?regexp_id=26.
-    emailRegExp :: Regex
-    emailRegExp = unsafeRegex "^([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)$" noFlags
+  -- See: https://regexlib.com/REDetails.aspx?regexp_id=26.
+  emailRegExp :: Regex
+  emailRegExp = unsafeRegex "^([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)$" noFlags
 
 -- | Produces a resource identifier in the pub: scheme:
 -- | pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains
@@ -124,6 +121,5 @@ pubParser = try do
   chars <- many (satisfy (not <<< isSpace <<< codePointFromChar))
   void whiteSpace
   s <- pure (fromCharArray chars)
-  if hasPublicResourceShape s
-    then pure s
-    else fail "Not a valid public resource url. " 
+  if hasPublicResourceShape s then pure s
+  else fail "Not a valid public resource url. "

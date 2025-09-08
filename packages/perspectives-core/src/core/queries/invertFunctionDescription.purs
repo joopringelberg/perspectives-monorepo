@@ -43,22 +43,21 @@ invertFunction :: Domain -> QueryFunction -> Range -> PhaseThree (Maybe QueryFun
 invertFunction dom qf ran = case qf of
   DataTypeGetter f -> case f of
     -- If we have the external role, use `DataTypeGetter ExternalRoleF`. That is, if the range is a Context.
-    ContextF -> if isExternalRole dom
-      then pure $ Just $ DataTypeGetter ExternalRoleF 
-      else do 
+    ContextF ->
+      if isExternalRole dom then pure $ Just $ DataTypeGetter ExternalRoleF
+      else do
         et <- unsafePartial $ domain2RoleType dom
         -- If the role is relational, produce another getter!
         relationalP <- lift $ lift $ isRelational_ et
-        if relationalP
-          then pure $ Just $ DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF (unwrap et)
-          else pure $ Just $ RolGetter $ ENR et
+        if relationalP then pure $ Just $ DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF (unwrap et)
+        else pure $ Just $ RolGetter $ ENR et
     -- FillerF is the `filledBy` step. So we have filled `filledBy` filler.
     -- Its inversion is filler `fills` filled, or: filler FilledF filled.
     -- We must qualify FilledF with the type that is filled.
     -- That is the domain, here!
     FillerF -> case dom of
-      (RDOM (ST (RoleInContext{context,role}))) -> pure $ Just $ FilledF role context
-      (RDOM (UET (RoleInContext{context,role}))) -> pure $ Just $ FilledF role context
+      (RDOM (ST (RoleInContext { context, role }))) -> pure $ Just $ FilledF role context
+      (RDOM (UET (RoleInContext { context, role }))) -> pure $ Just $ FilledF role context
       otherwise -> pure $ Nothing
     ExternalRoleF -> pure $ Just $ DataTypeGetter ContextF
     -- Identity steps add nothing to the query and can be left out.
@@ -80,7 +79,7 @@ invertFunction dom qf ran = case qf of
     GetRoleInstancesForContextFromDatabaseF -> pure $ Just $ DataTypeGetter ContextF
     SpecialisesRoleTypeF -> pure $ Nothing
     FillerF -> case dom of
-      (RDOM (ST (RoleInContext{context,role}))) -> pure $ Just $ FilledF role context
+      (RDOM (ST (RoleInContext { context, role }))) -> pure $ Just $ FilledF role context
       otherwise -> pure $ Nothing
     -- A lot of cases will never be seen in a regular query.
     _ -> pure $ Nothing
@@ -95,11 +94,11 @@ invertFunction dom qf ran = case qf of
   _ -> pure $ Nothing
 
   where
-    -- NOTE: this is a shortcut that depends on a naming convention. It allows us to **not** make this function in MP.
-    isExternalRole :: Domain -> Boolean
-    isExternalRole (RDOM (ST (RoleInContext {role}))) = unwrap role `endsWithSegments` "External"
-    isExternalRole (RDOM (UET (RoleInContext {role}))) = unwrap role `endsWithSegments` "External"
-    isExternalRole _ = false
+  -- NOTE: this is a shortcut that depends on a naming convention. It allows us to **not** make this function in MP.
+  isExternalRole :: Domain -> Boolean
+  isExternalRole (RDOM (ST (RoleInContext { role }))) = unwrap role `endsWithSegments` "External"
+  isExternalRole (RDOM (UET (RoleInContext { role }))) = unwrap role `endsWithSegments` "External"
+  isExternalRole _ = false
 
 -- | Checks whether the QueryFunction returns just a single result.
 queryFunctionIsFunctional :: QueryFunction -> ThreeValuedLogic
@@ -195,21 +194,23 @@ instance pathsMonoid :: Monoid Paths where
   mempty = Paths [] []
 
 mkPaths :: QueryFunctionDescription -> Paths
-mkPaths q = Paths [q] []
+mkPaths q = Paths [ q ] []
 
 -- | Combine two Paths according to filtering. The main Path of the first Paths argument is the source of the filter
 -- | and represents the main Path. The second Paths argument represents the filter. All paths in this argument
 -- | end up as secondary paths in the result.
 filterPaths :: Paths -> Paths -> Paths
-filterPaths p1@(Paths mp _) p2 = let
-  Paths x subs = composePaths p1 p2
-  in Paths mp (cons x subs)
+filterPaths p1@(Paths mp _) p2 =
+  let
+    Paths x subs = composePaths p1 p2
+  in
+    Paths mp (cons x subs)
 
 -- | Add two Paths, where we choose the **second** main path to be the main
 -- | path of the result. This is not completely arbitrary, for a Let* is compiled as a
 -- | sequence of its bindings and its body. It is fitting that the body should be the main path.
 sumPaths :: Paths -> Paths -> Paths
-sumPaths (Paths mp1 subs1) (Paths mp2 subs2) = Paths mp2 (subs1 <> [mp1] <> subs2)
+sumPaths (Paths mp1 subs1) (Paths mp2 subs2) = Paths mp2 (subs1 <> [ mp1 ] <> subs2)
 
 allPaths :: Paths -> Array Path
 allPaths (Paths mp1 subs1) = cons mp1 subs1

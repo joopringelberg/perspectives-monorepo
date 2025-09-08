@@ -39,16 +39,24 @@ import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), Role
 emptyRolesToRemove :: RoleInstance -> MonadPerspectives (Array RoleInstance)
 emptyRolesToRemove rid = do
   mysystem <- getMySystem
-  mclipboardItem <- ((ContextInstance mysystem) ##> filter
-    (getRoleInstances (ENR $ EnumeratedRoleType itemsOnClipboard))
-    (binding >=> \r -> pure (r == rid)))
-  mrecentContext <- ((ContextInstance mysystem) ##> filter
-    (getRoleInstances (ENR $ EnumeratedRoleType recentContexts))
-    (binding >=> \r -> pure (r == rid)))
-  mpinnedContext <- ((ContextInstance mysystem) ##> filter
-    (getRoleInstances (ENR $ EnumeratedRoleType pinnedContexts))
-    (binding >=> \r -> pure (r == rid)))
-  notifications <- ((ContextInstance mysystem) ##= filter
-    (getRoleInstances (ENR $ EnumeratedRoleType notifications))
-    (binding >=> \r -> pure (r == rid)))
-  pure $ notifications <> catMaybes [mclipboardItem, mrecentContext, mpinnedContext]
+  mclipboardItem <-
+    ( (ContextInstance mysystem) ##> filter
+        (getRoleInstances (ENR $ EnumeratedRoleType itemsOnClipboard))
+        (binding >=> \r -> pure (r == rid))
+    )
+  mrecentContext <-
+    ( (ContextInstance mysystem) ##> filter
+        (getRoleInstances (ENR $ EnumeratedRoleType recentContexts))
+        (binding >=> \r -> pure (r == rid))
+    )
+  mpinnedContext <-
+    ( (ContextInstance mysystem) ##> filter
+        (getRoleInstances (ENR $ EnumeratedRoleType pinnedContexts))
+        (binding >=> \r -> pure (r == rid))
+    )
+  notifications <-
+    ( (ContextInstance mysystem) ##= filter
+        (getRoleInstances (ENR $ EnumeratedRoleType notifications))
+        (binding >=> \r -> pure (r == rid))
+    )
+  pure $ notifications <> catMaybes [ mclipboardItem, mrecentContext, mpinnedContext ]

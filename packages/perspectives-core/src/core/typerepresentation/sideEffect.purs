@@ -43,5 +43,6 @@ derive instance genericRepSideEffect :: Generic SideEffect _
 
 instance showSideEffect :: Show SideEffect where
   show = genericShow
+
 instance eqSideEffect :: Eq SideEffect where
   eq = genericEq

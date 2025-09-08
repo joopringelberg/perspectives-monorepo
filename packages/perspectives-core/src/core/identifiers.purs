@@ -20,9 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.Identifiers
-
-where
+module Perspectives.Identifiers where
 
 import Data.Array (intercalate, null, uncons, unsnoc)
 import Data.Array.NonEmpty (NonEmptyArray, index)
@@ -30,7 +28,7 @@ import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.String (Pattern(..), Replacement(..), indexOf, replaceAll, split, splitAt, stripPrefix, stripSuffix)
 import Data.String.Regex (Regex, match, test)
 import Data.String.Regex.Flags (noFlags)
-import Data.String.Regex.Unsafe (unsafeRegex) 
+import Data.String.Regex.Unsafe (unsafeRegex)
 import Partial.Unsafe (unsafePartial)
 import Prelude (append, flip, identity, ($), (+), (<<<), (<>), (==), (||))
 
@@ -52,7 +50,6 @@ import Prelude (append, flip, identity, ($), (+), (<<<), (<>), (==), (||))
 -- | As backslash has special meaning in Purescript string literals, we must escape it if we want to use it literally.
 -- | Literal use comprises character class syntax, e.g. \w (for word characters). 
 -- | FOR CHARACTER CLASSES, USE DOUBLE BACKSLASH: \\w, \\n, etc.
-
 
 -----------------------------------------------------------
 -----------------------------------------------------------
@@ -94,33 +91,37 @@ isModelUri = isJust <<< match newModelRegex
 -- | When concatenated with a forward slash in between, those two parts form:
 -- |    https://{authority-with-dots}/models_{subdomains-with-underscores}_{authority-with-underscores}/{subdomains-with-underscores}_{authority-with-underscores}-{LocalModelName}.json
 -- | The function is Partial because it should only be applied to a string that matches newModelPattern.
-modelUri2ModelUrl :: Partial => String -> {repositoryUrl :: String, documentName :: String}
-modelUri2ModelUrl s = let
+modelUri2ModelUrl :: Partial => String -> { repositoryUrl :: String, documentName :: String }
+modelUri2ModelUrl s =
+  let
     (matches :: NonEmptyArray (Maybe String)) = fromJust $ match newModelRegex s
     (authority :: String) = fromJust $ fromJust $ index matches 1
     (localModelName :: String) = fromJust $ fromJust $ index matches 2
     (namespaceParts :: Array String) = split (Pattern ".") authority
-    {init:lowerParts, last:toplevel} = fromJust $ unsnoc namespaceParts
-    {init:subNamespaces, last:secondLevel} = fromJust $ unsnoc lowerParts
+    { init: lowerParts, last: toplevel } = fromJust $ unsnoc namespaceParts
+    { init: subNamespaces, last: secondLevel } = fromJust $ unsnoc lowerParts
   in
     { repositoryUrl: "https://" <> secondLevel <> "." <> toplevel <> "/models_" <> intercalate "_" namespaceParts
-    , documentName: (intercalate "_" namespaceParts) <> "-" <>  localModelName <> ".json"}
+    , documentName: (intercalate "_" namespaceParts) <> "-" <> localModelName <> ".json"
+    }
 
 -----------------------------------------------------------
 -- MODEL URI TO MANIFEST URL
 -- The Manifest is served from this Repository Url.
 -----------------------------------------------------------
-modelUri2ManifestUrl :: Partial => String -> {repositoryUrl :: String, manifestName :: String}
-modelUri2ManifestUrl s = let
+modelUri2ManifestUrl :: Partial => String -> { repositoryUrl :: String, manifestName :: String }
+modelUri2ManifestUrl s =
+  let
     (matches :: NonEmptyArray (Maybe String)) = fromJust $ match newModelRegex s
     (authority :: String) = fromJust $ fromJust $ index matches 1
     (localModelName :: String) = fromJust $ fromJust $ index matches 2
     (namespaceParts :: Array String) = split (Pattern ".") authority
-    {init:lowerParts, last:toplevel} = fromJust $ unsnoc namespaceParts
-    {init:subNamespaces, last:secondLevel} = fromJust $ unsnoc lowerParts
+    { init: lowerParts, last: toplevel } = fromJust $ unsnoc namespaceParts
+    { init: subNamespaces, last: secondLevel } = fromJust $ unsnoc lowerParts
   in
     { repositoryUrl: "https://" <> secondLevel <> "." <> toplevel <> "/cw_" <> intercalate "_" namespaceParts
-    , manifestName: (intercalate "_" namespaceParts) <> "-" <>  localModelName}
+    , manifestName: (intercalate "_" namespaceParts) <> "-" <> localModelName
+    }
 
 -----------------------------------------------------------
 -- MODEL URI TO REPOSITORY URL
@@ -132,12 +133,13 @@ modelUri2ManifestUrl s = let
 -- |    https://{authority-with-dots}/models_{subdomains-with-underscores}_{authority-with-underscores}
 -- | The function is Partial because it should only be applied to a string that matches newModelPattern.
 modelUri2ModelRepository :: Partial => String -> String
-modelUri2ModelRepository s = let
+modelUri2ModelRepository s =
+  let
     (matches :: NonEmptyArray (Maybe String)) = fromJust $ match newModelRegex s
     (authority :: String) = fromJust $ fromJust $ index matches 1
     (namespaceParts :: Array String) = split (Pattern ".") authority
-    {init:lowerParts, last:toplevel} = fromJust $ unsnoc namespaceParts
-    {init:subNamespaces, last:secondLevel} = fromJust $ unsnoc lowerParts
+    { init: lowerParts, last: toplevel } = fromJust $ unsnoc namespaceParts
+    { init: subNamespaces, last: secondLevel } = fromJust $ unsnoc lowerParts
   in
     "https://" <> secondLevel <> "." <> toplevel <> "/models_" <> intercalate "_" namespaceParts
 
@@ -145,7 +147,8 @@ modelUri2ModelRepository s = let
 -- MODEL URI TO LOCAL NAME (OR CUID)
 -----------------------------------------------------------
 modelUri2LocalName :: Partial => String -> String
-modelUri2LocalName s = let
+modelUri2LocalName s =
+  let
     (matches :: NonEmptyArray (Maybe String)) = fromJust $ match newModelRegex s
     (localModelName :: String) = fromJust $ fromJust $ index matches 2
   in
@@ -155,21 +158,23 @@ modelUri2LocalName s = let
 -- MODEL URI TO SCHEME AND AUTHORITY
 -----------------------------------------------------------
 modelUri2SchemeAndAuthority :: Partial => String -> String
-modelUri2SchemeAndAuthority s = let
+modelUri2SchemeAndAuthority s =
+  let
     (matches :: NonEmptyArray (Maybe String)) = fromJust $ match newModelRegex s
     (authority :: String) = fromJust $ fromJust $ index matches 1
     (localModelName :: String) = fromJust $ fromJust $ index matches 2
   in
     "model://" <> authority
+
 -----------------------------------------------------------
 -- STRIP A MODEL URI FROM ITS VERSION
 -----------------------------------------------------------
 -- | Remove the version from a model URI. E.g. "model://joopringelberg.nl#TestQueries@1.0" becomes "model://joopringelberg.nl#TestQueries"
 unversionedModelUri :: String -> String
-unversionedModelUri s = case indexOf (Pattern "@") s of 
+unversionedModelUri s = case indexOf (Pattern "@") s of
   Nothing -> s
-  Just u -> case splitAt u s of 
-    {before} -> before
+  Just u -> case splitAt u s of
+    { before } -> before
 
 -----------------------------------------------------------
 -- GET THE VERSION OF A MODEL URI
@@ -178,7 +183,7 @@ modelUriVersion :: String -> Maybe String
 modelUriVersion s = case indexOf (Pattern "@") s of
   Nothing -> Nothing
   Just u -> case splitAt (u + 1) s of
-    {after} -> Just after
+    { after } -> Just after
 
 -----------------------------------------------------------
 -- MODEL URI TO INSTANCES STORE
@@ -190,12 +195,13 @@ modelUriVersion s = case indexOf (Pattern "@") s of
 -- |    https://{authority-with-dots}/cw_{subdomains-with-underscores}_{authority-with-underscores}/
 -- | The function is Partial because it should only be applied to a string that matches newModelPattern.
 modelUri2InstancesStore :: Partial => String -> String
-modelUri2InstancesStore s = let
+modelUri2InstancesStore s =
+  let
     (matches :: NonEmptyArray (Maybe String)) = fromJust $ match newModelRegex s
     (authority :: String) = fromJust $ fromJust $ index matches 1
     (namespaceParts :: Array String) = split (Pattern ".") authority
-    {init:lowerParts, last:toplevel} = fromJust $ unsnoc namespaceParts
-    {init:subNamespaces, last:secondLevel} = fromJust $ unsnoc lowerParts
+    { init: lowerParts, last: toplevel } = fromJust $ unsnoc namespaceParts
+    { init: subNamespaces, last: secondLevel } = fromJust $ unsnoc lowerParts
   in
     "https://" <> secondLevel <> "." <> toplevel <> "/cw_" <> intercalate "_" namespaceParts
 
@@ -269,8 +275,8 @@ typeUri2ModelUri_ = fromJust <<< typeUri2ModelUri
 splitTypeUri :: TypeUri -> Maybe { modelUri :: ModelUri, localName :: String }
 splitTypeUri s = case match typeRegex s of
   Nothing -> Nothing
-  Just matches -> case (index matches 1), (index matches 2) of 
-    Just mmodelUri, Just mlocalName -> case mmodelUri, mlocalName of 
+  Just matches -> case (index matches 1), (index matches 2) of
+    Just mmodelUri, Just mlocalName -> case mmodelUri, mlocalName of
       Just modelUri, Just localName ->
         Just { modelUri: modelUri, localName: localName }
       _, _ -> Nothing
@@ -374,25 +380,26 @@ startsWithSegments whole part = (whole == part) || (isJust $ stripPrefix (Patter
 concatenateSegments :: String -> String -> String
 concatenateSegments left right = run (split (Pattern "$") left) (split (Pattern "$") right) ""
   where
-    run :: Array String -> Array String -> String -> String
-    run leftParts rightParts result = case uncons leftParts of
-      Nothing -> if null rightParts
-        -- Nothing to append, we're done.
-        then result
-        -- We've completely included the left side in the result, just add the right part.
-        else result <> "$" <> intercalate "$" rightParts
-      Just {head, tail} -> case uncons rightParts of
-        -- We've completely included the right side in the result.
-        -- We'd expect the left side to be included, too, but apparantly not.
-        -- This is an unusual case, following this pattern: abdc bd
-        Nothing -> result <> "$" <> intercalate "$" leftParts
-        Just {head:rightHead, tail:rightTail} -> if head == rightHead
-          -- Overlap. Append the overlapping segment to the result, drop it from both sides.
-          then run tail rightTail (result <> "$" <> head)
-          -- Append the next segment from left, continue with all parts from right.
-          else if result == ""
-            then run tail rightParts head
-            else run tail rightParts (result <> "$" <> head)
+  run :: Array String -> Array String -> String -> String
+  run leftParts rightParts result = case uncons leftParts of
+    Nothing ->
+      if null rightParts
+      -- Nothing to append, we're done.
+      then result
+      -- We've completely included the left side in the result, just add the right part.
+      else result <> "$" <> intercalate "$" rightParts
+    Just { head, tail } -> case uncons rightParts of
+      -- We've completely included the right side in the result.
+      -- We'd expect the left side to be included, too, but apparantly not.
+      -- This is an unusual case, following this pattern: abdc bd
+      Nothing -> result <> "$" <> intercalate "$" leftParts
+      Just { head: rightHead, tail: rightTail } ->
+        if head == rightHead
+        -- Overlap. Append the overlapping segment to the result, drop it from both sides.
+        then run tail rightTail (result <> "$" <> head)
+        -- Append the next segment from left, continue with all parts from right.
+        else if result == "" then run tail rightParts head
+        else run tail rightParts (result <> "$" <> head)
 
 -----------------------------------------------------------
 -- REGEX MATCHING HELPER FUNCTIONS

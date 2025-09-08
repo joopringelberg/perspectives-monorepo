@@ -32,7 +32,15 @@ import Perspectives.PerspectivesState (defaultRuntimeOptions, newPerspectivesSta
 import Prelude (bind, show, (<<<), (<>), (>>=))
 
 -- | Run an action in MonadPerspectives, given a username and password.
-runPerspectives :: forall a. String -> String -> String -> String -> String -> Int -> MonadPerspectives a
+runPerspectives
+  :: forall a
+   . String
+  -> String
+  -> String
+  -> String
+  -> String
+  -> Int
+  -> MonadPerspectives a
   -> Aff a
 runPerspectives userName password perspectivesUser systemId host port mp = do
   transactionFlag <- new true
@@ -41,21 +49,23 @@ runPerspectives userName password perspectivesUser systemId host port mp = do
   modelToLoad <- empty
   indexedResourceToCreate <- empty
   missingResource <- empty
-  (rf :: AVar PerspectivesState) <- getCurrentLanguageFromIDB >>= new <<< 
-    ((newPerspectivesState
-        { systemIdentifier: systemId
-        , perspectivesUser: perspectivesUser
-        , userName: Just userName
-        , password: Just password
-        , couchdbUrl: Just (host <> ":" <> show port <> "/")
-        }
-      transactionFlag
-      transactionWithTiming
-      modelToLoad
-      defaultRuntimeOptions
-      brokerService
-      indexedResourceToCreate
-      missingResource))
+  (rf :: AVar PerspectivesState) <- getCurrentLanguageFromIDB >>= new <<<
+    ( ( newPerspectivesState
+          { systemIdentifier: systemId
+          , perspectivesUser: perspectivesUser
+          , userName: Just userName
+          , password: Just password
+          , couchdbUrl: Just (host <> ":" <> show port <> "/")
+          }
+          transactionFlag
+          transactionWithTiming
+          modelToLoad
+          defaultRuntimeOptions
+          brokerService
+          indexedResourceToCreate
+          missingResource
+      )
+    )
   runReaderT mp rf
 
 runPerspectivesWithState :: forall a. MonadPerspectives a -> (AVar PerspectivesState) -> Aff a

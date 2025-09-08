@@ -55,103 +55,113 @@ import Perspectives.Representation.UserGraph (Edges(..), UserGraph(..))
 ---- BUILDING THE USER GRAPH
 -------------------------------------------------------------------------------
 type Node = Tuple RoleType Edges
+
 -- | Build a UserGraph from the DomeinFileRecord kept in PhaseThree State.
 buildUserGraph :: PhaseThree UserGraph
 buildUserGraph = do
-  {enumeratedRoles, calculatedRoles} <- (lift $ gets _.dfr)
+  { enumeratedRoles, calculatedRoles } <- (lift $ gets _.dfr)
   eUserRoles <- pure $ filter ((eq UserRole) <<< _.kindOfRole <<< unwrap) (OBJ.values enumeratedRoles)
   cUserRoles <- pure $ filter ((eq UserRole) <<< _.kindOfRole <<< unwrap) (OBJ.values calculatedRoles)
   (fromEroles :: Array Node) <- lift $ lift
-    (traverse userRoleToUserNode eUserRoles >>=
-    -- Apply Calculated User Rule.
-      traverse (unsafePartial expandSourceToExtension) >>=
-        pure <<< concat >>=
+    ( traverse userRoleToUserNode eUserRoles
+        >>=
+          -- Apply Calculated User Rule.
+          traverse (unsafePartial expandSourceToExtension)
+        >>= pure <<< concat
+        >>=
           -- Apply Filler Rule.
-          traverse expandSourceToBindings >>=
-            pure <<< concat >>=
-              -- Apply Inverted Calculated User Rule
-              traverse (unsafePartial expandDestinationToExtension))
-  (fromCroles :: Array Node) <- lift $ lift
-    (traverse userRoleToUserNode cUserRoles >>=
-    -- Apply Calculated User Rule.
-      traverse (unsafePartial expandSourceToExtension) >>=
-        pure <<< concat >>=
+          traverse expandSourceToBindings
+        >>= pure <<< concat
+        >>=
           -- Apply Inverted Calculated User Rule
-          traverse (unsafePartial expandDestinationToExtension))
+          traverse (unsafePartial expandDestinationToExtension)
+    )
+  (fromCroles :: Array Node) <- lift $ lift
+    ( traverse userRoleToUserNode cUserRoles
+        >>=
+          -- Apply Calculated User Rule.
+          traverse (unsafePartial expandSourceToExtension)
+        >>= pure <<< concat
+        >>=
+          -- Apply Inverted Calculated User Rule
+          traverse (unsafePartial expandDestinationToExtension)
+    )
   -- All UserNodes with the same userType should be combined.
   pure $ UserGraph $ EncodableMap $ combineUserNodes (fromEroles <> fromEroles)
   where
-    -- Apply the Calculated User Rule: when CU1 has a perspective on U2, we connect
-    -- CU1 to U2 in the User Graph. This rule says we should connect extension U1 of CU1
-    -- to U2 as well.
-    expandSourceToExtension :: Partial => Node -> MonadPerspectives (Array Node)
-    expandSourceToExtension t@(Tuple source edges) = case source of
-      ENR _ -> pure [t]
-      CR croleType -> do
-        expansion <- getRole source >>= pure <<< map ENR <<< expansionOfRole
-        pure $ flip Tuple edges <$> (cons source expansion)
+  -- Apply the Calculated User Rule: when CU1 has a perspective on U2, we connect
+  -- CU1 to U2 in the User Graph. This rule says we should connect extension U1 of CU1
+  -- to U2 as well.
+  expandSourceToExtension :: Partial => Node -> MonadPerspectives (Array Node)
+  expandSourceToExtension t@(Tuple source edges) = case source of
+    ENR _ -> pure [ t ]
+    CR croleType -> do
+      expansion <- getRole source >>= pure <<< map ENR <<< expansionOfRole
+      pure $ flip Tuple edges <$> (cons source expansion)
 
-    -- Partial, because of the embedded case and because domain2roleType is Partial because it just handles
-    -- RDOM cases.
-    -- | The same result as roleAspects, but not in MonadPerspectives.
-    expansionOfRole :: Partial => Role -> Array EnumeratedRoleType
-    expansionOfRole (E (EnumeratedRole {id:i})) = [i]
-    expansionOfRole (C role@(CalculatedRole {calculation})) = roleInContext2Role <$> (commonLeavesInADT $ domain2roleType $ range $ (case calculation of Q qd -> qd))
-    -- calculation role
+  -- Partial, because of the embedded case and because domain2roleType is Partial because it just handles
+  -- RDOM cases.
+  -- | The same result as roleAspects, but not in MonadPerspectives.
+  expansionOfRole :: Partial => Role -> Array EnumeratedRoleType
+  expansionOfRole (E (EnumeratedRole { id: i })) = [ i ]
+  expansionOfRole (C role@(CalculatedRole { calculation })) = roleInContext2Role <$> (commonLeavesInADT $ domain2roleType $ range $ (case calculation of Q qd -> qd))
 
-    -- Apply the Filler Rule: When U1 has a perspective on U2, we connect U1 to U2 in the
-    -- User Graph. The Filler Rule says we should connect filler F of U1 to U2 as well
-    -- (and apply this rule recursively).
-    expandSourceToBindings :: Tuple RoleType Edges -> MonadPerspectives (Array Node)
-    expandSourceToBindings t = pure [t]
-    -- TODO. Dit is tijdelijk uitgeschakeld bij wijze van experiment. Schakel opnieuw in of verwijder.
-    -- expandSourceToBindings t@(Tuple source edges) = case source of
-    --   ENR eroleType -> do
-    --     rAndb <- getEnumeratedRole eroleType >>= roleAndBinding
-    --     recursiveFillers <- bindingOfADT rAndb >>= pure <<< commonLeavesInADT
-    --     pure $ flip Tuple edges <$> (ENR <$> (recursiveFillers <> commonLeavesInADT rAndb))
-    --   CR _ -> pure [t]
+  -- calculation role
 
-    -- Apply the Inverted Calculated User Rule: When U1 has a perspective on calculated user role C2,
-    -- we connect U1 to C2 in the User Graph. The Inverted Calculated User Rule says we should connect
-    -- U1 to extension U2 as well.
-    expandDestinationToExtension :: Partial => Node -> MonadPerspectives Node
-    expandDestinationToExtension t@(Tuple source (Edges edges)) = do
-      -- close the Array of RoleTypes in edges under expansionOfRole, while preserving the originals.
-      expansion <- foldM
-        (\destinations nextDestination ->
+  -- Apply the Filler Rule: When U1 has a perspective on U2, we connect U1 to U2 in the
+  -- User Graph. The Filler Rule says we should connect filler F of U1 to U2 as well
+  -- (and apply this rule recursively).
+  expandSourceToBindings :: Tuple RoleType Edges -> MonadPerspectives (Array Node)
+  expandSourceToBindings t = pure [ t ]
+
+  -- TODO. Dit is tijdelijk uitgeschakeld bij wijze van experiment. Schakel opnieuw in of verwijder.
+  -- expandSourceToBindings t@(Tuple source edges) = case source of
+  --   ENR eroleType -> do
+  --     rAndb <- getEnumeratedRole eroleType >>= roleAndBinding
+  --     recursiveFillers <- bindingOfADT rAndb >>= pure <<< commonLeavesInADT
+  --     pure $ flip Tuple edges <$> (ENR <$> (recursiveFillers <> commonLeavesInADT rAndb))
+  --   CR _ -> pure [t]
+
+  -- Apply the Inverted Calculated User Rule: When U1 has a perspective on calculated user role C2,
+  -- we connect U1 to C2 in the User Graph. The Inverted Calculated User Rule says we should connect
+  -- U1 to extension U2 as well.
+  expandDestinationToExtension :: Partial => Node -> MonadPerspectives Node
+  expandDestinationToExtension t@(Tuple source (Edges edges)) = do
+    -- close the Array of RoleTypes in edges under expansionOfRole, while preserving the originals.
+    expansion <- foldM
+      ( \destinations nextDestination ->
           case nextDestination of
             -- Each Enumerated role is in the result on the outset.
             ENR _ -> pure destinations
             CR _ -> getRole nextDestination >>= pure <<< map ENR <<< expansionOfRole
-            )
-        edges
-        edges
-      pure $ Tuple source (Edges expansion)
+      )
+      edges
+      edges
+    pure $ Tuple source (Edges expansion)
 
-    -- Because we expand the user role having a perspective, multiple UserNodes may result.
-    userRoleToUserNode :: forall r i. RoleClass r i => r -> MonadPerspectives Node
-    userRoleToUserNode r = do
-        -- retain the user roles in the enumerated role expansion of the perspectives of r.
-        -- edges = nub $ filter isUserNode $ concat $ map (commonLeavesInADT <<< unsafePartial roleRange <<< perspectiveObjectQfd) (perspectives r)
-        edges <- nub <$> filterA isUserNode (concat (proximalObject <$> perspectives r))
-        pure $ Tuple (typeOfRole r) (Edges edges)
-      where
-      -- We only lookup in the enumerated role types, because we deal with the enumerated role expansion above.
-      isUserNode :: RoleType -> MonadPerspectives Boolean
-      isUserNode rt = eq UserRole <$> roleKindOfRoleType rt
+  -- Because we expand the user role having a perspective, multiple UserNodes may result.
+  userRoleToUserNode :: forall r i. RoleClass r i => r -> MonadPerspectives Node
+  userRoleToUserNode r = do
+    -- retain the user roles in the enumerated role expansion of the perspectives of r.
+    -- edges = nub $ filter isUserNode $ concat $ map (commonLeavesInADT <<< unsafePartial roleRange <<< perspectiveObjectQfd) (perspectives r)
+    edges <- nub <$> filterA isUserNode (concat (proximalObject <$> perspectives r))
+    pure $ Tuple (typeOfRole r) (Edges edges)
+    where
+    -- We only lookup in the enumerated role types, because we deal with the enumerated role expansion above.
+    isUserNode :: RoleType -> MonadPerspectives Boolean
+    isUserNode rt = eq UserRole <$> roleKindOfRoleType rt
 
-      proximalObject :: Perspective -> Array RoleType
-      proximalObject (Perspective{roleTypes}) = case head roleTypes of
-        Just cr@(CR _) -> [cr]
-        otherwise -> roleTypes
+    proximalObject :: Perspective -> Array RoleType
+    proximalObject (Perspective { roleTypes }) = case head roleTypes of
+      Just cr@(CR _) -> [ cr ]
+      otherwise -> roleTypes
 
-    combineUserNodes :: Array (Tuple RoleType Edges) -> Map RoleType Edges
-    combineUserNodes nodes = execState (for_ nodes combine) empty
-      where
-        combine :: (Tuple RoleType Edges) -> State (Map RoleType Edges) Unit
-        combine (Tuple userType edges) = do
-          (intermediate :: Map RoleType Edges) <- get
-          case lookup userType intermediate of
-            Nothing -> void $ modify (insert userType edges)
-            Just (Edges es) -> void $ modify (insert userType (Edges $ union es (unwrap edges)))
+  combineUserNodes :: Array (Tuple RoleType Edges) -> Map RoleType Edges
+  combineUserNodes nodes = execState (for_ nodes combine) empty
+    where
+    combine :: (Tuple RoleType Edges) -> State (Map RoleType Edges) Unit
+    combine (Tuple userType edges) = do
+      (intermediate :: Map RoleType Edges) <- get
+      case lookup userType intermediate of
+        Nothing -> void $ modify (insert userType edges)
+        Just (Edges es) -> void $ modify (insert userType (Edges $ union es (unwrap edges)))

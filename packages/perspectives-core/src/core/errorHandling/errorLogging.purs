@@ -43,5 +43,5 @@ logPerspectivesError = liftEffect <<< log <<< show
 -- For now, we just log the warning on screen.
 warnModeller :: PerspectivesWarning -> MonadPerspectives Unit
 warnModeller warning = do
-  modify \(s@{warnings}) -> s { warnings = cons (show warning) warnings }
+  modify \(s@{ warnings }) -> s { warnings = cons (show warning) warnings }
   warn $ show warning

@@ -48,18 +48,18 @@ import Perspectives.Representation.CNF (CNF, DPROD(..), DSUM(..), toConjunctiveN
 import Perspectives.Representation.ExpandedADT (ExpandedADT(..), foldMapExpandedADT)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 import Prelude (class Applicative, class Bind, class Eq, class Functor, class HeytingAlgebra, class Monoid, class Ord, class Show, disj, flip, map, not, pure, show, ($), (&&), (/=), (<#>), (<$>), (<<<), (<>), (>>=), (==), bind)
-import Simple.JSON (class ReadForeign, class WriteForeign, writeImpl, writeJSON, read', readJSON') 
+import Simple.JSON (class ReadForeign, class WriteForeign, writeImpl, writeJSON, read', readJSON')
 
 --------------------------------------------------------------------------------------------------
 ---- ADT
 --------------------------------------------------------------------------------------------------
 
-data ADT a = 
-  ST a 
+data ADT a
+  = ST a
   | UET a
-  | SUM (Array (ADT a)) 
-  | PROD (Array (ADT a)) 
-  
+  | SUM (Array (ADT a))
+  | PROD (Array (ADT a))
+
 instance functorADT :: Functor ADT where
   map f (ST a) = ST $ f a
   map f (UET a) = UET $ f a
@@ -74,7 +74,7 @@ instance showADT :: (Show a) => Show (ADT a) where
   show (SUM adts) = "(" <> "SUM" <> show adts <> ")"
   show (PROD adts) = "(" <> "PROD" <> show adts <> ")"
 
-instance (Show a) => PrettyPrint (ADT a) where 
+instance (Show a) => PrettyPrint (ADT a) where
   prettyPrint' t a@(ST _) = t <> show a
   prettyPrint' t a@(UET _) = t <> show a
   prettyPrint' t (PROD terms) = t <> "(PROD [\n" <> (intercalate ",\n" $ prettyPrint' (t <> "  ") <$> terms) <> "\n" <> t <> "  ])"
@@ -92,7 +92,7 @@ derive instance ordADT :: (Ord a) => Ord (ADT a)
 -- The foldmap function of this Foldable instance folds over SUM and PROD in the same way.
 -- For a function that does justice to the notion of `sum` and `product`, see foldMapADT.
 instance Foldable ADT where
-  foldMap f adt = case adt of 
+  foldMap f adt = case adt of
     ST a -> f a
     UET a -> f a
     PROD as -> fold (foldMap f <$> as)
@@ -120,22 +120,21 @@ foldMapADT f adt = case adt of
 -- | instead of to the values contained in them. Use it to collect labels along with values obtained 
 -- | from a. A prime example is to collect all types on a fully expanded tree.
 collect :: forall a m. Monoid m => (ADT a -> m) -> ADT a -> m
-collect f adt = case adt of 
-    a@(ST _) -> f a
-    a@(UET _) -> f a
-    PROD as -> fold (collect f <$> as)
-    SUM as -> fold (collect f <$> as)
+collect f adt = case adt of
+  a@(ST _) -> f a
+  a@(UET _) -> f a
+  PROD as -> fold (collect f <$> as)
+  SUM as -> fold (collect f <$> as)
 
 instance (WriteForeign a) => WriteForeign (ADT a) where
-  writeImpl (ST a) = writeImpl {constructor: "ST", arg: writeJSON a}
-  writeImpl (UET a) = writeImpl {constructor: "UET", arg: writeJSON a}
-  writeImpl (SUM as) = writeImpl { constructor: "SUM", arg: writeJSON as}
-  writeImpl (PROD as) = writeImpl { constructor: "PROD", arg: writeJSON as}
-
+  writeImpl (ST a) = writeImpl { constructor: "ST", arg: writeJSON a }
+  writeImpl (UET a) = writeImpl { constructor: "UET", arg: writeJSON a }
+  writeImpl (SUM as) = writeImpl { constructor: "SUM", arg: writeJSON as }
+  writeImpl (PROD as) = writeImpl { constructor: "PROD", arg: writeJSON as }
 
 instance (ReadForeign a) => ReadForeign (ADT a) where
   readImpl f = do
-    x :: {constructor :: String, arg :: String} <- read' f
+    x :: { constructor :: String, arg :: String } <- read' f
     unsafePartial case x.constructor, x.arg of
       "ST", a -> ST <$> readJSON' a
       "UET", a -> UET <$> readJSON' a
@@ -173,7 +172,7 @@ instance (Ord a, Eq a) => HeytingAlgebra (HArray a) where
     (HArray a), Everything -> HArray (nub a)
     Everything, (HArray b) -> HArray (nub b)
     Everything, Everything -> Everything
-  not a = case a of 
+  not a = case a of
     Everything -> HArray []
     _ -> Everything
   implies a b = disj (not a) b
@@ -253,7 +252,7 @@ expandAndReduce f adt = case adt of
   a@(ST _) -> f a
   a@(UET _) -> f a
   -- PROD as -> Just <<< PROD <<< catMaybes <$> (traverse (expandAndReduce f) as)
-  PROD as -> traverse (expandAndReduce f) as >>= \r -> case catMaybes r of 
+  PROD as -> traverse (expandAndReduce f) as >>= \r -> case catMaybes r of
     [] -> pure Nothing
     terms -> pure $ Just $ PROD terms
   SUM as -> (traverse (expandAndReduce f) as) >>= \r -> case catMaybes r of
@@ -276,11 +275,12 @@ expandAndReduce f adt = case adt of
 -- | See equalsOrSpecialises_.
 -- | See: Semantics of the Perspectives Language, chapter Another ordering of Role types for an explanation.
 equalsOrSpecialises :: forall a. Ord a => Eq a => ExpandedADT a -> ExpandedADT a -> Boolean
-equalsOrSpecialises adt1 adt2 = let
-  (adt1' :: CNF a) = toConjunctiveNormalForm adt1
-  adt2' = toConjunctiveNormalForm adt2
+equalsOrSpecialises adt1 adt2 =
+  let
+    (adt1' :: CNF a) = toConjunctiveNormalForm adt1
+    adt2' = toConjunctiveNormalForm adt2
   in
-  equalsOrSpecialises_ adt1' adt2'
+    equalsOrSpecialises_ adt1' adt2'
 
 -- | left `equalsOrSpecialises_` right
 -- | (left => right)
@@ -296,20 +296,24 @@ equalsOrSpecialises adt1 adt2 = let
 equalsOrSpecialises_ :: forall a. Ord a => Eq a => CNF a -> CNF a -> Boolean
 equalsOrSpecialises_ = unsafePartial equalsOrSpecialises'
   where
-    equalsOrSpecialises' :: CNF a -> CNF a -> Boolean
-    equalsOrSpecialises' (DPROD disjunctionsOnLeft) (DPROD disjunctionsOnRight) = unwrap
-      (fold
-        (disjunctionsOnRight <#> \(DSUM disjunctionOnRight) -> Conj $ isJust $ (flip findIndex) disjunctionsOnLeft
-          \(DSUM disjunctionOnLeft) -> ((SET.fromFoldable disjunctionOnLeft) `SET.subset` (SET.fromFoldable disjunctionOnRight))))
+  equalsOrSpecialises' :: CNF a -> CNF a -> Boolean
+  equalsOrSpecialises' (DPROD disjunctionsOnLeft) (DPROD disjunctionsOnRight) = unwrap
+    ( fold
+        ( disjunctionsOnRight <#> \(DSUM disjunctionOnRight) -> Conj $ isJust $ (flip findIndex) disjunctionsOnLeft
+            \(DSUM disjunctionOnLeft) -> ((SET.fromFoldable disjunctionOnLeft) `SET.subset` (SET.fromFoldable disjunctionOnRight))
+        )
+    )
 
 equals_ :: forall a. Ord a => Eq a => CNF a -> CNF a -> Boolean
 equals_ = unsafePartial equals'
   where
-    equals' :: CNF a -> CNF a -> Boolean
-    equals' (DPROD disjunctionsOnLeft) (DPROD disjunctionsOnRight) = length disjunctionsOnLeft == length disjunctionsOnRight && unwrap
-      (fold
-        (disjunctionsOnRight <#> \(DSUM disjunctionOnRight) -> Conj $ isJust $ (flip findIndex) disjunctionsOnLeft
-          \(DSUM disjunctionOnLeft) -> ((SET.fromFoldable disjunctionOnLeft) == (SET.fromFoldable disjunctionOnRight))))
+  equals' :: CNF a -> CNF a -> Boolean
+  equals' (DPROD disjunctionsOnLeft) (DPROD disjunctionsOnRight) = length disjunctionsOnLeft == length disjunctionsOnRight && unwrap
+    ( fold
+        ( disjunctionsOnRight <#> \(DSUM disjunctionOnRight) -> Conj $ isJust $ (flip findIndex) disjunctionsOnLeft
+            \(DSUM disjunctionOnLeft) -> ((SET.fromFoldable disjunctionOnLeft) == (SET.fromFoldable disjunctionOnRight))
+        )
+    )
 
 -- | left `specialises` right
 -- | left -> right

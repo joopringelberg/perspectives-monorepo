@@ -20,7 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.ArrayUnions  where
+module Perspectives.ArrayUnions where
 
 import Prelude
 
@@ -28,14 +28,19 @@ import Data.Array (concat, singleton)
 import Data.Newtype (class Newtype, unwrap)
 
 newtype ArrayUnions a = ArrayUnions (Array a)
+
 derive instance Newtype (ArrayUnions a) _
 instance Functor ArrayUnions where
   map f (ArrayUnions arr) = ArrayUnions $ (map f arr)
+
 instance Apply ArrayUnions where
   apply (ArrayUnions fs) (ArrayUnions arr) = ArrayUnions (fs <*> arr)
-instance Applicative ArrayUnions where 
+
+instance Applicative ArrayUnions where
   pure = ArrayUnions <<< singleton
+
 instance Bind ArrayUnions where
   bind (ArrayUnions arr) f = ArrayUnions $ concat (unwrap <$> (f <$> arr))
+
 instance Semigroup (ArrayUnions a) where
   append (ArrayUnions a1) (ArrayUnions a2) = ArrayUnions (a1 <> a2)

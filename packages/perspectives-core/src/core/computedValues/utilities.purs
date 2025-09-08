@@ -81,22 +81,25 @@ import Unsafe.Coerce (unsafeCoerce)
 
 -- TODO: verander naar echte gegenereerde identifiers.
 genSym :: RoleInstance -> MonadPerspectivesQuery String
-genSym _ = try 
-  (lift $ lift createCuid)
-  >>= handleExternalFunctionError "model://perspectives.domains#Utilities$GenSym"
+genSym _ =
+  try
+    (lift $ lift createCuid)
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$GenSym"
 
 -- | Returns a random int in the closed interval [l;u].
 random :: Array String -> Array String -> RoleInstance -> MonadPerspectivesQuery Value
-random lower_ upper_ _ = try 
-  (ArrayT case head lower_, head upper_ of
-    Just l, Just u -> do 
-      lowerBound <- try $ liftAff $ parseNumber l 
-      upperBound <- try $ liftAff $ parseNumber u
-      case lowerBound, upperBound of 
-        Right lower, Right upper -> (liftEffect (randomRange lower upper)) >>= pure <<< singleton <<< Value <<< show <<< floor
+random lower_ upper_ _ =
+  try
+    ( ArrayT case head lower_, head upper_ of
+        Just l, Just u -> do
+          lowerBound <- try $ liftAff $ parseNumber l
+          upperBound <- try $ liftAff $ parseNumber u
+          case lowerBound, upperBound of
+            Right lower, Right upper -> (liftEffect (randomRange lower upper)) >>= pure <<< singleton <<< Value <<< show <<< floor
+            _, _ -> pure []
         _, _ -> pure []
-    _, _ -> pure [])
-  >>= handleExternalFunctionError "model://perspectives.domains#Utilities$Random"
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$Random"
 
 roleIdentifier :: RoleInstance -> MonadPerspectivesQuery String
 roleIdentifier (RoleInstance id) = pure id
@@ -105,41 +108,48 @@ contextIdentifier :: ContextInstance -> MonadPerspectivesQuery String
 contextIdentifier (ContextInstance id) = pure id
 
 systemIdentifier :: RoleInstance -> MonadPerspectivesQuery String
-systemIdentifier _ = try
-  (lift $ lift getSystemIdentifier)
-  >>= handleExternalFunctionError "model://perspectives.domains#Utilities$SystemIdentifier"
+systemIdentifier _ =
+  try
+    (lift $ lift getSystemIdentifier)
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$SystemIdentifier"
 
 bottomIdentifier :: RoleInstance -> MonadPerspectivesQuery String
 bottomIdentifier = bottom >=> pure <<< unwrap
 
 replace :: Array String -> Array String -> String -> MonadPerspectivesQuery String
-replace patterns replacements value = try
-  (case head patterns, head replacements of
-    Just pattern, Just replacement -> pure $ String.replace (Pattern pattern) (Replacement replacement) value
-    _, _ -> pure value)
-  >>= handleExternalFunctionError "model://perspectives.domains#Utilities$Replace"
+replace patterns replacements value =
+  try
+    ( case head patterns, head replacements of
+        Just pattern, Just replacement -> pure $ String.replace (Pattern pattern) (Replacement replacement) value
+        _, _ -> pure value
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$Replace"
 
 replaceR :: Array String -> Array String -> String -> MonadPerspectivesQuery String
-replaceR patterns replacements value = try
-  (case head patterns, head replacements of
-    Just regexString, Just replacement -> do
-      theRegex <- pure $ REGEX.regex regexString noFlags
-      case theRegex of
-        Left e -> pure value
-        Right r -> pure $ REGEX.replace r replacement value
-    _, _ -> pure value)
-  >>= handleExternalFunctionError "model://perspectives.domains#Utilities$ReplaceR"
+replaceR patterns replacements value =
+  try
+    ( case head patterns, head replacements of
+        Just regexString, Just replacement -> do
+          theRegex <- pure $ REGEX.regex regexString noFlags
+          case theRegex of
+            Left e -> pure value
+            Right r -> pure $ REGEX.replace r replacement value
+        _, _ -> pure value
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$ReplaceR"
 
 selectR :: Array String -> String -> MonadPerspectivesQuery String
-selectR patterns value = try 
-  (ArrayT case head patterns of
-    Just regexString -> case REGEX.regex regexString noFlags of
-      Left e -> pure []
-      Right r -> case getFirstMatch r value of
+selectR patterns value =
+  try
+    ( ArrayT case head patterns of
+        Just regexString -> case REGEX.regex regexString noFlags of
+          Left e -> pure []
+          Right r -> case getFirstMatch r value of
+            Nothing -> pure []
+            Just s -> pure [ s ]
         Nothing -> pure []
-        Just s -> pure [s]
-    Nothing -> pure [])
-  >>= handleExternalFunctionError "model://perspectives.domains#Utilities$SelectR"
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$SelectR"
 
 -- | See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat for the values of Locale and 
 -- | the shape that the options can have.
@@ -151,13 +161,15 @@ type FormatOptions = String
 
 -- | The timeZone is always UTC. This is in line with the time values that we obtain from the SmartFieldControl.
 formatDateTime_ :: Array String -> Array String -> Array String -> RoleInstance -> MonadPerspectivesQuery String
-formatDateTime_ dts locales optionss _ = try 
-  (ArrayT $ case head dts, head locales, head optionss of
-    Just dt, Just locale, Just options -> do
-      epoch <- parseNumber dt
-      runArrayT $ liftEffect $ formatDateTime epoch locale options
-    _, _, _ -> pure [])
-  >>= handleExternalFunctionError "model://perspectives.domains#Utilities$FormatDateTime"
+formatDateTime_ dts locales optionss _ =
+  try
+    ( ArrayT $ case head dts, head locales, head optionss of
+        Just dt, Just locale, Just options -> do
+          epoch <- parseNumber dt
+          runArrayT $ liftEffect $ formatDateTime epoch locale options
+        _, _, _ -> pure []
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$FormatDateTime"
 
 formatDateTime :: Number -> Locale -> FormatOptions -> Effect String
 formatDateTime dt locale options = runEffectFn3 formatDateTimeImpl dt locale options
@@ -174,49 +186,52 @@ instance Show EvaluationResult where
 -- | Evaluate the expression and apply it to the role instance.
 -- | The result is a (series of) error message(s) that will start with "error#" or a valid result in string form preceded by "result#".
 evalExpression :: String -> RoleInstance -> MonadPerspectivesQuery String
-evalExpression expr roleId@(RoleInstance id) = do 
+evalExpression expr roleId@(RoleInstance id) = do
   rt <- roleType roleId
   ct <- (context >=> contextType) roleId
-  (r :: Either ParseError Step) <- liftAff $ runIndentParser expr step 
-  case r of 
+  (r :: Either ParseError Step) <- liftAff $ runIndentParser expr step
+  case r of
     Left e -> pure $ show (PE e)
-    Right (parseTree :: Step) -> do 
+    Right (parseTree :: Step) -> do
       s <- liftAff $ evalPhaseTwo' (expandPrefix parseTree)
-      case s of 
+      case s of
         Left e -> pure $ show (PSPE e)
-        Right parseTree' -> do 
+        Right parseTree' -> do
           lift $ lift $ void $ ensureModel parseTree'
-          (t :: Either MultiplePerspectivesErrors QueryFunctionDescription) <- lift $ lift $ evalPhaseTwo' 
-            (compileExpression (RDOM $ UET $ RoleInContext {context: ct, role: rt}) parseTree')
-          case t of 
+          (t :: Either MultiplePerspectivesErrors QueryFunctionDescription) <- lift $ lift $ evalPhaseTwo'
+            (compileExpression (RDOM $ UET $ RoleInContext { context: ct, role: rt }) parseTree')
+          case t of
             Left errs -> pure $ show (PSPE errs)
-            Right qfd -> do 
+            Right qfd -> do
               calculator <- lift $ lift $ compileFunction qfd
               result <- calculator id
               pure $ "result#" <> result
 
 evalExpression_ :: Array String -> RoleInstance -> MonadPerspectivesQuery String
-evalExpression_ exprArray roleId = try
-  (ArrayT case head exprArray of 
-    Just expr -> runArrayT $ evalExpression expr roleId
-    _ -> pure []
-  )
-  >>= handleExternalFunctionError "model://perspectives.domains#Utilities$EvalExpression"
+evalExpression_ exprArray roleId =
+  try
+    ( ArrayT case head exprArray of
+        Just expr -> runArrayT $ evalExpression expr roleId
+        _ -> pure []
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$EvalExpression"
 
 -- | Return various values from PerspectivesState or even other state.
 systemParameter_ :: Array String -> ContextInstance -> MonadPerspectivesQuery String
-systemParameter_ parArray _ = try 
-  (ArrayT $ lift case head parArray of 
-    Just par -> case par of
-      "IsFirstInstallation" -> gets (singleton <<< show <<< _.isFirstInstallation <<< _.runtimeOptions)
-      "PublicKey" -> getMyPublicKey >>= case _ of 
-        Just publicKey -> pure [publicKey]
-        Nothing -> pure []
-      "MyContextsVersion" -> gets (singleton <<< _.myContextsVersion <<< _.runtimeOptions)
-      "PDRVersion" -> pure [pdrVersion]
-      _ -> pure []
-    _ -> pure [])
-  >>= handleExternalFunctionError "model://perspectives.domains#Utilities$SystemParameter"
+systemParameter_ parArray _ =
+  try
+    ( ArrayT $ lift case head parArray of
+        Just par -> case par of
+          "IsFirstInstallation" -> gets (singleton <<< show <<< _.isFirstInstallation <<< _.runtimeOptions)
+          "PublicKey" -> getMyPublicKey >>= case _ of
+            Just publicKey -> pure [ publicKey ]
+            Nothing -> pure []
+          "MyContextsVersion" -> gets (singleton <<< _.myContextsVersion <<< _.runtimeOptions)
+          "PDRVersion" -> pure [ pdrVersion ]
+          _ -> pure []
+        _ -> pure []
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$SystemParameter"
 
 -- | The package version of the Perspectives Distributed Runtime.
 foreign import pdrVersion :: String
@@ -224,41 +239,44 @@ foreign import mycontextsUrl :: String
 
 -- | Given a serialised transaction and the string representation of a ConfirmationCode, creates a serialised Invitation
 createInvitation_ :: Array String -> Array String -> Array String -> RoleInstance -> MonadPerspectivesQuery String
-createInvitation_ messageA transactionA confirmationA _ = try 
-  (ArrayT $ lift case head messageA, head transactionA, head confirmationA of
-    Just message, Just transaction, Just confirmation -> pure [writeJSON { message, transaction, confirmation }]
-    _, _, _ -> pure [])
-  >>= handleExternalFunctionError "model://perspectives.domains#Utilities$CreateInvitation"
+createInvitation_ messageA transactionA confirmationA _ =
+  try
+    ( ArrayT $ lift case head messageA, head transactionA, head confirmationA of
+        Just message, Just transaction, Just confirmation -> pure [ writeJSON { message, transaction, confirmation } ]
+        _, _, _ -> pure []
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$CreateInvitation"
 
 getSharedFileServerKey :: Array String -> RoleInstance -> MonadPerspectivesQuery String
-getSharedFileServerKey keyArray _ = try
-  (ArrayT $ case head keyArray of
-    Just sharedFileServerKey -> do
-        rq <- pure 
-          { method: Left POST
-          , url: mycontextsUrl <> "ppsfs/getsharedfileserverkey"
-          , headers: []
-          , content: Just $ RequestBody.string $ writeJSON ({sharedfileserverkey: sharedFileServerKey } :: { sharedfileserverkey :: String})
-          , responseFormat: ResponseFormat.string
-          , timeout: Nothing
-          , password: Nothing
-          , username: Nothing
-          , withCredentials: false
-          }
-        res <- liftAff $ request rq
-        case res of 
-          Left e -> do 
-            log $ printError e
-            pure []
-          Right (response :: Response String) -> case (readJSON response.body) of
-            Left e -> throwError $ error ("model://perspectives.domains#Utilities$GetSharedFileServerKey: " <> show e)
-            Right (r :: {error :: Maybe Int, message :: Maybe String, newKey :: Maybe String}) -> case r.error, r.message, r.newKey of
-              Just error_, Just message_, _ -> log message_ *> pure []
-              Nothing, Nothing, Just newKey_ -> pure [newKey_]
-              _, _, _ -> pure []
-    Nothing -> pure []
+getSharedFileServerKey keyArray _ =
+  try
+    ( ArrayT $ case head keyArray of
+        Just sharedFileServerKey -> do
+          rq <- pure
+            { method: Left POST
+            , url: mycontextsUrl <> "ppsfs/getsharedfileserverkey"
+            , headers: []
+            , content: Just $ RequestBody.string $ writeJSON ({ sharedfileserverkey: sharedFileServerKey } :: { sharedfileserverkey :: String })
+            , responseFormat: ResponseFormat.string
+            , timeout: Nothing
+            , password: Nothing
+            , username: Nothing
+            , withCredentials: false
+            }
+          res <- liftAff $ request rq
+          case res of
+            Left e -> do
+              log $ printError e
+              pure []
+            Right (response :: Response String) -> case (readJSON response.body) of
+              Left e -> throwError $ error ("model://perspectives.domains#Utilities$GetSharedFileServerKey: " <> show e)
+              Right (r :: { error :: Maybe Int, message :: Maybe String, newKey :: Maybe String }) -> case r.error, r.message, r.newKey of
+                Just error_, Just message_, _ -> log message_ *> pure []
+                Nothing, Nothing, Just newKey_ -> pure [ newKey_ ]
+                _, _, _ -> pure []
+        Nothing -> pure []
     )
-  >>= handleExternalFunctionError "model://perspectives.domains#Utilities$GetSharedFileServerKey"
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$GetSharedFileServerKey"
 
 idbSet :: Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
 idbSet keys values _ = case head keys, head values of
@@ -283,37 +301,39 @@ toVersion str = case parseVersion str of
 
 -- Compare versions (returns true if v1 < v2)
 isLowerVersion :: String -> String -> Boolean
-isLowerVersion v1 v2 = 
+isLowerVersion v1 v2 =
   case toVersion v1, toVersion v2 of
     Just v1', Just v2' -> v1' < v2'
-    _, _ -> false  -- Handle parsing errors however you prefer
+    _, _ -> false -- Handle parsing errors however you prefer
 
 isLowerVersion_ :: Array String -> Array String -> RoleInstance -> MonadPerspectivesQuery Value
-isLowerVersion_ v1s v2s _ = try
-  (case head v1s, head v2s of
-    Just v1, Just v2 -> pure $ Value $ show $ isLowerVersion v1 v2
-    _, _ -> pure $ Value "false")
-  >>= handleExternalFunctionError "model://perspectives.domains#Utilities$IsLowerVersion"
+isLowerVersion_ v1s v2s _ =
+  try
+    ( case head v1s, head v2s of
+        Just v1, Just v2 -> pure $ Value $ show $ isLowerVersion v1 v2
+        _, _ -> pure $ Value "false"
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$IsLowerVersion"
 
 -- | An Array of External functions. Each External function is inserted into the ExternalFunctionCache and can be retrieved
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
 externalFunctions =
-  [ Tuple "model://perspectives.domains#Utilities$GenSym" {func: unsafeCoerce genSym, nArgs: 0, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$RoleIdentifier" {func: unsafeCoerce roleIdentifier, nArgs: 0, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$ContextIdentifier" {func: unsafeCoerce contextIdentifier, nArgs: 0, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$SystemIdentifier" {func: unsafeCoerce systemIdentifier, nArgs: 0, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$BottomIdentifier" {func: unsafeCoerce bottomIdentifier, nArgs: 0, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$Replace" {func: unsafeCoerce replace, nArgs: 2, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$ReplaceR" {func: unsafeCoerce replaceR, nArgs: 2, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$SelectR" {func: unsafeCoerce selectR, nArgs: 1, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$Random" {func: unsafeCoerce random, nArgs: 2, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$FormatDateTime" {func: unsafeCoerce formatDateTime_, nArgs: 3, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$EvalExpression" {func: unsafeCoerce evalExpression_, nArgs: 1, isFunctional: Unknown, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$SystemParameter" {func: unsafeCoerce systemParameter_, nArgs: 1, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$CreateInvitation" {func: unsafeCoerce createInvitation_, nArgs: 3, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$GetSharedFileServerKey" {func: unsafeCoerce getSharedFileServerKey, nArgs: 1, isFunctional: True, isEffect: false}
-  , Tuple "model://perspectives.domains#Utilities$IdbSet" {func: unsafeCoerce idbSet, nArgs: 2, isFunctional: True, isEffect: true}
-  , Tuple "model://perspectives.domains#Utilities$SetCurrentLanguage" {func: unsafeCoerce setCurrentLanguage, nArgs: 2, isFunctional: True, isEffect: true}
+  [ Tuple "model://perspectives.domains#Utilities$GenSym" { func: unsafeCoerce genSym, nArgs: 0, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$RoleIdentifier" { func: unsafeCoerce roleIdentifier, nArgs: 0, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$ContextIdentifier" { func: unsafeCoerce contextIdentifier, nArgs: 0, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$SystemIdentifier" { func: unsafeCoerce systemIdentifier, nArgs: 0, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$BottomIdentifier" { func: unsafeCoerce bottomIdentifier, nArgs: 0, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$Replace" { func: unsafeCoerce replace, nArgs: 2, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$ReplaceR" { func: unsafeCoerce replaceR, nArgs: 2, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$SelectR" { func: unsafeCoerce selectR, nArgs: 1, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$Random" { func: unsafeCoerce random, nArgs: 2, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$FormatDateTime" { func: unsafeCoerce formatDateTime_, nArgs: 3, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$EvalExpression" { func: unsafeCoerce evalExpression_, nArgs: 1, isFunctional: Unknown, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$SystemParameter" { func: unsafeCoerce systemParameter_, nArgs: 1, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$CreateInvitation" { func: unsafeCoerce createInvitation_, nArgs: 3, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$GetSharedFileServerKey" { func: unsafeCoerce getSharedFileServerKey, nArgs: 1, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$IdbSet" { func: unsafeCoerce idbSet, nArgs: 2, isFunctional: True, isEffect: true }
+  , Tuple "model://perspectives.domains#Utilities$SetCurrentLanguage" { func: unsafeCoerce setCurrentLanguage, nArgs: 2, isFunctional: True, isEffect: true }
   , mkLibFunc2 "model://perspectives.domains#Utilities$IsLowerVersion" True isLowerVersion_
   ]

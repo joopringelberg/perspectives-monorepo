@@ -72,15 +72,14 @@ instance prettyPrintQueryWithAKink_ :: PrettyPrint QueryWithAKink_ where
 completeInversions :: QueryFunctionDescription -> PhaseThree (Array QueryFunctionDescription)
 completeInversions = invert >=> pure <<< catMaybes <<< map f
   where
-    f :: QueryWithAKink -> Maybe QueryFunctionDescription
-    f qwk = if isCompleteInverse qwk then backwards qwk else Nothing
+  f :: QueryWithAKink -> Maybe QueryFunctionDescription
+  f qwk = if isCompleteInverse qwk then backwards qwk else Nothing
 
-    -- | Is the original query completely inversed? (as opposed to: is this a partial inversion).
-    -- | By definition this is true if the forwards part is Nothing.
-    isCompleteInverse :: QueryWithAKink -> Boolean
-    isCompleteInverse (ZQ _ Nothing) = true
-    isCompleteInverse _ = false
-
+  -- | Is the original query completely inversed? (as opposed to: is this a partial inversion).
+  -- | By definition this is true if the forwards part is Nothing.
+  isCompleteInverse :: QueryWithAKink -> Boolean
+  isCompleteInverse (ZQ _ Nothing) = true
+  isCompleteInverse _ = false
 
 --------------------------------------------------------------------------------------------------------------
 ---- INVERT
@@ -100,43 +99,46 @@ completeInversions = invert >=> pure <<< catMaybes <<< map f
 invert :: QueryFunctionDescription -> PhaseThree (Array QueryWithAKink)
 invert = invert_ >=> pure <<< catMaybes <<< map h
   where
-    h :: QueryWithAKink_ -> Maybe QueryWithAKink
-    h (ZQ_ steps q) = case unsnoc steps of
-      -- Remove candidates without a backwards part.
-      Nothing -> Nothing
-      -- Creates a right-associative composition that preserves the order in steps.
-      Just {init, last} -> Just $ ZQ (Just $ foldr makeComposition last init) q
+  h :: QueryWithAKink_ -> Maybe QueryWithAKink
+  h (ZQ_ steps q) = case unsnoc steps of
+    -- Remove candidates without a backwards part.
+    Nothing -> Nothing
+    -- Creates a right-associative composition that preserves the order in steps.
+    Just { init, last } -> Just $ ZQ (Just $ foldr makeComposition last init) q
 
 -- | The QueryFunctionDescriptions in the Array of each QueryWithAKink_
 -- | are inversed wrt the orinal query.
 invert_ :: QueryFunctionDescription -> PhaseThree (Array QueryWithAKink_)
 -- NOTE moeten we hier niet iets met de args?
 -- The inversion depends on the function f.
-invert_ (MQD dom (ExternalCoreRoleGetter f) args ran _ _) = case f of 
-  "model://perspectives.domains#Couchdb$PendingInvitations" -> pure [ZQ_ [SQD ran (ContextIndividual (ContextInstance mySystem)) dom True True] Nothing]
-  _ -> pure $ [ZQ_ [MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances") args dom Unknown Unknown] Nothing]
- 
+invert_ (MQD dom (ExternalCoreRoleGetter f) args ran _ _) = case f of
+  "model://perspectives.domains#Couchdb$PendingInvitations" -> pure [ ZQ_ [ SQD ran (ContextIndividual (ContextInstance mySystem)) dom True True ] Nothing ]
+  _ -> pure $ [ ZQ_ [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances") args dom Unknown Unknown ] Nothing ]
+
 invert_ (MQD _ _ args _ _ _) = join <$> traverse invert_ args
 
 invert_ q@(BQD dom (BinaryCombinator ComposeF) l r _ f m) = case l of
-  (BQD _ (BinaryCombinator UnionF) conj1 conj2 _ _ _) -> append <$>
-    invert_ (makeComposition conj1 (replaceDomain r (range conj1))) <*>
-    invert_ (makeComposition conj2 (replaceDomain r (range conj2)))
+  (BQD _ (BinaryCombinator UnionF) conj1 conj2 _ _ _) -> append
+    <$> invert_ (makeComposition conj1 (replaceDomain r (range conj1)))
+    <*>
+      invert_ (makeComposition conj2 (replaceDomain r (range conj2)))
 
-  (BQD _ (BinaryCombinator IntersectionF) conj1 conj2 _ _ _) -> append <$>
-    invert_ (makeComposition conj1 (replaceDomain r (range conj1))) <*>
-    invert_ (makeComposition conj2 (replaceDomain r (range conj2)))
+  (BQD _ (BinaryCombinator IntersectionF) conj1 conj2 _ _ _) -> append
+    <$> invert_ (makeComposition conj1 (replaceDomain r (range conj1)))
+    <*>
+      invert_ (makeComposition conj2 (replaceDomain r (range conj2)))
 
   (BQD _ (BinaryCombinator ComposeF) qfd1 qfd2 ran _ _) -> invert_ (BQD dom (BinaryCombinator ComposeF) qfd1 (BQD (range qfd1) (BinaryCombinator ComposeF) qfd2 r ran f m) ran f m)
 
-  (BQD _ (BinaryCombinator FilledByF) conj1 conj2 _ _ _) -> append <$>
-    invert_ (makeComposition conj1 (replaceDomain r (range conj1))) <*>
-    invert_ (makeComposition conj2 (replaceDomain r (range conj2)))
+  (BQD _ (BinaryCombinator FilledByF) conj1 conj2 _ _ _) -> append
+    <$> invert_ (makeComposition conj1 (replaceDomain r (range conj1)))
+    <*>
+      invert_ (makeComposition conj2 (replaceDomain r (range conj2)))
 
   (BQD _ (BinaryCombinator SequenceF) qfd1 qfd2 ran _ _) -> do
     q1 <- invert_ qfd1
     q2 <- invert_ qfd2
-    pure $ join $ [q1, q2]
+    pure $ join $ [ q1, q2 ]
 
   qq@(SQD _ (VariableLookup varName) _ _ _) -> do
     varExpr <- lookupVariableBinding varName
@@ -144,60 +146,59 @@ invert_ q@(BQD dom (BinaryCombinator ComposeF) l r _ f m) = case l of
       Nothing -> pure []
       Just qfd | qq == qfd -> pure []
       Just qfd -> invert_ (makeComposition qfd r)
-  
+
   otherwise -> do
     (lefts :: Array QueryWithAKink_) <- invert_ l
     (rights :: Array QueryWithAKink_) <- invert_ r
-    case lefts, rights of 
+    case lefts, rights of
       [], _ -> pure rights
       _, [] -> pure lefts
-      _, _ -> do 
+      _, _ -> do
         comprehension <- pure (comprehend lefts rights)
         -- If the next step is a filter, just return the comprehension. This is because storeInvertedQueries will 
         -- re-create the lefts, but then with a condition.
         -- TODO. I am not sure of the above.
-        if hasFilter r
-          then pure comprehension
-          else append comprehension <$>  for lefts 
-            -- Add the original right part of the composition as the forward part of the qinked query.
-            \(ZQ_ bw fw) -> case fw of
-              Nothing -> pure $ ZQ_ bw (Just r)
-              Just fw' -> pure $ ZQ_ bw (Just $ makeComposition fw' r)
-  
+        if hasFilter r then pure comprehension
+        else append comprehension <$> for lefts
+          -- Add the original right part of the composition as the forward part of the qinked query.
+          \(ZQ_ bw fw) -> case fw of
+            Nothing -> pure $ ZQ_ bw (Just r)
+            Just fw' -> pure $ ZQ_ bw (Just $ makeComposition fw' r)
+
   where
-    comprehend :: Array QueryWithAKink_ -> Array QueryWithAKink_ -> Array QueryWithAKink_
-    comprehend lefts rights = do
-      (ZQ_ left_inverted_steps mLeft_forward) <- lefts
-      (ZQ_ right_inverted_steps mRight_forward) <- rights
-      -- The range of mLeft_forward must equal the domain of mRight_forward.
-      -- guard $ case range <$> mLeft_forward, domain <$> mRight_forward of
-      --   Just ran, Just domn -> ran == domn
-      --   -- If the forward of the left part is Nothing, left has been inverted entirely and 
-      --   -- may be combined with any inversion of right.
-      --   Nothing, _ -> true
-      --   _, _ -> false
-      guard $ case range <$> (last right_inverted_steps), domain <$> head left_inverted_steps of
-        -- We had `equalsOrGeneralizesDomain` instead of `eq`. This runs into two implementation problems:
-        --  a. we need `equalsOrGeneralisesRoleInContext`, which is a Monadic function. That seriously complicates the comprehension.
-        --  b. we then need that operation on CDOM (ADT ContextType), which we do not yet have and requires a lot of work.
-        -- Reconsidering, `eq` is probably right anyway. This is because for consequtive query steps, the range of f1 equals 
-        -- the domain of f2 in f1 >> f2. And here we are just juggling around all these combinations.
-        Just ranRight, Just domLeft -> ranRight `eq` domLeft
-        -- NOTE that as the backwards part cannot be empty, the next case may not occur.
-        _, _ -> false
-      -- This is where we invert the order of the steps.
-      -- That's obvious if both left and right were single steps.
-      -- Remember we have right-associativity: s1 >> (s2 >> s3).
-      -- So when right has multiple steps, we receive them from the recursive call in reverse order: [s3, s2].
-      -- We must then add the left step to the end of those steps: [s3, s2] <> [s1].
-      pure $ ZQ_ (right_inverted_steps <> left_inverted_steps)
-                  (mLeft_forward `composeOverMaybe` mRight_forward)
-    
-    hasFilter :: QueryFunctionDescription -> Boolean
-    hasFilter qfd = case qfd of 
-      (UQD _ FilterF _ _ _ _) -> true
-      (BQD _ (BinaryCombinator ComposeF) (UQD _ FilterF _ _ _ _) _ _ _ _) -> true
-      _ -> false
+  comprehend :: Array QueryWithAKink_ -> Array QueryWithAKink_ -> Array QueryWithAKink_
+  comprehend lefts rights = do
+    (ZQ_ left_inverted_steps mLeft_forward) <- lefts
+    (ZQ_ right_inverted_steps mRight_forward) <- rights
+    -- The range of mLeft_forward must equal the domain of mRight_forward.
+    -- guard $ case range <$> mLeft_forward, domain <$> mRight_forward of
+    --   Just ran, Just domn -> ran == domn
+    --   -- If the forward of the left part is Nothing, left has been inverted entirely and 
+    --   -- may be combined with any inversion of right.
+    --   Nothing, _ -> true
+    --   _, _ -> false
+    guard $ case range <$> (last right_inverted_steps), domain <$> head left_inverted_steps of
+      -- We had `equalsOrGeneralizesDomain` instead of `eq`. This runs into two implementation problems:
+      --  a. we need `equalsOrGeneralisesRoleInContext`, which is a Monadic function. That seriously complicates the comprehension.
+      --  b. we then need that operation on CDOM (ADT ContextType), which we do not yet have and requires a lot of work.
+      -- Reconsidering, `eq` is probably right anyway. This is because for consequtive query steps, the range of f1 equals 
+      -- the domain of f2 in f1 >> f2. And here we are just juggling around all these combinations.
+      Just ranRight, Just domLeft -> ranRight `eq` domLeft
+      -- NOTE that as the backwards part cannot be empty, the next case may not occur.
+      _, _ -> false
+    -- This is where we invert the order of the steps.
+    -- That's obvious if both left and right were single steps.
+    -- Remember we have right-associativity: s1 >> (s2 >> s3).
+    -- So when right has multiple steps, we receive them from the recursive call in reverse order: [s3, s2].
+    -- We must then add the left step to the end of those steps: [s3, s2] <> [s1].
+    pure $ ZQ_ (right_inverted_steps <> left_inverted_steps)
+      (mLeft_forward `composeOverMaybe` mRight_forward)
+
+  hasFilter :: QueryFunctionDescription -> Boolean
+  hasFilter qfd = case qfd of
+    (UQD _ FilterF _ _ _ _) -> true
+    (BQD _ (BinaryCombinator ComposeF) (UQD _ FilterF _ _ _ _) _ _ _ _) -> true
+    _ -> false
 
 -- invert_ (BQD _ (BinaryCombinator FilterF) source criterium _ _ _) = invert_ $ 
 --   makeComposition source $
@@ -232,22 +233,22 @@ invert_ filter@(UQD _ FilterF criterium _ _ _) = do
   -- An inversion of criterium is a query whose range is the type of items to be judged. 
   -- We append the filter to such an inverted query (apply the filter to items of the range type!).
   where
-    addFilter :: QueryWithAKink_ -> QueryWithAKink_
-    addFilter (ZQ_ steps forward) = ZQ_ (snoc steps filter) forward
+  addFilter :: QueryWithAKink_ -> QueryWithAKink_
+  addFilter (ZQ_ steps forward) = ZQ_ (snoc steps filter) forward
 
 invert_ (UQD _ _ qfd _ _ _) = invert_ qfd
 
 invert_ (SQD dom (Constant _ _) ran _ _) = pure []
 
 invert_ (SQD dom (RolGetter rt) ran _ _) = case rt of
-  ENR _ -> pure [ZQ_ [(SQD ran (DataTypeGetter ContextF) dom True True)] Nothing]
+  ENR _ -> pure [ ZQ_ [ (SQD ran (DataTypeGetter ContextF) dom True True) ] Nothing ]
   CR r -> (lift2 $ (getRole >=> getCalculation) rt) >>= invert_
 
 invert_ (SQD dom (PropertyGetter (CP prop)) ran _ _) = (lift2 $ (getCalculatedProperty >=> calculation) prop) >>= invert_
 
 invert_ (SQD dom (DataTypeGetter CountF) ran _ _) = pure []
 
-  -- Treat a variable by looking up its definition (a QueryFunctionDescription), inverting it and inserting it.
+-- Treat a variable by looking up its definition (a QueryFunctionDescription), inverting it and inserting it.
 invert_ q@(SQD dom (VariableLookup varName) _ _ _) = do
   varExpr <- lookupVariableBinding varName
   case varExpr of
@@ -257,67 +258,92 @@ invert_ q@(SQD dom (VariableLookup varName) _ _ _) = do
 
 invert_ qfd@(SQD dom@(RDOM roleAdt) f@(PropertyGetter prop@(ENP _)) ran fun man) = do
   (hasProp :: Boolean) <- roleHasProperty roleAdt
-  if hasProp
-    then do
-      minvertedF <- invertFunction dom f ran
-      case minvertedF of
-        Nothing -> pure []
-        Just invertedF -> pure [ZQ_ [(SQD ran invertedF dom True True)] Nothing]
-    else (expandPropertyQuery roleAdt) >>= invert_
+  if hasProp then do
+    minvertedF <- invertFunction dom f ran
+    case minvertedF of
+      Nothing -> pure []
+      Just invertedF -> pure [ ZQ_ [ (SQD ran invertedF dom True True) ] Nothing ]
+  else (expandPropertyQuery roleAdt) >>= invert_
 
   where
-    -- Creates a series of nested binding expressions until the property has been reached.
-    expandPropertyQuery :: ADT RoleInContext -> PhaseThree QueryFunctionDescription
-    expandPropertyQuery adt = do
-      hasProp <- roleHasProperty adt
-      if hasProp
-        then pure (SQD (RDOM adt) (PropertyGetter prop) ran fun man)
-        else do 
-          mbinding <- lift $ lift $ bindingOfADT adt
-          case mbinding of 
-            Just binding -> do
-              bindingHasProp <- roleHasProperty binding
-              if bindingHasProp
-                then pure $ makeComposition 
-                  (SQD (RDOM adt) (DataTypeGetter FillerF) (RDOM binding) True False)
-                  (SQD (RDOM binding) (PropertyGetter prop) ran fun man)
-                else makeComposition <$> pure (SQD (RDOM adt) (DataTypeGetterWithParameter FillerF "direct") (RDOM binding) True False) <*> (expandPropertyQuery binding)
-            -- No fillers, but we haven't found the property yet. This is an error situation, but the compiler has 
-            -- ensured it cannot happen.
-            Nothing -> throwError (Custom $ "An impossible situation in module Perspectives.Query.Kinked, invert_.expandPropertyQuery. This property cannot be found: " <> show prop)
+  -- Creates a series of nested binding expressions until the property has been reached.
+  expandPropertyQuery :: ADT RoleInContext -> PhaseThree QueryFunctionDescription
+  expandPropertyQuery adt = do
+    hasProp <- roleHasProperty adt
+    if hasProp then pure (SQD (RDOM adt) (PropertyGetter prop) ran fun man)
+    else do
+      mbinding <- lift $ lift $ bindingOfADT adt
+      case mbinding of
+        Just binding -> do
+          bindingHasProp <- roleHasProperty binding
+          if bindingHasProp then pure $ makeComposition
+            (SQD (RDOM adt) (DataTypeGetter FillerF) (RDOM binding) True False)
+            (SQD (RDOM binding) (PropertyGetter prop) ran fun man)
+          else makeComposition <$> pure (SQD (RDOM adt) (DataTypeGetterWithParameter FillerF "direct") (RDOM binding) True False) <*> (expandPropertyQuery binding)
+        -- No fillers, but we haven't found the property yet. This is an error situation, but the compiler has 
+        -- ensured it cannot happen.
+        Nothing -> throwError (Custom $ "An impossible situation in module Perspectives.Query.Kinked, invert_.expandPropertyQuery. This property cannot be found: " <> show prop)
 
-    roleHasProperty :: ADT RoleInContext -> PhaseThree Boolean
-    roleHasProperty adt = lift $ lift (allLocallyRepresentedProperties (roleInContext2Role <$> adt) >>= pure <<< isJust <<< (elemIndex prop))
+  roleHasProperty :: ADT RoleInContext -> PhaseThree Boolean
+  roleHasProperty adt = lift $ lift (allLocallyRepresentedProperties (roleInContext2Role <$> adt) >>= pure <<< isJust <<< (elemIndex prop))
 
 -- The individual takes us to an instance of the range (`ran`), whatever the domain (`dom`) is. RoleIndividual is a constant function.
 -- Its inversion takes us to all instances of the domain.
-invert_ (SQD dom (RoleIndividual rid) ran fun man) = case dom of 
+invert_ (SQD dom (RoleIndividual rid) ran fun man) = case dom of
   -- Find all context instances whose type is one of the ContextTypes in CDOM adt. 
   -- NOTE: WE ARBITRARILY TAKE THE FIRST SUCH TYPE.
-  
-  CDOM adt -> pure [ZQ_ [MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances") 
-    [SQD dom (Constant PString (unwrap $ unsafePartial $ fromJust $ head $ allLeavesInADT adt)) (VDOM PString Nothing) True True]
-    dom Unknown Unknown] Nothing]
-  RDOM adt -> pure [ZQ_ [MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances") 
-    [SQD dom (Constant PString (unwrap $ roleInContext2Role $ unsafePartial $ fromJust $ head $ allLeavesInADT adt)) (VDOM PString Nothing) True True]
-    dom Unknown Unknown] Nothing]
+
+  CDOM adt -> pure
+    [ ZQ_
+        [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
+            [ SQD dom (Constant PString (unwrap $ unsafePartial $ fromJust $ head $ allLeavesInADT adt)) (VDOM PString Nothing) True True ]
+            dom
+            Unknown
+            Unknown
+        ]
+        Nothing
+    ]
+  RDOM adt -> pure
+    [ ZQ_
+        [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
+            [ SQD dom (Constant PString (unwrap $ roleInContext2Role $ unsafePartial $ fromJust $ head $ allLeavesInADT adt)) (VDOM PString Nothing) True True ]
+            dom
+            Unknown
+            Unknown
+        ]
+        Nothing
+    ]
   _ -> pure []
 
 -- Get all instances of the type of the domain. 
-invert_ (SQD dom (ContextIndividual rid) ran fun man) = case dom of 
-  CDOM adt -> pure [ZQ_ [MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances") 
-    [SQD dom (Constant PString (unwrap $ unsafePartial $ fromJust $ head $ allLeavesInADT adt)) (VDOM PString Nothing) True True]
-    dom Unknown Unknown] Nothing]
-  RDOM adt -> pure [ZQ_ [MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances") 
-    [SQD dom (Constant PString (unwrap $ roleInContext2Role $ unsafePartial $ fromJust $ head $ allLeavesInADT adt)) (VDOM PString Nothing) True True]
-    dom Unknown Unknown] Nothing]
+invert_ (SQD dom (ContextIndividual rid) ran fun man) = case dom of
+  CDOM adt -> pure
+    [ ZQ_
+        [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
+            [ SQD dom (Constant PString (unwrap $ unsafePartial $ fromJust $ head $ allLeavesInADT adt)) (VDOM PString Nothing) True True ]
+            dom
+            Unknown
+            Unknown
+        ]
+        Nothing
+    ]
+  RDOM adt -> pure
+    [ ZQ_
+        [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
+            [ SQD dom (Constant PString (unwrap $ roleInContext2Role $ unsafePartial $ fromJust $ head $ allLeavesInADT adt)) (VDOM PString Nothing) True True ]
+            dom
+            Unknown
+            Unknown
+        ]
+        Nothing
+    ]
   _ -> pure []
 
 invert_ (SQD dom f ran _ _) = do
   (minvertedF :: Maybe QueryFunction) <- invertFunction dom f ran
   case minvertedF of
     Nothing -> pure []
-    Just invertedF -> pure [ZQ_ [(SQD ran invertedF dom (queryFunctionIsFunctional invertedF) (queryFunctionIsMandatory f))] Nothing]
+    Just invertedF -> pure [ ZQ_ [ (SQD ran invertedF dom (queryFunctionIsFunctional invertedF) (queryFunctionIsMandatory f)) ] Nothing ]
 
 -- Catchall.
 invert_ q = throwError (Custom $ "Missing case in invert for: " <> prettyPrint q)

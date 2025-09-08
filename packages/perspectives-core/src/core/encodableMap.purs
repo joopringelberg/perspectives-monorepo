@@ -20,7 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.Data.EncodableMap 
+module Perspectives.Data.EncodableMap
   ( EncodableMap(..)
   , addAll
   , delete
@@ -34,8 +34,7 @@ module Perspectives.Data.EncodableMap
   , values
   , singleton
   , fromFoldable
-  )
-  where
+  ) where
 
 import Prelude
 
@@ -54,20 +53,24 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.Utilities (class PrettyPrint)
 import Simple.JSON (class ReadForeign, class WriteForeign, readImpl, writeImpl)
 
-
 newtype EncodableMap k v = EncodableMap (Map.Map k v)
 
 derive instance newtypeEncodableMap :: Newtype (EncodableMap k v) _
-instance showEncodableMap :: (Show k, Show v) => Show (EncodableMap k v) where show (EncodableMap m) = show m
-instance eqEncodableMap :: (Eq k, Eq v) => Eq (EncodableMap k v) where eq (EncodableMap m1) (EncodableMap m2) = eq m1 m2
+instance showEncodableMap :: (Show k, Show v) => Show (EncodableMap k v) where
+  show (EncodableMap m) = show m
+
+instance eqEncodableMap :: (Eq k, Eq v) => Eq (EncodableMap k v) where
+  eq (EncodableMap m1) (EncodableMap m2) = eq m1 m2
 
 instance (WriteForeign k, WriteForeign v) => WriteForeign (EncodableMap k v) where
-  writeImpl (EncodableMap m) = writeImpl ((\(Tuple k v) -> [writeImpl k, writeImpl v]) <$> (Map.toUnfoldable m :: Array (Tuple k v)))
+  writeImpl (EncodableMap m) = writeImpl ((\(Tuple k v) -> [ writeImpl k, writeImpl v ]) <$> (Map.toUnfoldable m :: Array (Tuple k v)))
 
 instance (Ord k, ReadForeign k, ReadForeign v) => ReadForeign (EncodableMap k v) where
-  readImpl f = EncodableMap <<< Map.fromFoldable <$> (traverse
-    (\pair -> Tuple <$> (unsafePartial $ readImpl $ head pair) <*> (unsafePartial $ readImpl (head $ tail pair)))
-    (unsafeFromForeign f :: Array (Array Foreign)))
+  readImpl f = EncodableMap <<< Map.fromFoldable <$>
+    ( traverse
+        (\pair -> Tuple <$> (unsafePartial $ readImpl $ head pair) <*> (unsafePartial $ readImpl (head $ tail pair)))
+        (unsafeFromForeign f :: Array (Array Foreign))
+    )
 
 instance prettyPrintEncodableMap :: (Show k, Show v) => PrettyPrint (EncodableMap k v) where
   prettyPrint' _ (EncodableMap mp) = Map.showTree mp
@@ -78,10 +81,10 @@ instance Functor (EncodableMap k) where
 -- instance traversableEncodableMap :: Traversable (EncodableMap k) where
 --   traverse f (EncodableMap mp)  = EncodableMap <$> (traverse f mp)
 --   sequence (EncodableMap mp) t = EncodableMap <$> (traverse t)
-  -- sequence (EncodableMap mp) = EncodableMap <$> traverse identity mp
+-- sequence (EncodableMap mp) = EncodableMap <$> traverse identity mp
 
 instance semigroupEncodableMap :: (Ord k, Semigroup v) => Semigroup (EncodableMap k v) where
-  append (EncodableMap map1) (EncodableMap map2)= EncodableMap (Map.unionWith append map1 map2)
+  append (EncodableMap map1) (EncodableMap map2) = EncodableMap (Map.unionWith append map1 map2)
 
 instance monoidEncodableMap :: (Ord k, Monoid v) => Monoid (EncodableMap k v) where
   mempty = EncodableMap Map.empty
@@ -112,7 +115,7 @@ removeAll :: forall key value. Ord key => value -> EncodableMap key value -> Arr
 removeAll value = foldr (\key map -> delete key map)
 
 union :: forall k v. Ord k => EncodableMap k v -> EncodableMap k v -> EncodableMap k v
-union (EncodableMap m1) (EncodableMap m2) = EncodableMap (m1 `Map.union` m2) 
+union (EncodableMap m1) (EncodableMap m2) = EncodableMap (m1 `Map.union` m2)
 
 -- | Filter out those key/value pairs of a map for which a predicate
 -- | on the key fails to hold.

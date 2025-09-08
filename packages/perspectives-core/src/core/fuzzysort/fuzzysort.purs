@@ -56,7 +56,7 @@ type FuzzyResultRecord a =
   { score :: Number
   , indexes :: Array Int
   , target :: a
-}
+  }
 
 foreign import matchStringsImpl :: forall a. Fn2 String (Array a) (Array (FuzzyResultRecord a))
 
@@ -73,17 +73,22 @@ matchIndexedContextNames s _ = ArrayT do
   sortedMatches <- pure $ matchStrings s (keys indexedNames)
   (matchingIndexedNames :: Array String) <- pure (_.target <$> sortedMatches)
   mysystem <- lift $ getMySystem
-  tell $ ArrayWithoutDoubles [RoleAssumption (ContextInstance mysystem) (EnumeratedRoleType indexedContextFuzzies)]
-  pure [Value $ writeJSON $ fromFoldable (map
-    (\iname -> Tuple iname (unwrap $ unsafePartial $ fromJust $ lookup iname indexedNames))
-    matchingIndexedNames)]
+  tell $ ArrayWithoutDoubles [ RoleAssumption (ContextInstance mysystem) (EnumeratedRoleType indexedContextFuzzies) ]
+  pure
+    [ Value $ writeJSON $ fromFoldable
+        ( map
+            (\iname -> Tuple iname (unwrap $ unsafePartial $ fromJust $ lookup iname indexedNames))
+            matchingIndexedNames
+        )
+    ]
 
 fuzzyLookup :: forall a. String -> Object a -> Maybe a
-fuzzyLookup s obj = let
-  (sortedMatches :: Array (FuzzyResultRecord String)) = matchStrings s (keys obj)
-  in 
-  case uncons sortedMatches of
-    Nothing -> Nothing
-    Just {head, tail} -> if head.score >= 0.9
-      then lookup head.target obj
-      else Nothing
+fuzzyLookup s obj =
+  let
+    (sortedMatches :: Array (FuzzyResultRecord String)) = matchStrings s (keys obj)
+  in
+    case uncons sortedMatches of
+      Nothing -> Nothing
+      Just { head, tail } ->
+        if head.score >= 0.9 then lookup head.target obj
+        else Nothing

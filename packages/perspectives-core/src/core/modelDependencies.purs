@@ -1,4 +1,4 @@
-module Perspectives.ModelDependencies  where
+module Perspectives.ModelDependencies where
 
 -- | This module contains all Arc identifiers that are used in the PDR source code.
 -- | None of these identifiers can be changed in their models without breaking the PDR.
@@ -12,43 +12,43 @@ module Perspectives.ModelDependencies  where
 ------------------------------------------------------------------------------------
 
 perspectivesUsers :: String
-perspectivesUsers = "model://perspectives.domains#System$TheWorld$PerspectivesUsers" 
+perspectivesUsers = "model://perspectives.domains#System$TheWorld$PerspectivesUsers"
 
 identifiableLastName :: String
-identifiableLastName = "model://perspectives.domains#System$Identifiable$LastName" 
+identifiableLastName = "model://perspectives.domains#System$Identifiable$LastName"
 
 identifiableFirstName :: String
-identifiableFirstName = "model://perspectives.domains#System$Identifiable$FirstName" 
+identifiableFirstName = "model://perspectives.domains#System$Identifiable$FirstName"
 
 theWorld :: String
-theWorld = "model://perspectives.domains#System$TheWorld" 
+theWorld = "model://perspectives.domains#System$TheWorld"
 
 theWorldInitializer :: String
-theWorldInitializer = "model://perspectives.domains#System$TheWorld$Initializer" 
+theWorldInitializer = "model://perspectives.domains#System$TheWorld$Initializer"
 
 perspectivesUsersCancelled :: String
-perspectivesUsersCancelled = "model://perspectives.domains#System$Identifiable$Cancelled" 
+perspectivesUsersCancelled = "model://perspectives.domains#System$Identifiable$Cancelled"
 
 perspectivesUsersPublicKey :: String
-perspectivesUsersPublicKey = "model://perspectives.domains#System$Identifiable$PublicKey" 
+perspectivesUsersPublicKey = "model://perspectives.domains#System$Identifiable$PublicKey"
 
 socialEnvironment :: String
-socialEnvironment = "model://perspectives.domains#System$SocialEnvironment" 
+socialEnvironment = "model://perspectives.domains#System$SocialEnvironment"
 
 mySocialEnvironment :: String
 mySocialEnvironment = "model://perspectives.domains#System$MySocialEnvironment"
 
 socialEnvironmentPersons :: String
-socialEnvironmentPersons = "model://perspectives.domains#System$SocialEnvironment$Persons" 
+socialEnvironmentPersons = "model://perspectives.domains#System$SocialEnvironment$Persons"
 
 socialEnvironmentMe :: String
-socialEnvironmentMe = "model://perspectives.domains#System$SocialEnvironment$Me" 
+socialEnvironmentMe = "model://perspectives.domains#System$SocialEnvironment$Me"
 
 indexedSocialMe :: String
 indexedSocialMe = "model://perspectives.domains#System$SocialMe"
 
 systemIdentityValues :: String
-systemIdentityValues = "model://perspectives.domains#System$TheWorld$SystemIdentities" 
+systemIdentityValues = "model://perspectives.domains#System$TheWorld$SystemIdentities"
 
 systemModelName :: String
 systemModelName = "model://perspectives.domains#System"
@@ -120,10 +120,10 @@ itemOnClipboardName :: String
 itemOnClipboardName = "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard$Name"
 
 selectedClipboardItem :: String
-selectedClipboardItem = "model://perspectives.domains#System$PerspectivesSystem$SelectedClipboardItem" 
+selectedClipboardItem = "model://perspectives.domains#System$PerspectivesSystem$SelectedClipboardItem"
 
 chatAspect :: String
-chatAspect = "model://perspectives.domains#System$Chat" 
+chatAspect = "model://perspectives.domains#System$Chat"
 
 recentContexts :: String
 recentContexts = "model://perspectives.domains#System$PerspectivesSystem$RecentContexts"
@@ -213,10 +213,10 @@ build :: String
 build = "model://perspectives.domains#System$VersionedModelManifest$External$Build"
 
 installedPatch :: String
-installedPatch =  "model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstalledPatch"
+installedPatch = "model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstalledPatch"
 
 installedBuild :: String
-installedBuild =  "model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstalledBuild"
+installedBuild = "model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstalledBuild"
 
 ------------------------------------------------------------------------------------
 -- COUCHDBMANAGEMENT
@@ -248,7 +248,7 @@ channel :: String
 channel = "model://perspectives.domains#System$Channel"
 
 channelDatabase :: String
-channelDatabase= "model://perspectives.domains#System$Channel$External$ChannelDatabaseName"
+channelDatabase = "model://perspectives.domains#System$Channel$External$ChannelDatabaseName"
 
 channelPartner :: String
 channelPartner = "model://perspectives.domains#System$Channel$ConnectedPartner"

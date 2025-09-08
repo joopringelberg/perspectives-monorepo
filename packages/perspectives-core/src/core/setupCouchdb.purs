@@ -67,7 +67,7 @@ createUserDatabases user = do
   void $ databaseInfo $ user <> "_invertedqueries"
   -- Now set the security document such that there is no role restriction for members.
   void $ withCouchdbUrl \url -> setSecurityDocument url (user <> "_models")
-      (SecurityDocument {admins: {names: Just [], roles: ["_admin"]}, members: {names: Just [], roles: []}})
+    (SecurityDocument { admins: { names: Just [], roles: [ "_admin" ] }, members: { names: Just [], roles: [] } })
 
 -----------------------------------------------------------
 -- VIEWS AND FILTER FUNCTIONS
@@ -90,7 +90,7 @@ createUserDatabases user = do
 -----------------------------------------------------------
 -- | Add a view to the couchdb installation in the 'repository' db.
 setRoleView :: forall f. String -> MonadPouchdb f Unit
-setRoleView dbname = void $ addViewToDatabase dbname "defaultViews" "roleView" ({map: roleView, reduce: Nothing})
+setRoleView dbname = void $ addViewToDatabase dbname "defaultViews" "roleView" ({ map: roleView, reduce: Nothing })
 
 -- | Import the view definition as a String.
 foreign import roleView :: String
@@ -103,7 +103,7 @@ roleViewFilter rtype rinstance = isJust $ elemIndex rtype (rol_allTypes rinstanc
 -----------------------------------------------------------
 -- | Add a view to the couchdb installation in the 'repository' db.
 setRoleFromContextView :: forall f. String -> MonadPouchdb f Unit
-setRoleFromContextView dbname = void $ addViewToDatabase dbname "defaultViews" "roleFromContext" ({map: roleFromContextView, reduce: Nothing})
+setRoleFromContextView dbname = void $ addViewToDatabase dbname "defaultViews" "roleFromContext" ({ map: roleFromContextView, reduce: Nothing })
 
 -- | Import the view definition as a String.
 foreign import roleFromContextView :: String
@@ -118,7 +118,7 @@ roleFromContextFilter eRoleType cinstance role = rol_context role == cinstance &
 -----------------------------------------------------------
 -- | Add a view to the couchdb installation in the 'repository' db.
 setPendingInvitationView :: forall f. String -> MonadPouchdb f Unit
-setPendingInvitationView dbname = void $ addViewToDatabase dbname "defaultViews" "pendingInvitations" ({map: pendingInvitations, reduce: Nothing})
+setPendingInvitationView dbname = void $ addViewToDatabase dbname "defaultViews" "pendingInvitations" ({ map: pendingInvitations, reduce: Nothing })
 
 -- | Import the view definition as a String.
 foreign import pendingInvitations :: String
@@ -129,7 +129,7 @@ foreign import pendingInvitations :: String
 -----------------------------------------------------------
 -- | Add a view to the couchdb installation in the 'repository' db.
 setContextView :: forall f. String -> MonadPouchdb f Unit
-setContextView dbname = void $ addViewToDatabase dbname "defaultViews" "contextView" ({map: contextView, reduce: Nothing})
+setContextView dbname = void $ addViewToDatabase dbname "defaultViews" "contextView" ({ map: contextView, reduce: Nothing })
 
 -- | Import the view definition as a String.
 foreign import contextView :: String
@@ -143,7 +143,7 @@ contextViewFilter ctype cinstance = isJust $ elemIndex ctype (context_allTypes c
 -----------------------------------------------------------
 -- | Add a view to the couchdb installation in the 'repository' db.
 setRoleSpecialisationsView :: forall f. String -> MonadPouchdb f Unit
-setRoleSpecialisationsView dbname = void $ addViewToDatabase dbname "defaultViews" "roleSpecialisationsView" ({map: roleSpecialisations, reduce: Nothing})
+setRoleSpecialisationsView dbname = void $ addViewToDatabase dbname "defaultViews" "roleSpecialisationsView" ({ map: roleSpecialisations, reduce: Nothing })
 
 -- | Import the view definition as a String.
 foreign import roleSpecialisations :: String
@@ -154,7 +154,7 @@ foreign import roleSpecialisations :: String
 -----------------------------------------------------------
 -- | Add a view to the couchdb installation in the 'repository' db.
 setContextSpecialisationsView :: forall f. String -> MonadPouchdb f Unit
-setContextSpecialisationsView dbname = void $ addViewToDatabase dbname "defaultViews" "contextSpecialisationsView" ({map: contextSpecialisations, reduce: Nothing})
+setContextSpecialisationsView dbname = void $ addViewToDatabase dbname "defaultViews" "contextSpecialisationsView" ({ map: contextSpecialisations, reduce: Nothing })
 
 -- | Import the view definition as a String.
 foreign import contextSpecialisations :: String
@@ -165,7 +165,7 @@ foreign import contextSpecialisations :: String
 -- However, only instances whose `isMe` value is true, are returned.
 -----------------------------------------------------------
 setCredentialsView :: forall f. String -> MonadPouchdb f Unit
-setCredentialsView dbname = void $ addViewToDatabase dbname "defaultViews" "credentialsView" ({map: credentials, reduce: Nothing})
+setCredentialsView dbname = void $ addViewToDatabase dbname "defaultViews" "credentialsView" ({ map: credentials, reduce: Nothing })
 
 -- | Import the view definition as a String.
 foreign import credentials :: String
@@ -176,14 +176,14 @@ foreign import credentials :: String
 -- Use it by selecting on filler to obtain those roles that are filled by it.
 -----------------------------------------------------------
 setFiller2FilledView :: forall f. String -> MonadPouchdb f Unit
-setFiller2FilledView dbname = void $ addViewToDatabase dbname "defaultViews" "filler2filledView" ({map: filler2filledView, reduce: Nothing})
+setFiller2FilledView dbname = void $ addViewToDatabase dbname "defaultViews" "filler2filledView" ({ map: filler2filledView, reduce: Nothing })
 
 -- | Import the view definition as a String.
 foreign import filler2filledView :: String
 
 -- | Does the RoleInstance instance fill the PerspectRol?
 filler2filledFilter :: RoleInstance -> PerspectRol -> Boolean
-filler2filledFilter filler role = Just filler == rol_binding role 
+filler2filledFilter filler role = Just filler == rol_binding role
 
 -----------------------------------------------------------
 -- THE VIEW 'FILLERROLEVIEW'
@@ -192,29 +192,36 @@ filler2filledFilter filler role = Just filler == rol_binding role
 -----------------------------------------------------------
 setFilled2FillerView :: forall f. String -> MonadPouchdb f Unit
 setFilled2FillerView dbname = void $ addViewToDatabase dbname "defaultViews" "filled2fillerView"
-  ({map: filled2fillerView, reduce: Nothing})
+  ({ map: filled2fillerView, reduce: Nothing })
 
 foreign import filled2fillerView :: String
 
 -- | Is the RoleInstance rid filled by the PerspectRol role?
 filled2fillerFilter :: RoleInstance -> PerspectRol -> Boolean
-filled2fillerFilter rid role = unwrap (foldMap
-    (\ctype filleds -> foldMap 
-      (\rtype filleds' -> Disj $ isJust $ elemIndex rid filleds')
-      filleds)
-    (rol_gevuldeRollen role))
+filled2fillerFilter rid role = unwrap
+  ( foldMap
+      ( \ctype filleds -> foldMap
+          (\rtype filleds' -> Disj $ isJust $ elemIndex rid filleds')
+          filleds
+      )
+      (rol_gevuldeRollen role)
+  )
 
 -- | The Attachment instance has no inherent meaning but it is required to be able to use getSafeViewOnDatabase.
-type FillerInfo = {filler :: RoleInstance, filledContextType :: ContextType, filledRoleType :: EnumeratedRoleType}
+type FillerInfo = { filler :: RoleInstance, filledContextType :: ContextType, filledRoleType :: EnumeratedRoleType }
 
 filled2FillerInfo :: RoleInstance -> PerspectRol -> Maybe FillerInfo
-filled2FillerInfo rid role = head (foldMap
-  (\ctype filleds -> foldMap 
-    (\rtype filleds' -> if isJust $ elemIndex rid filleds'
-      then [{filler: identifier role, filledContextType: ContextType ctype, filledRoleType: EnumeratedRoleType rtype}]
-      else [])
-    filleds)
-  (rol_gevuldeRollen role))
+filled2FillerInfo rid role = head
+  ( foldMap
+      ( \ctype filleds -> foldMap
+          ( \rtype filleds' ->
+              if isJust $ elemIndex rid filleds' then [ { filler: identifier role, filledContextType: ContextType ctype, filledRoleType: EnumeratedRoleType rtype } ]
+              else []
+          )
+          filleds
+      )
+      (rol_gevuldeRollen role)
+  )
 
 -----------------------------------------------------------
 -- THE VIEW 'CONTEXT2ROLEVIEW'
@@ -223,14 +230,16 @@ filled2FillerInfo rid role = head (foldMap
 -----------------------------------------------------------
 setContext2RoleView :: forall f. String -> MonadPouchdb f Unit
 setContext2RoleView dbname = void $ addViewToDatabase dbname "defaultViews" "context2RoleView"
-  ({map: context2roleView, reduce: Nothing})
+  ({ map: context2roleView, reduce: Nothing })
 
 foreign import context2roleView :: String
 
 context2RoleFilter :: RoleInstance -> PerspectContext -> Boolean
-context2RoleFilter rid context = unwrap (foldMap
-  (\rtype roles -> Disj $ isJust $ elemIndex rid roles)
-  (context_iedereRolInContext context))
+context2RoleFilter rid context = unwrap
+  ( foldMap
+      (\rtype roles -> Disj $ isJust $ elemIndex rid roles)
+      (context_iedereRolInContext context)
+  )
 
 -----------------------------------------------------------
 -- THE VIEW 'ROLE2CONTEXTVIEW'
@@ -239,7 +248,7 @@ context2RoleFilter rid context = unwrap (foldMap
 -----------------------------------------------------------
 setRole2ContextView :: forall f. String -> MonadPouchdb f Unit
 setRole2ContextView dbname = void $ addViewToDatabase dbname "defaultViews" "role2ContextView"
-  ({map: role2contextView, reduce: Nothing})
+  ({ map: role2contextView, reduce: Nothing })
 
 foreign import role2contextView :: String
 
@@ -251,15 +260,16 @@ role2ContextFilter cid prol = cid == rol_context prol
 -----------------------------------------------------------
 setModelView :: forall f. String -> MonadPouchdb f Unit
 setModelView dbname = void $ addViewToDatabase dbname "defaultViews" "modelView"
-  ({map: modelView, reduce: Nothing})
+  ({ map: modelView, reduce: Nothing })
 
 foreign import modelView :: String
+
 -----------------------------------------------------------
 -- THE VIEW 'RTPropertyKeyView'
 -----------------------------------------------------------
 setRTPropertyKeyView :: forall f. String -> MonadPouchdb f Unit
 setRTPropertyKeyView dbname = void $ addViewToDatabase dbname "defaultViews" "RTPropertyKeyView"
-  ({map: rTPropertyKeyView, reduce: Nothing})
+  ({ map: rTPropertyKeyView, reduce: Nothing })
 
 foreign import rTPropertyKeyView :: String
 
@@ -268,7 +278,7 @@ foreign import rTPropertyKeyView :: String
 -----------------------------------------------------------
 setRTRoleKeyView :: forall f. String -> MonadPouchdb f Unit
 setRTRoleKeyView dbname = void $ addViewToDatabase dbname "defaultViews" "RTRoleKeyView"
-  ({map: rTRoleKeyView, reduce: Nothing})
+  ({ map: rTRoleKeyView, reduce: Nothing })
 
 foreign import rTRoleKeyView :: String
 
@@ -277,7 +287,7 @@ foreign import rTRoleKeyView :: String
 -----------------------------------------------------------
 setRTContextKeyView :: forall f. String -> MonadPouchdb f Unit
 setRTContextKeyView dbname = void $ addViewToDatabase dbname "defaultViews" "RTContextKeyView"
-  ({map: rTContextKeyView, reduce: Nothing})
+  ({ map: rTContextKeyView, reduce: Nothing })
 
 foreign import rTContextKeyView :: String
 
@@ -286,7 +296,7 @@ foreign import rTContextKeyView :: String
 -----------------------------------------------------------
 setRTFillerKeyView :: forall f. String -> MonadPouchdb f Unit
 setRTFillerKeyView dbname = void $ addViewToDatabase dbname "defaultViews" "RTFillerKeyView"
-  ({map: rTFillerKeyView, reduce: Nothing})
+  ({ map: rTFillerKeyView, reduce: Nothing })
 
 foreign import rTFillerKeyView :: String
 
@@ -295,6 +305,6 @@ foreign import rTFillerKeyView :: String
 -----------------------------------------------------------
 setRTFilledKeyView :: forall f. String -> MonadPouchdb f Unit
 setRTFilledKeyView dbname = void $ addViewToDatabase dbname "defaultViews" "RTFilledKeyView"
-  ({map: rTFilledKeyView, reduce: Nothing})
+  ({ map: rTFilledKeyView, reduce: Nothing })
 
 foreign import rTFilledKeyView :: String

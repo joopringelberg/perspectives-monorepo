@@ -28,10 +28,11 @@ import Data.Generic.Rep (class Generic, Constructor(..), NoArguments(..), Sum(..
 import Data.Symbol (class IsSymbol, reflectSymbol)
 import Foreign (Foreign, F, ForeignError(..))
 import Prelude ((<<<), (==), (<$>), bind, ($), pure, (<>))
-import Simple.JSON (readImpl) 
+import Simple.JSON (readImpl)
 import Type.Proxy (Proxy(..))
 
-enumReadForeign :: forall a rep
+enumReadForeign
+  :: forall a rep
    . Generic a rep
   => EnumReadForeign rep
   => Foreign
@@ -46,19 +47,19 @@ class EnumReadForeign rep where
 instance sumEnumReadForeign ::
   ( EnumReadForeign a
   , EnumReadForeign b
-  ) => EnumReadForeign (Sum a b) where
-  enumReadForeignImpl f
-      = Inl <$> enumReadForeignImpl f
+  ) =>
+  EnumReadForeign (Sum a b) where
+  enumReadForeignImpl f = Inl <$> enumReadForeignImpl f
     <|> Inr <$> enumReadForeignImpl f
 
 instance constructorEnumReadForeign ::
   ( IsSymbol name
-  ) => EnumReadForeign (Constructor name NoArguments) where
+  ) =>
+  EnumReadForeign (Constructor name NoArguments) where
   enumReadForeignImpl f = do
     s <- readImpl f
-    if s == name
-       then pure $ Constructor NoArguments
-       else throwError <<< pure <<< ForeignError $
-            "Enum string " <> s <> " did not match expected string " <> name
+    if s == name then pure $ Constructor NoArguments
+    else throwError <<< pure <<< ForeignError $
+      "Enum string " <> s <> " did not match expected string " <> name
     where
-      name = reflectSymbol (Proxy :: Proxy name)
+    name = reflectSymbol (Proxy :: Proxy name)

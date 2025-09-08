@@ -49,40 +49,42 @@ import Prelude (bind, pure, ($), (<>), (>=>), (>>=), (<<<), flip)
 -- | Replace any occurrence of any indexed name in the string.
 replaceIndexedNames :: String -> MonadPerspectives String
 replaceIndexedNames s = do
-  {indexedRoles:roleReplacements, indexedContexts:contextReplacements} <- AMA.get
+  { indexedRoles: roleReplacements, indexedContexts: contextReplacements } <- AMA.get
   s' <- pure $ foldl (\(crl_ :: String) iname -> replaceAll (Pattern iname) (Replacement $ unwrap $ unsafeIndex roleReplacements iname) crl_) s (keys roleReplacements)
   pure $ foldl (\(crl_ :: String) iname -> replaceAll (Pattern iname) (Replacement $ unwrap $ unsafeIndex contextReplacements iname) crl_) s' (keys contextReplacements)
 
 indexedRoles_ :: Array RoleInstance -> MonadPerspectives (Object RoleInstance)
 indexedRoles_ roleIds = do
   rows <- foldM
-    (\rows roleId -> (try $ getPerspectRol roleId) >>=
-      handlePerspectRolError' "indexedRoles_" rows (f >=> (pure <<< flip cons rows)))
+    ( \rows roleId -> (try $ getPerspectRol roleId) >>=
+        handlePerspectRolError' "indexedRoles_" rows (f >=> (pure <<< flip cons rows))
+    )
     []
     roleIds
   pure $ fromFoldable rows
   where
-    f :: PerspectRol -> MonadPerspectives (Tuple String RoleInstance)
-    f r = case rol_binding r of
-      Nothing -> throwError (error ("An instance of sys:PerspectivesSystem$IndexedRoles has no binding: " <> identifier_ r))
-      Just b -> case head $ rol_property r (EnumeratedPropertyType indexedRoleName) of
-        Nothing -> throwError (error ("An instance of sys:PerspectivesSystem$IndexedRoles$Name has no value: " <> identifier_ r))
-        Just (Value iname) -> pure (Tuple iname b)
+  f :: PerspectRol -> MonadPerspectives (Tuple String RoleInstance)
+  f r = case rol_binding r of
+    Nothing -> throwError (error ("An instance of sys:PerspectivesSystem$IndexedRoles has no binding: " <> identifier_ r))
+    Just b -> case head $ rol_property r (EnumeratedPropertyType indexedRoleName) of
+      Nothing -> throwError (error ("An instance of sys:PerspectivesSystem$IndexedRoles$Name has no value: " <> identifier_ r))
+      Just (Value iname) -> pure (Tuple iname b)
 
 indexedContexts_ :: Array RoleInstance -> MonadPerspectives (Object ContextInstance)
 indexedContexts_ contextRoleIds = do
   rows <- foldM
-    (\rows roleId -> (try $ getPerspectRol roleId) >>=
-      handlePerspectRolError' "indexedContexts_" rows (f >=> (pure <<< flip cons rows)))
+    ( \rows roleId -> (try $ getPerspectRol roleId) >>=
+        handlePerspectRolError' "indexedContexts_" rows (f >=> (pure <<< flip cons rows))
+    )
     []
     contextRoleIds
   pure $ fromFoldable rows
   where
-    f :: PerspectRol -> MonadPerspectives (Tuple String ContextInstance)
-    f r = case head $ rol_property r (EnumeratedPropertyType indexedContextName) of
-        Nothing -> throwError (error ("An instance of sys:PerspectivesSystem$IndexedContexts$Name has no value: " <> identifier_ r))
-        Just (Value iname) -> do
-          mcontextId <- (identifier r) ##> binding >=> context
-          case mcontextId of
-            Nothing -> throwError (error ("An instance of sys:PerspectivesSystem$IndexedContexts has no context bound to it: " <> identifier_ r))
-            Just c -> pure (Tuple iname c)
+  f :: PerspectRol -> MonadPerspectives (Tuple String ContextInstance)
+  f r = case head $ rol_property r (EnumeratedPropertyType indexedContextName) of
+    Nothing -> throwError (error ("An instance of sys:PerspectivesSystem$IndexedContexts$Name has no value: " <> identifier_ r))
+    Just (Value iname) -> do
+      mcontextId <- (identifier r) ##> binding >=> context
+      case mcontextId of
+        Nothing -> throwError (error ("An instance of sys:PerspectivesSystem$IndexedContexts has no context bound to it: " <> identifier_ r))
+        Just c -> pure (Tuple iname c)

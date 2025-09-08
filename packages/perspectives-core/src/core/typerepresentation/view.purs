@@ -69,17 +69,17 @@ instance showView :: Show View where
   show = genericShow
 
 instance eqView :: Eq View where
-  eq (View {id : id1}) (View {id : id2}) = id1 == id2
+  eq (View { id: id1 }) (View { id: id2 }) = id1 == id2
 
 derive instance newtypeView :: Newtype View _
 
 instance revisionView :: Revision View where
   rev = _._rev <<< unwrap
-  changeRevision s = over View (\vr -> vr {_rev = s})
+  changeRevision s = over View (\vr -> vr { _rev = s })
 
 instance identifiableView :: Identifiable View ViewType where
-  identifier (View{id}) = id
-  displayName (View{displayName:d}) = d
+  identifier (View { id }) = id
+  displayName (View { displayName: d }) = d
 
 instance ordView :: Ord View where
-  compare (View{id:id1}) (View{id:id2}) = compare id1 id2
+  compare (View { id: id1 }) (View { id: id2 }) = compare id1 id2

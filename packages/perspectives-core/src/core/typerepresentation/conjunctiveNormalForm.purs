@@ -34,7 +34,6 @@ import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 import Prelude (class Eq, class Ord, class Show, map, show, ($), (<#>), (<$>), (<>), (==))
 import Simple.JSON (class ReadForeign, class WriteForeign, readImpl, writeImpl)
 
-
 --------------------------------------------------------------------------------------------------
 ---- CONJUNCTIVE NORMAL FORM
 --------------------------------------------------------------------------------------------------
@@ -48,16 +47,21 @@ traverseDPROD f (DPROD ds) = DPROD <$> traverse (\(DSUM sum) -> DSUM <$> travers
 derive instance Generic (DSUM a) _
 instance (WriteForeign a) => WriteForeign (DSUM a) where
   writeImpl (DSUM as) = writeImpl as
+
 instance (ReadForeign a) => ReadForeign (DSUM a) where
   readImpl f = DSUM <$> readImpl f
+
 instance (Show a) => Show (DSUM a) where
   show (DSUM adts) = "(" <> "DSUM" <> show adts <> ")"
-instance (Show a, PrettyPrint a) => PrettyPrint (DSUM a) where 
+
+instance (Show a, PrettyPrint a) => PrettyPrint (DSUM a) where
   prettyPrint' t (DSUM terms) = t <> "(DSUM [\n" <> (intercalate ",\n" $ prettyPrint' (t <> "  ") <$> terms) <> "\n" <> t <> "  ])"
+
 instance (Ord a) => Eq (DSUM a) where
   eq (DSUM left) (DSUM right) = SET.fromFoldable left == SET.fromFoldable right
+
 derive instance (Ord a) => Ord (DSUM a)
-  
+
 derive instance Generic (DPROD a) _
 
 instance (Eq a, Ord a) => Eq (DPROD a) where
@@ -68,7 +72,7 @@ derive instance (Ord a) => Ord (DPROD a)
 instance (Show a) => Show (DPROD a) where
   show (DPROD adts) = "(" <> "DPROD" <> show adts <> ")"
 
-instance (Show a, PrettyPrint a) => PrettyPrint (DPROD a) where 
+instance (Show a, PrettyPrint a) => PrettyPrint (DPROD a) where
   prettyPrint' t (DPROD terms) = t <> "(DPROD [\n" <> (intercalate ",\n" $ prettyPrint' (t <> "  ") <$> terms) <> "\n" <> t <> "  ])"
 
 instance (WriteForeign a) => WriteForeign (DPROD a) where
@@ -79,8 +83,8 @@ instance (ReadForeign a) => ReadForeign (DPROD a) where
 
 -- To be applied to an expanded tree only. In the expanded tree, UET will not occur.
 toConjunctiveNormalForm :: forall a. Eq a => Ord a => ExpandedADT a -> DPROD a
-toConjunctiveNormalForm adt = case adt of 
-  EST a -> DPROD [(DSUM [a])]
+toConjunctiveNormalForm adt = case adt of
+  EST a -> DPROD [ (DSUM [ a ]) ]
   -- In the disjunctive normal form we have no UET.
   -- We have a tree built from EST, ECT, ESUM and EPROD.
   -- We can safely ignore the label; it is in a, too.
@@ -91,36 +95,44 @@ toConjunctiveNormalForm adt = case adt of
 -- the argument is the product of applying toDisjunctiveNormalForm to an array of ADT - so it must
 -- be an array of DPROD (Array (DSUM a))
 flattenProducts :: forall a. Ord a => Partial => Array (DPROD a) -> DPROD a
-flattenProducts sums = DPROD $ nub $ concat (sums <#>
-  (\a -> case a of 
-    DPROD ds -> ds))
+flattenProducts sums = DPROD $ nub $ concat
+  ( sums <#>
+      ( \a -> case a of
+          DPROD ds -> ds
+      )
+  )
 
 -- | From an array of DPRODs that are in a disjunction, create a DPROD.
 distribute :: forall a. Ord a => Array (DPROD a) -> DPROD a
 distribute dprods = DPROD
   -- If we can combine two DPROD's that are in a disjunction into a single one, we can handle an entire array of them by folding:
-  (foldl
-    -- Fold with a function that, from a disjunction of two DPROD's, produces a single DPROD.
-    (\sumsOfResult (DPROD sumsOfNextprod) -> if null sumsOfResult
-      then sumsOfNextprod
-      -- The next product might consist of 1 or more DSUM's that are conjuncted together.
-      -- If we can construct a DPROD from a single DSUM with sumsOfResult, we can fold over all DSUMs.
-      -- CHECK IF FOLDL IS APPROPRIATE
-      else (foldl
-        -- Fold with a function that from a single DSUM and a DPROD produces a DPROD.
-        (\(resultingsums :: Array (DSUM a)) (DSUM nextsum) -> if null sumsOfResult
-          then [DSUM nextsum] 
-          else let
-          -- Form a sum of nextsum and each of the sums in resultingProd.
-            (x :: Array (DSUM a)) = (sumsOfResult <#> (\(DSUM sum) -> DSUM $ nub (nextsum <> sum)))
-          in 
-            resultingsums <> x
-          )
-        -- Start with an empty array of sums.
-        []
-        -- Fold over all DSUMS in the nextprod.
-        sumsOfNextprod))
-    -- Start with an empty array of sums.
-    []
-    -- Fold over all DPROD elements in the array.
-    dprods)
+  ( foldl
+      -- Fold with a function that, from a disjunction of two DPROD's, produces a single DPROD.
+      ( \sumsOfResult (DPROD sumsOfNextprod) ->
+          if null sumsOfResult then sumsOfNextprod
+          -- The next product might consist of 1 or more DSUM's that are conjuncted together.
+          -- If we can construct a DPROD from a single DSUM with sumsOfResult, we can fold over all DSUMs.
+          -- CHECK IF FOLDL IS APPROPRIATE
+          else
+            ( foldl
+                -- Fold with a function that from a single DSUM and a DPROD produces a DPROD.
+                ( \(resultingsums :: Array (DSUM a)) (DSUM nextsum) ->
+                    if null sumsOfResult then [ DSUM nextsum ]
+                    else
+                      let
+                        -- Form a sum of nextsum and each of the sums in resultingProd.
+                        (x :: Array (DSUM a)) = (sumsOfResult <#> (\(DSUM sum) -> DSUM $ nub (nextsum <> sum)))
+                      in
+                        resultingsums <> x
+                )
+                -- Start with an empty array of sums.
+                []
+                -- Fold over all DSUMS in the nextprod.
+                sumsOfNextprod
+            )
+      )
+      -- Start with an empty array of sums.
+      []
+      -- Fold over all DPROD elements in the array.
+      dprods
+  )

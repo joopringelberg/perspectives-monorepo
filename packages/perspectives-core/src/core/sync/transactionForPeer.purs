@@ -62,18 +62,20 @@ instance showTransactionForPeer :: Show TransactionForPeer where
 derive newtype instance ReadForeign TransactionForPeer
 derive newtype instance WriteForeign TransactionForPeer
 
-instance Attachment TransactionForPeer where 
+instance Attachment TransactionForPeer where
   getAttachments _ = Nothing
   setAttachment t _ = t
 
 -- | Add the new delta to the end of the array, in the Transaction.
 addToTransactionForPeer :: SignedDelta -> TransactionForPeer -> TransactionForPeer
-addToTransactionForPeer d (TransactionForPeer r@{deltas}) = TransactionForPeer r {deltas = if isJust $ elemIndex d deltas
-    then deltas
-    else snoc deltas d}
+addToTransactionForPeer d (TransactionForPeer r@{ deltas }) = TransactionForPeer r
+  { deltas =
+      if isJust $ elemIndex d deltas then deltas
+      else snoc deltas d
+  }
 
 transactieID :: TransactionForPeer -> String
-transactieID (TransactionForPeer{author, timeStamp}) = show author <> "_" <> show timeStamp
+transactieID (TransactionForPeer { author, timeStamp }) = show author <> "_" <> show timeStamp
 
 -- | The Revision instance is a stub; we don't really need it (except in tests).
 instance revisionTransactionForPeer :: Revision TransactionForPeer where
@@ -81,7 +83,7 @@ instance revisionTransactionForPeer :: Revision TransactionForPeer where
   changeRevision _ t = t
 
 instance eqTransactionForPeer :: Eq TransactionForPeer where
-  eq (TransactionForPeer{timeStamp: t1, author: a1}) (TransactionForPeer{timeStamp: t2, author: a2}) = eq t1 t2 && eq a1 a2
+  eq (TransactionForPeer { timeStamp: t1, author: a1 }) (TransactionForPeer { timeStamp: t2, author: a2 }) = eq t1 t2 && eq a1 a2
 
 instance ordTransactionForPeer :: Ord TransactionForPeer where
-  compare (TransactionForPeer{timeStamp: t1}) (TransactionForPeer{timeStamp: t2}) = compare t1 t2
+  compare (TransactionForPeer { timeStamp: t1 }) (TransactionForPeer { timeStamp: t2 }) = compare t1 t2

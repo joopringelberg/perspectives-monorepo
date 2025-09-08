@@ -32,9 +32,7 @@ module Perspectives.InvertedQuery.Storable
   , getRoleQueries
   , removeInvertedQueriesContributedByModel
   , saveInvertedQueries
-  )
-  where
-
+  ) where
 
 import Prelude
 
@@ -63,12 +61,12 @@ type StoredQueries = Array StorableInvertedQuery
 
 clearInvertedQueriesDatabase :: MonadPerspectives Unit
 clearInvertedQueriesDatabase = do
-  iqDatabaseName <- invertedQueryDatabaseName 
+  iqDatabaseName <- invertedQueryDatabaseName
   -- Actually delete all documents, because deleting the database will destroy the design document with queries too
   -- and we cannot import the function to recreate them here from SetupUser.
-  {rows} <- documentsInDatabase iqDatabaseName excludeDocs
+  { rows } <- documentsInDatabase iqDatabaseName excludeDocs
   -- Don't delete the design document!
-  documents :: Array {_id :: String, _rev :: String} <- pure $ (\{id, value} -> {_id: id, _rev: value.rev}) <$> (filter (\{id} -> id /= "_design/defaultViews") rows)
+  documents :: Array { _id :: String, _rev :: String } <- pure $ (\{ id, value } -> { _id: id, _rev: value.rev }) <$> (filter (\{ id } -> id /= "_design/defaultViews") rows)
   void $ deleteDocuments iqDatabaseName documents
 
 type QueryGetter = Array RunTimeInvertedQueryKey -> MonadPerspectives StoredQueries
@@ -78,7 +76,7 @@ getQueries :: String -> QueryCompiler -> Array RunTimeInvertedQueryKey -> MonadP
 getQueries viewName queryCompiler = getQueriesFromCache queryCompiler getQueries'
   where
   getQueries' :: Array RunTimeInvertedQueryKey -> MonadPerspectives StoredQueries
-  getQueries' qs = do 
+  getQueries' qs = do
     db <- invertedQueryDatabaseName
     getViewWithDocs db viewName (Keys (qs <#> serializeInvertedQueryKey))
 
@@ -91,10 +89,10 @@ getRoleQueries = getQueries "defaultViews/RTRoleKeyView"
 getContextQueries :: QueryCompiler -> Array RunTimeInvertedQueryKey -> MonadPerspectives (Array InvertedQuery)
 getContextQueries = getQueries "defaultViews/RTContextKeyView"
 
-getFillerQueries ::  QueryCompiler ->Array RunTimeInvertedQueryKey -> MonadPerspectives (Array InvertedQuery)
+getFillerQueries :: QueryCompiler -> Array RunTimeInvertedQueryKey -> MonadPerspectives (Array InvertedQuery)
 getFillerQueries = getQueries "defaultViews/RTFillerKeyView"
 
-getFilledQueries ::  QueryCompiler -> Array RunTimeInvertedQueryKey -> MonadPerspectives (Array InvertedQuery)
+getFilledQueries :: QueryCompiler -> Array RunTimeInvertedQueryKey -> MonadPerspectives (Array InvertedQuery)
 getFilledQueries = getQueries "defaultViews/RTFilledKeyView"
 
 storeQueryInCache :: String -> (Array InvertedQuery) -> MonadPerspectives QueryInstances
@@ -106,29 +104,29 @@ getQueryFromCache key = do
   liftEffect $ get (serializeInvertedQueryKey key) defaultGetOptions cache
 
 getQueriesFromCache :: QueryCompiler -> QueryGetter -> Array RunTimeInvertedQueryKey -> MonadPerspectives (Array InvertedQuery)
-getQueriesFromCache queryCompiler queryGetter ks = concat <$> 
+getQueriesFromCache queryCompiler queryGetter ks = concat <$>
   for ks
-    \key -> do 
+    \key -> do
       mQueries <- getQueryFromCache key
-      case mQueries of 
+      case mQueries of
         Just queries -> pure queries
-        Nothing -> do 
-          (storedQueries :: Array StorableInvertedQuery) <- queryGetter [key]
-          queries <- for storedQueries \{query} -> queryCompiler query
+        Nothing -> do
+          (storedQueries :: Array StorableInvertedQuery) <- queryGetter [ key ]
+          queries <- for storedQueries \{ query } -> queryCompiler query
           void $ storeQueryInCache (serializeInvertedQueryKey key) queries
           pure queries
 
 saveInvertedQueries :: StoredQueries -> MonadPerspectives Unit
-saveInvertedQueries queries = do 
+saveInvertedQueries queries = do
   db <- invertedQueryDatabaseName
   void $ addDocuments db queries
 
 -- | Retrieve the inverted queries for a model from the Repository.
 getInvertedQueriesOfModel :: String -> String -> MonadPerspectives StoredQueries
-getInvertedQueriesOfModel database documentName = do 
-  getAttachment database documentName "storedQueries.json" >>= case _ of 
-    Just f -> do 
-      x <- liftAff $ fromBlob f 
+getInvertedQueriesOfModel database documentName = do
+  getAttachment database documentName "storedQueries.json" >>= case _ of
+    Just f -> do
+      x <- liftAff $ fromBlob f
       case readJSON x of
         Left e -> logPerspectivesError (Custom $ "getInvertedQueriesOfModel" <> show e) *> pure []
         Right sq -> pure $ sq
@@ -136,8 +134,8 @@ getInvertedQueriesOfModel database documentName = do
 
 -- | Remove the inverted queries contributed from the local database.
 removeInvertedQueriesContributedByModel :: DomeinFileId -> MonadPerspectives Unit
-removeInvertedQueriesContributedByModel (DomeinFileId dfid) = do 
+removeInvertedQueriesContributedByModel (DomeinFileId dfid) = do
   db <- invertedQueryDatabaseName
   -- First retrieve all inverted queries from the local database contributed by the current model.
-  (modelQueries :: Array {_id :: String, _rev :: String }) <- getViewWithDocs db "defaultViews/modelView" (Key $ unversionedModelUri dfid)
+  (modelQueries :: Array { _id :: String, _rev :: String }) <- getViewWithDocs db "defaultViews/modelView" (Key $ unversionedModelUri dfid)
   void $ deleteDocuments db modelQueries

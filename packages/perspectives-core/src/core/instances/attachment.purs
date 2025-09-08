@@ -44,9 +44,14 @@ class Attachment a where
 -- NEWTYPE ATTACHMENTS
 -----------------------------------------------------------
 newtype Attachments = Attachments Foreign
+
 derive instance Newtype Attachments _
-instance Show Attachments where show _ = ""
-instance Eq Attachments where eq _ _ = true
+instance Show Attachments where
+  show _ = ""
+
+instance Eq Attachments where
+  eq _ _ = true
+
 derive newtype instance WriteForeign Attachments
 derive newtype instance ReadForeign Attachments
 
@@ -55,6 +60,6 @@ foreign import getAttachmentsImpl :: Foreign -> Foreign
 getRawAttachments :: Foreign -> F (Maybe Attachments)
 getRawAttachments f = do
   (x :: Maybe Foreign) <- readNullOrUndefined (getAttachmentsImpl f)
-  case x of 
+  case x of
     Nothing -> pure Nothing
     Just r -> pure $ Just $ Attachments r

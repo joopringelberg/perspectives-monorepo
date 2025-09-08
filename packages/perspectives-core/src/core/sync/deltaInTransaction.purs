@@ -34,7 +34,7 @@ import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 import Simple.JSON (class ReadForeign, class WriteForeign)
 
 -- | `users` will not always be model:System$PerspectivesSystem$User instances.
-newtype DeltaInTransaction = DeltaInTransaction {users :: Array RoleInstance, delta :: SignedDelta}
+newtype DeltaInTransaction = DeltaInTransaction { users :: Array RoleInstance, delta :: SignedDelta }
 
 derive instance genericRepDeltaInTransaction :: Generic DeltaInTransaction _
 

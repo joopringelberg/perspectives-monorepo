@@ -35,7 +35,7 @@ import Simple.JSON (class ReadForeign, class WriteForeign)
 
 -- | The author is the instance of sys:PerspectivesSystem$User who signed the delta.
 -- | NOTE: like all resource identifiers in Deltas, the author is a schemaless string!
-newtype SignedDelta = SignedDelta 
+newtype SignedDelta = SignedDelta
   { author :: PerspectivesUser
   , encryptedDelta :: String
   , signature :: Maybe String

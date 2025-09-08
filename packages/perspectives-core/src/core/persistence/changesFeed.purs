@@ -32,7 +32,6 @@
 -- | Construct a Producer with an EventSource object created with `createEventSource`.
 
 module Perspectives.Persistent.ChangesFeed
-
   ( createEventSource
   , closeEventSource
   , docProducer
@@ -42,9 +41,7 @@ module Perspectives.Persistent.ChangesFeed
   , DocProducer
   , ChangeProducer
   , DecodedCouchdbChange
-  )
-
-  where
+  ) where
 
 import Prelude
 
@@ -96,11 +93,11 @@ foreign import createEventSourceImpl :: EffectFn2 FeedUrl QueryParams EventSourc
 -- | If necessary, include credentials in the url in the format http://user:password@{domain}/etc.
 createEventSource :: FeedUrl -> Maybe QueryParams -> Boolean -> Effect EventSource
 createEventSource feedUrl mqueryParams withDocs = case mqueryParams of
-  Nothing -> if withDocs
-    then runEffectFn2 createEventSourceImpl feedUrl includeDocs
+  Nothing ->
+    if withDocs then runEffectFn2 createEventSourceImpl feedUrl includeDocs
     else runEffectFn2 createEventSourceImpl feedUrl ""
-  Just queryParams -> if withDocs
-    then runEffectFn2 createEventSourceImpl feedUrl (includeDocs <> queryParams)
+  Just queryParams ->
+    if withDocs then runEffectFn2 createEventSourceImpl feedUrl (includeDocs <> queryParams)
     else runEffectFn2 createEventSourceImpl feedUrl queryParams
 
 -----------------------------------------------------------
@@ -115,20 +112,21 @@ closeEventSource es = runEffectFn1 closeEventSourceImpl es
 -----------------------------------------------------------
 -- FOREIGNVALUEPRODUCER
 -----------------------------------------------------------
-foreign import createChangeEmitterImpl :: EffectFn4
-  EventSource
-  (Foreign -> Step Foreign Unit)
-  (Unit -> Step Foreign Unit)
-  (Emitter Effect Foreign Unit)
-  Unit
+foreign import createChangeEmitterImpl
+  :: EffectFn4
+       EventSource
+       (Foreign -> Step Foreign Unit)
+       (Unit -> Step Foreign Unit)
+       (Emitter Effect Foreign Unit)
+       Unit
 
 -- Hernoem naar createForeignEmitter
 -- | Takes an EventSource and produces a function that takes an Emitter.
 -- | Apply `produce` or `produce'` to it to create a Producer of Foreign.
-createChangeEmitter ::
-  EventSource ->
-  (Emitter Effect Foreign Unit) ->
-  Effect Unit
+createChangeEmitter
+  :: EventSource
+  -> (Emitter Effect Foreign Unit)
+  -> Effect Unit
 createChangeEmitter eventSource = runEffectFn4 createChangeEmitterImpl
   eventSource
   Emit
@@ -151,9 +149,9 @@ type DecodedCouchdbChange docType = Either MultipleErrors (CouchdbChange docType
 changeProducer :: forall f docType. ReadForeign docType => EventSource -> ChangeProducer f docType
 changeProducer eventSource = (foreignValueProducer eventSource) $~ (forever (transform decodeCouchdbChange'))
   where
-    -- | The Foreign value is the encoded value of a CouchdbChange instance.
-    decodeCouchdbChange' :: Foreign -> DecodedCouchdbChange docType
-    decodeCouchdbChange' f = read f
+  -- | The Foreign value is the encoded value of a CouchdbChange instance.
+  decodeCouchdbChange' :: Foreign -> DecodedCouchdbChange docType
+  decodeCouchdbChange' f = read f
 
 -----------------------------------------------------------
 -- DOCPRODUCER
@@ -166,12 +164,11 @@ type DocProducer f docType = Producer (Either MultipleErrors (Tuple String (Mayb
 docProducer :: forall f docType. ReadForeign docType => EventSource -> DocProducer f docType
 docProducer eventSource = (foreignValueProducer eventSource) $~ (forever (transform decodeDoc))
   where
-    decodeDoc :: Foreign -> Either MultipleErrors (Tuple String (Maybe docType))
-    decodeDoc f = case read f of
-      Left e -> Left e
-      Right (CouchdbChange{id, doc}) -> do
-        Right $ Tuple id doc
-
+  decodeDoc :: Foreign -> Either MultipleErrors (Tuple String (Maybe docType))
+  decodeDoc f = case read f of
+    Left e -> Left e
+    Right (CouchdbChange { id, doc }) -> do
+      Right $ Tuple id doc
 
 -----------------------------------------------------------
 -- COUCHDBCHANGE
@@ -209,7 +206,7 @@ docProducer eventSource = (foreignValueProducer eventSource) $~ (forever (transf
 newtype CouchdbChange docType = CouchdbChange
   { id :: String
   , seq :: String
-  , changes :: Array {rev :: String}
+  , changes :: Array { rev :: String }
   , deleted :: Maybe Boolean
   , doc :: Maybe docType
   }
@@ -220,7 +217,7 @@ derive instance newTypeCouchdbChange :: Newtype (CouchdbChange docType) _
 
 instance showCouchdbChange :: Show docType => Show (CouchdbChange docType) where
   -- show (CouchdbChange{id}) = "CouchdbChange: " <> id
-  show (CouchdbChange{id, deleted}) = "CouchdbChange: " <> id <> " (deleted=" <> show deleted <> ")"
+  show (CouchdbChange { id, deleted }) = "CouchdbChange: " <> id <> " (deleted=" <> show deleted <> ")"
 
 instance decodeCouchdbChange :: ReadForeign docType => ReadForeign (CouchdbChange docType) where
   -- decode = genericDecode defaultOptions
@@ -234,5 +231,5 @@ instance decodeCouchdbChange :: ReadForeign docType => ReadForeign (CouchdbChang
         -- A deleted document is not produced in full. It just has an _id, _rev
         -- and _deleted field.
         otherwise -> pure Nothing
-    pure $ CouchdbChange $ inter {doc = doc}
+    pure $ CouchdbChange $ inter { doc = doc }
 
