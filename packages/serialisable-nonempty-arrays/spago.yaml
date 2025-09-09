@@ -1,24 +1,24 @@
 package:
-  dependencies:
-  - arrays
-  - console
-  - effect
-  - either
-  - foldable-traversable
-  - foreign
-  - lists
-  - maybe
-  - newtype
-  - perspectives-utilities
-  - prelude
-  - simple-json
-  - transformers
   name: serializablenonemptyarray
+  dependencies:
+    - arrays
+    - console
+    - effect
+    - either
+    - foldable-traversable
+    - foreign
+    - lists
+    - maybe
+    - newtype
+    - perspectives-utilities
+    - prelude
+    - simple-json
+    - transformers
 workspace:
+  package_set:
+    registry: 60.6.0
   extra_packages:
     perspectives-utilities:
       path: ../perspectives-utilities
       # git: https://github.com/joopringelberg/perspectives-utilities.git
       # ref: v2.0.0
-  package_set:
-    registry: 60.6.0

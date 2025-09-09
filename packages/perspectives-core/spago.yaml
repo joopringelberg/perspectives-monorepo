@@ -1,4 +1,5 @@
 package:
+  name: perspectives-core
   dependencies:
     - aff
     - aff-coroutines
@@ -65,9 +66,10 @@ package:
     - unsafe-coerce
     - versions
     - web-encoding
-  name: perspectives-core
 workspace:
-  extraPackages:
+  package_set:
+    registry: 60.6.0
+  extra_packages:
     apitypes:
       path: ../perspectives-apitypes
       # git: https://github.com/joopringelberg/perspectives-apitypes.git
@@ -92,5 +94,3 @@ workspace:
       # git: https://github.com/rowtype-yoga/purescript-yoga-subtlecrypto.git
       # ref: v0.1.0
       path: node_modules/purescript-yoga-subtlecrypto
-  packageSet:
-    registry: 60.6.0

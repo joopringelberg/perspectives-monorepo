@@ -1,10 +1,22 @@
 {
 	"folders": [
 		{
-			"path": "."
+			"path": "packages/perspectives-core"
 		},
 		{
-			"path": "packages/perspectives-core"
+			"path": "packages/perspectives-apitypes"
+		},
+		{
+			"path": "packages/perspectives-utilities"
+		},
+		{
+			"path": "packages/purescript-avar-monadask"
+		},
+		{
+			"path": "packages/purescript-lru-cache"
+		},
+		{
+			"path": "packages/serialisable-nonempty-arrays"
 		},
 		{
 			"path": "packages/mycontexts"
@@ -16,8 +28,9 @@
 			"path": "packages/perspectives-proxy"
 		},
 		{
-			"path": "packages/perspectives-apitypes"
-		}
+			"path": "."
+		},
+
 	],
 	"settings": {
 		"conventionalCommits.scopes": [

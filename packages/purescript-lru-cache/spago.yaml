@@ -1,4 +1,5 @@
 package:
+  name: perspectives-lru-cache
   dependencies:
     - console
     - effect
@@ -13,7 +14,7 @@ package:
     - test-unit
     - tuples
     - unsafe-coerce
-  name: perspectives-lru-cache
 workspace:
-  packageSet:
+  package_set:
     registry: 60.6.0
+  extra_packages: {}

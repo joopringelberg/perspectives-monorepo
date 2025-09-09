@@ -1,12 +1,12 @@
 package:
-  dependencies:
-  - aff
-  - avar
-  - prelude
-  - transformers
-  - tuples
   name: avar-monadask
+  dependencies:
+    - aff
+    - avar
+    - prelude
+    - transformers
+    - tuples
 workspace:
-  extra_packages: {}
   package_set:
     registry: 60.6.0
+  extra_packages: {}

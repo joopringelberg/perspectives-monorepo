@@ -1,21 +1,24 @@
 packages:
-  - 'packages/mycontexts'
-  - 'packages/perspectives-apitypes'
-  - 'packages/perspectives-core'
-  - 'packages/perspectives-highlightjs'
-  - 'packages/perspectives-pageworker'
-  - 'packages/perspectives-proxy'
-  - 'packages/perspectives-react'
-  - 'packages/perspectives-sharedworker'
-  - 'packages/perspectives-utilities'
-  - 'packages/purescript-avar-monadask'
-  - 'packages/purescript-lru-cache'
-  - 'packages/serialisable-nonempty-arrays'
+  - packages/mycontexts
+  - packages/perspectives-apitypes
+  - packages/perspectives-core
+  - packages/perspectives-highlightjs
+  - packages/perspectives-pageworker
+  - packages/perspectives-proxy
+  - packages/perspectives-react
+  - packages/perspectives-sharedworker
+  - packages/perspectives-utilities
+  - packages/purescript-avar-monadask
+  - packages/purescript-lru-cache
+  - packages/serialisable-nonempty-arrays
 onlyBuiltDependencies:
   - '@fortawesome/fontawesome-common-types'
   - '@fortawesome/fontawesome-free'
   - '@fortawesome/fontawesome-svg-core'
   - '@fortawesome/free-solid-svg-icons'
   - '@swc/core'
+  - better-sqlite3
+  - cpu-features
   - esbuild
   - purescript
+  - ssh2

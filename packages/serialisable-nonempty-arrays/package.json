@@ -10,5 +10,7 @@
   },
   "main": "src/serialisableNonEmptyArray.purs",
   "homepage": "https://github.com/joopringelberg/serialisable-nonempty-arrays#readme",
-  "scripts": {}
+  "scripts": {
+    "build": "spago build"
+  }
 }

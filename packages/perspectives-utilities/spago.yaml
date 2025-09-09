@@ -1,4 +1,5 @@
 package:
+  name: perspectives-utilities
   dependencies:
     - arrays
     - console
@@ -11,8 +12,7 @@ package:
     - record
     - transformers
     - tuples
-  name: perspective-utilities
 workspace:
-  extraPackages: {}
-  packageSet:
+  package_set:
     registry: 60.6.0
+  extra_packages: {}
