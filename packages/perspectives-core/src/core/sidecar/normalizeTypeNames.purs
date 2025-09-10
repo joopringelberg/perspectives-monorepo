@@ -139,8 +139,8 @@ instance NormalizeTypeNames DomeinFile DomeinFileId where
     upstreamAutomaticEffects' <- fromFoldable <$> for ((toUnfoldable df.upstreamAutomaticEffects) :: Array (Tuple String (Array UpstreamAutomaticEffect)))
       (\(Tuple ct aae) -> Tuple <$> (unwrap <$> (fqn2tid <<< DomeinFileId) ct) <*> traverse normalize aae)
     screens' <- EM.fromFoldable <$>
-      ( for ((EM.toUnfoldable df.screens) :: Array (Tuple ScreenKey ScreenDefinition))
-          (\(Tuple ct sd) -> Tuple <$> normalize ct <*> normalize sd)
+      ( for ((EM.toUnfoldable df.screens) :: Array (Tuple ScreenKey ScreenDefinition)) $
+          \(Tuple ct sd) -> Tuple <$> normalize ct <*> normalize sd
       )
     pure $ DomeinFile df
       { contexts = contexts'

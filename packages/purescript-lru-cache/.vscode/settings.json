@@ -1,7 +1,8 @@
 {
   "purescript.addSpagoSources": true,
   "purescript.addNpmPath": true,
-  "purescript.pursExe": "${workspaceFolder}/../../node_modules/.bin/purs",
+  "purescript.autoStartPscIde": false,
+  "purescript.pursExe": "/Users/joopringelberg/Code/perspectives-monorepo/node_modules/.bin/purs",
   "purescript.buildCommand": "pnpm exec spago build",
   "purescript.outputDirectory": "output",
   "purescript.formatter": "purs-tidy",

@@ -33,6 +33,9 @@
 
 	],
 	"settings": {
+		"files.associations": {
+			"*.purs": "purescript"
+		},
 		"conventionalCommits.scopes": [
 			"accessibility",
 			"core",
