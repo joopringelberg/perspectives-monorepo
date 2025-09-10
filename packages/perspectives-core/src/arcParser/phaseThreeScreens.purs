@@ -53,11 +53,11 @@ import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getE
 import Perspectives.Representation.Class.Property (hasFacet)
 import Perspectives.Representation.Class.Role (allProperties, displayName, perspectivesOfRoleType, roleADTOfRoleType, roleTypeIsFunctional)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..), elements_)
-import Perspectives.Representation.Perspective (Perspective(..), expandPropSet, perspectiveSupportsPropertyForVerb, perspectiveSupportsRoleVerbs)
+import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsRoleVerbs)
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyRestrictions)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optimistic, pessimistic)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), propertytype2string, roletype2string)
-import Perspectives.Representation.Verbs (PropertyVerb, allPropertyVerbs, roleVerbList2Verbs)
+import Perspectives.Representation.Verbs (allPropertyVerbs, roleVerbList2Verbs)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_, lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
 import Prelude (Unit, bind, discard, eq, flip, map, not, pure, show, unit, ($), (<#>), (<$>), (<<<), (==), (>>=), (<*>))
@@ -224,13 +224,13 @@ handleScreens screenEs = do
       table :: ThreeValuedLogic -> AST.TableE -> PhaseThree TableDef
       table cardinality (AST.TableE markD fields) = do
         markdown' <- traverse markdown (fromFoldable markD)
-        widgetCommonFields' <- widgetCommonFields fields cardinality
+        widgetCommonFields' <- widgetCommonFields subjectRoleType fields cardinality
         pure $ TableDef { markdown: markdown', widgetCommonFields: widgetCommonFields' }
 
       form :: ThreeValuedLogic -> AST.FormE -> PhaseThree FormDef
       form cardinality (AST.FormE markD fields) = do
         markdown' <- traverse markdown (fromFoldable markD)
-        widgetCommonFields' <- widgetCommonFields fields cardinality
+        widgetCommonFields' <- widgetCommonFields subjectRoleType fields cardinality
         pure $ FormDef { markdown: markdown', widgetCommonFields: widgetCommonFields' }
 
       markdown :: AST.MarkDownE -> PhaseThree MarkDownDef
@@ -242,7 +242,7 @@ handleScreens screenEs = do
       markdown (MarkDownPerspective { widgetFields, condition, start: s, end: e }) = do
         case condition of
           Nothing -> do
-            widgetFields' <- widgetCommonFields widgetFields Unknown
+            widgetFields' <- widgetCommonFields subjectRoleType widgetFields Unknown
             pure $ MarkDownPerspectiveDef { widgetFields: widgetFields', conditionProperty: Nothing }
           Just conditionProp -> do
             (objectRoleType :: RoleType) <- unsafePartial ARRP.head <$> collectRoles widgetFields.perspective
@@ -252,7 +252,7 @@ handleScreens screenEs = do
               Nothing -> throwError (UnknownMarkDownConditionProperty s e conditionProp objectRoleType)
               Just conditionProperty -> do
                 -- add the conditionProperty to the widgetFields!
-                widgetFields' <- widgetCommonFields widgetFields Unknown
+                widgetFields' <- widgetCommonFields subjectRoleType widgetFields Unknown
                 pure $ MarkDownPerspectiveDef { widgetFields: widgetFields', conditionProperty: Just conditionProperty }
       markdown (MarkDownExpression { text, condition, context: ctxt, start: start', end: end' }) = do
         text' <- compileStep (CDOM $ ST ctxt) text
@@ -280,91 +280,103 @@ handleScreens screenEs = do
               CP p -> throwError $ PropertyCannotBeCalculated prop start' end'
             otherwise -> throwError $ NotUniquelyIdentifying start' prop (map propertytype2string candidates)
 
-      widgetCommonFields :: AST.WidgetCommonFields -> ThreeValuedLogic -> PhaseThree WidgetCommonFieldsDef
-      widgetCommonFields { title: title', perspective, withoutProps, withoutVerbs, roleVerbs, start: start', end: end' } isFunctionalWidget = do
-        -- From a RoleIdentification that represents the object,
-        -- find the relevant Perspective.
-        -- A ScreenElement can only be defined for a named Enumerated or Calculated Role. This means that `perspective` is constructed with the
-        -- RoleIdentification.ExplicitRole data constructor: a single RoleType.
-        -- If no role can be found for the given specification, collectRoles throws an error.
-        -- NOTE: objectRoleType identifies the same role as perspective.
-        (objectRoleType :: RoleType) <- unsafePartial ARRP.head <$> collectRoles perspective
-        -- Check the Cardinality
-        (lift2 $ roleTypeIsFunctional objectRoleType) >>=
-          if _
-          -- object is functional
-          then
-            if optimistic isFunctionalWidget
-            -- we're ok with either True or Unknown (MarkDownPerspectiveDef).
-            then pure unit
-            -- but not with False.
-            else throwError (WidgetCardinalityMismatch start' end')
-          -- object is relational
-          else if not $ pessimistic isFunctionalWidget
-          -- we're ok with either True or Unknown (MarkDownPerspectiveDef).
-          then pure unit
-          -- but not with False
-          else throwError (WidgetCardinalityMismatch start' end')
-        -- All properties defined on this object role.
-        allProps <- lift2 ((roleADTOfRoleType objectRoleType >>= allProperties <<< map roleInContext2Role))
-        -- The user must have a perspective on it. This perspective must have that RoleType
-        -- in its member roleTypes.
-        -- So we fetch the user role, get its Perspectives, and find the one that refers to the objectRoleType.
-        perspectives <- lift2 $ perspectivesOfRoleType subjectRoleType
-        case find (\(Perspective { roleTypes }) -> isJust $ elemIndex objectRoleType roleTypes) perspectives of
-          -- This case is probably that the object and user exist, but the latter
-          -- has no perspective on the former!
-          Nothing -> throwError (UserHasNoPerspective subjectRoleType objectRoleType start' end')
-          Just pspve@(Perspective { id: perspectiveId }) -> do
-            if perspectiveSupportsRoleVerbs pspve (maybe [] roleVerbList2Verbs roleVerbs) then pure unit
-            else throwError (UnauthorizedForRole "Auteur" subjectRoleType objectRoleType (maybe [] roleVerbList2Verbs roleVerbs) (Just start') (Just end'))
-            -- Compute the excluded propertiesfrom Maybe PropsOrView.
-            (withoutProperties :: Maybe (Array PropertyType)) <- case withoutProps of
-              Nothing -> pure Nothing
-              Just (withoutProps' :: PropsOrView) -> Just <$> propertiesInPropsOrView withoutProps' perspective objectRoleType start'
+  widgetCommonFields :: RoleType -> AST.WidgetCommonFields -> ThreeValuedLogic -> PhaseThree WidgetCommonFieldsDef
+  widgetCommonFields subjectRoleType { title: title', perspective, withProps, withoutProps, withoutVerbs, roleVerbs, start: start', end: end' } isFunctionalWidget = do
+    -- From a RoleIdentification that represents the object,
+    -- find the relevant Perspective.
+    -- A ScreenElement can only be defined for a named Enumerated or Calculated Role. This means that `perspective` is constructed with the
+    -- RoleIdentification.ExplicitRole data constructor: a single RoleType.
+    -- If no role can be found for the given specification, collectRoles throws an error.
+    -- NOTE: objectRoleType identifies the same role as perspective.
+    (objectRoleType :: RoleType) <- unsafePartial ARRP.head <$> collectRoles perspective
+    -- Check the Cardinality
+    (lift2 $ roleTypeIsFunctional objectRoleType) >>=
+      if _
+      -- object is functional
+      then
+        if optimistic isFunctionalWidget
+        -- we're ok with either True or Unknown (MarkDownPerspectiveDef).
+        then pure unit
+        -- but not with False.
+        else throwError (WidgetCardinalityMismatch start' end')
+      -- object is relational
+      else if not $ pessimistic isFunctionalWidget
+      -- we're ok with either True or Unknown (MarkDownPerspectiveDef).
+      then pure unit
+      -- but not with False
+      else throwError (WidgetCardinalityMismatch start' end')
+    -- All properties defined on this object role.
+    allProps <- lift2 ((roleADTOfRoleType objectRoleType >>= allProperties <<< map roleInContext2Role))
+    -- The user must have a perspective on it. This perspective must have that RoleType
+    -- in its member roleTypes.
+    -- So we fetch the user role, get its Perspectives, and find the one that refers to the objectRoleType.
+    perspectives <- lift2 $ perspectivesOfRoleType subjectRoleType
+    case find (\(Perspective { roleTypes }) -> isJust $ elemIndex objectRoleType roleTypes) perspectives of
+      -- This case is probably that the object and user exist, but the latter
+      -- has no perspective on the former!
+      Nothing -> throwError (UserHasNoPerspective subjectRoleType objectRoleType start' end')
+      Just pspve@(Perspective { id: perspectiveId }) -> do
+        if perspectiveSupportsRoleVerbs pspve (maybe [] roleVerbList2Verbs roleVerbs) then pure unit
+        else throwError (UnauthorizedForRole "Auteur" subjectRoleType objectRoleType (maybe [] roleVerbList2Verbs roleVerbs) (Just start') (Just end'))
+        -- Compute the excluded properties from either withProps (inclusion) or withoutProps (exclusion).
+        (withoutProperties :: Maybe (Array PropertyType)) <- case withProps, withoutProps of
+          Just withSel, Nothing -> do
+            included <- propertiesInPropsOrView withSel perspective objectRoleType start'
+            let
+              excluded = filter
+                ( \p -> case elemIndex p included of
+                    Nothing -> true
+                    _ -> false
+                )
+                allProps
+            pure (Just excluded)
+          Nothing, Just withoutSel -> Just <$> propertiesInPropsOrView withoutSel perspective objectRoleType start'
+          Nothing, Nothing -> pure Nothing
+          Just _, Just _ -> pure Nothing -- unreachable due to parser mutual exclusion
+        -- Parser ensures mutual exclusion; both Just cannot occur.
 
-            -- compute the excluded verbs per property from List PropertyVerbE.
-            -- Each PropertyVerbE has an ExplicitSet PropertyVerb and a PropsOrView. 
-            -- The former gives the verbs that are not allowed for each of the properties in the latter.
-            -- We can safely assume that the props per PropertyVerbE are disjunct.
-            (propertyRestrictions :: Maybe PropertyRestrictions) <- Just <$> (execWriterT $ collectPropertyRestrictions withoutVerbs objectRoleType)
+        -- compute the excluded verbs per property from List PropertyVerbE.
+        -- Each PropertyVerbE has an ExplicitSet PropertyVerb and a PropsOrView. 
+        -- The former gives the verbs that are not allowed for each of the properties in the latter.
+        -- We can safely assume that the props per PropertyVerbE are disjunct.
+        (propertyRestrictions :: Maybe PropertyRestrictions) <- Just <$> (execWriterT $ collectPropertyRestrictions withoutVerbs objectRoleType)
 
-            pure
-              { title: title'
-              , perspectiveId
-              , perspective: Nothing
-              , propertyRestrictions
-              , withoutProperties
-              , roleVerbs: maybe Nothing (Just <<< roleVerbList2Verbs) roleVerbs
-              , userRole: subjectRoleType
-              }
+        pure
+          { title: title'
+          , perspectiveId
+          , perspective: Nothing
+          , propertyRestrictions
+          , withoutProperties
+          , roleVerbs: maybe Nothing (Just <<< roleVerbList2Verbs) roleVerbs
+          , userRole: subjectRoleType
+          }
 
-        where
+    where
 
-        propertiesInPropsOrView :: PropsOrView -> RoleIdentification -> RoleType -> ArcPosition -> PhaseThree (Array PropertyType)
-        propertiesInPropsOrView pOrV role objectRoleType start = do
-          (propertyTypes :: ExplicitSet PropertyType) <- unsafePartial collectPropertyTypes pOrV role start
-          case propertyTypes of
-            Universal -> case objectRoleType of
-              ENR r -> lift2 $ allProperties $ ST r
-              CR r -> lift2 (roleADTOfRoleType objectRoleType >>= allProperties <<< map roleInContext2Role)
-            Empty -> pure []
-            PSet as -> pure as
+    propertiesInPropsOrView :: PropsOrView -> RoleIdentification -> RoleType -> ArcPosition -> PhaseThree (Array PropertyType)
+    propertiesInPropsOrView pOrV role objectRoleType start = do
+      (propertyTypes :: ExplicitSet PropertyType) <- unsafePartial collectPropertyTypes pOrV role start
+      case propertyTypes of
+        Universal -> case objectRoleType of
+          ENR r -> lift2 $ allProperties $ ST r
+          CR r -> lift2 (roleADTOfRoleType objectRoleType >>= allProperties <<< map roleInContext2Role)
+        Empty -> pure []
+        PSet as -> pure as
 
-        -- NOTE: currently not in use and not good anyway.
-        checkVerbsAndProps :: Array PropertyType -> ExplicitSet PropertyType -> Array PropertyVerb -> Perspective -> RoleType -> PhaseThree Unit
-        checkVerbsAndProps allProps requiredProps propertyVerbs' perspective' objectRoleType = for_ (expandPropSet allProps requiredProps)
-          \requiredProp -> for propertyVerbs' \requiredVerb ->
-            if perspectiveSupportsPropertyForVerb perspective' requiredProp requiredVerb then pure unit
-            else throwError (UnauthorizedForProperty "Auteur" subjectRoleType objectRoleType requiredProp requiredVerb (Just start') (Just end'))
+    -- NOTE: previously unused helper that referenced subjectRoleType; keep commented to avoid unused / scope issues.
+    -- checkVerbsAndProps :: Array PropertyType -> ExplicitSet PropertyType -> Array PropertyVerb -> Perspective -> RoleType -> PhaseThree Unit
+    -- checkVerbsAndProps allProps requiredProps propertyVerbs' perspective' objectRoleType = for_ (expandPropSet allProps requiredProps)
+    --   \requiredProp -> for propertyVerbs' \requiredVerb ->
+    --     if perspectiveSupportsPropertyForVerb perspective' requiredProp requiredVerb then pure unit
+    --     else throwError (UnauthorizedForProperty "Auteur" subjectRoleType objectRoleType requiredProp requiredVerb (Just start') (Just end'))
 
-        collectPropertyRestrictions :: LIST.List PropertyVerbE -> RoleType -> WriterT (PropertyRestrictions) PhaseThree Unit
-        collectPropertyRestrictions propertyVerbEs objectRoleType = for_ propertyVerbEs \(PropertyVerbE { propertyVerbs, propsOrView, start }) ->
-          do
-            props <- lift $ propertiesInPropsOrView propsOrView perspective objectRoleType start
-            verbs <- pure $ elements_ propertyVerbs allPropertyVerbs
-            for_ props \prop -> tell (EM.singleton prop verbs)
-            pure unit
+    collectPropertyRestrictions :: LIST.List PropertyVerbE -> RoleType -> WriterT (PropertyRestrictions) PhaseThree Unit
+    collectPropertyRestrictions propertyVerbEs objectRoleType = for_ propertyVerbEs \(PropertyVerbE { propertyVerbs, propsOrView, start }) ->
+      do
+        props <- lift $ propertiesInPropsOrView propsOrView perspective objectRoleType start
+        verbs <- pure $ elements_ propertyVerbs allPropertyVerbs
+        for_ props \prop -> tell (EM.singleton prop verbs)
+        pure unit
 
 -- | Qualifies incomplete names and changes RoleType constructor to CalculatedRoleType if necessary.
 -- | The role type name (parameter `rt`) is always fully qualified, EXCEPT

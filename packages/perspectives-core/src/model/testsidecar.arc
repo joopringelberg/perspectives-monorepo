@@ -65,12 +65,14 @@ domain model://joopringelberg.nl#TestCuids
       perspective on AnotherThing1
         props (Test7) verbs (SetPropertyValue)
       perspective on Manager
-        props (FirstName) verbs (Consult)
+        props (FirstName, LastName) verbs (Consult)
       screen
         who
           Manager
             master
+              with props (FirstName)
             detail
+              without props (LastName)
         what
           AnotherThing1
             master

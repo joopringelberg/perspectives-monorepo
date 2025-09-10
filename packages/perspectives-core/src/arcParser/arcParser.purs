@@ -27,6 +27,7 @@ import Control.Lazy (defer)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (fromFoldable)
 import Data.FunctorWithIndex (mapWithIndex)
+import Data.Either (Either(..))
 import Data.Int (toNumber)
 import Data.JSDate (toISOString)
 import Data.List (List(..), concat, filter, find, intercalate, many, null, singleton, some, (:))
@@ -1452,6 +1453,32 @@ withoutProperties = basedOnView <|> basedOnProps
   lotsOfProperties :: IP (List String)
   lotsOfProperties = token.parens (arcIdentifier `sepBy` token.symbol ",")
 
+-- | Inclusive counterpart for withoutProperties.
+-- | Parses either `with view <ArcIdentifier>` or `with props (<ArcIdentifier>{, <ArcIdentifier>}*)`.
+withProperties :: IP PropsOrView
+withProperties = basedOnView <|> basedOnProps
+  where
+  basedOnView :: IP PropsOrView
+  basedOnView = do
+    { subject, object, state } <- getArcParserState
+    case subject, object of
+      Just _, Just _ -> do
+        view <- reserved "view" *> (View <$> arcIdentifier)
+        sameOrOutdented'
+        pure view
+      _, _ -> fail "User role and object of perspective must be given, "
+
+  basedOnProps :: IP PropsOrView
+  basedOnProps = do
+    { subject, object, state } <- getArcParserState
+    case subject, object of
+      Just _, Just _ -> do
+        _ <- getPosition
+        props <- option AllProperties (reserved "props" *> (Properties <$> token.parens (arcIdentifier `sepBy` token.symbol ",")))
+        sameOrOutdented'
+        pure props
+      _, _ -> fail "User role and object of perspective must be given, "
+
 allPropertyVerbs :: List PropertyVerb
 allPropertyVerbs = (Consult : (RemovePropertyValue : (DeleteProperty : (AddPropertyValue : (SetPropertyValue : Nil)))))
 
@@ -1665,7 +1692,19 @@ widgetCommonFields = do
   protectObject do
     setObject perspective
     if isIndented' then withPos do
-      withoutProps <- optionMaybe (reserved "without" *> withoutProperties)
+      -- Parse at most one selector: either `with …` or `without …`.
+      mSelection <- optionMaybe
+        ( (Right <$> (reserved "with" *> withProperties))
+            <|>
+              (Left <$> (reserved "without" *> withoutProperties))
+        )
+      let
+        withProps = case mSelection of
+          Just (Right p) -> Just p
+          _ -> Nothing
+        withoutProps = case mSelection of
+          Just (Left p) -> Just p
+          _ -> Nothing
       -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
       (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
       mroleVerbs <- optionMaybe roleVerbs
@@ -1673,6 +1712,7 @@ widgetCommonFields = do
       pure
         { title
         , perspective
+        , withProps
         , withoutProps
         , withoutVerbs
         , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
@@ -1684,6 +1724,7 @@ widgetCommonFields = do
       pure
         { title
         , perspective
+        , withProps: Nothing
         , withoutProps: Nothing
         , withoutVerbs: Nil
         , roleVerbs: Nothing
@@ -1701,7 +1742,19 @@ tableFormFields perspective = do
     if isIndented'
     -- Set the reference position to the indented position following 'master' or 'detail'.
     then withPos do
-      (withoutProps :: Maybe PropsOrView) <- optionMaybe (reserved "without" *> withoutProperties)
+      -- Parse at most one selector: either `with …` or `without …`.
+      mSelection <- optionMaybe
+        ( (Right <$> (reserved "with" *> withProperties))
+            <|>
+              (Left <$> (reserved "without" *> withoutProperties))
+        )
+      let
+        withProps = case mSelection of
+          Just (Right p) -> Just p
+          _ -> Nothing
+        withoutProps = case mSelection of
+          Just (Left p) -> Just p
+          _ -> Nothing
       -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
       -- entireBlock expects the same indentation, i.e. the position taken up after parsing the optional 'without' clause.
       -- This may be outdented! 
@@ -1712,6 +1765,7 @@ tableFormFields perspective = do
       pure
         { title
         , perspective
+        , withProps
         , withoutProps
         , withoutVerbs
         , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
@@ -1723,6 +1777,7 @@ tableFormFields perspective = do
       pure
         { title
         , perspective
+        , withProps: Nothing
         , withoutProps: Nothing
         , withoutVerbs: Nil
         , roleVerbs: Nothing
