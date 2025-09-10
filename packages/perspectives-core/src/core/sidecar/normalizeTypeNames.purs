@@ -38,7 +38,7 @@ import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (fromFoldable, toUnfoldable)
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
-import Perspectives.Data.EncodableMap (toUnfoldable, fromFoldable) as EM
+import Perspectives.Data.EncodableMap (EncodableMap, toUnfoldable, fromFoldable) as EM
 import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), UpstreamAutomaticEffect(..), UpstreamStateNotification(..))
 import Perspectives.Identifiers (splitTypeUri)
 import Perspectives.Instances.ObjectGetters (getProperty)
@@ -63,6 +63,8 @@ import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
 import Perspectives.Representation.View (View(..))
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping)
 
 normalizeTypes :: DomeinFile -> StableIdMapping -> MonadPerspectives DomeinFile
@@ -270,7 +272,7 @@ instance NormalizeTypeNames State StateIdentifier where
         (Just stableIdMapping) -> case idUriForState stableIdMapping (StateUri fqn) of
           Nothing -> pure fqn -- no mapping found
           Just cuid -> pure cuid
-  normalizeTypeNames (State s) = do 
+  normalizeTypeNames (State s) = do
     id' <- fqn2tid s.id
     stateFulObject' <- case s.stateFulObject of
       Cnt ctype -> Cnt <$> fqn2tid ctype
@@ -447,3 +449,117 @@ instance normalizeUpstreamAutomaticEffectInst :: Normalize UpstreamAutomaticEffe
     automaticAction' <- normalize aae.automaticAction
     qualifiedUsers' <- for aae.qualifiedUsers fqn2tid
     pure $ UpstreamAutomaticEffect aae { stateId = stateId', automaticAction = automaticAction', qualifiedUsers = qualifiedUsers' }
+
+-- ScreenDefinition normalization -------------------------------------------------
+
+instance normalizeScreenDefinitionInst :: Normalize ScreenDefinition where
+  normalize (ScreenDefinition sd) = do
+    tabs' <- traverse (traverse normalize) sd.tabs
+    rows' <- traverse (traverse normalize) sd.rows
+    columns' <- traverse (traverse normalize) sd.columns
+    wwww' <- traverse normalize sd.whoWhatWhereScreen
+    pure $ ScreenDefinition sd { tabs = tabs', rows = rows', columns = columns', whoWhatWhereScreen = wwww' }
+
+instance normalizeTabDefInst :: Normalize TabDef where
+  normalize (TabDef r) = do
+    elements' <- traverse normalize r.elements
+    pure $ TabDef r { elements = elements' }
+
+instance normalizeScreenElementDefInst :: Normalize ScreenElementDef where
+  normalize (RowElementD r) = RowElementD <$> normalize r
+  normalize (ColumnElementD c) = ColumnElementD <$> normalize c
+  normalize (TableElementD t) = TableElementD <$> normalize t
+  normalize (FormElementD f) = FormElementD <$> normalize f
+  normalize (MarkDownElementD m) = MarkDownElementD <$> normalize m
+  normalize (ChatElementD c) = ChatElementD <$> normalize c
+
+instance normalizeRowDefInst :: Normalize RowDef where
+  normalize (RowDef xs) = RowDef <$> traverse normalize xs
+
+instance normalizeColumnDefInst :: Normalize ColumnDef where
+  normalize (ColumnDef xs) = ColumnDef <$> traverse normalize xs
+
+instance normalizeTableDefInst :: Normalize TableDef where
+  normalize (TableDef r) = do
+    markdown' <- traverse normalize r.markdown
+    widgetCommonFields' <- normalizeWidgetCommonFields r.widgetCommonFields
+    pure $ TableDef r { markdown = markdown', widgetCommonFields = widgetCommonFields' }
+
+instance normalizeFormDefInst :: Normalize FormDef where
+  normalize (FormDef r) = do
+    markdown' <- traverse normalize r.markdown
+    widgetCommonFields' <- normalizeWidgetCommonFields r.widgetCommonFields
+    pure $ FormDef r { markdown = markdown', widgetCommonFields = widgetCommonFields' }
+
+instance normalizeMarkDownDefInst :: Normalize MarkDownDef where
+  normalize (MarkDownConstantDef r) = do
+    condition' <- traverse normalize r.condition
+    pure $ MarkDownConstantDef r { condition = condition' }
+  normalize (MarkDownPerspectiveDef r) = do
+    widgetFields' <- normalizeWidgetCommonFields r.widgetFields
+    conditionProperty' <- traverse fqn2tid r.conditionProperty
+    pure $ MarkDownPerspectiveDef r { widgetFields = widgetFields', conditionProperty = conditionProperty' }
+  normalize (MarkDownExpressionDef r) = do
+    textQuery' <- normalize r.textQuery
+    condition' <- traverse normalize r.condition
+    pure $ MarkDownExpressionDef r { textQuery = textQuery', condition = condition' }
+
+instance normalizeChatDefInst :: Normalize ChatDef where
+  normalize (ChatDef fields) = do
+    chatRole' <- fqn2tid fields.chatRole
+    messageProperty' <- fqn2tid fields.messageProperty
+    mediaProperty' <- fqn2tid fields.mediaProperty
+    pure $ ChatDef fields { chatRole = chatRole', messageProperty = messageProperty', mediaProperty = mediaProperty' }
+
+instance normalizeWhoWhatWhereScreenDefInst :: Normalize WhoWhatWhereScreenDef where
+  normalize (WhoWhatWhereScreenDef r) = do
+    who' <- normalize r.who
+    what' <- normalize r.what
+    whereto' <- normalize r.whereto
+    pure $ WhoWhatWhereScreenDef { who: who', what: what', whereto: whereto' }
+
+instance normalizeTableFormDefInst :: Normalize TableFormDef where
+  normalize (TableFormDef r) = do
+    markdown' <- traverse normalize r.markdown
+    table' <- normalize r.table
+    form' <- normalize r.form
+    pure $ TableFormDef { markdown: markdown', table: table', form: form' }
+
+instance normalizeWhatInst :: Normalize What where
+  normalize (TableForms r) = do
+    markdown' <- traverse normalize r.markdown
+    tableForms' <- traverse normalize r.tableForms
+    pure $ TableForms { markdown: markdown', tableForms: tableForms' }
+  normalize (FreeFormScreen r) = do
+    tabs' <- traverse (traverse normalize) r.tabs
+    rows' <- traverse (traverse normalize) r.rows
+    columns' <- traverse (traverse normalize) r.columns
+    pure $ FreeFormScreen r { tabs = tabs', rows = rows', columns = columns' }
+
+instance normalizeWhoInst :: Normalize Who where
+  normalize (Who r) = do
+    markdown' <- traverse normalize r.markdown
+    chats' <- traverse normalize r.chats
+    userRoles' <- traverse normalize r.userRoles
+    pure $ Who { markdown: markdown', chats: chats', userRoles: userRoles' }
+
+instance normalizeWhereToInst :: Normalize WhereTo where
+  normalize (WhereTo r) = do
+    markdown' <- traverse normalize r.markdown
+    contextRoles' <- traverse normalize r.contextRoles
+    pure $ WhereTo { markdown: markdown', contextRoles: contextRoles' }
+
+-- Widget and restrictions normalization
+-- PropertyRestrictions normalization via specialized instance
+instance normalizePropertyRestrictionsInst :: Normalize (EM.EncodableMap PropertyType (Array PropertyVerb)) where
+  normalize em = do
+    let pairs = EM.toUnfoldable em :: Array (Tuple PropertyType (Array PropertyVerb))
+    EM.fromFoldable <$> for pairs (\(Tuple k v) -> Tuple <$> fqn2tid k <*> pure v)
+
+-- Helper for widget fields (cannot have an instance for a type synonym record)
+normalizeWidgetCommonFields :: WidgetCommonFieldsDef -> WithSideCars WidgetCommonFieldsDef
+normalizeWidgetCommonFields w = do
+  propertyRestrictions' <- traverse normalize w.propertyRestrictions
+  withoutProperties' <- traverse (traverse fqn2tid) w.withoutProperties
+  userRole' <- fqn2tid w.userRole
+  pure $ w { propertyRestrictions = propertyRestrictions', withoutProperties = withoutProperties', userRole = userRole' }
