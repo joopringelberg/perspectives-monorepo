@@ -64,7 +64,19 @@ domain model://joopringelberg.nl#TestCuids
     user Manager = sys:Me
       perspective on AnotherThing1
         props (Test7) verbs (SetPropertyValue)
-        
+      perspective on Manager
+        props (FirstName) verbs (Consult)
+      screen
+        who
+          Manager
+            master
+            detail
+        what
+          AnotherThing1
+            master
+            detail
+        where
+
     thing AnotherThing1
       property Test7 (String)
       property Test8 (String)

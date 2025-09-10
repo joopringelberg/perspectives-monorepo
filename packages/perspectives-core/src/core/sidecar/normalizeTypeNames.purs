@@ -59,12 +59,12 @@ import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), InvertedQueryKey(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Value(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..))
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
-import Perspectives.Representation.View (View(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.Verbs (PropertyVerb)
+import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping)
 
 normalizeTypes :: DomeinFile -> StableIdMapping -> MonadPerspectives DomeinFile
@@ -138,6 +138,10 @@ instance NormalizeTypeNames DomeinFile DomeinFileId where
       (\(Tuple ct usn) -> Tuple <$> (unwrap <$> (fqn2tid <<< DomeinFileId) ct) <*> traverse normalize usn)
     upstreamAutomaticEffects' <- fromFoldable <$> for ((toUnfoldable df.upstreamAutomaticEffects) :: Array (Tuple String (Array UpstreamAutomaticEffect)))
       (\(Tuple ct aae) -> Tuple <$> (unwrap <$> (fqn2tid <<< DomeinFileId) ct) <*> traverse normalize aae)
+    screens' <- EM.fromFoldable <$>
+      ( for ((EM.toUnfoldable df.screens) :: Array (Tuple ScreenKey ScreenDefinition))
+          (\(Tuple ct sd) -> Tuple <$> normalize ct <*> normalize sd)
+      )
     pure $ DomeinFile df
       { contexts = contexts'
       , enumeratedRoles = enumeratedRoles'
@@ -147,8 +151,10 @@ instance NormalizeTypeNames DomeinFile DomeinFileId where
       , states = states'
       , views = views'
       , referredModels = referredModels'
+      , invertedQueriesInOtherDomains = invertedQueriesInOtherDomains'
       , upstreamStateNotifications = upstreamStateNotifications'
       , upstreamAutomaticEffects = upstreamAutomaticEffects'
+      , screens = screens'
       }
 
 instance NormalizeTypeNames Context ContextType where
@@ -548,6 +554,9 @@ instance normalizeWhereToInst :: Normalize WhereTo where
     markdown' <- traverse normalize r.markdown
     contextRoles' <- traverse normalize r.contextRoles
     pure $ WhereTo { markdown: markdown', contextRoles: contextRoles' }
+
+instance normalizeScreenKeyInst :: Normalize ScreenKey where
+  normalize (ScreenKey ct rt) = ScreenKey <$> fqn2tid ct <*> fqn2tid rt
 
 -- Widget and restrictions normalization
 -- PropertyRestrictions normalization via specialized instance
