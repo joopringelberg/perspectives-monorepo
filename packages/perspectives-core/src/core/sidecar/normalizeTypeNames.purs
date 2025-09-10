@@ -131,11 +131,11 @@ instance NormalizeTypeNames DomeinFile DomeinFileId where
       (\(Tuple ct vw) -> Tuple <$> unwrap <$> (fqn2tid <<< ViewType) ct <*> normalizeTypeNames vw)
     referredModels' <- for df.referredModels fqn2tid
     invertedQueriesInOtherDomains' <- fromFoldable <$> for ((toUnfoldable df.invertedQueriesInOtherDomains) :: Array (Tuple String (Array SeparateInvertedQuery)))
-      (\(Tuple ct q) -> Tuple <$> unwrap <$> (fqn2tid <<< DomeinFileId) ct <*> traverse normalizeSeparateInvertedQuery q)
+      (\(Tuple ct q) -> Tuple <$> (unwrap <$> (fqn2tid <<< DomeinFileId) ct) <*> traverse normalize q)
     upstreamStateNotifications' <- fromFoldable <$> for ((toUnfoldable df.upstreamStateNotifications) :: Array (Tuple String (Array UpstreamStateNotification)))
-      (\(Tuple ct usn) -> Tuple <$> unwrap <$> (fqn2tid <<< DomeinFileId) ct <*> traverse normalizeUpstreamStateNotification usn)
+      (\(Tuple ct usn) -> Tuple <$> (unwrap <$> (fqn2tid <<< DomeinFileId) ct) <*> traverse normalize usn)
     upstreamAutomaticEffects' <- fromFoldable <$> for ((toUnfoldable df.upstreamAutomaticEffects) :: Array (Tuple String (Array UpstreamAutomaticEffect)))
-      (\(Tuple ct aae) -> Tuple <$> unwrap <$> (fqn2tid <<< DomeinFileId) ct <*> traverse normalizeAutomaticEffect aae)
+      (\(Tuple ct aae) -> Tuple <$> (unwrap <$> (fqn2tid <<< DomeinFileId) ct) <*> traverse normalize aae)
     pure $ DomeinFile df
       { contexts = contexts'
       , enumeratedRoles = enumeratedRoles'
@@ -194,10 +194,10 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
   normalizeTypeNames (EnumeratedRole er) = do
     id' <- fqn2tid er.id
     context' <- fqn2tid er.context
-    roleAspects' <- for er.roleAspects fqn2tidRoleInContext
+    roleAspects' <- for er.roleAspects normalize
     properties' <- for er.properties fqn2tid
     propertyAliases' <- for er.propertyAliases fqn2tid
-    completeType' <- traverseDPROD fqn2tidRoleInContext er.completeType
+    completeType' <- traverseDPROD normalize er.completeType
     pure $ EnumeratedRole $ er
       { id = id'
       , context = context'
@@ -206,9 +206,6 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
       , propertyAliases = propertyAliases'
       , completeType = completeType'
       }
-
-fqn2tidRoleInContext :: RoleInContext -> WithSideCars RoleInContext
-fqn2tidRoleInContext (RoleInContext { role, context }) = (\role' context' -> RoleInContext { role: role', context: context' }) <$> fqn2tid role <*> fqn2tid context
 
 instance NormalizeTypeNames CalculatedRole CalculatedRoleType where
   fqn2tid (CalculatedRoleType fqn) = do
@@ -223,7 +220,7 @@ instance NormalizeTypeNames CalculatedRole CalculatedRoleType where
   normalizeTypeNames (CalculatedRole er) = do
     id' <- fqn2tid er.id
     context' <- fqn2tid er.context
-    calculation' <- normalizeCalculationTypeNames er.calculation
+    calculation' <- normalize er.calculation
     pure $ CalculatedRole $ er { id = id', context = context', calculation = calculation' }
 
 instance NormalizeTypeNames Role RoleType where
@@ -260,7 +257,7 @@ instance NormalizeTypeNames CalculatedProperty CalculatedPropertyType where
   normalizeTypeNames (CalculatedProperty pt) = do
     id' <- fqn2tid pt.id
     role' <- fqn2tid pt.role
-    calculation' <- normalizeCalculationTypeNames pt.calculation
+    calculation' <- normalize pt.calculation
     pure $ CalculatedProperty $ pt { id = id', role = role', calculation = calculation' }
 
 instance NormalizeTypeNames State StateIdentifier where
@@ -279,13 +276,13 @@ instance NormalizeTypeNames State StateIdentifier where
       Cnt ctype -> Cnt <$> fqn2tid ctype
       Orole rtype -> Orole <$> fqn2tid rtype
       Srole rtype -> Srole <$> fqn2tid rtype
-    query' <- normalizeCalculationTypeNames s.query
-    object' <- traverse normalizeQfd s.object
+    query' <- normalize s.query
+    object' <- traverse normalize s.object
     subStates' <- for s.subStates fqn2tid
-    notifyOnEntry' <- EM.fromFoldable <$> for (EM.toUnfoldable s.notifyOnEntry) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalizeNotification n
-    notifyOnExit' <- EM.fromFoldable <$> for (EM.toUnfoldable s.notifyOnExit) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalizeNotification n
-    automaticOnEntry' <- EM.fromFoldable <$> for (EM.toUnfoldable s.automaticOnEntry) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalizeAutomaticAction n
-    automaticOnExit' <- EM.fromFoldable <$> for (EM.toUnfoldable s.automaticOnExit) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalizeAutomaticAction n
+    notifyOnEntry' <- EM.fromFoldable <$> for (EM.toUnfoldable s.notifyOnEntry) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalize n
+    notifyOnExit' <- EM.fromFoldable <$> for (EM.toUnfoldable s.notifyOnExit) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalize n
+    automaticOnEntry' <- EM.fromFoldable <$> for (EM.toUnfoldable s.automaticOnEntry) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalize n
+    automaticOnExit' <- EM.fromFoldable <$> for (EM.toUnfoldable s.automaticOnExit) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalize n
     pure $ State s { id = id', stateFulObject = stateFulObject', query = query', object = object', subStates = subStates', notifyOnEntry = notifyOnEntry', notifyOnExit = notifyOnExit', automaticOnEntry = automaticOnEntry', automaticOnExit = automaticOnExit' }
 
 instance NormalizeTypeNames Prop.Property PropertyType where
@@ -310,131 +307,143 @@ instance NormalizeTypeNames View ViewType where
     propertyReferences' <- for vw.propertyReferences fqn2tid
     pure $ View $ vw { id = id', role = role', propertyReferences = propertyReferences' }
 
-normalizeCalculationTypeNames :: Calculation -> WithSideCars Calculation
-normalizeCalculationTypeNames s@(S _ _) = pure s
-normalizeCalculationTypeNames (Q qfd) = Q <$> normalizeQfd qfd
+class Normalize v where
+  -- | Replace user readable local names given in the model text by Cuids in the given object.
+  normalize :: v -> WithSideCars v
 
-normalizeQfd :: QueryFunctionDescription -> WithSideCars QueryFunctionDescription
-normalizeQfd qfd = traverseQfd nQfd qfd
-  where
-  nQfd :: QueryFunctionDescription -> WithSideCars QueryFunctionDescription
-  nQfd (SQD dom qf ran fun man) = do
-    dom' <- normalizeDomain dom
-    qf' <- normalizeQueryFunction qf
-    ran' <- normalizeDomain ran
-    pure $ SQD dom' qf' ran' fun man
-  nQfd (UQD dom qf subQfd ran fun man) = do
-    dom' <- normalizeDomain dom
-    qf' <- normalizeQueryFunction qf
-    subQfd' <- normalizeQfd subQfd
-    ran' <- normalizeDomain ran
-    pure $ UQD dom' qf' subQfd' ran' fun man
-  nQfd (BQD dom qf subQfd1 subQfd2 ran fun man) = do
-    dom' <- normalizeDomain dom
-    qf' <- normalizeQueryFunction qf
-    subQfd1' <- normalizeQfd subQfd1
-    subQfd2' <- normalizeQfd subQfd2
-    ran' <- normalizeDomain ran
-    pure $ BQD dom' qf' subQfd1' subQfd2' ran' fun man
-  nQfd (MQD dom qf subQfds ran fun man) = do
-    dom' <- normalizeDomain dom
-    qf' <- normalizeQueryFunction qf
-    subQfds' <- for subQfds normalizeQfd
-    ran' <- normalizeDomain ran
-    pure $ MQD dom' qf' subQfds' ran' fun man
+-- Instances for structural normalization ------------------------------------
 
-  normalizeDomain :: Domain -> WithSideCars Domain
-  normalizeDomain (RDOM (d :: ADT RoleInContext)) = RDOM <$> (traverse fqn2tidRoleInContext d)
-  normalizeDomain (CDOM (d :: ADT ContextType)) = CDOM <$> (traverse fqn2tid d)
-  normalizeDomain (VDOM r (mp :: Maybe PropertyType)) = VDOM <$> pure r <*> (traverse fqn2tid mp)
-  normalizeDomain d = pure d
+instance normalizeRoleInContext :: Normalize RoleInContext where
+  normalize (RoleInContext { role, context }) =
+    (\role' context' -> RoleInContext { role: role', context: context' })
+      <$> fqn2tid role
+      <*> fqn2tid context
 
-  normalizeQueryFunction :: QueryFunction -> WithSideCars QueryFunction
-  normalizeQueryFunction (PropertyGetter pt) = PropertyGetter <$> fqn2tid pt
-  normalizeQueryFunction (Value2Role pt) = Value2Role <$> fqn2tid pt
-  normalizeQueryFunction (RolGetter pt) = RolGetter <$> fqn2tid pt
-  normalizeQueryFunction (RoleTypeConstant pt) = RoleTypeConstant <$> fqn2tid pt
-  normalizeQueryFunction (ContextTypeConstant pt) = ContextTypeConstant <$> fqn2tid pt
-  normalizeQueryFunction (CreateContext ct rt) = CreateContext <$> fqn2tid ct <*> fqn2tid rt
-  normalizeQueryFunction (CreateRootContext ct) = CreateRootContext <$> fqn2tid ct
-  normalizeQueryFunction (CreateContext_ ct) = CreateContext_ <$> fqn2tid ct
-  normalizeQueryFunction (CreateRole rt) = CreateRole <$> fqn2tid rt
-  normalizeQueryFunction (Bind rt) = Bind <$> fqn2tid rt
-  normalizeQueryFunction (Unbind rt) = Unbind <$> traverse fqn2tid rt
-  normalizeQueryFunction (DeleteRole rt) = DeleteRole <$> fqn2tid rt
-  normalizeQueryFunction (DeleteContext rt) = DeleteContext <$> fqn2tid rt
-  normalizeQueryFunction (DeleteProperty pt) = DeleteProperty <$> fqn2tid pt
-  normalizeQueryFunction (AddPropertyValue pt) = AddPropertyValue <$> fqn2tid pt
-  normalizeQueryFunction (RemovePropertyValue pt) = RemovePropertyValue <$> fqn2tid pt
-  normalizeQueryFunction (SetPropertyValue pt) = SetPropertyValue <$> fqn2tid pt
-  normalizeQueryFunction (CreateFileF s pt) = CreateFileF s <$> fqn2tid pt
-  normalizeQueryFunction (FilledF rt ct) = FilledF <$> fqn2tid rt <*> fqn2tid ct
-  normalizeQueryFunction f = pure f
+instance normalizeCalculation :: Normalize Calculation where
+  normalize s@(S _ _) = pure s
+  normalize (Q qfd) = Q <$> normalize qfd
 
-normalizeNotification :: Notification -> WithSideCars Notification
-normalizeNotification (ContextNotification facets@{sentence}) = do
-  parts' <- traverse normalizeQfd (unwrap sentence).parts
-  let sentence' = Sentence  (unwrap sentence) { parts = parts' }
-  pure $ ContextNotification facets { sentence = sentence' }
-normalizeNotification (RoleNotification facets@{currentContextCalculation, sentence}) = do
-  parts' <- traverse normalizeQfd (unwrap sentence).parts
-  currentContextCalculation' <- normalizeQfd currentContextCalculation
-  let sentence' = Sentence  (unwrap sentence) { parts = parts' }
-  pure $ RoleNotification facets { currentContextCalculation = currentContextCalculation', sentence = sentence' }
+instance normalizeQfdInst :: Normalize QueryFunctionDescription where
+  normalize qfd = traverseQfd nQfd qfd
+    where
+    nQfd :: QueryFunctionDescription -> WithSideCars QueryFunctionDescription
+    nQfd (SQD dom qf ran fun man) = do
+      dom' <- normalizeDomain dom
+      qf' <- normalizeQueryFunction qf
+      ran' <- normalizeDomain ran
+      pure $ SQD dom' qf' ran' fun man
+    nQfd (UQD dom qf subQfd ran fun man) = do
+      dom' <- normalizeDomain dom
+      qf' <- normalizeQueryFunction qf
+      subQfd' <- normalize subQfd
+      ran' <- normalizeDomain ran
+      pure $ UQD dom' qf' subQfd' ran' fun man
+    nQfd (BQD dom qf subQfd1 subQfd2 ran fun man) = do
+      dom' <- normalizeDomain dom
+      qf' <- normalizeQueryFunction qf
+      subQfd1' <- normalize subQfd1
+      subQfd2' <- normalize subQfd2
+      ran' <- normalizeDomain ran
+      pure $ BQD dom' qf' subQfd1' subQfd2' ran' fun man
+    nQfd (MQD dom qf subQfds ran fun man) = do
+      dom' <- normalizeDomain dom
+      qf' <- normalizeQueryFunction qf
+      subQfds' <- for subQfds normalize
+      ran' <- normalizeDomain ran
+      pure $ MQD dom' qf' subQfds' ran' fun man
 
-normalizeAutomaticAction :: AutomaticAction -> WithSideCars AutomaticAction
-normalizeAutomaticAction (ContextAction facets@{effect}) = do
-  effect' <- normalizeQfd effect
-  pure $ ContextAction facets { effect = effect' }
-normalizeAutomaticAction (RoleAction facets@{effect, currentContextCalculation}) = do
-  effect' <- normalizeQfd effect
-  currentContextCalculation' <- normalizeQfd currentContextCalculation
-  pure $ RoleAction facets { effect = effect', currentContextCalculation = currentContextCalculation' }
+    normalizeDomain :: Domain -> WithSideCars Domain
+    normalizeDomain (RDOM (d :: ADT RoleInContext)) = RDOM <$> (traverse normalize d)
+    normalizeDomain (CDOM (d :: ADT ContextType)) = CDOM <$> (traverse fqn2tid d)
+    normalizeDomain (VDOM r (mp :: Maybe PropertyType)) = VDOM <$> pure r <*> (traverse fqn2tid mp)
+    normalizeDomain d = pure d
 
-normalizeSeparateInvertedQuery :: SeparateInvertedQuery -> WithSideCars SeparateInvertedQuery
-normalizeSeparateInvertedQuery (RoleInvertedQuery enumeratedRoleType typeName invertedQuery) = do
-  enumeratedRoleType' <- fqn2tid enumeratedRoleType
-  ContextType typeName' <- fqn2tid (ContextType typeName)
-  invertedQuery' <- normalizeInvertedQuery invertedQuery
-  pure $ RoleInvertedQuery enumeratedRoleType' typeName' invertedQuery'
-normalizeSeparateInvertedQuery (ContextInvertedQuery contextType roleType invertedQuery) = do
-  contextType' <- fqn2tid contextType
-  EnumeratedRoleType roleType' <- fqn2tid (EnumeratedRoleType roleType)
-  invertedQuery' <- normalizeInvertedQuery invertedQuery
-  pure $ ContextInvertedQuery contextType' roleType' invertedQuery'
-normalizeSeparateInvertedQuery (FillerInvertedQuery invertedQueryKeys typeName invertedQuery) = do
-  invertedQueryKeys' <- for invertedQueryKeys normalizeInvertedQueryKey
-  EnumeratedRoleType typeName' <- fqn2tid (EnumeratedRoleType typeName)
-  invertedQuery' <- normalizeInvertedQuery invertedQuery
-  pure $ FillerInvertedQuery invertedQueryKeys' typeName' invertedQuery'
-normalizeSeparateInvertedQuery (FilledInvertedQuery invertedQueryKeys typeName invertedQuery) = do
-  invertedQueryKeys' <- for invertedQueryKeys normalizeInvertedQueryKey
-  EnumeratedRoleType typeName' <- fqn2tid (EnumeratedRoleType typeName)
-  invertedQuery' <- normalizeInvertedQuery invertedQuery
-  pure $ FilledInvertedQuery invertedQueryKeys' typeName' invertedQuery'
-normalizeSeparateInvertedQuery (OnPropertyDelta invertedQueryKeys typeName invertedQuery) = do
-  invertedQueryKeys' <- for invertedQueryKeys fqn2tid
-  EnumeratedPropertyType typeName' <- fqn2tid (EnumeratedPropertyType typeName)
-  invertedQuery' <- normalizeInvertedQuery invertedQuery
-  pure $ OnPropertyDelta invertedQueryKeys' typeName' invertedQuery'
+    normalizeQueryFunction :: QueryFunction -> WithSideCars QueryFunction
+    normalizeQueryFunction (PropertyGetter pt) = PropertyGetter <$> fqn2tid pt
+    normalizeQueryFunction (Value2Role pt) = Value2Role <$> fqn2tid pt
+    normalizeQueryFunction (RolGetter pt) = RolGetter <$> fqn2tid pt
+    normalizeQueryFunction (RoleTypeConstant pt) = RoleTypeConstant <$> fqn2tid pt
+    normalizeQueryFunction (ContextTypeConstant pt) = ContextTypeConstant <$> fqn2tid pt
+    normalizeQueryFunction (CreateContext ct rt) = CreateContext <$> fqn2tid ct <*> fqn2tid rt
+    normalizeQueryFunction (CreateRootContext ct) = CreateRootContext <$> fqn2tid ct
+    normalizeQueryFunction (CreateContext_ ct) = CreateContext_ <$> fqn2tid ct
+    normalizeQueryFunction (CreateRole rt) = CreateRole <$> fqn2tid rt
+    normalizeQueryFunction (Bind rt) = Bind <$> fqn2tid rt
+    normalizeQueryFunction (Unbind rt) = Unbind <$> traverse fqn2tid rt
+    normalizeQueryFunction (DeleteRole rt) = DeleteRole <$> fqn2tid rt
+    normalizeQueryFunction (DeleteContext rt) = DeleteContext <$> fqn2tid rt
+    normalizeQueryFunction (DeleteProperty pt) = DeleteProperty <$> fqn2tid pt
+    normalizeQueryFunction (AddPropertyValue pt) = AddPropertyValue <$> fqn2tid pt
+    normalizeQueryFunction (RemovePropertyValue pt) = RemovePropertyValue <$> fqn2tid pt
+    normalizeQueryFunction (SetPropertyValue pt) = SetPropertyValue <$> fqn2tid pt
+    normalizeQueryFunction (CreateFileF s pt) = CreateFileF s <$> fqn2tid pt
+    normalizeQueryFunction (FilledF rt ct) = FilledF <$> fqn2tid rt <*> fqn2tid ct
+    normalizeQueryFunction f = pure f
 
+instance normalizeNotificationInst :: Normalize Notification where
+  normalize (ContextNotification facets@{ sentence }) = do
+    parts' <- traverse normalize (unwrap sentence).parts
+    let sentence' = Sentence (unwrap sentence) { parts = parts' }
+    pure $ ContextNotification facets { sentence = sentence' }
+  normalize (RoleNotification facets@{ currentContextCalculation, sentence }) = do
+    parts' <- traverse normalize (unwrap sentence).parts
+    currentContextCalculation' <- normalize currentContextCalculation
+    let sentence' = Sentence (unwrap sentence) { parts = parts' }
+    pure $ RoleNotification facets { currentContextCalculation = currentContextCalculation', sentence = sentence' }
 
-normalizeInvertedQuery :: InvertedQuery -> WithSideCars InvertedQuery
-normalizeInvertedQuery invertedQuery = pure invertedQuery
+instance normalizeAutomaticActionInst :: Normalize AutomaticAction where
+  normalize (ContextAction facets@{ effect }) = do
+    effect' <- normalize effect
+    pure $ ContextAction facets { effect = effect' }
+  normalize (RoleAction facets@{ effect, currentContextCalculation }) = do
+    effect' <- normalize effect
+    currentContextCalculation' <- normalize currentContextCalculation
+    pure $ RoleAction facets { effect = effect', currentContextCalculation = currentContextCalculation' }
 
-normalizeInvertedQueryKey :: InvertedQueryKey -> WithSideCars InvertedQueryKey
-normalizeInvertedQueryKey (InvertedQueryKey contextType1 contextType2 enumeratedRoleType) = InvertedQueryKey <$> fqn2tid contextType1 <*> fqn2tid contextType2 <*> fqn2tid enumeratedRoleType
+instance normalizeSeparateInvertedQueryInst :: Normalize SeparateInvertedQuery where
+  normalize (RoleInvertedQuery enumeratedRoleType typeName invertedQuery) = do
+    enumeratedRoleType' <- fqn2tid enumeratedRoleType
+    ContextType typeName' <- fqn2tid (ContextType typeName)
+    invertedQuery' <- normalize invertedQuery
+    pure $ RoleInvertedQuery enumeratedRoleType' typeName' invertedQuery'
+  normalize (ContextInvertedQuery contextType roleType invertedQuery) = do
+    contextType' <- fqn2tid contextType
+    EnumeratedRoleType roleType' <- fqn2tid (EnumeratedRoleType roleType)
+    invertedQuery' <- normalize invertedQuery
+    pure $ ContextInvertedQuery contextType' roleType' invertedQuery'
+  normalize (FillerInvertedQuery invertedQueryKeys typeName invertedQuery) = do
+    invertedQueryKeys' <- for invertedQueryKeys normalize
+    EnumeratedRoleType typeName' <- fqn2tid (EnumeratedRoleType typeName)
+    invertedQuery' <- normalize invertedQuery
+    pure $ FillerInvertedQuery invertedQueryKeys' typeName' invertedQuery'
+  normalize (FilledInvertedQuery invertedQueryKeys typeName invertedQuery) = do
+    invertedQueryKeys' <- for invertedQueryKeys normalize
+    EnumeratedRoleType typeName' <- fqn2tid (EnumeratedRoleType typeName)
+    invertedQuery' <- normalize invertedQuery
+    pure $ FilledInvertedQuery invertedQueryKeys' typeName' invertedQuery'
+  normalize (OnPropertyDelta invertedQueryKeys typeName invertedQuery) = do
+    invertedQueryKeys' <- for invertedQueryKeys fqn2tid
+    EnumeratedPropertyType typeName' <- fqn2tid (EnumeratedPropertyType typeName)
+    invertedQuery' <- normalize invertedQuery
+    pure $ OnPropertyDelta invertedQueryKeys' typeName' invertedQuery'
 
-normalizeUpstreamStateNotification :: UpstreamStateNotification -> WithSideCars UpstreamStateNotification
-normalizeUpstreamStateNotification (UpstreamStateNotification usn) = do
-  stateId' <- fqn2tid usn.stateId
-  notification' <- normalizeNotification usn.notification
-  qualifiedUsers' <- for usn.qualifiedUsers fqn2tid
-  pure $ UpstreamStateNotification usn { stateId = stateId', notification = notification' }
+instance normalizeInvertedQueryInst :: Normalize InvertedQuery where
+  normalize invertedQuery = pure invertedQuery
 
-normalizeAutomaticEffect :: UpstreamAutomaticEffect -> WithSideCars UpstreamAutomaticEffect
-normalizeAutomaticEffect (UpstreamAutomaticEffect aae) = do
-  stateId' <- fqn2tid aae.stateId
-  automaticAction' <- normalizeAutomaticAction aae.automaticAction
-  qualifiedUsers' <- for aae.qualifiedUsers fqn2tid
-  pure $ UpstreamAutomaticEffect aae { stateId = stateId', automaticAction = automaticAction', qualifiedUsers = qualifiedUsers' }
+instance normalizeInvertedQueryKeyInst :: Normalize InvertedQueryKey where
+  normalize (InvertedQueryKey contextType1 contextType2 enumeratedRoleType) =
+    InvertedQueryKey <$> fqn2tid contextType1 <*> fqn2tid contextType2 <*> fqn2tid enumeratedRoleType
+
+instance normalizeUpstreamStateNotificationInst :: Normalize UpstreamStateNotification where
+  normalize (UpstreamStateNotification usn) = do
+    stateId' <- fqn2tid usn.stateId
+    notification' <- normalize usn.notification
+    qualifiedUsers' <- for usn.qualifiedUsers fqn2tid
+    pure $ UpstreamStateNotification usn { stateId = stateId', notification = notification' }
+
+instance normalizeUpstreamAutomaticEffectInst :: Normalize UpstreamAutomaticEffect where
+  normalize (UpstreamAutomaticEffect aae) = do
+    stateId' <- fqn2tid aae.stateId
+    automaticAction' <- normalize aae.automaticAction
+    qualifiedUsers' <- for aae.qualifiedUsers fqn2tid
+    pure $ UpstreamAutomaticEffect aae { stateId = stateId', automaticAction = automaticAction', qualifiedUsers = qualifiedUsers' }
