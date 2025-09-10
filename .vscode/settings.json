@@ -1,7 +1,7 @@
 {
   "purescript.addSpagoSources": true,
   "purescript.addNpmPath": true,
-  "purescript.autoStartPscIde": true,
-  "purescript.pursExe": "/Users/joopringelberg/.nvm/versions/node/v23.6.1/bin/purs",
+  "purescript.autoStartPscIde": false,
+  "purescript.pursExe": "${workspaceFolder}/node_modules/.bin/purs",
   "purescript.buildCommand": "pnpm exec spago build"
 }

@@ -1,10 +1,10 @@
 {
-  "purescript.outputDirectory": "output/",
-  "purescript.sourcePath": "src",
   "purescript.addSpagoSources": true,
-  "purescript.buildCommand": "/opt/homebrew/bin/spago build --purs-args '--output output'",
   "purescript.addNpmPath": true,
+  "purescript.pursExe": "${workspaceFolder}/../../node_modules/.bin/purs",
+  "purescript.buildCommand": "pnpm exec spago build",
+  "purescript.outputDirectory": "output",
   "purescript.formatter": "purs-tidy",
   "editor.formatOnSave": true,
-  "editor.formatOnPaste": true,
+  "editor.formatOnPaste": true
 }
