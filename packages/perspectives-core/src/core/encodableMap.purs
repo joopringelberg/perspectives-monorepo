@@ -35,8 +35,7 @@ module Perspectives.Data.EncodableMap
   , toUnfoldable
   , union
   , values
-  )
-  where
+  ) where
 
 import Prelude
 

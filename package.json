@@ -9,7 +9,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "pnpm --recursive run build",
     "dev": "pnpm --recursive run dev",
-  "ps:build": "pnpm -r --filter ./packages/perspectives-core --filter ./packages/perspectives-apitypes --filter ./packages/perspectives-utilities --filter ./packages/purescript-avar-monadask --filter ./packages/purescript-lru-cache --filter ./packages/serialisable-nonempty-arrays exec spago build",
+  "ps:build": "pnpm run fmt && pnpm -r --filter ./packages/perspectives-core --filter ./packages/perspectives-apitypes --filter ./packages/perspectives-utilities --filter ./packages/purescript-avar-monadask --filter ./packages/purescript-lru-cache --filter ./packages/serialisable-nonempty-arrays exec spago build",
     "version": "lerna version --no-push",
     "version:patch": "lerna version patch --yes --no-push --no-lifecycle",
     "version:minor": "lerna version minor --yes --no-push --no-lifecycle",
@@ -39,6 +39,11 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.34.1",
     "vite": "^6.3.5"
+  },
+  "lint-staged": {
+    "**/*.purs": [
+      "purs-tidy format-in-place"
+    ]
   },
   "dependencies": {},
   "keywords": [],

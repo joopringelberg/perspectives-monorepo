@@ -14,7 +14,7 @@ import Foreign.Object (Object, empty) as F
 import Partial.Unsafe (unsafePartial)
 import Perspectives.SerializableNonEmptyArray (SerializableNonEmptyArray)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
-import Simple.JSON (class ReadForeign, class WriteForeign) 
+import Simple.JSON (class ReadForeign, class WriteForeign)
 import Unsafe.Coerce (unsafeCoerce)
 
 -- | Identifies Requests with Responses.
@@ -32,13 +32,15 @@ type ApiEffect = ResponseWithWarnings -> Effect Unit
 
 mkApiEffect :: Maybe Foreign -> ApiEffect
 mkApiEffect f = (unsafeCoerce $ unsafePartial $ fromJust f) <<< convertResponse
+
 -----------------------------------------------------------
 -- REQUEST
 -----------------------------------------------------------
 
 -- | The Perspectives Core accepts only a limited set of request types.
-data RequestType =
-  -- Consulting
+data RequestType
+  =
+    -- Consulting
     GetBinding
   | GetRoleBinders
   | GetRolContext
@@ -56,7 +58,7 @@ data RequestType =
   | GetAllMyRoleTypes
   | IsMe
   | GetSystemIdentifier
-  | GetPerspectivesUser 
+  | GetPerspectivesUser
   | GetMeInContext
   | GetFileShareCredentials
   | GetChatParticipants
@@ -67,7 +69,7 @@ data RequestType =
   | GetTableForm
   | GetContextActions
   | GetRolesWithProperties
-  | GetLocalRoleSpecialisation 
+  | GetLocalRoleSpecialisation
   | MatchContextName
   | GetCouchdbUrl
   | GetRoleName
@@ -142,7 +144,6 @@ instance decodeRequestType :: ReadForeign RequestType where
     "AddRoleToClipboard" -> AddRoleToClipboard
     "GetPDRStatusMessage" -> GetPDRStatusMessage
 
-
     "GetSystemIdentifier" -> GetSystemIdentifier
     "GetPerspectivesUser" -> GetPerspectivesUser
     "GetMeInContext" -> GetMeInContext
@@ -207,21 +208,22 @@ type RequestRecord =
   , contextDescription :: Foreign
   , rolDescription :: Maybe RolSerialization
   , authoringRole :: Maybe String
-  , onlyOnce :: Boolean}
+  , onlyOnce :: Boolean
+  }
 
 derive instance genericRequest :: Generic Request _
 
 derive instance newTypeRequest :: Newtype Request _
 
 showRequestRecord :: RequestRecord -> String
-showRequestRecord {request, subject, predicate} = "{" <> show request <> ", " <> subject <> ", " <> predicate <> "}"
+showRequestRecord { request, subject, predicate } = "{" <> show request <> ", " <> subject <> ", " <> predicate <> "}"
 
 instance showRequest :: Show Request where
   show (Request r) = showRequestRecord r
 
 derive newtype instance ReadForeign Request
 
-newtype RecordWithCorrelationidentifier = RecordWithCorrelationidentifier {corrId :: CorrelationIdentifier, reactStateSetter :: Maybe Foreign}
+newtype RecordWithCorrelationidentifier = RecordWithCorrelationidentifier { corrId :: CorrelationIdentifier, reactStateSetter :: Maybe Foreign }
 
 derive instance Generic RecordWithCorrelationidentifier _
 
@@ -241,8 +243,8 @@ type Warnings = Array String
 data ResponseWithWarnings = ResultWithWarnings CorrelationIdentifier (Array String) Warnings | ErrorWithWarnings CorrelationIdentifier String Warnings
 
 convertResponse :: ResponseWithWarnings -> Foreign
-convertResponse (ResultWithWarnings i s warnings) = unsafeToForeign {responseType: "APIresult", corrId: i, result: s, warnings}
-convertResponse (ErrorWithWarnings i s warnings) = unsafeToForeign {responseType: "APIerror", corrId: i, error: s, warnings}
+convertResponse (ResultWithWarnings i s warnings) = unsafeToForeign { responseType: "APIresult", corrId: i, result: s, warnings }
+convertResponse (ErrorWithWarnings i s warnings) = unsafeToForeign { responseType: "APIerror", corrId: i, error: s, warnings }
 
 -----------------------------------------------------------
 -- SERIALIZATION OF CONTEXTS AND ROLES ON THE API
@@ -271,21 +273,21 @@ type ContextSerializationRecord =
   , ctype :: ContextID
   , rollen :: F.Object (SerializableNonEmptyArray RolSerialization)
   , externeProperties :: PropertySerialization
-}
+  }
 
 derive newtype instance eqContextSerialization :: Eq ContextSerialization
 
 derive instance genericContextSerialization :: Generic ContextSerialization _
 
 instance showContextSerialization :: Show ContextSerialization where
-  show (ContextSerialization {id, ctype, rollen, externeProperties}) =
+  show (ContextSerialization { id, ctype, rollen, externeProperties }) =
     "{ id=" <> show id <> ", ctype=" <> ctype <> ", rollen=" <> show rollen <> ", externeProperties=" <> show externeProperties
 
 derive newtype instance WriteForeign ContextSerialization
 derive newtype instance ReadForeign ContextSerialization
 
 defaultContextSerializationRecord :: ContextSerializationRecord
-defaultContextSerializationRecord = {id: Nothing, prototype: Nothing, ctype: "", rollen: F.empty, externeProperties: PropertySerialization F.empty}
+defaultContextSerializationRecord = { id: Nothing, prototype: Nothing, ctype: "", rollen: F.empty, externeProperties: PropertySerialization F.empty }
 
 instance prettyPrintContextSerialization :: PrettyPrint ContextSerialization where
   prettyPrint' tab (ContextSerialization r) = "ContextSerialization " <> prettyPrint' (tab <> "  ") r
@@ -297,14 +299,14 @@ newtype RolSerialization = RolSerialization
   { id :: Maybe ID
   , properties :: PropertySerialization
   , binding :: Maybe ID
-}
+  }
 
 derive instance genericRolSerialization :: Generic RolSerialization _
 
 derive newtype instance eqRolSerialization :: Eq RolSerialization
 
 instance showRolSerialization :: Show RolSerialization where
-  show (RolSerialization {properties, binding}) = "{ " <> show properties <> ", " <> show binding <> " }"
+  show (RolSerialization { properties, binding }) = "{ " <> show properties <> ", " <> show binding <> " }"
 
 derive newtype instance WriteForeign RolSerialization
 derive newtype instance ReadForeign RolSerialization
@@ -322,7 +324,7 @@ derive instance genericPropertySerialization :: Generic PropertySerialization _
 derive newtype instance eqPropertySerialization :: Eq PropertySerialization
 
 instance showPropertySerialization :: Show PropertySerialization where
-  show (PropertySerialization s) =  show s
+  show (PropertySerialization s) = show s
 
 derive newtype instance WriteForeign PropertySerialization
 derive newtype instance ReadForeign PropertySerialization

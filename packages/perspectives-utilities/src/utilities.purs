@@ -20,7 +20,7 @@
 
 -- END LICENSE
 
-module Perspectives.Utilities where 
+module Perspectives.Utilities where
 
 import Prelude
 
@@ -61,11 +61,10 @@ ifNothing monadicValue default fromJust = maybeM default fromJust monadicValue
 -- | Find a value in an Array using a monadic criterium.
 findM :: forall a f. Monad f => (a -> f Boolean) -> Array a -> f (Maybe a)
 findM criterium arr = case uncons arr of
-  Just {head, tail} -> do
+  Just { head, tail } -> do
     allowed <- criterium head
-    if allowed
-      then pure (Just head)
-      else findM criterium tail
+    if allowed then pure (Just head)
+    else findM criterium tail
   Nothing -> pure Nothing
 
 ----------------------------------------------------------------------------------------
@@ -73,8 +72,8 @@ findM criterium arr = case uncons arr of
 ----------------------------------------------------------------------------------------
 -- | Add an array element only if it is not yet in the array.
 addUnique :: forall a. Eq a => a -> Array a -> Array a
-addUnique a arr = if isJust $ elemIndex a arr
-  then arr
+addUnique a arr =
+  if isJust $ elemIndex a arr then arr
   else cons a arr
 
 ----------------------------------------------------------------------------------------
@@ -112,7 +111,7 @@ instance maybePrettyPrint :: (PrettyPrint v) => PrettyPrint (Maybe v) where
 instance tuplePrettyPrint :: (PrettyPrint f, PrettyPrint s) => PrettyPrint (Tuple f s) where
   prettyPrint' tab (Tuple f s) = "Tuple " <> prettyPrint' tab f <> prettyPrint' tab s
 
-instance setPrettyPrint :: (PrettyPrint v, Ord v) => PrettyPrint (Set v) where 
+instance setPrettyPrint :: (PrettyPrint v, Ord v) => PrettyPrint (Set v) where
   prettyPrint' tab s = "Set " <> "[" <> intercalate ", " (map (prettyPrint' tab) ((toUnfoldable s) :: List v)) <> "]"
 
 newline :: String
@@ -124,32 +123,31 @@ newline = "\n"
 -- |  * providing every value with an extra indent.
 -- |  * ending with a closing bracket on a new line.
 instance prettyPrintRecord :: (RL.RowToList rs rl, PrettyPrintRecordFields rl rs) => PrettyPrint (Record rs) where
-  prettyPrint' tab record = case prettyPrintRecordFields tab (Proxy :: Proxy rl) record  of
+  prettyPrint' tab record = case prettyPrintRecordFields tab (Proxy :: Proxy rl) record of
     [] -> "{}"
-    fields -> "\n" <> tab <> "{ " <> intercalate ("\n" <> tab <> ", " ) fields <> "\n" <> tab <> "}"
-
+    fields -> "\n" <> tab <> "{ " <> intercalate ("\n" <> tab <> ", ") fields <> "\n" <> tab <> "}"
 
 class PrettyPrintRecordFields :: forall k. k -> Row Type -> Constraint
 class PrettyPrintRecordFields rowlist row where
-  prettyPrintRecordFields ::  String -> Proxy rowlist -> Record row -> Array String
+  prettyPrintRecordFields :: String -> Proxy rowlist -> Record row -> Array String
 
 instance prettyPrintRecordFieldsNil :: PrettyPrintRecordFields RL.Nil row where
   prettyPrintRecordFields _ _ _ = []
 
-instance prettyPrintRecordFieldsCons
-    ::  ( PrettyPrintRecordFields rowlistTail row
-        , PrettyPrint valueType
-        , Reflectable key String
-        , IsSymbol key
-        )
-    => PrettyPrintRecordFields (RL.Cons key valueType rowlistTail) row where
+instance prettyPrintRecordFieldsCons ::
+  ( PrettyPrintRecordFields rowlistTail row
+  , PrettyPrint valueType
+  , Reflectable key String
+  , IsSymbol key
+  ) =>
+  PrettyPrintRecordFields (RL.Cons key valueType rowlistTail) row where
   prettyPrintRecordFields tab _ record = cons (keyString <> ": " <> (prettyPrint' (tab <> "  ") value)) tail
     where
-      keyString = reflectType (Proxy :: Proxy key)
-      -- See test2.purs for another attempt to make this work.
-      -- value = ((get (Proxy :: Proxy key) record) :: valueType)
-      value = unsafeGet keyString record :: valueType
-      tail = prettyPrintRecordFields tab (Proxy :: Proxy rowlistTail) record
+    keyString = reflectType (Proxy :: Proxy key)
+    -- See test2.purs for another attempt to make this work.
+    -- value = ((get (Proxy :: Proxy key) record) :: valueType)
+    value = unsafeGet keyString record :: valueType
+    tail = prettyPrintRecordFields tab (Proxy :: Proxy rowlistTail) record
 
 instance PrettyPrint (Map k v) where
   prettyPrint' tab o = "<implement prettyprint for maps!>"

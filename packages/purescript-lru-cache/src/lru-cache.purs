@@ -47,13 +47,12 @@ module LRUCache
   , set
   , size
   , values
-  )
-  where
+  ) where
 
 import Prelude
 
 import Data.Function.Uncurried (Fn1, runFn1)
-import JS.Iterable (Iterable) 
+import JS.Iterable (Iterable)
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
@@ -76,56 +75,58 @@ foreign import newCache_ :: forall a. Fn1 Foreign (Cache a)
 
 -- | Create a new cache.
 newCache :: forall a. CreateOptions a -> Cache a
-newCache options = let 
-    (opts :: CreateOptions') = options 
-        { sizeCalculation = unsafeCoerce $ uncurry2_ <$> options.sizeCalculation
-        , dispose = unsafeCoerce $ uncurry3_ <$> options.dispose 
-        , disposeAfter = unsafeCoerce $ uncurry2_ <$> options.disposeAfter
-        }
-    in runFn1 newCache_ (write opts)
+newCache options =
+  let
+    (opts :: CreateOptions') = options
+      { sizeCalculation = unsafeCoerce $ uncurry2_ <$> options.sizeCalculation
+      , dispose = unsafeCoerce $ uncurry3_ <$> options.dispose
+      , disposeAfter = unsafeCoerce $ uncurry2_ <$> options.disposeAfter
+      }
+  in
+    runFn1 newCache_ (write opts)
 
 -------------------------------------------------------------------------------
 ---- OPTIONS
 -------------------------------------------------------------------------------
 -- | CreateOptions to create a Cache with. See https://github.com/isaacs/node-lru-cache#options
 -- | for details.
-type CreateOptions a = 
-    { max :: Maybe Int
-    , maxSize :: Maybe Int
-    , sizeCalculation :: Maybe (SizeCalculation a)
-    -- fetchMethod is not supported
-    , dispose :: Maybe (DisposeFunction a)
-    , disposeAfter :: Maybe (DisposeFunction a)
-    , noDisposeOnSet :: Maybe Boolean
-    , ttl :: Maybe Int
-    , noUpdateTTL :: Maybe Boolean
-    , ttlResolution :: Maybe Int
-    , ttlAutopurge :: Maybe Boolean
-    , allowStale :: Maybe Boolean
-    , updateAgeOnGet :: Maybe Boolean
-    , updateAgeOnHas :: Maybe Boolean
-    }
+type CreateOptions a =
+  { max :: Maybe Int
+  , maxSize :: Maybe Int
+  , sizeCalculation :: Maybe (SizeCalculation a)
+  -- fetchMethod is not supported
+  , dispose :: Maybe (DisposeFunction a)
+  , disposeAfter :: Maybe (DisposeFunction a)
+  , noDisposeOnSet :: Maybe Boolean
+  , ttl :: Maybe Int
+  , noUpdateTTL :: Maybe Boolean
+  , ttlResolution :: Maybe Int
+  , ttlAutopurge :: Maybe Boolean
+  , allowStale :: Maybe Boolean
+  , updateAgeOnGet :: Maybe Boolean
+  , updateAgeOnHas :: Maybe Boolean
+  }
 
 -- | At least one of 'max', 'ttl', or 'maxSize' is required, to prevent
 -- | unsafe unbounded storage.
 -- | In most cases, it's best to specify a max for performance, so all
 -- | the required memory allocation is done up-front.
 defaultCreateOptions :: forall a. CreateOptions a
-defaultCreateOptions = 
-    { max: Just 500
-    , maxSize: Nothing
-    , sizeCalculation: Nothing
-    , dispose: Nothing
-    , disposeAfter: Nothing
-    , noDisposeOnSet: Nothing
-    , ttl: Nothing
-    , noUpdateTTL: Nothing
-    , ttlResolution: Nothing
-    , ttlAutopurge: Nothing
-    , allowStale: Nothing
-    , updateAgeOnGet: Nothing
-    , updateAgeOnHas: Nothing
-    }
+defaultCreateOptions =
+  { max: Just 500
+  , maxSize: Nothing
+  , sizeCalculation: Nothing
+  , dispose: Nothing
+  , disposeAfter: Nothing
+  , noDisposeOnSet: Nothing
+  , ttl: Nothing
+  , noUpdateTTL: Nothing
+  , ttlResolution: Nothing
+  , ttlAutopurge: Nothing
+  , allowStale: Nothing
+  , updateAgeOnGet: Nothing
+  , updateAgeOnHas: Nothing
+  }
 
 -- | Function to calculate the size of items.
 type SizeCalculation a = a -> Key -> Int
@@ -137,24 +138,24 @@ foreign import uncurry2_ :: forall a b c. (a -> b -> c) -> EffectFn2 a b c
 foreign import uncurry3_ :: forall a b c d. (a -> b -> c -> d) -> EffectFn3 a b c d
 
 -- 
-type CreateOptions' = 
-    { max :: Maybe Int
-    , maxSize :: Maybe Int
-    , sizeCalculation :: Maybe Foreign
-    -- fetchMethod is not supported
-    , dispose :: Maybe Foreign
-    , disposeAfter :: Maybe Foreign
-    , noDisposeOnSet :: Maybe Boolean
-    , ttl :: Maybe Int
-    , noUpdateTTL :: Maybe Boolean
-    , ttlResolution :: Maybe Int
-    , ttlAutopurge :: Maybe Boolean
-    , allowStale :: Maybe Boolean
-    , updateAgeOnGet :: Maybe Boolean
-    , updateAgeOnHas :: Maybe Boolean
-    }
+type CreateOptions' =
+  { max :: Maybe Int
+  , maxSize :: Maybe Int
+  , sizeCalculation :: Maybe Foreign
+  -- fetchMethod is not supported
+  , dispose :: Maybe Foreign
+  , disposeAfter :: Maybe Foreign
+  , noDisposeOnSet :: Maybe Boolean
+  , ttl :: Maybe Int
+  , noUpdateTTL :: Maybe Boolean
+  , ttlResolution :: Maybe Int
+  , ttlAutopurge :: Maybe Boolean
+  , allowStale :: Maybe Boolean
+  , updateAgeOnGet :: Maybe Boolean
+  , updateAgeOnHas :: Maybe Boolean
+  }
 
-type Key = String 
+type Key = String
 
 -------------------------------------------------------------------------------
 ---- LOGGING DISPOSAL
@@ -169,20 +170,21 @@ foreign import logDisposal :: forall a. DisposeFunction a
 -- | Options object my also include size, which will prevent calling the sizeCalculation function and just use the specified number if it is a positive integer, and noDisposeOnSet which will prevent calling a dispose function in the case of overwrites.
 -- | Will update the recency of the entry.
 set :: forall a. Key -> a -> Maybe (SetOptions a) -> Cache a -> Effect (Cache a)
-set key a mOptions cache = case mOptions of 
-    Nothing -> runEffectFn3 set__ key a cache
-    Just options ->  runEffectFn4 set_ key a cache options
+set key a mOptions cache = case mOptions of
+  Nothing -> runEffectFn3 set__ key a cache
+  Just options -> runEffectFn4 set_ key a cache options
 
 foreign import set_ :: forall a. EffectFn4 Key a (Cache a) (SetOptions a) (Cache a)
 foreign import set__ :: forall a. EffectFn3 Key a (Cache a) (Cache a)
 
 -- | Options to be provided to the set function.
-type SetOptions a = 
-    { size :: Maybe Int
-    , sizeCalculation :: Maybe (SizeCalculation a)
-    , ttl :: Maybe Int
-    , noDisposeOnSet :: Boolean
-    }
+type SetOptions a =
+  { size :: Maybe Int
+  , sizeCalculation :: Maybe (SizeCalculation a)
+  , ttl :: Maybe Int
+  , noDisposeOnSet :: Boolean
+  }
+
 -------------------------------------------------------------------------------
 ---- GET
 -------------------------------------------------------------------------------
@@ -193,10 +195,10 @@ get key options cache = runEffectFn5 get_ key (unsafeCoerce (write options)) Not
 
 foreign import get_ :: forall a m. EffectFn5 Key Foreign m (a -> m) (Cache a) m
 
-type GetOptions = {updateAgeOnGet :: Maybe Boolean, allowStale :: Maybe Boolean}
+type GetOptions = { updateAgeOnGet :: Maybe Boolean, allowStale :: Maybe Boolean }
 
 defaultGetOptions :: GetOptions
-defaultGetOptions = {updateAgeOnGet: Nothing, allowStale: Nothing}
+defaultGetOptions = { updateAgeOnGet: Nothing, allowStale: Nothing }
 
 -------------------------------------------------------------------------------
 ---- SIZE
@@ -226,10 +228,10 @@ peek key options cache = runEffectFn5 peek_ key (unsafeCoerce (write options)) N
 
 foreign import peek_ :: forall a m. EffectFn5 Key Foreign m (a -> m) (Cache a) m
 
-type PeekOptions = {allowStale :: Maybe Boolean}
+type PeekOptions = { allowStale :: Maybe Boolean }
 
 defaultPeekOptions :: PeekOptions
-defaultPeekOptions = {allowStale: Nothing}
+defaultPeekOptions = { allowStale: Nothing }
 
 -------------------------------------------------------------------------------
 ---- HAS
@@ -237,10 +239,10 @@ defaultPeekOptions = {allowStale: Nothing}
 
 -- | Check if a key is in the cache, without updating the recency of use. Age is updated if updateAgeOnHas is set to true in either the options or the constructor.
 -- | Will return false if the item is stale, even though it is technically in the cache.
-has :: forall a. Key -> {updateAgeOnHas :: Boolean} -> Cache a -> Effect Boolean
+has :: forall a. Key -> { updateAgeOnHas :: Boolean } -> Cache a -> Effect Boolean
 has key options cache = runEffectFn3 has_ key options cache
 
-foreign import has_ :: forall a. EffectFn3 Key {updateAgeOnHas :: Boolean} (Cache a) Boolean
+foreign import has_ :: forall a. EffectFn3 Key { updateAgeOnHas :: Boolean } (Cache a) Boolean
 
 -------------------------------------------------------------------------------
 ---- DELETE
@@ -278,7 +280,7 @@ rkeys :: forall a. Cache a -> Effect (Iterable String)
 rkeys cache = runEffectFn1 rkeys_ cache
 
 foreign import rkeys_ :: forall a. EffectFn1 (Cache a) (Iterable String)
- 
+
 -------------------------------------------------------------------------------
 ---- VALUES
 -------------------------------------------------------------------------------
@@ -321,19 +323,21 @@ foreign import rentries_ :: forall a x y. EffectFn2 (x -> y -> Tuple x y) (Cache
 -- | Find a value for which the supplied fn method returns a truthy value, similar to Array.find().
 -- | fn is called as fn(value, key, cache).
 find :: forall a. FindFunction a -> Maybe GetOptions -> Cache a -> Effect (Maybe a)
-find criterium mOptions cache = case mOptions of 
-    Nothing -> runEffectFn5 find_ (uncurry3_ criterium) defaultGetOptions Nothing Just cache
-    Just options -> runEffectFn5 find_ (uncurry3_ criterium) options Nothing Just cache
+find criterium mOptions cache = case mOptions of
+  Nothing -> runEffectFn5 find_ (uncurry3_ criterium) defaultGetOptions Nothing Just cache
+  Just options -> runEffectFn5 find_ (uncurry3_ criterium) options Nothing Just cache
 
 type FindFunction a = (a -> Key -> Cache a -> Boolean)
 
-foreign import find_ :: forall a m. EffectFn5 
-    (EffectFn3 a Key (Cache a) Boolean) 
-    GetOptions 
-    m 
-    (a -> m) 
-    (Cache a) 
-    (Maybe a)
+foreign import find_
+  :: forall a m
+   . EffectFn5
+       (EffectFn3 a Key (Cache a) Boolean)
+       GetOptions
+       m
+       (a -> m)
+       (Cache a)
+       (Maybe a)
 
 -------------------------------------------------------------------------------
 ---- DUMP
@@ -405,4 +409,4 @@ foreign import rforEach_ :: forall a. EffectFn3 Foreign Unit (Cache a) Unit
 pop :: forall a. Cache a -> Effect (Maybe a)
 pop cache = runEffectFn3 pop_ Nothing Just cache
 
-foreign import pop_ :: forall a m. EffectFn3 m (a -> m) (Cache a) m 
+foreign import pop_ :: forall a m. EffectFn3 m (a -> m) (Cache a) m

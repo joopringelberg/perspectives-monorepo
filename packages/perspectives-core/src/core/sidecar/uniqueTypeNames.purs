@@ -327,7 +327,7 @@ applyAliases mapping dfr@{ contexts, enumeratedRoles, enumeratedProperties, stat
     { contexts = aliasTable contexts mapping.contexts
     , enumeratedRoles = aliasTable enumeratedRoles mapping.roles
     , enumeratedProperties = aliasTable enumeratedProperties mapping.properties
-  , views = aliasTable views mapping.views
+    , views = aliasTable views mapping.views
     , states = aliasTable states mapping.states
     }
   where
@@ -361,7 +361,7 @@ extractKeysFromDfr
   -> { contexts :: OBJ.Object ContextKeySnapshot
      , roles :: OBJ.Object RoleKeySnapshot
      , properties :: OBJ.Object PropertyKeySnapshot
-  , views :: OBJ.Object ViewKeySnapshot
+     , views :: OBJ.Object ViewKeySnapshot
      , states :: OBJ.Object StateKeySnapshot
      }
 extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: croles, enumeratedProperties, calculatedProperties, views, states } =
@@ -836,7 +836,7 @@ planCuidAssignments
      }
   -> StableIdMapping
   -> { mappingWithAliases :: StableIdMapping
-  , needCuids :: { contexts :: Array String, roles :: Array String, properties :: Array String, views :: Array String, states :: Array String }
+     , needCuids :: { contexts :: Array String, roles :: Array String, properties :: Array String, views :: Array String, states :: Array String }
      }
 planCuidAssignments cur mapping0 =
   let
@@ -848,11 +848,11 @@ planCuidAssignments cur mapping0 =
     contextKeys = OBJ.values mapping0.contextKeys
 
     ctxAliases' = buildContextAliasesTopologically
-        defaultContextWeights
-        0.5
-        mapping0.contextKeys
-        candidatesC
-        mapping0.contexts
+      defaultContextWeights
+      0.5
+      mapping0.contextKeys
+      candidatesC
+      mapping0.contexts
 
     rolAliases' = buildAliases defaultRoleWeights 0.5 mapping0.roleKeys (snapshotToRoleKeyOld ctxAliases') candidatesR mapping0.roles (OBJ.keys mapping0.roleKeys)
     propAliases' = buildAliases defaultPropertyWeights 0.7 mapping0.propertyKeys (snapshotToPropertyKeyOld rolAliases') candidatesP mapping0.properties (OBJ.keys mapping0.propertyKeys)

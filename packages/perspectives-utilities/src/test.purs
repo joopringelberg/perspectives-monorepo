@@ -16,10 +16,11 @@ instance recordLabelsNil :: RecordLabels RL.Nil where
   recordLabels _ = []
 
 -- Instance for non-empty records
-instance recordLabelsCons
-  :: ( RecordLabels rowlistTail
-     , Reflectable keySymbol String
-     ) => RecordLabels (RL.Cons keySymbol valueType rowlistTail) where
+instance recordLabelsCons ::
+  ( RecordLabels rowlistTail
+  , Reflectable keySymbol String
+  ) =>
+  RecordLabels (RL.Cons keySymbol valueType rowlistTail) where
   recordLabels _ = cons (reflectType (Proxy :: Proxy keySymbol)) (recordLabels (Proxy :: Proxy rowlistTail))
 
 -- Function to collect labels from a record

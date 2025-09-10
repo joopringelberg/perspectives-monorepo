@@ -35,7 +35,7 @@ import Foreign (ForeignError(..))
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 import Prelude (class Eq, class Functor, class Ord, class Semigroup, class Show, pure, show, ($), (<<<), (<>), bind, (<$>))
 import Simple.JSON (class ReadForeign, class WriteForeign, write, read')
- 
+
 newtype SerializableNonEmptyArray a = SerializableNonEmptyArray (NER.NonEmptyArray a)
 
 instance showSerializableNonEmptyArray :: Show a => Show (SerializableNonEmptyArray a) where

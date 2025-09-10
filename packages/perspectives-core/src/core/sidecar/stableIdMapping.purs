@@ -25,7 +25,7 @@ module Perspectives.Sidecar.StableIdMapping
   , lookupContextCuid
   , lookupViewCuid
   , lookupStateCuid
-  , lookupPropertyCuid 
+  , lookupPropertyCuid
   , lookupRoleCuid
   , PropertyUri(..)
   , RoleUri(..)
@@ -35,7 +35,7 @@ module Perspectives.Sidecar.StableIdMapping
   ) where
 
 import Prelude
- 
+
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype, unwrap)
@@ -228,20 +228,22 @@ idUriForState :: StableIdMapping -> StateUri Readable -> Maybe String
 idUriForState m (StateUri stateFqn) =
   -- The simplest case is the root state of a context of role. In that case, we can exchange the fqn 
   -- for the ContextUri Stable or RoleUri Stable respectively, augmented with the cuid for the state itself.
-  let nsFqn = typeUri2typeNameSpace_ stateFqn
-      tryRole = do
-        rolTid <- idUriForRole m (RoleUri stateFqn)
-        stTid  <- lookupStateCuid m (StateUri stateFqn)
-        pure (rolTid <> "$" <> stTid)
-      tryContext = do
-        ctxTid <- idUriForContext m (ContextUri stateFqn)
-        stTid  <- lookupStateCuid m (StateUri stateFqn)
-        pure (ctxTid <> "$" <> stTid)
-  in case tryRole, tryContext of
+  let
+    nsFqn = typeUri2typeNameSpace_ stateFqn
+    tryRole = do
+      rolTid <- idUriForRole m (RoleUri stateFqn)
+      stTid <- lookupStateCuid m (StateUri stateFqn)
+      pure (rolTid <> "$" <> stTid)
+    tryContext = do
+      ctxTid <- idUriForContext m (ContextUri stateFqn)
+      stTid <- lookupStateCuid m (StateUri stateFqn)
+      pure (ctxTid <> "$" <> stTid)
+  in
+    case tryRole, tryContext of
       Just v, _ -> Just v
       _, Just v -> Just v
-      Nothing, Nothing -> do 
-        stTid  <- lookupStateCuid m (StateUri stateFqn)
+      Nothing, Nothing -> do
+        stTid <- lookupStateCuid m (StateUri stateFqn)
         nameSpaceTid <- idUriForState m (StateUri nsFqn)
         pure (nameSpaceTid <> "$" <> stTid)
 

@@ -6,10 +6,12 @@ import Effect.Aff.AVar (AVar, put, read, take) as AV
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Prelude (Unit, bind, discard, pure, ($), (<<<), (>=>), (>>=))
 
-state :: forall a s m.
-  MonadAff m =>
-  MonadAsk (AV.AVar s) m =>
-  (s -> (Tuple a s)) -> m a
+state
+  :: forall a s m
+   . MonadAff m
+  => MonadAsk (AV.AVar s) m
+  => (s -> (Tuple a s))
+  -> m a
 state f = do
   st <- get
   (Tuple a s) <- pure (f st)
@@ -34,29 +36,32 @@ getAVarWithState = ask
 
 -- | Returns the state. Blocks as long as the AVar is empty. Does not block a filled AVar: it is not left empty.
 -- | Compares with StateT get.
-get :: forall s m.
-  MonadAff m =>
-  MonadAsk (AV.AVar s) m =>
-  m s
+get
+  :: forall s m
+   . MonadAff m
+  => MonadAsk (AV.AVar s) m
+  => m s
 get = do
   (as :: AV.AVar s) <- getAVarWithState
   liftAff $ AV.read as
 
-take :: forall s m.
-  MonadAff m =>
-  MonadAsk (AV.AVar s) m =>
-  m s
+take
+  :: forall s m
+   . MonadAff m
+  => MonadAsk (AV.AVar s) m
+  => m s
 take = do
   (as :: AV.AVar s) <- getAVarWithState
   liftAff $ AV.take as
 
-
 -- | Returns the result of applying a function to the state.
 -- | Compares with StateT gets.
-gets :: forall s m a.
-  MonadAff m =>
-  MonadAsk (AV.AVar s) m =>
-  (s -> a) -> m a
+gets
+  :: forall s m a
+   . MonadAff m
+  => MonadAsk (AV.AVar s) m
+  => (s -> a)
+  -> m a
 gets f = get >>= pure <<< f
 
 -- | Puts a new state in the AVar holding the state. Uses replaceAVarContent: so blocks as long as the AVar
@@ -73,9 +78,12 @@ clearVar v = do
 
 -- | Replace the content of an AVar. Blocks as long as the AVar passed in is empty (waits till it is filled).
 -- | Then, if it is filled, blocks while the content is being replaced.
-replaceAVarContent :: forall a m.
-  MonadAff m =>
-  a -> AV.AVar a -> m Unit
+replaceAVarContent
+  :: forall a m
+   . MonadAff m
+  => a
+  -> AV.AVar a
+  -> m Unit
 replaceAVarContent value = liftAff <<< clearVar >=> liftAff <<< AV.put value
 
 -- | Notice that we block the AVar by taking its value.
@@ -85,12 +93,14 @@ replaceAVarContent value = liftAff <<< clearVar >=> liftAff <<< AV.put value
 -- | the take and put of this module, leading to a catch-22 where two or more 
 -- | were waiting for each other.
 -- | With the current solution that problem hasn't been observed.
-modify  :: forall s m.
-  MonadAff m =>
-  MonadAsk (AV.AVar s) m =>
-  (s -> s) -> m Unit
+modify
+  :: forall s m
+   . MonadAff m
+  => MonadAsk (AV.AVar s) m
+  => (s -> s)
+  -> m Unit
 modify f = do
   (as :: AV.AVar s) <- getAVarWithState
-  liftAff do 
+  liftAff do
     v <- AV.take as
     AV.put (f v) as
