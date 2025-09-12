@@ -54,7 +54,10 @@ const SelectedForm: React.FC<SelectedFormProps> = ({ forms, selectedRoleInstance
       // console.error(`No form found for role type ${selectedRoleType}`);
       return null;
     } else {
-      return buildForm(theForm, false, selectedRoleInstance);
+      return <>
+        <h3 className="column-heading mt-2">{theForm.widgetCommonFields.perspective.displayName}</h3>
+        { buildForm(theForm, false, selectedRoleInstance) }
+        </>;
     }
   }
 };
