@@ -67,9 +67,9 @@ package:
     - versions
     - web-encoding
 workspace:
-  package_set:
+  packageSet:
     registry: 60.6.0
-  extra_packages:
+  extraPackages:
     apitypes:
       path: ../perspectives-apitypes
       # git: https://github.com/joopringelberg/perspectives-apitypes.git

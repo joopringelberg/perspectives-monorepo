@@ -45,6 +45,7 @@
 			"models",
 			"perspectives-proxy",
 			"perspectives language"
-		]
+		],
+		"purescript.buildCommand": "pnpm exec spago build --json-errors"
 	}
 }

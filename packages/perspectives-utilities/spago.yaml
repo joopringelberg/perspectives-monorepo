@@ -13,6 +13,6 @@ package:
     - transformers
     - tuples
 workspace:
-  package_set:
+  packageSet:
     registry: 60.6.0
-  extra_packages: {}
+  extraPackages: {}

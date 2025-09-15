@@ -3,7 +3,7 @@
   "purescript.addNpmPath": true,
   "purescript.autoStartPscIde": false,
   "purescript.pursExe": "/Users/joopringelberg/Code/perspectives-monorepo/node_modules/.bin/purs",
-  "purescript.buildCommand": "pnpm exec spago build",
+  "purescript.buildCommand": "pnpm exec spago build --json-errors",
   "purescript.outputDirectory": "output",
   "purescript.formatter": "purs-tidy",
   "editor.formatOnSave": true,
