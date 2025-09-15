@@ -13,7 +13,7 @@ export class Who extends Component<WhoProps> {
   render() {
     const defaultActiveKey = this.props.screenelements.chats[0]?.fields.chatInstance;
     return <PSContext.Consumer>{ value => 
-      <div className="content-top-aligned">{ defaultActiveKey ?
+      <div className="content-top-aligned px-0">{ defaultActiveKey ?
         <Accordion defaultActiveKey={defaultActiveKey} flush>
         {this.props.screenelements.chats.map((chat) => (
           chat.fields.chatInstance ? 

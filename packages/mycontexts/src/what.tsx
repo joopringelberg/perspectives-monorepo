@@ -16,12 +16,13 @@ export class What extends PerspectivesComponent<WhatProps>{
 
   render() {
     const component = this;
+    let element;
     return (<PSContext.Consumer>{
       context => {
         switch (this.props.screenelements.tag) {
           case "TableForms":
-            const element = this.props.screenelements.elements as unknown as {markdown: MarkDownElementDef[], tableForms: TableFormDef[]};
-            return <div className="content-top-aligned">
+            element = this.props.screenelements.elements as unknown as {markdown: MarkDownElementDef[], tableForms: TableFormDef[]};
+            return <div className="content-top-aligned px-0">
                 {element.markdown.map((markdown, index) => 
                   <div key={index} className="markdown">{ buildMarkDown(context.contextinstance, context.myroletype, markdown) }</div>
                   )}

@@ -55,7 +55,7 @@ export class Where extends Component<WhereProps, WhereState> {
   render() {
     const component = this;
     return (<PSContext.Consumer>{ value => 
-    (<div className="content-top-aligned">
+    (<div className="content-top-aligned px-0">
       {this.props.screenelements.markdown.map((markdown, index) => 
           <div key={index} className="markdown">{ buildMarkDown(value.contextinstance, value.myroletype, markdown) }</div>
         )}

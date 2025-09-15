@@ -83,10 +83,17 @@ html body .dropdown-menu .dropdown-item {
     width 0.6s ease-in-out, 
     padding 0.6s ease-in-out;
 }
+.accordion {
+  --bs-accordion-body-padding-x: 0.5rem; /* Set your desired value here */
+}
+
+.container {
+  --bs-gutter-x: 0.5rem; /* Set your desired value here */
+}
 
 .markdown {
   --markdown-padding-y: var(--bs-accordion-body-padding-y, 1rem);
-  --markdown-padding-x: var(--bs-accordion-body-padding-x, 1.25rem);
+  --markdown-padding-x: var(--bs-accordion-body-padding-x, 0.5rem);
   padding: var(--markdown-padding-y) var(--markdown-padding-x);
 }
 

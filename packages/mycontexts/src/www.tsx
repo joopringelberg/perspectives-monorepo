@@ -809,7 +809,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           {component.renderTopNavBar()}
           <main id="main-content">
             <div tabIndex={0} className="content-section-area">
-              <Row className='mx-0'>
+              <Row className='mx-0 px-0'>
                 <Col 
                   className='bg-primary full-height animated-column' 
                   xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "who" ? 6 : 3 } 
@@ -817,7 +817,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}>
                     <h2 className='text-center text-dark column-heading' aria-keyshortcuts="alt+1" tabIndex={0}>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h2>
                   </Row>
-                  <Row className='px-1 full-www-content-height scrollable-content'>
+                  <Row className='px-1 full-www-content-height scrollable-content px-0'>
                     { this.state.screen?.whoWhatWhereScreen ?
                       <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } 
                         showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "who"}
@@ -838,7 +838,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   </Row>
                   {/* In the desktop, MSComponent will render a row with px-1 */}
                   {/* Here we render either an arbitrary screen: {tag: "FreeFormScreen", elements: MainScreenElements}, or all TableFormDef elements in the {tag: "TableForms", elements: TableFormDef[]} variant of What. */}
-                  <Row className="full-www-content-height scrollable-content">
+                  <Row className="full-www-content-height scrollable-content px-0">
                   {this.state.screen?.whoWhatWhereScreen ? 
                         <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "what"}/>
                         : 
@@ -853,7 +853,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   <Row onClick={() => component.setState( {'doubleSection': "where"} )}>
                     <h2 className='text-center column-heading' aria-keyshortcuts="alt+3" tabIndex={0}>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h2>
                   </Row>  
-                  <Row className="px-1 full-www-content-height scrollable-content" style={{overflow: 'auto'}}>
+                  <Row className="px-1 full-www-content-height scrollable-content px-0" style={{overflow: 'auto'}}>
                   { this.state.screen?.whoWhatWhereScreen ? 
                     <Where 
                       screenelements={  this.state.screen.whoWhatWhereScreen.whereto } 
