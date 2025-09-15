@@ -87,6 +87,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
 {
   inputRef: React.RefObject<HTMLElement | null>;
   private inputType: InputType;
+  private selectionByKeyboard: boolean;
   constructor (props : TableCellProps)
   {
     super(props);
@@ -99,12 +100,16 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     // It is used to dispatch the custom SetRow and SetColumn events.
     // It also receives focus.
     this.inputRef = createRef();
-    this.inputType = mapRange( this.props.serialisedProperty.range )
+  this.inputType = mapRange( this.props.serialisedProperty.range )
+  this.selectionByKeyboard = false;
   }
 
   componentDidMount()
   {
-    if (this.props.isselected)
+    // Only claim focus on initial mount if nothing else currently has focus (avoid stealing from another table/input).
+    if (this.props.isselected &&
+        typeof document !== 'undefined' &&
+        (document.activeElement === document.body || document.activeElement == null))
     {
       this.setFocus();
     }
@@ -119,7 +124,8 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
   {
     const component = this;
 
-    if (component.props.isselected)
+    // Always move focus to the newly selected cell when selection status changes to true, so arrow navigation continues to work.
+    if (component.props.isselected && !prevProps.isselected)
     {
       component.setFocus();
     }
@@ -133,15 +139,25 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
   setFocus()
   {
     const component = this;
-    if ( component.inputRef.current )
-    {
-      component.inputRef.current.focus();
-    }
-    else
-    {
-      // THIS IS A HACK, admittedly. However, React doesn't fullfil its
-      // promise to resolve refs before the componentDidUpdate function is called.
-      setTimeout( () => component.inputRef.current?.focus(), 100);
+    const focusInnerControl = (root: HTMLElement | null) => {
+      if (!root) return false;
+      // If the ref points to an adornment wrapper div, try to locate an actual form control inside.
+      let target: HTMLElement | null = root;
+      if (root instanceof HTMLDivElement) {
+        const inner = root.querySelector('input,textarea,select,.form-control,[contenteditable="true"]') as HTMLElement | null;
+        if (inner) target = inner;
+      }
+      if (target && document.activeElement !== target) {
+        console.log("TableCell.setFocus: focusing element for column " + component.props.propertyname + " roleinstance " + component.props.roleinstance + (target !== root ? " (inner control)" : " (wrapper)"));
+        try { target.focus(); } catch (_) { /* ignore */ }
+        return true;
+      }
+      return false;
+    };
+
+    if (!focusInnerControl(component.inputRef.current as HTMLElement | null)) {
+      // Ref not ready yet: retry shortly.
+      setTimeout(() => focusInnerControl(component.inputRef.current as HTMLElement | null), 50);
     }
   }
 
@@ -181,6 +197,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
       {
         switch(event.code){
           case "Enter":
+            component.selectionByKeyboard = true;
             component.setState({editable:true});
             event.preventDefault();
             event.stopPropagation();
@@ -254,7 +271,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
         else
         {
           return (
-            <td onKeyDown={component.handleKeyDown}>
+            <td onKeyDown={component.handleKeyDown} role="gridcell" aria-selected={true}>
               <RoleInstance
                 roleinstance={component.props.roleinstance}
                 contextinstance={component.props.perspective.contextInstance}
@@ -273,7 +290,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                     aria-label={title}
                     // Other properties to pass on.
                     tabIndex={receiveFocusByKeyboard}
-                    className="shadow"
+                    className={`shadow ${component.props.isselected ? 'card-selected' : ''}`}
                     onClick={component.handleClick}
                     type={component.inputType == 'date' ? 'text' : component.inputType || 'text'}
                   />
@@ -285,13 +302,13 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
       else
       {
         return (
-          <td>
+      <td role="gridcell" aria-selected={component.props.isselected}>
               <component.props.roleRepresentation
                 externalRef={component.inputRef as React.RefObject<HTMLElement>}
                 key={component.props.roleinstance}
                 tabIndex={focusable}
                 title={title}
-                className="shadow"
+        className={`shadow ${component.props.isselected ? 'card-selected' : ''}`}
                 onClick={component.handleClick}
                 aria-label={title} // deconstructLocalName ( component.props.propertyname )
                 type={component.inputType == 'date' ? 'text' : component.inputType || 'text'}

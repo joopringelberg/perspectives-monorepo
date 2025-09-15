@@ -1,4 +1,4 @@
-import React, { createRef } from "react";
+import React, { createRef, useContext } from "react";
 import PerspectivesComponent from "./perspectivesComponent";
 import {mapRoleVerbsToBehaviourNames} from "./maproleverbstobehaviours.js";
 import TableRow from "./tablerow.js";
@@ -8,7 +8,8 @@ import i18next from "i18next";
 import
   { Table
   , Form,
-  Accordion
+  Accordion,
+  AccordionContext
   } from "react-bootstrap";
 import "././styles/components.css";
 import { CardProperties } from "./cardbehaviour";
@@ -16,6 +17,21 @@ import { CardWithFixedBehaviour, WithOutBehavioursProps } from "./adorningCompon
 import { RoleInstanceT, Perspective, SerialisedProperty, PropertyType, Roleinstancewithprops } from "perspectives-proxy";
 import { AppContext } from "./reactcontexts";
 import TableItemContextMenu from "./tableItemContextMenu";
+
+// Wrapper functional component to derive `isOpen` from Accordion context and pass to the menu.
+const TableItemContextMenuWithOpen: React.FC<{
+  eventKey: string;
+  perspective: Perspective;
+  roleinstance: RoleInstanceT;
+  roleOnClipboard?: any;
+  systemExternalRole: RoleInstanceT;
+  showDetails?: boolean;
+}> = ({ eventKey, ...rest }) => {
+  const ctx = useContext(AccordionContext);
+  const active = ctx?.activeEventKey;
+  const isOpen = Array.isArray(active) ? active.includes(eventKey) : active === eventKey;
+  return <TableItemContextMenu {...rest} isOpen={isOpen} />;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // CARD
@@ -335,7 +351,8 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
                 >
                   <AppContext.Consumer>
                     {({ roleOnClipboard, systemExternalRole }) =>
-                      <TableItemContextMenu
+                      <TableItemContextMenuWithOpen
+                        eventKey={perspective.roleType}
                         perspective={perspective}
                         roleinstance={component.state.row}
                         roleOnClipboard={roleOnClipboard}

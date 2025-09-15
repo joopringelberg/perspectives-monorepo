@@ -95,3 +95,18 @@ for a discussion about variables and sass. */
   display: none !important;
 }
 
+/* Per-table selection highlight independent of browser focus */
+.card-selected {
+  /* Visual highlight similar to bootstrap focus but not tied to :focus */
+  box-shadow: 0 0 0 2px var(--bs-primary, #0d6efd) inset, 0 0 0 2px var(--bs-primary, #0d6efd);
+  background-color: rgba(13,110,253,0.08) !important;
+  border-color: var(--bs-primary, #0d6efd) !important;
+}
+
+/* Ensure inner input inherits highlight if wrapper gets class via adornment */
+.card-selected input.form-control,
+.card-selected .form-control {
+  background-color: transparent;
+  box-shadow: none;
+}
+

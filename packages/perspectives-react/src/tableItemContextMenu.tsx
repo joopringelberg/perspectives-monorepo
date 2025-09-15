@@ -34,6 +34,9 @@ interface TableItemContextMenuProps {
   roleOnClipboard?: RoleOnClipboard;
   systemExternalRole: RoleInstanceT;
   showDetails?: boolean;
+  // When false, the accordion item containing this menu is collapsed.
+  // We still render the trigger (empty menu) but skip computing menu content & async work.
+  isOpen?: boolean;
 }
 
 interface TableItemContextMenuState {
@@ -51,9 +54,12 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     this.ref = React.createRef();
   }
 
+  static defaultProps = { isOpen: true };
+
   componentDidMount(): void {
     const component = this;
-    if (component.props.roleOnClipboard !== undefined && !component.props.perspective.isCalculated)
+    // Skip expensive compatibility check if menu closed.
+    if (component.props.isOpen && component.props.roleOnClipboard !== undefined && !component.props.perspective.isCalculated)
     {
       PDRproxy.then( pproxy => pproxy.checkBindingP( component.props.perspective.roleType, component.props.roleOnClipboard!.roleData.rolinstance )
       .then( compatibleRole => 
@@ -63,18 +69,23 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
 
   componentDidUpdate(prevProps: Readonly<TableItemContextMenuProps>, prevState: Readonly<TableItemContextMenuState>, snapshot?: any): void {
     const component = this;
-    if (!component.props.perspective.isCalculated && 
-      component.props.roleOnClipboard &&
-      (!_.isEqual(component.props.roleOnClipboard, prevProps.roleOnClipboard) || component.props.roleinstance !== prevProps.roleinstance))
+    // Only (re)compute when open and needed (opened now, or clipboard / roleinstance changed)
+    const openedNow = component.props.isOpen && !prevProps.isOpen;
+    const dependenciesChanged = component.props.roleOnClipboard && (!_.isEqual(component.props.roleOnClipboard, prevProps.roleOnClipboard) || component.props.roleinstance !== prevProps.roleinstance);
+    if (component.props.isOpen && !component.props.perspective.isCalculated && (openedNow || dependenciesChanged))
     {
-      PDRproxy.then( pproxy => pproxy.checkBindingP( component.props.perspective.roleType, component.props.roleOnClipboard!.roleData.rolinstance )
-      .then( compatibleRole => 
-        component.setState({compatibleRole})));
+      if (component.props.roleOnClipboard)
+      {
+        PDRproxy.then( pproxy => pproxy.checkBindingP( component.props.perspective.roleType, component.props.roleOnClipboard!.roleData.rolinstance )
+        .then( compatibleRole => 
+          component.setState({compatibleRole})));
+      }
     }
   }
 
   computeActionItems(): JSX.Element[] 
   {
+  if (!this.props.isOpen) return [];
       // Computes the actions available based on context- and subject state, combined with those
     // available based on object state.
     const component = this;
@@ -139,6 +150,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   // - RemoveRole otherwise
   computeRemovalItems() : JSX.Element[] 
   {
+  if (!this.props.isOpen) return [];
     const component = this;
     const allowedtoremovecontext = () => component.props.perspective.verbs.includes("RemoveContext") || component.props.perspective.verbs.includes("DeleteContext")
     const allowedToRemoveRole = () => component.props.perspective.verbs.includes("Remove") || component.props.perspective.verbs.includes("Delete");
@@ -216,6 +228,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
 
   computeFillItem(): JSX.Element[] 
   {
+  if (!this.props.isOpen) return [];
     const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance];
     if ((this.mayCreateContext() || this.mayCreateInstance()) && roleInstanceWithProps && !roleInstanceWithProps.filler && this.state.compatibleRole)
     {
@@ -273,6 +286,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
 
   computeAddItems() : JSX.Element[] 
   {
+  if (!this.props.isOpen) return [];
     const component = this;
     const contexts = component.props.perspective.contextTypesToCreate;
     const contextItems = 
@@ -365,6 +379,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   // Neither should it be shown when the role is a calculated role.
   computeOpenContextOfFillerItem() : JSX.Element[] 
   {
+  if (!this.props.isOpen) return [];
     const component = this;
     if (this.props.perspective.roleKind == "ContextRole" || this.props.perspective.roleKind == "ExternalRole" || this.props.perspective.isCalculated)
     {
@@ -398,6 +413,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   
   computeTakeOnThisRoleItem() : JSX.Element[] 
   {
+  if (!this.props.isOpen) return [];
     const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance]; 
     if (roleInstanceWithProps?.isMe)
     {
@@ -429,6 +445,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
 
   computeOpenDetailsItem() : JSX.Element[]
   {
+  if (!this.props.isOpen) return [];
     const component = this;
     if ( component.props.showDetails)
     {
@@ -455,6 +472,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
 
   computeRestoreContextForUserItem() : JSX.Element[]
   {
+  if (!this.props.isOpen) return [];
     if (this.props.perspective.roleKind == "UserRole" || this.props.perspective.roleKind == "Public")
     {
       return [<Dropdown.Item
@@ -492,6 +510,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
 
   computePublicUrl() : JSX.Element[]
   {
+  if (!this.props.isOpen) return [];
     const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance];
     if (roleInstanceWithProps && roleInstanceWithProps.publicUrl)
     {
@@ -533,6 +552,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
 
   computeCopyItem() : JSX.Element[]
   {
+  if (!this.props.isOpen) return [];
     const component = this;
     const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance];
     if (roleInstanceWithProps)
@@ -584,7 +604,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   render()
   {
     const component = this;
-    const items = [
+    const items = this.props.isOpen ? [
       ...this.computeOpenDetailsItem(),
       ...this.computeCopyItem(),
       ...this.computeFillItem(),
@@ -595,7 +615,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
       ...this.computeTakeOnThisRoleItem(),
       ...this.computeRestoreContextForUserItem(),
       ...this.computePublicUrl()
-    ];
+    ] : [];
     {
       return <NavDropdown 
               ref={component.ref}
