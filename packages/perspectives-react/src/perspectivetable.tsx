@@ -314,35 +314,40 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
       return (
         component.props.showAsAccordionItem ?
           <Accordion.Item eventKey={perspective.roleType} key={perspective.id}>
-            {/* Use custom header structure instead of Accordion.Header with a component inside */}
-            <div className="d-flex accordion-custom-header">
-              {/* First part: the accordion header button */}
-              <div className="flex-grow-1">
-                <Accordion.Header 
-                  onClick={() => component.eventDiv.current?.dispatchEvent(
-                    new CustomEvent('OpenAccordionItem', {detail: perspective.roleType, bubbles: true})
-                  )}
+            <Accordion.Header
+              className="py-1"
+              onClick={() => component.eventDiv.current?.dispatchEvent(
+                new CustomEvent('OpenAccordionItem', { detail: perspective.roleType, bubbles: true })
+              )}
+            >
+              <div className="d-flex align-items-center w-100" style={{ minWidth: 0 }}>
+                <span
+                  className="flex-grow-1 text-truncate"
+                  style={{ minWidth: 0 }}
+                  title={perspective.displayName}
                 >
-                  <span>{perspective.displayName}</span>
-                </Accordion.Header>
+                  {perspective.displayName}
+                </span>
+                <div
+                  className="d-flex align-items-center ms-2 accordion-actions" /* reuse class for potential styling */
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <AppContext.Consumer>
+                    {({ roleOnClipboard, systemExternalRole }) =>
+                      <TableItemContextMenu
+                        perspective={perspective}
+                        roleinstance={component.state.row}
+                        roleOnClipboard={roleOnClipboard}
+                        systemExternalRole={systemExternalRole}
+                        showDetails={component.props.showDetails}
+                      />
+                    }
+                  </AppContext.Consumer>
+                </div>
               </div>
-              
-              {/* Second part: the menu outside the button but visually in the header */}
-              <div className="accordion-actions">
-                <AppContext.Consumer>
-                  {({ roleOnClipboard, systemExternalRole }) => 
-                    <TableItemContextMenu 
-                      perspective={perspective}
-                      roleinstance={component.state.row}
-                      roleOnClipboard={roleOnClipboard}
-                      systemExternalRole={systemExternalRole}
-                      showDetails={component.props.showDetails}
-                    />
-                  }
-                </AppContext.Consumer>
-              </div>
-            </div>
-            
+            </Accordion.Header>
+
             <Accordion.Body>
               {component.constructTable()}
             </Accordion.Body>
