@@ -19,7 +19,7 @@
 -- Full text of this license can be found in the LICENSE directory in the projects root.
 
 -- END LICENSE
-module Perspectives.Sidecar.NormalizeTypeNames
+module Perspectives.Sidecar.NormalizeTypeNames 
   ( WithSideCars
   , class NormalizeTypeNames
   , normalizeTypeNames

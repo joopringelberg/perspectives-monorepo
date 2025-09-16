@@ -1,7 +1,6 @@
 {
   "purescript.addSpagoSources": true,
   "purescript.addNpmPath": true,
-  "purescript.autoStartPscIde": false,
-  "purescript.pursExe": "${workspaceFolder}/node_modules/.bin/purs",
-  "purescript.buildCommand": "pnpm exec spago build"
+  "purescript.pursExe": "purs",
+  "purescript.buildCommand": "pnpm exec spago build --json-errors"
 }
