@@ -49,9 +49,8 @@ compileSentence domain xToString (Sentence { sentence, parts }) = do
     parts
   pure \roleId -> do
     (replacements :: Array String) <- concat <$> traverse (\p -> p roleId) compiledParts
-    -- TODO: replace sentence with its translation before applying the expression value replacements to it.
     translatedSentence <- translationOf domain sentence
-    pure (foldlWithIndex (\i s next -> replace (Pattern ("$" <> show i)) (Replacement next) s) sentence replacements)
+    pure (foldlWithIndex (\i s next -> replace (Pattern ("$" <> show i)) (Replacement next) s) translatedSentence replacements)
 
 -- | From a Sentence, create a function that takes a ContextInstance and produces a String in MonadPerspectives.
 compileContextSentence :: String -> Sentence -> MonadPerspectives (CompiledSentence ContextInstance)

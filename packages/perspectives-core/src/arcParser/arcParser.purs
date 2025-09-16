@@ -25,8 +25,8 @@ module Perspectives.Parsing.Arc where
 import Control.Alt (map, void, (<|>))
 import Control.Lazy (defer)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (fromFoldable)
-import Data.FunctorWithIndex (mapWithIndex)
+import Data.Array (fromFoldable, snoc)
+import Data.Foldable (foldl)
 import Data.Either (Either(..))
 import Data.Int (toNumber)
 import Data.JSDate (toISOString)
@@ -66,7 +66,7 @@ import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.State (NotificationLevel(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), RoleKind(..), RoleType(..))
 import Perspectives.Representation.Verbs (RoleVerb(..), PropertyVerb(..), RoleVerbList(..))
-import Prelude (bind, discard, flip, not, pure, show, ($), (&&), (*>), (<$>), (<*), (<*>), (<<<), (<>), (==), (>>=), (||), (/=))
+import Prelude (bind, discard, flip, not, pure, show, ($), (&&), (*>), (<$>), (<*), (<*>), (<<<), (<>), (==), (>>=), (||), (/=), (+))
 
 contextE :: IP ContextPart
 contextE = withPos do
@@ -1529,11 +1529,20 @@ sentenceE = do
   allparts <- between (char '"') (char '"') (many (sentencePart <|> exprPart))
   _ <- token.whiteSpace
   end <- getPosition
-  sentence <- pure $ intercalate " "
-    ( flip mapWithIndex allparts \i p -> case p of
-        HRpart s -> s
-        CPpart _ -> "$" <> show i
-    )
+  -- Build the sentence while numbering only the computation parts (CPpart)
+  -- sequentially. Previously we used the overall index in allparts, which
+  -- caused gaps when HRpart segments were present. We fold to keep a counter
+  -- of how many CPpart values we have emitted so far.
+  let
+    Tuple _ numberedParts =
+      foldl
+        ( \(Tuple n acc) part -> case part of
+            HRpart s -> Tuple n (snoc acc s)
+            CPpart _ -> Tuple (n + 1) (snoc acc ("$" <> show n))
+        )
+        (Tuple 0 [])
+        allparts
+  sentence <- pure $ intercalate " " numberedParts
   parts <- pure $ filter
     ( \p -> case p of
         CPpart _ -> true
