@@ -24,7 +24,6 @@ module Perspectives.Instances.ObjectGetters where
 
 import Control.Monad.Error.Class (try)
 import Control.Monad.Writer (WriterT, execWriter, execWriterT, lift, tell)
-import Control.Plus (empty) as Plus
 import Data.Array (catMaybes, concat, cons, elemIndex, filter, findIndex, foldM, foldMap, head, index, length, nub, null, singleton, union)
 import Data.FoldableWithIndex (foldWithIndexM, forWithIndex_)
 import Data.Map (Map, lookup) as Map
@@ -67,7 +66,7 @@ import Perspectives.Representation.Class.PersistentType (getContext, getEnumerat
 import Perspectives.Representation.Class.Role (actionsOfRoleType, completeDeclaredFillerRestriction, declaredTypeWithoutFiller, kindOfRole)
 import Perspectives.Representation.Context (Context(..)) as CONTEXT
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..), roleInstance2PerspectivesUser)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser(..), RoleInstance(..), Value(..), roleInstance2PerspectivesUser)
 import Perspectives.Representation.Perspective (StateSpec(..)) as SP
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleKind(..), RoleType, StateIdentifier)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, isInPublicScheme, takeGuid)
@@ -174,7 +173,9 @@ getContextActions userRoleType userRoleInstance cid = ArrayT do
 
 -- | Returns the name of the model that defines the context type as a String Value.
 contextModelName :: ContextInstance ~~> Value
-contextModelName (ContextInstance cid) = maybe Plus.empty (pure <<< Value) (typeUri2ModelUri cid)
+contextModelName =
+  contextType >=> \ct ->
+    ArrayT $ pure $ maybe [] (pure <<< Value) (typeUri2ModelUri (unwrap ct))
 
 indexedContextName :: ContextInstance ~~> Value
 indexedContextName = contextType >=> \cType -> ArrayT $ do
@@ -637,7 +638,12 @@ roleIsInState stateId ri = getActiveRoleStates_ ri >>= pure <<< isJust <<< elemI
 
 -- | Returns the name of the model that defines the role type as a String Value.
 roleModelName :: RoleInstance ~~> Value
-roleModelName (RoleInstance rid) = maybe Plus.empty (pure <<< Value) (typeUri2ModelUri rid)
+-- We cannot derive the model name directly from a role instance identifier; we must
+-- first obtain its (primary) EnumeratedRoleType and then translate that type URI
+-- to a model URI. If the type URI does not encode a model namespace, we return no value.
+roleModelName =
+  roleType >=> \rt ->
+    ArrayT $ pure $ maybe [] (pure <<< Value) (typeUri2ModelUri (unwrap rt))
 
 -- OBSOLETE
 -- | Return the value of the local property "Name", or return the last segment of the role type name.
