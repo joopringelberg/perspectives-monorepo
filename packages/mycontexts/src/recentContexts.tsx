@@ -41,9 +41,16 @@ export class RecentContexts extends PerspectivesComponent<RecentContextsProps, R
     const orderedIds = this.sortRoleIdsByLastShown(p);
     const keepIds = new Set(orderedIds.slice(0, maxHistoryLength));
     const overflow = orderedIds.slice(maxHistoryLength);
-    const trimmedRoleInstances = Object.fromEntries(
-      Object.entries(p.roleInstances).filter(([rid]) => keepIds.has(rid as RoleInstanceT))
-    ) as Perspective["roleInstances"];
+    // Reconstruct roleInstances in the (already sorted) order of orderedIds to keep navigation stable.
+    const trimmedRoleInstances = orderedIds
+      .slice(0, maxHistoryLength)
+      .reduce((acc, rid) => {
+        const ri = p.roleInstances[rid];
+        if (ri) {
+          acc[rid] = ri; // insertion preserves order for iteration
+        }
+        return acc;
+      }, {} as Perspective["roleInstances"]);
     const trimmed: Perspective = { ...p, roleInstances: trimmedRoleInstances };
     return { trimmed, overflow };
   }
@@ -129,8 +136,6 @@ export class RecentContexts extends PerspectivesComponent<RecentContextsProps, R
               perspective={this.state.perspective} 
               showcontrolsandcaption={false}
               showAsAccordionItem={true}
-              sortOnHiddenProperty={ModelDependencies.lastShownOnScreen}
-              sortAscending={false}
               />;
     }
   }
