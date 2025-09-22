@@ -383,17 +383,17 @@ generateFirstTranslation (DomeinFile dr) = flip runReader dr do
   toplevelContexts <- pure $ filterKeys isDefinedAtTopLevel dr.contexts
   contexts <-
     if isEmpty toplevelContexts then pure Nothing
-    else Just <<< ContextsTranslation <$> (for (filterKeys (not <<< eq dr.namespace) toplevelContexts) translateContext)
+    else Just <<< ContextsTranslation <$> (for (filterKeys (not <<< eq (unwrap dr.id)) dr.contexts) translateContext)
   eroles <- for (filterKeys isDefinedAtTopLevel dr.enumeratedRoles)
     (translateRole <<< E)
   croles <- for (filterKeys isDefinedAtTopLevel dr.calculatedRoles)
     (translateRole <<< C)
   allRoles <- pure $ fromFoldable ((toUnfoldable eroles <> toUnfoldable croles) :: Array (Tuple String RoleTranslation))
   roles <- if isEmpty allRoles then pure Nothing else pure $ Just $ RolesTranslation allRoles
-  pure $ ModelTranslation { namespace: dr.namespace, contexts, roles }
+  pure $ ModelTranslation { namespace: unwrap dr.id, contexts, roles }
   where
   isDefinedAtTopLevel :: String -> Boolean
-  isDefinedAtTopLevel s = dr.namespace == typeUri2typeNameSpace_ s && (isNothing $ Regex.match (unsafeRegex "External$" noFlags) s)
+  isDefinedAtTopLevel s = unwrap dr.id == typeUri2typeNameSpace_ s && (isNothing $ Regex.match (unsafeRegex "External$" noFlags) s)
 
 translateContext :: Context -> Reader DomeinFileRecord ContextTranslation
 translateContext (Context { id: contextId, gebruikerRol, contextRol, rolInContext, nestedContexts }) = do

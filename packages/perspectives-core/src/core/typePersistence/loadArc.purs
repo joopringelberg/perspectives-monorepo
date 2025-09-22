@@ -25,7 +25,8 @@ module Perspectives.TypePersistence.LoadArc where
 import Control.Alt (void)
 import Control.Monad.Error.Class (catchError)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (delete, null)
+import Data.Array (delete, null, filter)
+import Data.String.CodeUnits as SCU
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.List (List(..))
@@ -59,7 +60,7 @@ import Perspectives.Sidecar.NormalizeTypeNames (normalizeTypes)
 import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, emptyStableIdMapping, lookupContextCuid)
 import Perspectives.Sidecar.UniqueTypeNames (extractKeysFromDfr)
 import Perspectives.Sidecar.UniqueTypeNames as UTN
-import Prelude (bind, discard, pure, show, ($), (<<<), (==), (<>))
+import Prelude (bind, discard, pure, show, ($), (<<<), (==), (<>), (>=), (&&), (-), not)
 
 -- | The functions in this module load Arc files and parse and compile them to DomeinFiles.
 -- | Some functions expect a CRL file with the same name and add the instances found in them
@@ -94,7 +95,7 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
           Right ctxt@(ContextE { id: sourceDfid, pos }) ->
             -- LET OP: DIT GAAT FALEN VOOR NIEUWE MODELLEN
             -- If we have a mapping, it is sure to have the enclosing Domein context, so then we can map ModelUri Readable to ModelUri Stable.
-            if sourceDfid == stableModelUri then do
+            if testModelName then do
               (Tuple result state :: Tuple (Either MultiplePerspectivesErrors DomeinFile) PhaseTwoState) <-
                 lift $ lift $ runPhaseTwo_' (traverseDomain ctxt) defaultDomeinFileRecord empty empty Nil
               case result of
@@ -123,9 +124,28 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                       ctxPairs <- for planned.needCuids.contexts \fqn -> do
                         v <- liftEffect (cuid2 (stableModelUri <> ":ctx"))
                         pure (Tuple fqn v)
-                      rolPairs <- for planned.needCuids.roles \fqn -> do
+                      -- Special handling for synthetic external roles (<context-fqn>$External):
+                      -- Skip minting separate CUIDs; derive <context-cuid>$External so code can rely on structure.
+                      let
+                        isExternalRole fqn =
+                          let
+                            suf = "$External"
+                            lf = SCU.length fqn
+                            ls = SCU.length suf
+                          in
+                            lf >= ls && SCU.drop (lf - ls) fqn == suf
+                        regularRoleFqns = filter (not <<< isExternalRole) planned.needCuids.roles
+                      rolPairsRegular <- for regularRoleFqns \fqn -> do
                         v <- liftEffect (cuid2 (stableModelUri <> ":rol"))
                         pure (Tuple fqn v)
+                      let
+                        externalRolePairs = do
+                          Tuple ctxFqn ctxCuid <- ctxPairs
+                          let extRoleFqn = ctxFqn <> "$External"
+                          case OBJ.lookup extRoleFqn cur.roles of
+                            Nothing -> []
+                            Just _ -> [ Tuple extRoleFqn "External" ]
+                        rolPairs = rolPairsRegular <> externalRolePairs
                       propPairs <- for planned.needCuids.properties \fqn -> do
                         v <- liftEffect (cuid2 (stableModelUri <> ":prop"))
                         pure (Tuple fqn v)

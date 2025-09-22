@@ -200,8 +200,11 @@ modelManifest = "model://perspectives.domains#System$ModelManifest$External"
 domeinFileName :: String
 domeinFileName = "model://perspectives.domains#System$ModelManifest$External$DomeinFileName"
 
-versionedDomeinFileName :: String
-versionedDomeinFileName = "model://perspectives.domains#System$VersionedModelManifest$External$DomeinFileName"
+domeinFileNameOnVersionedModelManifest :: String
+domeinFileNameOnVersionedModelManifest = "model://perspectives.domains#System$VersionedModelManifest$External$DomeinFileName"
+
+domeinFileNameWithVersion :: String
+domeinFileNameWithVersion = "model://perspectives.domains#System$VersionedModelManifest$External$VersionedDomeinFileName"
 
 versionedModelManifestModelCuid :: String
 versionedModelManifestModelCuid = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelCuid"

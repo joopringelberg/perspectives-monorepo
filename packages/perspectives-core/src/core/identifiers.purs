@@ -64,7 +64,7 @@ import Prelude (append, flip, identity, ($), (+), (<<<), (<>), (==), (||))
 -- | The first group captures the authority.
 -- | The second group captures the local model name that is unique within the authority domain.
 newModelPattern :: String
-newModelPattern = "^model://([^/]+)#([A-Z][^\\$/]+)$"
+newModelPattern = "^model://([^/]+)#([^\\$/]+)$"
 
 newModelRegex :: Regex
 newModelRegex = unsafeRegex newModelPattern noFlags
@@ -239,14 +239,14 @@ type TypeUri = String
 -- |     This is to cover the top context of a model.
 -- | The first group captures the model URI; the second captures the segmented type name.
 typePattern :: String
-typePattern = "^(model://[^/]+#[A-Z][^\\$]+)\\$?(.*)$"
+typePattern = "^(model://[^/]+#[^\\$]+)\\$?(.*)$"
 
 typeRegex :: Regex
 typeRegex = unsafeRegex typePattern noFlags
 
 -- | This regex is like the typeRegex but it separates THE LAST segment from the rest of the expression.
 localNameRegEx :: Regex
-localNameRegEx = unsafeRegex "^model://[^/]+#[A-Z][^#/]+\\$([A-Z][^\\$/]+)$" noFlags
+localNameRegEx = unsafeRegex "^model://[^/]+#[^#/]+\\$([^\\$/]+)$" noFlags
 
 -----------------------------------------------------------
 -- TEST IF A STRING IS A TYPE URI

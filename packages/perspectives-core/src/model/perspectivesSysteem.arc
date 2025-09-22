@@ -962,7 +962,7 @@ domain model://perspectives.domains#System
       property Version (mandatory, String)
         pattern = "^[0-9]+\\.[0-9]+(?:\\.dev)?$" "The form MAJOR.MINOR where both are integer numbers, or MAJOR.MINOR.dev."
       -- E.g. "System@1.0.0"
-      property VersionedLocalModelName = (context >> extern >> binder Manifests >> LocalModelName >>= first) + "@" + Versions$Version
+      property VersionedLocalModelName = (context >> extern >> binder Manifests >> (ModelCuid orElse LocalModelName) >>= first) + "@" + Versions$Version
 
   case VersionedModelManifest
     external
@@ -974,6 +974,8 @@ domain model://perspectives.domains#System
       -- PDRDEPENDENCY
       property DomeinFileName (functional) = binder Versions >> context >> extern >> ModelManifest$External$DomeinFileName
       property Version (functional)        = binder Versions >> Versions$Version
+      -- PDRDEPENDENCY
+      property VersionedDomeinFileName = DomeinFileName + "@" + Version
       property VersionName = ModelName + "@" + Version
         readableName
       -- PDRDEPENDENCY

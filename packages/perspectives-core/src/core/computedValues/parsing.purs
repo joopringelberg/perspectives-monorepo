@@ -57,7 +57,7 @@ import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (DomeinFileName, ModelUri, isModelUri, modelUri2ModelUrl, unversionedModelUri)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
-import Perspectives.ModelDependencies (sysUser, versionedModelManifestModelCuid)
+import Perspectives.ModelDependencies (sysUser, versionedModelManifestModelCuid) as MD
 import Perspectives.ModelTranslation (ModelTranslation, augmentModelTranslation, generateFirstTranslation, parseTranslation, writeTranslationYaml, generateTranslationTable) as MT
 import Perspectives.ModelTranslation (ModelTranslation, emptyTranslationTable)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -87,8 +87,8 @@ parseAndCompileArc domeinFileName_ arcSource_ versionedModelManifest =
           do
             previousWarnings <- lift $ lift $ getWarnings
             lift $ lift $ resetWarnings
-            Value modelCuid <- getPropertyValues (CP $ CalculatedPropertyType versionedModelManifestModelCuid) versionedModelManifest
-            r <- lift $ lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType sysUser)
+            Value modelCuid <- getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid) versionedModelManifest
+            r <- lift $ lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType MD.sysUser)
               (loadAndCompileArcFile_ (Sidecar.ModelUri domeinFileName) arcSource false modelCuid)
             case r of
               Left errs -> ArrayT $ pure (Value <<< show <$> errs)
@@ -110,11 +110,11 @@ applyImmediately domeinFileName_ arcSource_ versionedModelManifest =
         _, Nothing -> lift $ addWarning "Parsing$applyImmediately: no arc source given!"
         Just domeinFileName, Just arcSource -> catchError
           do
-            mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType versionedModelManifestModelCuid))
+            mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
             case mmodelCuid of
               Nothing -> lift $ addWarning "Parsing$applyImmediately: no model CUID given!"
               Just (Value modelCuid) -> do
-                r <- lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType sysUser)
+                r <- lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType MD.sysUser)
                   (loadAndCompileArcFile_ (Sidecar.ModelUri domeinFileName) arcSource true modelCuid)
                 case r of
                   Left errs -> lift $ addWarning ("Error in Parsing$applyImmediately: " <> show errs)
@@ -139,10 +139,10 @@ uploadToRepository domeinFileName_ arcSource_ versionedModelManifest =
   try
     ( case head domeinFileName_, head arcSource_ of
         Just domeinFileName, Just arcSource -> do
-          -- Retrieve existing sidecar (if any) from repository
+          -- Retrieve existing sidecar (if any) from repository. domeinFilename should be Stable.
           mMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri domeinFileName)
           let split = unsafePartial modelUri2ModelUrl domeinFileName
-          mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType versionedModelManifestModelCuid))
+          mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           case mmodelCuid of
             Nothing -> lift $ addWarning "Parsing$applyImmediately: no model CUID given!"
             Just (Value modelCuid) -> do
@@ -245,7 +245,7 @@ removeFromRepository modelUris _ =
     ( case head modelUris of
         Just modelUri ->
           if isModelUri modelUri then void $ lift $ removeFromRepository_ (unsafePartial modelUri2ModelUrl modelUri)
-          else logPerspectivesError $ DomeinFileErrorBoundary "uploadToRepository" ("This modelURI is not well-formed: " <> modelUri)
+          else logPerspectivesError $ DomeinFileErrorBoundary "RemoveFromRepository" ("This modelURI is not well-formed: " <> modelUri)
         _ -> logPerspectivesError $ Custom ("removeFromRepository lacks the ModelURI argument.")
     )
     >>= handleExternalStatementError "model://perspectives.domains#Parsing$RemoveFromRepository"
@@ -288,7 +288,7 @@ storeModelLocally_ domeinFileName_ arcSource_ versionedModelManifest =
         Just domeinFileName, Just arcSource -> do
           -- Load mapping from local models DB (if present)
           mLocalMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri domeinFileName)
-          mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType versionedModelManifestModelCuid))
+          mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           case mmodelCuid of
             Nothing -> lift $ addWarning "Parsing$applyImmediately: no model CUID given!"
             Just (Value modelCuid) -> do

@@ -1123,7 +1123,7 @@ domain model://perspectives.domains#CouchdbManagement
       -- (DomeinFileUri Readable)
       property ModelURI (functional) = binder Versions >> context >> extern >> ModelManifest$External$ModelURI
       property ModelCuid (functional) = binder Versions >> context >> extern >> ModelManifest$External$ModelCuid
-      -- (DomeinFileUri Readable) plus version.
+      -- (currently DomeinFileUri Readable) plus version. This should become a Stable URI.
       property VersionedModelURI = VersionedModelManifest$External$ModelURI + "@" + External$Version
       property ArcFile (File)
         pattern = "text/arc" "Only .arc files (Perspectives Language source files) are allowed, so use `text//arc."
@@ -1178,7 +1178,7 @@ domain model://perspectives.domains#CouchdbManagement
         state UploadToRepository = Store == "Repository"
           on entry
             do for Author
-              -- This will upload an empty Translations table, too.
+              -- This will upload an empty Translations table, too. VersionedModelURI should be Stable.
               callEffect p:UploadToRepository( VersionedModelManifest$External$VersionedModelURI, 
                 callExternal util:ReplaceR( "bind publicrole.*in sys:MySystem", "", ArcSource ) returns String)
               Build = Build + 1

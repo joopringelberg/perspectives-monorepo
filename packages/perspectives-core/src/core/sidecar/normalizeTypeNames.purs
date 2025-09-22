@@ -19,7 +19,7 @@
 -- Full text of this license can be found in the LICENSE directory in the projects root.
 
 -- END LICENSE
-module Perspectives.Sidecar.NormalizeTypeNames 
+module Perspectives.Sidecar.NormalizeTypeNames
   ( WithSideCars
   , class NormalizeTypeNames
   , normalizeTypeNames
@@ -43,7 +43,7 @@ import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), Upstr
 import Perspectives.Identifiers (splitTypeUri)
 import Perspectives.Instances.ObjectGetters (getProperty)
 import Perspectives.InvertedQuery (InvertedQuery)
-import Perspectives.ModelDependencies (modelURI, modelsInUse, versionedDomeinFileName)
+import Perspectives.ModelDependencies (modelURI, modelsInUse, domeinFileNameOnVersionedModelManifest)
 import Perspectives.Names (getMySystem)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), traverseQfd)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
@@ -95,7 +95,8 @@ normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
     system <- getMySystem
     modelRoles <- (ContextInstance system) ##= getRoleInstances (ENR $ EnumeratedRoleType modelsInUse)
     x :: Array (Maybe (Tuple (ModelUri Readable) (ModelUri Stable))) <- for modelRoles \ri -> do
-      mcuid <- ri ##> getProperty (EnumeratedPropertyType versionedDomeinFileName)
+      -- TODO: DIT moet gewoon versionedDomeinFileName zijn.
+      mcuid <- ri ##> getProperty (EnumeratedPropertyType domeinFileNameOnVersionedModelManifest)
       case mcuid of
         Nothing -> pure Nothing
         Just _ -> do
@@ -142,6 +143,7 @@ instance NormalizeTypeNames DomeinFile DomeinFileId where
       ( for ((EM.toUnfoldable df.screens) :: Array (Tuple ScreenKey ScreenDefinition)) $
           \(Tuple ct sd) -> Tuple <$> normalize ct <*> normalize sd
       )
+    id' <- fqn2tid df.id
     pure $ DomeinFile df
       { contexts = contexts'
       , enumeratedRoles = enumeratedRoles'
@@ -155,6 +157,7 @@ instance NormalizeTypeNames DomeinFile DomeinFileId where
       , upstreamStateNotifications = upstreamStateNotifications'
       , upstreamAutomaticEffects = upstreamAutomaticEffects'
       , screens = screens'
+      , id = id'
       }
 
 instance NormalizeTypeNames Context ContextType where

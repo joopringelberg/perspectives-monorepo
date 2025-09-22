@@ -1,11 +1,19 @@
-{ "version": 2
-  , "contexts": {}
-  , "roles": {}
-  , "properties": {}
-  , "contextKeys": {}
-  , "roleKeys": {}
-  , "propertyKeys": {}
-  , "contextCuids": {}
-  , "roleCuids": {}
-  , "propertyCuids": {}
-  }
+{
+  "views": {},
+  "viewKeys": {},
+  "viewCuids": {},
+  "version": 4,
+  "states": {},
+  "stateKeys": {},
+  "stateCuids": {},
+  "roles": {},
+  "roleKeys": {},
+  "roleCuids": {},
+  "propertyKeys": {},
+  "propertyCuids": {},
+  "properties": {},
+  "modelIdentifier": "model://joopringelberg.nl#cmddp2k3jz",
+  "contexts": {},
+  "contextKeys": {},
+  "contextCuids": {}
+}
