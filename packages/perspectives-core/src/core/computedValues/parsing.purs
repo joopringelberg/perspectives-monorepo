@@ -58,8 +58,8 @@ import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (DomeinFileName, ModelUri, isModelUri, modelUri2ModelUrl, unversionedModelUri)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.ModelDependencies (sysUser, versionedModelManifestModelCuid) as MD
-import Perspectives.ModelTranslation (ModelTranslation, augmentModelTranslation, generateFirstTranslation, parseTranslation, writeTranslationYaml, generateTranslationTable) as MT
-import Perspectives.ModelTranslation (ModelTranslation, emptyTranslationTable)
+import Perspectives.ModelTranslation (augmentModelTranslation, emptyTranslationTable, generateFirstTranslation, generateTranslationTable, parseTranslation_pass1, parseTranslation_pass2, writeReadableTranslationYaml, writeTranslationYaml) as MT
+import Perspectives.ModelTranslation.Representation (ModelTranslation(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, addDocument, deleteDocument, fromBlob, getAttachment, getDocument, retrieveDocumentVersion, toFile, tryGetDocument_)
 import Perspectives.PerspectivesState (addWarning, getWarnings, resetWarnings, setWarnings)
@@ -69,6 +69,7 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), StableIdMapping, loadStableMapping) as Sidecar
+import Perspectives.Sidecar.StableIdMapping (loadStableMapping)
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_, loadAndCompileArcFileWithSidecar_)
 import Simple.JSON (readJSON, readJSON_, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
@@ -197,7 +198,7 @@ uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping = do
   defaultAttachments :: AttachmentFiles -> MonadPerspectives AttachmentFiles
   defaultAttachments attachments = do
     -- Add an empty translations file.
-    translationsFile <- liftEffect $ unsafeCoerce toFile "translationtable.json" "application/json" (unsafeToForeign $ writeJSON emptyTranslationTable)
+    translationsFile <- liftEffect $ unsafeCoerce toFile "translationtable.json" "application/json" (unsafeToForeign $ writeJSON MT.emptyTranslationTable)
     -- Add a skeleton stableIdMapping sidecar.
     mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping)
     queryFile <- liftEffect $ toFile "storedQueries.json" "application/json" (unsafeToForeign $ writeJSON invertedQueries)
@@ -342,7 +343,12 @@ getTranslationYaml modelTranslation_ _ = case head modelTranslation_ of
   Just modelTranslation -> case readJSON modelTranslation of
     Left e -> handleExternalFunctionError "model://perspectives.domains#Parsing$GetTranslationYaml"
       (Left $ error (show e))
-    Right (translation :: MT.ModelTranslation) -> pure $ Value $ MT.writeTranslationYaml translation
+    Right m@(ModelTranslation translation) -> do
+      mMapping <- lift $ lift $ loadStableMapping (Sidecar.ModelUri (translation.namespace <> "@" <> translation.version))
+      case mMapping of
+        Nothing -> pure $ Value $ MT.writeTranslationYaml m
+        Just mapping -> do
+          pure $ Value $ MT.writeReadableTranslationYaml mapping m
 
 -- | From a YAML string, generate a (serialised) ModelTranslation.
 parseYamlTranslation :: Array String -> (RoleInstance ~~> Value)
@@ -353,10 +359,16 @@ parseYamlTranslation pfile_ _ = ArrayT case head pfile_ of
     case mYaml of
       Nothing -> pure $ []
       Just yaml -> do
-        translation' <- liftEffect $ MT.parseTranslation yaml
+        translation' <- liftEffect $ MT.parseTranslation_pass1 yaml
         case translation' of
           Left e -> throwError e
-          Right translation -> pure $ [ Value $ writeJSON translation ]
+          Right (ModelTranslation translation) -> do
+            mMapping <- lift $ loadStableMapping (Sidecar.ModelUri (translation.namespace <> "@" <> translation.version))
+            case mMapping of
+              Nothing -> pure $ [ Value $ writeJSON translation ]
+              Just mapping -> do
+                translation'' <- liftEffect $ MT.parseTranslation_pass2 (ModelTranslation translation) mapping
+                pure $ [ Value $ writeJSON translation'' ]
 
 -- | From a PString that holds a ModelTranslation, generate the table and upload to the repository.
 -- | The DomeinFileName should be versioned (e.g. model://perspectives.domains#System@1.0).

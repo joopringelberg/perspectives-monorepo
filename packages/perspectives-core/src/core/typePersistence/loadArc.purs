@@ -174,6 +174,7 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                         df <- pure $ DomeinFile correctedDFR
                           { referredModels = delete id refModels
                           , arc = text
+                          -- Notice that this is the UNVERSIONED id. It will be overwritten with the versioned id when uploading to the repository.
                           , _id = takeGuid $ unwrap id
                           }
                         if saveInCache then void $ lift $ storeDomeinFileInCache id df else pure unit

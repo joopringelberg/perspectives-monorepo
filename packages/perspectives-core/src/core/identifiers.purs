@@ -186,6 +186,15 @@ modelUriVersion s = case indexOf (Pattern "@") s of
     { after } -> Just after
 
 -----------------------------------------------------------
+-- GET THE VERSION OF DOMEIN FILE NAME
+-----------------------------------------------------------
+domeinFileVersionRegex :: Regex
+domeinFileVersionRegex = unsafeRegex "@(.*)\\.json$" noFlags
+
+domeinFileVersion :: String -> Maybe String
+domeinFileVersion s = getFirstMatch domeinFileVersionRegex s
+
+-----------------------------------------------------------
 -- MODEL URI TO INSTANCES STORE
 -- Instances representing the repository and its manifests are stored here.
 -----------------------------------------------------------
