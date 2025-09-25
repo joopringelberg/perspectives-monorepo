@@ -69,7 +69,7 @@ newModelPattern = "^model://([^/]+)#([^\\$/]+)$"
 newModelRegex :: Regex
 newModelRegex = unsafeRegex newModelPattern noFlags
 
-type ModelUri = String
+type ModelUriString = String
 type DomeinFileName = String
 
 -----------------------------------------------------------
@@ -275,13 +275,13 @@ isTypeUri = isJust <<< match typeRegex
 -- |
 -- | Strips away the first '$' and everything following it.
 -- | Does not test whether the input actually is a TypeUri!
-typeUri2ModelUri :: TypeUri -> Maybe ModelUri
+typeUri2ModelUri :: TypeUri -> Maybe ModelUriString
 typeUri2ModelUri = getFirstMatch typeRegex
 
-typeUri2ModelUri_ :: Partial => TypeUri -> ModelUri
+typeUri2ModelUri_ :: Partial => TypeUri -> ModelUriString
 typeUri2ModelUri_ = fromJust <<< typeUri2ModelUri
 
-splitTypeUri :: TypeUri -> Maybe { modelUri :: ModelUri, localName :: String }
+splitTypeUri :: TypeUri -> Maybe { modelUri :: ModelUriString, localName :: String }
 splitTypeUri s = case match typeRegex s of
   Nothing -> Nothing
   Just matches -> case (index matches 1), (index matches 2) of

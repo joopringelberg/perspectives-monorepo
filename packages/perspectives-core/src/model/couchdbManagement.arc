@@ -934,7 +934,7 @@ domain model://perspectives.domains#CouchdbManagement
       -- DomeinFileName
       -- Notice that we have to register the LocalModelName on the filled context role in the collection,
       -- so we can create ModelManifest with a user-defined name. 
-      -- The Model URI (the 'logical name' of the model), e.g. model://perspectives.domains#System (DomeinFileUri Readable).
+      -- The Model URI (the 'logical name' of the model), e.g. model://perspectives.domains#<cuid> (DomeinFileUri Stable).
       property ModelURI (functional) = "model://" + context >> Repository >> Repository$External$NameSpace + "#" + binder Manifests >> (ModelCuid orElse LocalModelName) >>= first
       -- The URL of the Repository (and it will refer to the ServerUrl).
       property RepositoryUrl (functional) = binder Manifests >> context >> extern >> RepositoryUrl
@@ -1120,7 +1120,7 @@ domain model://perspectives.domains#CouchdbManagement
       -- VersionedModelManifest$External$Build
       -- The Version property is registered on ModelManifest$Versions so we can use it to create a DNS URN for it (it must be a public resource)
       -- PDRDEPENDENCY
-      -- (DomeinFileUri Readable)
+      -- (DomeinFileUri Stable)
       property ModelURI (functional) = binder Versions >> context >> extern >> ModelManifest$External$ModelURI
       property ModelCuid (functional) = binder Versions >> context >> extern >> ModelManifest$External$ModelCuid
       -- (currently DomeinFileUri Readable) plus version. This should become a Stable URI.

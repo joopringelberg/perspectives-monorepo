@@ -26,12 +26,13 @@ import Control.Alt (void)
 import Control.Monad.Error.Class (catchError)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (delete, null, filter)
-import Data.String.CodeUnits as SCU
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.List (List(..))
+import Data.Map (lookup)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Data.String.CodeUnits as SCU
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Data.Unit (unit)
@@ -56,11 +57,11 @@ import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwoState, runPhaseTwo_')
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors, PerspectivesError(..))
 import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..))
 import Perspectives.ResourceIdentifiers (takeGuid)
-import Perspectives.Sidecar.NormalizeTypeNames (normalizeTypes)
-import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, emptyStableIdMapping, lookupContextCuid)
+import Perspectives.Sidecar.NormalizeTypeNames (StableIdMappingForModel, getinstalledModelCuids, normalizeTypes)
+import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, emptyStableIdMapping, idUriForContext, loadStableMapping)
 import Perspectives.Sidecar.UniqueTypeNames (extractKeysFromDfr)
 import Perspectives.Sidecar.UniqueTypeNames as UTN
-import Prelude (bind, discard, pure, show, ($), (<<<), (==), (<>), (>=), (&&), (-), not)
+import Prelude (bind, discard, pure, show, ($), (<<<), (==), (<>), (>=), (&&), (-), not, (>=>))
 
 -- | The functions in this module load Arc files and parse and compile them to DomeinFiles.
 -- | Some functions expect a CRL file with the same name and add the instances found in them
@@ -79,7 +80,9 @@ type Source = String
 -- | However, will load, cache and store dependencies of the model.
 loadAndCompileArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple DomeinFile StoredQueries))
 loadAndCompileArcFile_ dfid text saveInCache modelCuid = do
-  x <- loadAndCompileArcFileWithSidecar_ dfid text saveInCache Nothing modelCuid
+  -- Retrieve existing sidecar (if any) from repository. domeinFilename should be Stable.
+  mMapping <- lift $ loadStableMapping dfid
+  x <- loadAndCompileArcFileWithSidecar_ dfid text saveInCache mMapping modelCuid
   pure case x of
     Left errs -> Left errs
     Right (Tuple df (Tuple iqs _m)) -> Right (Tuple df iqs)
@@ -92,10 +95,10 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
         (r :: Either ParseError ContextE) <- lift $ lift $ runIndentParser text domain
         case r of
           Left e -> pure $ Left [ parseError2PerspectivesError e ]
-          Right ctxt@(ContextE { id: sourceDfid, pos }) ->
+          Right ctxt@(ContextE { id: sourceIdReadable, pos }) ->
             -- LET OP: DIT GAAT FALEN VOOR NIEUWE MODELLEN
             -- If we have a mapping, it is sure to have the enclosing Domein context, so then we can map ModelUri Readable to ModelUri Stable.
-            if testModelName then do
+            if testModelName sourceIdReadable then do
               (Tuple result state :: Tuple (Either MultiplePerspectivesErrors DomeinFile) PhaseTwoState) <-
                 lift $ lift $ runPhaseTwo_' (traverseDomain ctxt) defaultDomeinFileRecord empty empty Nil
               case result of
@@ -103,7 +106,10 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                 Right (DomeinFile dr'@{ id }) -> do
                   dr''@{ referredModels } <- pure dr' { referredModels = state.referredModels }
                   -- We should load referred models if they are missing (but not the model we're compiling!).
-                  for_ (delete id state.referredModels) (lift <<< retrieveDomeinFile)
+                  -- Throw an error if a referred model is not installed. It will show up in the arc feedback.
+                  -- NOTICE: referredModels is in termen van Readable, dus dat moet nog omgezet worden naar Stable.
+                  installedModelCuids <- lift getinstalledModelCuids
+                  for_ (delete id state.referredModels) (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
 
                   (x' :: Either MultiplePerspectivesErrors (Tuple DomeinFileRecord StoredQueries)) <-
                     lift $ phaseThree dr'' state.postponedStateQualifiedParts state.screens
@@ -185,16 +191,24 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                       else
                         pure $ Left typeCheckErrors
             else
-              pure $ Left [ (DomeinFileIdIncompatible stableModelUri (DomeinFileId sourceDfid) pos) ]
+              pure $ Left [ (DomeinFileIdIncompatible stableModelUri (DomeinFileId sourceIdReadable) pos) ]
     )
     (\e -> pure $ Left [ Custom (show e) ])
 
   where
-  testModelName :: Boolean
-  testModelName = case mMapping of
+  -- The model under construction itself is not remapped, only its dependencies.
+  -- With this function we cover both cases: models in terms of Stable and in terms of Readable.
+  toStable :: StableIdMappingForModel -> DomeinFileId -> MonadPerspectives DomeinFileId
+  toStable m idfid@(DomeinFileId mUri) = case lookup (ModelUri mUri) m of
+    Nothing -> pure idfid
+    Just (ModelUri s) -> pure $ (DomeinFileId s)
+
+  testModelName :: String -> Boolean
+  testModelName sourceIdReadable = case mMapping of
     Nothing -> true
-    Just m -> case lookupContextCuid m (ContextUri stableModelUri) of
-      Nothing -> true
+    -- look up the context CUID
+    Just m -> case idUriForContext m (ContextUri sourceIdReadable) of
+      Nothing -> false
       Just s -> s == stableModelUri
 
 type Persister = String -> DomeinFile -> MonadPerspectives (Array PerspectivesError)

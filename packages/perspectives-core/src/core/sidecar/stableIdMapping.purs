@@ -194,7 +194,11 @@ idUriForContext
   -> Maybe String
 idUriForContext m cid@(ContextUri ctxFqn) = do
   let (namespaceCtxFqn :: String) = typeUri2typeNameSpace_ ctxFqn
-  if namespaceCtxFqn == ctxFqn then Just $ unwrap m.modelIdentifier
+  -- if the ctxFqn is the root context (no namespace), then return the model identifier directly -
+  -- but only if it is indeed a context in the model. Otherwise we might be dealing with a changed model name.
+  if namespaceCtxFqn == ctxFqn then case lookupContextCuid m cid of
+    Just v -> Just $ unwrap m.modelIdentifier
+    Nothing -> Nothing
   else
     do
       (namespaceTid :: String) <- idUriForContext m (ContextUri namespaceCtxFqn)
@@ -230,14 +234,20 @@ idUriForState m (StateUri stateFqn) =
   -- for the ContextUri Stable or RoleUri Stable respectively, augmented with the cuid for the state itself.
   let
     nsFqn = typeUri2typeNameSpace_ stateFqn
-    tryRole = do
-      rolTid <- idUriForRole m (RoleUri stateFqn)
-      stTid <- lookupStateCuid m (StateUri stateFqn)
-      pure (rolTid <> "$" <> stTid)
-    tryContext = do
-      ctxTid <- idUriForContext m (ContextUri stateFqn)
-      stTid <- lookupStateCuid m (StateUri stateFqn)
-      pure (ctxTid <> "$" <> stTid)
+    -- If stateFqn is the root state of a role, then the stable identifier is simply the stable identifier of that role.
+    -- We know it is the root state of a role if we can find a role with exactly the same fqn.
+    tryRole = idUriForRole m (RoleUri stateFqn)
+    -- tryRole = do
+    --   rolTid <- idUriForRole m (RoleUri stateFqn)
+    --   -- Als er een rolTid is, dan is stateFqn een root state. Dat is in dat geval tevens de stable identifier van deze state!
+    --   stTid <- lookupStateCuid m (StateUri stateFqn)
+    --   pure (rolTid <> "$" <> stTid)
+    -- Similar reasoning for context root states.
+    tryContext = idUriForContext m (ContextUri stateFqn)
+  -- tryContext = do
+  --   ctxTid <- idUriForContext m (ContextUri stateFqn)
+  --   stTid <- lookupStateCuid m (StateUri stateFqn)
+  --   pure (ctxTid <> "$" <> stTid)
   in
     case tryRole, tryContext of
       Just v, _ -> Just v

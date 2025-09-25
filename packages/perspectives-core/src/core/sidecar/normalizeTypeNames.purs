@@ -20,10 +20,12 @@
 
 -- END LICENSE
 module Perspectives.Sidecar.NormalizeTypeNames
-  ( WithSideCars
+  ( StableIdMappingForModel
+  , WithSideCars
   , class NormalizeTypeNames
-  , normalizeTypeNames
   , fqn2tid
+  , getinstalledModelCuids
+  , normalizeTypeNames
   , normalizeTypes
   ) where
 
@@ -43,7 +45,7 @@ import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), Upstr
 import Perspectives.Identifiers (splitTypeUri)
 import Perspectives.Instances.ObjectGetters (getProperty)
 import Perspectives.InvertedQuery (InvertedQuery)
-import Perspectives.ModelDependencies (modelURI, modelsInUse, domeinFileNameOnVersionedModelManifest)
+import Perspectives.ModelDependencies (domeinFileNameWithVersion, modelURI, modelsInUse)
 import Perspectives.Names (getMySystem)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), traverseQfd)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
@@ -74,8 +76,8 @@ normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
   sidecars <- foldM
     ( \scs (DomeinFileId referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
         Nothing -> pure scs
-        Just (cuid :: ModelUri Stable) -> do
-          mmapping <- loadStableMapping cuid
+        Just (domeinFileName :: ModelUri Stable) -> do
+          mmapping <- loadStableMapping domeinFileName
           case mmapping of
             Nothing -> pure scs
             Just submapping -> pure $ Map.insert (ModelUri referredModel) submapping scs
@@ -86,25 +88,26 @@ normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
     (normalizeTypeNames df)
     sidecars
 
-  where
+type StableIdMappingForModel = (Map.Map (ModelUri Readable) (ModelUri Stable))
 
-  -- A map from DomeinFileName without cuid to DomeinFileId with cuid. 
-  -- Not every installed model need have cuid!
-  getinstalledModelCuids :: MonadPerspectives (Map.Map (ModelUri Readable) (ModelUri Stable))
-  getinstalledModelCuids = do
-    system <- getMySystem
-    modelRoles <- (ContextInstance system) ##= getRoleInstances (ENR $ EnumeratedRoleType modelsInUse)
-    x :: Array (Maybe (Tuple (ModelUri Readable) (ModelUri Stable))) <- for modelRoles \ri -> do
-      -- TODO: DIT moet gewoon versionedDomeinFileName zijn.
-      mcuid <- ri ##> getProperty (EnumeratedPropertyType domeinFileNameOnVersionedModelManifest)
-      case mcuid of
-        Nothing -> pure Nothing
-        Just _ -> do
-          mdfid <- ri ##> getProperty (EnumeratedPropertyType modelURI)
-          case mdfid of
-            Nothing -> pure Nothing
-            Just (Value dfid) -> pure $ Just $ Tuple (ModelUri dfid) (ModelUri dfid) -- LET OP! ZE KUNNEN NIET BEIDE DFID ZIJN!!
-    pure $ Map.fromFoldable $ catMaybes x
+-- A map from DomeinFileName without cuid to DomeinFileId with cuid. 
+-- Not every installed model need have cuid!
+getinstalledModelCuids :: MonadPerspectives StableIdMappingForModel
+getinstalledModelCuids = do
+  system <- getMySystem
+  modelRoles <- (ContextInstance system) ##= getRoleInstances (ENR $ EnumeratedRoleType modelsInUse)
+  x :: Array (Maybe (Tuple (ModelUri Readable) (ModelUri Stable))) <- for modelRoles \ri -> do
+    -- TODO: DIT moet gewoon versionedDomeinFileName zijn.
+    mcuid <- ri ##> getProperty (EnumeratedPropertyType domeinFileNameWithVersion)
+    case mcuid of
+      Nothing -> pure Nothing
+      Just _ -> do
+        mdfid <- ri ##> getProperty (EnumeratedPropertyType modelURI) -- Stable
+        case mdfid of
+          Nothing -> pure Nothing
+          -- The Stable name.
+          Just (Value dfid) -> pure $ Just $ Tuple (ModelUri dfid) (ModelUri dfid) -- LET OP! ZE KUNNEN NIET BEIDE DFID ZIJN!!
+  pure $ Map.fromFoldable $ catMaybes x
 
 -- | This monad supports 'ask'. `ask` will return an object whose keys are Model Ids (MIDs).
 type WithSideCars = Reader (Map.Map (ModelUri Readable) StableIdMapping)

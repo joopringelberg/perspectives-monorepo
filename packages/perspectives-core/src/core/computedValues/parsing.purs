@@ -55,7 +55,7 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Extern.Couchdb (retrieveModelFromLocalStore, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
-import Perspectives.Identifiers (DomeinFileName, ModelUri, isModelUri, modelUri2ModelUrl, unversionedModelUri)
+import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2ModelUrl, unversionedModelUri)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.ModelDependencies (sysUser, versionedModelManifestModelCuid) as MD
 import Perspectives.ModelTranslation (augmentModelTranslation, emptyTranslationTable, generateFirstTranslation, generateTranslationTable, parseTranslation_pass1, parseTranslation_pass2, writeReadableTranslationYaml, writeTranslationYaml) as MT
@@ -76,21 +76,21 @@ import Unsafe.Coerce (unsafeCoerce)
 
 -- | Read the .arc file, parse it and try to compile it. Does neither cache nor store.
 -- | However, will load, cache and store dependencies of the model.
--- | The DomeinFileName should be unversioned.
+-- | The ModelUriString should be unversioned.
 -- | Warnings are returned as a result value; they are not sent to the client.
-parseAndCompileArc :: Array DomeinFileName -> Array ArcSource -> (RoleInstance ~~> Value)
-parseAndCompileArc domeinFileName_ arcSource_ versionedModelManifest =
+parseAndCompileArc :: Array ModelUriString -> Array ArcSource -> (RoleInstance ~~> Value)
+parseAndCompileArc modelUri_ arcSource_ versionedModelManifest =
   try
-    ( case head domeinFileName_, head arcSource_ of
+    ( case head modelUri_, head arcSource_ of
         Nothing, _ -> pure $ Value "No model name given!"
         _, Nothing -> pure $ Value "No arc source given!"
-        Just domeinFileName, Just arcSource -> catchError
+        Just modelUri, Just arcSource -> catchError
           do
             previousWarnings <- lift $ lift $ getWarnings
             lift $ lift $ resetWarnings
             Value modelCuid <- getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid) versionedModelManifest
             r <- lift $ lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType MD.sysUser)
-              (loadAndCompileArcFile_ (Sidecar.ModelUri domeinFileName) arcSource false modelCuid)
+              (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource false modelCuid)
             case r of
               Left errs -> ArrayT $ pure (Value <<< show <$> errs)
               -- Als er meldingen zijn, geef die dan terug.
@@ -103,20 +103,20 @@ parseAndCompileArc domeinFileName_ arcSource_ versionedModelManifest =
     >>= handleExternalFunctionError "model://perspectives.domains#Parsing$ParseAndCompileArc"
 
 -- | Parse and compile the Arc file, saves in cache. Warnings are sent to the client.
-applyImmediately :: Array DomeinFileName -> Array ArcSource -> RoleInstance -> MonadPerspectivesTransaction Unit
-applyImmediately domeinFileName_ arcSource_ versionedModelManifest =
+applyImmediately :: Array ModelUriString -> Array ArcSource -> RoleInstance -> MonadPerspectivesTransaction Unit
+applyImmediately modelUri_ arcSource_ versionedModelManifest =
   try
-    ( case head domeinFileName_, head arcSource_ of
+    ( case head modelUri_, head arcSource_ of
         Nothing, _ -> lift $ addWarning "Parsing$applyImmediately: no model name given!"
         _, Nothing -> lift $ addWarning "Parsing$applyImmediately: no arc source given!"
-        Just domeinFileName, Just arcSource -> catchError
+        Just modelUri, Just arcSource -> catchError
           do
             mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
             case mmodelCuid of
               Nothing -> lift $ addWarning "Parsing$applyImmediately: no model CUID given!"
               Just (Value modelCuid) -> do
                 r <- lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType MD.sysUser)
-                  (loadAndCompileArcFile_ (Sidecar.ModelUri domeinFileName) arcSource true modelCuid)
+                  (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource true modelCuid)
                 case r of
                   Left errs -> lift $ addWarning ("Error in Parsing$applyImmediately: " <> show errs)
                   Right _ -> pure unit
@@ -130,24 +130,24 @@ type Url = String
 
 -- | Parse and compile the Arc file. Upload to the repository. Does neither cache, nor stores it in the local collection of DomeinFiles.
 -- | If the file is not valid, nothing happens.
--- | The DomeinFileName should be versioned (e.g. model://perspectives.domains#System@1.0).
+-- | The ModelUriString should be versioned (e.g. model://perspectives.domains#System@1.0).
 uploadToRepository
-  :: Array DomeinFileName
+  :: Array ModelUriString
   -> Array ArcSource
   -> RoleInstance
   -> MonadPerspectivesTransaction Unit
-uploadToRepository domeinFileName_ arcSource_ versionedModelManifest =
+uploadToRepository modelUri_ arcSource_ versionedModelManifest =
   try
-    ( case head domeinFileName_, head arcSource_ of
-        Just domeinFileName, Just arcSource -> do
-          -- Retrieve existing sidecar (if any) from repository. domeinFilename should be Stable.
-          mMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri domeinFileName)
-          let split = unsafePartial modelUri2ModelUrl domeinFileName
+    ( case head modelUri_, head arcSource_ of
+        Just modelUri, Just arcSource -> do
+          -- Retrieve existing sidecar (if any) from repository. modelUri should be Stable.
+          mMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri modelUri)
+          let split = unsafePartial modelUri2ModelUrl modelUri
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           case mmodelCuid of
             Nothing -> lift $ addWarning "Parsing$applyImmediately: no model CUID given!"
             Just (Value modelCuid) -> do
-              r <- loadAndCompileArcFileWithSidecar_ (Sidecar.ModelUri $ unversionedModelUri domeinFileName) arcSource false mMapping modelCuid
+              r <- loadAndCompileArcFileWithSidecar_ (Sidecar.ModelUri $ unversionedModelUri modelUri) arcSource false mMapping modelCuid
               case r of
                 Left m -> logPerspectivesError $ Custom ("uploadToRepository: " <> show m)
                 -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries plus the updated mapping.
@@ -238,7 +238,7 @@ uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping = do
     lift $ void $ addAttachment documentUrl documentName newRev "storedQueries.json" theFile (MediaType "application/json")
 
 removeFromRepository
-  :: Array ModelUri
+  :: Array ModelUriString
   -> RoleInstance
   -> MonadPerspectivesTransaction Unit
 removeFromRepository modelUris _ =
@@ -274,26 +274,26 @@ compileRepositoryModels modelsurl_ manifestsurl_ _ =
 ------------------------------------------------------------------------------- 
 -- | Parse and compile the Arc file. Store in the local model database. Does not cache.
 -- | If the file is not valid, nothing happens.
--- | The DomeinFileName should be versioned (e.g. model://perspectives.domains#System@1.0).
+-- | The ModelUriString should be versioned (e.g. model://perspectives.domains#System@1.0).
 -- | Attachments are taken from the local model database, 
 -- | where the StoredQueries that result from model compilation overwrite those from the local store. 
 -- | The translation is that of the Repository, though.
 storeModelLocally_
-  :: Array DomeinFileName
+  :: Array ModelUriString
   -> Array ArcSource
   -> RoleInstance
   -> MonadPerspectivesTransaction Unit
-storeModelLocally_ domeinFileName_ arcSource_ versionedModelManifest =
+storeModelLocally_ modelUri_ arcSource_ versionedModelManifest =
   try
-    ( case head domeinFileName_, head arcSource_ of
-        Just domeinFileName, Just arcSource -> do
+    ( case head modelUri_, head arcSource_ of
+        Just modelUri, Just arcSource -> do
           -- Load mapping from local models DB (if present)
-          mLocalMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri domeinFileName)
+          mLocalMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri modelUri)
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           case mmodelCuid of
             Nothing -> lift $ addWarning "Parsing$applyImmediately: no model CUID given!"
             Just (Value modelCuid) -> do
-              r <- loadAndCompileArcFileWithSidecar_ (Sidecar.ModelUri $ unversionedModelUri domeinFileName) arcSource false mLocalMapping modelCuid
+              r <- loadAndCompileArcFileWithSidecar_ (Sidecar.ModelUri $ unversionedModelUri modelUri) arcSource false mLocalMapping modelCuid
               case r of
                 Left m -> logPerspectivesError $ Custom ("storeModelLocally: " <> show m)
                 -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries.
@@ -320,8 +320,8 @@ storeModelLocally_ domeinFileName_ arcSource_ versionedModelManifest =
 ---- MODEL TRANSLATION
 -------------------------------------------------------------------------------
 -- | From the DomeinFile indicated by the namespace, generate ModelTranslation and serialise it to a PString.
--- | The DomeinFileName should be versioned (e.g. model://perspectives.domains#System@1.0).
-generateFirstTranslation :: Array DomeinFileName -> (RoleInstance ~~> Value)
+-- | The ModelUriString should be versioned (e.g. model://perspectives.domains#System@1.0).
+generateFirstTranslation :: Array ModelUriString -> (RoleInstance ~~> Value)
 generateFirstTranslation modelURI_ _ = case head modelURI_ of
   Nothing -> handleExternalFunctionError "model://perspectives.domains#Parsing$GenerateFirstTranslation"
     (Left (error "Model URI should be provided."))
@@ -371,18 +371,18 @@ parseYamlTranslation pfile_ _ = ArrayT case head pfile_ of
                 pure $ [ Value $ writeJSON translation'' ]
 
 -- | From a PString that holds a ModelTranslation, generate the table and upload to the repository.
--- | The DomeinFileName should be versioned (e.g. model://perspectives.domains#System@1.0).
+-- | The ModelUriString should be versioned (e.g. model://perspectives.domains#System@1.0).
 generateTranslationTable :: Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
-generateTranslationTable translation_ domeinFileName_ _ = case head translation_, head domeinFileName_ of
+generateTranslationTable translation_ modelUri_ _ = case head translation_, head modelUri_ of
   Nothing, _ -> handleExternalStatementError "model://perspectives.domains#Parsing$GenerateTranslationTable"
     (Left (error "A String holding a ModelTranslation should be provided."))
   _, Nothing -> handleExternalStatementError "model://perspectives.domains#Parsing$GenerateTranslationTable"
     (Left (error "A Versioned model name should be provided. (e.g. model://perspectives.domains#System@1.0)"))
-  Just modelTranslationString, Just domeinFileName -> case readJSON modelTranslationString of
+  Just modelTranslationString, Just modelUri -> case readJSON modelTranslationString of
     -- Fail silently
     Left e -> log ("generateTranslationTable: " <> show e)
     -- Generate the table and upload as attachment to the repository DomeinFile.
-    Right (modelTranslation :: ModelTranslation) -> case (unsafePartial modelUri2ModelUrl domeinFileName) of
+    Right (modelTranslation :: ModelTranslation) -> case (unsafePartial modelUri2ModelUrl modelUri) of
       { repositoryUrl, documentName } -> do
         table <- pure (MT.generateTranslationTable modelTranslation)
         theFile <- liftEffect $ toFile "translationtable.json" "application/json" (unsafeToForeign $ writeJSON table)

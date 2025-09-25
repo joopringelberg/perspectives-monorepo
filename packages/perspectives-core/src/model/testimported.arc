@@ -1,6 +1,6 @@
-domain model://joopringelberg.nl#TestImports
+domain model://joopringelberg.nl#TestImported
   use sys for model://perspectives.domains#System
-  use ts for model://joopringelberg.nl#TestImports
+  use ts for model://joopringelberg.nl#TestImported
 
   -------------------------------------------------------------------------------
   ---- SETTING UP
@@ -16,13 +16,13 @@ domain model://joopringelberg.nl#TestImports
           -- Being a RootContext, too, Installer can fill a new instance
           -- of StartContexts with it.
           bind_ app >> extern to start
-          Name = "Test Imports" for start
+          Name = "Test Imported" for start
           IsSystemModel = true for start
 
   on exit
     do for sys:PerspectivesSystem$Installer
       letA
-        startcontext <- filter sys:MySystem >> StartContexts with filledBy (ts:TestImports >> extern)
+        startcontext <- filter sys:MySystem >> StartContexts with filledBy (ts:TestImported >> extern)
       in
         remove role startcontext
 
@@ -36,7 +36,7 @@ domain model://joopringelberg.nl#TestImports
   ---- INDEXED CONTEXT
   -------------------------------------------------------------------------------
   case TestImports
-    indexed ts:TestImports
+    indexed ts:TestImported
     aspect sys:RootContext
     external
       aspect sys:RootContext$External
