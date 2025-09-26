@@ -49,7 +49,7 @@ import Perspectives.Couchdb (DeleteCouchdbDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ErrorLogging (logPerspectivesError, warnModeller)
-import Perspectives.Identifiers (DomeinFileName, buitenRol, deconstructBuitenRol, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
+import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.ModelDependencies (build, patch, versionToInstall)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -63,21 +63,21 @@ import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value)
 import Perspectives.Representation.State (State(..))
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..))
 import Perspectives.ResourceIdentifiers (resourceIdentifier2DocLocator)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (Unit, bind, discard, identity, map, pure, unit, void, ($), (*>), (<$>), (<<<), (<>), (>>=))
 import Simple.JSON (readJSON)
 
-storeDomeinFileInCache :: DomeinFileId -> DomeinFile -> MonadPerspectives (AVar DomeinFile)
+storeDomeinFileInCache :: ModelUri Stable -> DomeinFile Stable -> MonadPerspectives (AVar (DomeinFile Stable))
 storeDomeinFileInCache id df = cacheEntity id df
 
-removeDomeinFileFromCache :: DomeinFileId -> MonadPerspectives Unit
+removeDomeinFileFromCache :: ModelUri Stable -> MonadPerspectives Unit
 removeDomeinFileFromCache = void <<< domeinCacheRemove <<< unwrap
 
 -- | Change the domeinfile in cache. NOTA BENE: does not store the modified file in Couchdb!
-modifyDomeinFileInCache :: (DomeinFile -> DomeinFile) -> DomeinFileId -> MonadPerspectives Unit
-modifyDomeinFileInCache modifier domeinFileId@(DomeinFileId modelUri) =
+modifyDomeinFileInCache :: (DomeinFile Stable -> DomeinFile Stable) -> ModelUri Stable -> MonadPerspectives Unit
+modifyDomeinFileInCache modifier domeinFileId@(ModelUri modelUri) =
   do
     mAvar <- retrieveInternally domeinFileId
     case mAvar of
@@ -91,28 +91,28 @@ modifyDomeinFileInCache modifier domeinFileId@(DomeinFileId modelUri) =
 -----------------------------------------------------------
 -- MODIFY ELEMENTS OF A DOMEINFILE
 -----------------------------------------------------------
-modifyCalculatedRoleInDomeinFile :: DomeinFileId -> CalculatedRole -> MonadPerspectives CalculatedRole
+modifyCalculatedRoleInDomeinFile :: ModelUri Stable -> CalculatedRole -> MonadPerspectives CalculatedRole
 modifyCalculatedRoleInDomeinFile modelUri cr@(CalculatedRole { id }) = modifyDomeinFileInCache modifier modelUri *> pure cr
   where
-  modifier :: DomeinFile -> DomeinFile
+  modifier :: DomeinFile Stable -> DomeinFile Stable
   modifier (DomeinFile dff@{ calculatedRoles }) = DomeinFile dff { calculatedRoles = insert (unwrap id) cr calculatedRoles }
 
-modifyEnumeratedRoleInDomeinFile :: DomeinFileId -> EnumeratedRole -> MonadPerspectives EnumeratedRole
+modifyEnumeratedRoleInDomeinFile :: ModelUri Stable -> EnumeratedRole -> MonadPerspectives EnumeratedRole
 modifyEnumeratedRoleInDomeinFile modelUri er@(EnumeratedRole { id }) = modifyDomeinFileInCache modifier modelUri *> pure er
   where
-  modifier :: DomeinFile -> DomeinFile
+  modifier :: DomeinFile Stable -> DomeinFile Stable
   modifier (DomeinFile dff@{ enumeratedRoles }) = DomeinFile dff { enumeratedRoles = insert (unwrap id) er enumeratedRoles }
 
-modifyCalculatedPropertyInDomeinFile :: DomeinFileId -> CalculatedProperty -> MonadPerspectives CalculatedProperty
+modifyCalculatedPropertyInDomeinFile :: ModelUri Stable -> CalculatedProperty -> MonadPerspectives CalculatedProperty
 modifyCalculatedPropertyInDomeinFile modelUri cr@(CalculatedProperty { id }) = modifyDomeinFileInCache modifier modelUri *> pure cr
   where
-  modifier :: DomeinFile -> DomeinFile
+  modifier :: DomeinFile Stable -> DomeinFile Stable
   modifier (DomeinFile dff@{ calculatedProperties }) = DomeinFile dff { calculatedProperties = insert (unwrap id) cr calculatedProperties }
 
-modifyStateInDomeinFile :: DomeinFileId -> State -> MonadPerspectives State
+modifyStateInDomeinFile :: ModelUri Stable -> State -> MonadPerspectives State
 modifyStateInDomeinFile modelUri sr@(State { id }) = modifyDomeinFileInCache modifier modelUri *> pure sr
   where
-  modifier :: DomeinFile -> DomeinFile
+  modifier :: DomeinFile Stable -> DomeinFile Stable
   modifier (DomeinFile dff@{ states }) = DomeinFile dff { states = insert (unwrap id) sr states }
 
 -----------------------------------------------------------
@@ -124,21 +124,21 @@ modifyStateInDomeinFile modelUri sr@(State { id }) = modifyDomeinFileInCache mod
 -- | If that cannot be established, settles for the document without version.
 -- | Also loads the translations table for the namespace of the DomeinFile.
 -- | The modelUri parameter may be bound to a Versioned ModelURI.
-retrieveDomeinFile :: DomeinFileId -> MonadPerspectives DomeinFile
-retrieveDomeinFile domeinFileId@(DomeinFileId modelUri) = do
+retrieveDomeinFile :: ModelUri Stable -> MonadPerspectives (DomeinFile Stable)
+retrieveDomeinFile domeinFileId@(ModelUri modelUri) = do
   mdf <- tryReadEntiteitFromCache domeinFileId
   case mdf of
     -- The DomeinFile is in the cache, meaning we have loaded the translations table before.
     Just df -> pure df
     -- The DomeinFile is not in the cache, so we have to load the translations table.
-    Nothing -> tryGetPerspectEntiteit (DomeinFileId $ unversionedModelUri modelUri) >>= case _ of
+    Nothing -> tryGetPerspectEntiteit (ModelUri $ unversionedModelUri modelUri) >>= case _ of
       -- the DomeinFile is not available in the local database. Retrieve it from a remote repository and store it in the local "models" database of this user.
       Nothing -> do
         version <- case modelUriVersion modelUri of
           Nothing -> map _.semver <$> getVersionToInstall domeinFileId
           Just v -> pure $ Just v
         modelToLoadAVar <- getModelToLoad
-        liftAff $ put (LoadModel (DomeinFileId ((unversionedModelUri modelUri) <> (maybe "" ((<>) "@") version)))) modelToLoadAVar
+        liftAff $ put (LoadModel (ModelUri ((unversionedModelUri modelUri) <> (maybe "" ((<>) "@") version)))) modelToLoadAVar
         result <- liftAff $ take modelToLoadAVar
         -- Now the forking process waits (blocks) until retrieveFromDomeinFile fills it with another LoadModel request.
         case result of
@@ -158,13 +158,13 @@ retrieveDomeinFile domeinFileId@(DomeinFileId modelUri) = do
       Just df -> fetchTranslations' df
 
   where
-  fetchTranslations' :: DomeinFile -> MonadPerspectives DomeinFile
+  fetchTranslations' :: DomeinFile Stable -> MonadPerspectives (DomeinFile Stable)
   fetchTranslations' df = do
     fetchTranslations (identifier df)
     pure df
 
-fetchTranslations :: DomeinFileId -> MonadPerspectives Unit
-fetchTranslations (DomeinFileId namespace) = do
+fetchTranslations :: ModelUri Stable -> MonadPerspectives Unit
+fetchTranslations (ModelUri namespace) = do
   mtranslations <- getTranslationTable namespace
   case mtranslations of
     Just translations -> pure unit
@@ -186,8 +186,8 @@ fetchTranslations (DomeinFileId namespace) = do
 -- | If no manifest is found, the empty string is returned. This causes retrieveDomainFile to retrieve a versionless document!
 -- | This function must be able to run without any type information, as it is run on system install, too.
 -- | The modelURI should not include a version.
-getVersionToInstall :: DomeinFileId -> MonadPerspectives (Maybe { semver :: String, versionedModelManifest :: RoleInstance })
-getVersionToInstall (DomeinFileId modelUri) = case unsafePartial modelUri2ManifestUrl modelUri of
+getVersionToInstall :: ModelUri Stable -> MonadPerspectives (Maybe { semver :: String, versionedModelManifest :: RoleInstance })
+getVersionToInstall (ModelUri modelUri) = case unsafePartial modelUri2ManifestUrl modelUri of
   -- Retrieve the property from the external role of the manifest that indicates the version we should install.
   -- To achieve this, we have an Enumerated property that reflects the version to install in the external role of the Manifest.
   -- We retrieve this role as a Couchdb document and read that value directly from its structure.
@@ -222,7 +222,7 @@ getPatchAndBuild rid = do
 type DatabaseName = String
 
 -- NOTE: the revision of the returned DomeinFile will be outdated!
-saveCachedDomeinFile :: DomeinFileId -> MonadPerspectives DomeinFile
+saveCachedDomeinFile :: ModelUri Stable -> MonadPerspectives (DomeinFile Stable)
 saveCachedDomeinFile dfid = do
   updateRevision dfid
   saveEntiteit dfid
@@ -230,13 +230,13 @@ saveCachedDomeinFile dfid = do
 -- | Either create or modify the DomeinFile in couchdb. Caches.
 -- | Do not use createDomeinFileInCouchdb or modifyDomeinFileInCouchdb directly.
 -- | If the model is not found in the cache, assumes it is not in the database either.
-storeDomeinFileInCouchdb :: DomeinFile -> MonadPerspectives DomeinFile
+storeDomeinFileInCouchdb :: DomeinFile Stable -> MonadPerspectives (DomeinFile Stable)
 storeDomeinFileInCouchdb df@(DomeinFile dfr@{ id }) = do
   void $ storeDomeinFileInCache id df
   saveCachedDomeinFile id
 
 -- | Guarantees a correct revision.
-storeDomeinFileInCouchdbPreservingAttachments :: DomeinFile -> MonadPerspectives Unit
+storeDomeinFileInCouchdbPreservingAttachments :: DomeinFile Stable -> MonadPerspectives Unit
 storeDomeinFileInCouchdbPreservingAttachments df@(DomeinFile dfr@{ id, _attachments }) = do
   { repositoryUrl, documentName } <- pure $ unsafePartial modelUri2ModelUrl (unwrap id)
   modelsDb <- modelDatabaseName
@@ -272,8 +272,8 @@ addAttachments documentUrl documentName attachments = do
     )
 
 -- | Remove the file from couchb. Removes the model from cache.
-removeDomeinFileFromCouchdb :: DomeinFileName -> MonadPerspectives Unit
-removeDomeinFileFromCouchdb domeinFileName = removeEntiteit (DomeinFileId domeinFileName) *> pure unit
+removeDomeinFileFromCouchdb :: ModelUri Stable -> MonadPerspectives Unit
+removeDomeinFileFromCouchdb domeinFileName = removeEntiteit domeinFileName *> pure unit
 
 -----------------------------------------------------------
 -- CASCADING DELETION OF A DOMAINFILE
@@ -281,7 +281,7 @@ removeDomeinFileFromCouchdb domeinFileName = removeEntiteit (DomeinFileId domein
 -- | Delete the DomeinFile from cache and from the local models store.
 -- | (First) delete all dependencies.
 -- | Notice that this may remove files that are dependencies of other locally stored DomeinFiles!
-cascadeDeleteDomeinFile :: DomeinFileId -> MonadPerspectives Unit
+cascadeDeleteDomeinFile :: ModelUri Stable -> MonadPerspectives Unit
 cascadeDeleteDomeinFile dfid = do
   df <- tryGetPerspectEntiteit dfid
   case df of

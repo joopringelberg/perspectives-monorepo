@@ -1,4 +1,5 @@
 -- BEGIN LICENSE
+
 -- Perspectives Distributed Runtime
 -- SPDX-FileCopyrightText: 2019 Joop Ringelberg (joopringelberg@gmail.com), Cor Baars
 -- SPDX-License-Identifier: GPL-3.0-or-later
@@ -34,6 +35,7 @@ import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
 import Node.Path as Path
 import Node.Process (cwd)
+import Parsing (ParseError(..))
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinCache (storeDomeinFileInCache, storeDomeinFileInCouchdb)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
@@ -43,11 +45,10 @@ import Perspectives.Parsing.Arc.AST (ContextE)
 import Perspectives.Parsing.Arc.IndentParser (position2ArcPosition, runIndentParser)
 import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
-import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwoState, runPhaseTwo_')
+import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwoState, runPhaseTwo_', toStableDomeinFile, toStableModelUri)
 import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable)
 import Prelude (bind, pure, show, ($), (*>), (<>))
-import Parsing (ParseError(..))
 
 -- | The functions in this module load Arc files and parse and compile them to DomeinFiles.
 -- | Some functions expect a CRL file with the same name and add the instances found in them
@@ -61,14 +62,14 @@ import Parsing (ParseError(..))
 
 -- | Load an Arc file from a directory relative to the active process. Parse the file completely.
 -- | Does neither cache nor save the model.
-loadAndCompileArcFile :: String -> String -> MonadPerspectives (Either MultiplePerspectivesErrors (Tuple DomeinFile StoredQueries))
+loadAndCompileArcFile :: String -> String -> MonadPerspectives (Either MultiplePerspectivesErrors (Tuple (DomeinFile Readable) StoredQueries))
 loadAndCompileArcFile fileName directoryName = do
   procesDir <- liftEffect cwd
   loadAndCompileArcFile_ (Path.concat [ procesDir, directoryName, fileName <> ".arc" ])
 
 type FilePath = String
 
-loadAndCompileArcFile_ :: FilePath -> MonadPerspectives (Either MultiplePerspectivesErrors (Tuple DomeinFile StoredQueries))
+loadAndCompileArcFile_ :: FilePath -> MonadPerspectives (Either MultiplePerspectivesErrors (Tuple (DomeinFile Readable) StoredQueries))
 loadAndCompileArcFile_ filePath = catchError
   do
     text <- lift $ readTextFile UTF8 filePath
@@ -77,14 +78,14 @@ loadAndCompileArcFile_ filePath = catchError
       (Left e) -> pure $ Left [ parseError2PerspectivesError e ]
       (Right ctxt) -> do
         -- liftEffect $ log ((show ctxt) <> "\n\n\n")
-        (Tuple result state :: Tuple (Either MultiplePerspectivesErrors DomeinFile) PhaseTwoState) <- {-pure $ unwrap $-}  lift $ runPhaseTwo_' (traverseDomain ctxt) defaultDomeinFileRecord empty empty Nil
+        (Tuple result state :: Tuple (Either MultiplePerspectivesErrors (DomeinFile Readable)) PhaseTwoState) <- {-pure $ unwrap $-}  lift $ runPhaseTwo_' (traverseDomain ctxt) defaultDomeinFileRecord empty empty Nil
         case result of
           (Left e) -> pure $ Left e
           (Right (DomeinFile dr'@{ id })) -> do
             -- log (show dr')
             dr'' <- pure dr' { referredModels = state.referredModels }
             -- logShow state.referredModels
-            (x' :: (Either MultiplePerspectivesErrors (Tuple DomeinFileRecord StoredQueries))) <- phaseThree dr'' state.postponedStateQualifiedParts state.screens
+            (x' :: (Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries))) <- phaseThree dr'' state.postponedStateQualifiedParts state.screens
             case x' of
               (Left e) -> do
                 pure $ Left e
@@ -97,7 +98,7 @@ loadAndCompileArcFile_ filePath = catchError
                 pure $ Right $ Tuple df invertedQueries
   \e -> pure $ Left [ Custom (show e) ]
 
-type Persister = DomeinFileId -> DomeinFile -> MonadPerspectives MultiplePerspectivesErrors
+type Persister = ModelUri Readable -> DomeinFile Readable -> MonadPerspectives MultiplePerspectivesErrors
 
 type ArcPath = String
 type CrlPath = String
@@ -115,22 +116,22 @@ loadAndPersistArcFile loadCRL persist fileName directoryName = do
 -- | Load an Arc file from a directory. Parse the file completely. Cache it.
 -- | Loads an instance file, too. If not present, throws an error. Instances are added to the cache.
 loadCompileAndCacheArcFile :: String -> String -> MonadPerspectives MultiplePerspectivesErrors
-loadCompileAndCacheArcFile = loadAndPersistArcFile true \id df -> storeDomeinFileInCache id df *> pure []
+loadCompileAndCacheArcFile = loadAndPersistArcFile true \id df -> storeDomeinFileInCache (toStableModelUri id) (toStableDomeinFile df) *> pure []
 
 -- | Load an Arc file from a directory. Parse the file completely. Cache it.
 -- | Does not try to load an instance file.
 loadCompileAndCacheArcFile' :: String -> String -> MonadPerspectives MultiplePerspectivesErrors
-loadCompileAndCacheArcFile' = loadAndPersistArcFile false \id df -> storeDomeinFileInCache id df *> pure []
+loadCompileAndCacheArcFile' = loadAndPersistArcFile false \id df -> storeDomeinFileInCache (toStableModelUri id) (toStableDomeinFile df) *> pure []
 
 -- | Load an Arc file from a directory. Parse the file completely. Store in Couchdb.
 -- | Loads an instance file, too. If not present, throws an error. Instances are added to the cache.
 loadCompileAndSaveArcFile :: String -> String -> MonadPerspectives MultiplePerspectivesErrors
-loadCompileAndSaveArcFile = loadAndPersistArcFile true \_ df -> storeDomeinFileInCouchdb df *> pure []
+loadCompileAndSaveArcFile = loadAndPersistArcFile true \_ df -> storeDomeinFileInCouchdb (toStableDomeinFile df) *> pure []
 
 -- | Load an Arc file from a directory. Parse the file completely. Store in Couchdb.
 -- | Does not try to load an instance file.
 loadCompileAndSaveArcFile' :: String -> String -> MonadPerspectives MultiplePerspectivesErrors
-loadCompileAndSaveArcFile' = loadAndPersistArcFile false \_ df -> storeDomeinFileInCouchdb df *> pure []
+loadCompileAndSaveArcFile' = loadAndPersistArcFile false \_ df -> storeDomeinFileInCouchdb (toStableDomeinFile df) *> pure []
 
 parseError2PerspectivesError :: ParseError -> PerspectivesError
 parseError2PerspectivesError (ParseError message pos) = ParserError message (position2ArcPosition pos)

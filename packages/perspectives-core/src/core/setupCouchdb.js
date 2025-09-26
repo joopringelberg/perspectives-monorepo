@@ -179,7 +179,7 @@ export const role2contextView = (function(context)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////    INVERTED QUERY VIEWS
 // Inverted query documents have the following structure:
-// type StorableInvertedQuery = { keys :: Array RunTimeInvertedQueryKey, query :: InvertedQuery, model :: DomeinFileId }
+// type StorableInvertedQuery = { keys :: Array RunTimeInvertedQueryKey, query :: InvertedQuery, model :: ModelUri Readable }
 // RunTimeInvertedQueryKey is serialised as:
 // { keyType, fields}
 // where fields is the serialisation of the key proper.

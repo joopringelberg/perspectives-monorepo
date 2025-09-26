@@ -47,6 +47,7 @@ import Perspectives.Instances.ObjectGetters (getProperty)
 import Perspectives.InvertedQuery (InvertedQuery)
 import Perspectives.ModelDependencies (domeinFileNameWithVersion, modelURI, modelsInUse)
 import Perspectives.Names (getMySystem)
+import Perspectives.Parsing.Arc.PhaseTwoDefs (toStableDomeinFile)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), traverseQfd)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.ADT (ADT)
@@ -64,17 +65,17 @@ import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateFulObject(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
 import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping)
 
-normalizeTypes :: DomeinFile -> StableIdMapping -> MonadPerspectives DomeinFile
+normalizeTypes :: DomeinFile Readable -> StableIdMapping -> MonadPerspectives (DomeinFile Stable)
 normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
   -- Notice that referredModels from a freshly parsed Arc source will be FQNs with names given by the modeller, rather than underlying cuids.
   cuidMap <- getinstalledModelCuids
   sidecars <- foldM
-    ( \scs (DomeinFileId referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
+    ( \scs (ModelUri referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
         Nothing -> pure scs
         Just (domeinFileName :: ModelUri Stable) -> do
           mmapping <- loadStableMapping domeinFileName
@@ -82,15 +83,15 @@ normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
             Nothing -> pure scs
             Just submapping -> pure $ Map.insert (ModelUri referredModel) submapping scs
     )
-    (Map.singleton (ModelUri namespace) mapping)
+    (Map.singleton namespace mapping)
     referredModels
-  pure $ unwrap $ runReaderT
+  pure $ toStableDomeinFile $ unwrap $ runReaderT
     (normalizeTypeNames df)
     sidecars
 
 type StableIdMappingForModel = (Map.Map (ModelUri Readable) (ModelUri Stable))
 
--- A map from DomeinFileName without cuid to DomeinFileId with cuid. 
+-- A map from ModelUri Readable to ModelUri Stable.
 -- Not every installed model need have cuid!
 getinstalledModelCuids :: MonadPerspectives StableIdMappingForModel
 getinstalledModelCuids = do
@@ -118,8 +119,8 @@ class NormalizeTypeNames v ident | v -> ident, ident -> v where
   -- Dit zou van Readable naar Stable moeten zijn.
   fqn2tid :: ident -> WithSideCars ident
 
-instance NormalizeTypeNames DomeinFile DomeinFileId where
-  fqn2tid df = DomeinFileId <<< unwrap <$> fqn2tid (ContextType $ unwrap df)
+instance NormalizeTypeNames (DomeinFile Readable) (ModelUri Readable) where
+  fqn2tid df = ModelUri <<< unwrap <$> fqn2tid (ContextType $ unwrap df)
   normalizeTypeNames (DomeinFile df) = do
     contexts' <- fromFoldable <$> for ((toUnfoldable df.contexts) :: Array (Tuple String Context))
       (\(Tuple ct ctxt) -> Tuple <$> unwrap <$> (fqn2tid <<< ContextType) ct <*> normalizeTypeNames ctxt)
@@ -137,11 +138,11 @@ instance NormalizeTypeNames DomeinFile DomeinFileId where
       (\(Tuple ct vw) -> Tuple <$> unwrap <$> (fqn2tid <<< ViewType) ct <*> normalizeTypeNames vw)
     referredModels' <- for df.referredModels fqn2tid
     invertedQueriesInOtherDomains' <- fromFoldable <$> for ((toUnfoldable df.invertedQueriesInOtherDomains) :: Array (Tuple String (Array SeparateInvertedQuery)))
-      (\(Tuple ct q) -> Tuple <$> (unwrap <$> (fqn2tid <<< DomeinFileId) ct) <*> traverse normalize q)
+      (\(Tuple ct q) -> Tuple <$> (unwrap <$> ((fqn2tid (ModelUri ct)) :: WithSideCars (ModelUri Readable))) <*> traverse normalize q)
     upstreamStateNotifications' <- fromFoldable <$> for ((toUnfoldable df.upstreamStateNotifications) :: Array (Tuple String (Array UpstreamStateNotification)))
-      (\(Tuple ct usn) -> Tuple <$> (unwrap <$> (fqn2tid <<< DomeinFileId) ct) <*> traverse normalize usn)
+      (\(Tuple ct usn) -> Tuple <$> (unwrap <$> ((fqn2tid (ModelUri ct)) :: WithSideCars (ModelUri Readable))) <*> traverse normalize usn)
     upstreamAutomaticEffects' <- fromFoldable <$> for ((toUnfoldable df.upstreamAutomaticEffects) :: Array (Tuple String (Array UpstreamAutomaticEffect)))
-      (\(Tuple ct aae) -> Tuple <$> (unwrap <$> (fqn2tid <<< DomeinFileId) ct) <*> traverse normalize aae)
+      (\(Tuple ct aae) -> Tuple <$> (unwrap <$> ((fqn2tid (ModelUri ct)) :: WithSideCars (ModelUri Readable))) <*> traverse normalize aae)
     screens' <- EM.fromFoldable <$>
       ( for ((EM.toUnfoldable df.screens) :: Array (Tuple ScreenKey ScreenDefinition)) $
           \(Tuple ct sd) -> Tuple <$> normalize ct <*> normalize sd

@@ -74,6 +74,7 @@ import Perspectives.Representation.Perspective (StateSpec, stateSpec2StateIdenti
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), PropertyType(..), RoleType(..), roletype2string)
+import Perspectives.SideCar.PhantomTypedNewtypes (Stable)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
 import Purescript.YAML (load)
 import Simple.JSON (read_)
@@ -280,7 +281,7 @@ instance Rehydrate ModelTranslation_ ModelTranslation where
 ---- From this, generate the first YAML file;
 ---- From this, generate the key-value translation table.
 -------------------------------------------------------------------------------
-generateFirstTranslation :: DomeinFile -> ModelTranslation
+generateFirstTranslation :: DomeinFile Stable -> ModelTranslation
 generateFirstTranslation (DomeinFile dr) = flip runReader dr do
   toplevelContexts <- pure $ filterKeys isDefinedAtTopLevel dr.contexts
   contexts <-
@@ -298,7 +299,7 @@ generateFirstTranslation (DomeinFile dr) = flip runReader dr do
   isDefinedAtTopLevel :: String -> Boolean
   isDefinedAtTopLevel s = unwrap dr.id == typeUri2typeNameSpace_ s && (isNothing $ Regex.match (unsafeRegex "External$" noFlags) s)
 
-translateContext :: Context -> Reader DomeinFileRecord ContextTranslation
+translateContext :: Context -> Reader (DomeinFileRecord Stable) ContextTranslation
 translateContext (Context { id: contextId, gebruikerRol, contextRol, rolInContext, nestedContexts }) = do
   { enumeratedRoles } <- ask
   external <- unsafePartial case lookup (buitenRol $ unwrap contextId) enumeratedRoles of
@@ -330,7 +331,7 @@ translateContext (Context { id: contextId, gebruikerRol, contextRol, rolInContex
   where
   -- Writes singletons with the original sentence and empty translations
 
-  translateRoles :: Array RoleType -> Reader DomeinFileRecord RolesTranslation
+  translateRoles :: Array RoleType -> Reader (DomeinFileRecord Stable) RolesTranslation
   translateRoles roles = RolesTranslation <$> fromFoldable <$> for
     (filter (\rt -> (roletype2string rt) `startsWithSegments` (unwrap contextId)) roles)
     (\rt -> (lookupRoleType rt >>= translateRole >>= pure <<< Tuple (roletype2string rt)))
@@ -341,20 +342,20 @@ translateNotification (ContextNotification { sentence }) = tell $ singleton (_.s
 translateNotification (RoleNotification { sentence }) = tell $ singleton (_.sentence $ unwrap sentence) (Translations empty)
 
 -- Aspect roles that have been added as is will turn up here, but should not be translated.
-lookupRoleType :: RoleType -> Reader DomeinFileRecord Role
+lookupRoleType :: RoleType -> Reader (DomeinFileRecord Stable) Role
 lookupRoleType rt = do
   { enumeratedRoles, calculatedRoles } <- ask
   case lookup (roletype2string rt) enumeratedRoles of
     Nothing -> pure $ C $ unsafePartial fromJust $ lookup (roletype2string rt) calculatedRoles
     Just r -> pure $ E r
 
-lookupContextType :: ContextType -> Reader DomeinFileRecord Context
+lookupContextType :: ContextType -> Reader (DomeinFileRecord Stable) Context
 lookupContextType (ContextType ct) = do
   { contexts } <- ask
   unsafePartial case lookup ct contexts of
     Just c -> pure c
 
-translateRole :: Role -> Reader DomeinFileRecord RoleTranslation
+translateRole :: Role -> Reader (DomeinFileRecord Stable) RoleTranslation
 translateRole (E (EnumeratedRole rec)) = do
   -- The translations of all properties.
   (properties :: PropertiesTranslation) <- do
@@ -396,7 +397,7 @@ translateRole (C (CalculatedRole rec)) = do
     , titles
     }
 
-markDownsInScreen :: ScreenKey -> Reader DomeinFileRecord MarkdownsTranslation
+markDownsInScreen :: ScreenKey -> Reader (DomeinFileRecord Stable) MarkdownsTranslation
 markDownsInScreen screenKey = do
   -- screens holds an EncodableMap where the keys are ScreenKey instances: ScreenKey ContextType RoleType.
   -- The ContextType and RoleType are the lexical context and subject for the definition of the screen.
@@ -412,7 +413,7 @@ markDownsInScreen screenKey = do
       in
         pure $ MarkdownsTranslation $ fromFoldable translations
 
-titlesInScreen :: ScreenKey -> Reader DomeinFileRecord TitlesTranslation
+titlesInScreen :: ScreenKey -> Reader (DomeinFileRecord Stable) TitlesTranslation
 titlesInScreen screenKey = do
   -- screens holds an EncodableMap where the keys are ScreenKey instances: ScreenKey ContextType RoleType.
   -- The ContextType and RoleType are the lexical context and subject for the definition of the screen.
@@ -428,7 +429,7 @@ titlesInScreen screenKey = do
       in
         pure $ TitlesTranslation $ fromFoldable translations
 
-translateActions :: ContextType -> EncodableMap StateSpec (Object Action) -> Reader DomeinFileRecord ActionsPerStateTranslation
+translateActions :: ContextType -> EncodableMap StateSpec (Object Action) -> Reader (DomeinFileRecord Stable) ActionsPerStateTranslation
 translateActions (ContextType cType) actions = ActionsPerStateTranslation <<< fromFoldable <$>
   ( for (SET.toUnfoldable $ EM.keys actions :: Array StateSpec) \state -> pure $ Tuple
       (unwrap $ stateSpec2StateIdentifier state)
@@ -441,7 +442,7 @@ translateActions (ContextType cType) actions = ActionsPerStateTranslation <<< fr
   )
 
 -- The translations of a single property.
-translatePropertyType :: PropertyType -> Reader DomeinFileRecord (Tuple String Translations)
+translatePropertyType :: PropertyType -> Reader (DomeinFileRecord Stable) (Tuple String Translations)
 translatePropertyType (CP (CalculatedPropertyType p)) = pure $ Tuple p (Translations empty)
 translatePropertyType (ENP (EnumeratedPropertyType p)) = pure $ Tuple p (Translations empty)
 

@@ -52,10 +52,10 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (Keys(..), addDocuments, deleteDocuments, documentsInDatabase, excludeDocs, fromBlob, getAttachment, getViewWithDocs)
 import Perspectives.Persistent (invertedQueryDatabaseName)
 import Perspectives.PerspectivesState (queryCache)
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..))
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Simple.JSON (readJSON)
 
-type StorableInvertedQuery = { queryType :: String, keys :: Array String, query :: InvertedQuery, model :: DomeinFileId }
+type StorableInvertedQuery = { queryType :: String, keys :: Array String, query :: InvertedQuery, model :: ModelUri Readable }
 
 type StoredQueries = Array StorableInvertedQuery
 
@@ -133,8 +133,8 @@ getInvertedQueriesOfModel database documentName = do
     Nothing -> pure []
 
 -- | Remove the inverted queries contributed from the local database.
-removeInvertedQueriesContributedByModel :: DomeinFileId -> MonadPerspectives Unit
-removeInvertedQueriesContributedByModel (DomeinFileId dfid) = do
+removeInvertedQueriesContributedByModel :: ModelUri Stable -> MonadPerspectives Unit
+removeInvertedQueriesContributedByModel (ModelUri dfid) = do
   db <- invertedQueryDatabaseName
   -- First retrieve all inverted queries from the local database contributed by the current model.
   (modelQueries :: Array { _id :: String, _rev :: String }) <- getViewWithDocs db "defaultViews/modelView" (Key $ unversionedModelUri dfid)

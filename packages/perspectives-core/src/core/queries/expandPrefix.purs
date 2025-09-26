@@ -33,7 +33,8 @@ import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo, expandNamespace)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetABinding(..), LetStep(..), Statements(..))
 import Perspectives.Query.QueryTypes (Calculation(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), DomeinFileId(..), EnumeratedRoleType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Prelude (class Monad, bind, discard, flip, pure, unit, void, ($), (<$>), (<*>), (<<<), (>>=))
 
 type SymbolHandler m = String -> m String
@@ -53,7 +54,7 @@ ensureModel s = runReaderT (scan s)
   \symbol ->
     if isTypeUri symbol then do
       case typeUri2typeNameSpace symbol of
-        Just namespace -> void $ retrieveDomeinFile (DomeinFileId namespace)
+        Just namespace -> void $ retrieveDomeinFile (ModelUri namespace)
         Nothing -> pure unit
       pure symbol
     else pure symbol

@@ -30,9 +30,10 @@ import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Extern.Couchdb (addModelToLocalStore, createInitialInstances, isInitialLoad)
 import Perspectives.ModelDependencies (bodiesWithAccountsModelName, couchdbManagementModelName, sysUser, systemModelName)
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, invertedQueryDatabaseName, modelDatabaseName)
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedRoleType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction)
 import Perspectives.SetupCouchdb (setContext2RoleView, setContextSpecialisationsView, setContextView, setCredentialsView, setFilled2FillerView, setFiller2FilledView, setModelView, setPendingInvitationView, setRTContextKeyView, setRTFilledKeyView, setRTFillerKeyView, setRTPropertyKeyView, setRTRoleKeyView, setRole2ContextView, setRoleFromContextView, setRoleSpecialisationsView, setRoleView)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer)
 import Prelude (Unit, bind, discard, void, ($), (>>=))
 
@@ -64,7 +65,7 @@ setupUser uninterpretedIdentityDoc = do
     (ENR $ EnumeratedRoleType sysUser)
     ( do
         modify (over Transaction \t -> t { identityDocument = uninterpretedIdentityDoc })
-        addModelToLocalStore (DomeinFileId systemModelName) isInitialLoad
+        addModelToLocalStore (ModelUri systemModelName) isInitialLoad
     )
 
 setupInvertedQueryDatabase :: MonadPerspectives Unit
@@ -88,7 +89,7 @@ reSetupUser = do
   entitiesDatabaseName >>= setFilled2FillerView
   entitiesDatabaseName >>= setContext2RoleView
   entitiesDatabaseName >>= setRole2ContextView
-  DomeinFile { referredModels } <- getDomeinFile (DomeinFileId systemModelName)
+  DomeinFile { referredModels } <- getDomeinFile (ModelUri systemModelName)
   -- INSTALLATION / MODEL DEPENDENCY HERE: we assume these models will have been installed.
   void $ runMonadPerspectivesTransaction (ENR $ EnumeratedRoleType sysUser)
     do

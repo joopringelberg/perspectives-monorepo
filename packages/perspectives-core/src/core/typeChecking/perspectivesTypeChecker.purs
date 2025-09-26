@@ -48,13 +48,14 @@ import Perspectives.Representation.Context (Context)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType, RoleKind(..), RoleType(..))
+import Perspectives.SideCar.PhantomTypedNewtypes (Readable)
 import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleInContext)
 import Prelude (Unit, bind, discard, pure, unit, ($), (<<<), (==), (>=>), (>>=))
 
-checkDomeinFile :: DomeinFile -> MonadPerspectives (Array PerspectivesError)
+checkDomeinFile :: DomeinFile Readable -> MonadPerspectives (Array PerspectivesError)
 checkDomeinFile df = pure []
 
-checkDomeinFile_ :: DomeinFile -> PF Unit
+checkDomeinFile_ :: DomeinFile Readable -> PF Unit
 checkDomeinFile_ df = pure unit
 
 checkContext :: Context -> PF Unit

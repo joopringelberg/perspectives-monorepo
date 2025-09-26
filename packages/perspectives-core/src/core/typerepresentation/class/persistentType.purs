@@ -44,14 +44,15 @@ import Perspectives.Representation.Context (Context)
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole)
 import Perspectives.Representation.State (State)
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType, CalculatedRoleType, ContextType, DomeinFileId(..), EnumeratedPropertyType, EnumeratedRoleType, PerspectiveType(..), StateIdentifier(..), ViewType)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType, CalculatedRoleType, ContextType, EnumeratedPropertyType, EnumeratedRoleType, PerspectiveType(..), StateIdentifier(..), ViewType)
 import Perspectives.Representation.View (View)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Prelude (class Eq, class Show, Unit, bind, const, pure, show, unit, ($), (<<<), (<>), (>>=), (<$>))
 
 type Namespace = String
 
 class (Show i, Identifiable v i, Revision v, Newtype i String, Eq v) <= PersistentType v i | v -> i, i -> v where
-  retrieveFromDomein :: i -> DomeinFileId -> MonadPerspectives v
+  retrieveFromDomein :: i -> ModelUri Stable -> MonadPerspectives v
   cacheInDomeinFile :: i -> v -> MonadPerspectives Unit
 
 -- | Get any type representation for Perspectives, either from cache or from a model file in
@@ -61,7 +62,7 @@ getPerspectType id = do
   mns <- pure (typeUri2ModelUri (unwrap id))
   case mns of
     Nothing -> throwError (error $ "getPerspectType cannot retrieve type with incorrectly formed id: '" <> show id <> "'.")
-    (Just ns) -> retrieveFromDomein id (DomeinFileId ns)
+    (Just ns) -> retrieveFromDomein id (ModelUri ns)
 
 tryGetPerspectType :: forall v i. PersistentType v i => i -> MonadPerspectives (Maybe v)
 tryGetPerspectType id = catchError ((getPerspectType id) >>= (pure <<< Just))
@@ -97,10 +98,10 @@ typeExists id = catchError (((getPerspectType id) :: MP v) >>= pure <<< const tr
 -----------------------------------------------------------
 -- ADD TO A DOMEINFILE
 -----------------------------------------------------------
-addContextToDomeinFile :: Context -> DomeinFile -> DomeinFile
+addContextToDomeinFile :: Context -> DomeinFile Stable -> DomeinFile Stable
 addContextToDomeinFile c (DomeinFile dff@{ contexts }) = DomeinFile dff { contexts = FO.insert (unwrap $ (identifier c :: ContextType)) c contexts }
 
-addEnumeratedRoleToDomeinFile :: EnumeratedRole -> DomeinFile -> DomeinFile
+addEnumeratedRoleToDomeinFile :: EnumeratedRole -> DomeinFile Stable -> DomeinFile Stable
 addEnumeratedRoleToDomeinFile c (DomeinFile dff@{ enumeratedRoles }) = DomeinFile dff { enumeratedRoles = FO.insert (unwrap $ (identifier c :: EnumeratedRoleType)) c enumeratedRoles }
 
 -- addQueryFunctionToDomeinFile :: String -> QueryFunction -> DomeinFile -> DomeinFile
@@ -108,16 +109,16 @@ addEnumeratedRoleToDomeinFile c (DomeinFile dff@{ enumeratedRoles }) = DomeinFil
 
 -----------------------------------------------------------
 -----------------------------------------------------------
-ifNamespace :: forall i. Newtype i String => i -> (DomeinFile -> DomeinFile) -> MP Unit
-ifNamespace i modifier = maybe (pure unit) (modifyDomeinFileInCache modifier) (DomeinFileId <$> typeUri2ModelUri (unwrap i))
+ifNamespace :: forall i. Newtype i String => i -> (DomeinFile Stable -> DomeinFile Stable) -> MP Unit
+ifNamespace i modifier = maybe (pure unit) (modifyDomeinFileInCache modifier) (ModelUri <$> typeUri2ModelUri (unwrap i))
 
 -- Put error boundaries around calls to this function.
 retrieveFromDomein_
   :: forall v i
    . PersistentType v i
   => i
-  -> (DomeinFile -> Maybe v)
-  -> DomeinFileId
+  -> (DomeinFile Stable -> Maybe v)
+  -> ModelUri Stable
   -> (MonadPerspectives v)
 retrieveFromDomein_ id lookupFunction ns = do
   df <- retrieveDomeinFile ns

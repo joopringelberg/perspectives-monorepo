@@ -27,8 +27,8 @@ import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile)
 import Perspectives.PerspectivesState (domeinCache)
 import Perspectives.Query.UnsafeCompiler (getRoleFunction)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..))
 import Perspectives.SetupCouchdb (setRoleView)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Perspectives.Sidecar.StableIdMapping (emptyStableIdMapping)
 import Perspectives.TypePersistence.LoadArc.FS (loadCompileAndCacheArcFile, loadCompileAndCacheArcFile')
 import Test.Perspectives.Utils (assertEqual, developmentRepository, runMonadPerspectivesTransaction, runP, runTestadmin, withSystem)
@@ -58,11 +58,11 @@ modelDirectory :: String
 modelDirectory = "src/model"
 
 -- | Take a DomeinFile from the local perspect_models database and upload it to the repository database.
--- | Notice that repositoryUrl is derived from the DomeinFileId.
+-- | Notice that repositoryUrl is derived from the ModelUri.
 -- | Attachments are preserved: if they were in the repository before uploading,
 -- | they will be in the repository after uploading.
-uploadToRepository :: DomeinFileId -> MonadPerspectives Unit
-uploadToRepository dfId@(DomeinFileId domeinFileName) = do
+uploadToRepository :: ModelUri Stable -> MonadPerspectives Unit
+uploadToRepository dfId@(ModelUri domeinFileName) = do
   if isModelUri domeinFileName
     then do
       mdf <- try $ getDomeinFile dfId
@@ -90,7 +90,7 @@ theSuite = suiteOnly "Perspectives.Extern.Couchdb" do
       then do
         pure unit
         cdburl <- developmentRepository
-        uploadToRepository (DomeinFileId "model://perspectives.domains#Serialise")
+        uploadToRepository (ModelUri "model://perspectives.domains#Serialise")
       else liftAff $ assert ("There are instance- or model errors for model:Serialise: " <> show errs) false
 
   test "upload model://perspectives.domains#Sensor to repository from files" $ runP do
@@ -100,7 +100,7 @@ theSuite = suiteOnly "Perspectives.Extern.Couchdb" do
       then do
         pure unit
         cdburl <- developmentRepository
-        uploadToRepository (DomeinFileId "model://perspectives.domains#Sensor")
+        uploadToRepository (ModelUri "model://perspectives.domains#Sensor")
       else liftAff $ assert ("There are instance- or model errors for perspectives.domains#Sensor: " <> show errs) false
 
   test "upload model://perspectives.domains#Couchdb to repository from files" $ runP do
@@ -110,7 +110,7 @@ theSuite = suiteOnly "Perspectives.Extern.Couchdb" do
     if null errs
       then do
         -- cdburl <- developmentRepository
-        uploadToRepository (DomeinFileId "model://perspectives.domains#Couchdb")
+        uploadToRepository (ModelUri "model://perspectives.domains#Couchdb")
       else liftAff $ assert ("There are instance- or model errors for perspectives.domains#Couchdb: " <> show errs) false
 
   test "upload model://perspectives.domains#Utilities to repository from files" $ runP do
@@ -119,7 +119,7 @@ theSuite = suiteOnly "Perspectives.Extern.Couchdb" do
     if null errs
       then do
         cdburl <- developmentRepository
-        uploadToRepository (DomeinFileId "model://perspectives.domains#Utilities")
+        uploadToRepository (ModelUri "model://perspectives.domains#Utilities")
       else liftAff $ assert ("There are instance- or model errors for perspectives.domains#Utilities: " <> show errs) false
 
   test "upload model://perspectives.domains#System to repository from files" $ runP do
@@ -133,13 +133,13 @@ theSuite = suiteOnly "Perspectives.Extern.Couchdb" do
     errs <- loadCompileAndCacheArcFile' "perspectivesSysteem" modelDirectory
     dCache <- domeinCache
     if null errs
-      then uploadToRepository (DomeinFileId "model://perspectives.domains#System")
+      then uploadToRepository (ModelUri "model://perspectives.domains#System")
       else liftAff $ assert ("There are instance- or model errors for model://perspectives.domains#System: " <> show errs) false
 
   test "upload model://perspectives.domains#Parsing to repository from files" $ runP do
     errs <- loadCompileAndCacheArcFile' "parsing" modelDirectory
     if null errs
-      then uploadToRepository (DomeinFileId "model://perspectives.domains#Parsing")
+      then uploadToRepository (ModelUri "model://perspectives.domains#Parsing")
       else liftAff $ assert ("There are instance- or model errors for model://perspectives.domains#Parsing: " <> show errs) false
 
   test "upload model://perspectives.domains#TestPublicRole to repository from files" $ runP do
@@ -153,7 +153,7 @@ theSuite = suiteOnly "Perspectives.Extern.Couchdb" do
     dCache <- domeinCache
     errs <- loadCompileAndCacheArcFile' "testPublicRole" modelDirectory
     if null errs
-      then uploadToRepository (DomeinFileId "model://perspectives.domains#TestPublicRole")
+      then uploadToRepository (ModelUri "model://perspectives.domains#TestPublicRole")
       else liftAff $ assert ("There are instance- or model errors for model://perspectives.domains#TestPublicRole: " <> show errs) false
 
   test "upload model://perspectives.domains#TestFields to repository from files" $ runP do
@@ -166,7 +166,7 @@ theSuite = suiteOnly "Perspectives.Extern.Couchdb" do
     _ <- loadCompileAndCacheArcFile' "perspectivesSysteem" modelDirectory
     errs <- loadCompileAndCacheArcFile' "testFields" modelDirectory
     if null errs
-      then uploadToRepository (DomeinFileId "model://perspectives.domains#TestFields")
+      then uploadToRepository (ModelUri "model://perspectives.domains#TestFields")
       else liftAff $ assert ("There are instance- or model errors for model://perspectives.domains#TestFields: " <> show errs) false
 
   test "upload model:perspectives.domains#BodiesWithAccounts to repository from files (without testuser)" $ runP do
@@ -179,7 +179,7 @@ theSuite = suiteOnly "Perspectives.Extern.Couchdb" do
     _ <- loadCompileAndCacheArcFile' "perspectivesSysteem" modelDirectory
     errs <- loadCompileAndCacheArcFile' "bodiesWithAccounts" modelDirectory
     if null errs
-      then uploadToRepository (DomeinFileId "model://perspectives.domains#BodiesWithAccounts")
+      then uploadToRepository (ModelUri "model://perspectives.domains#BodiesWithAccounts")
       else liftAff $ assert ("There are instance- or model errors for model://perspectives.domains#BodiesWithAccounts: " <> show errs) false
 
   testOnly "upload model://perspectives.domains#CouchdbManagement_new to repository from files (without testuser)" $ runP do
@@ -194,7 +194,7 @@ theSuite = suiteOnly "Perspectives.Extern.Couchdb" do
     _ <- loadCompileAndCacheArcFile' "parsing" modelDirectory
     errs <- loadCompileAndCacheArcFile' "couchdbManagement_new" modelDirectory
     if null errs
-      then uploadToRepository (DomeinFileId "model://perspectives.domains#CouchdbManagement")
+      then uploadToRepository (ModelUri "model://perspectives.domains#CouchdbManagement")
       else liftAff $ assert ("There are instance- or model errors for model//perspectives.domains#CouchdbManagement: " <> show errs) false
 
   test "upload model:ModelManagement to repository from files (without testuser)" $ runP do
@@ -208,7 +208,7 @@ theSuite = suiteOnly "Perspectives.Extern.Couchdb" do
       then do
         pure unit
         cdburl <- developmentRepository
-        uploadToRepository (DomeinFileId "model://perspectives.domains#ModelManagement")
+        uploadToRepository (ModelUri "model://perspectives.domains#ModelManagement")
       else liftAff $ assert ("There are instance- or model errors for model://perspectives.domains#ModelManagement: " <> show errs) false
 
   test "upload model://perspectives.domains#BrokerServices to repository from files (without testuser)" $ runP do
@@ -221,7 +221,7 @@ theSuite = suiteOnly "Perspectives.Extern.Couchdb" do
       then do
         -- pure unit
         cdburl <- developmentRepository
-        uploadToRepository (DomeinFileId "model://perspectives.domains#BrokerServices")
+        uploadToRepository (ModelUri "model://perspectives.domains#BrokerServices")
       else liftAff $ assert ("There are instance- or model errors for model://perspectives.domains#BrokerServices: " <> show errs) false
 
   test "upload model://perspectives.domains#SimpleChat to repository from files" $ runP do
@@ -233,7 +233,7 @@ theSuite = suiteOnly "Perspectives.Extern.Couchdb" do
       then do
         cdburl <- developmentRepository
         -- log $ "Repository url = " <> cdburl
-        uploadToRepository (DomeinFileId "model://perspectives.domains#SimpleChat")
+        uploadToRepository (ModelUri "model://perspectives.domains#SimpleChat")
       else liftAff $ assert ("There are instance- or model errors for model://perspectives.domains#SimpleChat: " <> show errs) false
 
   test "upload model:Competition to repository from files (without testuser)" $ runP do
@@ -246,7 +246,7 @@ theSuite = suiteOnly "Perspectives.Extern.Couchdb" do
       then do
         pure unit
         cdburl <- developmentRepository
-        uploadToRepository (DomeinFileId "model://perspectives.domains#Competition")
+        uploadToRepository (ModelUri "model://perspectives.domains#Competition")
       else liftAff $ assert ("There are instance- or model errors for model://perspectives.domains#Competition: " <> show errs) false
 
   test "setRoleView" do

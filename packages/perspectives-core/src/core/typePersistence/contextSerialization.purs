@@ -66,8 +66,9 @@ import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.Property (hasFacet)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..), Value(..), externalRole)
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType, DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleKind(..), RoleType(..), externalRoleType, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleKind(..), RoleType(..), externalRoleType, roletype2string)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableNameFromTelescope, perspectiveForContextAndUser', perspectiveForContextAndUserFromId, perspectivesForContextAndUser')
 import Perspectives.TypePersistence.PerspectiveSerialisation.Data (SerialisedPerspective', SerialisedProperty)
 import Perspectives.TypePersistence.ScreenContextualisation (contextualiseScreen, contextualiseTableFormDef)
@@ -82,7 +83,7 @@ derive instance newTypeSerialisedScreen :: Newtype SerialisedScreen _
 -- | Get the screen for a context and a user. By construction, the whoWhatWhereScreen is Nothing in the result.
 screenForContextAndUser :: RoleInstance -> RoleType -> ContextType -> (ContextInstance ~~> SerialisedScreen)
 screenForContextAndUser userRoleInstance userRoleType contextType contextInstance = do
-  DomeinFile df <- lift2MPQ $ retrieveDomeinFile (DomeinFileId $ unsafePartial typeUri2ModelUri_ $ unwrap contextType)
+  DomeinFile df <- lift2MPQ $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ $ unwrap contextType)
   title <- lift (getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST $ externalRoleType contextType) (externalRole contextInstance))
   translatedUserRoleType <- lift $ lift $ translateType (roletype2string userRoleType)
   case lookup (ScreenKey contextType userRoleType) df.screens of
@@ -447,7 +448,7 @@ serialisedTableFormForContextAndUser userRoleInstance userRoleType contextType o
 
 tableFormForContextAndUser :: RoleInstance -> RoleType -> ContextType -> RoleType -> (ContextInstance ~~> TableFormDef)
 tableFormForContextAndUser userRoleInstance userRoleType contextType objectRoleType contextInstance = do
-  DomeinFile df <- lift2MPQ $ retrieveDomeinFile (DomeinFileId $ unsafePartial typeUri2ModelUri_ $ unwrap contextType)
+  DomeinFile df <- lift2MPQ $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ $ unwrap contextType)
   case lookup (ScreenKey contextType userRoleType) df.screens of
     Just (ScreenDefinition { whoWhatWhereScreen }) -> case whoWhatWhereScreen of
       -- If there is a whoWhatWhereScreen element, populate it

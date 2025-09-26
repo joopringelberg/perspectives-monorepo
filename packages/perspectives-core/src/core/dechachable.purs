@@ -34,13 +34,13 @@ import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
 import Perspectives.Persistence.API (tryGetDocument)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId)
 import Perspectives.ResourceIdentifiers (resourceIdentifier2DocLocator)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
 
 class Persistent v i <= Decacheable v i | i -> v, v -> i where
   decache :: i -> MonadPerspectives Unit
 
-instance Decacheable DomeinFile DomeinFileId where
+instance Decacheable (DomeinFile Stable) (ModelUri Stable) where
   decache dfid = decache_ dfid
 
 instance Decacheable PerspectContext ContextInstance where

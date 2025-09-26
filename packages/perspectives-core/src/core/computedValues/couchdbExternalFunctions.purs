@@ -93,11 +93,12 @@ import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), Cont
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (RoleType(..))
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.RoleAssignment (roleIsMe)
 import Perspectives.SaveUserData (scheduleContextRemoval, setFirstBinding)
 import Perspectives.SetupCouchdb (contextViewFilter, roleViewFilter, setContext2RoleView, setContextView, setCredentialsView, setFiller2FilledView, setFilled2FillerView, setPendingInvitationView, setRoleFromContextView, setRoleView, setRole2ContextView)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer(..))
 import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>>=))
@@ -189,7 +190,7 @@ ensureLatestModel_ arrWithModelName arrWithDependencies _ =
         Nothing -> pure unit
         -- TODO: add a check on the form of the modelName.
         Just modelName ->
-          if isModelUri modelName then updateModel' (DomeinFileId modelName) (maybe false (eq "true") (head arrWithDependencies)) true
+          if isModelUri modelName then updateModel' (ModelUri modelName) (maybe false (eq "true") (head arrWithDependencies)) true
           else throwError (error $ "This is not a well-formed domain name: " <> modelName)
     )
     >>= handleExternalStatementError "model://perspectives.domains#EnsureLatestModel"
@@ -210,26 +211,26 @@ updateModel_ arrWithModelName arrWithDependencies _ =
         Nothing -> pure unit
         -- TODO: add a check on the form of the modelName.
         Just modelName ->
-          if isModelUri modelName then updateModel' (DomeinFileId modelName) (maybe false (eq "true") (head arrWithDependencies)) true
+          if isModelUri modelName then updateModel' (ModelUri modelName) (maybe false (eq "true") (head arrWithDependencies)) true
           else throwError (error $ "This is not a well-formed domain name: " <> modelName)
     )
     >>= handleExternalStatementError "model://perspectives.domains#UpdateModel"
 
 -- | Also saves the attachments.
--- | DomeinFileId is the qualified stable identifier in terms of a CUID, extended with @<Version>.
-updateModel' :: DomeinFileId -> Boolean -> Boolean -> MonadPerspectivesTransaction Unit
-updateModel' dfid@(DomeinFileId modelName) withDependencies install = do
+-- | ModelUri is the qualified stable identifier in terms of a CUID, extended with @<Version>.
+updateModel' :: ModelUri Stable -> Boolean -> Boolean -> MonadPerspectivesTransaction Unit
+updateModel' dfid@(ModelUri modelName) withDependencies install = do
   { versionedModelName } <- computeVersionedAndUnversiondName dfid
   { repositoryUrl, documentName } <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
   storedQueries <- lift $ getInvertedQueriesOfModel repositoryUrl documentName
   domeinFileAndAttachents <- retrieveModelFromRepository versionedModelName
-  updateModel withDependencies install (DomeinFileId modelName) domeinFileAndAttachents storedQueries
+  updateModel withDependencies install (ModelUri modelName) domeinFileAndAttachents storedQueries
 
 -- | Also saves the attachments.
-updateModel :: Boolean -> Boolean -> DomeinFileId -> (Tuple DomeinFileRecord AttachmentFiles) -> StoredQueries -> MonadPerspectivesTransaction Unit
-updateModel withDependencies install dfid@(DomeinFileId modelName) domeinFileAndAttachents storedQueries = do
+updateModel :: Boolean -> Boolean -> ModelUri Stable -> (Tuple (DomeinFileRecord Stable) AttachmentFiles) -> StoredQueries -> MonadPerspectivesTransaction Unit
+updateModel withDependencies install dfid@(ModelUri modelName) domeinFileAndAttachents storedQueries = do
   unversionedModelname <- pure $ unversionedModelUri modelName
-  (lift $ tryGetPerspectEntiteit (DomeinFileId unversionedModelname)) >>= case _ of
+  (lift $ tryGetPerspectEntiteit (ModelUri unversionedModelname)) >>= case _ of
     -- Not installed.
     Nothing ->
       if install
@@ -245,18 +246,18 @@ updateModel withDependencies install dfid@(DomeinFileId modelName) domeinFileAnd
       lift $ removeInvertedQueriesContributedByModel dfid
       forWithIndex_ upstreamStateNotifications
         \domainName notifications -> do
-          (lift $ try $ getDomeinFile (DomeinFileId domainName)) >>=
+          (lift $ try $ getDomeinFile (ModelUri domainName)) >>=
             handleDomeinFileError "updateModel"
               \(DomeinFile dfr) -> do
                 lift (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ notifications removeDownStreamNotification) dfr))
       forWithIndex_ upstreamAutomaticEffects
         \domainName automaticEffects -> do
-          (lift $ try $ getDomeinFile (DomeinFileId domainName)) >>=
+          (lift $ try $ getDomeinFile (ModelUri domainName)) >>=
             handleDomeinFileError "updateModel"
               \(DomeinFile dfr) -> do
                 lift (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ automaticEffects removeDownStreamAutomaticEffect) dfr))
       -- Clear the caches of compiled states.
-      void $ pure $ clearModelStates (DomeinFileId unversionedModelname)
+      void $ pure $ clearModelStates (ModelUri unversionedModelname)
       -- Install the new model, taking care of outgoing InvertedQueries.
       installModelLocally domeinFileAndAttachents isUpdate storedQueries
       -- As we have the new definitions of invertedQueries in place in the database, we should now clear the cache in PerspectivesState
@@ -272,14 +273,14 @@ updateModel withDependencies install dfid@(DomeinFileId modelName) domeinFileAnd
 -- | This function is applied with `callEffect`. Accordingly, it will get the ContextInstance of the Action as second parameter.
 -- | Requires the right to write to the Repository database (SERVERADMIN, DATABASEADMIN, WRITINGMEMBER)
 addModelToLocalStore_ :: Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
-addModelToLocalStore_ modelNames _ = try (for_ modelNames (flip addModelToLocalStore isInitialLoad <<< DomeinFileId))
+addModelToLocalStore_ modelNames _ = try (for_ modelNames (flip addModelToLocalStore isInitialLoad <<< ModelUri))
   >>= handleExternalStatementError "model://perspectives.domains#AddModelToLocalStore"
 
 -- | Parameter `isUpdate` should be true iff the model has been added to the local installation before.
 -- | Attachments are fetched from the repository and stored locally.
 -- | Invariant: the model is not in cache when this function returns.
 -- | The modelname is UNVERSIONED!
-addModelToLocalStore :: DomeinFileId -> Boolean -> MonadPerspectivesTransaction Unit
+addModelToLocalStore :: ModelUri Stable -> Boolean -> MonadPerspectivesTransaction Unit
 addModelToLocalStore dfid isInitialLoad' = do
   { versionedModelName } <- computeVersionedAndUnversiondName dfid
   domeinFileAndAttachments <- retrieveModelFromRepository versionedModelName
@@ -287,7 +288,7 @@ addModelToLocalStore dfid isInitialLoad' = do
   storedQueries <- lift $ getInvertedQueriesOfModel repositoryUrl documentName
   installModelLocally domeinFileAndAttachments isInitialLoad' storedQueries
 
-retrieveModelFromRepository :: String -> MonadPerspectivesTransaction (Tuple DomeinFileRecord AttachmentFiles)
+retrieveModelFromRepository :: String -> MonadPerspectivesTransaction (Tuple (DomeinFileRecord Stable) AttachmentFiles)
 retrieveModelFromRepository versionedModelName = do
   { repositoryUrl, documentName } <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
   (DomeinFile dfile@{ _attachments }) <- lift $ getDocument repositoryUrl documentName
@@ -299,8 +300,8 @@ retrieveModelFromRepository versionedModelName = do
       atts
   pure (Tuple dfile attachments)
 
-retrieveModelFromLocalStore :: DomeinFileId -> MonadPerspectivesTransaction (Tuple DomeinFileRecord AttachmentFiles)
-retrieveModelFromLocalStore dfid@(DomeinFileId modelname) = do
+retrieveModelFromLocalStore :: ModelUri Stable -> MonadPerspectivesTransaction (Tuple (DomeinFileRecord Stable) AttachmentFiles)
+retrieveModelFromLocalStore dfid@(ModelUri modelname) = do
   { database, documentName } <- lift $ resourceIdentifier2DocLocator modelname
   (DomeinFile dfile@{ _attachments }) <- lift $ getDocument database documentName
 
@@ -319,10 +320,10 @@ type NameAndVersion =
   , versionedModelManifest :: Maybe RoleInstance
   }
 
-computeVersionedAndUnversiondName :: DomeinFileId -> MonadPerspectivesTransaction NameAndVersion
-computeVersionedAndUnversiondName (DomeinFileId modelname) = do
+computeVersionedAndUnversiondName :: ModelUri Stable -> MonadPerspectivesTransaction NameAndVersion
+computeVersionedAndUnversiondName (ModelUri modelname) = do
   unversionedModelname <- pure $ unversionedModelUri modelname
-  x :: (Maybe { semver :: String, versionedModelManifest :: RoleInstance }) <- lift $ getVersionToInstall (DomeinFileId unversionedModelname)
+  x :: (Maybe { semver :: String, versionedModelManifest :: RoleInstance }) <- lift $ getVersionToInstall (ModelUri unversionedModelname)
   { patch, build } <- case x of
     Nothing -> pure { patch: "0", build: "0" }
     Just { versionedModelManifest } -> lift $ getPatchAndBuild versionedModelManifest
@@ -340,7 +341,7 @@ computeVersionedAndUnversiondName (DomeinFileId modelname) = do
   pure { patch, build, versionedModelName, unversionedModelname, versionedModelManifest: _.versionedModelManifest <$> x }
 
 -- | Also saves the attachments.
-installModelLocally :: (Tuple DomeinFileRecord AttachmentFiles) -> Boolean -> StoredQueries -> MonadPerspectivesTransaction Unit
+installModelLocally :: (Tuple (DomeinFileRecord Stable) AttachmentFiles) -> Boolean -> StoredQueries -> MonadPerspectivesTransaction Unit
 installModelLocally (Tuple dfrecord@{ id, referredModels, invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects, _attachments } attachmentFiles) isInitialLoad' storedQueries = do
   { patch, build, versionedModelName, unversionedModelname, versionedModelManifest } <- computeVersionedAndUnversiondName id
   -- Store the model in Couchdb, that is: in the local store of models.
@@ -365,7 +366,7 @@ installModelLocally (Tuple dfrecord@{ id, referredModels, invertedQueriesInOther
   -- Distribute upstream state notifications over the other domains.
   forWithIndex_ upstreamStateNotifications
     \domainName notifications -> do
-      (lift $ try $ getDomeinFile (DomeinFileId domainName)) >>=
+      (lift $ try $ getDomeinFile (ModelUri domainName)) >>=
         handleDomeinFileError "addModelToLocalStore"
           \(DomeinFile dfr) -> do
             lift (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ notifications addDownStreamNotification) dfr))
@@ -373,7 +374,7 @@ installModelLocally (Tuple dfrecord@{ id, referredModels, invertedQueriesInOther
   -- Distribute upstream automatic effects over the other domains.
   forWithIndex_ upstreamAutomaticEffects
     \domainName automaticEffects -> do
-      (lift $ try $ getDomeinFile (DomeinFileId domainName)) >>=
+      (lift $ try $ getDomeinFile (ModelUri domainName)) >>=
         handleDomeinFileError "addModelToLocalStore"
           \(DomeinFile dfr) -> do
             lift (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ automaticEffects addDownStreamAutomaticEffect) dfr))
@@ -567,12 +568,12 @@ removeModelFromLocalStore versionedModelURIA rid =
           let unversionedURI = unversionedModelUri versionedModelURI
           let cid = createDefaultIdentifier ((unsafePartial modelUri2ManifestUrl unversionedURI).manifestName <> "_modelRootContext")
           scheduleContextRemoval Nothing [] (ContextInstance cid)
-          scheduleDomeinFileRemoval (DomeinFileId unversionedURI)
+          scheduleDomeinFileRemoval (ModelUri unversionedURI)
         _ -> pure unit
     )
     >>= handleExternalStatementError "model://perspectives.domains#RemoveModelFromLocalStore"
 
-scheduleDomeinFileRemoval :: DomeinFileId -> MonadPerspectivesTransaction Unit
+scheduleDomeinFileRemoval :: ModelUri Stable -> MonadPerspectivesTransaction Unit
 scheduleDomeinFileRemoval id = AMA.modify (over Transaction \t@{ modelsToBeRemoved } -> t { modelsToBeRemoved = cons id modelsToBeRemoved })
 
 type Url = String

@@ -18,7 +18,7 @@ import Perspectives.CoreTypes ((###=), MP)
 import Perspectives.Data.EncodableMap (EncodableMap(..))
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
 import Perspectives.ExecuteInTopologicalOrder (executeInTopologicalOrder)
-import Perspectives.Identifiers (Namespace, buitenRol, deconstructBuitenRol, typeUri2LocalName_, isExternalRole, startsWithSegments)
+import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, startsWithSegments, typeUri2LocalName_)
 import Perspectives.Instances.Combinators (closure)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, modifyDF, withDomeinFile)
 import Perspectives.Query.QueryTypes (Domain(..), RoleInContext, domain2roleInContext, domain2roleType, range, replaceRange, roleInContext2Role)
@@ -32,6 +32,7 @@ import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), externalRoleType, propertytype2string, roletype2string)
 import Perspectives.Representation.Verbs (RoleVerbList)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Perspectives.Types.ObjectGetters (allEnumeratedRoles, aspectRoles, aspectsOfRole, equalsOrSpecialisesRoleInContext)
 
 contextualisePerspectives :: PhaseThree Unit
@@ -44,8 +45,8 @@ contextualisePerspectives = do
     (contextualisePerspectives' df namespace)
   where
   -- Notice that only EnumeratedRoles have Aspects (this includes external roles).
-  contextualisePerspectives' :: DomeinFileRecord -> Namespace -> PhaseThree Unit
-  contextualisePerspectives' { enumeratedRoles } namespace = void $ executeInTopologicalOrder
+  contextualisePerspectives' :: DomeinFileRecord Readable -> ModelUri Readable -> PhaseThree Unit
+  contextualisePerspectives' { enumeratedRoles } (ModelUri namespace) = void $ executeInTopologicalOrder
     identifier_
     -- Only count aspects defined in this namespace as dependencies for the sorting!
     (\(EnumeratedRole { roleAspects }) -> filter (flip startsWithSegments namespace) (unwrap <<< _.role <<< unwrap <$> roleAspects))

@@ -12,6 +12,7 @@ import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
 import Effect.Class.Console (log, logShow)
 import Foreign.Object (lookup)
+import Parsing (ParseError)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinCache (removeDomeinFileFromCache, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
@@ -21,7 +22,7 @@ import Perspectives.Parsing.Arc.AST (ContextE(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
-import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo')
+import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo', toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..))
 import Perspectives.Representation.ADT (ADT(..))
@@ -29,25 +30,24 @@ import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
-import Perspectives.Utilities (prettyPrint)
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Test.Perspectives.Utils (runP)
 import Test.Unit (TestF, suite, suiteOnly, suiteSkip, test, testOnly, testSkip)
 import Test.Unit.Assert (assert)
-import Parsing (ParseError)
 
-withDomeinFile :: forall a. Namespace -> DomeinFile -> MonadPerspectives a -> MonadPerspectives a
+withDomeinFile :: forall a. Namespace -> DomeinFile Stable -> MonadPerspectives a -> MonadPerspectives a
 withDomeinFile ns df mpa = do
-  void $ storeDomeinFileInCache (DomeinFileId ns) df
+  void $ storeDomeinFileInCache (ModelUri ns) df
   r <- mpa 
-  removeDomeinFileFromCache (DomeinFileId ns)
+  removeDomeinFileFromCache (ModelUri ns)
   pure r
 
 makeTest_ :: (String -> Aff Unit -> Free TestF Unit) ->
   String ->
   String ->
   (PerspectivesError -> Aff Unit) ->
-  (DomeinFileRecord -> Aff Unit) ->
+  (DomeinFileRecord Stable -> Aff Unit) ->
   Free TestF Unit
 makeTest_ test title source errorHandler theTest = test title do
   (r :: Either ParseError ContextE) <- {-pure $ unwrap $-} runIndentParser source ARC.domain
@@ -63,12 +63,12 @@ makeTest_ test title source errorHandler theTest = test title do
             x <- runP $ phaseThree dr' state.postponedStateQualifiedParts Nil
             case x of
               (Left e) -> for_ e errorHandler
-              (Right (Tuple correctedDFR _)) -> theTest correctedDFR
+              (Right (Tuple correctedDFR _)) -> theTest $ unwrap $ toStableDomeinFile (DomeinFile correctedDFR)
 
-makeTest :: String -> String -> (PerspectivesError -> Aff Unit) -> (DomeinFileRecord -> Aff Unit) -> Free TestF Unit
+makeTest :: String -> String -> (PerspectivesError -> Aff Unit) -> (DomeinFileRecord Stable -> Aff Unit) -> Free TestF Unit
 makeTest = makeTest_ test
 
-makeTestOnly :: String -> String -> (PerspectivesError -> Aff Unit) -> (DomeinFileRecord -> Aff Unit) -> Free TestF Unit
+makeTestOnly :: String -> String -> (PerspectivesError -> Aff Unit) -> (DomeinFileRecord Stable -> Aff Unit) -> Free TestF Unit
 makeTestOnly = makeTest_ testOnly
 
 theSuite :: Free TestF Unit

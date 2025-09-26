@@ -63,7 +63,7 @@ import Perspectives.Query.QueryTypes (Range) as QT
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
-import Perspectives.Representation.Class.PersistentType (DomeinFileId(..), StateIdentifier(..), getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole, typeExists)
+import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole, typeExists)
 import Perspectives.Representation.Class.Property (propertyTypeIsFunctional, propertyTypeIsMandatory, range) as PROP
 import Perspectives.Representation.Class.Role (bindingOfADT, contextOfADT, contextOfRepresentation, externalRoleOfADT, getRoleADTFromString, getRoleType, roleADT, roleTypeIsFunctional, roleTypeIsMandatory)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
@@ -75,6 +75,7 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), bool2
 import Perspectives.Representation.ThreeValuedLogic (and, or) as THREE
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), roletype2string)
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as RTI
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Types.ObjectGetters (allTypesInContextADT, allTypesInRoleADT, enumeratedRoleContextType, equals, isUnlinked_, lookForPropertyType, lookForRoleTypeOfADT, lookForUnqualifiedPropertyType, lookForUnqualifiedRoleTypeOfADT, qualifyContextInDomain, qualifyEnumeratedRoleInDomain, qualifyRoleInDomain)
 import Prelude (bind, discard, eq, map, pure, show, unit, void, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>>=), (||))
 
@@ -134,7 +135,7 @@ compileAndSaveRole dom step (CalculatedRole cr@{ id, kindOfRole, pos }) consider
         if considerFunctional then pure $ setCardinality compiledExpression True
         else pure compiledExpression
       -- Save the result in DomeinCache.
-      lift2 $ void $ modifyCalculatedRoleInDomeinFile (DomeinFileId $ unsafePartial fromJust $ typeUri2ModelUri (unwrap id)) (CalculatedRole cr { calculation = Q compiledExpression' })
+      lift2 $ void $ modifyCalculatedRoleInDomeinFile (ModelUri $ unsafePartial fromJust $ typeUri2ModelUri (unwrap id)) (CalculatedRole cr { calculation = Q compiledExpression' })
       pure $ unsafePartial $ domain2roleType $ range compiledExpression'
 
 -- | Ensures that the range of the QueryFunctionDescription is a qualified
@@ -239,7 +240,7 @@ compileAndSaveProperty dom step (CalculatedProperty cp@{ id, role, pos }) consid
         if considerFunctional then pure $ setCardinality compiledExpression True
         else pure compiledExpression
       -- Save the result in DomeinCache.
-      lift2 $ void $ modifyCalculatedPropertyInDomeinFile (DomeinFileId $ unsafePartial fromJust $ typeUri2ModelUri (unwrap id)) (CalculatedProperty cp { calculation = Q compiledExpression' })
+      lift2 $ void $ modifyCalculatedPropertyInDomeinFile (ModelUri $ unsafePartial fromJust $ typeUri2ModelUri (unwrap id)) (CalculatedProperty cp { calculation = Q compiledExpression' })
       pure $ range compiledExpression'
   where
   roleKind :: Partial => EnumeratedRoleType -> PhaseThree RTI.RoleKind
@@ -380,7 +381,7 @@ compileSimpleStep currentDomain s@(Filler pos membeddingContext) = do
             -- Try to qualify the name within the Domain.
             else do
               { id } <- lift $ gets _.dfr
-              (qnames :: Array ContextType) <- lift2 $ runArrayT $ qualifyContextInDomain context id
+              (qnames :: Array ContextType) <- lift2 $ runArrayT $ qualifyContextInDomain context (ModelUri $ unwrap id)
               case head qnames of
                 Nothing -> throwError $ UnknownContext pos context
                 (Just qn) | length qnames == 1 -> pure $ SQD currentDomain (QF.DataTypeGetterWithParameter FillerF (unwrap qn)) (RDOM $ replaceContext adtOfBinding qn) True False
@@ -396,7 +397,7 @@ compileSimpleStep currentDomain s@(Filled pos binderName membeddingContext) = do
         -- Try to qualify the name within the Domain.
         else do
           { id } <- lift $ gets _.dfr
-          (qnames :: Array EnumeratedRoleType) <- lift2 $ runArrayT $ qualifyEnumeratedRoleInDomain binderName id
+          (qnames :: Array EnumeratedRoleType) <- lift2 $ runArrayT $ qualifyEnumeratedRoleInDomain binderName (ModelUri $ unwrap id)
           case head qnames of
             Nothing -> throwError $ UnknownRole pos binderName
             (Just qn) | length qnames == 1 -> pure qn
@@ -412,7 +413,7 @@ compileSimpleStep currentDomain s@(Filled pos binderName membeddingContext) = do
           -- Try to qualify the name within the Domain.
           else do
             { id } <- lift $ gets _.dfr
-            (qnames :: Array ContextType) <- lift2 $ runArrayT $ qualifyContextInDomain context id
+            (qnames :: Array ContextType) <- lift2 $ runArrayT $ qualifyContextInDomain context (ModelUri $ unwrap id)
             case head qnames of
               Nothing -> throwError $ UnknownContext pos context
               (Just qn) | length qnames == 1 -> pure $ SQD currentDomain (QF.FilledF qBinderType (ContextType context)) (RDOM $ replaceContext adtOfBinder qn) False False
@@ -434,7 +435,7 @@ compileSimpleStep currentDomain s@(TypeOfContext pos) = do
 
 compileSimpleStep currentDomain s@(RoleTypeIndividual pos typeName) = do
   nameSpace <- getsDF _.id
-  typeCandidates <- lift $ lift (nameSpace ###= qualifyRoleInDomain typeName)
+  typeCandidates <- lift $ lift ((ModelUri $ unwrap nameSpace) ###= qualifyRoleInDomain typeName)
   case length typeCandidates, head typeCandidates of
     0, _ -> throwError $ UnknownRole pos typeName
     1, Just qualifiedType -> pure $ SQD currentDomain (QF.RoleTypeConstant qualifiedType) RoleKind True True
@@ -442,7 +443,7 @@ compileSimpleStep currentDomain s@(RoleTypeIndividual pos typeName) = do
 
 compileSimpleStep currentDomain s@(ContextTypeIndividual pos typeName) = do
   nameSpace <- getsDF _.id
-  typeCandidates <- lift $ lift (nameSpace ###= qualifyContextInDomain typeName)
+  typeCandidates <- lift $ lift ((ModelUri $ unwrap nameSpace) ###= qualifyContextInDomain typeName)
   case length typeCandidates, head typeCandidates of
     0, _ -> throwError $ UnknownContext pos typeName
     1, Just qualifiedType -> pure $ SQD currentDomain (QF.ContextTypeConstant qualifiedType) ContextKind True True
@@ -463,7 +464,7 @@ compileSimpleStep currentDomain s@(SpecialisesRoleType pos roleName) = do
         -- Try to qualify the name within the Domain.
         else do
           { id } <- lift $ gets _.dfr
-          (qnames :: Array EnumeratedRoleType) <- lift2 $ runArrayT $ qualifyEnumeratedRoleInDomain roleName id
+          (qnames :: Array EnumeratedRoleType) <- lift2 $ runArrayT $ qualifyEnumeratedRoleInDomain roleName (ModelUri $ unwrap id)
           case head qnames of
             Nothing -> throwError $ UnknownRole pos roleName
             (Just qn) | length qnames == 1 -> pure qn

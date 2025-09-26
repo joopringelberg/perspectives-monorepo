@@ -44,6 +44,7 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
+import Perspectives.SideCar.PhantomTypedNewtypes (Stable)
 import Prelude (Unit, bind, discard, pure, unit, void, ($), (+), (<<<), (>>=), (<>))
 import Simple.JSON (writeJSON)
 
@@ -123,13 +124,13 @@ queryCache = gets _.queryCache
 clearQueryCache :: MonadPerspectives Unit
 clearQueryCache = queryCache >>= liftEffect <<< clear
 
-domeinCacheLookup :: String -> MonadPerspectives (Maybe (AVar DomeinFile))
+domeinCacheLookup :: String -> MonadPerspectives (Maybe (AVar (DomeinFile Stable)))
 domeinCacheLookup = lookup domeinCache
 
-domeinCacheInsert :: String -> AVar DomeinFile -> MonadPerspectives (AVar DomeinFile)
+domeinCacheInsert :: String -> AVar (DomeinFile Stable) -> MonadPerspectives (AVar (DomeinFile Stable))
 domeinCacheInsert = insert domeinCache
 
-domeinCacheRemove :: String -> MonadPerspectives (Maybe (AVar DomeinFile))
+domeinCacheRemove :: String -> MonadPerspectives (Maybe (AVar (DomeinFile Stable)))
 domeinCacheRemove = remove domeinCache
 
 queryAssumptionRegister :: MonadPerspectives AssumptionRegister

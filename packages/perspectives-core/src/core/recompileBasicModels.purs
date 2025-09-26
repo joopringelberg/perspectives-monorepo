@@ -68,7 +68,8 @@ import Perspectives.Persistent (getDomeinFile, getPerspectRol, modelDatabaseName
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.Representation.Class.Cacheable (setRevision)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedPropertyType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..))
+import Perspectives.SideCar.PhantomTypedNewtypes (Stable)
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), loadStableMapping)
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFileWithSidecar_)
 import Simple.JSON (class ReadForeign, read, read', writeJSON)
@@ -152,14 +153,14 @@ recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _
         -- Distribute upstream state notifications over the other domains.
         forWithIndex_ upstreamStateNotifications
           \domainName notifications -> do
-            (try $ getDomeinFile (DomeinFileId domainName)) >>=
+            (try $ getDomeinFile (ModelUri domainName)) >>=
               handleDomeinFileError "recompileModel"
                 \(DomeinFile dfr) -> do
                   (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ notifications addDownStreamNotification) dfr))
         -- Distribute upstream automatic effects over the other domains.
         forWithIndex_ upstreamAutomaticEffects
           \domainName automaticEffects -> do
-            (try $ getDomeinFile (DomeinFileId domainName)) >>=
+            (try $ getDomeinFile (ModelUri domainName)) >>=
               handleDomeinFileError "recompileModel"
                 \(DomeinFile dfr) -> do
                   (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ automaticEffects addDownStreamAutomaticEffect) dfr))
@@ -194,7 +195,7 @@ executeInTopologicalOrder toSort action =
 newtype UninterpretedDomeinFile = UninterpretedDomeinFile
   { _rev :: String
   , _id :: String
-  , id :: DomeinFileId
+  , id :: ModelUri Stable
   , namespace :: String
   , referredModels :: Array String
   , arc :: String

@@ -49,20 +49,21 @@ import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), InvertedQueryKey)
 import Perspectives.Representation.ScreenDefinition (ScreenDefinition, ScreenKey)
 import Perspectives.Representation.State (State(..), Notification) as PEState
-import Perspectives.Representation.TypeIdentifiers (ContextType, DomeinFileId(..), EnumeratedRoleType, RoleType, StateIdentifier(..))
+import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType, RoleType, StateIdentifier(..))
 import Perspectives.Representation.UserGraph (UserGraph(..))
 import Perspectives.Representation.View (View)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Prelude (class Eq, class Show, Unit, bind, eq, pure, unit, void, ($), (<$>), (<<<))
 import Simple.JSON (class ReadForeign, class WriteForeign, read', readJSON', writeImpl, writeJSON)
 
-newtype DomeinFile = DomeinFile DomeinFileRecord
+newtype DomeinFile f = DomeinFile (DomeinFileRecord f)
 
 -- NOTE: the qualification of the identifiers is in terms of the scheme "model:", 
 -- two forward slashes and an internet namespace, followed by a hash sign.
-type DomeinFileRecord = PouchbdDocumentFields
-  ( id :: DomeinFileId -- The qualified stable identifier in terms of a CUID (ModelUri Stable)
+type DomeinFileRecord f = PouchbdDocumentFields
+  ( id :: ModelUri f -- The qualified stable identifier in terms of a CUID (ModelUri Stable)
   -- _id :: String -- The name of the file in Couchdb, e.g. perspectives_domains-System.json. DomeinFileName.
-  , namespace :: String -- The qualified readable name of the model that may vary. Semantically (ModelUri Readable), but is a String here.
+  , namespace :: ModelUri Readable -- The qualified readable name of the model that may vary. Semantically (ModelUri Readable), but is a String here.
   , contexts :: Object Context
   , enumeratedRoles :: Object EnumeratedRole
   , calculatedRoles :: Object CalculatedRole
@@ -71,7 +72,7 @@ type DomeinFileRecord = PouchbdDocumentFields
   , views :: Object View
   , states :: Object PEState.State
   , arc :: String
-  , referredModels :: Array DomeinFileId
+  , referredModels :: Array (ModelUri f)
   -- Keys are DomeinFileIds.
   , invertedQueriesInOtherDomains :: Object (Array SeparateInvertedQuery)
   , upstreamStateNotifications :: Object (Array UpstreamStateNotification)
@@ -81,28 +82,28 @@ type DomeinFileRecord = PouchbdDocumentFields
   , _attachments :: Maybe AttachmentInfo
   )
 
-derive instance genericDomeinFile :: Generic DomeinFile _
+derive instance genericDomeinFile :: Generic (DomeinFile f) _
 
-derive instance newtypeDomeinFile :: Newtype DomeinFile _
+derive instance newtypeDomeinFile :: Newtype (DomeinFile f) _
 
-derive newtype instance WriteForeign DomeinFile
-derive newtype instance ReadForeign DomeinFile
+derive newtype instance WriteForeign (DomeinFile f)
+derive newtype instance ReadForeign (DomeinFile f)
 
-instance showDomeinFile :: Show DomeinFile where
+instance showDomeinFile :: Show (DomeinFile f) where
   show = genericShow
 
-instance eqDomeinFile :: Eq DomeinFile where
+instance eqDomeinFile :: Eq (DomeinFile f) where
   eq (DomeinFile { id: id1 }) (DomeinFile { id: id2 }) = eq id1 id2
 
-instance identifiableDomeinFile :: Identifiable DomeinFile DomeinFileId where
+instance identifiableDomeinFile :: Identifiable (DomeinFile f) (ModelUri f) where
   identifier (DomeinFile { id }) = id
-  displayName (DomeinFile { namespace }) = namespace
+  displayName (DomeinFile { namespace }) = unwrap namespace
 
-instance revisionDomeinFile :: Revision DomeinFile where
+instance revisionDomeinFile :: Revision (DomeinFile f) where
   rev = _._rev <<< unwrap
   changeRevision s = over DomeinFile (\vr -> vr { _rev = s })
 
-instance Attachment DomeinFile where
+instance Attachment (DomeinFile f) where
   setAttachment d _ = d
   -- TODO. Handle screen attachments here!
   getAttachments _ = Nothing
@@ -192,7 +193,7 @@ instance ReadForeign SeparateInvertedQuery where
       "FilledInvertedQuery" -> (\k -> FilledInvertedQuery k typeName invertedQuery) <$> readJSON' key
       "OnPropertyDelta" -> (\k -> OnPropertyDelta k typeName invertedQuery) <$> readJSON' key
 
-addInvertedQueryForDomain :: TypeName -> InvertedQuery -> (TypeName -> InvertedQuery -> SeparateInvertedQuery) -> DomeinFileRecord -> DomeinFileRecord
+addInvertedQueryForDomain :: forall f. TypeName -> InvertedQuery -> (TypeName -> InvertedQuery -> SeparateInvertedQuery) -> DomeinFileRecord f -> DomeinFileRecord f
 addInvertedQueryForDomain typeName iq collectionConstructor dfr@{ invertedQueriesInOtherDomains } = case typeUri2ModelUri typeName of
   Nothing -> dfr
   Just modelName ->
@@ -206,12 +207,12 @@ addInvertedQueryForDomain typeName iq collectionConstructor dfr@{ invertedQuerie
 -------------------------------------------------------------------------------
 -------------------------------------------------------------------------------
 
-defaultDomeinFileRecord :: DomeinFileRecord
+defaultDomeinFileRecord :: forall f. DomeinFileRecord f
 defaultDomeinFileRecord =
   { _rev: Nothing
   , _id: ""
-  , id: DomeinFileId ""
-  , namespace: ""
+  , id: ModelUri ""
+  , namespace: ModelUri ""
   , contexts: empty
   , enumeratedRoles: empty
   , calculatedRoles: empty
@@ -229,16 +230,16 @@ defaultDomeinFileRecord =
   , _attachments: Nothing
   }
 
-defaultDomeinFile :: DomeinFile
+defaultDomeinFile :: forall f. (DomeinFile f)
 defaultDomeinFile = DomeinFile defaultDomeinFileRecord
 
 type DomeinFileEnumeratedRoles = Object EnumeratedRole
 
-setRevision :: String -> DomeinFile -> DomeinFile
+setRevision :: forall f. String -> (DomeinFile f) -> (DomeinFile f)
 setRevision vs (DomeinFile dff) = DomeinFile $ dff { _rev = Just vs }
 
 -- | Returns a table with indexed names as key and ContextType as value.
-indexedContexts :: DomeinFile -> Object ContextType
+indexedContexts :: forall f. (DomeinFile f) -> Object ContextType
 indexedContexts (DomeinFile { contexts }) = execState indexedContexts_ empty
   where
   indexedContexts_ :: State (Object ContextType) Unit
@@ -247,7 +248,7 @@ indexedContexts (DomeinFile { contexts }) = execState indexedContexts_ empty
     Just i -> void $ modify \table -> insert (unwrap i) id table
 
 -- | Returns a table with indexed names as key and ContextType as value.
-indexedRoles :: DomeinFile -> Object EnumeratedRoleType
+indexedRoles :: forall f. (DomeinFile f) -> Object EnumeratedRoleType
 indexedRoles (DomeinFile { enumeratedRoles }) = execState indexedRoles_ empty
   where
   indexedRoles_ :: State (Object EnumeratedRoleType) Unit
@@ -255,7 +256,7 @@ indexedRoles (DomeinFile { enumeratedRoles }) = execState indexedRoles_ empty
     Nothing -> pure unit
     Just i -> void $ modify \table -> insert (unwrap i) id table
 
-addUpstreamNotification :: UpstreamStateNotification -> StateIdentifier -> DomeinFileRecord -> DomeinFileRecord
+addUpstreamNotification :: forall f. UpstreamStateNotification -> StateIdentifier -> DomeinFileRecord f -> DomeinFileRecord f
 addUpstreamNotification notification (StateIdentifier s) dfr@{ upstreamStateNotifications } =
   let
     domeinName = unsafePartial fromJust $ typeUri2ModelUri s
@@ -266,7 +267,7 @@ addUpstreamNotification notification (StateIdentifier s) dfr@{ upstreamStateNoti
           Just ns -> insert domeinName (cons notification ns) upstreamStateNotifications
       }
 
-addUpstreamAutomaticEffect :: UpstreamAutomaticEffect -> StateIdentifier -> DomeinFileRecord -> DomeinFileRecord
+addUpstreamAutomaticEffect :: forall f. UpstreamAutomaticEffect -> StateIdentifier -> DomeinFileRecord f -> DomeinFileRecord f
 addUpstreamAutomaticEffect effect (StateIdentifier s) dfr@{ upstreamAutomaticEffects } =
   let
     domeinName = unsafePartial fromJust $ typeUri2ModelUri s
@@ -277,13 +278,13 @@ addUpstreamAutomaticEffect effect (StateIdentifier s) dfr@{ upstreamAutomaticEff
           Just ns -> insert domeinName (cons effect ns) upstreamAutomaticEffects
       }
 
-addDownStreamNotification :: UpstreamStateNotification -> State DomeinFileRecord Unit
+addDownStreamNotification :: forall f. UpstreamStateNotification -> State (DomeinFileRecord f) Unit
 addDownStreamNotification = modifyDownstreamNotification true
 
-removeDownStreamNotification :: UpstreamStateNotification -> State DomeinFileRecord Unit
+removeDownStreamNotification :: forall f. UpstreamStateNotification -> State (DomeinFileRecord f) Unit
 removeDownStreamNotification = modifyDownstreamNotification false
 
-modifyDownstreamNotification :: Boolean -> UpstreamStateNotification -> State DomeinFileRecord Unit
+modifyDownstreamNotification :: forall f. Boolean -> UpstreamStateNotification -> State (DomeinFileRecord f) Unit
 modifyDownstreamNotification add (UpstreamStateNotification { stateId, isOnEntry, notification, qualifiedUsers }) = void $ modify \dfr@{ states } ->
   case lookup (unwrap stateId) states of
     Nothing -> dfr
@@ -297,13 +298,13 @@ modifyDownstreamNotification add (UpstreamStateNotification { stateId, isOnEntry
     else if add then PEState.State sr { notifyOnExit = addAll notification notifyOnExit qualifiedUsers }
     else PEState.State sr { notifyOnExit = removeAll notification notifyOnExit qualifiedUsers }
 
-addDownStreamAutomaticEffect :: UpstreamAutomaticEffect -> State DomeinFileRecord Unit
+addDownStreamAutomaticEffect :: forall f. UpstreamAutomaticEffect -> State (DomeinFileRecord f) Unit
 addDownStreamAutomaticEffect = modifyDownstreamAutomaticEffect true
 
-removeDownStreamAutomaticEffect :: UpstreamAutomaticEffect -> State DomeinFileRecord Unit
+removeDownStreamAutomaticEffect :: forall f. UpstreamAutomaticEffect -> State (DomeinFileRecord f) Unit
 removeDownStreamAutomaticEffect = modifyDownstreamAutomaticEffect false
 
-modifyDownstreamAutomaticEffect :: Boolean -> UpstreamAutomaticEffect -> State DomeinFileRecord Unit
+modifyDownstreamAutomaticEffect :: forall f. Boolean -> UpstreamAutomaticEffect -> State (DomeinFileRecord f) Unit
 modifyDownstreamAutomaticEffect add (UpstreamAutomaticEffect { stateId, isOnEntry, automaticAction, qualifiedUsers }) = void $ modify \dfr@{ states } ->
   case lookup (unwrap stateId) states of
     Nothing -> dfr

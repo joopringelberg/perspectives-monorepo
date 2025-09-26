@@ -79,7 +79,7 @@ import Perspectives.Proxy (createRequestEmitter, retrieveRequestEmitter)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter, getDynamicPropertyGetterFromLocalName, getPropertyFromTelescope, getPropertyValues, getPublicUrl, getRoleFunction, getRoleInstances)
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Action (Action(..)) as ACTION
-import Perspectives.Representation.Class.PersistentType (DomeinFileId(..), getCalculatedRole, getContext, getEnumeratedRole, getPerspectType)
+import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getContext, getEnumeratedRole, getPerspectType)
 import Perspectives.Representation.Class.Property (hasFacet)
 import Perspectives.Representation.Class.Role (getRoleType, kindOfRole, perspectivesOfRoleType, rangeOfRoleCalculation, roleKindOfRoleType)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
@@ -91,6 +91,7 @@ import Perspectives.ResourceIdentifiers (createPublicIdentifier, guid, resourceI
 import Perspectives.RoleStateCompiler (evaluateRoleState)
 import Perspectives.RunMonadPerspectivesTransaction (detectPublicStateChanges, runMonadPerspectivesTransaction, runMonadPerspectivesTransaction')
 import Perspectives.SaveUserData (removeAllRoleInstances, removeBinding, removeContextIfUnbound, scheduleContextRemoval, scheduleRoleRemoval, setBinding, setFirstBinding, synchronise)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUser, serialisedTableFormForContextAndUser)
@@ -193,7 +194,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
                 logPerspectivesError $ TypeErrorBoundary "Api.GetRoleBinders" (show err)
                 sendResponse (Error corrId (show $ TypeErrorBoundary "Api.GetRoleBinders" (show err))) setter
               Right (EnumeratedRole { context: filledContextType }) -> do
-                void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (DomeinFileId $ unsafePartial typeUri2ModelUri_ (unwrap fillerType)))
+                void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap fillerType)))
                 registerSupportedEffect corrId setter (getFilledRoles filledContextType (EnumeratedRoleType predicate)) (RoleInstance subject) onlyOnce
           filledContextType -> (try $ getContext (ContextType filledContextType)) >>=
             case _ of
@@ -201,7 +202,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
                 logPerspectivesError $ ContextErrorBoundary "Api.GetRoleBinders" (show err)
                 sendResponse (Error corrId (show $ ContextErrorBoundary "Api.GetRoleBinders" (show err))) setter
               Right _ -> do
-                void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (DomeinFileId $ unsafePartial typeUri2ModelUri_ (unwrap fillerType)))
+                void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap fillerType)))
                 registerSupportedEffect corrId setter (getFilledRoles (ContextType filledContextType) (EnumeratedRoleType predicate)) (RoleInstance subject) onlyOnce
     Api.GetRol -> do
       (f :: RoleGetter) <- (getRoleFunction predicate)
@@ -311,7 +312,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
         setter
         ( \_ -> ArrayT $ lift do
             -- Ensure model://perspectives.domains#SharedFileServices is available.
-            void $ retrieveDomeinFile (DomeinFileId sharedFileServices)
+            void $ retrieveDomeinFile (ModelUri sharedFileServices)
             -- Get the indexed context sfs:MySharedFileServices
             -- Then get the role ActualSharedFileServer
             -- Finally return the property FileShareCredentials
@@ -618,7 +619,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
         runMonadPerspectivesTransaction' false authoringRole do
           result <- runExceptT $ traverse
             ( \ctxt@(ContextSerialization { ctype }) -> do
-                void $ lift $ lift $ retrieveDomeinFile (DomeinFileId $ unsafePartial typeUri2ModelUri_ ctype)
+                void $ lift $ lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ ctype)
                 constructContext Nothing ctxt
             )
             ctxts
@@ -735,7 +736,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
             logPerspectivesError $ RolErrorBoundary "Api.CheckBinding" (show err)
             sendResponse (Error corrId (show $ RolErrorBoundary "Api.CheckBinding" (show err))) setter
           Right (PerspectRol { pspType }) -> do
-            void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (DomeinFileId $ unsafePartial typeUri2ModelUri_ (unwrap pspType)))
+            void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap pspType)))
             ok <- checkBinding typeOfRoleToBindTo (RoleInstance object)
             sendResponse (Result corrId [ (show ok) ]) setter
     Api.SetProperty -> catchError
@@ -950,7 +951,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     (Left e :: Either (NonEmptyList ForeignError) ContextSerialization) -> sendResponse (Error corrId (show e)) setter
     (Right cd@(ContextSerialization { ctype }) :: Either (NonEmptyList ForeignError) ContextSerialization) -> do
       void $ runMonadPerspectivesTransaction authoringRole do
-        void $ lift $ retrieveDomeinFile (DomeinFileId $ unsafePartial typeUri2ModelUri_ ctype)
+        void $ lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ ctype)
         ctxt <- runExceptT $ constructContext mroleType cd
         case ctxt of
           (Left messages) -> lift $ sendResponse (Error corrId (show messages)) setter

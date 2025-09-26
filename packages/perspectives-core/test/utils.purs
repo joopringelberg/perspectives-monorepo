@@ -6,17 +6,16 @@ import Data.Array (singleton)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff, error, throwError, try)
-import Effect.Class.Console (log)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
 import Perspectives.DomeinCache (cascadeDeleteDomeinFile)
 import Perspectives.Extern.Couchdb (addModelToLocalStore, isInitialLoad)
 import Perspectives.Persistence.API (createDatabase, deleteDatabase)
 import Perspectives.Persistence.State (getCouchdbBaseURL)
 import Perspectives.Persistent (entitiesDatabaseName, postDatabaseName)
-import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedRoleType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runSterileTransaction, runMonadPerspectivesTransaction')
 import Perspectives.RunPerspectives (runPerspectives)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Test.Unit.Assert as Assert
 
 developmentRepository :: MonadPerspectives String
@@ -89,13 +88,13 @@ clearPostDatabase = do
 
 -- | Load the model, compute the value in MonadPerspectives, unload the model and remove the instances.
 -- | Notice: dependencies of the model are not automatically removed!
-withModel :: forall a. DomeinFileId -> MonadPerspectives a -> MonadPerspectives a
-withModel m@(DomeinFileId id) a = withModel_ m true a
+withModel :: forall a f. ModelUri f -> MonadPerspectives a -> MonadPerspectives a
+withModel m@(ModelUri id) a = withModel_ m true a
 
 -- | Load the model, compute the value in MonadPerspectives, unload the model.
 -- | Either removes instances, or lets them sit in the database.
-withModel_ :: forall a. DomeinFileId -> Boolean -> MonadPerspectives a -> MonadPerspectives a
-withModel_ m@(DomeinFileId id) clear a = do
+withModel_ :: forall a f. ModelUri f -> Boolean -> MonadPerspectives a -> MonadPerspectives a
+withModel_ m@(ModelUri id) clear a = do
   result <- try $ withModel' m a
   if clear then clearUserDatabase else pure unit
   case result of
@@ -104,24 +103,24 @@ withModel_ m@(DomeinFileId id) clear a = do
 
 -- | Load the model, compute the value in MonadPerspectives, unload the model.
 -- | Leaves instances from the computation in the database.
-withModel' :: forall a. DomeinFileId -> MonadPerspectives a -> MonadPerspectives a
-withModel' m@(DomeinFileId id) a = do
+withModel' :: forall a f. ModelUri f -> MonadPerspectives a -> MonadPerspectives a
+withModel' m@(ModelUri id) a = do
   mcdbUrl <- getCouchdbBaseURL
   case mcdbUrl of
     Just cdbUrl -> do
-      void $ runSterileTransaction (addModelToLocalStore (DomeinFileId $ cdbUrl <> "repository/" <> id) isInitialLoad)
+      void $ runSterileTransaction (addModelToLocalStore (ModelUri $ cdbUrl <> "repository/" <> id) isInitialLoad)
       result <- try a
-      void $ cascadeDeleteDomeinFile m
+      void $ cascadeDeleteDomeinFile (ModelUri id)
       case result of
         Left e -> throwError e
         Right r -> pure r
     Nothing -> throwError $ error "Expected a couchdb url"
 
 withSystem :: forall a. MonadPerspectives a -> MonadPerspectives a
-withSystem = withModel (DomeinFileId "model:System")
+withSystem = withModel (ModelUri "model:System")
 
 withSimpleChat :: forall a. MonadPerspectives a -> MonadPerspectives a
-withSimpleChat = withModel (DomeinFileId "model:SimpleChat")
+withSimpleChat = withModel (ModelUri "model:SimpleChat")
 
 -- | Runs an update function (a function in MonadPerspectivesTransaction that produces deltas),
 -- | runs actions as long as they are triggered, sends deltas to other participants and re-runs active queries

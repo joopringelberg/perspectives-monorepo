@@ -15,6 +15,7 @@ import Foreign.Object (lookup)
 import Node.Encoding as ENC
 import Node.FS.Aff (readTextFile)
 import Node.Path as Path
+import Parsing (ParseError)
 import Perspectives.CoreTypes (MonadPerspectives, (###=))
 import Perspectives.DomeinCache (removeDomeinFileFromCache, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
@@ -25,7 +26,7 @@ import Perspectives.Parsing.Arc.AST (ContextE(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
-import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo')
+import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo', toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), queryFunction, range)
 import Perspectives.Representation.ADT (ADT(..))
@@ -38,21 +39,21 @@ import Perspectives.Representation.Perspective (StateSpec(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), propertytype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), propertytype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.Representation.View (View(..))
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Perspectives.Types.ObjectGetters (lookForUnqualifiedPropertyType_)
 import Test.Parsing.DomeinFileSelectors (ensureCRole, ensureDescription, ensureERole, ensureEnumeratedProperty, ensurePerspectiveOn, ensurePropertyVerbsInState, ensureState, enumeratedPropertyIsFunctional, exists, failure, haveVerbs, isCalculationOf, objectOfPerspective, stateQuery, ensureOnEntry)
 import Test.Perspectives.Utils (runP)
 import Test.Unit (Test, TestF, TestSuite, suite, suiteOnly, suiteSkip, test, testOnly, testSkip)
 import Test.Unit.Assert (assert)
-import Parsing (ParseError)
 
-withDomeinFile :: forall a. Namespace -> DomeinFile -> MonadPerspectives a -> MonadPerspectives a
+withDomeinFile :: forall a. Namespace -> DomeinFile Readable -> MonadPerspectives a -> MonadPerspectives a
 withDomeinFile ns df mpa = do
-  void $ storeDomeinFileInCache (DomeinFileId ns) df
+  void $ storeDomeinFileInCache (ModelUri ns) (toStableDomeinFile df)
   r <- mpa
-  removeDomeinFileFromCache (DomeinFileId ns)
+  removeDomeinFileFromCache (ModelUri ns)
   pure r
 
 theSuite :: Free TestF Unit
@@ -827,7 +828,7 @@ expectErrorOnly = expectErrorX testOnly
 
 type TestName = String
 type ModelText = String
-type Criterium = ((Either PerspectivesError DomeinFileRecord) -> Aff Unit)
+type Criterium = ((Either PerspectivesError (DomeinFileRecord Readable)) -> Aff Unit)
 expectErrorX ::
   (String -> Test -> TestSuite) ->
   TestName ->
@@ -852,7 +853,7 @@ expectErrorX theTest testName modelText resultTester = do
                 Left errs -> for_ errs (resultTester <<< Left)
               -- resultTester x
 
-type DomainTester = (DomeinFileRecord -> Aff Unit)
+type DomainTester = (DomeinFileRecord Readable -> Aff Unit)
 
 domainTest :: TestName -> ModelText -> DomainTester -> TestSuite
 domainTest = domainTestX test

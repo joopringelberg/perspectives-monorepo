@@ -145,8 +145,9 @@ import Perspectives.Repetition (Duration)
 import Perspectives.Representation.Class.Identifiable (class Identifiable, identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic)
-import Perspectives.Representation.TypeIdentifiers (ContextType, DomeinFileId(..), EnumeratedPropertyType, EnumeratedRoleType, ResourceType, RoleType, StateIdentifier)
+import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, ResourceType, RoleType, StateIdentifier)
 import Perspectives.ResourceIdentifiers.Parser (pouchdbDatabaseName)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Perspectives.Sync.Transaction (Transaction)
 import Prelude (class Eq, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, eq, pure, show, unit, ($), (<<<), (<>), (>>=))
 import Simple.JSON (class ReadForeign, class WriteForeign)
@@ -157,7 +158,7 @@ import Unsafe.Coerce (unsafeCoerce)
 -----------------------------------------------------------
 type ContextInstances = Cache (AVar PerspectContext)
 type RolInstances = Cache (AVar PerspectRol)
-type DomeinCache = Cache (AVar DomeinFile)
+type DomeinCache = Cache (AVar (DomeinFile Stable))
 
 type QueryInstances = Cache (Array InvertedQuery)
 
@@ -281,7 +282,7 @@ data RepeatingTransaction
       , startMoment :: Duration
       }
 
-data JustInTimeModelLoad = LoadModel DomeinFileId | ModelLoaded | LoadingFailed String | Stop | HotLine (AVar JustInTimeModelLoad)
+data JustInTimeModelLoad = LoadModel (ModelUri Stable) | ModelLoaded | LoadingFailed String | Stop | HotLine (AVar JustInTimeModelLoad)
 
 -----------------------------------------------------------
 -- ASSUMPTIONS
@@ -558,7 +559,7 @@ data IntegrityFix = Missing ResourceToBeStored | FixSucceeded | FixFailed String
 data ResourceToBeStored
   = Ctxt ContextInstance
   | Rle RoleInstance
-  | Dfile DomeinFileId
+  | Dfile (ModelUri Stable)
 
 instance Eq ResourceToBeStored where
   eq (Ctxt c1) (Ctxt c2) = eq c1 c2
@@ -571,7 +572,7 @@ instance Show ResourceToBeStored where
   show (Rle r) = show r
   show (Dfile d) = show d
 
-instance cacheableDomeinFile :: Cacheable DomeinFile DomeinFileId where
+instance cacheableDomeinFile :: Cacheable (DomeinFile Stable) (ModelUri Stable) where
   theCache = gets _.domeinCache
   representInternally c = do
     av <- liftAff empty
@@ -621,8 +622,8 @@ remove g k = do
   _ <- liftEffect $ delete k dc
   pure ma
 
-instance persistentInstanceDomeinFile :: Persistent DomeinFile DomeinFileId where
-  dbLocalName (DomeinFileId id) = pouchdbDatabaseName id
+instance persistentInstanceDomeinFile :: Persistent (DomeinFile Stable) (ModelUri Stable) where
+  dbLocalName (ModelUri id) = pouchdbDatabaseName id
   addPublicResource _ = pure unit
   resourceToBeStored df = Dfile $ identifier df
   resourceIdToBeStored id = Dfile id

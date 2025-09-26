@@ -37,7 +37,7 @@ import Foreign.Object (fromFoldable, union, lookup) as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinCache (removeDomeinFileFromCache, storeDomeinFileInCache)
-import Perspectives.DomeinFile (DomeinFile, DomeinFileRecord, defaultDomeinFileRecord)
+import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
 import Perspectives.Instances.Environment (Environment, _pushFrame)
 import Perspectives.Instances.Environment (addVariable, empty, lookup) as ENV
 import Perspectives.InvertedQuery.Storable (StoredQueries, StorableInvertedQuery)
@@ -48,7 +48,8 @@ import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError, MultiplePerspectivesErrors)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription)
 import Perspectives.Representation.Perspective (Perspective)
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType, DomeinFileId(..), EnumeratedRoleType, RoleType)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType, EnumeratedRoleType, RoleType)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Prelude (class Eq, class Monad, Unit, bind, discard, eq, identity, map, pure, show, void, ($), (<$>), (<<<), (<>), (>>=))
 
 -- TODO
@@ -58,9 +59,9 @@ import Prelude (class Eq, class Monad, Unit, bind, discard, eq, identity, map, p
 
 type PhaseTwoState =
   { bot :: Boolean
-  , dfr :: DomeinFileRecord
+  , dfr :: DomeinFileRecord Readable
   , namespaces :: Object String
-  , referredModels :: Array DomeinFileId
+  , referredModels :: Array (ModelUri Readable)
   , indexedContexts :: Object ContextType
   , indexedRoles :: Object EnumeratedRoleType
   -- In PhaseTwoState, variables are bound to QueryFunctionDescriptions.
@@ -97,7 +98,7 @@ runPhaseTwo' computation = runPhaseTwo_' computation defaultDomeinFileRecord emp
 runPhaseTwo_'
   :: forall a m
    . PhaseTwo' m a
-  -> DomeinFileRecord
+  -> DomeinFileRecord Readable
   -> Object ContextType
   -> Object EnumeratedRoleType
   -> List StateQualifiedPart
@@ -122,7 +123,7 @@ runPhaseTwo_' computation dfr indexedContexts indexedRoles postponedParts = runS
 evalPhaseTwo' :: forall a m. Monad m => PhaseTwo' m a -> m (Either MultiplePerspectivesErrors a)
 evalPhaseTwo' computation = evalPhaseTwo_' computation defaultDomeinFileRecord empty empty
 
-evalPhaseTwo_' :: forall a m. Monad m => PhaseTwo' m a -> DomeinFileRecord -> Object ContextType -> Object EnumeratedRoleType -> m (Either MultiplePerspectivesErrors a)
+evalPhaseTwo_' :: forall a m. Monad m => PhaseTwo' m a -> DomeinFileRecord Readable -> Object ContextType -> Object EnumeratedRoleType -> m (Either MultiplePerspectivesErrors a)
 evalPhaseTwo_' computation drf indexedContexts indexedRoles = evalStateT (runExceptT computation)
   { bot: false
   , dfr: drf
@@ -156,14 +157,14 @@ subjectIsNotABot = lift $ void $ modify (\s -> s { bot = false })
 isSubjectBot :: PhaseTwo Boolean
 isSubjectBot = lift $ gets _.bot
 
-modifyDF :: forall m. MonadState PhaseTwoState m => (DomeinFileRecord -> DomeinFileRecord) -> m Unit
+modifyDF :: forall m. MonadState PhaseTwoState m => (DomeinFileRecord Readable -> DomeinFileRecord Readable) -> m Unit
 modifyDF f = void $ modify \s@{ dfr } -> s { dfr = f dfr }
 
-getDF :: PhaseTwo DomeinFileRecord
+getDF :: PhaseTwo (DomeinFileRecord Readable)
 getDF = lift $ gets _.dfr
 
 -- | Get a part of the DomeinFileRecord from PhaseTwoState.
-getsDF :: forall m n. MonadState PhaseTwoState m => (DomeinFileRecord -> n) -> m n
+getsDF :: forall m n. MonadState PhaseTwoState m => (DomeinFileRecord Readable -> n) -> m n
 getsDF f = gets (f <<< _.dfr)
 
 getLoopdetection :: PhaseThree LoopDetection
@@ -224,7 +225,7 @@ withNamespaces pairs pt = do
   -- replace keys in ns with values found in x.
   void $ modify \(s@{ namespaces, referredModels }) -> s
     { namespaces = x `OBJ.union` namespaces
-    , referredModels = referredModels `union` (DomeinFileId <$> values x)
+    , referredModels = referredModels `union` (ModelUri <$> values x)
     }
   ctxt <- pt
   void $ modify \s -> s { namespaces = ns }
@@ -257,12 +258,26 @@ findPerspective subject object = do
 -- insertPerspective :: forall m. Monad m => Perspective -> PhaseTwo' Unit m
 -- insertPerspective perspective@(Perspective{subject, object}) = void $ lift $ modify \r@{perspectives} -> r {perspectives = MAP.insert (Tuple (roletype2string subject) object) perspective perspectives}
 
-withDomeinFile :: forall a. DomeinFileId -> DomeinFile -> PhaseThree a -> PhaseThree a
-withDomeinFile ns df mpa = do
-  void $ lift2 $ storeDomeinFileInCache ns df
+withDomeinFile :: forall a. ModelUri Readable -> DomeinFile Readable -> PhaseThree a -> PhaseThree a
+withDomeinFile (ModelUri ns) df mpa = do
+  let (mStable :: ModelUri Stable) = ModelUri ns
+  let (dfStable :: DomeinFile Stable) = toStableDomeinFile df
+  void $ lift2 $ storeDomeinFileInCache mStable dfStable
   r <- mpa
-  lift2 $ removeDomeinFileFromCache ns
+  lift2 $ removeDomeinFileFromCache (ModelUri ns :: ModelUri Stable)
   pure r
+
+toStableModelUri :: forall f. ModelUri f -> ModelUri Stable
+toStableModelUri (ModelUri s) = ModelUri s
+
+toReadableModelUri :: forall f. ModelUri f -> ModelUri Readable
+toReadableModelUri (ModelUri s) = ModelUri s
+
+toStableDomeinFile :: DomeinFile Readable -> DomeinFile Stable
+toStableDomeinFile (DomeinFile r) = let r' = r { id = toStableModelUri r.id, referredModels = map toStableModelUri r.referredModels } in DomeinFile r'
+
+toReadableDomeinFile :: DomeinFile Stable -> DomeinFile Readable
+toReadableDomeinFile (DomeinFile r) = let r' = r { id = toReadableModelUri r.id, referredModels = map toReadableModelUri r.referredModels } in DomeinFile r'
 
 -- | Add a StorableInvertedQuery to PhaseTwo State.
 addStorableInvertedQuery :: StorableInvertedQuery -> PhaseThree Unit

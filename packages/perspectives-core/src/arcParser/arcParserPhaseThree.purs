@@ -65,9 +65,7 @@ import Perspectives.Parsing.Arc.PhaseThree.CheckPerspectivesModifiers (checkPers
 import Perspectives.Parsing.Arc.PhaseThree.PerspectiveContextualisation (addAspectsToExternalRoles, contextualisePerspectives)
 import Perspectives.Parsing.Arc.PhaseThree.Screens (collectPropertyTypes, collectRoles, handleScreens, roleIdentification2Context, roleIdentification2Step)
 import Perspectives.Parsing.Arc.PhaseThree.SetInvertedQueries (setInvertedQueries)
-import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, lift2, modifyDF, runPhaseTwo_', throwError, withDomeinFile, withFrame)
-import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith)
-import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
+import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, lift2, modifyDF, runPhaseTwo_', throwError, toReadableDomeinFile, toStableDomeinFile, toStableModelUri, withDomeinFile, withFrame)
 import Perspectives.Parsing.Arc.Position (ArcPosition, arcParserStartPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
 import Perspectives.Persistent (getDomeinFile)
@@ -97,34 +95,37 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), and)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.Representation.UserGraph.Build (buildUserGraph)
 import Perspectives.Representation.View (View(..))
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
+import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
+import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith)
 import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, hasContextAspect, isPerspectiveOnSelf, lookForUnqualifiedPropertyType_, roleStates, statesPerProperty, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
 import Prelude (Unit, append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=))
 
 -- Currently only used in tests and in loadArcFS - but that has to change to phaseThreeWithMapping.
 phaseThree
-  :: DomeinFileRecord
+  :: DomeinFileRecord Readable
   -> LIST.List AST.StateQualifiedPart
   -> LIST.List AST.ScreenE
-  -> MP (Either MultiplePerspectivesErrors (Tuple DomeinFileRecord StoredQueries))
+  -> MP (Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries))
 phaseThree df@{ id } postponedParts screens = do
   -- Store the DomeinFile in cache. If a prefix for the domain is defined in the file,
   -- phaseThree_ will try to retrieve it.
-  void $ storeDomeinFileInCache id (DomeinFile df)
+  void $ storeDomeinFileInCache (toStableModelUri id) (toStableDomeinFile (DomeinFile df))
   result <- phaseThreeWithMapping_ df postponedParts screens Nothing
-  removeDomeinFileFromCache id
+  removeDomeinFileFromCache (toStableModelUri id)
   pure result
 
 -- NOTE THIS FUNCTION IS PROBABLY OBSOLETE (NEVER CALLED)
 phaseThree_
-  :: DomeinFileRecord
+  :: DomeinFileRecord Readable
   -> LIST.List AST.StateQualifiedPart
   -> LIST.List AST.ScreenE
-  -> MP (Either MultiplePerspectivesErrors (Tuple DomeinFileRecord StoredQueries))
+  -> MP (Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries))
 phaseThree_ df@{ id, referredModels } postponedParts screens = do
   -- We don't expect an error on retrieving the DomeinFile, as we've only just put it into cache!
-  indexedContexts <- unions <$> traverse (getDomeinFile >=> pure <<< indexedContexts) referredModels
-  indexedRoles <- unions <$> traverse (getDomeinFile >=> pure <<< indexedRoles) referredModels
+  indexedContexts <- unions <$> traverse (getDomeinFile <<< toStableModelUri >=> pure <<< indexedContexts) referredModels
+  indexedRoles <- unions <$> traverse (getDomeinFile <<< toStableModelUri >=> pure <<< indexedRoles) referredModels
   (Tuple ei { dfr, invertedQueries }) <-
     runPhaseTwo_'
       ( do
@@ -161,29 +162,29 @@ phaseThree_ df@{ id, referredModels } postponedParts screens = do
     otherwise -> pure $ Right (Tuple dfr invertedQueries)
 
 phaseThreeWithMapping
-  :: DomeinFileRecord
+  :: DomeinFileRecord Readable
   -> LIST.List AST.StateQualifiedPart
   -> LIST.List AST.ScreenE
   -> Maybe StableIdMapping
-  -> MP (Either MultiplePerspectivesErrors (Tuple DomeinFileRecord StoredQueries))
+  -> MP (Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries))
 phaseThreeWithMapping df@{ id } postponedParts screens mMapping = do
   -- Store the DomeinFile in cache. If a prefix for the domain is defined in the file,
   -- phaseThree_ will try to retrieve it.
-  void $ storeDomeinFileInCache id (DomeinFile df)
+  void $ storeDomeinFileInCache (toStableModelUri id) (toStableDomeinFile $ DomeinFile df)
   result <- phaseThreeWithMapping_ df postponedParts screens mMapping
-  removeDomeinFileFromCache id
+  removeDomeinFileFromCache (toStableModelUri id)
   pure result
 
 -- New entry that accepts an optional sidecar mapping.
 phaseThreeWithMapping_
-  :: DomeinFileRecord
+  :: DomeinFileRecord Readable
   -> LIST.List AST.StateQualifiedPart
   -> LIST.List AST.ScreenE
   -> Maybe StableIdMapping
-  -> MP (Either MultiplePerspectivesErrors (Tuple DomeinFileRecord StoredQueries))
+  -> MP (Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries))
 phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping = do
-  indexedContexts <- unions <$> traverse (getDomeinFile >=> pure <<< indexedContexts) referredModels
-  indexedRoles <- unions <$> traverse (getDomeinFile >=> pure <<< indexedRoles) referredModels
+  indexedContexts <- unions <$> traverse (getDomeinFile <<< toStableModelUri >=> pure <<< indexedContexts) referredModels
+  indexedRoles <- unions <$> traverse (getDomeinFile <<< toStableModelUri >=> pure <<< indexedRoles) referredModels
   let
     dfMapped = case mMapping of
       Nothing -> df
@@ -223,7 +224,7 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
     Left e -> Left e
     Right _ -> Right (Tuple dfr invertedQueries)
 
-getDF :: Unit -> PhaseThree DomeinFileRecord
+getDF :: Unit -> PhaseThree (DomeinFileRecord Readable)
 getDF _ = lift $ State.gets _.dfr
 
 -- | Aspect roles are added by default as Enumerated to their context. However, they may be Calculated and only now can we check.
@@ -236,7 +237,7 @@ checkAspectRoleReferences = do
     (DomeinFile df)
     (checkAspectRoles' df)
   where
-  checkAspectRoles' :: DomeinFileRecord -> PhaseThree Unit
+  checkAspectRoles' :: DomeinFileRecord Readable -> PhaseThree Unit
   checkAspectRoles' { contexts } = do
     contexts' <- for contexts
       \(CTXT.Context r@{ contextRol, rolInContext, gebruikerRol }) -> do
@@ -255,11 +256,11 @@ checkAspectRoleReferences = do
 -- | We qualify a name only by searching the roles of the domain. Role names that have the segmentedName as a suffix
 -- | are candidates to qualify it. Only one such Role may exist in the domain!
 -- | Note that this function requires the DomeinFile to be available in the cache.
--- | This function just uses the DomeinFileRecord that is passed in as an argument.
+-- | This function just uses the DomeinFileRecord Readable that is passed in as an argument.
 qualifyBindings :: PhaseThree Unit
 qualifyBindings = (lift $ State.gets _.dfr) >>= qualifyBindings'
   where
-  qualifyBindings' :: DomeinFileRecord -> PhaseThree Unit
+  qualifyBindings' :: DomeinFileRecord Readable -> PhaseThree Unit
   qualifyBindings' { enumeratedRoles: eroles, calculatedRoles: croles, contexts } = for_ eroles
     ( \(EnumeratedRole rr@{ id, binding: mfiller, pos }) -> case mfiller of
         Nothing -> pure unit
@@ -341,7 +342,7 @@ qualifyBindings = (lift $ State.gets _.dfr) >>= qualifyBindings'
 qualifyStateNames :: PhaseThree Unit
 qualifyStateNames = (lift $ State.gets _.dfr) >>= qualifyStateNames'
   where
-  qualifyStateNames' :: DomeinFileRecord -> PhaseThree Unit
+  qualifyStateNames' :: DomeinFileRecord Readable -> PhaseThree Unit
   qualifyStateNames' { states } =
     for states
       ( \(State sr@{ id }) -> do
@@ -359,7 +360,7 @@ qualifyStateNames = (lift $ State.gets _.dfr) >>= qualifyStateNames'
 requalifyBindingsToCalculatedRoles :: PhaseThree Unit
 requalifyBindingsToCalculatedRoles = (lift $ State.gets _.dfr) >>= qualifyBindings'
   where
-  qualifyBindings' :: DomeinFileRecord -> PhaseThree Unit
+  qualifyBindings' :: DomeinFileRecord Readable -> PhaseThree Unit
   qualifyBindings' { enumeratedRoles: eroles, calculatedRoles: croles } = for_ eroles
     ( \(EnumeratedRole rr@{ id, binding: mfiller, pos }) -> do
         case mfiller of
@@ -393,7 +394,7 @@ qualifyPropertyReferences = do
     (DomeinFile df)
     (qualifyPropertyReferences' df)
   where
-  qualifyPropertyReferences' :: DomeinFileRecord -> PhaseThree Unit
+  qualifyPropertyReferences' :: DomeinFileRecord Readable -> PhaseThree Unit
   qualifyPropertyReferences' df@{ id, views, calculatedProperties, enumeratedRoles } = do
     qviews <- traverseWithIndex qualifyView views
     enumeratedRoles' <- traverse (unsafePartial qualifyAliases) enumeratedRoles
@@ -440,7 +441,7 @@ qualifyPropertyReferences = do
 --     (DomeinFile df)
 --     (invertedQueriesForLocalRolesAndProperties' df)
 --   where
---     invertedQueriesForLocalRolesAndProperties' :: DomeinFileRecord -> PhaseThree Unit
+--     invertedQueriesForLocalRolesAndProperties' :: DomeinFileRecord Readable -> PhaseThree Unit
 --     invertedQueriesForLocalRolesAndProperties' {enumeratedRoles} = do
 --       for_ enumeratedRoles
 --         \(EnumeratedRole {id, context, mandatory, functional}) -> do
@@ -466,14 +467,14 @@ compileCalculatedRoles = do
     (DomeinFile df)
     (compileCalculatedRoles' df)
   where
-  compileCalculatedRoles' :: DomeinFileRecord -> PhaseThree Unit
+  compileCalculatedRoles' :: DomeinFileRecord Readable -> PhaseThree Unit
   compileCalculatedRoles' { id, calculatedRoles, states, enumeratedRoles } = do
     traverse_ compileRolExpr (identifier <$> calculatedRoles)
     -- The objects of perspectives are compiled when we handle the postponedStateQualifiedParts.
     -- Get the DomeinFile out of cache and replace the one in PhaseTwoState with it.
     -- We will not have errors on trying to retrieve the DomeinFile here.
-    DomeinFile modifiedDomeinFile <- lift2 $ getDomeinFile id
-    modifyDF \dfr -> modifiedDomeinFile
+    DomeinFile modifiedDomeinFile <- lift2 $ getDomeinFile (ModelUri $ unwrap id)
+    modifyDF \dfr -> unwrap $ toReadableDomeinFile (DomeinFile modifiedDomeinFile)
     where
     compileRolExpr :: CalculatedRoleType -> PhaseThree Unit
     compileRolExpr roleType = do
@@ -493,14 +494,14 @@ compileCalculatedProperties = do
     (DomeinFile df)
     (compileCalculatedProperties' df)
   where
-  compileCalculatedProperties' :: DomeinFileRecord -> PhaseThree Unit
+  compileCalculatedProperties' :: DomeinFileRecord Readable -> PhaseThree Unit
   compileCalculatedProperties' { id, calculatedProperties, states, enumeratedRoles } = do
     traverse_ compilePropertyExpr (identifier <$> calculatedProperties)
     -- The objects of perspectives are compiled when we handle the postponedStateQualifiedParts.
     -- Get the DomeinFile out of cache and replace the one in PhaseTwoState with it.
     -- We will not have errors on trying to retrieve the DomeinFile here.
-    DomeinFile modifiedDomeinFile <- lift2 $ getDomeinFile id
-    modifyDF \dfr -> modifiedDomeinFile
+    DomeinFile modifiedDomeinFile <- lift2 $ getDomeinFile (ModelUri $ unwrap id)
+    modifyDF \dfr -> unwrap $ toReadableDomeinFile (DomeinFile modifiedDomeinFile)
     where
     compilePropertyExpr :: CalculatedPropertyType -> PhaseThree Unit
     compilePropertyExpr propertyType = do
@@ -524,14 +525,14 @@ compilePublicUrls = do
     (DomeinFile df)
     (compilePublicUrls' df)
   where
-  compilePublicUrls' :: DomeinFileRecord -> PhaseThree Unit
+  compilePublicUrls' :: DomeinFileRecord Readable -> PhaseThree Unit
   compilePublicUrls' { id, enumeratedRoles } = do
     traverse_ compilePublicUrlExpr (identifier <$> enumeratedRoles)
     -- The objects of perspectives are compiled when we handle the postponedStateQualifiedParts.
     -- Get the DomeinFile out of cache and replace the one in PhaseTwoState with it.
     -- We will not have errors on trying to retrieve the DomeinFile here.
-    DomeinFile modifiedDomeinFile <- lift2 $ getDomeinFile id
-    modifyDF \dfr -> modifiedDomeinFile
+    DomeinFile modifiedDomeinFile <- lift2 $ getDomeinFile (ModelUri $ unwrap id)
+    modifyDF \dfr -> unwrap $ toReadableDomeinFile (DomeinFile modifiedDomeinFile)
     where
     compilePublicUrlExpr :: EnumeratedRoleType -> PhaseThree Unit
     compilePublicUrlExpr roleType = do
@@ -551,7 +552,7 @@ compilePublicUrls = do
           -- Check.
           case range compiledExpression of
             -- Save the result in DomeinCache.
-            VDOM PString _ -> lift2 $ void $ modifyEnumeratedRoleInDomeinFile id (EnumeratedRole er { publicUrl = Just $ Q compiledExpression })
+            VDOM PString _ -> lift2 $ void $ modifyEnumeratedRoleInDomeinFile (ModelUri $ unwrap id) (EnumeratedRole er { publicUrl = Just $ Q compiledExpression })
             ran -> throwError (NotAStringDomain compiledExpression pos pos)
 
 handlePostponedStateQualifiedParts :: PhaseThree Unit
@@ -1437,7 +1438,7 @@ handlePostponedStateQualifiedParts = do
 -- part of a model that is referred to by the current model.
 isUpstreamModelState :: StateIdentifier -> PhaseThree Boolean
 isUpstreamModelState (StateIdentifier s) = do
-  thisModel <- State.gets (_.namespace <<< _.dfr)
+  ModelUri thisModel <- State.gets (_.namespace <<< _.dfr)
   if s `startsWithSegments` thisModel then pure false
   else do
     upstreamModels <- State.gets (map unwrap <<< _.referredModels <<< _.dfr)
@@ -1476,7 +1477,7 @@ invertPerspectiveObjects = do
     (DomeinFile df)
     (addInvertedQueries' df)
   where
-  addInvertedQueries' :: DomeinFileRecord -> PhaseThree Unit
+  addInvertedQueries' :: DomeinFileRecord Readable -> PhaseThree Unit
   addInvertedQueries' { enumeratedRoles, calculatedRoles } = do
     traverse_ perspectivesInEnumeratedRole enumeratedRoles
     traverse_ perspectivesInCalculatedRole calculatedRoles
@@ -1583,7 +1584,7 @@ compileStateQueries = do
     (DomeinFile df)
     (compileStateQueries' df)
   where
-  compileStateQueries' :: DomeinFileRecord -> PhaseThree Unit
+  compileStateQueries' :: DomeinFileRecord Readable -> PhaseThree Unit
   compileStateQueries' df@{ states } = do
     states' <- for states ensureStateQueryCompiled
     modifyDF \dfr -> dfr { states = states' }

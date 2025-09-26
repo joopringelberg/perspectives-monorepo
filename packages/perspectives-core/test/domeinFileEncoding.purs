@@ -17,7 +17,7 @@ import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Query.QueryTypes (Calculation)
 import Perspectives.Representation.State (State(..))
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..))
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.TypePersistence.LoadArc.FS (loadCompileAndCacheArcFile)
 import Simple.JSON (read, readImpl, write, writeImpl)
 import Test.Perspectives.Utils (runP)
@@ -38,7 +38,7 @@ theSuite = suite "Perspectives.Extern.Couchdb" do
     errs <- loadCompileAndCacheArcFile "utilities" modelDirectory
     if null errs
       then do
-        target <- retrieveDomeinFile $ DomeinFileId "model://perspectives.domains#Utilities"
+        target <- retrieveDomeinFile $ ModelUri "model://perspectives.domains#Utilities"
         encodedTarget <- pure $ writeImpl target
         decodedTarget <- pure $ unwrap $ runExceptT $ readImpl encodedTarget
         case decodedTarget of
@@ -55,7 +55,7 @@ theSuite = suite "Perspectives.Extern.Couchdb" do
     errs <- loadCompileAndCacheArcFile "perspectivesSysteem" modelDirectory
     if null errs
       then do
-        target <- retrieveDomeinFile $ DomeinFileId "model://perspectives.domains#System"
+        target <- retrieveDomeinFile $ ModelUri "model://perspectives.domains#System"
         encodedTarget <- pure $ writeImpl target
         decodedTarget <- pure $ unwrap $ runExceptT $ readImpl encodedTarget
         case decodedTarget of
@@ -73,7 +73,7 @@ theSuite = suite "Perspectives.Extern.Couchdb" do
     errs <- loadCompileAndCacheArcFile "BodiesWithAccounts" modelDirectory
     if null errs
       then do
-        target <- retrieveDomeinFile $ DomeinFileId "model://perspectives.domains#BodiesWithAccounts"
+        target <- retrieveDomeinFile $ ModelUri "model://perspectives.domains#BodiesWithAccounts"
         encodedTarget <- pure $ writeImpl target
         decodedTarget <- pure $ unwrap $ runExceptT $ readImpl encodedTarget
         case decodedTarget of
@@ -94,7 +94,7 @@ theSuite = suite "Perspectives.Extern.Couchdb" do
     errs <- loadCompileAndCacheArcFile "couchdbManagement_new" modelDirectory
     if null errs
       then do
-        target <- retrieveDomeinFile $ DomeinFileId "model://perspectives.domains#CouchdbManagement"
+        target <- retrieveDomeinFile $ ModelUri "model://perspectives.domains#CouchdbManagement"
         encodedTarget <- pure $ writeImpl target
         decodedTarget <- pure $ unwrap $ runExceptT $ readImpl encodedTarget
         case decodedTarget of
@@ -109,7 +109,7 @@ theSuite = suite "Perspectives.Extern.Couchdb" do
     errs <- loadCompileAndCacheArcFile "perspectivesSysteem" modelDirectory
     if null errs
       then do
-        (DomeinFile{states}) <- retrieveDomeinFile $ DomeinFileId "model:System"
+        (DomeinFile{states}) <- retrieveDomeinFile $ ModelUri "model:System"
         case lookup "model:System$PerspectivesSystem$IndexedContexts$Dangles" states of
           Nothing -> liftAff $ assert ("There should have been an entry in states for " <> "model:System$PerspectivesSystem$IndexedContexts$Dangles") false
           Just target -> do
@@ -127,7 +127,7 @@ theSuite = suite "Perspectives.Extern.Couchdb" do
     errs <- loadCompileAndCacheArcFile "perspectivesSysteem" modelDirectory
     if null errs
       then do
-        (DomeinFile{states}) <- retrieveDomeinFile $ DomeinFileId "model:System"
+        (DomeinFile{states}) <- retrieveDomeinFile $ ModelUri "model:System"
         case lookup "model:System$PerspectivesSystem$IndexedContexts$Dangles" states of
           Nothing -> liftAff $ assert ("There should have been an entry in states for " <> "model:System$PerspectivesSystem$IndexedContexts$Dangles") false
           Just (State{query:target}) -> do

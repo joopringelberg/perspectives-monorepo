@@ -37,24 +37,25 @@ exists :: forall a. a -> Aff Unit
 exists _ = pure unit
 
 both :: forall a. (a -> Aff Unit) -> (a -> Aff Unit) -> a -> Aff Unit
-both f s  a = f a *> s a *> pure unit
+both f s a = f a *> s a *> pure unit
 
 all :: forall a. (Array (a -> Aff Unit)) -> a -> Aff Unit
 all fs a = for_ fs (\f -> f a)
+
 --------------------------------------------------------------------------------
 ---- ENUMERATEDPROPERTY
 --------------------------------------------------------------------------------
-ensureEnumeratedProperty :: String -> DomeinFileRecord -> Aff EnumeratedProperty
-ensureEnumeratedProperty pname {enumeratedProperties} = case lookup pname enumeratedProperties of
+ensureEnumeratedProperty :: forall f. String -> DomeinFileRecord f -> Aff EnumeratedProperty
+ensureEnumeratedProperty pname { enumeratedProperties } = case lookup pname enumeratedProperties of
   Nothing -> failure ("No property '" <> pname <> "'.")
   Just p -> pure p
 
 --------------------------------------------------------------------------------
 ---- ENUMERATEDROLE
 --------------------------------------------------------------------------------
-ensureERole :: String -> DomeinFileRecord -> Aff EnumeratedRole
-ensureERole roleName {enumeratedRoles} = case lookup roleName enumeratedRoles of
-  Nothing -> failure  ("There should be a role '" <> roleName <> "'.")
+ensureERole :: forall f. String -> DomeinFileRecord f -> Aff EnumeratedRole
+ensureERole roleName { enumeratedRoles } = case lookup roleName enumeratedRoles of
+  Nothing -> failure ("There should be a role '" <> roleName <> "'.")
   Just erole -> pure erole
 
 -- | Ensure the object is compiled to a description before applying this function
@@ -62,10 +63,14 @@ ensureERole roleName {enumeratedRoles} = case lookup roleName enumeratedRoles of
 -- | NOTE: we assume that roleName is not instantiated as an Aspect role in another context
 -- | (we derive the context type as the lexical context of the EnumeratedRoleType)
 ensurePerspectiveOn :: String -> EnumeratedRole -> Aff Perspective.Perspective
-ensurePerspectiveOn roleName (EnumeratedRole{perspectives}) = case head $ filter
-  (unsafePartial Perspective.objectOfPerspective >>> eq (ST $ RoleInContext {context: ContextType $ typeUri2typeNameSpace_ roleName, role: EnumeratedRoleType roleName})) perspectives of
-  Nothing -> failure  ("There should be a Perspective on '" <> roleName <> "'.")
-  Just p -> pure p
+ensurePerspectiveOn roleName (EnumeratedRole { perspectives }) =
+  case
+    head $ filter
+      (unsafePartial Perspective.objectOfPerspective >>> eq (ST $ RoleInContext { context: ContextType $ typeUri2typeNameSpace_ roleName, role: EnumeratedRoleType roleName }))
+      perspectives
+    of
+    Nothing -> failure ("There should be a Perspective on '" <> roleName <> "'.")
+    Just p -> pure p
 
 -- | Use this function in phaseThree.
 -- ensureObjectsAreCompiled :: EnumeratedRole -> Aff EnumeratedRole
@@ -79,40 +84,42 @@ ensurePerspectiveOn roleName (EnumeratedRole{perspectives}) = case head $ filter
 --------------------------------------------------------------------------------
 ---- CALCULATEDROLE
 --------------------------------------------------------------------------------
-ensureCRole :: String -> DomeinFileRecord -> Aff CalculatedRole
-ensureCRole roleName {calculatedRoles} = case lookup roleName calculatedRoles of
-  Nothing -> failure  ("There should be a role '" <> roleName <> "'.")
+ensureCRole :: forall f. String -> DomeinFileRecord f -> Aff CalculatedRole
+ensureCRole roleName { calculatedRoles } = case lookup roleName calculatedRoles of
+  Nothing -> failure ("There should be a role '" <> roleName <> "'.")
   Just erole -> pure erole
-
 
 --------------------------------------------------------------------------------
 ---- ROLEHASPROPERTY
 --------------------------------------------------------------------------------
 ensureEnumeratedRoleHasProperty :: String -> EnumeratedRole -> Aff PropertyType
-ensureEnumeratedRoleHasProperty name (EnumeratedRole{id, properties}) = case find
-  (case _ of
-    ENP (EnumeratedPropertyType n) -> n == name
-    CP (CalculatedPropertyType n) -> n == name) properties of
-  Nothing -> failure ("Role '" <> show id <> "' has no property '" <> name <> "'.")
-  Just r -> pure r
+ensureEnumeratedRoleHasProperty name (EnumeratedRole { id, properties }) =
+  case
+    find
+      ( case _ of
+          ENP (EnumeratedPropertyType n) -> n == name
+          CP (CalculatedPropertyType n) -> n == name
+      )
+      properties
+    of
+    Nothing -> failure ("Role '" <> show id <> "' has no property '" <> name <> "'.")
+    Just r -> pure r
 
 enumeratedPropertyIsFunctional :: Boolean -> EnumeratedProperty -> Aff Unit
-enumeratedPropertyIsFunctional b (EnumeratedProperty{functional}) = if functional == b
-  then pure unit
-  else if b
-    then failure "Property is not functional."
-    else failure "Property is functional."
+enumeratedPropertyIsFunctional b (EnumeratedProperty { functional }) =
+  if functional == b then pure unit
+  else if b then failure "Property is not functional."
+  else failure "Property is functional."
 
 enumeratedPropertyIsMandatory :: Boolean -> EnumeratedProperty -> Aff Unit
-enumeratedPropertyIsMandatory b (EnumeratedProperty{mandatory}) = if mandatory == b
-  then pure unit
-  else if b
-    then failure "Property is not mandatory."
-    else failure "Property is mandatory."
+enumeratedPropertyIsMandatory b (EnumeratedProperty { mandatory }) =
+  if mandatory == b then pure unit
+  else if b then failure "Property is not mandatory."
+  else failure "Property is mandatory."
 
 enumeratedPropertyHasRange :: Range.Range -> EnumeratedProperty -> Aff Unit
-enumeratedPropertyHasRange r (EnumeratedProperty{range}) = if range == r
-  then pure unit
+enumeratedPropertyHasRange r (EnumeratedProperty { range }) =
+  if range == r then pure unit
   else failure ("Property does not have range '" <> show r <> "'.")
 
 -- (ExplicitSet PropertyType) haveVerbs (Array PropertyVerb)
@@ -125,8 +132,8 @@ haveVerbs props verbs pvArr = case find (\(Perspective.PropertyVerbs propset ver
 --------------------------------------------------------------------------------
 ---- PERSPECTIVE
 --------------------------------------------------------------------------------
-ensurePropertyVerbsInState  :: StateSpec -> Perspective.Perspective -> Aff (Array Perspective.PropertyVerbs)
-ensurePropertyVerbsInState stateSpec (Perspective.Perspective{propertyVerbs}) = do
+ensurePropertyVerbsInState :: StateSpec -> Perspective.Perspective -> Aff (Array Perspective.PropertyVerbs)
+ensurePropertyVerbsInState stateSpec (Perspective.Perspective { propertyVerbs }) = do
   -- log $ showTree (unwrap propertyVerbs)
   case Map.lookup stateSpec (unwrap propertyVerbs) of
     Nothing -> failure ("There should be an entry in propertyVerbs for state '" <> show stateSpec <> "'.")
@@ -138,18 +145,18 @@ ensurePropertyVerbsInState stateSpec (Perspective.Perspective{propertyVerbs}) = 
 --   Just rv -> pure rv
 
 objectOfPerspective :: Perspective.Perspective -> Aff QueryFunctionDescription
-objectOfPerspective (Perspective.Perspective{object}) = pure object
+objectOfPerspective (Perspective.Perspective { object }) = pure object
 
 isCalculationOf :: Range -> QueryFunctionDescription -> Aff Unit
-isCalculationOf r qfd = if r == range qfd
-  then pure unit
+isCalculationOf r qfd =
+  if r == range qfd then pure unit
   else failure ("Calculation is not the right type")
 
 --------------------------------------------------------------------------------
 ---- STATE
 --------------------------------------------------------------------------------
-ensureState :: String -> DomeinFileRecord -> Aff State
-ensureState stateId {states} = do
+ensureState :: forall f. String -> DomeinFileRecord f -> Aff State
+ensureState stateId { states } = do
   case lookup stateId states of
     Nothing -> failure ("There should be a state '" <> show stateId <> "'.")
     Just s -> pure s
@@ -162,7 +169,7 @@ ensureDescription (Q qfd) = pure qfd
 ensureDescription _ = failure "The query of a state should have been compiled to a description."
 
 ensureOnEntry :: RoleType -> State -> Aff AutomaticAction
-ensureOnEntry rt (State{automaticOnEntry}) = case Map.lookup rt (unwrap automaticOnEntry) of
+ensureOnEntry rt (State { automaticOnEntry }) = case Map.lookup rt (unwrap automaticOnEntry) of
   Nothing -> failure ("No automatic on entry effect for " <> show rt)
   Just automaticAction -> pure automaticAction
 

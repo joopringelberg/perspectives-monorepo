@@ -41,7 +41,7 @@ import Effect.Aff.Class (liftAff)
 import Effect.Exception (error)
 import Perspectives.CoreTypes (class Cacheable, MonadPerspectives, representInternally, retrieveInternally)
 import Perspectives.Couchdb.Revision (class Revision, Revision_, changeRevision, rev)
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), ViewType(..), DomeinFileId)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), ViewType(..))
 
 -- | Members of class Cacheable provide functionality to cache and retrieve their representation.
 -- | Members are by definition also members of class Revision.

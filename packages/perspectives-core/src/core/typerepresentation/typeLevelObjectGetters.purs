@@ -58,7 +58,7 @@ import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.Class.Context (contextADT, contextRole, roleInContext, userRole) as ContextClass
 import Perspectives.Representation.Class.Context (contextAspects)
 import Perspectives.Representation.Class.Context (externalRole) as CTCLASS
-import Perspectives.Representation.Class.PersistentType (DomeinFileId, getCalculatedRole, getContext, getEnumeratedRole, getPerspectType, getView, tryGetState)
+import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getContext, getEnumeratedRole, getPerspectType, getView, tryGetState)
 import Perspectives.Representation.Class.Role (actionsOfRoleType, adtOfRole, allProperties, allRoleProperties, allRoles, allViews, bindingOfADT, calculation, expandUnexpandedLeaves, getRole, getRoleADT, perspectives, perspectivesOfRoleType, roleADT, roleADTOfRoleType, roleKindOfRoleType, toConjunctiveNormalForm_)
 import Perspectives.Representation.Context (Context)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
@@ -70,6 +70,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), Cont
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as TI
 import Perspectives.Representation.Verbs (PropertyVerb, RoleVerb)
 import Perspectives.Representation.View (propertyReferences)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
 import Perspectives.Utilities (addUnique)
 import Prelude (Unit, append, bind, eq, flip, not, pure, show, unit, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>), (||), (<*>))
 
@@ -606,7 +607,7 @@ viewsOfRoleType (CR rt) = ArrayT do
 ----------------------------------------------------------------------------------------
 ------- FUNCTIONS TO QUALIFY ROLES AND CONTEXTS
 ----------------------------------------------------------------------------------------
-qualifyRoleInDomain :: String -> DomeinFileId ~~~> RoleType
+qualifyRoleInDomain :: String -> (ModelUri Stable) ~~~> RoleType
 qualifyRoleInDomain localName namespace = ArrayT do
   (try $ retrieveDomeinFile namespace) >>=
     handleDomeinFileError' "qualifyRoleInDomain" []
@@ -615,19 +616,19 @@ qualifyRoleInDomain localName namespace = ArrayT do
         cCandidates <- pure $ map (CR <<< CalculatedRoleType) (filter (\id -> id `endsWithSegments` localName) (OBJ.keys calculatedRoles))
         pure $ eCandidates <> cCandidates
 
-qualifyEnumeratedRoleInDomain :: String -> DomeinFileId ~~~> EnumeratedRoleType
+qualifyEnumeratedRoleInDomain :: String -> (ModelUri Stable) ~~~> EnumeratedRoleType
 qualifyEnumeratedRoleInDomain localName namespace = ArrayT do
   (try $ retrieveDomeinFile namespace) >>=
     handleDomeinFileError' "qualifyEnumeratedRoleInDomain" []
       \(DomeinFile { enumeratedRoles }) -> pure $ map EnumeratedRoleType (filter (\id -> id `endsWithSegments` localName) (OBJ.keys enumeratedRoles))
 
-qualifyCalculatedRoleInDomain :: String -> DomeinFileId ~~~> CalculatedRoleType
+qualifyCalculatedRoleInDomain :: String -> (ModelUri Stable) ~~~> CalculatedRoleType
 qualifyCalculatedRoleInDomain localName namespace = ArrayT do
   (try $ retrieveDomeinFile namespace) >>=
     handleDomeinFileError' "qualifyCalculatedRoleInDomain" []
       \(DomeinFile { calculatedRoles }) -> pure $ map CalculatedRoleType (filter (\id -> id `endsWithSegments` localName) (OBJ.keys calculatedRoles))
 
-qualifyContextInDomain :: String -> DomeinFileId ~~~> ContextType
+qualifyContextInDomain :: String -> (ModelUri Stable) ~~~> ContextType
 qualifyContextInDomain localName namespace = ArrayT do
   (try $ retrieveDomeinFile namespace) >>=
     handleDomeinFileError' "qualifyContextInDomain" []

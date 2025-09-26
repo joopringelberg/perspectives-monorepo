@@ -68,8 +68,8 @@ import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), StableIdMapping, loadStableMapping) as Sidecar
-import Perspectives.Sidecar.StableIdMapping (loadStableMapping)
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_, loadAndCompileArcFileWithSidecar_)
 import Simple.JSON (readJSON, readJSON_, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
@@ -147,7 +147,7 @@ uploadToRepository modelUri_ arcSource_ versionedModelManifest =
           case mmodelCuid of
             Nothing -> lift $ addWarning "Parsing$applyImmediately: no model CUID given!"
             Just (Value modelCuid) -> do
-              r <- loadAndCompileArcFileWithSidecar_ (Sidecar.ModelUri $ unversionedModelUri modelUri) arcSource false mMapping modelCuid
+              r <- loadAndCompileArcFileWithSidecar_ ((Sidecar.ModelUri $ unversionedModelUri modelUri) :: ModelUri Stable) arcSource false mMapping modelCuid
               case r of
                 Left m -> logPerspectivesError $ Custom ("uploadToRepository: " <> show m)
                 -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries plus the updated mapping.
@@ -162,7 +162,7 @@ type URL = String
 -- | As uploadToRepository, but provide the DomeinFile as argument.
 -- | Adds an empty TranslationTable if the DomeinFile did not yet exist in the Repository.
 -- TODO: retrieve the mapping sidecar from the repository in this function, save its updated value to the repository here too.
-uploadToRepository_ :: { repositoryUrl :: String, documentName :: String } -> DomeinFile -> StoredQueries -> Sidecar.StableIdMapping -> MonadPerspectives Unit
+uploadToRepository_ :: { repositoryUrl :: String, documentName :: String } -> DomeinFile Stable -> StoredQueries -> Sidecar.StableIdMapping -> MonadPerspectives Unit
 uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping = do
   -- Get the attachment info
   (mremoteDf :: Maybe DocWithAttachmentInfo) <- tryGetDocument_ splitName.repositoryUrl splitName.documentName
@@ -329,7 +329,6 @@ generateFirstTranslation modelURI_ _ = case head modelURI_ of
     case (unsafePartial modelUri2ModelUrl dfName) of
       { repositoryUrl, documentName } -> do
         x <- try $ lift $ lift $ getDocument repositoryUrl documentName
-        -- x <- try $ lift $ lift $ getDomeinFile (DomeinFileId dfName)
         case x of
           Left e -> handleExternalFunctionError "model://perspectives.domains#Parsing$GenerateFirstTranslation"
             (Left e)
@@ -344,7 +343,7 @@ getTranslationYaml modelTranslation_ _ = case head modelTranslation_ of
     Left e -> handleExternalFunctionError "model://perspectives.domains#Parsing$GetTranslationYaml"
       (Left $ error (show e))
     Right m@(ModelTranslation translation) -> do
-      mMapping <- lift $ lift $ loadStableMapping (Sidecar.ModelUri (translation.namespace <> "@" <> translation.version))
+      mMapping <- lift $ lift $ Sidecar.loadStableMapping (Sidecar.ModelUri (translation.namespace <> "@" <> translation.version))
       case mMapping of
         Nothing -> pure $ Value $ MT.writeTranslationYaml m
         Just mapping -> do
@@ -363,7 +362,7 @@ parseYamlTranslation pfile_ _ = ArrayT case head pfile_ of
         case translation' of
           Left e -> throwError e
           Right (ModelTranslation translation) -> do
-            mMapping <- lift $ loadStableMapping (Sidecar.ModelUri (translation.namespace <> "@" <> translation.version))
+            mMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri (translation.namespace <> "@" <> translation.version))
             case mMapping of
               Nothing -> pure $ [ Value $ writeJSON translation ]
               Just mapping -> do

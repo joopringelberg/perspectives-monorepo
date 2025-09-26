@@ -44,8 +44,9 @@ import Perspectives.Couchdb.Revision (class Revision)
 import Perspectives.Data.EncodableMap as ENCMAP
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser, RoleInstance)
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId, EnumeratedRoleType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.ScheduledAssignment (ScheduledAssignment, StateEvaluation)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction)
 import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult)
@@ -74,7 +75,7 @@ newtype Transaction = Transaction
       -- used in runMonadPerspectivesTransaction'.run to execute ContextRemoval and RoleRemoval.
       -- used in runAllAutomaticActions to execute RoleUnbinding and ExecuteDestructiveEffect.
       , scheduledAssignments :: Array ScheduledAssignment
-      , modelsToBeRemoved :: Array DomeinFileId
+      , modelsToBeRemoved :: Array (ModelUri Stable)
       -- Used in runEntryAndExitActions to enter the root state of a new context.
       , createdContexts :: Array ContextInstance
       -- Used in runEntryAndExitActions to enter the root state of a new context.

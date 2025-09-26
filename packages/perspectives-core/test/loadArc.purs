@@ -14,7 +14,8 @@ import Effect.Class.Console (log, logShow)
 import Perspectives.Couchdb.Revision (changeRevision)
 import Perspectives.DomeinCache (removeDomeinFileFromCouchdb, retrieveDomeinFile)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..))
+import Perspectives.Parsing.Arc.PhaseTwoDefs (toStableDomeinFile)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.TypePersistence.LoadArc.FS (loadAndCompileArcFile, loadCompileAndCacheArcFile', loadCompileAndSaveArcFile, loadCompileAndSaveArcFile')
 import Test.Perspectives.Utils (clearUserDatabase, runP, withSystem)
 import Test.Unit (TestF, suite, suiteOnly, suiteSkip, test, testOnly, testSkip)
@@ -37,7 +38,7 @@ theSuite = suite "Perspectives.loadArc" do
         logShow messages
         assert "The file could not be saved" false
     -- 2. Reload it from the database into the cache.
-    retrievedModel <- runP $ retrieveDomeinFile $ DomeinFileId "model:ContextAndRole"
+    retrievedModel <- runP $ retrieveDomeinFile $ ModelUri "model:ContextAndRole"
     -- 3. Reload the file without caching or saving.
     r <- runP $ withSystem $ loadAndCompileArcFile "contextAndRole" testDirectory
     -- 4. Compare the model in cache with the model from the file.
@@ -47,8 +48,9 @@ theSuite = suite "Perspectives.loadArc" do
       Right (Tuple reParsedModel _) -> do
         -- logShow (changeRevision Nothing reParsedModel)
         assert "The model reloaded from couchdb should equal the model loaded from file."
-          (eq (changeRevision Nothing retrievedModel) (changeRevision Nothing reParsedModel))
-    runP $ removeDomeinFileFromCouchdb "model:ContextAndRole"
+          -- NOTICE: this test will fail because retrievedModel will be Stable and reParsedModel will be Readable.
+          (eq (changeRevision Nothing retrievedModel) (changeRevision Nothing (toStableDomeinFile reParsedModel)))
+    runP $ removeDomeinFileFromCouchdb (ModelUri "model:ContextAndRole")
 
   test "Load model:System and cache it" do
     messages <- runP do
@@ -91,7 +93,7 @@ theSuite = suite "Perspectives.loadArc" do
       else do
         logShow messages
         assert "The file could not be parsed, compiled or saved" false
-    runP $ removeDomeinFileFromCouchdb "model:Couchdb"
+    runP $ removeDomeinFileFromCouchdb (ModelUri "model:Couchdb")
 
   test "Load model:Serialise from file and store it in Couchdb" do
     messages <- runP do
@@ -102,7 +104,7 @@ theSuite = suite "Perspectives.loadArc" do
       else do
         logShow messages
         assert "The file could not be parsed, compiled or saved" false
-    runP $ removeDomeinFileFromCouchdb "model:Serialise"
+    runP $ removeDomeinFileFromCouchdb (ModelUri "model:Serialise")
 
   test "Load a model file and instances and store it in Couchdb" do
     messages <- runP do
@@ -118,5 +120,5 @@ theSuite = suite "Perspectives.loadArc" do
         logShow messages
         assert "The file could not be parsed, compiled or saved" false
     runP do
-      removeDomeinFileFromCouchdb "model:System"
+      removeDomeinFileFromCouchdb (ModelUri "model:System")
       clearUserDatabase

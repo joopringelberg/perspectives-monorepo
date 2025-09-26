@@ -58,27 +58,28 @@ import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.State (State(..), StateFulObject(..), constructState)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), DomeinFileId(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..), externalRoleType_, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..), externalRoleType_, roletype2string)
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as TI
 import Perspectives.Representation.View (View(..)) as VIEW
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Prelude (bind, discard, pure, show, void, ($), (&&), (<$>), (<<<), (<>), (==), (>>=), (||))
 import Type.Proxy (Proxy(..))
 
 -------------------
-traverseDomain :: ContextE -> PhaseTwo DomeinFile
+traverseDomain :: ContextE -> PhaseTwo (DomeinFile Readable)
 traverseDomain c = do
-  -- Traverse the model parse tree and construct a DomeinFileRecord in PhaseTwoState.
+  -- Traverse the model parse tree and construct a (DomeinFileRecord Readable) in PhaseTwoState.
   (Context { id: namespace }) <- traverseContextE c "domain"
   domeinFileRecord <- getDF
   pure $ DomeinFile
     ( domeinFileRecord
-        { id = DomeinFileId $ unwrap namespace
-        , namespace = unwrap namespace
+        { id = ModelUri $ unwrap namespace
+        , namespace = ModelUri $ unwrap namespace
         }
     )
 
 -- | Traverse the members of the ContextE AST type to construct a new Context type
--- | and insert it into a DomeinFileRecord.
+-- | and insert it into a (DomeinFileRecord Readable).
 traverseContextE :: ContextE -> Namespace -> PhaseTwo Context
 traverseContextE (ContextE { id, kindOfContext, public, contextParts, pos }) ns = do
   -- TODO. Controleer op dubbele definities.
@@ -176,7 +177,7 @@ traverseContextE (ContextE { id, kindOfContext, public, contextParts, pos }) ns 
   -- We can safely ignore nested lists of StateQualifiedParts here, as they are already removed by the parser.
   handleParts c (CSQP _) = pure c
 
-  addContextToDomeinFile :: Context -> DomeinFileRecord -> DomeinFileRecord
+  addContextToDomeinFile :: Context -> (DomeinFileRecord Readable) -> (DomeinFileRecord Readable)
   addContextToDomeinFile c@(Context { id: (ContextType ident) }) domeinFile = LN.over
     (prop (Proxy :: Proxy "contexts"))
     (insert ident c)
@@ -218,7 +219,7 @@ addNamespace :: String -> String -> String
 addNamespace ns' ln = if ns' == "domain" then ln else (ns' <> "$" <> ln)
 
 -- | Traverse the members of the RoleE AST type to construct a new Role type
--- | and insert it into a DomeinFileRecord.
+-- | and insert it into a (DomeinFileRecord Readable).
 traverseRoleE :: RoleE -> Namespace -> PhaseTwo Role
 traverseRoleE r ns =
   if isCalculatedRole r then traverseCalculatedRoleE r ns
@@ -408,7 +409,7 @@ traverseStateE stateFulObect (StateE { id, condition, stateParts, subStates }) =
     Just segments -> pure $ StateIdentifier (roletype2string rt <> "$" <> segments)
   toStateIdentifier _ = throwError (Custom "Programming error: State should be specified with a ContextState, or an ExplicitRole.")
 
-addStatesToDomeinFile :: Array State -> DomeinFileRecord -> DomeinFileRecord
+addStatesToDomeinFile :: Array State -> (DomeinFileRecord Readable) -> (DomeinFileRecord Readable)
 -- addStatesToDomeinFile state@(State{id}) dfr@{states} = dfr {states = insert (unwrap id) state states}
 addStatesToDomeinFile extraStates dfr@{ states } = dfr
   { states =
@@ -417,7 +418,7 @@ addStatesToDomeinFile extraStates dfr@{ states } = dfr
   }
 
 -- Traverse the members of ViewE to construct a new View type and insert it into the
--- DomeinFileRecord.
+-- (DomeinFileRecord Readable).
 traverseViewE :: ViewE -> RoleType -> PhaseTwo ViewType
 traverseViewE (ViewE { id, viewParts, pos }) rtype = do
   -- TODO. Controleer op dubbele definities.
@@ -442,7 +443,7 @@ traverseViewE (ViewE { id, viewParts, pos }) rtype = do
     expandedPname <- expandNamespace pname
     pure $ ENP $ EnumeratedPropertyType expandedPname
 
-addRoleToDomeinFile :: Role -> DomeinFileRecord -> DomeinFileRecord
+addRoleToDomeinFile :: Role -> (DomeinFileRecord Readable) -> (DomeinFileRecord Readable)
 addRoleToDomeinFile (E r@(EnumeratedRole { id })) domeinFile = LN.over
   (prop (Proxy :: Proxy "enumeratedRoles"))
   (insert (unwrap id) r)
@@ -506,7 +507,7 @@ traverseCalculatedRoleE_ role@(CalculatedRole { id: roleName, kindOfRole }) role
   handleParts crole p = throwError $ Custom ("Cannot handle part '" <> show p <> "' in PhaseTwo in a CalculatedRole: " <> show roleName)
 
 -- | Traverse the members of the PropertyE AST type to construct a new Property type
--- | and insert it into a DomeinFileRecord.
+-- | and insert it into a (DomeinFileRecord Readable).
 traversePropertyE :: PropertyE -> Namespace -> PhaseTwo Property.Property
 traversePropertyE r ns =
   if isCalculatedProperty r then traverseCalculatedPropertyE r ns
@@ -568,7 +569,7 @@ traverseCalculatedPropertyE (PropertyE { id, range, propertyParts, propertyFacet
   modifyDF (\df -> addPropertyToDomeinFile property' df)
   pure property'
 
-addPropertyToDomeinFile :: Property.Property -> DomeinFileRecord -> DomeinFileRecord
+addPropertyToDomeinFile :: Property.Property -> (DomeinFileRecord Readable) -> (DomeinFileRecord Readable)
 addPropertyToDomeinFile property df@{ enumeratedProperties, calculatedProperties } = case property of
   (Property.E r@(EnumeratedProperty { id })) -> df { enumeratedProperties = insert (unwrap id) r enumeratedProperties }
   (Property.C r@(CalculatedProperty { id })) -> df { calculatedProperties = insert (unwrap id) r calculatedProperties }

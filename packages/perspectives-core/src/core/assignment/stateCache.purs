@@ -29,7 +29,8 @@ import Perspectives.CoreTypes (Updater, type (~~>))
 import Perspectives.GlobalUnsafeStrMap (GLStrMap, newMap, peek, poke, filterKeys)
 import Perspectives.Identifiers (startsWithSegments)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value)
-import Perspectives.Representation.TypeIdentifiers (PropertyType, RoleType, StateIdentifier, DomeinFileId(..))
+import Perspectives.Representation.TypeIdentifiers (PropertyType, RoleType, StateIdentifier)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Prelude (Unit, const, flip, not, unit, ($))
 
 type ContextStateCache = GLStrMap CompiledContextState
@@ -56,8 +57,8 @@ retrieveCompiledContextState :: StateIdentifier -> (Maybe CompiledContextState)
 retrieveCompiledContextState a = peek contextStateCache (unwrap a)
 
 -- | Remove, from both caches, all compiled states from a particular domain.
-clearModelStates :: DomeinFileId -> Unit
-clearModelStates (DomeinFileId s) =
+clearModelStates :: forall f. ModelUri f -> Unit
+clearModelStates (ModelUri s) =
   let
     _ = filterKeys (not $ flip startsWithSegments s) contextStateCache
     _ = filterKeys (not $ flip startsWithSegments s) roleStateCache

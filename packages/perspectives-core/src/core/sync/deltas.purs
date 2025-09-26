@@ -54,7 +54,8 @@ import Perspectives.PerspectivesState (nextTransactionNumber, stompClient)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter)
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser, RoleInstance(..), Value(..), perspectivesUser2RoleInstance)
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedPropertyType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), RoleType(..))
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
@@ -72,7 +73,7 @@ import Simple.JSON (writeJSON)
 -- because that would need cyclic model imports.
 distributeTransaction :: Transaction -> MonadPerspectives TransactionPerUser
 distributeTransaction t@(Transaction { changedDomeinFiles }) = do
-  for_ changedDomeinFiles (DomeinFileId >>> saveCachedDomeinFile)
+  for_ changedDomeinFiles (ModelUri >>> saveCachedDomeinFile)
   -- Send the Transaction to all involved.
   addPublicKeysToTransaction t >>= distributeTransactie'
 

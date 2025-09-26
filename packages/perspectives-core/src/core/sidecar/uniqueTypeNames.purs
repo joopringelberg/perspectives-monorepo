@@ -310,7 +310,7 @@ nameSim a b =
 
 -- | Pure hook: apply a provided mapping and also compute the updated mapping snapshot.
 -- | Returns the alias-augmented DomeinFileRecord and the updated mapping.
-applyStableIdMappingWith :: StableIdMapping -> DomeinFileRecord -> Tuple DomeinFileRecord StableIdMapping
+applyStableIdMappingWith :: forall f. StableIdMapping -> DomeinFileRecord f -> Tuple (DomeinFileRecord f) StableIdMapping
 applyStableIdMappingWith mapping0 df =
   let
     cur = extractKeysFromDfr df
@@ -321,7 +321,7 @@ applyStableIdMappingWith mapping0 df =
 -- | Add alias keys (from the mapping file) that point to the canonical entries
 -- | in the DomeinFileRecord. We NEVER rename the canonical identifiers here;
 -- | we only add lookups under the alias keys for backwards/forwards compatibility.
-applyAliases :: StableIdMapping -> DomeinFileRecord -> DomeinFileRecord
+applyAliases :: forall f. StableIdMapping -> DomeinFileRecord f -> DomeinFileRecord f
 applyAliases mapping dfr@{ contexts, enumeratedRoles, enumeratedProperties, states, views } =
   dfr
     { contexts = aliasTable contexts mapping.contexts
@@ -357,7 +357,8 @@ applyAliases mapping dfr@{ contexts, enumeratedRoles, enumeratedProperties, stat
 -- IMPORTANT: only snapshot canonical entries (skip alias keys). We consider an entry canonical
 -- if the table key equals the entity’s internal canonical FQN (unwrap *.id).
 extractKeysFromDfr
-  :: DomeinFileRecord
+  :: forall f
+   . DomeinFileRecord f
   -> { contexts :: OBJ.Object ContextKeySnapshot
      , roles :: OBJ.Object RoleKeySnapshot
      , properties :: OBJ.Object PropertyKeySnapshot

@@ -38,7 +38,7 @@ import Perspectives.DomeinCache (modifyEnumeratedRoleInDomeinFile)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
 import Perspectives.ExecuteInTopologicalOrder (executeInTopologicalOrder)
 import Perspectives.Identifiers (startsWithSegments)
-import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, modifyDF, withDomeinFile)
+import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, modifyDF, toReadableDomeinFile, withDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistent (getDomeinFile)
 import Perspectives.Query.QueryTypes (roleInContext2Role)
@@ -48,6 +48,7 @@ import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
 import Perspectives.Representation.Class.Role (binding)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Perspectives.Types.ObjectGetters (isMandatory_, isRelational_)
 
 -- Modify EnumeratedRoles by inferring the following from their aspects:
@@ -62,17 +63,17 @@ inferFromAspectRoles = do
     (DomeinFile df)
     (inferFromAspectRoles' df)
   where
-  inferFromAspectRoles' :: DomeinFileRecord -> PhaseThree Unit
+  inferFromAspectRoles' :: DomeinFileRecord Readable -> PhaseThree Unit
   inferFromAspectRoles' df@{ id, namespace, enumeratedRoles } = do
     -- We have to execute in topological order, so aspects are handled before they are applied.
     enumeratedRoles' <- executeInTopologicalOrder
       identifier_
       -- Only count aspects defined in this namespace as dependencies for the sorting!
-      (filter (flip startsWithSegments namespace) <<< (map (unwrap <<< roleInContext2Role) <<< _.roleAspects <<< unwrap))
+      (filter (flip startsWithSegments (unwrap namespace)) <<< (map (unwrap <<< roleInContext2Role) <<< _.roleAspects <<< unwrap))
       (values enumeratedRoles)
-      (inferCardinality >=> inferMandatoriness {->=> inferBinding-}  >=> lift <<< lift <<< modifyEnumeratedRoleInDomeinFile id)
-    (DomeinFile dfr') <- lift $ lift $ getDomeinFile id
-    modifyDF \_ -> dfr'
+      (inferCardinality >=> inferMandatoriness {->=> inferBinding-}  >=> lift <<< lift <<< modifyEnumeratedRoleInDomeinFile (ModelUri $ unwrap id))
+    (DomeinFile dfr') <- lift $ lift $ getDomeinFile (ModelUri $ unwrap id)
+    modifyDF \_ -> unwrap $ toReadableDomeinFile $ DomeinFile dfr'
 
   inferCardinality :: EnumeratedRole -> PhaseThree EnumeratedRole
   inferCardinality r@(EnumeratedRole { functional, roleAspects }) = do

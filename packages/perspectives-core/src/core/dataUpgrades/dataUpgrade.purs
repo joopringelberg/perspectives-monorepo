@@ -64,10 +64,11 @@ import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspect
 import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..), EnumeratedRoleType(..), RoleType(..), EnumeratedPropertyType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..), EnumeratedPropertyType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
 import Perspectives.SetupCouchdb (setContext2RoleView, setFilled2FillerView, setFiller2FilledView, setRole2ContextView)
 import Perspectives.SetupUser (setupInvertedQueryDatabase)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Simple.JSON (read)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -249,8 +250,8 @@ indexedQueries _ = do
   -- set all the views
   setupInvertedQueryDatabase
   -- Fix the source of model:System
-  (DomeinFile dfr) <- getDomeinFile (DomeinFileId "model://perspectives.domains#System")
-  void $ saveEntiteit_ (DomeinFileId "model://perspectives.domains#System")
+  (DomeinFile dfr) <- getDomeinFile (ModelUri "model://perspectives.domains#System")
+  void $ saveEntiteit_ (ModelUri "model://perspectives.domains#System")
     (DomeinFile dfr { arc = replace (Pattern "    state InitMe = not exists Me") (Replacement "\n    external \n      aspect sys:RootContext$External\n    state InitMe = not exists Me") dfr.arc })
   -- recompile local models.
   modelsDb <- modelsDatabaseName

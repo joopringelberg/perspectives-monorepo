@@ -78,7 +78,7 @@ import Perspectives.Names (findIndexedContextName, findIndexedRoleName, removeIn
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, tryGetPerspectContext, tryGetPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Context (userRole)
-import Perspectives.Representation.Class.PersistentType (DomeinFileId(..), getContext, getEnumeratedRole)
+import Perspectives.Representation.Class.PersistentType (getContext, getEnumeratedRole)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType, RoleKind(..), RoleType(..), externalRoleType)
@@ -87,6 +87,7 @@ import Perspectives.RoleAssignment (filledNoLongerPointsTo, filledPointsTo, fill
 import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
 import Perspectives.SerializableNonEmptyArray (SerializableNonEmptyArray(..))
 import Perspectives.SerializableNonEmptyArray (singleton) as SNEA
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.SignedDelta (SignedDelta)
@@ -518,7 +519,7 @@ setFirstBinding filled filler msignedDelta = (lift $ try $ getPerspectRol filled
   loadModel :: EnumeratedRoleType -> MonadPerspectivesTransaction Unit
   loadModel fillerType = case (typeUri2ModelUri $ unwrap fillerType) of
     Nothing -> pure unit
-    Just modelUri -> lift $ void $ retrieveDomeinFile (DomeinFileId modelUri)
+    Just modelUri -> lift $ void $ retrieveDomeinFile (ModelUri modelUri)
 
 -- | If the type of the role has kind UserRole and is not the `me` role for its context,
 -- | we add a new user to the context. This user should have access to

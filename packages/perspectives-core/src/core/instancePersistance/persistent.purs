@@ -94,9 +94,9 @@ import Perspectives.PerspectivesState (getMissingResource)
 import Perspectives.Representation.Class.Cacheable (Revision_, cacheEntity, changeRevision, readEntiteitFromCache, rev, setRevision, takeEntiteitFromCache, tryReadEntiteitFromCache)
 import Perspectives.Representation.Class.Identifiable (identifier, identifier_)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..))
 import Perspectives.ResourceIdentifiers (isInPublicScheme, isInRemoteScheme, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator)
 import Perspectives.ResourceIdentifiers.Parser (ResourceIdentifier)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Simple.JSON (class WriteForeign)
 
 fix :: Boolean
@@ -125,7 +125,7 @@ postDatabaseName :: forall f. MonadPouchdb f String
 postDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_post")
 
 modelDatabaseName :: MonadPerspectives String
-modelDatabaseName = dbLocalName (DomeinFileId "model://perspectives.domains#System")
+modelDatabaseName = dbLocalName ((ModelUri "model://perspectives.domains#System") :: ModelUri Stable)
 
 invertedQueryDatabaseName :: MonadPerspectives String
 invertedQueryDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_invertedqueries")
@@ -143,7 +143,7 @@ getPerspectRol :: RoleInstance -> MP PerspectRol
 getPerspectRol = getPerspectEntiteit fix
 
 -- | Argument should have form model:ModelName (not the new model:some.domain/ModelName form).
-getDomeinFile :: DomeinFileId -> MP DomeinFile
+getDomeinFile :: ModelUri Stable -> MP (DomeinFile Stable)
 getDomeinFile = getPerspectEntiteit doNotFix
 
 tryGetPerspectEntiteit :: forall a i. Attachment a => Persistent a i => i -> MonadPerspectives (Maybe a)
@@ -280,7 +280,7 @@ forceSaveRole rid = forceSaveEntiteit (Rle rid) rid
 forceSaveContext :: ContextInstance -> MonadPerspectives Unit
 forceSaveContext cid = forceSaveEntiteit (Ctxt cid) cid
 
-forceSaveDomeinFile :: DomeinFileId -> MonadPerspectives Unit
+forceSaveDomeinFile :: ModelUri Stable -> MonadPerspectives Unit
 forceSaveDomeinFile dfid = forceSaveEntiteit (Dfile dfid) dfid
 
 -- | Guarantees that
@@ -302,7 +302,7 @@ saveMarkedResources = do
       ( case rs of
           Ctxt c -> void $ saveCachedEntiteit rs (c :: ContextInstance)
           Rle r -> void $ saveCachedEntiteit rs (r :: RoleInstance)
-          Dfile d -> void $ saveCachedEntiteit rs (d :: DomeinFileId)
+          Dfile d -> void $ saveCachedEntiteit rs (d :: ModelUri Stable)
       ) >>= case _ of
       Left e -> do
         logPerspectivesError (Custom ("Could not save resource " <> show rs <> " because: " <> show e))

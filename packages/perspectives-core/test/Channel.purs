@@ -149,7 +149,7 @@ theSuite = suite "Perspectives.Sync.Channel" do
             deleteDatabase channelId
 
   test "test Me and You" $ runP $ withSystem $ void $ withCouchdbUrl \url -> do
-  -- testOnly "test Me and You" $ runP $ withModel_ (DomeinFileId "model:System") false do
+  -- testOnly "test Me and You" $ runP $ withModel_ (ModelUri "model:System") false do
     achannel <- runMonadPerspectivesTransaction (createChannel url)
     case head achannel of
       Nothing -> liftAff $ assert "Failed to create a channel" false

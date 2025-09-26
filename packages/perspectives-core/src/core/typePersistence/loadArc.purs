@@ -53,10 +53,10 @@ import Perspectives.Parsing.Arc.AST (ContextE(..))
 import Perspectives.Parsing.Arc.IndentParser (position2ArcPosition, runIndentParser)
 import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
-import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwoState, runPhaseTwo_')
+import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwoState, runPhaseTwo_', toStableModelUri)
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors, PerspectivesError(..))
-import Perspectives.Representation.TypeIdentifiers (DomeinFileId(..))
 import Perspectives.ResourceIdentifiers (takeGuid)
+import Perspectives.SideCar.PhantomTypedNewtypes (Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (StableIdMappingForModel, getinstalledModelCuids, normalizeTypes)
 import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, emptyStableIdMapping, idUriForContext, loadStableMapping)
 import Perspectives.Sidecar.UniqueTypeNames (extractKeysFromDfr)
@@ -78,7 +78,7 @@ type Source = String
 -- | Parses and compiles the ARC file to a DomeinFile. 
 -- | Parameter `saveInCache` determines whether to cache the DomeinFIle. Does not store the DomeinFile.
 -- | However, will load, cache and store dependencies of the model.
-loadAndCompileArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple DomeinFile StoredQueries))
+loadAndCompileArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) StoredQueries))
 loadAndCompileArcFile_ dfid text saveInCache modelCuid = do
   -- Retrieve existing sidecar (if any) from repository. domeinFilename should be Stable.
   mMapping <- lift $ loadStableMapping dfid
@@ -88,7 +88,7 @@ loadAndCompileArcFile_ dfid text saveInCache modelCuid = do
     Right (Tuple df (Tuple iqs _m)) -> Right (Tuple df iqs)
 
 -- New: sidecar-aware API that returns the updated mapping with results.
-loadAndCompileArcFileWithSidecar_ :: ModelUri Stable -> Source -> Boolean -> Maybe StableIdMapping -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple DomeinFile (Tuple StoredQueries StableIdMapping)))
+loadAndCompileArcFileWithSidecar_ :: ModelUri Stable -> Source -> Boolean -> Maybe StableIdMapping -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
 loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCache mMapping modelCuid =
   catchError
     ( do
@@ -99,7 +99,7 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
             -- LET OP: DIT GAAT FALEN VOOR NIEUWE MODELLEN
             -- If we have a mapping, it is sure to have the enclosing Domein context, so then we can map ModelUri Readable to ModelUri Stable.
             if testModelName sourceIdReadable then do
-              (Tuple result state :: Tuple (Either MultiplePerspectivesErrors DomeinFile) PhaseTwoState) <-
+              (Tuple result state :: Tuple (Either MultiplePerspectivesErrors (DomeinFile Readable)) PhaseTwoState) <-
                 lift $ lift $ runPhaseTwo_' (traverseDomain ctxt) defaultDomeinFileRecord empty empty Nil
               case result of
                 Left e -> pure $ Left e
@@ -111,7 +111,7 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                   installedModelCuids <- lift getinstalledModelCuids
                   for_ (delete id state.referredModels) (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
 
-                  (x' :: Either MultiplePerspectivesErrors (Tuple DomeinFileRecord StoredQueries)) <-
+                  (x' :: Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries)) <-
                     lift $ phaseThree dr'' state.postponedStateQualifiedParts state.screens
                   case x' of
                     Left e -> pure $ Left e
@@ -183,25 +183,26 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                           -- Notice that this is the UNVERSIONED id. It will be overwritten with the versioned id when uploading to the repository.
                           , _id = takeGuid $ unwrap id
                           }
-                        if saveInCache then void $ lift $ storeDomeinFileInCache id df else pure unit
-
                         -- Now replace the readable name given by the modeller with a cuid, in FQNs:
                         normalizedDf <- lift $ normalizeTypes df mapping1
+
+                        if saveInCache then void $ lift $ storeDomeinFileInCache (toStableModelUri id) normalizedDf else pure unit
+
                         pure $ Right $ Tuple normalizedDf (Tuple invertedQueries mapping1)
                       else
                         pure $ Left typeCheckErrors
             else
-              pure $ Left [ (DomeinFileIdIncompatible stableModelUri (DomeinFileId sourceIdReadable) pos) ]
+              pure $ Left [ (DomeinFileIdIncompatible stableModelUri (ModelUri sourceIdReadable) pos) ]
     )
     (\e -> pure $ Left [ Custom (show e) ])
 
   where
   -- The model under construction itself is not remapped, only its dependencies.
   -- With this function we cover both cases: models in terms of Stable and in terms of Readable.
-  toStable :: StableIdMappingForModel -> DomeinFileId -> MonadPerspectives DomeinFileId
-  toStable m idfid@(DomeinFileId mUri) = case lookup (ModelUri mUri) m of
-    Nothing -> pure idfid
-    Just (ModelUri s) -> pure $ (DomeinFileId s)
+  toStable :: StableIdMappingForModel -> ModelUri Readable -> MonadPerspectives (ModelUri Stable)
+  toStable m idfid@(ModelUri mUri) = case lookup (ModelUri mUri) m of
+    Nothing -> pure $ toStableModelUri idfid
+    Just (ModelUri s) -> pure $ (ModelUri s)
 
   testModelName :: String -> Boolean
   testModelName sourceIdReadable = case mMapping of
@@ -210,8 +211,6 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
     Just m -> case idUriForContext m (ContextUri sourceIdReadable) of
       Nothing -> false
       Just s -> s == stableModelUri
-
-type Persister = String -> DomeinFile -> MonadPerspectives (Array PerspectivesError)
 
 type ArcSource = String
 type CrlSource = String

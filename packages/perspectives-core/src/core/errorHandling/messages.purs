@@ -38,8 +38,9 @@ import Perspectives.Parsing.Arc.Statement.AST (LetStep(..))
 import Perspectives.Query.QueryTypes (Domain, QueryFunctionDescription, RoleInContext, Range)
 import Perspectives.Representation.ADT (ADT)
 import Perspectives.Representation.Range (Range) as RAN
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType, CalculatedRoleType, ContextType, DomeinFileId, EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType, RoleKind, RoleType, StateIdentifier, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType, CalculatedRoleType, ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType, RoleKind, RoleType, StateIdentifier, roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb, RoleVerb)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
 import Perspectives.Utilities (prettyPrint)
 import Prelude (class Eq, class Show, show, (<<<), (<>))
 
@@ -140,7 +141,7 @@ data PerspectivesError
   | MissingObject ArcPosition ArcPosition
   | NoCalculatedAspect ArcPosition String
 
-  | DomeinFileIdIncompatible String DomeinFileId ArcPosition
+  | DomeinFileIdIncompatible String (ModelUri Stable) ArcPosition
   | PerspectivesFileFormatError String String
 
   -- Screens

@@ -64,7 +64,7 @@ theSuite = suite "Test.Query.Inversion" do
   --           Q qfd -> do
   --             -- log $ prettyPrint qfd
   --             -- the condition is variable-free.
-  --             (DomeinFile (dfr :: DomeinFileRecord)) <- getPerspectEntiteit (DomeinFileId "model:Test")
+  --             (DomeinFile (dfr :: DomeinFileRecord)) <- getPerspectEntiteit (ModelUri "model:Test")
   --             result <- runPhaseTwo_' (invert qfd) dfr empty empty
   --             case fst result of
   --               Left e -> liftAff $ assert ("Cannot invert query: " <> show e) false
