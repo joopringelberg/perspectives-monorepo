@@ -21,6 +21,7 @@
 -- END LICENSE
 module Perspectives.Sidecar.NormalizeTypeNames
   ( StableIdMappingForModel
+  , Env
   , WithSideCars
   , class NormalizeTypeNames
   , fqn2tid
@@ -52,7 +53,7 @@ import Perspectives.Parsing.Arc.PhaseTwoDefs (toStableDomeinFile)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), traverseQfd)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
 import Perspectives.Representation.ADT (ADT)
-import Perspectives.Representation.Action (Action, AutomaticAction(..))
+import Perspectives.Representation.Action (Action(..), AutomaticAction(..))
 import Perspectives.Representation.CNF (traverseDPROD)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -74,6 +75,12 @@ import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), idUriForAction, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping)
 import Perspectives.Sidecar.HashQFD (qfdSignature)
 
+-- Environment carried during normalization: sidecars and a perspective id rewrite map
+type Env =
+  { sidecars :: Map.Map (ModelUri Readable) StableIdMapping
+  , perspMap :: OBJ.Object String -- oldId -> stableId
+  }
+
 normalizeTypes :: DomeinFile Readable -> StableIdMapping -> MonadPerspectives (DomeinFile Stable)
 normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
   -- Notice that referredModels from a freshly parsed Arc source will be FQNs with names given by the modeller, rather than underlying cuids.
@@ -89,9 +96,11 @@ normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
     )
     (Map.singleton namespace mapping)
     referredModels
-  pure $ toStableDomeinFile $ unwrap $ runReaderT
-    (normalizeTypeNames df)
-    sidecars
+  -- Pre-compute a mapping from old perspective ids to stable ones using the sidecars only
+  let env0 = { sidecars, perspMap: OBJ.fromFoldable [] }
+  let perspMap = buildPerspectiveIdMap df env0
+  -- Run normalization with full environment
+  pure $ toStableDomeinFile $ unwrap $ runReaderT (normalizeTypeNames df) { sidecars, perspMap }
 
 type StableIdMappingForModel = (Map.Map (ModelUri Readable) (ModelUri Stable))
 
@@ -117,7 +126,7 @@ getinstalledModelCuids versioned = do
   pure $ Map.fromFoldable $ catMaybes x
 
 -- | This monad supports 'ask'. `ask` will return an object whose keys are Model Ids (MIDs).
-type WithSideCars = Reader (Map.Map (ModelUri Readable) StableIdMapping)
+type WithSideCars = Reader Env
 
 class NormalizeTypeNames v ident | v -> ident, ident -> v where
   -- | Replace user readable local names given in the model text by Cuids in the given object.
@@ -128,6 +137,8 @@ class NormalizeTypeNames v ident | v -> ident, ident -> v where
 instance NormalizeTypeNames (DomeinFile Readable) (ModelUri Readable) where
   fqn2tid df = ModelUri <<< unwrap <$> fqn2tid (ContextType $ unwrap df)
   normalizeTypeNames (DomeinFile df) = do
+    views' <- fromFoldable <$> for ((toUnfoldable df.views) :: Array (Tuple String View))
+      (\(Tuple ct vw) -> Tuple <$> unwrap <$> (fqn2tid <<< ViewType) ct <*> normalizeTypeNames vw)
     contexts' <- fromFoldable <$> for ((toUnfoldable df.contexts) :: Array (Tuple String Context))
       (\(Tuple ct ctxt) -> Tuple <$> unwrap <$> (fqn2tid <<< ContextType) ct <*> normalizeTypeNames ctxt)
     enumeratedRoles' <- fromFoldable <$> for ((toUnfoldable df.enumeratedRoles) :: Array (Tuple String EnumeratedRole))
@@ -140,8 +151,6 @@ instance NormalizeTypeNames (DomeinFile Readable) (ModelUri Readable) where
       (\(Tuple ct rle) -> Tuple <$> unwrap <$> (fqn2tid <<< CalculatedPropertyType) ct <*> normalizeTypeNames rle)
     states' <- fromFoldable <$> for ((toUnfoldable df.states) :: Array (Tuple String State))
       (\(Tuple ct st) -> Tuple <$> unwrap <$> (fqn2tid <<< StateIdentifier) ct <*> normalizeTypeNames st)
-    views' <- fromFoldable <$> for ((toUnfoldable df.views) :: Array (Tuple String View))
-      (\(Tuple ct vw) -> Tuple <$> unwrap <$> (fqn2tid <<< ViewType) ct <*> normalizeTypeNames vw)
     referredModels' <- for df.referredModels fqn2tid
     invertedQueriesInOtherDomains' <- fromFoldable <$> for ((toUnfoldable df.invertedQueriesInOtherDomains) :: Array (Tuple String (Array SeparateInvertedQuery)))
       (\(Tuple ct q) -> Tuple <$> (unwrap <$> ((fqn2tid (ModelUri ct)) :: WithSideCars (ModelUri Readable))) <*> traverse normalize q)
@@ -172,7 +181,8 @@ instance NormalizeTypeNames (DomeinFile Readable) (ModelUri Readable) where
 
 instance NormalizeTypeNames Context ContextType where
   fqn2tid (ContextType fqn) = do
-    sidecars <- ask
+    env <- ask
+    let sidecars = env.sidecars
     ContextType <$> case splitTypeUri fqn of
       Nothing -> pure fqn -- not a type uri
       Just { modelUri, localName } -> case Map.lookup ((ModelUri modelUri) :: ModelUri Readable) sidecars of
@@ -204,7 +214,8 @@ instance NormalizeTypeNames Context ContextType where
 
 instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
   fqn2tid (EnumeratedRoleType fqn) = do
-    sidecars <- ask
+    env <- ask
+    let sidecars = env.sidecars
     EnumeratedRoleType <$> case splitTypeUri fqn of
       Nothing -> pure fqn -- not a type uri
       Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of
@@ -215,6 +226,7 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
   normalizeTypeNames (EnumeratedRole er) = do
     id' <- fqn2tid er.id
     context' <- fqn2tid er.context
+    views' <- for er.views fqn2tid
     roleAspects' <- for er.roleAspects normalize
     properties' <- for er.properties fqn2tid
     (propertyAliases' :: Array (Tuple String EnumeratedPropertyType)) <- for (toUnfoldable er.propertyAliases) \(Tuple key value) -> Tuple <$> (unwrap <$> (fqn2tid $ EnumeratedPropertyType key)) <*> (fqn2tid value)
@@ -225,6 +237,7 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
     pure $ EnumeratedRole $ er
       { id = id'
       , context = context'
+      , views = views'
       , roleAspects = roleAspects'
       , properties = properties'
       , propertyAliases = fromFoldable propertyAliases'
@@ -235,7 +248,8 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
 
 instance NormalizeTypeNames CalculatedRole CalculatedRoleType where
   fqn2tid (CalculatedRoleType fqn) = do
-    sidecars <- ask
+    env <- ask
+    let sidecars = env.sidecars
     CalculatedRoleType <$> case splitTypeUri fqn of
       Nothing -> pure fqn -- not a type uri
       Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of
@@ -263,11 +277,13 @@ normalizeActionsForState
   -> OBJ.Object Action
   -> WithSideCars (OBJ.Object Action)
 normalizeActionsForState stateSpec obj = do
-  sidecars <- ask
+  env <- ask
+  let sidecars = env.sidecars
   let
     stateFqn = unwrap (stateSpec2StateIdentifier stateSpec)
     pairs = OBJ.toUnfoldable obj :: Array (Tuple String Action)
-  folded <- for pairs \(Tuple localName act) -> do
+  folded <- for pairs \(Tuple localName (Action qfd)) -> do
+    act <- Action <$> traverseQfd normalize qfd
     case splitTypeUri (stateFqn <> "$" <> localName) of
       Nothing -> pure (Tuple localName act)
       Just { modelUri } -> case Map.lookup (ModelUri modelUri) sidecars of
@@ -353,7 +369,8 @@ instance NormalizeTypeNames Role RoleType where
 
 instance NormalizeTypeNames EnumeratedProperty EnumeratedPropertyType where
   fqn2tid (EnumeratedPropertyType fqn) = do
-    sidecars <- ask
+    env <- ask
+    let sidecars = env.sidecars
     EnumeratedPropertyType <$> case splitTypeUri fqn of
       Nothing -> pure fqn -- not a type uri
       Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of
@@ -368,7 +385,8 @@ instance NormalizeTypeNames EnumeratedProperty EnumeratedPropertyType where
 
 instance NormalizeTypeNames CalculatedProperty CalculatedPropertyType where
   fqn2tid (CalculatedPropertyType fqn) = do
-    sidecars <- ask
+    env <- ask
+    let sidecars = env.sidecars
     CalculatedPropertyType <$> case splitTypeUri fqn of
       Nothing -> pure fqn -- not a type uri
       Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of
@@ -384,7 +402,8 @@ instance NormalizeTypeNames CalculatedProperty CalculatedPropertyType where
 
 instance NormalizeTypeNames State StateIdentifier where
   fqn2tid (StateIdentifier fqn) = do
-    sidecars <- ask
+    env <- ask
+    let sidecars = env.sidecars
     StateIdentifier <$> case splitTypeUri fqn of
       Nothing -> pure fqn -- not a type uri
       Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of
@@ -415,7 +434,8 @@ instance NormalizeTypeNames Prop.Property PropertyType where
 
 instance NormalizeTypeNames View ViewType where
   fqn2tid (ViewType fqn) = do
-    sidecars <- ask
+    env <- ask
+    let sidecars = env.sidecars
     ViewType <$> case splitTypeUri fqn of
       Nothing -> pure fqn -- not a type uri
       Just { modelUri, localName } -> case Map.lookup (ModelUri modelUri) sidecars of
@@ -687,7 +707,52 @@ instance normalizePropertyRestrictionsInst :: Normalize (EM.EncodableMap Propert
 -- Helper for widget fields (cannot have an instance for a type synonym record)
 normalizeWidgetCommonFields :: WidgetCommonFieldsDef -> WithSideCars WidgetCommonFieldsDef
 normalizeWidgetCommonFields w = do
+  env <- ask
+  let perspMap = env.perspMap
   propertyRestrictions' <- traverse normalize w.propertyRestrictions
   withoutProperties' <- traverse (traverse fqn2tid) w.withoutProperties
   userRole' <- fqn2tid w.userRole
-  pure $ w { propertyRestrictions = propertyRestrictions', withoutProperties = withoutProperties', userRole = userRole' }
+  -- rewrite perspectiveId if we have a stable id for it
+  let
+    perspectiveId' = case OBJ.lookup w.perspectiveId perspMap of
+      Nothing -> w.perspectiveId
+      Just stable -> stable
+  pure $ w { propertyRestrictions = propertyRestrictions', withoutProperties = withoutProperties', userRole = userRole', perspectiveId = perspectiveId' }
+
+-- Build a mapping from old perspective ids to stable ones for all roles in the DomeinFile
+buildPerspectiveIdMap :: DomeinFile Readable -> Env -> OBJ.Object String
+buildPerspectiveIdMap (DomeinFile dfr) env0 =
+  let
+    -- For an array of perspectives and an owning role id, compute tuples (oldId, stableId)
+    mkTuples :: String -> Array Perspective -> Array (Tuple String String)
+    mkTuples ownerTid ps =
+      -- We need to normalize the QFD object before computing the signature
+      let
+        go p =
+          let
+            Perspective pr = p
+            object' = unwrap $ runReaderT (normalize pr.object) env0
+            sig = qfdSignature object'
+            stableId = ownerTid <> "_" <> sig
+          in
+            Tuple pr.id stableId
+      in
+        go <$> ps
+
+    -- Enumerated roles
+    erTuples = case (OBJ.toUnfoldable dfr.enumeratedRoles :: Array (Tuple String EnumeratedRole)) of
+      arr -> arr >>= \(Tuple _ (EnumeratedRole er)) ->
+        let
+          ownerTid = unwrap $ unwrap $ runReaderT (fqn2tid er.id) env0
+        in
+          mkTuples ownerTid er.perspectives
+
+    -- Calculated roles
+    crTuples = case (OBJ.toUnfoldable dfr.calculatedRoles :: Array (Tuple String CalculatedRole)) of
+      arr -> arr >>= \(Tuple _ (CalculatedRole cr)) ->
+        let
+          ownerTid = unwrap $ unwrap $ runReaderT (fqn2tid cr.id) env0
+        in
+          mkTuples ownerTid cr.perspectives
+  in
+    OBJ.fromFoldable (erTuples <> crTuples)
