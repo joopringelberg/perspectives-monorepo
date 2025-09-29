@@ -73,3 +73,14 @@ derive newtype instance ordStateUri :: Ord (StateUri f)
 derive newtype instance showStateUri :: Show (StateUri f)
 derive newtype instance ReadForeign (StateUri f)
 derive newtype instance WriteForeign (StateUri f)
+
+-- New: Action identifiers (readable or stable)
+newtype ActionUri :: forall k. k -> Type
+newtype ActionUri f = ActionUri String
+
+derive instance newtypeActionUri :: Newtype (ActionUri f) _
+derive newtype instance eqActionUri :: Eq (ActionUri f)
+derive newtype instance ordActionUri :: Ord (ActionUri f)
+derive newtype instance showActionUri :: Show (ActionUri f)
+derive newtype instance ReadForeign (ActionUri f)
+derive newtype instance WriteForeign (ActionUri f)

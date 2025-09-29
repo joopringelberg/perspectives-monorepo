@@ -11,6 +11,7 @@ module Perspectives.Sidecar.StableIdMapping
   , ViewKeySnapshot
   , StateKeySnapshot
   , RoleKeySnapshot
+  , ActionKeySnapshot
   , StableIdMapping
   , emptyStableIdMapping
   , idUriForContext
@@ -18,12 +19,14 @@ module Perspectives.Sidecar.StableIdMapping
   , idUriForRole
   , idUriForView
   , idUriForState
+  , idUriForAction
   , loadStableMapping
   , lookupContextCuid
   , lookupViewCuid
   , lookupStateCuid
   , lookupPropertyCuid
   , lookupRoleCuid
+  , lookupActionCuid
   ) where
 
 import Prelude (bind, pure, ($), (<>), (==))
@@ -38,7 +41,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Identifiers (modelUri2ModelUrl, typeUri2typeNameSpace_)
 import Perspectives.Persistence.API (fromBlob, getAttachment)
-import Perspectives.SideCar.PhantomTypedNewtypes (ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StateUri(..), ViewUri(..))
+import Perspectives.SideCar.PhantomTypedNewtypes (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StateUri(..), ViewUri(..))
 import Simple.JSON (readJSON)
 
 -- A compact, forward-compatible skeleton mapping sidecar.
@@ -82,6 +85,14 @@ type StateKeySnapshot =
   , queryHash :: String
   }
 
+-- Actions live under a role and state; we snapshot only the FQN for now.
+-- If needed, we can extend with effect hashes later.
+type ActionKeySnapshot =
+  { fqn :: String
+  , declaringRoleFqn :: String
+  , declaringStateFqn :: String
+  }
+
 type StableIdMapping =
   { version :: Int
   , contexts :: Object String
@@ -89,18 +100,21 @@ type StableIdMapping =
   , properties :: Object String
   , views :: Object String
   , states :: Object String
+  , actions :: Object String
   -- Baseline canonical keys for heuristics on the next compile.
   , contextKeys :: Object ContextKeySnapshot
   , roleKeys :: Object RoleKeySnapshot
   , propertyKeys :: Object PropertyKeySnapshot
   , viewKeys :: Object ViewKeySnapshot
   , stateKeys :: Object StateKeySnapshot
+  , actionKeys :: Object ActionKeySnapshot
   -- Stable ids per kind (FQN -> CUID). Canonical entries should have these.
   , contextCuids :: Object String
   , roleCuids :: Object String
   , propertyCuids :: Object String
   , viewCuids :: Object String
   , stateCuids :: Object String
+  , actionCuids :: Object String
   , modelIdentifier :: ModelUri Stable
   }
 
@@ -112,16 +126,19 @@ emptyStableIdMapping =
   , properties: empty
   , views: empty
   , states: empty
+  , actions: empty
   , contextKeys: empty
   , roleKeys: empty
   , propertyKeys: empty
   , viewKeys: empty
   , stateKeys: empty
+  , actionKeys: empty
   , contextCuids: empty
   , roleCuids: empty
   , propertyCuids: empty
   , viewCuids: empty
   , stateCuids: empty
+  , actionCuids: empty
   , modelIdentifier: ModelUri ""
   }
 
@@ -166,6 +183,14 @@ lookupStateCuid m (StateUri fqn) =
     Just v -> Just v
     Nothing -> case OBJ.lookup fqn m.states of
       Just canonical -> OBJ.lookup canonical m.stateCuids
+      Nothing -> Nothing
+
+lookupActionCuid :: StableIdMapping -> ActionUri Readable -> Maybe String
+lookupActionCuid m (ActionUri fqn) =
+  case OBJ.lookup fqn m.actionCuids of
+    Just v -> Just v
+    Nothing -> case OBJ.lookup fqn m.actions of
+      Just canonical -> OBJ.lookup canonical m.actionCuids
       Nothing -> Nothing
 
 loadStableMapping :: ModelUri Stable -> MonadPerspectives (Maybe StableIdMapping)
@@ -249,4 +274,15 @@ idUriForState m (StateUri stateFqn) =
         stTid <- lookupStateCuid m (StateUri stateFqn)
         nameSpaceTid <- idUriForState m (StateUri nsFqn)
         pure (nameSpaceTid <> "$" <> stTid)
+
+-- Actions are declared under a role, partitioned by a state. Build ID by role tid + state cuid + action cuid.
+-- The readable FQN uses $ separators: <roleFqn>$<stateLocal>$<actionLocal> (or nested state path). We rely on cuid lookups.
+idUriForAction :: StableIdMapping -> ActionUri Readable -> Maybe String
+idUriForAction m (ActionUri actionFqn) = do
+  -- The namespace of an action is the parent state FQN; its namespace is the role FQN.
+  -- We'll derive role tid via the parent role FQN, then append state cuid and action cuid.
+  let stateFqn = typeUri2typeNameSpace_ actionFqn
+  stateTid <- idUriForState m (StateUri stateFqn)
+  actTid <- lookupActionCuid m (ActionUri actionFqn)
+  pure (stateTid <> "$" <> actTid)
 

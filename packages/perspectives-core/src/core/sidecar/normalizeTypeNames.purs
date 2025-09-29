@@ -39,19 +39,20 @@ import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (fromFoldable, toUnfoldable)
+import Foreign.Object as OBJ
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
 import Perspectives.Data.EncodableMap (EncodableMap, toUnfoldable, fromFoldable) as EM
 import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), UpstreamAutomaticEffect(..), UpstreamStateNotification(..))
 import Perspectives.Identifiers (splitTypeUri)
-import Perspectives.Instances.ObjectGetters (getProperty)
+import Perspectives.Instances.ObjectGetters (binding)
 import Perspectives.InvertedQuery (InvertedQuery)
-import Perspectives.ModelDependencies (domeinFileNameWithVersion, modelURI, modelsInUse)
+import Perspectives.ModelDependencies (modelURI, modelURIReadable, modelsInUse, versionedModelURI)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (toStableDomeinFile)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), traverseQfd)
-import Perspectives.Query.UnsafeCompiler (getRoleInstances)
+import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
 import Perspectives.Representation.ADT (ADT)
-import Perspectives.Representation.Action (AutomaticAction(..))
+import Perspectives.Representation.Action (Action, AutomaticAction(..))
 import Perspectives.Representation.CNF (traverseDPROD)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -60,6 +61,7 @@ import Perspectives.Representation.Class.Role (Role(..))
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), InvertedQueryKey(..))
+import Perspectives.Representation.Perspective (Perspective(..), StateSpec, stateSpec2StateIdentifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Value(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
@@ -68,12 +70,12 @@ import Perspectives.Representation.State (Notification(..), State(..), StateFulO
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
 import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
-import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping)
+import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), idUriForAction, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping)
 
 normalizeTypes :: DomeinFile Readable -> StableIdMapping -> MonadPerspectives (DomeinFile Stable)
 normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
   -- Notice that referredModels from a freshly parsed Arc source will be FQNs with names given by the modeller, rather than underlying cuids.
-  cuidMap <- getinstalledModelCuids
+  cuidMap <- getinstalledModelCuids true -- get versioned cuids because we will read from the repository.
   sidecars <- foldM
     ( \scs (ModelUri referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
         Nothing -> pure scs
@@ -93,21 +95,23 @@ type StableIdMappingForModel = (Map.Map (ModelUri Readable) (ModelUri Stable))
 
 -- A map from ModelUri Readable to ModelUri Stable.
 -- Not every installed model need have cuid!
-getinstalledModelCuids :: MonadPerspectives StableIdMappingForModel
-getinstalledModelCuids = do
+-- The Stable ModelUri will be versioned.
+getinstalledModelCuids :: Boolean -> MonadPerspectives StableIdMappingForModel
+getinstalledModelCuids versioned = do
+  let modelProp = if versioned then versionedModelURI else modelURI
   system <- getMySystem
+  -- Instances of ModelInUse are filled with instances of sys:VersionedModelManifest
   modelRoles <- (ContextInstance system) ##= getRoleInstances (ENR $ EnumeratedRoleType modelsInUse)
   x :: Array (Maybe (Tuple (ModelUri Readable) (ModelUri Stable))) <- for modelRoles \ri -> do
-    -- TODO: DIT moet gewoon versionedDomeinFileName zijn.
-    mcuid <- ri ##> getProperty (EnumeratedPropertyType domeinFileNameWithVersion)
-    case mcuid of
+    mreadableModelUri <- ri ##> binding >=> getPropertyValues (CP $ CalculatedPropertyType modelURIReadable)
+    case mreadableModelUri of
       Nothing -> pure Nothing
-      Just _ -> do
-        mdfid <- ri ##> getProperty (EnumeratedPropertyType modelURI) -- Stable
-        case mdfid of
+      Just (Value readableModelUri) -> do
+        mstableModelUri <- ri ##> binding >=> getPropertyValues (CP $ CalculatedPropertyType modelProp)
+        case mstableModelUri of
           Nothing -> pure Nothing
           -- The Stable name.
-          Just (Value dfid) -> pure $ Just $ Tuple (ModelUri dfid) (ModelUri dfid) -- LET OP! ZE KUNNEN NIET BEIDE DFID ZIJN!!
+          Just (Value stableModelUri) -> pure $ Just $ Tuple (ModelUri readableModelUri) (ModelUri stableModelUri)
   pure $ Map.fromFoldable $ catMaybes x
 
 -- | This monad supports 'ask'. `ask` will return an object whose keys are Model Ids (MIDs).
@@ -182,7 +186,7 @@ instance NormalizeTypeNames Context ContextType where
     gebruikerRol' <- for cr.gebruikerRol fqn2tid
     nestedContexts' <- for cr.nestedContexts fqn2tid
     context' <- for cr.context fqn2tid
-    roleAliases' <- for cr.roleAliases fqn2tid
+    (roleAliases' :: Array (Tuple String EnumeratedRoleType)) <- for (toUnfoldable cr.roleAliases) \(Tuple (key :: String) (value :: EnumeratedRoleType)) -> Tuple <$> (unwrap <$> (fqn2tid $ EnumeratedRoleType key)) <*> (fqn2tid value)
     pure $ Context
       ( cr
           { id = id'
@@ -192,7 +196,7 @@ instance NormalizeTypeNames Context ContextType where
           , gebruikerRol = gebruikerRol'
           , nestedContexts = nestedContexts'
           , context = context'
-          , roleAliases = roleAliases'
+          , roleAliases = fromFoldable roleAliases'
           }
       )
 
@@ -211,15 +215,19 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
     context' <- fqn2tid er.context
     roleAspects' <- for er.roleAspects normalize
     properties' <- for er.properties fqn2tid
-    propertyAliases' <- for er.propertyAliases fqn2tid
+    (propertyAliases' :: Array (Tuple String EnumeratedPropertyType)) <- for (toUnfoldable er.propertyAliases) \(Tuple key value) -> Tuple <$> (unwrap <$> (fqn2tid $ EnumeratedPropertyType key)) <*> (fqn2tid value)
     completeType' <- traverseDPROD normalize er.completeType
+    actions' <- EM.fromFoldable <$> for (EM.toUnfoldable er.actions) (\(Tuple ss objActs) -> Tuple ss <$> normalizeActionsForState ss objActs)
+    perspectives' <- traverse normalize er.perspectives
     pure $ EnumeratedRole $ er
       { id = id'
       , context = context'
       , roleAspects = roleAspects'
       , properties = properties'
-      , propertyAliases = propertyAliases'
+      , propertyAliases = fromFoldable propertyAliases'
       , completeType = completeType'
+      , actions = actions'
+      , perspectives = perspectives'
       }
 
 instance NormalizeTypeNames CalculatedRole CalculatedRoleType where
@@ -236,7 +244,44 @@ instance NormalizeTypeNames CalculatedRole CalculatedRoleType where
     id' <- fqn2tid er.id
     context' <- fqn2tid er.context
     calculation' <- normalize er.calculation
-    pure $ CalculatedRole $ er { id = id', context = context', calculation = calculation' }
+    actions' <- EM.fromFoldable <$> for (EM.toUnfoldable er.actions) (\(Tuple ss objActs) -> Tuple ss <$> normalizeActionsForState ss objActs)
+    perspectives' <- traverse normalize er.perspectives
+    pure $ CalculatedRole $ er { id = id', context = context', calculation = calculation', actions = actions', perspectives = perspectives' }
+
+-- Normalize action map keys for a given StateSpec into stable IDs using sidecars.
+normalizeActionsForState
+  :: StateSpec
+  -> OBJ.Object Action
+  -> WithSideCars (OBJ.Object Action)
+normalizeActionsForState stateSpec obj = do
+  sidecars <- ask
+  let
+    stateFqn = unwrap (stateSpec2StateIdentifier stateSpec)
+    pairs = OBJ.toUnfoldable obj :: Array (Tuple String Action)
+  folded <- for pairs \(Tuple localName act) -> do
+    case splitTypeUri (stateFqn <> "$" <> localName) of
+      Nothing -> pure (Tuple localName act)
+      Just { modelUri } -> case Map.lookup (ModelUri modelUri) sidecars of
+        Nothing -> pure (Tuple localName act)
+        Just mapping -> case idUriForAction mapping (ActionUri (stateFqn <> "$" <> localName)) of
+          Nothing -> pure (Tuple localName act)
+          Just stableKey -> pure (Tuple stableKey act)
+  pure $ OBJ.fromFoldable folded
+
+-- Normalize a Perspective record structurally: translate type ids and action keys
+instance normalizePerspectiveInst :: Normalize Perspective where
+  normalize (Perspective pr) = do
+    object' <- normalize pr.object
+    roleTypes' <- traverse fqn2tid pr.roleTypes
+    -- roleVerbs and propertyVerbs carry no type identifiers in values; keep as-is
+    actions' <- EM.fromFoldable <$> for (EM.toUnfoldable pr.actions) (\(Tuple ss objActs) -> Tuple ss <$> normalizeActionsForState ss objActs)
+    automaticStates' <- traverse fqn2tid pr.automaticStates
+    pure $ Perspective pr
+      { object = object'
+      , roleTypes = roleTypes'
+      , actions = actions'
+      , automaticStates = automaticStates'
+      }
 
 instance NormalizeTypeNames Role RoleType where
   fqn2tid (ENR rt) = ENR <$> fqn2tid rt
@@ -328,6 +373,9 @@ class Normalize v where
 
 -- Instances for structural normalization ------------------------------------
 
+instance normalizeModelUri :: Normalize (ModelUri Stable) where
+  normalize (ModelUri fqn) = ModelUri <<< unwrap <$> fqn2tid (ContextType fqn)
+
 instance normalizeRoleInContext :: Normalize RoleInContext where
   normalize (RoleInContext { role, context }) =
     (\role' context' -> RoleInContext { role: role', context: context' })
@@ -396,15 +444,17 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
     normalizeQueryFunction f = pure f
 
 instance normalizeNotificationInst :: Normalize Notification where
-  normalize (ContextNotification facets@{ sentence }) = do
+  normalize (ContextNotification facets@{ sentence, domain }) = do
     parts' <- traverse normalize (unwrap sentence).parts
+    domain' <- normalize domain
     let sentence' = Sentence (unwrap sentence) { parts = parts' }
-    pure $ ContextNotification facets { sentence = sentence' }
-  normalize (RoleNotification facets@{ currentContextCalculation, sentence }) = do
+    pure $ ContextNotification facets { sentence = sentence', domain = domain' }
+  normalize (RoleNotification facets@{ currentContextCalculation, sentence, domain }) = do
     parts' <- traverse normalize (unwrap sentence).parts
     currentContextCalculation' <- normalize currentContextCalculation
+    domain' <- normalize domain
     let sentence' = Sentence (unwrap sentence) { parts = parts' }
-    pure $ RoleNotification facets { currentContextCalculation = currentContextCalculation', sentence = sentence' }
+    pure $ RoleNotification facets { currentContextCalculation = currentContextCalculation', sentence = sentence', domain = domain' }
 
 instance normalizeAutomaticActionInst :: Normalize AutomaticAction where
   normalize (ContextAction facets@{ effect }) = do

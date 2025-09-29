@@ -65,6 +65,7 @@ type ContextRecord =
 
   , roleInvertedQueries :: Object (Array InvertedQuery) -- OBSOLETE!
 
+  -- Keys are role type names.
   , roleAliases :: Object (EnumeratedRoleType)
 
   , pos :: ArcPosition

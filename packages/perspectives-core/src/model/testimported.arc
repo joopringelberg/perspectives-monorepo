@@ -66,6 +66,8 @@ domain model://joopringelberg.nl#TestImported
         props (Test7) verbs (SetPropertyValue)
       perspective on Manager
         props (FirstName, LastName) verbs (Consult)
+      action MyAction
+        Test7 = "Did action MyAction" for AnotherThing1
       screen
         who
           Manager

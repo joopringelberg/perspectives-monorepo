@@ -96,7 +96,6 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
         case r of
           Left e -> pure $ Left [ parseError2PerspectivesError e ]
           Right ctxt@(ContextE { id: sourceIdReadable, pos }) ->
-            -- LET OP: DIT GAAT FALEN VOOR NIEUWE MODELLEN
             -- If we have a mapping, it is sure to have the enclosing Domein context, so then we can map ModelUri Readable to ModelUri Stable.
             if testModelName sourceIdReadable then do
               (Tuple result state :: Tuple (Either MultiplePerspectivesErrors (DomeinFile Readable)) PhaseTwoState) <-
@@ -108,7 +107,7 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                   -- We should load referred models if they are missing (but not the model we're compiling!).
                   -- Throw an error if a referred model is not installed. It will show up in the arc feedback.
                   -- NOTICE: referredModels is in termen van Readable, dus dat moet nog omgezet worden naar Stable.
-                  installedModelCuids <- lift getinstalledModelCuids
+                  installedModelCuids <- lift $ getinstalledModelCuids false -- unversioned.
                   for_ (delete id state.referredModels) (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
 
                   (x' :: Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries)) <-
@@ -161,6 +160,9 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                       viewPairs <- for planned.needCuids.views \fqn -> do
                         v <- liftEffect (cuid2 (stableModelUri <> ":view"))
                         pure (Tuple fqn v)
+                      actionPairs <- for planned.needCuids.actions \fqn -> do
+                        v <- liftEffect (cuid2 (stableModelUri <> ":action"))
+                        pure (Tuple fqn v)
 
                       let
                         newCuids =
@@ -169,6 +171,7 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                           , properties: OBJ.fromFoldable propPairs
                           , states: OBJ.fromFoldable statePairs
                           , views: OBJ.fromFoldable viewPairs
+                          , actions: OBJ.fromFoldable actionPairs
                           }
 
                       let mapping1 = UTN.finalizeCuidAssignments planned.mappingWithAliases newCuids

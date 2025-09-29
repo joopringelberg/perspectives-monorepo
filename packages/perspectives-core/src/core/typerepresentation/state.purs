@@ -38,6 +38,7 @@ import Perspectives.Representation.Action (AutomaticAction, TimeFacets)
 import Perspectives.Representation.Class.Identifiable (class Identifiable)
 import Perspectives.Representation.Sentence (Sentence)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), PropertyType, RoleType, StateIdentifier)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
 import Simple.JSON (class ReadForeign, class WriteForeign, read', writeImpl)
 
 newtype State = State StateRecord
@@ -180,8 +181,8 @@ instance ReadForeign StateFulObject where
       "Srole" -> pure $ Srole $ EnumeratedRoleType typ
 
 data Notification
-  = ContextNotification (TimeFacets (sentence :: Sentence, domain :: String))
-  | RoleNotification (TimeFacets (currentContextCalculation :: QueryFunctionDescription, sentence :: Sentence, domain :: String))
+  = ContextNotification (TimeFacets (sentence :: Sentence, domain :: ModelUri Stable))
+  | RoleNotification (TimeFacets (currentContextCalculation :: QueryFunctionDescription, sentence :: Sentence, domain :: ModelUri Stable))
 
 derive instance genericNotification :: Generic Notification _
 instance showNotification :: Show Notification where
@@ -198,9 +199,9 @@ instance ReadForeign Notification where
   readImpl f =
     -- Order matters here!
     do
-      { r } :: { r :: TimeFacets (sentence :: Sentence, currentContextCalculation :: QueryFunctionDescription, domain :: String) } <- read' f
+      { r } :: { r :: TimeFacets (sentence :: Sentence, currentContextCalculation :: QueryFunctionDescription, domain :: ModelUri Stable) } <- read' f
       pure $ RoleNotification r
       <|>
         do
-          { r } :: { r :: TimeFacets (sentence :: Sentence, domain :: String) } <- read' f
+          { r } :: { r :: TimeFacets (sentence :: Sentence, domain :: ModelUri Stable) } <- read' f
           pure $ ContextNotification r

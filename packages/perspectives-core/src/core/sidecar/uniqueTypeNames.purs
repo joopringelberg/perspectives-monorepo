@@ -51,13 +51,13 @@ module Perspectives.Sidecar.UniqueTypeNames
 
 import Prelude
 
-import Data.Array (filter, find, head, length, mapMaybe, nub, singleton, sortBy)
+import Data.Array (filter, find, findLastIndex, head, length, mapMaybe, nub, singleton, sortBy)
 import Data.Either (Either(..))
 import Data.Foldable (elem, foldl)
 import Data.Int (toNumber)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (unwrap)
-import Data.String.CodeUnits (toCharArray)
+import Data.String.CodeUnits (drop, toCharArray)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object)
 import Foreign.Object as OBJ
@@ -72,11 +72,14 @@ import Perspectives.Representation.Class.Context (enumeratedRoles)
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
+import Perspectives.Representation.Action (Action)
 import Perspectives.Representation.State (State(..)) as ST
 import Perspectives.Representation.TypeIdentifiers (propertytype2string, roletype2string)
 import Perspectives.Representation.View (View(..)) as VW
 import Perspectives.Sidecar.HashQFD (qfdSignature)
-import Perspectives.Sidecar.StableIdMapping (PropertyKeySnapshot, RoleKeySnapshot, StableIdMapping, ContextKeySnapshot, ViewKeySnapshot, StateKeySnapshot)
+import Perspectives.Sidecar.StableIdMapping (ActionKeySnapshot, ContextKeySnapshot, PropertyKeySnapshot, RoleKeySnapshot, StableIdMapping, StateKeySnapshot, ViewKeySnapshot)
+import Perspectives.Representation.Perspective (Perspective(..), StateSpec, stateSpec2StateIdentifier)
+import Perspectives.Data.EncodableMap (toUnfoldable) as EM
 
 -- | We match three kinds for now (omit state types): Context, Role, Property
 newtype ContextKey = ContextKey
@@ -364,6 +367,7 @@ extractKeysFromDfr
      , properties :: OBJ.Object PropertyKeySnapshot
      , views :: OBJ.Object ViewKeySnapshot
      , states :: OBJ.Object StateKeySnapshot
+     , actions :: OBJ.Object ActionKeySnapshot
      }
 extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: croles, enumeratedProperties, calculatedProperties, views, states } =
   { contexts: mapContext contexts
@@ -371,6 +375,7 @@ extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: cro
   , properties: mapEProp enumeratedProperties <> mapCProp calculatedProperties
   , views: mapView views
   , states: mapState states
+  , actions: mapActions eroles croles
   }
   where
   mapContext :: Object Context -> Object ContextKeySnapshot
@@ -518,6 +523,93 @@ extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: cro
               in
                 pure $ Tuple k { fqn: k, queryHash: qh }
 
+  -- Actions: collect from role-level action maps and perspectives; snapshot canonical entries only
+  mapActions :: Object EnumeratedRole -> Object CalculatedRole -> OBJ.Object ActionKeySnapshot
+  mapActions erolesTbl crolesTbl =
+    let
+      fromRoleActions = foldl
+        ( \acc k ->
+            case OBJ.lookup k erolesTbl of
+              Nothing -> acc
+              Just (EnumeratedRole r) ->
+                let
+                  roleFqn = unwrap r.id
+                  addFromEm acc' =
+                    let
+                      pairs = EM.toUnfoldable r.actions :: Array (Tuple StateSpec (OBJ.Object Action))
+                    in
+                      foldl accumulate acc' pairs
+                  addFromPerspectives acc' =
+                    foldl
+                      ( \a p ->
+                          case p of
+                            Perspective pr ->
+                              let
+                                pairs = EM.toUnfoldable pr.actions :: Array (Tuple StateSpec (OBJ.Object Action))
+                              in
+                                foldl accumulate a pairs
+                      )
+                      acc'
+                      r.perspectives
+                  accumulate a (Tuple ss objActs) =
+                    let
+                      stFqn = unwrap (stateSpec2StateIdentifier ss)
+                      ks = OBJ.keys objActs
+                      inserts = ks <#>
+                        ( \nm -> Tuple (stFqn <> "$" <> nm)
+                            { fqn: stFqn <> "$" <> nm
+                            , declaringRoleFqn: roleFqn
+                            , declaringStateFqn: stFqn
+                            }
+                        )
+                    in
+                      OBJ.union a (OBJ.fromFoldable inserts)
+                in
+                  addFromPerspectives (addFromEm acc)
+        )
+        OBJ.empty
+        (OBJ.keys erolesTbl)
+      fromCalcRoleActions = foldl
+        ( \acc k ->
+            case OBJ.lookup k crolesTbl of
+              Nothing -> acc
+              Just (CalculatedRole r) ->
+                let
+                  roleFqn = unwrap r.id
+                  pairs = EM.toUnfoldable r.actions :: Array (Tuple StateSpec (OBJ.Object Action))
+                  acc' = foldl accumulate OBJ.empty pairs
+                  acc'' = foldl
+                    ( \a p ->
+                        case p of
+                          Perspective pr ->
+                            let
+                              pairsP = EM.toUnfoldable pr.actions :: Array (Tuple StateSpec (OBJ.Object Action))
+                            in
+                              foldl accumulate a pairsP
+                    )
+                    acc'
+                    r.perspectives
+                  accumulate a (Tuple ss objActs) =
+                    let
+                      stFqn = unwrap (stateSpec2StateIdentifier ss)
+                      ks = OBJ.keys objActs
+                      inserts = ks <#>
+                        ( \nm -> Tuple (stFqn <> "$" <> nm)
+                            { fqn: stFqn <> "$" <> nm
+                            , declaringRoleFqn: roleFqn
+                            , declaringStateFqn: stFqn
+                            }
+                        )
+                    in
+                      OBJ.union a (OBJ.fromFoldable inserts)
+                in
+                  OBJ.union acc acc''
+        )
+        OBJ.empty
+        (OBJ.keys crolesTbl)
+    in
+      OBJ.union fromRoleActions fromCalcRoleActions
+
 -- Merge the current key snapshots with the previous sidecar to generate/update alias maps.
 mergeStableIdMapping
   :: forall r
@@ -526,6 +618,7 @@ mergeStableIdMapping
      , properties :: OBJ.Object PropertyKeySnapshot
      , states :: OBJ.Object StateKeySnapshot
      , views :: OBJ.Object ViewKeySnapshot
+     , actions :: OBJ.Object ActionKeySnapshot
      | r
      }
   -> StableIdMapping
@@ -577,6 +670,10 @@ mergeStableIdMapping cur mapping0 =
 
     -- State aliasing: process old snapshots topologically by namespace and normalize parent namespaces through known context/state aliases.
     stateAliases' = buildStateAliasesTopologically mapping0.stateKeys ctxAliases' mapping0.states candStatesIndex
+
+    -- Action aliases: normalize through state alias map only; preserve existing aliases otherwise
+    actionAliases' = buildActionAliases mapping0.actionKeys mapping0.actions (OBJ.fromFoldable (OBJ.keys cur.actions <#> (\k -> Tuple k true))) stateAliases'
+    actionCuids' = assignCuids actionAliases' mapping0.actionCuids (OBJ.keys cur.actions)
   in
     mapping0
       { contexts = ctxAliases'
@@ -584,15 +681,18 @@ mergeStableIdMapping cur mapping0 =
       , properties = propAliases'
       , views = viewAliases'
       , states = stateAliases'
+      , actions = actionAliases'
       , contextKeys = cur.contexts
       , roleKeys = cur.roles
       , propertyKeys = cur.properties
       , viewKeys = cur.views
       , stateKeys = cur.states
+      , actionKeys = cur.actions
       , contextCuids = ctxCuids'
       , roleCuids = rolCuids'
       , propertyCuids = propCuids'
       , viewCuids = viewCuids'
+      , actionCuids = actionCuids'
       }
   where
   objToArrayWith :: forall s a. (s -> a) -> OBJ.Object s -> Array (Tuple String a)
@@ -718,6 +818,40 @@ buildStateAliasesTopologically oldStates ctxAliases acc0 curIndex =
   in
     foldl step acc0 sorted
 
+-- Build action aliases by normalizing old state namespaces via state alias map, keep same local action name.
+buildActionAliases
+  :: OBJ.Object ActionKeySnapshot -- old action snapshots
+  -> OBJ.Object String -- existing alias map (oldFqn -> newFqn)
+  -> OBJ.Object Boolean -- current index of canonical action FQNs
+  -> OBJ.Object String -- state alias map (oldStateFqn -> newStateFqn)
+  -> OBJ.Object String
+buildActionAliases oldActions acc0 curIndex stateAliases =
+  foldl
+    ( \acc oldFqn -> case OBJ.lookup oldFqn oldActions of
+        Nothing -> acc
+        Just sOld ->
+          if OBJ.lookup oldFqn curIndex /= Nothing then acc
+          else
+            let
+              st0 = sOld.declaringStateFqn
+              stN = case OBJ.lookup st0 stateAliases of
+                Just ns -> ns
+                Nothing -> st0
+              -- take local action name as suffix after last '$'
+              local = lastSegment oldFqn
+              cand = stN <> "$" <> local
+            in
+              if OBJ.lookup cand curIndex /= Nothing then OBJ.insert oldFqn cand acc else acc
+    )
+    acc0
+    (OBJ.keys oldActions)
+
+lastSegment :: String -> String
+lastSegment s =
+  case findLastIndex (_ == '$') (toCharArray s) of
+    Nothing -> s
+    Just i -> drop (i + 1) s
+
 -- uses top-level findFirstJust
 snapshotToContextKeyCurrent :: ContextKeySnapshot -> ContextKey
 snapshotToContextKeyCurrent s = ContextKey { fqn: s.fqn, declaringContextFqn: s.declaringContextFqn, roles: s.roles, properties: s.properties, aspects: s.aspects }
@@ -833,11 +967,12 @@ planCuidAssignments
      , properties :: OBJ.Object PropertyKeySnapshot
      , views :: OBJ.Object ViewKeySnapshot
      , states :: OBJ.Object StateKeySnapshot
+     , actions :: OBJ.Object ActionKeySnapshot
      | r
      }
   -> StableIdMapping
   -> { mappingWithAliases :: StableIdMapping
-     , needCuids :: { contexts :: Array String, roles :: Array String, properties :: Array String, views :: Array String, states :: Array String }
+     , needCuids :: { contexts :: Array String, roles :: Array String, properties :: Array String, views :: Array String, states :: Array String, actions :: Array String }
      }
 planCuidAssignments cur mapping0 =
   let
@@ -907,9 +1042,18 @@ planCuidAssignments cur mapping0 =
             _ -> Nothing
       in
         filter (\fqn -> not (hasPrev fqn) && reusedFromAlias fqn == Nothing) (OBJ.keys cur.states)
+    needAction =
+      let
+        hasPrev fqn = OBJ.lookup fqn mapping0.actionCuids /= Nothing
+        reusedFromAlias fqn = findFirstJust (OBJ.keys mapping0.actions) \oldFqn ->
+          case OBJ.lookup oldFqn mapping0.actions of
+            Just tgt | tgt == fqn -> OBJ.lookup oldFqn mapping0.actionCuids
+            _ -> Nothing
+      in
+        filter (\fqn -> not (hasPrev fqn) && reusedFromAlias fqn == Nothing) (OBJ.keys cur.actions)
   in
     { mappingWithAliases
-    , needCuids: { contexts: needCtx, roles: needRol, properties: needProp, views: needView, states: needState }
+    , needCuids: { contexts: needCtx, roles: needRol, properties: needProp, views: needView, states: needState, actions: needAction }
     }
   where
   objToArrayWith :: forall s a. (s -> a) -> OBJ.Object s -> Array (Tuple String a)
@@ -978,7 +1122,7 @@ planCuidAssignments cur mapping0 =
 -- Finalize CUID assignments: copy existing cuids from oldFqn to newFqn wherever alias old->new exists and new lacks a cuid
 finalizeCuidAssignments
   :: StableIdMapping
-  -> { contexts :: OBJ.Object String, roles :: OBJ.Object String, properties :: OBJ.Object String, views :: OBJ.Object String, states :: OBJ.Object String }
+  -> { contexts :: OBJ.Object String, roles :: OBJ.Object String, properties :: OBJ.Object String, views :: OBJ.Object String, states :: OBJ.Object String, actions :: OBJ.Object String }
   -> StableIdMapping
 finalizeCuidAssignments mappingWithAliases newCuids =
   let
@@ -1006,6 +1150,7 @@ finalizeCuidAssignments mappingWithAliases newCuids =
     propCuidsProp = propagate mappingWithAliases.properties mappingWithAliases.propertyCuids
     viewCuidsProp = propagate mappingWithAliases.views mappingWithAliases.viewCuids
     stateCuidsProp = propagate mappingWithAliases.states mappingWithAliases.stateCuids
+    actionCuidsProp = propagate mappingWithAliases.actions mappingWithAliases.actionCuids
 
     -- 2) add freshly minted cuids (if any)
     ctxCuids' = OBJ.union ctxCuidsProp newCuids.contexts
@@ -1013,6 +1158,7 @@ finalizeCuidAssignments mappingWithAliases newCuids =
     propCuids' = OBJ.union propCuidsProp newCuids.properties
     viewCuids' = OBJ.union viewCuidsProp newCuids.views
     stateCuids' = OBJ.union stateCuidsProp newCuids.states
+    actionCuids' = OBJ.union actionCuidsProp newCuids.actions
   in
     mappingWithAliases
       { contextCuids = ctxCuids'
@@ -1020,5 +1166,6 @@ finalizeCuidAssignments mappingWithAliases newCuids =
       , propertyCuids = propCuids'
       , viewCuids = viewCuids'
       , stateCuids = stateCuids'
+      , actionCuids = actionCuids'
       }
 
