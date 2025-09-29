@@ -61,7 +61,8 @@ import Perspectives.Representation.Class.Role (Role(..))
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), InvertedQueryKey(..))
-import Perspectives.Representation.Perspective (Perspective(..), StateSpec, stateSpec2StateIdentifier)
+import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..), stateSpec2StateIdentifier, PropertyVerbs(..))
+import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Value(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
@@ -71,6 +72,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), 
 import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), idUriForAction, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping)
+import Perspectives.Sidecar.HashQFD (qfdSignature)
 
 normalizeTypes :: DomeinFile Readable -> StableIdMapping -> MonadPerspectives (DomeinFile Stable)
 normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
@@ -218,7 +220,8 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
     (propertyAliases' :: Array (Tuple String EnumeratedPropertyType)) <- for (toUnfoldable er.propertyAliases) \(Tuple key value) -> Tuple <$> (unwrap <$> (fqn2tid $ EnumeratedPropertyType key)) <*> (fqn2tid value)
     completeType' <- traverseDPROD normalize er.completeType
     actions' <- EM.fromFoldable <$> for (EM.toUnfoldable er.actions) (\(Tuple ss objActs) -> Tuple ss <$> normalizeActionsForState ss objActs)
-    perspectives' <- traverse normalize er.perspectives
+    -- Derive stable perspective IDs using the owning role's stable ID
+    perspectives' <- traverse (normalizePerspectiveWithOwner (unwrap id')) er.perspectives
     pure $ EnumeratedRole $ er
       { id = id'
       , context = context'
@@ -244,8 +247,14 @@ instance NormalizeTypeNames CalculatedRole CalculatedRoleType where
     id' <- fqn2tid er.id
     context' <- fqn2tid er.context
     calculation' <- normalize er.calculation
-    actions' <- EM.fromFoldable <$> for (EM.toUnfoldable er.actions) (\(Tuple ss objActs) -> Tuple ss <$> normalizeActionsForState ss objActs)
-    perspectives' <- traverse normalize er.perspectives
+    actions' <- EM.fromFoldable <$> for (EM.toUnfoldable er.actions)
+      ( \(Tuple ss objActs) -> do
+          ss' <- normalize ss
+          objActs' <- normalizeActionsForState ss' objActs
+          pure (Tuple ss' objActs')
+      )
+    -- Derive stable perspective IDs using the owning role's stable ID
+    perspectives' <- traverse (normalizePerspectiveWithOwner (unwrap id')) er.perspectives
     pure $ CalculatedRole $ er { id = id', context = context', calculation = calculation', actions = actions', perspectives = perspectives' }
 
 -- Normalize action map keys for a given StateSpec into stable IDs using sidecars.
@@ -273,15 +282,68 @@ instance normalizePerspectiveInst :: Normalize Perspective where
   normalize (Perspective pr) = do
     object' <- normalize pr.object
     roleTypes' <- traverse fqn2tid pr.roleTypes
-    -- roleVerbs and propertyVerbs carry no type identifiers in values; keep as-is
-    actions' <- EM.fromFoldable <$> for (EM.toUnfoldable pr.actions) (\(Tuple ss objActs) -> Tuple ss <$> normalizeActionsForState ss objActs)
+    -- Remap EncodableMap keys (StateSpec) to their normalized form and normalize action keys per state
+    roleVerbs' <- EM.fromFoldable <$> for (EM.toUnfoldable pr.roleVerbs) (\(Tuple ss rvs) -> Tuple <$> normalize ss <*> pure rvs)
+    propertyVerbs' <- EM.fromFoldable <$> for (EM.toUnfoldable pr.propertyVerbs) (\(Tuple ss pvs) -> Tuple <$> normalize ss <*> traverse normalizePropertyVerbs pvs)
+    actions' <- EM.fromFoldable <$> for (EM.toUnfoldable pr.actions)
+      ( \(Tuple ss objActs) -> do
+          ss' <- normalize ss
+          objActs' <- normalizeActionsForState ss' objActs
+          pure (Tuple ss' objActs')
+      )
     automaticStates' <- traverse fqn2tid pr.automaticStates
     pure $ Perspective pr
       { object = object'
       , roleTypes = roleTypes'
+      , roleVerbs = roleVerbs'
+      , propertyVerbs = propertyVerbs'
       , actions = actions'
       , automaticStates = automaticStates'
       }
+
+-- Helper: normalize a Perspective while setting a stable id derived from the owning role's stable id
+normalizePerspectiveWithOwner :: String -> Perspective -> WithSideCars Perspective
+normalizePerspectiveWithOwner ownerRoleTid (Perspective pr) = do
+  object' <- normalize pr.object
+  roleTypes' <- traverse fqn2tid pr.roleTypes
+  roleVerbs' <- EM.fromFoldable <$> for (EM.toUnfoldable pr.roleVerbs) (\(Tuple ss rvs) -> Tuple <$> normalize ss <*> pure rvs)
+  propertyVerbs' <- EM.fromFoldable <$> for (EM.toUnfoldable pr.propertyVerbs) (\(Tuple ss pvs) -> Tuple <$> normalize ss <*> traverse normalizePropertyVerbs pvs)
+  actions' <- EM.fromFoldable <$> for (EM.toUnfoldable pr.actions)
+    ( \(Tuple ss objActs) -> do
+        ss' <- normalize ss
+        objActs' <- normalizeActionsForState ss' objActs
+        pure (Tuple ss' objActs')
+    )
+  automaticStates' <- traverse fqn2tid pr.automaticStates
+  let perspSig = qfdSignature object'
+  let stableId = ownerRoleTid <> "_" <> perspSig
+  pure $ Perspective pr
+    { id = stableId
+    , object = object'
+    , roleTypes = roleTypes'
+    , roleVerbs = roleVerbs'
+    , propertyVerbs = propertyVerbs'
+    , actions = actions'
+    , automaticStates = automaticStates'
+    }
+
+-- Normalize PropertyVerbs by normalizing the PropertyTypes inside its ExplicitSet
+normalizePropertyVerbs :: PropertyVerbs -> WithSideCars PropertyVerbs
+normalizePropertyVerbs (PropertyVerbs props verbs) = do
+  props' <- case props of
+    Universal -> pure Universal
+    Empty -> pure Empty
+    PSet as -> PSet <$> traverse fqn2tid as
+  pure $ PropertyVerbs props' verbs
+
+-- Normalize StateSpec by normalizing its inner StateIdentifier while preserving the variant
+instance normalizeStateSpec :: Normalize StateSpec where
+  normalize ss = do
+    sid' <- fqn2tid (stateSpec2StateIdentifier ss)
+    pure case ss of
+      ContextState _ -> ContextState sid'
+      SubjectState _ -> SubjectState sid'
+      ObjectState _ -> ObjectState sid'
 
 instance NormalizeTypeNames Role RoleType where
   fqn2tid (ENR rt) = ENR <$> fqn2tid rt
