@@ -37,6 +37,7 @@ import Data.Either (Either(..))
 import Data.Foldable (for_, traverse_)
 import Data.Identity as Identity
 import Data.List (List, filter, filterM, fromFoldable) as LIST
+import Data.Map (lookup) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, isNothing, maybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), indexOf)
@@ -96,11 +97,12 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), 
 import Perspectives.Representation.UserGraph.Build (buildUserGraph)
 import Perspectives.Representation.View (View(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
+import Perspectives.Sidecar.NormalizeTypeNames (getinstalledModelCuids)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
 import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith)
 import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, hasContextAspect, isPerspectiveOnSelf, lookForUnqualifiedPropertyType_, roleStates, statesPerProperty, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
-import Prelude (Unit, append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=))
+import Prelude (Unit, append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (<#>))
 
 -- Currently only used in tests and in loadArcFS - but that has to change to phaseThreeWithMapping.
 phaseThree
@@ -183,8 +185,13 @@ phaseThreeWithMapping_
   -> Maybe StableIdMapping
   -> MP (Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries))
 phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping = do
-  indexedContexts <- unions <$> traverse (getDomeinFile <<< toStableModelUri >=> pure <<< indexedContexts) referredModels
-  indexedRoles <- unions <$> traverse (getDomeinFile <<< toStableModelUri >=> pure <<< indexedRoles) referredModels
+  installedModelCuids <- getinstalledModelCuids false -- not versioned
+  -- Notice that here we want to retrieve a DomeinFile from the local store. That means we don't have to provide a version!
+  stableReferredModels <- pure $ referredModels <#> \rm -> case Map.lookup rm installedModelCuids of
+    Just stableUri -> stableUri
+    Nothing -> ModelUri $ unwrap rm
+  indexedContexts <- unions <$> traverse (getDomeinFile <<< toStableModelUri >=> pure <<< indexedContexts) stableReferredModels
+  indexedRoles <- unions <$> traverse (getDomeinFile <<< toStableModelUri >=> pure <<< indexedRoles) stableReferredModels
   let
     dfMapped = case mMapping of
       Nothing -> df
@@ -856,7 +863,7 @@ handlePostponedStateQualifiedParts = do
             , startMoment
             , endMoment
             , repeats
-            , domain: unsafePartial typeUri2ModelUri_ $ unwrap $ roleIdentification2context user
+            , domain: unsafePartial ModelUri $ typeUri2ModelUri_ $ unwrap $ roleIdentification2context user
             }
           otherwise -> RoleNotification
             { currentContextCalculation
@@ -864,7 +871,7 @@ handlePostponedStateQualifiedParts = do
             , startMoment
             , endMoment
             , repeats
-            , domain: unsafePartial typeUri2ModelUri_ $ unwrap $ roleIdentification2context user
+            , domain: unsafePartial ModelUri $ typeUri2ModelUri_ $ unwrap $ roleIdentification2context user
             }
       )
       qualifiedUsers

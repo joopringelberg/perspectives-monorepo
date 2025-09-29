@@ -269,6 +269,7 @@ updateModel withDependencies install dfid@(ModelUri modelName) domeinFileAndAtta
       lift $ fetchTranslations dfid
 
 -- | Retrieve the model(s) from the modelName(s) and add them to the local couchdb installation.
+-- | The modelName(s) may be UNVERSIONED or VERSIONED.
 -- | Load the dependencies first.
 -- | This function is applied with `callEffect`. Accordingly, it will get the ContextInstance of the Action as second parameter.
 -- | Requires the right to write to the Repository database (SERVERADMIN, DATABASEADMIN, WRITINGMEMBER)
@@ -279,7 +280,7 @@ addModelToLocalStore_ modelNames _ = try (for_ modelNames (flip addModelToLocalS
 -- | Parameter `isUpdate` should be true iff the model has been added to the local installation before.
 -- | Attachments are fetched from the repository and stored locally.
 -- | Invariant: the model is not in cache when this function returns.
--- | The modelname is UNVERSIONED!
+-- | The modelName may be UNVERSIONED or VERSIONED.
 addModelToLocalStore :: ModelUri Stable -> Boolean -> MonadPerspectivesTransaction Unit
 addModelToLocalStore dfid isInitialLoad' = do
   { versionedModelName } <- computeVersionedAndUnversiondName dfid

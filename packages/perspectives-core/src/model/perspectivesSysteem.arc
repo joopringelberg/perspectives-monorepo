@@ -522,7 +522,8 @@ domain model://perspectives.domains#System
 
     -- PDRDEPENDENCY
     context ModelsInUse (relational) filledBy sys:VersionedModelManifest
-      -- Includes a semantic version number. The PDR will set this value.
+      -- Includes a semantic version number. 
+      -- The PDR will set this value to the value of VersionedModelManifest$External$VersionedModelURI, a ModelUri Stable.
       -- PDRDEPENDENCY
       property ModelToRemove (String)
       -- PDRDEPENDENCY
@@ -950,7 +951,7 @@ domain model://perspectives.domains#System
       property IsLibrary (mandatory, Boolean)
       property IsSystemModel (Boolean)
       -- The value of this property will be set automatically by the Couchdb:VersionedModelManifest$Author.
-      -- It must be a local DomeinFileId, e.g. perspectives_domains-System.json (WITHOUT the version!)
+      -- It must be a the name of the file in Couchdb (the _id value of the document), e.g. perspectives_domains-System.json (WITHOUT the version!)
       -- PDRDEPENDENCY
       property DomeinFileName (mandatory, String)
       property ModelCuid (String)

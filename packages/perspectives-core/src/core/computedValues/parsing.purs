@@ -125,7 +125,6 @@ applyImmediately modelUri_ arcSource_ versionedModelManifest =
     >>= handleExternalStatementError "model://perspectives.domains#Parsing$ApplyImmediately"
 
 type ArcSource = String
-type CrlSource = String
 type Url = String
 
 -- | Parse and compile the Arc file. Upload to the repository. Does neither cache, nor stores it in the local collection of DomeinFiles.
@@ -237,6 +236,8 @@ uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping = do
     theFile <- liftEffect $ toFile "storedQueries.json" "application/json" (unsafeToForeign $ writeJSON invertedQueries)
     lift $ void $ addAttachment documentUrl documentName newRev "storedQueries.json" theFile (MediaType "application/json")
 
+-- | Remove the DomeinFile from the repository.
+-- | ModelUriString should be versioned (e.g. model://perspectives.domains#System@1.0).
 removeFromRepository
   :: Array ModelUriString
   -> RoleInstance
@@ -291,11 +292,11 @@ storeModelLocally_ modelUri_ arcSource_ versionedModelManifest =
           mLocalMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri modelUri)
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           case mmodelCuid of
-            Nothing -> lift $ addWarning "Parsing$applyImmediately: no model CUID given!"
+            Nothing -> lift $ addWarning "StoreModelLocally: no model CUID given!"
             Just (Value modelCuid) -> do
               r <- loadAndCompileArcFileWithSidecar_ (Sidecar.ModelUri $ unversionedModelUri modelUri) arcSource false mLocalMapping modelCuid
               case r of
-                Left m -> logPerspectivesError $ Custom ("storeModelLocally: " <> show m)
+                Left m -> logPerspectivesError $ Custom ("StoreModelLocally: " <> show m)
                 -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries.
                 Right (Tuple (DomeinFile dfr@{ id, namespace }) (Tuple invertedQueries mapping')) -> do
                   (Tuple _ attachments) <- retrieveModelFromLocalStore id
@@ -401,17 +402,17 @@ generateTranslationTable translation_ modelUri_ _ = case head translation_, head
 -- | The result is the (serialised) ModelTranslation.
 -- | The original ModelTranslation is returned when there is no TranslationTable or when it cannot be parsed correctly.
 augmentModelTranslation :: Array String -> Array String -> (RoleInstance ~~> Value)
-augmentModelTranslation translation_ domeinFileName_ _ = case head translation_, head domeinFileName_ of
+augmentModelTranslation translation_ modelUri_ _ = case head translation_, head modelUri_ of
   Nothing, _ -> handleExternalFunctionError "model://perspectives.domains#Parsing$AugmentModelTranslation"
     (Left (error "A String holding a ModelTranslation should be provided."))
   _, Nothing -> handleExternalFunctionError "model://perspectives.domains#Parsing$AugmentModelTranslation"
     (Left (error "A Versioned model name should be provided. (e.g. model://perspectives.domains#System@1.0)"))
-  Just modelTranslationString, Just domeinFileName -> case readJSON_ modelTranslationString of
+  Just modelTranslationString, Just modelUriString -> case readJSON_ modelTranslationString of
     -- Fail silently
     Nothing -> handleExternalFunctionError "model://perspectives.domains#Parsing$AugmentModelTranslation"
       (Left (error "The model translation string could not be parsed."))
     -- Retrieve the Existing Translation from the repository and apply it to the ModelTranslation.
-    Just (modelTranslation :: ModelTranslation) -> case (unsafePartial modelUri2ModelUrl domeinFileName) of
+    Just (modelTranslation :: ModelTranslation) -> case (unsafePartial modelUri2ModelUrl modelUriString) of
       { repositoryUrl, documentName } -> do
         mTranslationTableBlob <- lift $ lift $ getAttachment repositoryUrl documentName "translationtable.json"
         case mTranslationTableBlob of

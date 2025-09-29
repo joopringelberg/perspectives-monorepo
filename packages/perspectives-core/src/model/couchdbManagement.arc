@@ -936,6 +936,8 @@ domain model://perspectives.domains#CouchdbManagement
       -- so we can create ModelManifest with a user-defined name. 
       -- The Model URI (the 'logical name' of the model), e.g. model://perspectives.domains#<cuid> (DomeinFileUri Stable).
       property ModelURI (functional) = "model://" + context >> Repository >> Repository$External$NameSpace + "#" + binder Manifests >> (ModelCuid orElse LocalModelName) >>= first
+      -- PDRDEPENDENCY
+      property ModelURIReadable (functional) = "model://" + context >> Repository >> Repository$External$NameSpace + "#" + binder Manifests >> LocalModelName >>= first
       -- The URL of the Repository (and it will refer to the ServerUrl).
       property RepositoryUrl (functional) = binder Manifests >> context >> extern >> RepositoryUrl
       -- The URL of the Instances database of the Repository.
@@ -1122,6 +1124,8 @@ domain model://perspectives.domains#CouchdbManagement
       -- PDRDEPENDENCY
       -- (DomeinFileUri Stable)
       property ModelURI (functional) = binder Versions >> context >> extern >> ModelManifest$External$ModelURI
+      -- PDRDEPENDENCY
+      property ModelURIReadable (functional) = (binder Versions >> context >> extern >> ModelManifest$External$ModelURIReadable >>= first)
       property ModelCuid (functional) = binder Versions >> context >> extern >> ModelManifest$External$ModelCuid
       -- (currently DomeinFileUri Readable) plus version. This should become a Stable URI.
       property VersionedModelURI = VersionedModelManifest$External$ModelURI + "@" + External$Version
@@ -1150,7 +1154,7 @@ domain model://perspectives.domains#CouchdbManagement
       on exit
         do for Author
           -- Delete the DomeinFile.
-          callEffect p:RemoveFromRepository( VersionedModelManifest$External$VersionedModelURI )
+          callEffect p:RemoveFromRepository( VersionedModelURI )
 
       state BecomesRecommended = IsRecommended
         on entry
@@ -1179,7 +1183,7 @@ domain model://perspectives.domains#CouchdbManagement
           on entry
             do for Author
               -- This will upload an empty Translations table, too. VersionedModelURI should be Stable.
-              callEffect p:UploadToRepository( VersionedModelManifest$External$VersionedModelURI, 
+              callEffect p:UploadToRepository( VersionedModelURI, 
                 callExternal util:ReplaceR( "bind publicrole.*in sys:MySystem", "", ArcSource ) returns String)
               Build = Build + 1
               MustUpload = false
@@ -1190,7 +1194,7 @@ domain model://perspectives.domains#CouchdbManagement
         state StoreInLocalDatabase = Store == "Locally"
           on entry
             do for Author
-              callEffect p:StoreModelLocally( VersionedModelManifest$External$VersionedModelURI, ArcSource )
+              callEffect p:StoreModelLocally( VersionedModelURI, ArcSource )
               Build = Build + 1
               MustUpload = false
             notify Author
