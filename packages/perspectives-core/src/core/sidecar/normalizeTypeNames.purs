@@ -35,7 +35,7 @@ import Prelude
 import Control.Monad.Reader (Reader, ask, runReaderT)
 import Data.Array (catMaybes, foldM)
 import Data.Map (Map, fromFoldable, lookup, insert, singleton) as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
@@ -64,7 +64,7 @@ import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), InvertedQueryKey(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..), stateSpec2StateIdentifier, PropertyVerbs(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Value(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.Sentence (Sentence(..))
@@ -72,7 +72,7 @@ import Perspectives.Representation.State (Notification(..), State(..), StateFulO
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
 import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
-import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), idUriForAction, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping)
+import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), idUriForAction, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
 import Perspectives.Sidecar.HashQFD (qfdSignature)
 
 -- Environment carried during normalization: sidecars and a perspective id rewrite map
@@ -199,6 +199,18 @@ instance NormalizeTypeNames Context ContextType where
     nestedContexts' <- for cr.nestedContexts fqn2tid
     context' <- for cr.context fqn2tid
     (roleAliases' :: Array (Tuple String EnumeratedRoleType)) <- for (toUnfoldable cr.roleAliases) \(Tuple (key :: String) (value :: EnumeratedRoleType)) -> Tuple <$> (unwrap <$> (fqn2tid $ EnumeratedRoleType key)) <*> (fqn2tid value)
+    -- Normalize indexed context instance if present via sidecar individuals (use the sidecar for the individual's namespace)
+    indexedContext' <- case cr.indexedContext of
+      Nothing -> pure Nothing
+      Just (ContextInstance ident) -> do
+        env <- ask
+        let
+          stableId = case splitTypeUri ident of
+            Nothing -> Nothing
+            Just { modelUri } -> case Map.lookup (ModelUri modelUri) env.sidecars of
+              Nothing -> Nothing
+              Just sim -> lookupContextIndividualId sim ident
+        pure $ Just (ContextInstance (maybe ident identity stableId))
     pure $ Context
       ( cr
           { id = id'
@@ -209,6 +221,7 @@ instance NormalizeTypeNames Context ContextType where
           , nestedContexts = nestedContexts'
           , context = context'
           , roleAliases = fromFoldable roleAliases'
+          , indexedContext = indexedContext'
           }
       )
 
@@ -234,6 +247,18 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
     actions' <- EM.fromFoldable <$> for (EM.toUnfoldable er.actions) (\(Tuple ss objActs) -> Tuple ss <$> normalizeActionsForState ss objActs)
     -- Derive stable perspective IDs using the owning role's stable ID
     perspectives' <- traverse (normalizePerspectiveWithOwner (unwrap id')) er.perspectives
+    -- Normalize indexed role instance if present via sidecar individuals (use the sidecar for the individual's namespace)
+    indexedRole' <- case er.indexedRole of
+      Nothing -> pure Nothing
+      Just (RoleInstance ident) -> do
+        env <- ask
+        let
+          stableId = case splitTypeUri ident of
+            Nothing -> Nothing
+            Just { modelUri } -> case Map.lookup (ModelUri modelUri) env.sidecars of
+              Nothing -> Nothing
+              Just sim -> lookupRoleIndividualId sim ident
+        pure $ Just (RoleInstance (maybe ident identity stableId))
     pure $ EnumeratedRole $ er
       { id = id'
       , context = context'
@@ -244,6 +269,7 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
       , completeType = completeType'
       , actions = actions'
       , perspectives = perspectives'
+      , indexedRole = indexedRole'
       }
 
 instance NormalizeTypeNames CalculatedRole CalculatedRoleType where
@@ -503,7 +529,6 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
     normalizeDomain (VDOM r (mp :: Maybe PropertyType)) = VDOM <$> pure r <*> (traverse fqn2tid mp)
     normalizeDomain d = pure d
 
-    normalizeQueryFunction :: QueryFunction -> WithSideCars QueryFunction
     normalizeQueryFunction (PropertyGetter pt) = PropertyGetter <$> fqn2tid pt
     normalizeQueryFunction (Value2Role pt) = Value2Role <$> fqn2tid pt
     normalizeQueryFunction (RolGetter pt) = RolGetter <$> fqn2tid pt
@@ -523,6 +548,25 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
     normalizeQueryFunction (SetPropertyValue pt) = SetPropertyValue <$> fqn2tid pt
     normalizeQueryFunction (CreateFileF s pt) = CreateFileF s <$> fqn2tid pt
     normalizeQueryFunction (FilledF rt ct) = FilledF <$> fqn2tid rt <*> fqn2tid ct
+    -- Translate readable individuals to stable instance IDs using sidecar individuals maps
+    normalizeQueryFunction (ContextIndividual (ContextInstance ident)) = do
+      env <- ask
+      let
+        stableId = case splitTypeUri ident of
+          Nothing -> Nothing
+          Just { modelUri } -> case Map.lookup (ModelUri modelUri) env.sidecars of
+            Nothing -> Nothing
+            Just sim -> lookupContextIndividualId sim ident
+      pure $ ContextIndividual (ContextInstance (maybe ident identity stableId))
+    normalizeQueryFunction (RoleIndividual (RoleInstance ident)) = do
+      env <- ask
+      let
+        stableId = case splitTypeUri ident of
+          Nothing -> Nothing
+          Just { modelUri } -> case Map.lookup (ModelUri modelUri) env.sidecars of
+            Nothing -> Nothing
+            Just sim -> lookupRoleIndividualId sim ident
+      pure $ RoleIndividual (RoleInstance (maybe ident identity stableId))
     normalizeQueryFunction f = pure f
 
 instance normalizeNotificationInst :: Normalize Notification where

@@ -6,13 +6,16 @@
 
 module Perspectives.Sidecar.StableIdMapping
   ( ContextKeySnapshot
+  , ContextIndividualKeySnapshot
   , module Perspectives.SideCar.PhantomTypedNewtypes
   , PropertyKeySnapshot
   , ViewKeySnapshot
   , StateKeySnapshot
   , RoleKeySnapshot
   , ActionKeySnapshot
+  , RoleIndividualKeySnapshot
   , StableIdMapping
+  , StableIdMappingWithoutIndividuals
   , emptyStableIdMapping
   , idUriForContext
   , idUriForProperty
@@ -27,6 +30,8 @@ module Perspectives.Sidecar.StableIdMapping
   , lookupPropertyCuid
   , lookupRoleCuid
   , lookupActionCuid
+  , lookupContextIndividualId
+  , lookupRoleIndividualId
   ) where
 
 import Prelude (bind, pure, ($), (<>), (==))
@@ -93,6 +98,17 @@ type ActionKeySnapshot =
   , declaringStateFqn :: String
   }
 
+-- Indexed individuals snapshots: capture the parent scope and the readable name
+type ContextIndividualKeySnapshot =
+  { contextFqn :: String
+  , name :: String
+  }
+
+type RoleIndividualKeySnapshot =
+  { roleFqn :: String
+  , name :: String
+  }
+
 type StableIdMapping =
   { version :: Int
   , contexts :: Object String
@@ -108,6 +124,9 @@ type StableIdMapping =
   , viewKeys :: Object ViewKeySnapshot
   , stateKeys :: Object StateKeySnapshot
   , actionKeys :: Object ActionKeySnapshot
+  -- Indexed individual key snapshots (parent scope + name)
+  , contextIndividualKeys :: Object ContextIndividualKeySnapshot
+  , roleIndividualKeys :: Object RoleIndividualKeySnapshot
   -- Stable ids per kind (FQN -> CUID). Canonical entries should have these.
   , contextCuids :: Object String
   , roleCuids :: Object String
@@ -115,6 +134,9 @@ type StableIdMapping =
   , viewCuids :: Object String
   , stateCuids :: Object String
   , actionCuids :: Object String
+  -- Indexed individuals within this model (readable name -> stable instance id)
+  , contextIndividuals :: Object String
+  , roleIndividuals :: Object String
   , modelIdentifier :: ModelUri Stable
   }
 
@@ -133,13 +155,70 @@ emptyStableIdMapping =
   , viewKeys: empty
   , stateKeys: empty
   , actionKeys: empty
+  , contextIndividualKeys: empty
+  , roleIndividualKeys: empty
   , contextCuids: empty
   , roleCuids: empty
   , propertyCuids: empty
   , viewCuids: empty
   , stateCuids: empty
   , actionCuids: empty
+  , contextIndividuals: empty
+  , roleIndividuals: empty
   , modelIdentifier: ModelUri ""
+  }
+
+-- Backward-compatible shape (e.g. existing stored sidecars without individuals maps)
+type StableIdMappingWithoutIndividuals =
+  { version :: Int
+  , contexts :: Object String
+  , roles :: Object String
+  , properties :: Object String
+  , views :: Object String
+  , states :: Object String
+  , actions :: Object String
+  , contextKeys :: Object ContextKeySnapshot
+  , roleKeys :: Object RoleKeySnapshot
+  , propertyKeys :: Object PropertyKeySnapshot
+  , viewKeys :: Object ViewKeySnapshot
+  , stateKeys :: Object StateKeySnapshot
+  , actionKeys :: Object ActionKeySnapshot
+  -- Older sidecars won't have individual key snapshots
+  , contextCuids :: Object String
+  , roleCuids :: Object String
+  , propertyCuids :: Object String
+  , viewCuids :: Object String
+  , stateCuids :: Object String
+  , actionCuids :: Object String
+  , modelIdentifier :: ModelUri Stable
+  }
+
+upgradeWithoutIndividuals :: StableIdMappingWithoutIndividuals -> StableIdMapping
+upgradeWithoutIndividuals m =
+  { version: m.version
+  , contexts: m.contexts
+  , roles: m.roles
+  , properties: m.properties
+  , views: m.views
+  , states: m.states
+  , actions: m.actions
+  , contextKeys: m.contextKeys
+  , roleKeys: m.roleKeys
+  , propertyKeys: m.propertyKeys
+  , viewKeys: m.viewKeys
+  , stateKeys: m.stateKeys
+  , actionKeys: m.actionKeys
+  , contextIndividualKeys: empty
+  , roleIndividualKeys: empty
+  , contextCuids: m.contextCuids
+  , roleCuids: m.roleCuids
+  , propertyCuids: m.propertyCuids
+  , viewCuids: m.viewCuids
+  , stateCuids: m.stateCuids
+  , actionCuids: m.actionCuids
+  , contextIndividuals: empty
+  , roleIndividuals: empty
+  , modelIdentifier: m.modelIdentifier
   }
 
 -- Resolve a CUID for an FQN:
@@ -204,7 +283,9 @@ loadStableMapping (ModelUri domeinFileName) = do
       txt <- liftAff $ fromBlob blob
       pure $ case readJSON txt of
         Right (m :: StableIdMapping) -> Just m
-        _ -> Nothing
+        _ -> case readJSON txt of
+          Right (m0 :: StableIdMappingWithoutIndividuals) -> Just (upgradeWithoutIndividuals m0)
+          _ -> Nothing
 
 idUriForContext
   :: StableIdMapping
@@ -285,4 +366,11 @@ idUriForAction m (ActionUri actionFqn) = do
   stateTid <- idUriForState m (StateUri stateFqn)
   actTid <- lookupActionCuid m (ActionUri actionFqn)
   pure (stateTid <> "$" <> actTid)
+
+-- Lookup helpers for indexed individuals
+lookupContextIndividualId :: StableIdMapping -> String -> Maybe String
+lookupContextIndividualId m ident = OBJ.lookup ident m.contextIndividuals
+
+lookupRoleIndividualId :: StableIdMapping -> String -> Maybe String
+lookupRoleIndividualId m ident = OBJ.lookup ident m.roleIndividuals
 

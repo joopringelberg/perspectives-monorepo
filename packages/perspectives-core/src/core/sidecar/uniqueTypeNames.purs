@@ -47,6 +47,8 @@ module Perspectives.Sidecar.UniqueTypeNames
   , extractKeysFromDfr
   , planCuidAssignments
   , finalizeCuidAssignments
+  -- Refactor target: end-to-end mapping update with CUID minting for a model
+  , updateStableMappingForModel
   ) where
 
 import Prelude
@@ -58,13 +60,15 @@ import Data.Int (toNumber)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (unwrap)
 import Data.String.CodeUnits (drop, toCharArray)
+import Data.String.CodeUnits as SCU
+import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object)
 import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.DomeinFile (DomeinFileRecord)
 import Perspectives.ExecuteInTopologicalOrder (sortTopologicallyEither)
-import Perspectives.Identifiers (isModelUri, typeUri2LocalName_, typeUri2typeNameSpace_)
+import Perspectives.Identifiers (isModelUri, typeUri2LocalName_, typeUri2typeNameSpace_, modelUri2SchemeAndAuthority)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), range)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -77,7 +81,9 @@ import Perspectives.Representation.State (State(..)) as ST
 import Perspectives.Representation.TypeIdentifiers (propertytype2string, roletype2string)
 import Perspectives.Representation.View (View(..)) as VW
 import Perspectives.Sidecar.HashQFD (qfdSignature)
-import Perspectives.Sidecar.StableIdMapping (ActionKeySnapshot, ContextKeySnapshot, PropertyKeySnapshot, RoleKeySnapshot, StableIdMapping, StateKeySnapshot, ViewKeySnapshot)
+import Perspectives.Sidecar.StableIdMapping (ActionKeySnapshot, ContextIndividualKeySnapshot, ContextKeySnapshot, PropertyKeySnapshot, RoleIndividualKeySnapshot, RoleKeySnapshot, Stable, StableIdMapping, StateKeySnapshot, ViewKeySnapshot, emptyStableIdMapping, idUriForContext, idUriForRole, ContextUri(..), RoleUri(..), ModelUri(..))
+import Perspectives.Cuid2 (cuid2)
+import Effect.Class (class MonadEffect, liftEffect)
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec, stateSpec2StateIdentifier)
 import Perspectives.Data.EncodableMap (toUnfoldable) as EM
 
@@ -368,6 +374,12 @@ extractKeysFromDfr
      , views :: OBJ.Object ViewKeySnapshot
      , states :: OBJ.Object StateKeySnapshot
      , actions :: OBJ.Object ActionKeySnapshot
+     -- Indexed individuals present in the model text (readable identifiers)
+     , contextIndividuals :: Array String
+     , roleIndividuals :: Array String
+     -- Indexed individual key snapshots (parent scope + name). Keyed by parent FQN.
+     , contextIndividualKeys :: OBJ.Object ContextIndividualKeySnapshot
+     , roleIndividualKeys :: OBJ.Object RoleIndividualKeySnapshot
      }
 extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: croles, enumeratedProperties, calculatedProperties, views, states } =
   { contexts: mapContext contexts
@@ -376,8 +388,74 @@ extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: cro
   , views: mapView views
   , states: mapState states
   , actions: mapActions eroles croles
+  -- Lift indexed individuals from canonical Context and EnumeratedRole entries
+  , contextIndividuals: collectIndexedContexts contexts
+  , roleIndividuals: collectIndexedRoles eroles
+  , contextIndividualKeys: collectIndexedContextKeys contexts
+  , roleIndividualKeys: collectIndexedRoleKeys eroles
   }
   where
+  -- Gather readable identifiers for indexed contexts from canonical Context entries
+  collectIndexedContexts :: Object Context -> Array String
+  collectIndexedContexts tbl = do
+    k <- OBJ.keys tbl
+    case OBJ.lookup k tbl of
+      Nothing -> []
+      Just (Context c) ->
+        let
+          canon = unwrap c.id
+        in
+          if canon /= k then []
+          else case c.indexedContext of
+            Nothing -> []
+            Just ci -> [ unwrap ci ]
+
+  -- Gather readable identifiers for indexed roles from canonical EnumeratedRole entries
+  collectIndexedRoles :: Object EnumeratedRole -> Array String
+  collectIndexedRoles tbl = do
+    k <- OBJ.keys tbl
+    case OBJ.lookup k tbl of
+      Nothing -> []
+      Just (EnumeratedRole r) ->
+        let
+          canon = unwrap r.id
+        in
+          if canon /= k then []
+          else case r.indexedRole of
+            Nothing -> []
+            Just ri -> [ unwrap ri ]
+
+  -- Individual key snapshots keyed by parent FQN
+  collectIndexedContextKeys :: Object Context -> OBJ.Object ContextIndividualKeySnapshot
+  collectIndexedContextKeys tbl =
+    OBJ.fromFoldable do
+      k <- OBJ.keys tbl
+      case OBJ.lookup k tbl of
+        Nothing -> []
+        Just (Context c) ->
+          let
+            canon = unwrap c.id
+          in
+            if canon /= k then []
+            else case c.indexedContext of
+              Nothing -> []
+              Just ci -> [ Tuple k { contextFqn: k, name: unwrap ci } ]
+
+  collectIndexedRoleKeys :: Object EnumeratedRole -> OBJ.Object RoleIndividualKeySnapshot
+  collectIndexedRoleKeys tbl =
+    OBJ.fromFoldable do
+      k <- OBJ.keys tbl
+      case OBJ.lookup k tbl of
+        Nothing -> []
+        Just (EnumeratedRole r) ->
+          let
+            canon = unwrap r.id
+          in
+            if canon /= k then []
+            else case r.indexedRole of
+              Nothing -> []
+              Just ri -> [ Tuple k { roleFqn: k, name: unwrap ri } ]
+
   mapContext :: Object Context -> Object ContextKeySnapshot
   mapContext tbl =
     OBJ.fromFoldable do
@@ -609,6 +687,168 @@ extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: cro
         (OBJ.keys crolesTbl)
     in
       OBJ.union fromRoleActions fromCalcRoleActions
+
+-- | Refactored from loadArc.purs: plan, mint and finalize stable IDs for a model
+-- | and return the updated StableIdMapping including indexed individuals.
+-- | There is at most a single indexed individual per parent in ARC, which this assumes.
+updateStableMappingForModel
+  :: forall m f
+   . MonadEffect m
+  => ModelUri Stable
+  -> String -- modelCuid
+  -> DomeinFileRecord f
+  -> Maybe StableIdMapping
+  -> m StableIdMapping
+updateStableMappingForModel (ModelUri stableModelUri) modelCuid correctedDFR mMapping = do
+  -- Base mapping from caller or initialize a fresh one for this model
+  let
+    mapping0 = case mMapping of
+      Nothing -> emptyStableIdMapping
+        { contextCuids = OBJ.singleton stableModelUri modelCuid
+        , modelIdentifier = ModelUri $ (unsafePartial $ modelUri2SchemeAndAuthority stableModelUri) <> "#" <> modelCuid
+        }
+      Just m0 -> m0
+
+  -- Extend aliases and compute current key snapshots
+  let
+    cur = extractKeysFromDfr correctedDFR
+    planned = planCuidAssignments cur mapping0
+
+  -- Mint new CUIDs for canonicals that need one (author-local, effectful)
+  ctxPairs <- for planned.needCuids.contexts \fqn -> do
+    v <- liftEffect (cuid2 (stableModelUri <> ":ctx"))
+    pure (Tuple fqn v)
+
+  -- Special handling for synthetic external roles (<context-fqn>$External):
+  -- Skip minting separate CUIDs; derive <context-cuid>$External so code can rely on structure.
+  let
+    isExternalRole fqn =
+      let
+        suf = "$External"
+        lf = SCU.length fqn
+        ls = SCU.length suf
+      in
+        lf >= ls && SCU.drop (lf - ls) fqn == suf
+    regularRoleFqns = filter (not <<< isExternalRole) planned.needCuids.roles
+  rolPairsRegular <- for regularRoleFqns \fqn -> do
+    v <- liftEffect (cuid2 (stableModelUri <> ":rol"))
+    pure (Tuple fqn v)
+  let
+    externalRolePairs = do
+      Tuple ctxFqn ctxCuid <- ctxPairs
+      let extRoleFqn = ctxFqn <> "$External"
+      case OBJ.lookup extRoleFqn cur.roles of
+        Nothing -> []
+        Just _ -> [ Tuple extRoleFqn "External" ]
+    rolPairs = rolPairsRegular <> externalRolePairs
+
+  propPairs <- for planned.needCuids.properties \fqn -> do
+    v <- liftEffect (cuid2 (stableModelUri <> ":prop"))
+    pure (Tuple fqn v)
+
+  statePairs <- for planned.needCuids.states \fqn -> do
+    v <- liftEffect (cuid2 (stableModelUri <> ":state"))
+    pure (Tuple fqn v)
+
+  viewPairs <- for planned.needCuids.views \fqn -> do
+    v <- liftEffect (cuid2 (stableModelUri <> ":view"))
+    pure (Tuple fqn v)
+
+  actionPairs <- for planned.needCuids.actions \fqn -> do
+    v <- liftEffect (cuid2 (stableModelUri <> ":action"))
+    pure (Tuple fqn v)
+
+  -- Mint instance CUIDs for indexed individuals (names)
+  ctxIndPairs <- for planned.needCuids.contextIndividuals \nm -> do
+    v <- liftEffect (cuid2 (stableModelUri <> ":ctx-ind"))
+    pure (Tuple nm v)
+  rolIndPairs <- for planned.needCuids.roleIndividuals \nm -> do
+    v <- liftEffect (cuid2 (stableModelUri <> ":rol-ind"))
+    pure (Tuple nm v)
+
+  let
+    newCuids =
+      { contexts: OBJ.fromFoldable ctxPairs
+      , roles: OBJ.fromFoldable rolPairs
+      , properties: OBJ.fromFoldable propPairs
+      , states: OBJ.fromFoldable statePairs
+      , views: OBJ.fromFoldable viewPairs
+      , actions: OBJ.fromFoldable actionPairs
+      }
+
+  let mapping1 = finalizeCuidAssignments planned.mappingWithAliases newCuids
+
+  -- Build alias maps for individuals (oldName -> newName) based on parent scope snapshots
+  let
+    buildCtxIndAliases olds news =
+      foldl
+        ( \acc parentFqn -> case Tuple (OBJ.lookup parentFqn olds) (OBJ.lookup parentFqn news) of
+            Tuple (Just o) (Just n) -> if not (o.name == n.name) then OBJ.insert o.name n.name acc else acc
+            _ -> acc
+        )
+        OBJ.empty
+        (OBJ.keys olds)
+    buildRolIndAliases olds news =
+      foldl
+        ( \acc parentFqn -> case Tuple (OBJ.lookup parentFqn olds) (OBJ.lookup parentFqn news) of
+            Tuple (Just o) (Just n) -> if not (o.name == n.name) then OBJ.insert o.name n.name acc else acc
+            _ -> acc
+        )
+        OBJ.empty
+        (OBJ.keys olds)
+    ctxIndAliases = buildCtxIndAliases mapping0.contextIndividualKeys cur.contextIndividualKeys
+    rolIndAliases = buildRolIndAliases mapping0.roleIndividualKeys cur.roleIndividualKeys
+
+  -- Carry over IDs for renamed individuals (alias reuse): add newName -> oldId if present
+  let
+    carryAliases prev aliases =
+      foldl
+        ( \acc oldNm -> case Tuple (OBJ.lookup oldNm aliases) (OBJ.lookup oldNm prev) of
+            Tuple (Just newNm) (Just oldId) ->
+              case OBJ.lookup newNm acc of
+                Nothing -> OBJ.insert newNm oldId acc
+                Just _ -> acc
+            _ -> acc
+        )
+        prev
+        (OBJ.keys aliases)
+
+    -- Start from previous maps in mapping1
+    carriedCtxInd = carryAliases mapping1.contextIndividuals ctxIndAliases
+    carriedRolInd = carryAliases mapping1.roleIndividuals rolIndAliases
+
+  -- Compose stable instance IDs for newly minted individuals: parent type stable id + "$" + cuid
+  let
+    -- Build name -> parentFqn indices from current snapshots
+    ctxName2Parent = OBJ.fromFoldable do
+      parent <- OBJ.keys cur.contextIndividualKeys
+      case OBJ.lookup parent cur.contextIndividualKeys of
+        Nothing -> []
+        Just snap -> [ Tuple snap.name parent ]
+    rolName2Parent = OBJ.fromFoldable do
+      parent <- OBJ.keys cur.roleIndividualKeys
+      case OBJ.lookup parent cur.roleIndividualKeys of
+        Nothing -> []
+        Just snap -> [ Tuple snap.name parent ]
+
+    composeCtx nm cuid = do
+      parentFqn <- OBJ.lookup nm ctxName2Parent
+      parentTid <- idUriForContext mapping1 (ContextUri parentFqn)
+      pure (Tuple nm (parentTid <> "$" <> cuid))
+    composeRol nm cuid = do
+      parentFqn <- OBJ.lookup nm rolName2Parent
+      parentTid <- idUriForRole mapping1 (RoleUri parentFqn)
+      pure (Tuple nm (parentTid <> "$" <> cuid))
+
+    newCtxIndMap = OBJ.fromFoldable $ mapMaybe (\(Tuple nm cuid) -> composeCtx nm cuid) ctxIndPairs
+    newRolIndMap = OBJ.fromFoldable $ mapMaybe (\(Tuple nm cuid) -> composeRol nm cuid) rolIndPairs
+
+    finalCtxInd = OBJ.union carriedCtxInd newCtxIndMap
+    finalRolInd = OBJ.union carriedRolInd newRolIndMap
+
+  let mapping2 = mapping1 { contextIndividuals = finalCtxInd, roleIndividuals = finalRolInd }
+
+  pure mapping2
 
 -- Merge the current key snapshots with the previous sidecar to generate/update alias maps.
 mergeStableIdMapping
@@ -968,11 +1208,17 @@ planCuidAssignments
      , views :: OBJ.Object ViewKeySnapshot
      , states :: OBJ.Object StateKeySnapshot
      , actions :: OBJ.Object ActionKeySnapshot
+     -- Indexed individuals present in the model text (readable identifiers)
+     , contextIndividuals :: Array String
+     , roleIndividuals :: Array String
+     -- Indexed individual key snapshots (parent scope + name)
+     , contextIndividualKeys :: OBJ.Object ContextIndividualKeySnapshot
+     , roleIndividualKeys :: OBJ.Object RoleIndividualKeySnapshot
      | r
      }
   -> StableIdMapping
   -> { mappingWithAliases :: StableIdMapping
-     , needCuids :: { contexts :: Array String, roles :: Array String, properties :: Array String, views :: Array String, states :: Array String, actions :: Array String }
+     , needCuids :: { contexts :: Array String, roles :: Array String, properties :: Array String, views :: Array String, states :: Array String, actions :: Array String, contextIndividuals :: Array String, roleIndividuals :: Array String }
      }
 planCuidAssignments cur mapping0 =
   let
@@ -1015,6 +1261,8 @@ planCuidAssignments cur mapping0 =
       , propertyKeys = cur.properties
       , viewKeys = cur.views
       , stateKeys = cur.states
+      , contextIndividualKeys = cur.contextIndividualKeys
+      , roleIndividualKeys = cur.roleIndividualKeys
       }
 
     needs :: forall s. OBJ.Object s -> OBJ.Object String -> OBJ.Object String -> Array String
@@ -1051,9 +1299,54 @@ planCuidAssignments cur mapping0 =
             _ -> Nothing
       in
         filter (\fqn -> not (hasPrev fqn) && reusedFromAlias fqn == Nothing) (OBJ.keys cur.actions)
+
+    -- Build simple alias maps for individuals based on parent scope: oldName -> newName
+    contextIndividualAliases :: OBJ.Object String
+    contextIndividualAliases =
+      let
+        olds = mapping0.contextIndividualKeys
+        news = cur.contextIndividualKeys
+      in
+        foldl
+          ( \acc parentFqn -> case Tuple (OBJ.lookup parentFqn olds) (OBJ.lookup parentFqn news) of
+              Tuple (Just o) (Just n) ->
+                if o.name /= n.name then OBJ.insert o.name n.name acc else acc
+              _ -> acc
+          )
+          OBJ.empty
+          (OBJ.keys olds)
+
+    roleIndividualAliases :: OBJ.Object String
+    roleIndividualAliases =
+      let
+        olds = mapping0.roleIndividualKeys
+        news = cur.roleIndividualKeys
+      in
+        foldl
+          ( \acc parentFqn -> case Tuple (OBJ.lookup parentFqn olds) (OBJ.lookup parentFqn news) of
+              Tuple (Just o) (Just n) ->
+                if o.name /= n.name then OBJ.insert o.name n.name acc else acc
+              _ -> acc
+          )
+          OBJ.empty
+          (OBJ.keys olds)
+
+    needsIndividuals :: Array String -> OBJ.Object String -> OBJ.Object String -> Array String
+    needsIndividuals current prevMap aliases =
+      let
+        hasPrev nm = OBJ.lookup nm prevMap /= Nothing
+        reusedFromAlias nm = findFirstJust (OBJ.keys aliases) \oldNm ->
+          case OBJ.lookup oldNm aliases of
+            Just tgt | tgt == nm -> OBJ.lookup oldNm prevMap
+            _ -> Nothing
+      in
+        filter (\nm -> not (hasPrev nm) && reusedFromAlias nm == Nothing) current
+
+    needContextIndividuals = needsIndividuals cur.contextIndividuals mapping0.contextIndividuals contextIndividualAliases
+    needRoleIndividuals = needsIndividuals cur.roleIndividuals mapping0.roleIndividuals roleIndividualAliases
   in
     { mappingWithAliases
-    , needCuids: { contexts: needCtx, roles: needRol, properties: needProp, views: needView, states: needState, actions: needAction }
+    , needCuids: { contexts: needCtx, roles: needRol, properties: needProp, views: needView, states: needState, actions: needAction, contextIndividuals: needContextIndividuals, roleIndividuals: needRoleIndividuals }
     }
   where
   objToArrayWith :: forall s a. (s -> a) -> OBJ.Object s -> Array (Tuple String a)

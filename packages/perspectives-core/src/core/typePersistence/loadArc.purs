@@ -25,28 +25,27 @@ module Perspectives.TypePersistence.LoadArc where
 import Control.Alt (void)
 import Control.Monad.Error.Class (catchError)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (delete, null, filter)
+import Data.Array (delete, null)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.List (List(..))
 import Data.Map (lookup)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
-import Data.String.CodeUnits as SCU
-import Data.Traversable (for)
+-- removed SCU: no longer used here after refactor
+-- for no longer needed
 import Data.Tuple (Tuple(..))
 import Data.Unit (unit)
-import Effect.Class (liftEffect)
-import Foreign.Object (empty, singleton)
-import Foreign.Object as OBJ
+-- liftEffect no longer needed here
+import Foreign.Object (empty)
 import Parsing (ParseError(..))
-import Partial.Unsafe (unsafePartial)
+-- unsafePartial no longer needed here
 import Perspectives.Checking.PerspectivesTypeChecker (checkDomeinFile)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
-import Perspectives.Cuid2 (cuid2)
+-- cuid2 no longer needed here
 import Perspectives.DomeinCache (retrieveDomeinFile, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
-import Perspectives.Identifiers (modelUri2SchemeAndAuthority)
+-- modelUri2SchemeAndAuthority no longer needed here
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE(..))
@@ -58,10 +57,10 @@ import Perspectives.Parsing.Messages (MultiplePerspectivesErrors, PerspectivesEr
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.SideCar.PhantomTypedNewtypes (Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (StableIdMappingForModel, getinstalledModelCuids, normalizeTypes)
-import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, emptyStableIdMapping, idUriForContext, loadStableMapping)
-import Perspectives.Sidecar.UniqueTypeNames (extractKeysFromDfr)
+import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, idUriForContext, loadStableMapping)
+-- direct extractKeysFromDfr import no longer needed; using UTN.updateStableMappingForModel
 import Perspectives.Sidecar.UniqueTypeNames as UTN
-import Prelude (bind, discard, pure, show, ($), (<<<), (==), (<>), (>=), (&&), (-), not, (>=>))
+import Prelude (bind, discard, pure, show, ($), (<<<), (==), (>=>))
 
 -- | The functions in this module load Arc files and parse and compile them to DomeinFiles.
 -- | Some functions expect a CRL file with the same name and add the instances found in them
@@ -115,66 +114,8 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                   case x' of
                     Left e -> pure $ Left e
                     Right (Tuple correctedDFR@{ referredModels: refModels } invertedQueries) -> do
-                      -- Base mapping from caller
-                      let
-                        mapping0 = case mMapping of
-                          Nothing -> emptyStableIdMapping { contextCuids = singleton stableModelUri modelCuid, modelIdentifier = ModelUri $ (unsafePartial $ modelUri2SchemeAndAuthority stableModelUri) <> "#" <> modelCuid }
-                          Just m0 -> m0
-
-                      -- Extend aliases and compute current key snapshots
-                      let cur = extractKeysFromDfr correctedDFR
-                      let planned = UTN.planCuidAssignments cur mapping0
-
-                      -- Mint new CUIDs for canonicals that need one (author-local, effectful)
-                      ctxPairs <- for planned.needCuids.contexts \fqn -> do
-                        v <- liftEffect (cuid2 (stableModelUri <> ":ctx"))
-                        pure (Tuple fqn v)
-                      -- Special handling for synthetic external roles (<context-fqn>$External):
-                      -- Skip minting separate CUIDs; derive <context-cuid>$External so code can rely on structure.
-                      let
-                        isExternalRole fqn =
-                          let
-                            suf = "$External"
-                            lf = SCU.length fqn
-                            ls = SCU.length suf
-                          in
-                            lf >= ls && SCU.drop (lf - ls) fqn == suf
-                        regularRoleFqns = filter (not <<< isExternalRole) planned.needCuids.roles
-                      rolPairsRegular <- for regularRoleFqns \fqn -> do
-                        v <- liftEffect (cuid2 (stableModelUri <> ":rol"))
-                        pure (Tuple fqn v)
-                      let
-                        externalRolePairs = do
-                          Tuple ctxFqn ctxCuid <- ctxPairs
-                          let extRoleFqn = ctxFqn <> "$External"
-                          case OBJ.lookup extRoleFqn cur.roles of
-                            Nothing -> []
-                            Just _ -> [ Tuple extRoleFqn "External" ]
-                        rolPairs = rolPairsRegular <> externalRolePairs
-                      propPairs <- for planned.needCuids.properties \fqn -> do
-                        v <- liftEffect (cuid2 (stableModelUri <> ":prop"))
-                        pure (Tuple fqn v)
-                      statePairs <- for planned.needCuids.states \fqn -> do
-                        v <- liftEffect (cuid2 (stableModelUri <> ":state"))
-                        pure (Tuple fqn v)
-                      viewPairs <- for planned.needCuids.views \fqn -> do
-                        v <- liftEffect (cuid2 (stableModelUri <> ":view"))
-                        pure (Tuple fqn v)
-                      actionPairs <- for planned.needCuids.actions \fqn -> do
-                        v <- liftEffect (cuid2 (stableModelUri <> ":action"))
-                        pure (Tuple fqn v)
-
-                      let
-                        newCuids =
-                          { contexts: OBJ.fromFoldable ctxPairs
-                          , roles: OBJ.fromFoldable rolPairs
-                          , properties: OBJ.fromFoldable propPairs
-                          , states: OBJ.fromFoldable statePairs
-                          , views: OBJ.fromFoldable viewPairs
-                          , actions: OBJ.fromFoldable actionPairs
-                          }
-
-                      let mapping1 = UTN.finalizeCuidAssignments planned.mappingWithAliases newCuids
+                      -- Refactored: compute updated StableIdMapping (with cuids and individuals) in one call
+                      mapping2 <- UTN.updateStableMappingForModel dfid modelCuid correctedDFR mMapping
 
                       -- Run the type checker (NOTE: but a stub, right now).
                       typeCheckErrors <- lift $ checkDomeinFile (DomeinFile correctedDFR)
@@ -187,11 +128,11 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                           , _id = takeGuid $ unwrap id
                           }
                         -- Now replace the readable name given by the modeller with a cuid, in FQNs:
-                        normalizedDf <- lift $ normalizeTypes df mapping1
+                        normalizedDf <- lift $ normalizeTypes df mapping2
 
                         if saveInCache then void $ lift $ storeDomeinFileInCache (toStableModelUri id) normalizedDf else pure unit
 
-                        pure $ Right $ Tuple normalizedDf (Tuple invertedQueries mapping1)
+                        pure $ Right $ Tuple normalizedDf (Tuple invertedQueries mapping2)
                       else
                         pure $ Left typeCheckErrors
             else
