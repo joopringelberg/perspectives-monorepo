@@ -25,11 +25,11 @@ import Prelude
 
 import Control.Alt ((<|>))
 import Control.Alternative (guard)
-import Control.Monad.Error.Class (throwError)
+-- import Control.Monad.Error.Class (throwError)
 import Control.Monad.State (StateT, evalStateT)
 import Control.Monad.State as State
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, cons, filter, null, singleton, some, uncons)
+import Data.Array (catMaybes, cons, filter, null, some, uncons)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (over, unwrap)
 import Data.Traversable (for)
@@ -38,7 +38,7 @@ import Perspectives.DomeinCache (modifyEnumeratedRoleInDomeinFile)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
 import Perspectives.ExecuteInTopologicalOrder (executeInTopologicalOrder)
 import Perspectives.Identifiers (startsWithSegments)
-import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, modifyDF, toReadableDomeinFile, withDomeinFile)
+import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, modifyDF, toReadableDomeinFile, withDomeinFile, throwError)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistent (getDomeinFile)
 import Perspectives.Query.QueryTypes (roleInContext2Role)
@@ -84,7 +84,7 @@ inferFromAspectRoles = do
   aspectIsRelational = do
     maspect <- State.gets uncons
     case maspect of
-      Nothing -> throwError $ singleton (Custom "Not found")
+      Nothing -> lift $ throwError (Custom "Not found")
       Just { head, tail } -> do
         State.put tail
         -- fail if head is functional; only pass through when head is relational.
@@ -100,7 +100,7 @@ inferFromAspectRoles = do
   aspectIsMandatory = do
     maspect <- State.gets uncons
     case maspect of
-      Nothing -> throwError $ singleton (Custom "Not found")
+      Nothing -> lift $ throwError (Custom "Not found")
       Just { head, tail } -> do
         State.put tail
         -- fail if head is optional; only pass through when head is mandatory.

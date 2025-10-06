@@ -37,6 +37,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (###=), (###>))
 import Perspectives.Data.EncodableMap (empty, insert, singleton) as EM
 import Perspectives.DomeinFile (DomeinFile(..))
+import Perspectives.HumanReadableType (swapDisplayName)
 import Perspectives.Identifiers (areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_)
 import Perspectives.ModelDependencies (chatAspect)
 import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), PropertyVerbE(..), PropsOrView, RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..))
@@ -56,11 +57,11 @@ import Perspectives.Representation.ExplicitSet (ExplicitSet(..), elements_)
 import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsRoleVerbs)
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyRestrictions)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optimistic, pessimistic)
-import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), propertytype2string, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), roletype2string)
 import Perspectives.Representation.Verbs (allPropertyVerbs, roleVerbList2Verbs)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_, lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
-import Prelude (Unit, bind, discard, eq, flip, map, not, pure, show, unit, ($), (<#>), (<$>), (<<<), (==), (>>=), (<*>))
+import Prelude (Unit, bind, discard, eq, flip, map, not, pure, unit, ($), (<#>), (<$>), (<*>), (<<<), (==), (>>=))
 
 handleScreens :: LIST.List AST.ScreenE -> PhaseThree Unit
 handleScreens screenEs = do
@@ -274,11 +275,11 @@ handleScreens screenEs = do
         qualifyProperty chatRoleType prop = do
           candidates <- lift2 (chatRoleType ###= lookForUnqualifiedPropertyType_ prop)
           case head candidates of
-            Nothing -> throwError $ UnknownProperty start' prop (roletype2string chatRoleType)
+            Nothing -> throwError $ UnknownProperty start' (ENP $ EnumeratedPropertyType prop) (ST chatRoleType)
             (Just t) | length candidates == 1 -> case t of
               ENP p -> pure p
               CP p -> throwError $ PropertyCannotBeCalculated prop start' end'
-            otherwise -> throwError $ NotUniquelyIdentifying start' prop (map propertytype2string candidates)
+            otherwise -> throwError $ NotUniquelyIdentifyingPropertyType start' (ENP $ EnumeratedPropertyType prop) candidates
 
   widgetCommonFields :: RoleType -> AST.WidgetCommonFields -> ThreeValuedLogic -> PhaseThree WidgetCommonFieldsDef
   widgetCommonFields subjectRoleType { title: title', perspective, withProps, withoutProps, withoutVerbs, roleVerbs, start: start', end: end' } isFunctionalWidget = do
@@ -314,10 +315,25 @@ handleScreens screenEs = do
     case find (\(Perspective { roleTypes }) -> isJust $ elemIndex objectRoleType roleTypes) perspectives of
       -- This case is probably that the object and user exist, but the latter
       -- has no perspective on the former!
-      Nothing -> throwError (UserHasNoPerspective subjectRoleType objectRoleType start' end')
+      Nothing -> do
+        -- Swap to readable role types in the error payload
+        subjectRoleType' <- lift2 $ case subjectRoleType of
+          ENR ert -> ENR <$> swapDisplayName ert
+          CR crt -> CR <$> swapDisplayName crt
+        objectRoleType' <- lift2 $ case objectRoleType of
+          ENR ert -> ENR <$> swapDisplayName ert
+          CR crt -> CR <$> swapDisplayName crt
+        throwError (UserHasNoPerspective subjectRoleType' objectRoleType' start' end')
       Just pspve@(Perspective { id: perspectiveId }) -> do
         if perspectiveSupportsRoleVerbs pspve (maybe [] roleVerbList2Verbs roleVerbs) then pure unit
-        else throwError (UnauthorizedForRole "Auteur" subjectRoleType objectRoleType (maybe [] roleVerbList2Verbs roleVerbs) (Just start') (Just end'))
+        else do
+          subjectRoleType' <- lift2 $ case subjectRoleType of
+            ENR ert -> ENR <$> swapDisplayName ert
+            CR crt -> CR <$> swapDisplayName crt
+          objectRoleType' <- lift2 $ case objectRoleType of
+            ENR ert -> ENR <$> swapDisplayName ert
+            CR crt -> CR <$> swapDisplayName crt
+          throwError (UnauthorizedForRole "Auteur" subjectRoleType' objectRoleType' (maybe [] roleVerbList2Verbs roleVerbs) (Just start') (Just end'))
         -- Compute the excluded properties from either withProps (inclusion) or withoutProps (exclusion).
         (withoutProperties :: Maybe (Array PropertyType)) <- case withProps, withoutProps of
           Just withSel, Nothing -> do
@@ -416,9 +432,10 @@ collectPropertyTypes (AST.Properties ps) object start = do
     \localPropertyName -> do
       candidates <- lift2 (roleADT ###= lookForUnqualifiedPropertyType localPropertyName)
       case head candidates of
-        Nothing -> throwError $ UnknownProperty start localPropertyName (show roleADT)
+        -- NOTICE that we have to choose a kind of property and arbitrarily choose to report it as Enumerated.
+        Nothing -> throwError $ UnknownProperty start (ENP $ EnumeratedPropertyType localPropertyName) (ENR <$> roleADT)
         (Just t) | length candidates == 1 -> pure t
-        _ -> throwError $ NotUniquelyIdentifying start localPropertyName (propertytype2string <$> candidates)
+        _ -> throwError $ NotUniquelyIdentifyingPropertyType start (ENP $ EnumeratedPropertyType localPropertyName) candidates
 
 collectPropertyTypes (AST.View view) object start = do
   if isTypeUri view then do
@@ -449,7 +466,7 @@ collectPropertyTypes (AST.View view) object start = do
           case length candidates' of
             1 -> unsafePartial case lookup (unsafePartial ARRP.head candidates') views of
               Just (View { propertyReferences }) -> pure $ PSet propertyReferences
-            _ -> throwError $ NotUniquelyIdentifying start view candidates'
+            _ -> throwError $ NotUniquelyIdentifyingView start (ViewType view) (ViewType <$> candidates')
   where
   isViewOfObject :: Array RoleType -> String -> Boolean
   -- | "Context" `isLocalNameOf` "model:Perspectives$Context"

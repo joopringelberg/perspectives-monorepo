@@ -45,6 +45,8 @@ newtype State = State StateRecord
 
 type StateRecord =
   { id :: StateIdentifier
+  -- NOTE: the Maybe is temporary to prevent a breaking change in DomeinFile. It will be removed in a future version.
+  , displayName :: Maybe String
   , stateFulObject :: StateFulObject
   , query :: Calculation
   , object :: Maybe QueryFunctionDescription
@@ -115,9 +117,10 @@ instance ReadForeign StateDependentPerspective where
       "RolePerspective" ->
         pure $ RolePerspective { properties, selfOnly, authorOnly, isSelfPerspective, currentContextCalculation: unsafePartial fromJust currentContextCalculation }
 
-constructState :: StateIdentifier -> Calculation -> StateFulObject -> Array StateIdentifier -> State
-constructState id condition stateFulObject subStates = State
+constructState :: StateIdentifier -> String -> Calculation -> StateFulObject -> Array StateIdentifier -> State
+constructState id displayName condition stateFulObject subStates = State
   { id: id
+  , displayName: Just displayName
   , stateFulObject
   , query: condition
   , object: Nothing -- used to compute the objects in enteringState, to bind to "currentobject".

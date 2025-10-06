@@ -53,7 +53,7 @@ import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), 
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equalsOrGeneralises_, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
-import Perspectives.Representation.Class.Identifiable (identifier_)
+import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.Class.PersistentType (getEnumeratedProperty, getEnumeratedRole)
 import Perspectives.Representation.Class.Property (range) as PT
 import Perspectives.Representation.Class.Role (completeDeclaredFillerRestriction, roleKindOfRoleType, toConjunctiveNormalForm_)
@@ -537,7 +537,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       else do
         ctxts <- getsDF (keys <<< _.contexts)
         case filter (areLastSegmentsOf contextIdentifier) ctxts of
-          toomany | length toomany > 1 -> throwError $ NotUniquelyIdentifying start contextIdentifier toomany
+          toomany | length toomany > 1 -> throwError $ NotUniquelyIdentifyingContext start (ContextType contextIdentifier) (ContextType <$> toomany)
           justone | length justone == 1 -> pure $ ContextType $ unsafePartial fromJust $ head justone
           none -> throwError $ CannotFindContextType start end contextIdentifier
 
@@ -581,7 +581,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
             if null nameMatches then throwError $ UnknownRole start ident
             else throwError $ LocalRoleDoesNotBind start end ident fillers
           (Just (EnumeratedRole { id: candidate })) | length candidates == 1 -> pure $ Just candidate
-          otherwise -> throwError $ NotUniquelyIdentifying start ident (identifier_ <$> candidates)
+          otherwise -> throwError $ NotUniquelyIdentifyingRoleType start (ENR $ EnumeratedRoleType ident) (ENR <<< identifier <$> candidates)
 
     -- Compiles the Step and inverts it as well.
     -- NOTE: parameter userTypes is not used.

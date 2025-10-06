@@ -103,7 +103,7 @@ traverseContextE (ContextE { id, kindOfContext, public, contextParts, pos }) ns 
           of
           Nothing -> do
             -- Add a default state for the external role.
-            state <- pure $ constructState (StateIdentifier $ contextIdentifier <> "$External") (Q $ trueCondition (CDOM $ UET (ContextType contextIdentifier))) (Cnt (ContextType contextIdentifier)) []
+            state <- pure $ constructState (StateIdentifier $ contextIdentifier <> "$External") id (Q $ trueCondition (CDOM $ UET (ContextType contextIdentifier))) (Cnt (ContextType contextIdentifier)) []
             modifyDF (\domeinFile -> addStatesToDomeinFile [ state ] domeinFile)
             -- Add a definition for the external role; it apparently hasn't been declared in the source.
             pure $ Cons (RE (RoleE { id: "External", kindOfRole: TI.ExternalRole, roleParts: Nil, pos })) contextParts
@@ -386,7 +386,7 @@ traverseStateE stateFulObect (StateE { id, condition, stateParts, subStates }) =
   subStateIds <- for subStates (toStateIdentifier <<< \(StateE { id: id' }) -> id')
   stateId <- toStateIdentifier id
   expandedCondition <- expandPrefix condition
-  state <- pure $ constructState stateId (S expandedCondition false) stateFulObect (ARR.fromFoldable subStateIds)
+  state <- pure $ constructState stateId (unwrap stateId) (S expandedCondition false) stateFulObect (ARR.fromFoldable subStateIds)
   -- Postpone all stateParts because there may be forward references to user and subject.
   parts <- traverse expandPrefix stateParts
   void $ lift $ modify \s@{ postponedStateQualifiedParts } -> s { postponedStateQualifiedParts = postponedStateQualifiedParts <> parts }

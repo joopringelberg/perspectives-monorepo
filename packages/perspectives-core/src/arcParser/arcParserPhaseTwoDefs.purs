@@ -62,7 +62,9 @@ type PhaseTwoState =
   , dfr :: DomeinFileRecord Readable
   , namespaces :: Object String
   , referredModels :: Array (ModelUri Readable)
+  -- The keys are the Readable identifiers of indexed contexts in all referred models, including the current model. The values are their ContextTypes.
   , indexedContexts :: Object ContextType
+  -- Similarly for indexed roles.
   , indexedRoles :: Object EnumeratedRoleType
   -- In PhaseTwoState, variables are bound to QueryFunctionDescriptions.
   -- In PerspectivesState, variables are bound to Strings.
@@ -83,9 +85,8 @@ instance Eq CurrentlyCalculated where
 
 type LoopDetection = Array CurrentlyCalculated
 
--- | A Monad with state that indicates whether the Subject of an Action is a Bot,
--- | and allows exceptions.
--- | It allows for a variable bottom of the monadic stack.
+-- | A Monad with PhaseTwoState that allows multiple PerspectivesError based exceptions.
+-- | It also allows for a variable bottom of the monadic stack.
 type PhaseTwo' m = ExceptT MultiplePerspectivesErrors (StateT PhaseTwoState m)
 
 throwError :: forall a m. Monad m => PerspectivesError -> PhaseTwo' m a
@@ -237,15 +238,15 @@ expandNamespace s = do
   namespaces <- lift $ gets _.namespaces
   pure $ expandNamespaces namespaces s
 
--- | From an expanded name like "model:System$MySystem" returns a Maybe Context.
+-- | From an expanded name like "model:System$MySystem" returns a Maybe ContextType.
 -- | Note: returns indexed context names from PhaseTwoState.
-isIndexedContext :: forall m. Monad m => String -> (PhaseTwo' m) (Maybe ContextType)
-isIndexedContext n = do
+isIndexedContextInCurrentCompilation :: forall m. Monad m => String -> (PhaseTwo' m) (Maybe ContextType)
+isIndexedContextInCurrentCompilation n = do
   indexedContexts <- lift $ gets _.indexedContexts
   pure $ OBJ.lookup n indexedContexts
 
-isIndexedRole :: forall m. Monad m => String -> (PhaseTwo' m) (Maybe EnumeratedRoleType)
-isIndexedRole n = do
+isIndexedRoleInCurrentCompilation :: forall m. Monad m => String -> (PhaseTwo' m) (Maybe EnumeratedRoleType)
+isIndexedRoleInCurrentCompilation n = do
   indexedRoles <- lift $ gets _.indexedRoles
   pure $ OBJ.lookup n indexedRoles
 

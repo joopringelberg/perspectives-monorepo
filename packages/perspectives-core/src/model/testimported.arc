@@ -10,7 +10,7 @@ domain model://joopringelberg.nl#TestImported
       do for sys:PerspectivesSystem$Installer
         letA
           -- This is to add an entry to the Start Contexts in System.
-          app <- create context TestImports
+          app <- create context TestImported
           start <- create role StartContexts in sys:MySystem
         in
           -- Being a RootContext, too, Installer can fill a new instance
@@ -22,7 +22,7 @@ domain model://joopringelberg.nl#TestImported
   on exit
     do for sys:PerspectivesSystem$Installer
       letA
-        startcontext <- filter sys:MySystem >> StartContexts with filledBy (ts:TestImported >> extern)
+        startcontext <- filter sys:MySystem >> StartContexts with filledBy (ts:MyTestImported >> extern)
       in
         remove role startcontext
 
@@ -35,20 +35,21 @@ domain model://joopringelberg.nl#TestImported
   -------------------------------------------------------------------------------
   ---- INDEXED CONTEXT
   -------------------------------------------------------------------------------
-  case TestImports
-    indexed ts:TestImported
+  case TestImported
+    indexed ts:MyTestImported
     aspect sys:RootContext
     external
       aspect sys:RootContext$External
-      property Test6 (String) 
+      property Test66 (String) 
     
     user Manager = sys:Me
 
-    thing Something
+    thing Something1
+      indexed ts:MyOnlySomething
   
-  case AnotherCase
+  case AnotherCase1
     aspect sys:ContextWithNotification
-    state SomeState = exists AnotherThing1
+    state SomeState2 = (exists AnotherThing1) and true
       on entry
         notify Manager
           "Entering SomeState for {Manager >> FirstName}"
@@ -60,6 +61,9 @@ domain model://joopringelberg.nl#TestImported
       on entry
         notify Manager
           "Entering AnotherState for {Manager >> FirstName}"
+    
+    external
+      property Test10 = ts:MyTestImported >> extern >> Test66
 
     user Manager = sys:Me
       perspective on AnotherThing1
@@ -86,3 +90,7 @@ domain model://joopringelberg.nl#TestImported
       property Test8 (String)
       property Test9 = Test7 + Test8
       view ThingView (Test7, Test8, Test9)
+    
+    thing TheSomething = ts:MyOnlySomething
+  
+    case ThirdCase

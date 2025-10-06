@@ -55,7 +55,7 @@ import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), UnaryStep(..), VarBinding(..))
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
 import Perspectives.Parsing.Arc.PhaseThree.SetInvertedQueries (setInvertedQueries)
-import Perspectives.Parsing.Arc.PhaseTwoDefs (CurrentlyCalculated(..), PhaseThree, addBinding, getsDF, isBeingCalculated, isIndexedContext, isIndexedRole, lift2, lookupVariableBinding, loopErrorMessage, throwError, withCurrentCalculation, withFrame)
+import Perspectives.Parsing.Arc.PhaseTwoDefs (CurrentlyCalculated(..), PhaseThree, addBinding, getsDF, isBeingCalculated, isIndexedContextInCurrentCompilation, isIndexedRoleInCurrentCompilation, lift2, lookupVariableBinding, loopErrorMessage, throwError, withCurrentCalculation, withFrame)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), context2RoleInContextADT, domain, domain2roleType, equalDomainKinds, functional, makeComposition, mandatory, productOfDomains, range, replaceContext, replaceRange, roleInContext2Role, setCardinality, sumOfDomains, traverseQfd)
@@ -73,7 +73,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), isFunctional
 import Perspectives.Representation.Range (Duration_(..), Range(..), isDate, isPDuration, isPMonth, isTime, isTimeDuration)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), bool2threeValued, pessimistic)
 import Perspectives.Representation.ThreeValuedLogic (and, or) as THREE
-import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), roletype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as RTI
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Types.ObjectGetters (allTypesInContextADT, allTypesInRoleADT, enumeratedRoleContextType, equals, isUnlinked_, lookForPropertyType, lookForRoleTypeOfADT, lookForUnqualifiedPropertyType, lookForUnqualifiedRoleTypeOfADT, qualifyContextInDomain, qualifyEnumeratedRoleInDomain, qualifyRoleInDomain)
@@ -185,7 +185,8 @@ qualifyLocalRoleName_ pos ident roleIdentifiers = do
   case head candidates of
     Nothing -> throwError $ UnknownRole pos ident
     (Just qname) | length candidates == 1 -> pure qname
-    otherwise -> throwError $ NotUniquelyIdentifying pos ident candidates
+    -- Notice: we arbitrarily report back in terms of enumerated properties.
+    otherwise -> throwError $ NotUniquelyIdentifyingPropertyType pos (ENP $ EnumeratedPropertyType ident) (ENP <<< EnumeratedPropertyType <$> candidates)
 
 qualifyLocalContextName :: ArcPosition -> String -> Array String -> PhaseThree ContextType
 qualifyLocalContextName pos ident roleIdentifiers = ContextType <$> (qualifyLocalContextName_ pos ident roleIdentifiers)
@@ -194,9 +195,9 @@ qualifyLocalContextName_ :: ArcPosition -> String -> Array String -> PhaseThree 
 qualifyLocalContextName_ pos ident roleIdentifiers = do
   (candidates :: Array String) <- pure $ filter (\id -> id `endsWithSegments` ident) roleIdentifiers
   case head candidates of
-    Nothing -> throwError $ UnknownContext pos ident
+    Nothing -> throwError $ UnknownContext pos (ContextType ident)
     (Just qname) | length candidates == 1 -> pure qname
-    otherwise -> throwError $ NotUniquelyIdentifying pos ident candidates
+    otherwise -> throwError $ NotUniquelyIdentifyingContext pos (ContextType ident) (ContextType <$> candidates)
 
 ------------------------------------------------------------------------------------
 ------ COMPILING PROPERTY REFERENCES
@@ -305,55 +306,68 @@ compileStep currentDomain (Computation st) = compileComputationStep currentDomai
 ------------------------------------------------------------------------------------
 compileSimpleStep :: Domain -> SimpleStep -> FD
 compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
-  -- The next line just looks for indexed contexts in the current model.
-  mLocalIndexedContextType <- isIndexedContext ident
-  mIndexedContextType <- lift $ lift $ (lookupIndexedContext ident >>= traverse contextType_)
-  case mLocalIndexedContextType, mIndexedContextType of
-    Just indexedContextType, _ -> pure $ SQD currentDomain (QF.ContextIndividual (ContextInstance ident)) (CDOM (UET indexedContextType)) True True
-    _, Just indexedContextType -> pure $ SQD currentDomain (QF.ContextIndividual (ContextInstance ident)) (CDOM (UET indexedContextType)) True True
-    _, _ -> do
-      -- The next line just looks for indexed roles in the current model.
-      mLocalIndexedRoleType <- isIndexedRole ident
-      mIndexedRoleType <- lift $ lift (lookupIndexedRole ident >>= traverse roleType_)
-      case mLocalIndexedRoleType, mIndexedRoleType of
-        Just role, _ -> do
-          -- For context, we take the syntactically embedding context type of the indexed role.
-          context <- lift2 $ enumeratedRoleContextType role
-          pure $ SQD currentDomain (QF.RoleIndividual (RoleInstance ident)) (RDOM (UET (RoleInContext { context, role }))) True True
-        _, Just role -> do
-          -- For context, we take the syntactically embedding context type of the indexed role.
-          context <- lift2 $ enumeratedRoleContextType role
-          pure $ SQD currentDomain (QF.RoleIndividual (RoleInstance ident)) (RDOM (UET (RoleInContext { context, role }))) True True
-        _, _ -> case currentDomain of
-          (CDOM c) ->
-            if ident == "External" then do
-              (rts :: ADT RoleInContext) <- lift2 $ externalRoleOfADT c
-              pure $ SQD currentDomain (QF.DataTypeGetter ExternalRoleF) (RDOM rts) True True
-            else do
-              (rts :: Array RoleType) <-
-                if isTypeUri ident then
-                  if isExternalRole ident then pure [ ENR $ EnumeratedRoleType ident ]
-                  else lift2 $ runArrayT $ lookForRoleTypeOfADT ident c
-                else lift2 $ runArrayT $ lookForUnqualifiedRoleTypeOfADT ident c
-              case uncons rts of
-                Nothing -> throwError $ ContextHasNoRole c ident pos (endOf $ Simple s)
-                Just { head, tail } ->
-                  if null tail then
-                    if isExternalRole ident then do
-                      (rts' :: ADT RoleInContext) <- lift2 $ externalRoleOfADT c
-                      pure $ SQD currentDomain (QF.DataTypeGetter ExternalRoleF) (RDOM rts') True True
-                    else unsafePartial $ makeRoleGetter currentDomain head
-                  else throwError (NotUniquelyIdentifying pos ident (roletype2string <$> rts))
-          (RDOM r) -> do
-            (pts :: Array PropertyType) <-
-              if isTypeUri ident then lift2 $ runArrayT $ lookForPropertyType ident (roleInContext2Role <$> r)
-              else lift2 $ runArrayT $ lookForUnqualifiedPropertyType ident (roleInContext2Role <$> r)
-            case uncons pts of
-              Nothing -> throwError $ RoleHasNoProperty (roleInContext2Role <$> r) ident pos pos
-              Just { head: pt, tail } ->
-                if null tail then makePropertyGetter currentDomain pt
-                else throwError $ NotUniquelyIdentifying pos ident (show <$> pts)
-          otherwise -> throwError $ DomainTypeRequired "context or role" currentDomain pos (endOf (Simple s))
+  -- Obviously, 'ident' will be a Readable identifier. It also must, by definition of the language, be fully qualified.
+  -- Only after phase three will we replace it by a Stable identifier.
+  mLocalIndexedContextType <- isIndexedContextInCurrentCompilation ident
+  case mLocalIndexedContextType of
+    Just indexedContextType -> pure $ SQD currentDomain (QF.ContextIndividual (ContextInstance ident)) (CDOM (UET indexedContextType)) True True
+    -- Now ident is either not an indexed context, or it is an indexed context defined in a model that is still in terms of Readable identifiers.
+    -- TODO: as soon as all models are in terms of Stable identifiers, we can remove the next check.
+    _ -> do
+      mIndexedContext <- lift2 $ lookupIndexedContext ident
+      case mIndexedContext of
+        Just indexedContext -> do
+          ctype <- lift2 $ contextType_ indexedContext
+          pure $ SQD currentDomain (QF.ContextIndividual (ContextInstance ident)) (CDOM (UET ctype)) True True
+        Nothing -> do
+          -- The next line just looks for indexed roles in the current model.
+          mLocalIndexedRoleType <- isIndexedRoleInCurrentCompilation ident
+          case mLocalIndexedRoleType of
+            Just role -> do
+              -- For context, we take the syntactically embedding context type of the indexed role.
+              context <- lift2 $ enumeratedRoleContextType role
+              pure $ SQD currentDomain (QF.RoleIndividual (RoleInstance ident)) (RDOM (UET (RoleInContext { context, role }))) True True
+            -- Now ident is either not an indexed role, or it is an indexed role defined in a model that is still in terms of Readable identifiers.
+            -- TODO: as soon as all models are in terms of Stable identifiers, we can remove the next check.
+            _ -> do
+              mIndexedRole <- lift2 $ lookupIndexedRole ident
+              case mIndexedRole of
+                Just indexedRole -> do
+                  role <- lift2 $ roleType_ indexedRole
+                  context <- lift2 $ enumeratedRoleContextType role
+                  pure $ SQD currentDomain (QF.RoleIndividual (RoleInstance ident)) (RDOM (UET (RoleInContext { context, role }))) True True
+                Nothing -> do
+                  case currentDomain of
+                    (CDOM c) ->
+                      if ident == "External" then do
+                        (rts :: ADT RoleInContext) <- lift2 $ externalRoleOfADT c
+                        pure $ SQD currentDomain (QF.DataTypeGetter ExternalRoleF) (RDOM rts) True True
+                      else do
+                        (rts :: Array RoleType) <-
+                          if isTypeUri ident then
+                            if isExternalRole ident then pure [ ENR $ EnumeratedRoleType ident ]
+                            else lift2 $ runArrayT $ lookForRoleTypeOfADT ident c
+                          else lift2 $ runArrayT $ lookForUnqualifiedRoleTypeOfADT ident c
+                        case uncons rts of
+                          Nothing -> throwError $ ContextHasNoRole c ident pos (endOf $ Simple s)
+                          Just { head, tail } ->
+                            if null tail then
+                              if isExternalRole ident then do
+                                (rts' :: ADT RoleInContext) <- lift2 $ externalRoleOfADT c
+                                pure $ SQD currentDomain (QF.DataTypeGetter ExternalRoleF) (RDOM rts') True True
+                              else unsafePartial $ makeRoleGetter currentDomain head
+                            else throwError (NotUniquelyIdentifyingRoleType pos (ENR $ EnumeratedRoleType ident) rts)
+                    (RDOM r) -> do
+                      (pts :: Array PropertyType) <-
+                        if isTypeUri ident then lift2 $ runArrayT $ lookForPropertyType ident (roleInContext2Role <$> r)
+                        else lift2 $ runArrayT $ lookForUnqualifiedPropertyType ident (roleInContext2Role <$> r)
+                      case uncons pts of
+                        Nothing -> throwError $ RoleHasNoProperty (roleInContext2Role <$> r) ident pos pos
+                        Just { head: pt, tail } ->
+                          if null tail then makePropertyGetter currentDomain pt
+                          -- Notice: we arbitrarily report back in terms of enumerated properties.
+                          else throwError $ NotUniquelyIdentifyingPropertyType pos (ENP $ EnumeratedPropertyType ident) pts
+                    otherwise -> throwError $ DomainTypeRequired "context or role" currentDomain pos (endOf (Simple s))
 
 compileSimpleStep currentDomain (PublicRole pos ident) = do
   rType <- lift2 $ roleType_ (RoleInstance ident)
@@ -383,9 +397,9 @@ compileSimpleStep currentDomain s@(Filler pos membeddingContext) = do
               { id } <- lift $ gets _.dfr
               (qnames :: Array ContextType) <- lift2 $ runArrayT $ qualifyContextInDomain context (ModelUri $ unwrap id)
               case head qnames of
-                Nothing -> throwError $ UnknownContext pos context
+                Nothing -> throwError $ UnknownContext pos (ContextType context)
                 (Just qn) | length qnames == 1 -> pure $ SQD currentDomain (QF.DataTypeGetterWithParameter FillerF (unwrap qn)) (RDOM $ replaceContext adtOfBinding qn) True False
-                _ -> throwError $ NotUniquelyIdentifying pos context (map unwrap qnames)
+                _ -> throwError $ NotUniquelyIdentifyingContext pos (ContextType context) qnames
         Nothing -> throwError $ RoleHasNoBinding pos (roleInContext2Role <$> r)
     otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)
 
@@ -401,7 +415,7 @@ compileSimpleStep currentDomain s@(Filled pos binderName membeddingContext) = do
           case head qnames of
             Nothing -> throwError $ UnknownRole pos binderName
             (Just qn) | length qnames == 1 -> pure qn
-            otherwise -> throwError $ NotUniquelyIdentifying pos binderName (map unwrap qnames)
+            otherwise -> throwError $ NotUniquelyIdentifyingRoleType pos (ENR $ EnumeratedRoleType binderName) (map ENR qnames)
       case membeddingContext of
         -- <origin> fills R in <optional context>. Clearly, <optional context> is the context that holds the filled
         -- role (binder).
@@ -415,9 +429,9 @@ compileSimpleStep currentDomain s@(Filled pos binderName membeddingContext) = do
             { id } <- lift $ gets _.dfr
             (qnames :: Array ContextType) <- lift2 $ runArrayT $ qualifyContextInDomain context (ModelUri $ unwrap id)
             case head qnames of
-              Nothing -> throwError $ UnknownContext pos context
+              Nothing -> throwError $ UnknownContext pos (ContextType context)
               (Just qn) | length qnames == 1 -> pure $ SQD currentDomain (QF.FilledF qBinderType (ContextType context)) (RDOM $ replaceContext adtOfBinder qn) False False
-              otherwise -> throwError $ NotUniquelyIdentifying pos context (map unwrap qnames)
+              otherwise -> throwError $ NotUniquelyIdentifyingContext pos (ContextType context) qnames
     otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)
 
 compileSimpleStep currentDomain s@(Context pos) = do
@@ -439,15 +453,15 @@ compileSimpleStep currentDomain s@(RoleTypeIndividual pos typeName) = do
   case length typeCandidates, head typeCandidates of
     0, _ -> throwError $ UnknownRole pos typeName
     1, Just qualifiedType -> pure $ SQD currentDomain (QF.RoleTypeConstant qualifiedType) RoleKind True True
-    _, _ -> throwError $ NotUniquelyIdentifying pos typeName (map roletype2string typeCandidates)
+    _, _ -> throwError $ NotUniquelyIdentifyingRoleType pos (ENR $ EnumeratedRoleType typeName) typeCandidates
 
 compileSimpleStep currentDomain s@(ContextTypeIndividual pos typeName) = do
   nameSpace <- getsDF _.id
   typeCandidates <- lift $ lift ((ModelUri $ unwrap nameSpace) ###= qualifyContextInDomain typeName)
   case length typeCandidates, head typeCandidates of
-    0, _ -> throwError $ UnknownContext pos typeName
+    0, _ -> throwError $ UnknownContext pos (ContextType typeName)
     1, Just qualifiedType -> pure $ SQD currentDomain (QF.ContextTypeConstant qualifiedType) ContextKind True True
-    _, _ -> throwError $ NotUniquelyIdentifying pos typeName (map unwrap typeCandidates)
+    _, _ -> throwError $ NotUniquelyIdentifyingContext pos (ContextType typeName) typeCandidates
 
 compileSimpleStep currentDomain s@(RoleTypes pos) = do
   case currentDomain of
@@ -468,7 +482,8 @@ compileSimpleStep currentDomain s@(SpecialisesRoleType pos roleName) = do
           case head qnames of
             Nothing -> throwError $ UnknownRole pos roleName
             (Just qn) | length qnames == 1 -> pure qn
-            otherwise -> throwError $ NotUniquelyIdentifying pos roleName (map unwrap qnames)
+            -- Notice : we arbitrarily report back in terms of enumerated roles.
+            otherwise -> throwError $ NotUniquelyIdentifyingRoleType pos (ENR $ EnumeratedRoleType roleName) (map ENR qnames)
       pure $ SQD currentDomain (QF.DataTypeGetterWithParameter SpecialisesRoleTypeF (unwrap qRoleName)) (VDOM PBool Nothing) (isFunctionalFunction SpecialisesRoleTypeF) False
     otherwise -> throwError $ DomainTypeRequired "role type" currentDomain pos (endOf $ Simple s)
 
@@ -510,9 +525,9 @@ compileSimpleStep currentDomain s@(IsInState pos stateName) = do
         0 -> case (filter (\id -> id `endsWithSegments` stateName) (keys states)) of
           none | length none == 0 -> throwError $ UnknownState pos stateName
           single | length single == 1 -> pure $ StateIdentifier $ unsafePartial $ fromJust (head single)
-          multiple -> throwError $ NotUniquelyIdentifying pos stateName (keys states)
+          multiple -> throwError $ NotUniquelyIdentifyingState pos (StateIdentifier stateName) (StateIdentifier <$> keys states)
         1 -> pure $ StateIdentifier $ unsafePartial $ fromJust (head allMatchingStateNames)
-        _ -> throwError $ NotUniquelyIdentifying pos stateName allMatchingStateNames
+        _ -> throwError $ NotUniquelyIdentifyingState pos (StateIdentifier stateName) (StateIdentifier <$> allMatchingStateNames)
 
 compileSimpleStep currentDomain s@(RegEx pos (reg :: RegExP)) = do
   case currentDomain of
@@ -614,7 +629,7 @@ compileUnaryStep currentDomain st@(ContextIndividual pos qualifiedIdentifier s) 
       -- Check whether tye type exists.
       mqualifiedContext <- lift $ lift $ try (getContext $ ContextType qualifiedIdentifier)
       case mqualifiedContext of
-        Left _ -> throwError $ UnknownContext pos qualifiedIdentifier
+        Left _ -> throwError $ UnknownContext pos (ContextType qualifiedIdentifier)
         Right _ -> pure $ UQD currentDomain (QF.UnaryCombinator ContextIndividualF) descriptionOfs (CDOM $ UET $ ContextType qualifiedIdentifier) True True
     otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf s)
 

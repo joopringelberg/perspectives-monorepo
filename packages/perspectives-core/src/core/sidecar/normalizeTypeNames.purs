@@ -20,11 +20,12 @@
 
 -- END LICENSE
 module Perspectives.Sidecar.NormalizeTypeNames
-  ( StableIdMappingForModel
-  , Env
+  ( Env
+  , StableIdMappingForModel
   , WithSideCars
   , class NormalizeTypeNames
   , fqn2tid
+  , getSideCars
   , getinstalledModelCuids
   , normalizeTypeNames
   , normalizeTypes
@@ -34,7 +35,7 @@ import Prelude
 
 import Control.Monad.Reader (Reader, ask, runReaderT)
 import Data.Array (catMaybes, foldM)
-import Data.Map (Map, fromFoldable, lookup, insert, singleton) as Map
+import Data.Map (Map, empty, fromFoldable, insert, lookup) as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
@@ -62,9 +63,9 @@ import Perspectives.Representation.Class.Role (Role(..))
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), InvertedQueryKey(..))
-import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..), stateSpec2StateIdentifier, PropertyVerbs(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
+import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..), stateSpec2StateIdentifier, PropertyVerbs(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.Sentence (Sentence(..))
@@ -72,8 +73,8 @@ import Perspectives.Representation.State (Notification(..), State(..), StateFulO
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
 import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
-import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), idUriForAction, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
 import Perspectives.Sidecar.HashQFD (qfdSignature)
+import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), idUriForAction, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
 
 -- Environment carried during normalization: sidecars and a perspective id rewrite map
 type Env =
@@ -83,19 +84,7 @@ type Env =
 
 normalizeTypes :: DomeinFile Readable -> StableIdMapping -> MonadPerspectives (DomeinFile Stable)
 normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
-  -- Notice that referredModels from a freshly parsed Arc source will be FQNs with names given by the modeller, rather than underlying cuids.
-  cuidMap <- getinstalledModelCuids true -- get versioned cuids because we will read from the repository.
-  sidecars <- foldM
-    ( \scs (ModelUri referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
-        Nothing -> pure scs
-        Just (domeinFileName :: ModelUri Stable) -> do
-          mmapping <- loadStableMapping domeinFileName
-          case mmapping of
-            Nothing -> pure scs
-            Just submapping -> pure $ Map.insert (ModelUri referredModel) submapping scs
-    )
-    (Map.singleton namespace mapping)
-    referredModels
+  sidecars <- Map.insert namespace mapping <$> getSideCars df true
   -- Pre-compute a mapping from old perspective ids to stable ones using the sidecars only
   let env0 = { sidecars, perspMap: OBJ.fromFoldable [] }
   let perspMap = buildPerspectiveIdMap df env0
@@ -104,9 +93,26 @@ normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
 
 type StableIdMappingForModel = (Map.Map (ModelUri Readable) (ModelUri Stable))
 
--- A map from ModelUri Readable to ModelUri Stable.
--- Not every installed model need have cuid!
--- The Stable ModelUri will be versioned.
+-- | Returns a map from ModelUri Readable to StableIdMapping for all referred models that have a mapping.
+getSideCars :: DomeinFile Readable -> Boolean -> MonadPerspectives (Map.Map (ModelUri Readable) StableIdMapping)
+getSideCars df@(DomeinFile { referredModels }) versioned = do
+  -- Notice that referredModels from a freshly parsed Arc source will be FQNs with names given by the modeller, rather than underlying cuids.
+  cuidMap <- getinstalledModelCuids versioned
+  foldM
+    ( \scs (ModelUri referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
+        Nothing -> pure scs
+        Just (domeinFileName :: ModelUri Stable) -> do
+          mmapping <- loadStableMapping domeinFileName
+          case mmapping of
+            Nothing -> pure scs
+            Just submapping -> pure $ Map.insert (ModelUri referredModel) submapping scs
+    )
+    Map.empty
+    referredModels
+
+-- | A map from ModelUri Readable to ModelUri Stable.
+-- | Not every installed model need have cuid, as long as we have not completely moved to stable identifiers!
+-- | The Stable ModelUri will be versioned iff parameter versioned is true.
 getinstalledModelCuids :: Boolean -> MonadPerspectives StableIdMappingForModel
 getinstalledModelCuids versioned = do
   let modelProp = if versioned then versionedModelURI else modelURI
@@ -556,7 +562,10 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
           Nothing -> Nothing
           Just { modelUri } -> case Map.lookup (ModelUri modelUri) env.sidecars of
             Nothing -> Nothing
-            Just sim -> lookupContextIndividualId sim ident
+            Just sim -> case lookupContextIndividualId sim ident of
+              -- This case covers indexed contexts from other models than the one we're currently normalizing.
+              Nothing -> Just ident
+              Just s -> Just s
       pure $ ContextIndividual (ContextInstance (maybe ident identity stableId))
     normalizeQueryFunction (RoleIndividual (RoleInstance ident)) = do
       env <- ask

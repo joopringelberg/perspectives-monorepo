@@ -36,25 +36,29 @@ import Data.Array (cons, elemIndex, filter, find, findIndex, foldM, foldl, foldr
 import Data.Either (Either(..))
 import Data.Foldable (for_, traverse_)
 import Data.Identity as Identity
-import Data.List (List, filter, filterM, fromFoldable) as LIST
-import Data.Map (lookup) as Map
+import Data.List (catMaybes, List, concat, filter, filterM, fromFoldable) as LIST
+import Data.Map (values) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, isNothing, maybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), indexOf)
 import Data.Traversable (for, traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (Object, insert, keys, lookup, singleton, unions)
+import Foreign.Object (Object, insert, keys, lookup, singleton, toUnfoldable)
+import Foreign.Object (fromFoldable, union) as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (type (~~~>), MP, forceTypeArray, (###=), (###>>))
 import Perspectives.Data.EncodableMap (EncodableMap, empty, insert, lookup, keys, addAll) as EM
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (modifyEnumeratedRoleInDomeinFile, removeDomeinFileFromCache, storeDomeinFileInCache)
-import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, UpstreamAutomaticEffect(..), UpstreamStateNotification(..), addUpstreamAutomaticEffect, addUpstreamNotification, indexedContexts, indexedRoles)
-import Perspectives.Identifiers (Namespace, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_, typeUri2typeNameSpace)
+import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, UpstreamAutomaticEffect(..), UpstreamStateNotification(..), addUpstreamAutomaticEffect, addUpstreamNotification)
+import Perspectives.HumanReadableType (lookupDisplayName)
+import Perspectives.Identifiers (Namespace, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2LocalName_, typeUri2ModelUri_, typeUri2typeNameSpace)
+import Perspectives.Instances.ObjectGetters (contextType_, roleType_)
 import Perspectives.InvertedQuery (RelevantProperties(..))
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.ModelDependencies (contextWithNotification)
+import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ContextActionE(..), NotificationE(..), PropertyVerbE(..), RoleVerbE(..), ScreenE, SelfOnly(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..)) as AST
 import Perspectives.Parsing.Arc.AST (RoleIdentification(..), SegmentedPath, SentenceE(..), SentencePartE(..), StateTransitionE(..), roleIdentification2context)
 import Perspectives.Parsing.Arc.AspectInference (inferFromAspectRoles)
@@ -87,6 +91,7 @@ import Perspectives.Representation.Class.Role (Role(..), allProperties, complete
 import Perspectives.Representation.Context (Context(..)) as CTXT
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec(..), createModificationSummary, expandPropSet, isMutatingVerbSet, perspectiveMustBeSynchronized, stateSpec2StateIdentifier)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
@@ -97,12 +102,12 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), 
 import Perspectives.Representation.UserGraph.Build (buildUserGraph)
 import Perspectives.Representation.View (View(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
-import Perspectives.Sidecar.NormalizeTypeNames (getinstalledModelCuids)
+import Perspectives.Sidecar.NormalizeTypeNames (getSideCars)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
 import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith)
 import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, hasContextAspect, isPerspectiveOnSelf, lookForUnqualifiedPropertyType_, roleStates, statesPerProperty, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
-import Prelude (Unit, append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (<#>))
+import Prelude (Unit, append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=))
 
 -- Currently only used in tests and in loadArcFS - but that has to change to phaseThreeWithMapping.
 phaseThree
@@ -117,51 +122,6 @@ phaseThree df@{ id } postponedParts screens = do
   result <- phaseThreeWithMapping_ df postponedParts screens Nothing
   removeDomeinFileFromCache (toStableModelUri id)
   pure result
-
--- NOTE THIS FUNCTION IS PROBABLY OBSOLETE (NEVER CALLED)
-phaseThree_
-  :: DomeinFileRecord Readable
-  -> LIST.List AST.StateQualifiedPart
-  -> LIST.List AST.ScreenE
-  -> MP (Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries))
-phaseThree_ df@{ id, referredModels } postponedParts screens = do
-  -- We don't expect an error on retrieving the DomeinFile, as we've only just put it into cache!
-  indexedContexts <- unions <$> traverse (getDomeinFile <<< toStableModelUri >=> pure <<< indexedContexts) referredModels
-  indexedRoles <- unions <$> traverse (getDomeinFile <<< toStableModelUri >=> pure <<< indexedRoles) referredModels
-  (Tuple ei { dfr, invertedQueries }) <-
-    runPhaseTwo_'
-      ( do
-          addAspectsToExternalRoles
-          checkAspectRoleReferences
-          inferFromAspectRoles
-          qualifyBindings
-          qualifyStateNames
-          compileCalculatedRoles
-          requalifyBindingsToCalculatedRoles
-          compileCalculatedProperties
-          -- As all Calculated roles and Properties are now compiled, we can safely compile public Url calculations.
-          compilePublicUrls
-          qualifyPropertyReferences
-          computeCompleteEnumeratedTypes
-          handlePostponedStateQualifiedParts
-          compileStateQueries
-          contextualisePerspectives
-          -- Now all perspectives are available.
-          -- Check whether actions are allowed given perspectives.
-          handleScreens screens
-          checkPerspectiveModifiers
-          invertPerspectiveObjects
-          -- combinePerspectives
-          addUserRoleGraph
-          checkSynchronization
-      )
-      df
-      indexedContexts
-      indexedRoles
-      postponedParts
-  case ei of
-    (Left e) -> pure $ Left e
-    otherwise -> pure $ Right (Tuple dfr invertedQueries)
 
 phaseThreeWithMapping
   :: DomeinFileRecord Readable
@@ -185,13 +145,32 @@ phaseThreeWithMapping_
   -> Maybe StableIdMapping
   -> MP (Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries))
 phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping = do
-  installedModelCuids <- getinstalledModelCuids false -- not versioned
-  -- Notice that here we want to retrieve a DomeinFile from the local store. That means we don't have to provide a version!
-  stableReferredModels <- pure $ referredModels <#> \rm -> case Map.lookup rm installedModelCuids of
-    Just stableUri -> stableUri
-    Nothing -> ModelUri $ unwrap rm
-  indexedContexts <- unions <$> traverse (getDomeinFile <<< toStableModelUri >=> pure <<< indexedContexts) stableReferredModels
-  indexedRoles <- unions <$> traverse (getDomeinFile <<< toStableModelUri >=> pure <<< indexedRoles) stableReferredModels
+  -- SideCar files for all referred models (insofar as they have been compiled with Stable Identifiers yet).
+  sideCars <- getSideCars (DomeinFile df) false -- not versioned
+  indexedContexts :: LIST.List (Maybe (Tuple String ContextType)) <- LIST.concat <$>
+    ( for
+        (Map.values sideCars)
+        \({ contextIndividuals }) -> for (toUnfoldable contextIndividuals)
+          \(Tuple readableString stableString) -> do
+            mIndividual <- lookupIndexedContext stableString
+            case mIndividual of
+              Nothing -> pure Nothing
+              Just individual -> do
+                ctype <- contextType_ individual
+                pure $ Just $ Tuple readableString ctype
+    )
+  indexedRoles :: LIST.List (Maybe (Tuple String EnumeratedRoleType)) <- LIST.concat <$>
+    ( for
+        (Map.values sideCars)
+        \({ roleIndividuals }) -> for (toUnfoldable roleIndividuals)
+          \(Tuple readableString stableString) -> do
+            mIndividual <- lookupIndexedRole stableString
+            case mIndividual of
+              Nothing -> pure Nothing
+              Just individual -> do
+                ctype <- roleType_ individual
+                pure $ Just $ Tuple readableString ctype
+    )
   let
     dfMapped = case mMapping of
       Nothing -> df
@@ -224,8 +203,10 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
           checkSynchronization
       )
       dfMapped
-      indexedContexts
-      indexedRoles
+      -- Keys are Readable names, values are ContextTypes.
+      (((OBJ.fromFoldable $ LIST.catMaybes indexedContexts)) `OBJ.union` (collectLocalIndexedContexts dfMapped))
+      -- Keys are Readable names, values are EnumeratedRoleTypes.
+      ((OBJ.fromFoldable $ LIST.catMaybes indexedRoles) `OBJ.union` (collectLocalIndexedRoles dfMapped))
       postponedParts
   pure $ case ei of
     Left e -> Left e
@@ -318,13 +299,13 @@ qualifyBindings = (lift $ State.gets _.dfr) >>= qualifyBindings'
                             -- A name was specified, fully qualified. Check whether it exists, but not as a local name.
                             ContextType contextName -> catchError
                               (lift2 $ getContext context *> pure context)
-                              (\e -> throwError $ UnknownContext pos (unwrap context))
+                              (\e -> throwError $ UnknownContext pos context)
                           lift2 ((flip replaceContext qualifiedContext) <$> roleADT r)
                         C r -> case context of
                           ContextType empty | empty == "" -> lift2 $ roleADT r
                           ContextType contextName ->
                             try (lift2 $ getContext context) >>= case _ of
-                              Left e -> throwError $ UnknownContext pos (unwrap context)
+                              Left e -> throwError $ UnknownContext pos context
                               Right _ -> (flip replaceContext context) <$> (lift2 $ roleADT r)
                     else throwError $ NotWellFormedName pos (unwrap role)
                   e -> throwError e
@@ -334,7 +315,7 @@ qualifyBindings = (lift $ State.gets _.dfr) >>= qualifyBindings'
                   ContextType empty | empty == "" -> pure $ UET $ QT.RoleInContext { context, role: qualifiedRoleType }
                   -- Note that this is not yet correct, as the role in the RoleInContext should be
                   -- an EnumeratedRole. But we've not yet compiled the CalculatedRoles so we leave it for now.
-                  ContextType contextName -> throwError $ NoCalculatedAspect pos (unwrap qualifiedRoleType)
+                  ContextType contextName -> throwError $ NoCalculatedAspect pos qualifiedRoleType
             e -> throwError e
           Right (ST qualifiedRoleType) -> case context of
             ContextType empty | empty == "" -> unsafePartial case lookup (unwrap qualifiedRoleType) eroles of
@@ -433,9 +414,9 @@ qualifyPropertyReferences = do
       else do
         (candidates :: Array PropertyType) <- lift2 (rtype ###= lookForUnqualifiedPropertyType_ (propertytype2string propType))
         case head candidates of
-          Nothing -> throwError $ UnknownProperty pos (propertytype2string propType) (roletype2string rtype)
+          Nothing -> throwError $ UnknownProperty pos propType (ST rtype)
           (Just t) | length candidates == 1 -> pure t
-          otherwise -> throwError $ NotUniquelyIdentifying pos (propertytype2string propType) (map propertytype2string candidates)
+          otherwise -> throwError $ NotUniquelyIdentifyingPropertyType pos propType candidates
 
 -- | For each EnumeratedRole R in the model, add InvertedQueries to make deltas
 -- | available to User Roles in the context of R that have a Perspective on R.
@@ -686,7 +667,9 @@ handlePostponedStateQualifiedParts = do
             Nothing -> unwrap one
             Just sp | isTypeUri sp -> sp
             Just sp -> (unwrap one) <> "$" <> sp
-        many -> throwError (Custom ("State specification resolves to multiple roles: " <> show (unwrap <$> many) <> ". Specify exactly one."))
+        many -> do
+          names <- lift2 $ traverse lookupDisplayName many
+          throwError (Custom ("State specification resolves to multiple roles: " <> show names <> ". Specify exactly one."))
 
     f :: RoleType ~~~> ADT EnumeratedRoleType
     f rt = ArrayT do
@@ -1064,7 +1047,7 @@ handlePostponedStateQualifiedParts = do
           expandedProps
         of
         s | null s -> pure unit
-        calculatedProps -> throwError $ CannotModifyCalculatedProperty (intercalate "," $ propertytype2string <$> calculatedProps) start end
+        calculatedProps -> throwError $ CannotModifyCalculatedProperty calculatedProps start end
     else pure unit
     (propertyVerbs' :: PropertyVerbs) <- pure $ PropertyVerbs propertyTypes propertyVerbs
     -- ... for these states only...
@@ -1406,7 +1389,7 @@ handlePostponedStateQualifiedParts = do
     case mstate of
       Nothing -> isContextRootState stateId >>=
         if _ then do
-          state' <- State <$> modifyState (unwrap $ constructState stateId (Q $ trueCondition (CDOM $ UET (ContextType (unwrap stateId)))) (Cnt (ContextType (unwrap stateId))) [])
+          state' <- State <$> modifyState (unwrap $ constructState stateId (typeUri2LocalName_ $ unwrap stateId) (Q $ trueCondition (CDOM $ UET (ContextType (unwrap stateId)))) (Cnt (ContextType (unwrap stateId))) [])
           modifyDF \drf@{ states } -> drf { states = insert (unwrap stateId) state' states }
         else isRoleRootState stateId >>=
           if _ then do
@@ -1416,6 +1399,7 @@ handlePostponedStateQualifiedParts = do
             state' <- State <$> modifyState
               ( unwrap $ constructState
                   stateId
+                  (typeUri2LocalName_ $ unwrap stateId)
                   (Q $ trueCondition (RDOM (UET $ QT.RoleInContext { context, role: (EnumeratedRoleType (unwrap stateId)) })))
                   ( case rk of
                       UserRole -> (Srole (EnumeratedRoleType (unwrap stateId)))
@@ -1745,3 +1729,23 @@ computeCompleteEnumeratedTypes = do
     normalizedType <- lift $ lift (completeExpandedType erole >>= pure <<< toConjunctiveNormalForm)
     pure (EnumeratedRole erec { completeType = normalizedType })
 
+----------------------------------------------------------------------------------------
+------- COLLECT LOCAL INDEXED RESOURCES
+----------------------------------------------------------------------------------------
+collectLocalIndexedContexts :: DomeinFileRecord Readable -> Object ContextType
+collectLocalIndexedContexts df@{ contexts } = OBJ.fromFoldable $ LIST.catMaybes $ map
+  ( \(Tuple contextIdReadable (CTXT.Context { indexedContext, id })) ->
+      case indexedContext of
+        Just (ContextInstance ci) -> Just $ Tuple ci id
+        Nothing -> Nothing
+  )
+  (toUnfoldable contexts)
+
+collectLocalIndexedRoles :: DomeinFileRecord Readable -> Object EnumeratedRoleType
+collectLocalIndexedRoles df@{ enumeratedRoles } = OBJ.fromFoldable $ LIST.catMaybes $ map
+  ( \(Tuple roleIdReadable (EnumeratedRole { indexedRole, id })) ->
+      case indexedRole of
+        Just (RoleInstance ri) -> Just $ Tuple ri id
+        Nothing -> Nothing
+  )
+  (toUnfoldable enumeratedRoles)

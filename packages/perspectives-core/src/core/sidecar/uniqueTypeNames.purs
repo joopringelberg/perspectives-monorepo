@@ -877,14 +877,37 @@ mergeStableIdMapping cur mapping0 =
     candidatesV :: Array (Tuple String ViewKey)
     candidatesV = objToArrayWith snapshotToViewKeyCurrent cur.views
 
-    -- For states, we don't use a graded heuristic yet: we require exact (fqn, queryHash).
-    -- Build an index of current states by (fqn#hash)
+    -- For states, we relax matching: prefer exact (fqn#hash), otherwise allow (namespace#hash).
+    -- Build an index of current states by both (fqn#hash) and (ns#hash) mapping to canonical state FQN.
     candStatesIndex :: OBJ.Object String
-    candStatesIndex = OBJ.fromFoldable $ do
-      k <- OBJ.keys cur.states
-      case OBJ.lookup k cur.states of
-        Nothing -> []
-        Just s -> pure (Tuple (s.fqn <> "#" <> s.queryHash) s.fqn)
+    candStatesIndex =
+      let
+        -- Collect exact pairs and namespace groups to detect ambiguity
+        collect = foldl
+          ( \acc k -> case OBJ.lookup k cur.states of
+              Nothing -> acc
+              Just s ->
+                let
+                  ns = typeUri2typeNameSpace_ s.fqn
+                  exactKey = s.fqn <> "#" <> s.queryHash
+                  nsKey = ns <> "#" <> s.queryHash
+                  -- include an fqn-only key for query-change reuse
+                  accExact = acc.exact <> [ Tuple exactKey s.fqn, Tuple s.fqn s.fqn ]
+                  accNsGrp = case OBJ.lookup nsKey acc.nsGroups of
+                    Nothing -> OBJ.insert nsKey [ s.fqn ] acc.nsGroups
+                    Just arr -> OBJ.insert nsKey (arr <> [ s.fqn ]) acc.nsGroups
+                in
+                  { exact: accExact, nsGroups: accNsGrp }
+          )
+          { exact: [] :: Array (Tuple String String), nsGroups: OBJ.empty }
+          (OBJ.keys cur.states)
+        uniqueNsPairs = do
+          nsKey <- OBJ.keys collect.nsGroups
+          case OBJ.lookup nsKey collect.nsGroups of
+            Just [ onlyFqn ] -> [ Tuple nsKey onlyFqn ]
+            _ -> [] -- skip ambiguous namespace+hash groups
+      in
+        OBJ.fromFoldable (collect.exact <> uniqueNsPairs)
 
     contextKeys = OBJ.values mapping0.contextKeys
 
@@ -1054,7 +1077,31 @@ buildStateAliasesTopologically oldStates ctxAliases acc0 curIndex =
           in
             case OBJ.lookup k2 curIndex of
               Just newFqn -> OBJ.insert sOld.fqn newFqn acc
-              Nothing -> acc
+              Nothing ->
+                let
+                  -- Fallback 1: match by normalized namespace + query hash (rename under same parent)
+                  kNs = ns1 <> "#" <> sOld.queryHash
+                in
+                  case OBJ.lookup kNs curIndex of
+                    Just newFqn -> OBJ.insert sOld.fqn newFqn acc
+                    Nothing ->
+                      -- Fallback 2: match by normalized FQN regardless of hash (query changed; same parent+name)
+                      case OBJ.lookup normFqn curIndex of
+                        Just newFqn -> OBJ.insert sOld.fqn newFqn acc
+                        Nothing ->
+                          -- Fallback 3 (root-state move): if this old state FQN is itself a context that was aliased,
+                          -- use the mapped context FQN (with and without hash). This captures moving an entire case.
+                          case OBJ.lookup sOld.fqn ctxAliases of
+                            Just mappedCtxFqn ->
+                              let
+                                mk = mappedCtxFqn <> "#" <> sOld.queryHash
+                              in
+                                case OBJ.lookup mk curIndex of
+                                  Just newFqn -> OBJ.insert sOld.fqn newFqn acc
+                                  Nothing -> case OBJ.lookup mappedCtxFqn curIndex of
+                                    Just newFqn -> OBJ.insert sOld.fqn newFqn acc
+                                    Nothing -> acc
+                            Nothing -> acc
   in
     foldl step acc0 sorted
 
@@ -1240,13 +1287,35 @@ planCuidAssignments cur mapping0 =
     propAliases' = buildAliases defaultPropertyWeights 0.7 mapping0.propertyKeys (snapshotToPropertyKeyOld rolAliases') candidatesP mapping0.properties (OBJ.keys mapping0.propertyKeys)
     viewAliases' = buildAliases defaultViewWeights 0.7 mapping0.viewKeys (snapshotToViewKeyOld rolAliases') candidatesV mapping0.views (OBJ.keys mapping0.viewKeys)
 
-    -- state aliases (exact match fqn+hash with normalized namespace)
+    -- state aliases (relaxed): build index with both exact (fqn#hash) and namespace-level (ns#hash)
     candStatesIndex :: OBJ.Object String
-    candStatesIndex = OBJ.fromFoldable $ do
-      k <- OBJ.keys cur.states
-      case OBJ.lookup k cur.states of
-        Nothing -> []
-        Just s -> pure (Tuple (s.fqn <> "#" <> s.queryHash) s.fqn)
+    candStatesIndex =
+      let
+        collect = foldl
+          ( \acc k -> case OBJ.lookup k cur.states of
+              Nothing -> acc
+              Just s ->
+                let
+                  ns = typeUri2typeNameSpace_ s.fqn
+                  exactKey = s.fqn <> "#" <> s.queryHash
+                  nsKey = ns <> "#" <> s.queryHash
+                  -- include fqn-only for query-change reuse
+                  accExact = acc.exact <> [ Tuple exactKey s.fqn, Tuple s.fqn s.fqn ]
+                  accNsGrp = case OBJ.lookup nsKey acc.nsGroups of
+                    Nothing -> OBJ.insert nsKey [ s.fqn ] acc.nsGroups
+                    Just arr -> OBJ.insert nsKey (arr <> [ s.fqn ]) acc.nsGroups
+                in
+                  { exact: accExact, nsGroups: accNsGrp }
+          )
+          { exact: [] :: Array (Tuple String String), nsGroups: OBJ.empty }
+          (OBJ.keys cur.states)
+        uniqueNsPairs = do
+          nsKey <- OBJ.keys collect.nsGroups
+          case OBJ.lookup nsKey collect.nsGroups of
+            Just [ onlyFqn ] -> [ Tuple nsKey onlyFqn ]
+            _ -> []
+      in
+        OBJ.fromFoldable (collect.exact <> uniqueNsPairs)
 
     stateAliases' = buildStateAliasesTopologically mapping0.stateKeys ctxAliases' mapping0.states candStatesIndex
 

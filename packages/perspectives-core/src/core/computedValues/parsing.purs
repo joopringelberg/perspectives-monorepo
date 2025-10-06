@@ -34,6 +34,7 @@ import Data.Either (Either(..))
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Maybe (Maybe(..))
 import Data.MediaType (MediaType(..))
+import Data.Traversable (traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
 import Effect.Aff (error)
@@ -51,6 +52,7 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (AttachmentFiles)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
+import Perspectives.Error.Pretty (renderPerspectivesError)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Extern.Couchdb (retrieveModelFromLocalStore, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
@@ -92,7 +94,9 @@ parseAndCompileArc modelUri_ arcSource_ versionedModelManifest =
             r <- lift $ lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType MD.sysUser)
               (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource false modelCuid)
             case r of
-              Left errs -> ArrayT $ pure (Value <<< show <$> errs)
+              Left errs -> ArrayT do
+                rendered <- lift $ traverse renderPerspectivesError errs
+                pure (Value <$> rendered)
               -- Als er meldingen zijn, geef die dan terug.
               Right _ -> do
                 warnings <- lift $ lift $ getWarnings

@@ -102,28 +102,26 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
               case result of
                 Left e -> pure $ Left e
                 Right (DomeinFile dr'@{ id }) -> do
-                  dr''@{ referredModels } <- pure dr' { referredModels = state.referredModels }
+                  dr''@{ referredModels } <- pure dr' { referredModels = (delete id state.referredModels) }
                   -- We should load referred models if they are missing (but not the model we're compiling!).
                   -- Throw an error if a referred model is not installed. It will show up in the arc feedback.
-                  -- NOTICE: referredModels is in termen van Readable, dus dat moet nog omgezet worden naar Stable.
                   installedModelCuids <- lift $ getinstalledModelCuids false -- unversioned.
-                  for_ (delete id state.referredModels) (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
+                  for_ referredModels (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
 
                   (x' :: Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries)) <-
                     lift $ phaseThree dr'' state.postponedStateQualifiedParts state.screens
                   case x' of
                     Left e -> pure $ Left e
-                    Right (Tuple correctedDFR@{ referredModels: refModels } invertedQueries) -> do
-                      -- Refactored: compute updated StableIdMapping (with cuids and individuals) in one call
+                    Right (Tuple correctedDFR invertedQueries) -> do
+                      -- Compute updated StableIdMapping (with cuids and individuals) in one call
                       mapping2 <- UTN.updateStableMappingForModel dfid modelCuid correctedDFR mMapping
 
                       -- Run the type checker (NOTE: but a stub, right now).
                       typeCheckErrors <- lift $ checkDomeinFile (DomeinFile correctedDFR)
                       if null typeCheckErrors then do
-                        -- Remove the self-referral and add the source.
+                        -- Add the source and _id.
                         df <- pure $ DomeinFile correctedDFR
-                          { referredModels = delete id refModels
-                          , arc = text
+                          { arc = text
                           -- Notice that this is the UNVERSIONED id. It will be overwritten with the versioned id when uploading to the repository.
                           , _id = takeGuid $ unwrap id
                           }
