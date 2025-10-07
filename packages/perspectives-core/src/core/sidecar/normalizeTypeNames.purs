@@ -296,7 +296,7 @@ instance NormalizeTypeNames CalculatedRole CalculatedRoleType where
     actions' <- EM.fromFoldable <$> for (EM.toUnfoldable er.actions)
       ( \(Tuple ss objActs) -> do
           ss' <- normalize ss
-          objActs' <- normalizeActionsForState ss' objActs
+          objActs' <- normalizeActionsForState ss objActs
           pure (Tuple ss' objActs')
       )
     -- Derive stable perspective IDs using the owning role's stable ID
@@ -308,6 +308,7 @@ normalizeActionsForState
   :: StateSpec
   -> OBJ.Object Action
   -> WithSideCars (OBJ.Object Action)
+-- stateSpec blijkt genormaliseerd.
 normalizeActionsForState stateSpec obj = do
   env <- ask
   let sidecars = env.sidecars
@@ -318,6 +319,8 @@ normalizeActionsForState stateSpec obj = do
     act <- Action <$> traverseQfd normalize qfd
     case splitTypeUri (stateFqn <> "$" <> localName) of
       Nothing -> pure (Tuple localName act)
+      -- modelUri is "model://joopringelberg.nl#h9sqb9tqih",
+      -- env.sidecars heeft een entry voor 'model://joopringelberg.nl#TestImported'
       Just { modelUri } -> case Map.lookup (ModelUri modelUri) sidecars of
         Nothing -> pure (Tuple localName act)
         Just mapping -> case idUriForAction mapping (ActionUri (stateFqn <> "$" <> localName)) of
@@ -336,7 +339,7 @@ instance normalizePerspectiveInst :: Normalize Perspective where
     actions' <- EM.fromFoldable <$> for (EM.toUnfoldable pr.actions)
       ( \(Tuple ss objActs) -> do
           ss' <- normalize ss
-          objActs' <- normalizeActionsForState ss' objActs
+          objActs' <- normalizeActionsForState ss objActs
           pure (Tuple ss' objActs')
       )
     automaticStates' <- traverse fqn2tid pr.automaticStates
@@ -359,7 +362,7 @@ normalizePerspectiveWithOwner ownerRoleTid (Perspective pr) = do
   actions' <- EM.fromFoldable <$> for (EM.toUnfoldable pr.actions)
     ( \(Tuple ss objActs) -> do
         ss' <- normalize ss
-        objActs' <- normalizeActionsForState ss' objActs
+        objActs' <- normalizeActionsForState ss objActs
         pure (Tuple ss' objActs')
     )
   automaticStates' <- traverse fqn2tid pr.automaticStates
