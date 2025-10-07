@@ -633,9 +633,8 @@ handlePostponedStateQualifiedParts = do
     -- Execute the effect for all subjects in all object states.
     AST.ObjectState ridentification mpath -> collectStates mpath ridentification
 
-    where
-    maybeQualifyWith :: Namespace -> SegmentedPath -> String
-    maybeQualifyWith ns path = if isTypeUri path then path else qualifyWith ns path
+  maybeQualifyWith :: Namespace -> SegmentedPath -> String
+  maybeQualifyWith ns path = if isTypeUri path then path else qualifyWith ns path
 
   stateSpecificationToStateSpec :: AST.StateSpecification -> PhaseThree (Array StateSpec)
   stateSpecificationToStateSpec spec = case spec of
@@ -1199,7 +1198,14 @@ handlePostponedStateQualifiedParts = do
       qualifiedUsers
       effectWithEnvironment
 
-    stateSpecs <- stateSpecificationToStateSpec state
+    -- For context state specifications, root aspect states would be added by stateSpecificationToStateSpec.
+    -- This would add the action to all root states of the context type,
+    -- which is not necessary. It leads to proliferation of actions in the translation file.
+    -- Hence, we special-case ContextState here.
+    stateSpecs <- case state of
+      AST.ContextState ctx mpath -> pure [ ContextState $ StateIdentifier (maybe (unwrap ctx) (maybeQualifyWith (unwrap ctx)) mpath) ]
+      _ -> stateSpecificationToStateSpec state
+
     modifyAllSubjectRoles
       qualifiedUsers
       id
@@ -1415,14 +1421,14 @@ handlePostponedStateQualifiedParts = do
         modifyDF \dfr@{ states } -> dfr { states = insert (unwrap stateId) state' states }
     pure unit
     where
-    isContextRootState :: StateIdentifier -> PhaseThree Boolean
-    isContextRootState (StateIdentifier s) = State.gets _.dfr >>= pure <<< isJust <<< lookup s <<< _.contexts
-
-    isRoleRootState :: StateIdentifier -> PhaseThree Boolean
-    isRoleRootState (StateIdentifier s) = State.gets _.dfr >>= pure <<< isJust <<< lookup s <<< _.enumeratedRoles
-
     roleKind :: Partial => StateIdentifier -> PhaseThree RoleKind
     roleKind (StateIdentifier s) = State.gets _.dfr >>= \{ enumeratedRoles } -> pure $ _.kindOfRole $ unwrap $ fromJust (lookup s enumeratedRoles)
+
+  isContextRootState :: StateIdentifier -> PhaseThree Boolean
+  isContextRootState (StateIdentifier s) = State.gets _.dfr >>= pure <<< isJust <<< lookup s <<< _.contexts
+
+  isRoleRootState :: StateIdentifier -> PhaseThree Boolean
+  isRoleRootState (StateIdentifier s) = State.gets _.dfr >>= pure <<< isJust <<< lookup s <<< _.enumeratedRoles
 
 -- | Checks if the state is an upstream model state.
 -- An upstream model state is a state that is not part of the current model, but is

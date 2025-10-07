@@ -61,8 +61,6 @@ type EnumeratedRoleRecord =
   , pos :: ArcPosition
 
   , perspectives :: Array Perspective
-  -- The keys of (Object Action) are the action names as occurring in the readable arc model.
-  -- They should be replaced by unique identifiers, to support stable translation in case the modeller renames an action.
   , actions :: EncodableMap StateSpec (OBJ.Object Action)
 
   , roleAspects :: Array RoleInContext
