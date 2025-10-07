@@ -319,8 +319,6 @@ normalizeActionsForState stateSpec obj = do
     act <- Action <$> traverseQfd normalize qfd
     case splitTypeUri (stateFqn <> "$" <> localName) of
       Nothing -> pure (Tuple localName act)
-      -- modelUri is "model://joopringelberg.nl#h9sqb9tqih",
-      -- env.sidecars heeft een entry voor 'model://joopringelberg.nl#TestImported'
       Just { modelUri } -> case Map.lookup (ModelUri modelUri) sidecars of
         Nothing -> pure (Tuple localName act)
         Just mapping -> case idUriForAction mapping (ActionUri (stateFqn <> "$" <> localName)) of

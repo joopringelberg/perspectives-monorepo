@@ -61,7 +61,7 @@ import Perspectives.Data.EncodableMap (EncodableMap)
 import Perspectives.Data.EncodableMap (keys, lookup, values) as EM
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
 import Perspectives.Fuzzysort (fuzzyLookup)
-import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, domeinFileVersion, isExternalRole, qualifyWith, startsWithSegments, typeUri2LocalName_, typeUri2ModelUri, typeUri2typeNameSpace_)
+import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, domeinFileVersion, isExternalRole, startsWithSegments, typeUri2LocalName_, typeUri2ModelUri, typeUri2typeNameSpace_)
 import Perspectives.ModelTranslation.Normalize (fromReadableModelTranslation, toReadableModelTranslation)
 import Perspectives.ModelTranslation.Representation (ActionsPerStateTranslation(..), ActionsTranslation(..), ContextTranslation(..), ContextsTranslation(..), MarkdownsTranslation(..), ModelTranslation(..), NotificationsTranslation(..), PropertiesTranslation(..), RoleTranslation(..), RolesTranslation(..), TitlesTranslation(..))
 import Perspectives.PerspectivesState (getCurrentLanguage, getTranslationTable)
@@ -435,7 +435,7 @@ translateActions (ContextType cType) actions = ActionsPerStateTranslation <<< fr
       (unwrap $ stateSpec2StateIdentifier state)
       ( ActionsTranslation
           let
-            qualifiedActionNames = qualifyWith cType <$> (keys (unsafePartial fromJust $ EM.lookup state actions))
+            qualifiedActionNames = keys (unsafePartial fromJust $ EM.lookup state actions)
           in
             fromFoldable $ flip Tuple (Translations empty) <$> qualifiedActionNames
       )
