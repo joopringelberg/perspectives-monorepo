@@ -94,6 +94,8 @@ humanizePerspectivesError e = case e of
     props' <- traverse swapPropertyType props
     pure (CannotModifyCalculatedProperty props' start end)
   RoleHasNoProperty adt pt start end -> do
+    -- It may be that this error arose during the compilation of a model. In that case
+    -- compilation failed and this error will be in terms of Readable ids.
     adt' <- traverse swapDisplayName adt
     pure (RoleHasNoProperty adt' pt start end)
 
