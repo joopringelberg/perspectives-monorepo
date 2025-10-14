@@ -72,6 +72,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), 
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), StableIdMapping, loadStableMapping) as Sidecar
+import Perspectives.Sidecar.StableIdMapping (fromRepository)
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_, loadAndCompileArcFileWithSidecar_)
 import Simple.JSON (readJSON, readJSON_, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
@@ -144,7 +145,7 @@ uploadToRepository modelUri_ arcSource_ versionedModelManifest =
     ( case head modelUri_, head arcSource_ of
         Just modelUri, Just arcSource -> do
           -- Retrieve existing sidecar (if any) from repository. modelUri should be Stable.
-          mMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri modelUri)
+          mMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri modelUri) fromRepository
           let split = unsafePartial modelUri2ModelUrl modelUri
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           case mmodelCuid of
@@ -292,8 +293,8 @@ storeModelLocally_ modelUri_ arcSource_ versionedModelManifest =
   try
     ( case head modelUri_, head arcSource_ of
         Just modelUri, Just arcSource -> do
-          -- Load mapping from local models DB (if present)
-          mLocalMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri modelUri)
+          -- Load mapping from the Repository.
+          mLocalMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri modelUri) fromRepository
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           case mmodelCuid of
             Nothing -> lift $ addWarning "StoreModelLocally: no model CUID given!"
@@ -348,7 +349,7 @@ getTranslationYaml modelTranslation_ _ = case head modelTranslation_ of
     Left e -> handleExternalFunctionError "model://perspectives.domains#Parsing$GetTranslationYaml"
       (Left $ error (show e))
     Right m@(ModelTranslation translation) -> do
-      mMapping <- lift $ lift $ Sidecar.loadStableMapping (Sidecar.ModelUri (translation.namespace <> "@" <> translation.version))
+      mMapping <- lift $ lift $ Sidecar.loadStableMapping (Sidecar.ModelUri (translation.namespace <> "@" <> translation.version)) fromRepository
       case mMapping of
         Nothing -> pure $ Value $ MT.writeTranslationYaml m
         Just mapping -> do
@@ -367,7 +368,7 @@ parseYamlTranslation pfile_ _ = ArrayT case head pfile_ of
         case translation' of
           Left e -> throwError e
           Right (ModelTranslation translation) -> do
-            mMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri (translation.namespace <> "@" <> translation.version))
+            mMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri (translation.namespace <> "@" <> translation.version)) fromRepository
             case mMapping of
               Nothing -> pure $ [ Value $ writeJSON translation ]
               Just mapping -> do

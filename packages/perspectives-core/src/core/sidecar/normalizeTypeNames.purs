@@ -74,7 +74,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), 
 import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.HashQFD (qfdSignature)
-import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), idUriForAction, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
+import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), fromLocalModels, idUriForAction, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
 
 -- Environment carried during normalization: sidecars and a perspective id rewrite map
 type Env =
@@ -102,7 +102,7 @@ getSideCars df@(DomeinFile { referredModels }) versioned = do
     ( \scs (ModelUri referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
         Nothing -> pure scs
         Just (domeinFileName :: ModelUri Stable) -> do
-          mmapping <- loadStableMapping domeinFileName
+          mmapping <- loadStableMapping domeinFileName fromLocalModels
           case mmapping of
             Nothing -> pure scs
             Just submapping -> pure $ Map.insert (ModelUri referredModel) submapping scs

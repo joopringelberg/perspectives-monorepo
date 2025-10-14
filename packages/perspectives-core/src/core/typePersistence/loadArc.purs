@@ -32,20 +32,14 @@ import Data.List (List(..))
 import Data.Map (lookup)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
--- removed SCU: no longer used here after refactor
--- for no longer needed
 import Data.Tuple (Tuple(..))
 import Data.Unit (unit)
--- liftEffect no longer needed here
 import Foreign.Object (empty)
 import Parsing (ParseError(..))
--- unsafePartial no longer needed here
 import Perspectives.Checking.PerspectivesTypeChecker (checkDomeinFile)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
--- cuid2 no longer needed here
 import Perspectives.DomeinCache (retrieveDomeinFile, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
--- modelUri2SchemeAndAuthority no longer needed here
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE(..))
@@ -57,8 +51,7 @@ import Perspectives.Parsing.Messages (MultiplePerspectivesErrors, PerspectivesEr
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.SideCar.PhantomTypedNewtypes (Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (StableIdMappingForModel, getinstalledModelCuids, normalizeTypes)
-import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, idUriForContext, loadStableMapping)
--- direct extractKeysFromDfr import no longer needed; using UTN.updateStableMappingForModel
+import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, fromRepository, idUriForContext, loadStableMapping)
 import Perspectives.Sidecar.UniqueTypeNames as UTN
 import Prelude (bind, discard, pure, show, ($), (<<<), (==), (>=>))
 
@@ -80,7 +73,7 @@ type Source = String
 loadAndCompileArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) StoredQueries))
 loadAndCompileArcFile_ dfid text saveInCache modelCuid = do
   -- Retrieve existing sidecar (if any) from repository. domeinFilename should be Stable.
-  mMapping <- lift $ loadStableMapping dfid
+  mMapping <- lift $ loadStableMapping dfid fromRepository
   x <- loadAndCompileArcFileWithSidecar_ dfid text saveInCache mMapping modelCuid
   pure case x of
     Left errs -> Left errs

@@ -5,36 +5,37 @@
 -- END LICENSE
 
 module Perspectives.Sidecar.StableIdMapping
-  ( ContextKeySnapshot
+  ( ActionKeySnapshot
   , ContextIndividualKeySnapshot
-  , module Perspectives.SideCar.PhantomTypedNewtypes
+  , ContextKeySnapshot
   , PropertyKeySnapshot
-  , ViewKeySnapshot
-  , StateKeySnapshot
-  , RoleKeySnapshot
-  , ActionKeySnapshot
   , RoleIndividualKeySnapshot
+  , RoleKeySnapshot
   , StableIdMapping
   , StableIdMappingWithoutIndividuals
+  , StateKeySnapshot
+  , ViewKeySnapshot
   , emptyStableIdMapping
+  , fromLocalModels
+  , fromRepository
+  , idUriForAction
   , idUriForContext
   , idUriForProperty
   , idUriForRole
-  , idUriForView
   , idUriForState
-  , idUriForAction
+  , idUriForView
   , loadStableMapping
+  , lookupActionCuid
   , lookupContextCuid
-  , lookupViewCuid
-  , lookupStateCuid
+  , lookupContextIndividualId
   , lookupPropertyCuid
   , lookupRoleCuid
-  , lookupActionCuid
-  , lookupContextIndividualId
   , lookupRoleIndividualId
-  ) where
-
-import Prelude (bind, pure, ($), (<>), (==))
+  , lookupStateCuid
+  , lookupViewCuid
+  , module Perspectives.SideCar.PhantomTypedNewtypes
+  )
+  where
 
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
@@ -46,7 +47,9 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Identifiers (modelUri2ModelUrl, typeUri2typeNameSpace_)
 import Perspectives.Persistence.API (fromBlob, getAttachment)
+import Perspectives.Persistent (modelDatabaseName)
 import Perspectives.SideCar.PhantomTypedNewtypes (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StateUri(..), ViewUri(..))
+import Prelude (bind, pure, ($), (<>), (==))
 import Simple.JSON (readJSON)
 
 -- A compact, forward-compatible skeleton mapping sidecar.
@@ -272,11 +275,18 @@ lookupActionCuid m (ActionUri fqn) =
       Just canonical -> OBJ.lookup canonical m.actionCuids
       Nothing -> Nothing
 
-loadStableMapping :: ModelUri Stable -> MonadPerspectives (Maybe StableIdMapping)
-loadStableMapping (ModelUri domeinFileName) = do
+fromRepository :: Boolean
+fromRepository = true
+
+fromLocalModels :: Boolean
+fromLocalModels = false
+
+-- | Load the stable ID mapping sidecar for a given model (if any), from the Repository.
+loadStableMapping :: ModelUri Stable -> Boolean -> MonadPerspectives (Maybe StableIdMapping)
+loadStableMapping (ModelUri domeinFileName) fromRepo = do
   let split = unsafePartial modelUri2ModelUrl domeinFileName
-  -- Retrieve existing sidecar (if any) from repository
-  mBlob <- getAttachment split.repositoryUrl split.documentName "stableIdMapping.json"
+  source <- if fromRepo then pure split.repositoryUrl else modelDatabaseName
+  mBlob <- getAttachment source split.documentName "stableIdMapping.json"
   case mBlob of
     Nothing -> pure Nothing
     Just blob -> do
@@ -286,6 +296,7 @@ loadStableMapping (ModelUri domeinFileName) = do
         _ -> case readJSON txt of
           Right (m0 :: StableIdMappingWithoutIndividuals) -> Just (upgradeWithoutIndividuals m0)
           _ -> Nothing
+
 
 idUriForContext
   :: StableIdMapping

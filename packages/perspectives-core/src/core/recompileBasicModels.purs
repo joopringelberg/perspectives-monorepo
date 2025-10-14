@@ -70,7 +70,7 @@ import Perspectives.Representation.Class.Cacheable (setRevision)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (Stable)
-import Perspectives.Sidecar.StableIdMapping (ModelUri(..), loadStableMapping)
+import Perspectives.Sidecar.StableIdMapping (ModelUri(..), fromLocalModels, fromRepository, loadStableMapping)
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFileWithSidecar_)
 import Simple.JSON (class ReadForeign, read, read', writeJSON)
 
@@ -96,7 +96,7 @@ recompileModelsAtUrl modelsDb manifestsDb = do
     do
       log ("Recompiling " <> namespace)
       -- Load sidecar from repository DB and compile with it
-      mRepoMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id)
+      mRepoMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id) fromRepository
       -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
       r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id))
       case r of
@@ -132,7 +132,7 @@ recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _
   do
     log ("Recompiling " <> namespace)
     -- Load sidecar from local DB and compile with it
-    mlocalMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id)
+    mlocalMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id) fromLocalModels
     -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
     -- It should also be the local part of the id.
     r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mlocalMapping (unsafePartial modelUri2LocalName (unwrap id))
