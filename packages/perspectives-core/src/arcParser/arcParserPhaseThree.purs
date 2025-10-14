@@ -116,10 +116,8 @@ phaseThree
   -> LIST.List AST.ScreenE
   -> MP (Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries))
 phaseThree df@{ id } postponedParts screens = do
-  -- Store the DomeinFile in cache. If a prefix for the domain is defined in the file,
-  -- phaseThree_ will try to retrieve it.
-  void $ storeDomeinFileInCache (toStableModelUri id) (toStableDomeinFile (DomeinFile df))
   result <- phaseThreeWithMapping_ df postponedParts screens Nothing
+  -- phaseThreeWithMapping_ stored the DomeinFile in cache.
   removeDomeinFileFromCache (toStableModelUri id)
   pure result
 
@@ -130,10 +128,8 @@ phaseThreeWithMapping
   -> Maybe StableIdMapping
   -> MP (Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries))
 phaseThreeWithMapping df@{ id } postponedParts screens mMapping = do
-  -- Store the DomeinFile in cache. If a prefix for the domain is defined in the file,
-  -- phaseThree_ will try to retrieve it.
-  void $ storeDomeinFileInCache (toStableModelUri id) (toStableDomeinFile $ DomeinFile df)
   result <- phaseThreeWithMapping_ df postponedParts screens mMapping
+  -- phaseThreeWithMapping_ stored the DomeinFile in cache.
   removeDomeinFileFromCache (toStableModelUri id)
   pure result
 
@@ -147,6 +143,7 @@ phaseThreeWithMapping_
 phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping = do
   -- SideCar files for all referred models (insofar as they have been compiled with Stable Identifiers yet).
   sideCars <- getSideCars (DomeinFile df) false -- not versioned
+  void $ storeDomeinFileInCache (toStableModelUri id) (toStableDomeinFile (DomeinFile df))
   indexedContexts :: LIST.List (Maybe (Tuple String ContextType)) <- LIST.concat <$>
     ( for
         (Map.values sideCars)
