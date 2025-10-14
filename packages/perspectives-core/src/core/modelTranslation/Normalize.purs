@@ -12,17 +12,17 @@ module Perspectives.ModelTranslation.Normalize
 import Prelude
 
 import Control.Monad.Reader (Reader, ask, runReader)
-import Data.Maybe (fromMaybe, Maybe(..))
 import Data.Array (mapMaybe, uncons)
+import Data.Maybe (fromMaybe, Maybe(..))
 import Data.String as S
 import Data.String.CodeUnits as CU
-import Data.Tuple (Tuple(..))
 import Data.Traversable (traverse)
+import Data.Tuple (Tuple(..))
 import Foreign.Object (Object)
 import Foreign.Object as OBJ
-import Perspectives.ModelTranslation.Representation (ModelTranslation(..), ContextsTranslation(..), ContextTranslation(..), RolesTranslation(..), RoleTranslation(..), PropertiesTranslation(..), ActionsPerStateTranslation(..), ActionsTranslation)
-import Perspectives.Sidecar.StableIdMapping (StableIdMapping, ContextUri(..), RoleUri(..), PropertyUri(..), StateUri(..), idUriForContext, idUriForRole, idUriForProperty, idUriForState)
 import Perspectives.Identifiers (deconstructBuitenRol, isExternalRole)
+import Perspectives.ModelTranslation.Representation (ModelTranslation(..), ContextsTranslation(..), ContextTranslation(..), RolesTranslation(..), RoleTranslation(..), PropertiesTranslation(..), ActionsPerStateTranslation(..), ActionsTranslation(..))
+import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), PropertyUri(..), RoleUri(..), StableIdMapping, StateUri(..), idUriForAction, idUriForContext, idUriForProperty, idUriForRole, idUriForState)
 
 -- | Transform a ModelTranslation whose keys are readable FQNs into one keyed by
 -- | stable identifiers (cuid-composed) using a StableIdMapping.
@@ -72,6 +72,7 @@ type ReverseMaps =
   , roles :: Object String
   , properties :: Object String
   , states :: Object String
+  , actions :: Object String
   }
 
 buildReverse :: StableIdMapping -> ReverseMaps
@@ -80,6 +81,7 @@ buildReverse m =
   , roles: mk RoleUri idUriForRole m.roleCuids
   , properties: mk PropertyUri idUriForProperty m.propertyCuids
   , states: mk StateUri idUriForState m.stateCuids
+  , actions: mk ActionUri idUriForAction m.actionCuids
   }
   where
   mk :: forall a. (String -> a) -> (StableIdMapping -> a -> Maybe String) -> Object String -> Object String
@@ -124,7 +126,16 @@ toReadableProperties rev (PropertiesTranslation obj) =
 
 toReadableActionsPerState :: ReverseMaps -> ActionsPerStateTranslation -> ActionsPerStateTranslation
 toReadableActionsPerState rev (ActionsPerStateTranslation obj) =
-  ActionsPerStateTranslation $ remapKeysPure (lookupState rev) obj
+  let
+    -- First, make nested action tables readable
+    obj' = map (toReadableActions rev) obj
+  in
+    -- Then, remap the state keys from stable IDs back to readable FQNs
+    ActionsPerStateTranslation $ remapKeysPure (lookupState rev) obj'
+
+toReadableActions :: ReverseMaps -> ActionsTranslation -> ActionsTranslation
+toReadableActions rev (ActionsTranslation at) =
+  ActionsTranslation $ remapKeysPure (lookupAction rev) at
 
 lookupContext :: ReverseMaps -> String -> String
 lookupContext rev key = fromMaybe key (OBJ.lookup key rev.contexts)
@@ -148,6 +159,9 @@ lookupProperty rev key = fromMaybe key (OBJ.lookup key rev.properties)
 
 lookupState :: ReverseMaps -> String -> String
 lookupState rev key = fromMaybe key (OBJ.lookup key rev.states)
+
+lookupAction :: ReverseMaps -> String -> String
+lookupAction rev key = fromMaybe key (OBJ.lookup key rev.actions)
 
 remapKeysPure :: forall a. (String -> String) -> Object a -> Object a
 remapKeysPure fk obj =
@@ -202,7 +216,9 @@ normalizeActionsPerState (ActionsPerStateTranslation obj) = do
   pure $ ActionsPerStateTranslation obj'
 
 normalizeActions :: ActionsTranslation -> Reader Env ActionsTranslation
-normalizeActions at = pure at -- Action names themselves are not type identifiers; keys already handled at state level.
+normalizeActions (ActionsTranslation at) = do
+  at' <- remapKeys normalizeActionKey (pure at)
+  pure $ ActionsTranslation at'
 
 -- Key normalization helpers --------------------------------------------------
 
@@ -233,6 +249,11 @@ normalizeStateKey k = do
   env <- ask
   -- Keys for ActionsPerStateTranslation are state identifiers; normalize fully.
   pure $ fromMaybe k (idUriForState env (StateUri k))
+
+normalizeActionKey :: String -> Reader Env String
+normalizeActionKey k = do
+  env <- ask
+  pure $ fromMaybe k (idUriForAction env (ActionUri k))
 
 -- Generic object traversal & remapping ---------------------------------------
 

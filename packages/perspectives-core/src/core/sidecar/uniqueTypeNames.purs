@@ -934,8 +934,20 @@ mergeStableIdMapping cur mapping0 =
     -- State aliasing: process old snapshots topologically by namespace and normalize parent namespaces through known context/state aliases.
     stateAliases' = buildStateAliasesTopologically mapping0.stateKeys ctxAliases' mapping0.states candStatesIndex
 
-    -- Action aliases: normalize through state alias map only; preserve existing aliases otherwise
-    actionAliases' = buildActionAliases mapping0.actionKeys mapping0.actions (OBJ.fromFoldable (OBJ.keys cur.actions <#> (\k -> Tuple k true))) stateAliases'
+    -- Action aliases: normalize through state alias map only; preserve existing aliases otherwise.
+    -- Be robust to older sidecars that had no actionKeys: synthesize minimal snapshots from previous actionCuids keys.
+    letOldActionsFromCuids =
+      let
+        toSnap fqn =
+          let
+            stFqn = typeUri2typeNameSpace_ fqn
+            rolFqn = typeUri2typeNameSpace_ stFqn
+          in
+            Tuple fqn { fqn, declaringRoleFqn: rolFqn, declaringStateFqn: stFqn }
+      in
+        OBJ.fromFoldable (OBJ.keys mapping0.actionCuids <#> toSnap)
+    oldActionsForAliasing = OBJ.union mapping0.actionKeys letOldActionsFromCuids
+    actionAliases' = buildActionAliases oldActionsForAliasing mapping0.actions (OBJ.fromFoldable (OBJ.keys cur.actions <#> (\k -> Tuple k true))) stateAliases'
     actionCuids' = assignCuids actionAliases' mapping0.actionCuids (OBJ.keys cur.actions)
   in
     mapping0
@@ -1113,25 +1125,106 @@ buildActionAliases
   -> OBJ.Object String -- state alias map (oldStateFqn -> newStateFqn)
   -> OBJ.Object String
 buildActionAliases oldActions acc0 curIndex stateAliases =
-  foldl
-    ( \acc oldFqn -> case OBJ.lookup oldFqn oldActions of
-        Nothing -> acc
-        Just sOld ->
-          if OBJ.lookup oldFqn curIndex /= Nothing then acc
-          else
-            let
-              st0 = sOld.declaringStateFqn
-              stN = case OBJ.lookup st0 stateAliases of
-                Just ns -> ns
-                Nothing -> st0
-              -- take local action name as suffix after last '$'
-              local = lastSegment oldFqn
-              cand = stN <> "$" <> local
-            in
-              if OBJ.lookup cand curIndex /= Nothing then OBJ.insert oldFqn cand acc else acc
-    )
-    acc0
-    (OBJ.keys oldActions)
+  let
+    -- Group current canonical actions by parent state FQN, with a map of localName -> full FQN
+    currentByParentLocal :: OBJ.Object (OBJ.Object String)
+    currentByParentLocal =
+      let
+        addOne acc fqn =
+          let
+            parent = typeUri2typeNameSpace_ fqn
+            local = lastSegment fqn
+            inner = case OBJ.lookup parent acc of
+              Nothing -> OBJ.singleton local fqn
+              Just mp -> OBJ.insert local fqn mp
+          in
+            OBJ.insert parent inner acc
+      in
+        foldl addOne OBJ.empty (OBJ.keys curIndex)
+
+    -- Local accumulator type for pass 1
+    -- We avoid a local type alias (not allowed in this scope) by describing the record inline where used.
+
+    -- Pass 1: exact same-name under aliased parent state
+    pass1 =
+      let
+        step a oldFqn = case OBJ.lookup oldFqn oldActions of
+          Nothing -> a
+          Just sOld ->
+            if OBJ.lookup oldFqn curIndex /= Nothing then a -- old still canonical; no alias needed
+            else
+              let
+                st0 = sOld.declaringStateFqn
+                stN = case OBJ.lookup st0 stateAliases of
+                  Just ns -> ns
+                  Nothing -> st0
+                local = lastSegment oldFqn
+                cand = stN <> "$" <> local
+              in
+                case Tuple (OBJ.lookup cand curIndex) (OBJ.lookup cand a.matchedNew) of
+                  Tuple (Just _) Nothing ->
+                    { aliases: OBJ.insert oldFqn cand a.aliases
+                    , matchedNew: OBJ.insert cand true a.matchedNew
+                    }
+                  _ -> a
+      in
+        foldl step { aliases: acc0, matchedNew: OBJ.empty } (OBJ.keys oldActions)
+
+    -- Build unmatched sets per parent for pass 2 (rename within same parent)
+    oldUnmatchedByParent :: OBJ.Object (Array String)
+    oldUnmatchedByParent =
+      let
+        addOld acc oldFqn = case OBJ.lookup oldFqn oldActions of
+          Nothing -> acc
+          Just sOld ->
+            if OBJ.lookup oldFqn curIndex /= Nothing then acc
+            else if OBJ.lookup oldFqn pass1.aliases /= Nothing then acc
+            else
+              let
+                st0 = sOld.declaringStateFqn
+                stN = case OBJ.lookup st0 stateAliases of
+                  Just ns -> ns
+                  Nothing -> st0
+                arr = case OBJ.lookup stN acc of
+                  Nothing -> [ oldFqn ]
+                  Just xs -> xs <> [ oldFqn ]
+              in
+                OBJ.insert stN arr acc
+      in
+        foldl addOld OBJ.empty (OBJ.keys oldActions)
+
+    newUnmatchedByParent :: OBJ.Object (Array String)
+    newUnmatchedByParent =
+      let
+        toArr mp = OBJ.values mp
+        addParent acc parent =
+          case OBJ.lookup parent currentByParentLocal of
+            Nothing -> acc
+            Just mp ->
+              let
+                allFqns = toArr mp
+                rem = allFqns # filter (\f -> OBJ.lookup f pass1.matchedNew == Nothing)
+              in
+                if rem == [] then acc else OBJ.insert parent rem acc
+      in
+        foldl addParent OBJ.empty (OBJ.keys currentByParentLocal)
+
+    -- Pass 2: for each parent state, if exactly one old unmatched and one new unmatched, alias them
+    pass2Aliases =
+      let
+        parents = OBJ.keys oldUnmatchedByParent
+        go acc parent =
+          case Tuple (OBJ.lookup parent oldUnmatchedByParent) (OBJ.lookup parent newUnmatchedByParent) of
+            Tuple (Just [ oldOnly ]) (Just [ newOnly ]) ->
+              -- only alias if not already set (defensive)
+              case OBJ.lookup oldOnly pass1.aliases of
+                Just _ -> acc
+                Nothing -> OBJ.insert oldOnly newOnly acc
+            _ -> acc
+      in
+        foldl go pass1.aliases parents
+  in
+    pass2Aliases
 
 lastSegment :: String -> String
 lastSegment s =
@@ -1319,17 +1412,34 @@ planCuidAssignments cur mapping0 =
 
     stateAliases' = buildStateAliasesTopologically mapping0.stateKeys ctxAliases' mapping0.states candStatesIndex
 
+    -- action aliases: normalize via state alias map and keep local action name
+    candActionsIndex = OBJ.fromFoldable (OBJ.keys cur.actions <#> (\k -> Tuple k true))
+    letOldActionsFromCuids =
+      let
+        toSnap fqn =
+          let
+            stFqn = typeUri2typeNameSpace_ fqn
+            rolFqn = typeUri2typeNameSpace_ stFqn
+          in
+            Tuple fqn { fqn, declaringRoleFqn: rolFqn, declaringStateFqn: stFqn }
+      in
+        OBJ.fromFoldable (OBJ.keys mapping0.actionCuids <#> toSnap)
+    oldActionsForAliasing = OBJ.union mapping0.actionKeys letOldActionsFromCuids
+    actionAliases' = buildActionAliases oldActionsForAliasing mapping0.actions candActionsIndex stateAliases'
+
     mappingWithAliases = mapping0
       { contexts = ctxAliases'
       , roles = rolAliases'
       , properties = propAliases'
       , views = viewAliases'
       , states = stateAliases'
+      , actions = actionAliases'
       , contextKeys = cur.contexts
       , roleKeys = cur.roles
       , propertyKeys = cur.properties
       , viewKeys = cur.views
       , stateKeys = cur.states
+      , actionKeys = cur.actions
       , contextIndividualKeys = cur.contextIndividualKeys
       , roleIndividualKeys = cur.roleIndividualKeys
       }
@@ -1362,8 +1472,8 @@ planCuidAssignments cur mapping0 =
     needAction =
       let
         hasPrev fqn = OBJ.lookup fqn mapping0.actionCuids /= Nothing
-        reusedFromAlias fqn = findFirstJust (OBJ.keys mapping0.actions) \oldFqn ->
-          case OBJ.lookup oldFqn mapping0.actions of
+        reusedFromAlias fqn = findFirstJust (OBJ.keys actionAliases') \oldFqn ->
+          case OBJ.lookup oldFqn actionAliases' of
             Just tgt | tgt == fqn -> OBJ.lookup oldFqn mapping0.actionCuids
             _ -> Nothing
       in
