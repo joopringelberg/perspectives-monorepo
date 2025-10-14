@@ -47,17 +47,17 @@ domain model://joopringelberg.nl#TestImported
     thing Something1
       indexed ts:MyOnlySomething
   
-  case AnotherCase1
+  case AnotherCase11
     aspect sys:ContextWithNotification
-    state SomeState2 = (exists AnotherThing1) and true
+    state SomeState2 = (exists AnotherThing2) and true
       on entry
         notify Manager
           "Entering SomeState for {Manager >> FirstName}"
       state Nested = 1 == 2
         on entry
           do for Manager
-            Test7 = "Hello " for AnotherThing1
-    state AnotherState = Manager >> FirstName == "Joop"
+            Test7 = "Hello " for AnotherThing2
+    state AnotherState1 = Manager >> FirstName == "Joop"
       on entry
         notify Manager
           "Entering AnotherState for {Manager >> FirstName}"
@@ -66,12 +66,12 @@ domain model://joopringelberg.nl#TestImported
       property Test10 = ts:MyTestImported >> extern >> Test66
 
     user Manager = sys:Me
-      perspective on AnotherThing1
+      perspective on AnotherThing2
         props (Test7) verbs (SetPropertyValue)
       perspective on Manager
         props (FirstName, LastName) verbs (Consult)
-      action MyAction
-        Test7 = "Did action MyAction" for AnotherThing1
+      action MyAction5
+        Test7 = "Did action MyAction" for AnotherThing2
       screen
         who
           Manager
@@ -80,12 +80,12 @@ domain model://joopringelberg.nl#TestImported
             detail
               without props (LastName)
         what
-          AnotherThing1
+          AnotherThing2
             master
             detail
         where
 
-    thing AnotherThing1
+    thing AnotherThing2
       property Test7 (String)
       property Test8 (String)
       property Test9 = Test7 + Test8

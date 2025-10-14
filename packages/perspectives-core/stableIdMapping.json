@@ -8,12 +8,19 @@
   "stateCuids": {},
   "roles": {},
   "roleKeys": {},
+  "roleIndividuals": {},
+  "roleIndividualKeys": {},
   "roleCuids": {},
   "propertyKeys": {},
   "propertyCuids": {},
   "properties": {},
-  "modelIdentifier": "model://joopringelberg.nl#cmddp2k3jz",
+  "modelIdentifier": "model://joopringelberg.nl#h9sqb9tqih",
   "contexts": {},
   "contextKeys": {},
-  "contextCuids": {}
+  "contextIndividuals": {},
+  "contextIndividualKeys": {},
+  "contextCuids": {},
+  "actions": {},
+  "actionKeys": {},
+  "actionCuids": {}
 }

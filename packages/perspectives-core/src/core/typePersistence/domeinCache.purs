@@ -28,21 +28,22 @@ module Perspectives.DomeinCache
 import Control.Monad.Cont.Trans (lift)
 import Control.Monad.Except (throwError)
 import Control.Monad.State (StateT, execStateT, get, put) as State
-import Data.Array (head)
+import Data.Array (foldl, head)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
-import Data.Maybe (Maybe(..), maybe)
+import Data.Maybe (Maybe(..), fromJust, maybe)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (unwrap)
 import Data.Show (show)
+import Data.String (Pattern(..), Replacement(..), replace)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
 import Effect.Aff.AVar (AVar, put, take)
 import Effect.Aff.Class (liftAff)
 import Effect.Exception (error)
 import Foreign (Foreign)
-import Foreign.Object (Object, empty, insert, lookup)
+import Foreign.Object (Object, empty, insert, keys, lookup)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (JustInTimeModelLoad(..), MonadPerspectives, retrieveInternally)
 import Perspectives.Couchdb (DeleteCouchdbDocument(..))
@@ -51,10 +52,10 @@ import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ErrorLogging (logPerspectivesError, warnModeller)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
-import Perspectives.ModelDependencies (build, patch, versionToInstall)
+import Perspectives.ModelDependencies (build, modelReadableToStable, modelStableToReadable, patch, versionToInstall)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, fromBlob, getAttachment, tryGetDocument)
-import Perspectives.Persistent (forceSaveDomeinFile, getDomeinFile, getPerspectRol, modelDatabaseName, removeEntiteit, saveEntiteit, tryGetPerspectEntiteit, tryRemoveEntiteit, updateRevision)
+import Perspectives.Persistent (forceSaveDomeinFile, getDomeinFile, modelDatabaseName, removeEntiteit, saveEntiteit, tryGetPerspectEntiteit, tryGetPerspectRol, tryRemoveEntiteit, updateRevision)
 import Perspectives.PerspectivesState (domeinCacheRemove, getModelToLoad, getTranslationTable, setTranslationTable)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -66,7 +67,7 @@ import Perspectives.Representation.State (State(..))
 import Perspectives.ResourceIdentifiers (resourceIdentifier2DocLocator)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (Unit, bind, discard, identity, map, pure, unit, void, ($), (*>), (<$>), (<<<), (<>), (>>=))
+import Prelude (Unit, bind, discard, identity, map, pure, unit, void, ($), (*>), (<$>), (<<<), (<>), (>>=), (==))
 import Simple.JSON (readJSON)
 
 storeDomeinFileInCache :: ModelUri Stable -> DomeinFile Stable -> MonadPerspectives (AVar (DomeinFile Stable))
@@ -196,21 +197,40 @@ getVersionToInstall (ModelUri modelUri) = case unsafePartial modelUri2ManifestUr
     case mRol of
       Just (PerspectRol { id, properties }) -> case head $ maybe [] identity (lookup versionToInstall properties) of
         Nothing -> pure Nothing
-        -- TODO dit klopt niet, want dit is de externe rol van het ModelManifest zelf. We willen het VersionedModelManifest.
         Just v -> pure $ Just { semver: unwrap v, versionedModelManifest: makeVersionedModelManifest (unwrap v) id }
-      _ -> pure Nothing
+      -- TODO. Na de transitie naar Stable identifiers kan dit weg.
+      -- _ -> Nothing -> pure Nothing
+      _ -> case lookup modelUri modelStableToReadable of
+        Just cuid -> getVersionToInstall (ModelUri cuid)
+        Nothing -> pure Nothing
   where
   makeVersionedModelManifest :: String -> RoleInstance -> RoleInstance
   makeVersionedModelManifest semver (RoleInstance modelManifest) = RoleInstance $ buitenRol ((deconstructBuitenRol modelManifest) <> "@" <> semver)
 
 getPatchAndBuild :: RoleInstance -> MonadPerspectives { patch :: String, build :: String }
 getPatchAndBuild rid = do
-  (PerspectRol { id, properties }) <- getPerspectRol rid
-  case lookup patch properties, lookup build properties of
-    Just p, Just b -> pure { patch: firstOrDefault p, build: firstOrDefault b }
-    Just p, Nothing -> pure { patch: firstOrDefault p, build: default }
-    Nothing, Just b -> pure { patch: default, build: firstOrDefault b }
-    Nothing, Nothing -> pure { patch: default, build: default }
+  -- TODO. In de transitieperiode proberen we de Readable name te vervangen door de CUID.
+  -- Dit kan weg als alle modellen op Stable identifiers draaien (revert naar onderstaande).
+  -- (PerspectRol { id, properties }) <- getPerspectRol rid
+  -- case lookup patch properties, lookup build properties of
+  --   Just p, Just b -> pure { patch: firstOrDefault p, build: firstOrDefault b }
+  --   Just p, Nothing -> pure { patch: firstOrDefault p, build: default }
+  --   Nothing, Just b -> pure { patch: default, build: firstOrDefault b }
+  --   Nothing, Nothing -> pure { patch: default, build: default }
+  mrol <- tryGetPerspectRol rid
+  case mrol of
+    Just (PerspectRol { id, properties }) -> do
+      case lookup patch properties, lookup build properties of
+        Just p, Just b -> pure { patch: firstOrDefault p, build: firstOrDefault b }
+        Just p, Nothing -> pure { patch: firstOrDefault p, build: default }
+        Nothing, Just b -> pure { patch: default, build: firstOrDefault b }
+        Nothing, Nothing -> pure { patch: default, build: default }
+    Nothing -> do
+      let stableRid = foldl (\final nextReadable -> replace (Pattern nextReadable) (Replacement $ unsafePartial fromJust $ lookup nextReadable modelReadableToStable) final) (unwrap rid) (keys modelReadableToStable)
+      if stableRid == unwrap rid then
+        throwError (error $ "getPatchAndBuild cannot find role " <> show rid)
+      else
+        getPatchAndBuild (RoleInstance stableRid)
   where
   default :: String
   default = "0"

@@ -723,10 +723,13 @@ domain model://perspectives.domains#CouchdbManagement
       -- to both the cw_servers_and_repositories and to the Repository database.
       perspective on Manifests
         only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
-        props (Description, ModelCuid) verbs (Consult)
         props (DomeinFileName, LocalModelName) verbs (SetPropertyValue, Consult)
-        in object state NoLocalModelName
-          props (ModelCuid) verbs (SetPropertyValue)
+        props (Description, ModelCuid) verbs (Consult)
+        props (ModelCuid) verbs (SetPropertyValue)
+        -- in object state NoLocalModelName
+        --   props (ModelCuid) verbs (SetPropertyValue)
+        action GenerateCuid
+            ModelCuid = callExternal util:GenSym() returns String
       
       action CreateManifest
         create role Manifests

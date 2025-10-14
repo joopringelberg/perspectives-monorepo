@@ -1,5 +1,8 @@
 module Perspectives.ModelDependencies where
 
+import Data.Tuple (Tuple(..))
+import Foreign.Object (Object, fromFoldable)
+
 -- | This module contains all Arc identifiers that are used in the PDR source code.
 -- | None of these identifiers can be changed in their models without breaking the PDR.
 -- | Relevant models are:
@@ -51,7 +54,7 @@ systemIdentityValues :: String
 systemIdentityValues = "model://perspectives.domains#System$TheWorld$SystemIdentities"
 
 systemModelName :: String
-systemModelName = "model://perspectives.domains#System"
+systemModelName = "model://perspectives.domains#tiodn6tcyc" -- System
 
 sysMe :: String
 sysMe = "model://perspectives.domains#System$Me"
@@ -225,7 +228,7 @@ installedBuild = "model://perspectives.domains#System$PerspectivesSystem$ModelsI
 -- COUCHDBMANAGEMENT
 ------------------------------------------------------------------------------------
 couchdbManagementModelName :: String
-couchdbManagementModelName = "model://perspectives.domains#CouchdbManagement"
+couchdbManagementModelName = "model://perspectives.domains#xyfxpg3lzq" -- CouchdbManagement
 
 versionToInstall :: String
 versionToInstall = "model://perspectives.domains#CouchdbManagement$ModelManifest$External$VersionToInstall"
@@ -334,7 +337,7 @@ userWithCredentialsAuthorizedDomain = "model://perspectives.domains#System$WithC
 -- BODIESWITHACCOUNTS
 ------------------------------------------------------------------------------------
 bodiesWithAccountsModelName :: String
-bodiesWithAccountsModelName = "model://perspectives.domains#BodiesWithAccounts"
+bodiesWithAccountsModelName = "model://perspectives.domains#bxxptg50jp" -- BodiesWithAccounts
 
 ------------------------------------------------------------------------------------
 -- SHAREDFILESERVICES
@@ -350,3 +353,31 @@ actualSharedFileServer = "model://perspectives.domains#SharedFileServices$Shared
 
 fileShareCredentials :: String
 fileShareCredentials = "model://perspectives.domains#SharedFileServices$SharedFileService$FileShareCredentials"
+
+------------------------------------------------------------------------------------
+-- MODEL CUIDS
+------------------------------------------------------------------------------------
+-- We moved from Readable identifiers to Stable ones in October 2025. In transitioning,
+-- we have public resources in perspectives.domains that, under the new logic, should have their
+-- names derived from model CUIDs. Instead, they are still derived from the Readable identifiers.
+-- In the transition period, we need to be able to refer to these resources by their old names.
+
+modelStableToReadable :: Object String
+modelStableToReadable = fromFoldable
+  [ (Tuple "model://perspectives.domains#tiodn6tcyc" "model://perspectives.domains#System")
+  , (Tuple "model://perspectives.domains#xyfxpg3lzq" "model://perspectives.domains#CouchdbManagement")
+  , (Tuple "model://perspectives.domains#bxxptg50jp" "model://perspectives.domains#BodiesWithAccounts")
+  , (Tuple "model://perspectives.domains#xjrfkxrzyt" "model://perspectives.domains#SharedFileServices")
+  , (Tuple "model://perspectives.domains#zjuzxbqpgc" "model://perspectives.domains#BrokerServices")
+  , (Tuple "model://perspectives.domains#hkfgpmwt93" "model://perspectives.domains#HyperContext")
+  ]
+
+modelReadableToStable :: Object String
+modelReadableToStable = fromFoldable
+  [ (Tuple "System" "tiodn6tcyc")
+  , (Tuple "CouchdbManagement" "xyfxpg3lzq")
+  , (Tuple "BodiesWithAccounts" "bxxptg50jp")
+  , (Tuple "SharedFileServices" "xjrfkxrzyt")
+  , (Tuple "BrokerServices" "zjuzxbqpgc")
+  , (Tuple "HyperContext" "hkfgpmwt93")
+  ]

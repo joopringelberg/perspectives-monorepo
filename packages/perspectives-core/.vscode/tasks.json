@@ -33,6 +33,30 @@
 			"type": "shell",
 			"command": "pnpm exec spago build && pnpm run build",
 			"group": "build"
+		},
+		{
+			"label": "build perspectives-core (refactor check)",
+			"type": "shell",
+			"command": "pnpm exec spago build && pnpm run build",
+			"group": "build"
+		},
+		{
+			"label": "build perspectives-core (refactor check)",
+			"type": "shell",
+			"command": "pnpm exec spago build && pnpm run build",
+			"group": "build"
+		},
+		{
+			"label": "build perspectives-core (refactor check)",
+			"type": "shell",
+			"command": "pnpm exec spago build && pnpm run build",
+			"group": "build"
+		},
+		{
+			"label": "build perspectives-core (refactor check)",
+			"type": "shell",
+			"command": "pnpm exec spago build && pnpm run build",
+			"group": "build"
 		}
 	]
 }

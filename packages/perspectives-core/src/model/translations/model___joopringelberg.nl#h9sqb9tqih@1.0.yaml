@@ -1,0 +1,91 @@
+model://joopringelberg.nl#h9sqb9tqih:
+  version: "1.0"
+  contexts:
+    TestImported:
+      translations:
+        nl: Test geïmporteerd
+        en: Test imported
+      external:
+        properties:
+          Test66:
+            translations:
+              nl: Test zes
+              en: Test six
+      users:
+        Manager:
+          translations:
+            nl: Beheerder
+            en: Manager
+      things:
+        Something1:
+          translations:
+            nl: Iets 1
+            en: Something 1
+    ThirdCase:
+      translations:
+        nl: Derde zaak
+        en: Third case
+    AnotherCase11:
+      translations:
+        nl: Een andere zaak 1
+        en: Another case 1
+      external:
+        properties:
+          Test10:
+            translations:
+              nl: Test tien
+              en: Test ten
+      notifications:
+        0:
+          translations:
+            orig: Entering AnotherState for $0
+            nl: Binnenkomend 'Een andere zaak 1' voor $0
+            en: Entering 'Another case 1' for $0
+        1:
+          translations:
+            orig: Entering SomeState for $0
+            nl: Binnenkomend 'Een andere zaak 1' voor $0
+            en: Entering 'Another case 1' for $0
+      users:
+        Manager:
+          translations:
+            nl: Beheerder
+            en: Manager
+          actions:
+            model://joopringelberg.nl#TestImported$AnotherCase11:
+              MyAction2:
+                translations:
+                  nl: Mijn actie
+                  en: My action
+      things:
+        TheSomething:
+          translations:
+            nl: Het iets
+            en: The something
+        AnotherThing2:
+          translations:
+            nl: Een ander ding 1
+            en: Another thing 1
+          properties:
+            Test9:
+              translations:
+                nl: Test negen
+                en: Test nine
+            Test8:
+              translations:
+                nl: Test acht
+                en: Test eight
+            Test7:
+              translations:
+                nl: Test zeven
+                en: Test seven
+      contexts:
+        ThirdCase:
+          translations:
+            nl: Derde zaak
+            en: Third case
+  roles:
+    UpgradeImports:
+      translations:
+        nl: Werk data bij
+        en: Upgrade data

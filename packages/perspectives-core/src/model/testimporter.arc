@@ -43,4 +43,9 @@ domain model://joopringelberg.nl#TestImporter
       aspect sys:RootContext$External
     
     user Manager = sys:Me
+      perspective on SomeSubs
+        only (CreateAndFill, Remove)
+        props (Test100) verbs (Consult, SetPropertyValue)
+
+    context SomeSubs filledBy ti:AnotherCase11
 
