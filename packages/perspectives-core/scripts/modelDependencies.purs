@@ -21,7 +21,7 @@ identifiableFirstName :: String
 identifiableFirstName = "model://perspectives.domains#tiodn6tcyc$xku8d2dtb7$iyg9tyrxkt"
 
 theWorld :: String
-theWorld = "model://perspectives.domains#tiodn6tcyc$xzummxis57$mpzyw05z7y"
+theWorld = "model://perspectives.domains#tiodn6tcyc$xzummxis57"
 
 theWorldInitializer :: String
 theWorldInitializer = "model://perspectives.domains#tiodn6tcyc$xzummxis57$orys2fz4uu"
@@ -36,7 +36,7 @@ socialEnvironment :: String
 socialEnvironment = "model://perspectives.domains#tiodn6tcyc$v39ynwzgqa"
 
 mySocialEnvironment :: String
-mySocialEnvironment = "model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$zmy4ibqctb"
+mySocialEnvironment = "model://perspectives.domains#System$MySocialEnvironment"
 
 socialEnvironmentPersons :: String
 socialEnvironmentPersons = "model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh"
@@ -45,16 +45,19 @@ socialEnvironmentMe :: String
 socialEnvironmentMe = "model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$robf7hy8p0"
 
 indexedSocialMe :: String
-indexedSocialMe = "model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$robf7hy8p0$f0yuqk3hg8"
+indexedSocialMe = "model://perspectives.domains#System$SocialMe"
+
+systemIdentityValues :: String
+systemIdentityValues = "model://perspectives.domains#System$TheWorld$SystemIdentities"
 
 systemModelName :: String
 systemModelName = "model://perspectives.domains#tiodn6tcyc" -- System
 
 sysMe :: String
-sysMe = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$auftu9ldl2$smvtnanqq6"
+sysMe = "model://perspectives.domains#System$Me"
 
 mySystem :: String
-mySystem = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$msufk1679v"
+mySystem = "model://perspectives.domains#System$MySystem"
 
 theSystem :: String
 theSystem = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c"
@@ -185,7 +188,6 @@ indexedRoleName = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$av4pglf4vc
 indexedContext :: String
 indexedContext = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$oxmvuvcfjv"
 
--- TODO: This Role is no longer used in the model, but it is still used in code.
 indexedContextFuzzies :: String
 indexedContextFuzzies = "model://perspectives.domains#System$PerspectivesSystem$IndexedContextsFuzzies"
 
@@ -282,7 +284,7 @@ brokerService :: String
 brokerService = "model://perspectives.domains#zjuzxbqpgc$nami0qer9d"
 
 myBrokers :: String
-myBrokers = "model://perspectives.domains#zjuzxbqpgc$fmx94rj1sn$ksarfim1ee"
+myBrokers = "model://perspectives.domains#BrokerServices$MyBrokers"
 
 brokerServiceAccounts :: String
 brokerServiceAccounts = "model://perspectives.domains#zjuzxbqpgc$nami0qer9d$vv80iskte1"
@@ -338,10 +340,10 @@ bodiesWithAccountsModelName = "model://perspectives.domains#bxxptg50jp" -- Bodie
 -- SHAREDFILESERVICES
 ------------------------------------------------------------------------------------
 sharedFileServices :: String
-sharedFileServices = "model://perspectives.domains#xjrfkxrzyt" -- SharedFileServices
+sharedFileServices = "model://perspectives.domains#SharedFileServices"
 
 mySharedFileServices :: String
-mySharedFileServices = "model://perspectives.domains#xjrfkxrzyt$ul1y1ukzye$tp551lll1t"
+mySharedFileServices = "model://perspectives.domains#SharedFileServices$MySharedFileServices"
 
 actualSharedFileServer :: String
 actualSharedFileServer = "model://perspectives.domains#xjrfkxrzyt$ul1y1ukzye$jx2xqh4f1w"

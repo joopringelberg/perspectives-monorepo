@@ -124,7 +124,7 @@ removeIndexedContext s = modify \r -> r { indexedContexts = OBJ.delete s r.index
 -----------------------------------------------------------
 -- | Returns a Perspectives Identifier of the form "def:#<systemIdentifier>$User".
 getUserIdentifier :: MonadPerspectives String
-getUserIdentifier = getMySystem >>= pure <<< flip append "$User"
+getUserIdentifier = getMySystem >>= pure <<< flip append "$auftu9ldl2"
 
 -- | Returns a Perspectives Identifier of the form "def:#<guid>"
 -- | To be more precise: "def:#<SystemIdentifier>"

@@ -49,6 +49,7 @@ runPerspectives userName password perspectivesUser systemId host port mp = do
   modelToLoad <- empty
   indexedResourceToCreate <- empty
   missingResource <- empty
+  typeToBeFixed <- empty
   (rf :: AVar PerspectivesState) <- getCurrentLanguageFromIDB >>= new <<<
     ( ( newPerspectivesState
           { systemIdentifier: systemId
@@ -64,6 +65,7 @@ runPerspectives userName password perspectivesUser systemId host port mp = do
           brokerService
           indexedResourceToCreate
           missingResource
+          typeToBeFixed
       )
     )
   runReaderT mp rf

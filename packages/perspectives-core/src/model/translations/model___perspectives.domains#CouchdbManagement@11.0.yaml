@@ -1,4 +1,5 @@
-model://perspectives.domains#CouchdbManagement:
+model://perspectives.domains#xyfxpg3lzqm:
+  version: "11.0"
   contexts:
     CouchdbManagementApp:
       translations:

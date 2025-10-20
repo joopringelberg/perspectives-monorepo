@@ -9,6 +9,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "watch": "rollup -c -w",
+    "prebuild": "node ../perspectives-core/scripts/transpile-model-deps.mjs --cache-dir ../perspectives-core/.cache/sidecars --in-file src/modelDependencies_source.ts --out-file src/modelDependencies.ts",
     "build": "rollup -c",
     "lint": "eslint 'src/**/*.{js,jsx,ts,tsx}'",
     "lint:fix": "eslint 'src/**/*.{js,jsx,ts,tsx}' --fix",

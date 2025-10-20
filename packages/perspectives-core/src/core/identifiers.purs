@@ -253,9 +253,12 @@ typePattern = "^(model://[^/]+#[^\\$]+)\\$?(.*)$"
 typeRegex :: Regex
 typeRegex = unsafeRegex typePattern noFlags
 
--- | This regex is like the typeRegex but it separates THE LAST segment from the rest of the expression.
+-- | Capture the final segment after the last '$'.
+-- | Matches e.g. "model://a#M$X$Y" -> "Y"
 localNameRegEx :: Regex
-localNameRegEx = unsafeRegex "^model://[^/]+#[^#/]+\\$([^\\$/]+)$" noFlags
+localNameRegEx = unsafeRegex ".*\\$([^\\$]+)$" noFlags
+
+-- "^(model://[^/]+#.*)\\$([^\\$/]+)$"
 
 -----------------------------------------------------------
 -- TEST IF A STRING IS A TYPE URI

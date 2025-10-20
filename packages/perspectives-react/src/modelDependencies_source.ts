@@ -1,0 +1,60 @@
+import { ContextType, PropertyType, RoleType } from "perspectives-proxy";
+
+interface ModelDependenciesT
+{
+  cardClipBoard: PropertyType;
+  itemsOnClipboard: RoleType;
+  itemOnClipboardClipboardData: PropertyType;
+  itemOnClipboardSelected: PropertyType;
+  currentLanguage: PropertyType;
+  maxHistoryItems: PropertyType;
+  sysUser: RoleType;
+  WWWUser: RoleType;
+  notifiedUser: RoleType;
+  apps: RoleType;
+  system: ContextType;
+  systemExternal: RoleType;
+  notifications: RoleType;
+  allNotifications: RoleType;
+  notificationMessage: PropertyType;
+  isOnScreen: PropertyType;
+  nrOfUploadedFiles: PropertyType;
+  disabled: PropertyType;
+  pinnedContexts: RoleType;
+  recentContexts: RoleType;
+  actualRecentContexts: RoleType;
+  roleWithIdProp: PropertyType;
+  lastShownOnScreen: PropertyType;
+  connectedToAMQPBroker: PropertyType;
+  restart: PropertyType;
+}
+
+const ModelDependencies =
+{ cardClipBoard: "model://perspectives.domains#System$PerspectivesSystem$External$CardClipBoard" as PropertyType
+, itemsOnClipboard: "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard"
+, itemOnClipboardSelected: "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard$Selected"
+, itemOnClipboardClipboardData: "model://perspectives.domains#System$PerspectivesSystem$ItemsOnClipboard$ClipboardData"
+, currentLanguage: "model://perspectives.domains#System$PerspectivesSystem$External$CurrentLanguage" as PropertyType
+, maxHistoryItems: "model://perspectives.domains#System$PerspectivesSystem$External$MaxHistoryLength" as PropertyType
+, sysUser: "model://perspectives.domains#System$PerspectivesSystem$User" as RoleType
+, WWWUser: "model://perspectives.domains#System$PerspectivesSystem$WWWUser" as RoleType
+, notifiedUser: "model://perspectives.domains#System$ContextWithNotification$NotifiedUser" as RoleType
+, apps: "model://perspectives.domains#System$PerspectivesSystem$Apps" as RoleType
+, system: "model://perspectives.domains#System$PerspectivesSystem" as ContextType
+, systemExternal: "model://perspectives.domains#System$PerspectivesSystem$External" as RoleType
+, notifications: "model://perspectives.domains#System$ContextWithNotification$Notifications" as RoleType
+, allNotifications: "model://perspectives.domains#System$PerspectivesSystem$AllNotifications" as RoleType
+, notificationMessage: "model://perspectives.domains#System$ContextWithNotification$Notifications$Message" as PropertyType
+, isOnScreen: "model://perspectives.domains#System$ContextWithScreenState$External$IsOnScreen" as PropertyType
+, nrOfUploadedFiles: "model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer$NrOfUploadedFiles" as PropertyType
+, disabled: "model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer$Disabled" as PropertyType
+, pinnedContexts: "model://perspectives.domains#System$PerspectivesSystem$PinnedContexts" as RoleType
+, actualRecentContexts: "model://perspectives.domains#System$PerspectivesSystem$ActualRecentContexts" as RoleType
+, recentContexts: "model://perspectives.domains#System$PerspectivesSystem$RecentContexts" as RoleType
+, roleWithIdProp: "model://perspectives.domains#System$RoleWithId$Id" as PropertyType
+, lastShownOnScreen: "model://perspectives.domains#System$PerspectivesSystem$RecentContexts$LastShownOnScreen" as PropertyType
+, connectedToAMQPBroker: "model://perspectives.domains#System$PerspectivesSystem$External$ConnectedToAMQPBroker" as PropertyType
+, restart: "model://perspectives.domains#System$PerspectivesSystem$External$Restart" as PropertyType
+} as ModelDependenciesT;
+
+export default ModelDependencies;

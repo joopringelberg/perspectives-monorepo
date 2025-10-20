@@ -85,6 +85,7 @@ import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmb
 import Perspectives.RunPerspectives (runPerspectivesWithState)
 import Perspectives.SetupCouchdb (createUserDatabases)
 import Perspectives.SetupUser (reSetupUser, setupUser)
+import Perspectives.Sidecar.TransitionaryTypeSwitching (forkedTypeFixer)
 import Perspectives.Sync.Channel (endChannelReplication)
 import Perspectives.Sync.Transaction (UninterpretedTransactionForPeer(..))
 import Perspectives.SystemClocks (forkedSystemClocks)
@@ -129,6 +130,7 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
       modelToLoad <- empty
       indexedResourceToCreate <- empty
       missingResource <- empty
+      typeToBeFixed <- empty
       state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
         pouchdbUser
         transactionFlag
@@ -138,6 +140,7 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
         brokerService
         indexedResourceToCreate
         missingResource
+        typeToBeFixed
 
       -- Fork aff to capture transactions to run.
       void $ forkAff $ forkTimedTransactions transactionWithTiming state
@@ -147,6 +150,9 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
 
       -- Fork aff to restore referential integrity
       void $ forkAff $ forkReferentialIntegrityFixer missingResource state
+
+      -- Fork aff to fix types that need to be mapped.
+      void $ forkAff $ forkedTypeFixer typeToBeFixed state
 
       -- Fork aff to save to the database
       void $ forkAff $ forkDatabasePersistence state
@@ -492,6 +498,7 @@ createAccount perspectivesUser rawPouchdbUser runtimeOptions nullableIdentityDoc
       modelToLoad <- empty
       indexedResourceToCreate <- empty
       missingResource <- empty
+      typeToBeFixed <- empty
       state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
         pouchdbUser
         transactionFlag
@@ -501,6 +508,7 @@ createAccount perspectivesUser rawPouchdbUser runtimeOptions nullableIdentityDoc
         brokerService
         indexedResourceToCreate
         missingResource
+        typeToBeFixed
 
       -- Fork aff to load models just in time.
       void $ forkAff $ forkJustInTimeModelLoader modelToLoad state
@@ -511,6 +519,8 @@ createAccount perspectivesUser rawPouchdbUser runtimeOptions nullableIdentityDoc
       void $ forkAff $ forkCreateIndexedResources indexedResourceToCreate state
       -- Fork aff to restore referential integrity
       void $ forkAff $ forkReferentialIntegrityFixer missingResource state
+      -- Fork aff to fix types that need to be mapped.
+      void $ forkAff $ forkedTypeFixer typeToBeFixed state
 
       -- Set up.
       runPerspectivesWithState
@@ -546,6 +556,7 @@ reCreateInstances rawPouchdbUser options callback = void $ runAff handler
         modelToLoad <- empty
         indexedResourceToCreate <- empty
         missingResource <- empty
+        typeToBeFixed <- empty
         state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
           pouchdbUser
           transactionFlag
@@ -555,6 +566,7 @@ reCreateInstances rawPouchdbUser options callback = void $ runAff handler
           brokerService
           indexedResourceToCreate
           missingResource
+          typeToBeFixed
         -- Fork aff to create indexed roles and contexts.
         void $ forkAff $ forkCreateIndexedResources indexedResourceToCreate state
         -- Fork aff to restore referential integrity
@@ -596,6 +608,7 @@ resetAccount usr rawPouchdbUser options callback = void $ runAff handler
         modelToLoad <- empty
         indexedResourceToCreate <- empty
         missingResource <- empty
+        typeToBeFixed <- empty
         state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
           pouchdbUser
           transactionFlag
@@ -605,6 +618,7 @@ resetAccount usr rawPouchdbUser options callback = void $ runAff handler
           brokerService
           indexedResourceToCreate
           missingResource
+          typeToBeFixed
         runPerspectivesWithState
           ( do
               ( catchError
@@ -703,6 +717,7 @@ removeAccount usr rawPouchdbUser callback = void $ runAff handler
         brokerService <- empty
         transactionWithTiming <- empty
         modelToLoad <- empty
+        typeToBeFixed <- empty
         indexedResourceToCreate <- empty
         missingResource <- empty
         state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
@@ -714,6 +729,7 @@ removeAccount usr rawPouchdbUser callback = void $ runAff handler
           brokerService
           indexedResourceToCreate
           missingResource
+          typeToBeFixed
         runPerspectivesWithState
           do
             -- Get all Channels
@@ -768,6 +784,7 @@ recompileLocalModels rawPouchdbUser callback = void $ runAff handler
         modelToLoad <- empty
         indexedResourceToCreate <- empty
         missingResource <- empty
+        typeToBeFixed <- empty
         state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
           pouchdbUser
           transactionFlag
@@ -777,6 +794,7 @@ recompileLocalModels rawPouchdbUser callback = void $ runAff handler
           brokerService
           indexedResourceToCreate
           missingResource
+          typeToBeFixed
         runPerspectivesWithState RECOMPILE.recompileLocalModels state
   where
   handler :: Either Error Boolean -> Effect Unit
@@ -821,6 +839,7 @@ recoverFromRecoveryPoint rawPouchdbUser callback = void $ runAff handler
         modelToLoad <- empty
         indexedResourceToCreate <- empty
         missingResource <- empty
+        typeToBeFixed <- empty
         state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
           pouchdbUser
           transactionFlag
@@ -830,6 +849,7 @@ recoverFromRecoveryPoint rawPouchdbUser callback = void $ runAff handler
           brokerService
           indexedResourceToCreate
           missingResource
+          typeToBeFixed
         runPerspectivesWithState
           ( do
               entities <- entitiesDatabaseName

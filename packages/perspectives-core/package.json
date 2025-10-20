@@ -33,7 +33,9 @@
     "copyCoreToRoot": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com",
     "copyCoreToWWW": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com/www",
     "fmt": "purs-tidy format-in-place \"src/**/*.purs\"",
-    "build": "pnpm run fmt && rollup -c",
+    "transpileDependencies": "node ./scripts/transpile-model-deps.mjs --cache-dir ./.cache/sidecars --in-file ./scripts/modelDependencies_source.purs --out-file ./src/core/modelDependencies.purs || echo '[transpile] skipping (no versions or offline)'",
+    "prebuild": "node ./scripts/transpile-model-deps.mjs --cache-dir ./.cache/sidecars --in-file ./scripts/modelDependencies_source.purs --out-file ./src/core/modelDependencies.purs || echo '[transpile] skipping (no versions or offline)'",
+    "build": "pnpm run fmt && pnpm exec spago build && rollup -c",
     "modulemap": "node build-module-map.mjs > module-map.json"
   },
   "devDependencies": {

@@ -36,7 +36,7 @@ import Foreign.Object (empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
 import Perspectives.AMQP.Stomp (StompClient)
-import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, PerspectivesState, QueryInstances, RepeatingTransaction, RolInstances, RuntimeOptions, TranslationTable, MonadPerspectives)
+import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, RolInstances, RuntimeOptions, TranslationTable, TypeFix)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, empty, lookup) as ENV
 import Perspectives.Persistence.API (PouchdbUser)
@@ -57,9 +57,10 @@ newPerspectivesState
   -> AVar BrokerService
   -> AVar IndexedResource
   -> AVar IntegrityFix
+  -> AVar TypeFix
   -> String
   -> PerspectivesState
-newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOptions brokerService indexedResourceToCreate missingResource currentLanguage =
+newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOptions brokerService indexedResourceToCreate missingResource typeToBeFixed currentLanguage =
   { rolInstances: newCache defaultCreateOptions
   , contextInstances: newCache defaultCreateOptions
   , domeinCache: newCache defaultCreateOptions
@@ -95,6 +96,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , currentLanguage
   , translations: empty
   , setPDRStatus: \_ -> pure unit
+  , typeToBeFixed
   }
 
 defaultRuntimeOptions :: RuntimeOptions
@@ -235,6 +237,9 @@ removeMessage :: String -> MonadPerspectives Unit
 removeMessage msg = do
   setPDRStatus <- getPDRStatusSetter
   liftEffect $ setPDRStatus $ writeJSON { action: "remove", message: msg }
+
+getTypeToBeFixed :: MonadPerspectives (AVar TypeFix)
+getTypeToBeFixed = gets _.typeToBeFixed
 
 -----------------------------------------------------------
 -- PERSPECTIVESUSER

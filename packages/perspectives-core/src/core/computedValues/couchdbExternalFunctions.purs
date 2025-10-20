@@ -60,7 +60,7 @@ import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.Assignment.Update (withAuthoringRole)
 import Perspectives.Authenticate (getMyPublicKey)
 import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_id)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2)
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectivesTransaction, MonadPerspectives, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2)
 import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.Deltas (addCreatedContextToTransaction)
@@ -104,6 +104,16 @@ import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionF
 import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>>=))
 import Simple.JSON (read_)
 import Unsafe.Coerce (unsafeCoerce)
+
+-- TEMPORARY HACK FOR SYS:THEWORLD AS CONTEXT TYPE
+-- As long as we have not fixed the system model so it uses a different identifier for the context type TheWorld, and the indexed context,
+-- we use this hack to make sure we refer to the context type here.
+-- Sidecar construction relies on an indexed name to be unique in a model. However, in the system model we violate that assumption.
+
+theWorld :: String
+theWorld = "model://perspectives.domains#tiodn6tcyc$xzummxis57"
+
+
 
 -- | Retrieves all instances of a particular role type from Couchdb. Instances that have the type as aspect are returned as well!
 -- | For example: `user: Users = callExternal cdb:RoleInstances(sysUser) returns: model://perspectives.domains#System$PerspectivesSystem$User`
@@ -220,7 +230,7 @@ updateModel_ arrWithModelName arrWithDependencies _ =
 -- | ModelUri is the qualified stable identifier in terms of a CUID, extended with @<Version>.
 updateModel' :: ModelUri Stable -> Boolean -> Boolean -> MonadPerspectivesTransaction Unit
 updateModel' dfid@(ModelUri modelName) withDependencies install = do
-  { versionedModelName } <- computeVersionedAndUnversiondName dfid
+  { versionedModelName } <- lift $ computeVersionedAndUnversiondName dfid
   { repositoryUrl, documentName } <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
   storedQueries <- lift $ getInvertedQueriesOfModel repositoryUrl documentName
   domeinFileAndAttachents <- retrieveModelFromRepository versionedModelName
@@ -283,7 +293,7 @@ addModelToLocalStore_ modelNames _ = try (for_ modelNames (flip addModelToLocalS
 -- | The modelName may be UNVERSIONED or VERSIONED.
 addModelToLocalStore :: ModelUri Stable -> Boolean -> MonadPerspectivesTransaction Unit
 addModelToLocalStore dfid isInitialLoad' = do
-  { versionedModelName } <- computeVersionedAndUnversiondName dfid
+  { versionedModelName } <- lift $ computeVersionedAndUnversiondName dfid
   domeinFileAndAttachments <- retrieveModelFromRepository versionedModelName
   { repositoryUrl, documentName } <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
   storedQueries <- lift $ getInvertedQueriesOfModel repositoryUrl documentName
@@ -321,14 +331,14 @@ type NameAndVersion =
   , versionedModelManifest :: Maybe RoleInstance
   }
 
-computeVersionedAndUnversiondName :: ModelUri Stable -> MonadPerspectivesTransaction NameAndVersion
+computeVersionedAndUnversiondName :: ModelUri Stable -> MonadPerspectives NameAndVersion
 computeVersionedAndUnversiondName (ModelUri modelname) = do
   unversionedModelname <- pure $ unversionedModelUri modelname
-  x :: (Maybe { semver :: String, versionedModelManifest :: RoleInstance }) <- lift $ getVersionToInstall (ModelUri unversionedModelname)
+  x :: (Maybe { semver :: String, versionedModelManifest :: RoleInstance }) <- getVersionToInstall (ModelUri unversionedModelname)
   { patch, build } <- case x of
     Nothing -> pure { patch: "0", build: "0" }
-    Just { versionedModelManifest } -> lift $ getPatchAndBuild versionedModelManifest
-  msversion <- lift (toMaybe <$> AMA.gets (_.useSystemVersion <<< _.runtimeOptions))
+    Just { versionedModelManifest } -> getPatchAndBuild versionedModelManifest
+  msversion <- toMaybe <$> AMA.gets (_.useSystemVersion <<< _.runtimeOptions)
   version' <- case modelUriVersion modelname of
     Just v -> pure $ Just v
     Nothing -> pure $ _.semver <$> x
@@ -344,7 +354,7 @@ computeVersionedAndUnversiondName (ModelUri modelname) = do
 -- | Also saves the attachments.
 installModelLocally :: (Tuple (DomeinFileRecord Stable) AttachmentFiles) -> Boolean -> StoredQueries -> MonadPerspectivesTransaction Unit
 installModelLocally (Tuple dfrecord@{ id, referredModels, invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects, _attachments } attachmentFiles) isInitialLoad' storedQueries = do
-  { patch, build, versionedModelName, unversionedModelname, versionedModelManifest } <- computeVersionedAndUnversiondName id
+  { patch, build, versionedModelName, unversionedModelname, versionedModelManifest } <- lift $ computeVersionedAndUnversiondName id
   -- Store the model in Couchdb, that is: in the local store of models.
   -- Save it with the revision of the local version that we have, if any (do not use the repository version).
   { documentName: unversionedDocumentName } <- lift $ resourceIdentifier2WriteDocLocator unversionedModelname
@@ -498,7 +508,7 @@ initSystem = do
               ( ContextSerialization
                   { id: Just "TheWorld"
                   , prototype: Nothing
-                  , ctype: DEP.theWorld
+                  , ctype: theWorld
                   , rollen: empty
                   , externeProperties: (PropertySerialization empty)
                   }
@@ -619,7 +629,7 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
           mtheWorld <- lift $ tryGetPerspectContext theworldid
           case mtheWorld of
             Nothing -> do
-              void $ runExceptT $ constructEmptyContext theworldid DEP.theWorld "TheWorld" (PropertySerialization empty) Nothing
+              void $ runExceptT $ constructEmptyContext theworldid theWorld "TheWorld" (PropertySerialization empty) Nothing
               lift $ void $ saveEntiteit theworldid
             _ -> pure unit
         _, _, _ -> pure unit

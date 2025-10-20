@@ -9,7 +9,7 @@ interface DeconstructSegmentsResult {
 }
 
 export function deconstructSegments(s: string): string {
-  const typePattern = "^(model://[^/]+#[A-Z][^\\$]+)\\$?(.*)$";
+  const typePattern = "^(model://[^/]+#[^\\$]+)\\$?(.*)$";
   try {
     return s.match(typePattern)![2];
   } catch (e) {
@@ -23,7 +23,7 @@ interface DeconstructLocalNameResult {
 }
 
 export function deconstructLocalName(s: string): string {
-  const localNameRegEx = new RegExp("^model://[^/]+#[A-Z][^#/]+\\$([A-Z][^\\$/]*)$");
+  const localNameRegEx = new RegExp("^model://[^/]+#[^#/]+\\$([^\\$/]*)$");
   try {
     return s.match(localNameRegEx)![1];
   } catch (e) {
@@ -63,7 +63,7 @@ export function deconstructContext( s : string) : string
 // then replacing "." by "_" and "#" by "-".
 export function deconstructModelName( s : string) : string
 {
-  const typeRegex = new RegExp( "^model://([^/]+#[A-Z][^\\$]+)\\$?.*$" );
+  const typeRegex = new RegExp( "^model://([^/]+#[^\\$]+)\\$?.*$" );
   const m = s.match(typeRegex);
   if ( m )
   {
@@ -98,7 +98,7 @@ export function getQualifiedPropertyName (localName : string, qualifiedNames : P
 // Is this a type identifier?
 export function isQualifiedName(s : string) : boolean
 {
-  const typeRegEx = new RegExp( "^(model://[^/]+#[A-Z][^\\$]+)\\$?(.*)$" );
+  const typeRegEx = new RegExp( "^(model://[^/]+#[^\\$]+)\\$?(.*)$" );
   return s.match(typeRegEx) !== null;
 }
 

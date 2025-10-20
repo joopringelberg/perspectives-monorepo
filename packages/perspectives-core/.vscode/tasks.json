@@ -2,60 +2,15 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "build perspectives-core (refactor check)",
+			"label": "build perspectives-core",
 			"type": "shell",
-			"command": "pnpm exec spago build && pnpm run build",
-			"problemMatcher": [
-				"$purescript-psa"
-			],
+			"command": "pnpm run build",
 			"group": "build"
 		},
 		{
-			"label": "build perspectives-core (relaxed state aliasing)",
+			"label": "transpile modelDependencies.purs (dry-run)",
 			"type": "shell",
-			"command": "pnpm exec spago build && pnpm run build",
-			"group": "build"
-		},
-		{
-			"label": "build perspectives-core (relaxed state aliasing v2)",
-			"type": "shell",
-			"command": "pnpm exec spago build && pnpm run build",
-			"group": "build"
-		},
-		{
-			"label": "build perspectives-core (refactor check)",
-			"type": "shell",
-			"command": "pnpm exec spago build && pnpm run build",
-			"group": "build"
-		},
-		{
-			"label": "build perspectives-core (refactor check)",
-			"type": "shell",
-			"command": "pnpm exec spago build && pnpm run build",
-			"group": "build"
-		},
-		{
-			"label": "build perspectives-core (refactor check)",
-			"type": "shell",
-			"command": "pnpm exec spago build && pnpm run build",
-			"group": "build"
-		},
-		{
-			"label": "build perspectives-core (refactor check)",
-			"type": "shell",
-			"command": "pnpm exec spago build && pnpm run build",
-			"group": "build"
-		},
-		{
-			"label": "build perspectives-core (refactor check)",
-			"type": "shell",
-			"command": "pnpm exec spago build && pnpm run build",
-			"group": "build"
-		},
-		{
-			"label": "build perspectives-core (refactor check)",
-			"type": "shell",
-			"command": "pnpm exec spago build && pnpm run build",
+			"command": "node ./scripts/transpile-model-deps.mjs --dry-run --cache-dir ./.cache/sidecars --in-file ./scripts/modelDependencies_source.purs --out-file ./src/core/modelDependencies.purs",
 			"group": "build"
 		}
 	]

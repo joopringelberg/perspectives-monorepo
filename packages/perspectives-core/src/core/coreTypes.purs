@@ -68,8 +68,11 @@ module Perspectives.CoreTypes
   , TrackingObjectsGetter
   , TranslationTable(..)
   , Translations(..)
+  , TypeFix(..)
+  , TypeKind(..)
   , TypeLevelGetter
   , TypeLevelResults
+  , TypeToBeMapped(..)
   , Updater
   , Url
   , WithAssumptions
@@ -229,6 +232,8 @@ type PerspectivesExtraState =
   , translations :: Object TranslationTable
 
   , setPDRStatus :: String -> Effect Unit
+
+  , typeToBeFixed :: AVar TypeFix
 
   )
 
@@ -571,6 +576,16 @@ instance Show ResourceToBeStored where
   show (Ctxt c) = show c
   show (Rle r) = show r
   show (Dfile d) = show d
+
+data TypeToBeMapped = TypeToBeMapped { kind :: TypeKind, fqn :: String }
+
+data TypeKind = KContext | KEnumeratedRole | KCalculatedRole | KEnumeratedProperty | KCalculatedProperty | KView | KState
+
+data TypeFix
+  = Fix TypeToBeMapped
+  | Fixed TypeToBeMapped
+  | TypeFixingHotline (AVar TypeFix)
+  | TypeFixingError String
 
 instance cacheableDomeinFile :: Cacheable (DomeinFile Stable) (ModelUri Stable) where
   theCache = gets _.domeinCache

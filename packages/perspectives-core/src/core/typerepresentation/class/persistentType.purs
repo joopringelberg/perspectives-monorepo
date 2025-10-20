@@ -29,14 +29,24 @@ module Perspectives.Representation.Class.PersistentType
 import Perspectives.Couchdb.Revision
 
 import Control.Monad.Except (catchError, throwError)
+import Control.Monad.Trans.Class (lift)
+import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), maybe)
-import Data.Newtype (class Newtype, unwrap)
+import Data.Newtype (class Newtype, unwrap, wrap)
+import Data.Time.Duration (Milliseconds(..))
+import Effect.AVar (AVar)
+import Effect.Aff (delay)
+import Effect.Aff.AVar (empty, put, read)
+import Effect.Class.Console (log)
 import Effect.Exception (error)
 import Foreign.Object (insert, lookup) as FO
-import Perspectives.CoreTypes (MP, MonadPerspectives)
+import Foreign.Object (lookup)
+import Perspectives.CoreTypes (MP, MonadPerspectives, TypeFix(..), TypeKind(..), TypeToBeMapped(..))
 import Perspectives.DomeinCache (modifyDomeinFileInCache, retrieveDomeinFile)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (typeUri2ModelUri)
+import Perspectives.ModelDependencies.ReadableStableMappings (modelStableToReadable)
+import Perspectives.PerspectivesState (getTypeToBeFixed)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty)
 import Perspectives.Representation.CalculatedRole (CalculatedRole)
 import Perspectives.Representation.Class.Identifiable (class Identifiable, identifier)
@@ -44,25 +54,69 @@ import Perspectives.Representation.Context (Context)
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole)
 import Perspectives.Representation.State (State)
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType, CalculatedRoleType, ContextType, EnumeratedPropertyType, EnumeratedRoleType, PerspectiveType(..), StateIdentifier(..), ViewType)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PerspectiveType(..), StateIdentifier(..), ViewType(..))
 import Perspectives.Representation.View (View)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
-import Prelude (class Eq, class Show, Unit, bind, const, pure, show, unit, ($), (<<<), (<>), (>>=), (<$>))
+import Prelude (class Eq, class Show, Unit, bind, const, pure, show, unit, ($), (<<<), (<>), (>>=), (<$>), discard)
 
 type Namespace = String
 
 class (Show i, Identifiable v i, Revision v, Newtype i String, Eq v) <= PersistentType v i | v -> i, i -> v where
   retrieveFromDomein :: i -> ModelUri Stable -> MonadPerspectives v
   cacheInDomeinFile :: i -> v -> MonadPerspectives Unit
+  toTypeToBeMapped :: i -> TypeToBeMapped
+  fromTypeToBeMapped :: Partial => TypeToBeMapped -> i
 
 -- | Get any type representation for Perspectives, either from cache or from a model file in
 -- | couchdb.
 getPerspectType :: forall v i. PersistentType v i => i -> MonadPerspectives v
 getPerspectType id = do
-  mns <- pure (typeUri2ModelUri (unwrap id))
-  case mns of
+  id' <- case (typeUri2ModelUri (unwrap id)) of
     Nothing -> throwError (error $ "getPerspectType cannot retrieve type with incorrectly formed id: '" <> show id <> "'.")
-    (Just ns) -> retrieveFromDomein id (ModelUri ns)
+    Just modelUri -> case lookup modelUri modelStableToReadable of
+      -- This is a proxy for having a Stable type (it works for the system models).
+      Just _ -> pure id
+      -- No Stable type, so we need to switch.
+      Nothing -> switch id
+  case typeUri2ModelUri (unwrap id') of
+    Nothing -> throwError (error $ "getPerspectType cannot retrieve type with incorrectly formed id: '" <> show id <> "'.")
+    (Just ns) -> retrieveFromDomein id' (ModelUri ns)
+  where
+  switch :: i -> MonadPerspectives i
+  switch i0 = do
+    -- Create a hotline for this specific request.
+    -- Fill it with a Fix message.
+    hotline <- lift $ empty
+    lift $ put (Fix (toTypeToBeMapped i0)) hotline
+    typeToBeFixed <- getTypeToBeFixed
+    -- Push the hotline into the coordination AVar so it will be picked up by the fixer.
+    lift $ put (TypeFixingHotline hotline) typeToBeFixed
+    -- Wait for the fixer to pick up the Fix and post the result or an error.
+    hotlineOrError <- waitForHotline hotline
+    case hotlineOrError of
+      Right (Fixed (TypeToBeMapped { kind, fqn })) -> do
+        -- lift $ log ("getPerspectType: received Fixed; fqn=" <> fqn)
+        pure (wrap fqn)
+      Left e -> do
+        -- lift $ log ("getPerspectType: TypeFixingError (hotline) for " <> show i0 <> ": " <> e)
+        throwError (error ("getPerspectType: error during type fixing: " <> e))
+      _ -> throwError (error "getPerspectType: unexpected hotline state.")
+
+  waitForHotline :: AVar TypeFix -> MonadPerspectives (Either String TypeFix)
+  waitForHotline hotline = loop false
+    where
+    loop :: Boolean -> MonadPerspectives (Either String TypeFix)
+    loop logged = do
+      tf <- lift $ read hotline
+      case tf of
+        Fixed _ -> pure (Right tf)
+        TypeFixingError e -> pure (Left e)
+        Fix _ -> do
+          -- Log once on the first wait and add a small delay to avoid busy-waiting.
+          -- if logged then pure unit else lift $ log "getPerspectType: waiting for hotline..."
+          lift $ delay (Milliseconds 1.0)
+          loop true
+        _ -> pure $ Left "getPerspectType: unexpected coordination state."
 
 tryGetPerspectType :: forall v i. PersistentType v i => i -> MonadPerspectives (Maybe v)
 tryGetPerspectType id = catchError ((getPerspectType id) >>= (pure <<< Just))
@@ -134,39 +188,53 @@ instance persistentContext :: PersistentType Context ContextType where
     (\(DomeinFile dff@{ contexts }) -> DomeinFile dff { contexts = FO.insert (unwrap i) v contexts })
   retrieveFromDomein i = retrieveFromDomein_ i
     (\(DomeinFile { contexts }) -> FO.lookup (unwrap i) contexts)
+  toTypeToBeMapped (ContextType i) = TypeToBeMapped { kind: KContext, fqn: i }
+  fromTypeToBeMapped (TypeToBeMapped { kind: KContext, fqn }) = ContextType fqn
 
 instance persistentEnumeratedRole :: PersistentType EnumeratedRole EnumeratedRoleType where
   cacheInDomeinFile i v = ifNamespace i
     (\(DomeinFile dff@{ enumeratedRoles }) -> DomeinFile dff { enumeratedRoles = FO.insert (unwrap i) v enumeratedRoles })
   retrieveFromDomein i = retrieveFromDomein_ i
     (\(DomeinFile { enumeratedRoles }) -> FO.lookup (unwrap i) enumeratedRoles)
+  toTypeToBeMapped i = TypeToBeMapped { kind: KEnumeratedRole, fqn: unwrap i }
+  fromTypeToBeMapped (TypeToBeMapped { kind: KEnumeratedRole, fqn }) = EnumeratedRoleType fqn
 
 instance persistentCalculatedRole :: PersistentType CalculatedRole CalculatedRoleType where
   cacheInDomeinFile i v = ifNamespace i
     (\(DomeinFile dff@{ calculatedRoles }) -> DomeinFile dff { calculatedRoles = FO.insert (unwrap i) v calculatedRoles })
   retrieveFromDomein i = retrieveFromDomein_ i
     (\(DomeinFile { calculatedRoles }) -> FO.lookup (unwrap i) calculatedRoles)
+  toTypeToBeMapped i = TypeToBeMapped { kind: KCalculatedRole, fqn: unwrap i }
+  fromTypeToBeMapped (TypeToBeMapped { kind: KCalculatedRole, fqn }) = CalculatedRoleType fqn
 
 instance persistentEnumeratedProperty :: PersistentType EnumeratedProperty EnumeratedPropertyType where
   cacheInDomeinFile i v = ifNamespace i
     (\(DomeinFile dff@{ enumeratedProperties }) -> DomeinFile dff { enumeratedProperties = FO.insert (unwrap i) v enumeratedProperties })
   retrieveFromDomein i = retrieveFromDomein_ i
     (\(DomeinFile { enumeratedProperties }) -> FO.lookup (unwrap i) enumeratedProperties)
+  toTypeToBeMapped i = TypeToBeMapped { kind: KEnumeratedProperty, fqn: unwrap i }
+  fromTypeToBeMapped (TypeToBeMapped { kind: KEnumeratedProperty, fqn }) = EnumeratedPropertyType fqn
 
 instance persistentCalculatedProperty :: PersistentType CalculatedProperty CalculatedPropertyType where
   cacheInDomeinFile i v = ifNamespace i
     (\(DomeinFile dff@{ calculatedProperties }) -> DomeinFile dff { calculatedProperties = FO.insert (unwrap i) v calculatedProperties })
   retrieveFromDomein i = retrieveFromDomein_ i
     (\(DomeinFile { calculatedProperties }) -> FO.lookup (unwrap i) calculatedProperties)
+  toTypeToBeMapped i = TypeToBeMapped { kind: KCalculatedProperty, fqn: unwrap i }
+  fromTypeToBeMapped (TypeToBeMapped { kind: KCalculatedProperty, fqn }) = CalculatedPropertyType fqn
 
 instance persistentView :: PersistentType View ViewType where
   cacheInDomeinFile i v = ifNamespace i
     (\(DomeinFile dff@{ views }) -> DomeinFile dff { views = FO.insert (unwrap i) v views })
   retrieveFromDomein i = retrieveFromDomein_ i
     (\(DomeinFile { views }) -> FO.lookup (unwrap i) views)
+  toTypeToBeMapped i = TypeToBeMapped { kind: KView, fqn: unwrap i }
+  fromTypeToBeMapped (TypeToBeMapped { kind: KView, fqn }) = ViewType fqn
 
 instance persistentState :: PersistentType State StateIdentifier where
   cacheInDomeinFile i v = ifNamespace i
     (\(DomeinFile dff@{ states }) -> DomeinFile dff { states = FO.insert (unwrap i) v states })
   retrieveFromDomein i = retrieveFromDomein_ i
     (\(DomeinFile { states }) -> FO.lookup (unwrap i) states)
+  toTypeToBeMapped i = TypeToBeMapped { kind: KState, fqn: unwrap i }
+  fromTypeToBeMapped (TypeToBeMapped { kind: KState, fqn }) = StateIdentifier fqn

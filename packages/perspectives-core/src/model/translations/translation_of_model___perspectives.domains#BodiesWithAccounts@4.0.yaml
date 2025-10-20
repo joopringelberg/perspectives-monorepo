@@ -1,4 +1,5 @@
-model://perspectives.domains#BodiesWithAccounts:
+model://perspectives.domains#bxxptg50jp:
+  version: "4.0"
   contexts:
     BodiesWithAccountsApp:
       translations:

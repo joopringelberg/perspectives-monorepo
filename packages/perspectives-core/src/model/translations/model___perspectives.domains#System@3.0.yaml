@@ -1,4 +1,5 @@
-model://perspectives.domains#System:
+model://perspectives.domains#tiodn6tcyc:
+  version: "5.0"
   contexts:
     TheWorld:
       translations:

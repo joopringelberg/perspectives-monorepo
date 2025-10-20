@@ -25,6 +25,7 @@ module Perspectives.Sidecar.StableIdMapping
   , idUriForState
   , idUriForView
   , loadStableMapping
+  , loadStableMapping_
   , lookupActionCuid
   , lookupContextCuid
   , lookupContextIndividualId
@@ -34,22 +35,24 @@ module Perspectives.Sidecar.StableIdMapping
   , lookupStateCuid
   , lookupViewCuid
   , module Perspectives.SideCar.PhantomTypedNewtypes
-  )
-  where
+  ) where
 
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Data.Show (show)
 import Effect.Aff.Class (liftAff)
 import Foreign.Object (Object, empty)
 import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
+import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Identifiers (modelUri2ModelUrl, typeUri2typeNameSpace_)
+import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (fromBlob, getAttachment)
 import Perspectives.Persistent (modelDatabaseName)
 import Perspectives.SideCar.PhantomTypedNewtypes (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StateUri(..), ViewUri(..))
-import Prelude (bind, pure, ($), (<>), (==))
+import Prelude (bind, pure, ($), (<>), (==), (>>=), (*>))
 import Simple.JSON (readJSON)
 
 -- A compact, forward-compatible skeleton mapping sidecar.
@@ -297,6 +300,15 @@ loadStableMapping (ModelUri domeinFileName) fromRepo = do
           Right (m0 :: StableIdMappingWithoutIndividuals) -> Just (upgradeWithoutIndividuals m0)
           _ -> Nothing
 
+loadStableMapping_ :: String -> String -> MonadPerspectives (Maybe StableIdMapping)
+loadStableMapping_ database documentName = do
+  getAttachment database documentName "stableIdMapping.json" >>= case _ of
+    Just f -> do
+      x <- liftAff $ fromBlob f
+      case readJSON x of
+        Left e -> logPerspectivesError (Custom $ "loadStableMapping_" <> show e) *> pure Nothing
+        Right sq -> pure $ Just sq
+    Nothing -> pure Nothing
 
 idUriForContext
   :: StableIdMapping
