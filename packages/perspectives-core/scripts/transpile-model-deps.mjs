@@ -165,12 +165,21 @@ function idUriForView(m, viewFqn) {
 function idUriForState(m, stateFqn) {
   if (!stateFqn.includes('$')) return null
   const nsFqn = typeUri2typeNameSpace_(stateFqn)
-  // Root state of role or context: if the FQN is exactly a role or context, reuse their TIDs.
-  const roleCuid = lookup(m.roleCuids, m.roles, stateFqn)
-  if (roleCuid) return idUriForRole(m, stateFqn)
-  const ctxCuid = lookupContextCuid(m, stateFqn)
-  if (ctxCuid) return idUriForContext(m, stateFqn)
-  // Non-root nested state
+  // If parent is a role, attach to role TID
+  const parentRoleCuid = lookup(m.roleCuids, m.roles, nsFqn)
+  if (parentRoleCuid) {
+    const parentTid = idUriForRole(m, nsFqn)
+    const stTid = lookup(m.stateCuids, m.states, stateFqn)
+    return parentTid && stTid ? `${parentTid}$${stTid}` : null
+  }
+  // If parent is a context, attach to context TID
+  const parentCtxCuid = lookupContextCuid(m, nsFqn)
+  if (parentCtxCuid) {
+    const parentTid = idUriForContext(m, nsFqn)
+    const stTid = lookup(m.stateCuids, m.states, stateFqn)
+    return parentTid && stTid ? `${parentTid}$${stTid}` : null
+  }
+  // Otherwise nested under another state
   const stTid = lookup(m.stateCuids, m.states, stateFqn)
   if (!stTid) return null
   if (nsFqn === stateFqn) return null
@@ -226,35 +235,33 @@ function hasSingleLocalSegment(s) {
   const text = await fs.readFile(srcFile, 'utf8')
 
   // Find all string literals containing model:// URIs
-  const stringLitRe = /"model:\/\/[^"]+"/g
-  const matches = [...text.matchAll(stringLitRe)].map(m => ({ match: m[0], index: m.index }))
+  // COPILOT_SENTINEL: escaped-URI test
+  // Also match escaped occurrences inside JSON strings, e.g. \"model://...\"
+  const stringLitRe = /"model:\/\/[^"\\]+"/g
+  const escapedLitRe = /\\"model:\/\/[^"\\]+\\"/g
+  const matches = [
+    ...[...text.matchAll(stringLitRe)].map(m => ({ match: m[0], index: m.index })),
+    ...[...text.matchAll(escapedLitRe)].map(m => ({ match: m[0], index: m.index }))
+  ]
 
   // Deduplicate by string value
   const unique = new Map()
   for (const m of matches) unique.set(m.match, m)
 
   const replacements = new Map()
-  for (const [str] of unique) {
-    const raw = str.slice(1, -1) // remove quotes
-    const parts = splitTypeUri(raw)
-    if (!parts) continue
-  const { modelUri } = parts
-  const stableModelUri = readableToStable[modelUri] || modelUri
-  // Versioned name for sidecar fetch (no version in final URIs). Prefer version keyed by stable model URI.
-  const version = (config.models?.[stableModelUri]) ?? (config.models?.[modelUri])
-  const uriForFetch = version ? `${stableModelUri}@${version}` : stableModelUri
-  const { repositoryUrl, documentName } = modelUri2ModelUrl(uriForFetch)
-    // Build URLs and caches
+  // Cache sidecar mappings per (stable) model uri and version key
+  const mappingCache = new Map()
+  async function getMapping(modelUri) {
+    const stableModelUri = readableToStable[modelUri] || modelUri
+    const version = (config.models?.[stableModelUri]) ?? (config.models?.[modelUri])
+    const key = version ? `${stableModelUri}@${version}` : stableModelUri
+    if (mappingCache.has(key)) return mappingCache.get(key)
+    const { repositoryUrl, documentName } = modelUri2ModelUrl(key)
     const attachmentUrl = `${repositoryUrl}/${documentName}/stableIdMapping.json`
     const attachmentCache = path.join(cacheDir, `${documentName}-stableIdMapping.json`)
     const docUrl = `${repositoryUrl}/${documentName}`
     const docCache = path.join(cacheDir, `${documentName}.json`)
-
-    let mapping
-    const tryAttachment = async () => {
-      const text = await fetchWithCache(attachmentUrl, attachmentCache, { refresh })
-      return JSON.parse(text)
-    }
+    const tryAttachment = async () => JSON.parse(await fetchWithCache(attachmentUrl, attachmentCache, { refresh }))
     const tryDocument = async () => {
       const docText = await fetchWithCache(docUrl, docCache, { refresh })
       const mappingDoc = JSON.parse(docText)
@@ -270,49 +277,39 @@ function hasSingleLocalSegment(s) {
         throw new Error('No stableIdMapping in document')
       }
     }
-
+    let mapping
     try {
-      if (preferDoc) {
-        mapping = await tryDocument()
-      } else {
-        mapping = await tryAttachment()
-      }
+      mapping = preferDoc ? await tryDocument() : await tryAttachment()
     } catch (e) {
-      const primary = preferDoc ? 'document' : 'attachment'
-      const secondary = preferDoc ? 'attachment' : 'document'
-      console.warn(`[transpile] Sidecar ${primary} fetch failed for ${uriForFetch} (${e.message}). Trying ${secondary}…`)
       try {
         mapping = preferDoc ? await tryAttachment() : await tryDocument()
       } catch (e2) {
-        // If we tried versioned and failed, try unversioned stable as best-effort.
         if (version) {
-          try {
-            const { repositoryUrl: repo2, documentName: doc2 } = modelUri2ModelUrl(stableModelUri)
-            const att2 = `${repo2}/${doc2}/stableIdMapping.json`
-            const cache2 = path.join(cacheDir, `${doc2}-stableIdMapping.json`)
-            const txt2 = await fetchWithCache(att2, cache2, { refresh })
-            mapping = JSON.parse(txt2)
-          } catch (e3) {
-            console.warn(`[transpile] Failed to fetch mapping for ${uriForFetch}: ${e2.message}`)
-            continue
-          }
+          const { repositoryUrl: repo2, documentName: doc2 } = modelUri2ModelUrl(stableModelUri)
+          const att2 = `${repo2}/${doc2}/stableIdMapping.json`
+          const cache2 = path.join(cacheDir, `${doc2}-stableIdMapping.json`)
+          const txt2 = await fetchWithCache(att2, cache2, { refresh })
+          mapping = JSON.parse(txt2)
         } else {
-          console.warn(`[transpile] Failed to fetch mapping for ${uriForFetch}: ${e2.message}`)
-          continue
+          throw e2
         }
       }
     }
+    mappingCache.set(key, mapping)
+    return mapping
+  }
 
-    // Build stable id: capability-driven order avoids fragile $-segment counting
-    const fqn = raw
+  function computeStable(mapping, fqn) {
     let stable = null
-
-    // Indexed individuals (context or role) live as modelUri + one segment; last segment is unique within the model
+    // Individuals first (by local name or full FQN)
     if (hasSingleLocalSegment(fqn)) {
-      if (mapping.contextIndividuals && mapping.contextIndividuals[fqn]) {
-        stable = mapping.contextIndividuals[fqn]
-      } else if (mapping.roleIndividuals && mapping.roleIndividuals[fqn]) {
-        stable = mapping.roleIndividuals[fqn]
+      const local = typeUri2LocalName(fqn)
+      if (local) {
+        if (mapping.contextIndividuals && (mapping.contextIndividuals[local] || mapping.contextIndividuals[fqn])) {
+          stable = mapping.contextIndividuals[local] || mapping.contextIndividuals[fqn]
+        } else if (mapping.roleIndividuals && (mapping.roleIndividuals[local] || mapping.roleIndividuals[fqn])) {
+          stable = mapping.roleIndividuals[local] || mapping.roleIndividuals[fqn]
+        }
       }
     }
     const isAction = !!lookup(mapping.actionCuids, mapping.actions, fqn)
@@ -321,27 +318,60 @@ function hasSingleLocalSegment(s) {
     const isState = !!lookup(mapping.stateCuids, mapping.states, fqn)
     const isRole = !!lookup(mapping.roleCuids, mapping.roles, fqn)
     const isContext = !!lookupContextCuid(mapping, fqn)
-
-
     if (!stable && isAction) stable = idUriForAction(mapping, fqn)
-    else if (!stable && isProperty) stable = idUriForProperty(mapping, fqn)
-    else if (!stable && isView) stable = idUriForView(mapping, fqn)
-    else if (!stable && isState) stable = idUriForState(mapping, fqn)
-    else if (!stable && isRole) stable = idUriForRole(mapping, fqn)
-    else if (!stable && isContext) stable = idUriForContext(mapping, fqn)
-
-    if (!stable) {
-      console.warn(`[transpile] No mapping found for ${fqn}`)
-      continue
+    if (!stable && isProperty) stable = idUriForProperty(mapping, fqn)
+    if (!stable && isView) stable = idUriForView(mapping, fqn)
+    if (!stable && isRole) stable = idUriForRole(mapping, fqn)
+    if (!stable && isContext) stable = idUriForContext(mapping, fqn)
+    if (!stable && isState) stable = idUriForState(mapping, fqn)
+    // Fallback: bare model URI mapping
+    if (!stable && !fqn.includes('$') && readableToStable[fqn]) {
+      stable = readableToStable[fqn]
     }
+    if (stable && /@/.test(stable)) stable = stable.replace(/@[^$]+/, '')
+    return stable
+  }
 
-    // Ensure no version in final stable (as requested)
-    if (/@/.test(stable)) {
-      console.warn(`[transpile] Unexpected version in stable URI; stripping: ${stable}`)
-      stable = stable.replace(/@[^$]+/, '')
+  for (const [str] of unique) {
+    const isEscaped = str.startsWith('\\"')
+    const raw = isEscaped ? str.slice(2, -2) : str.slice(1, -1)
+    // Inner scan: split glued sequences and replace each model:// occurrence
+    const innerRe = /model:\/\/.*?(?=(?:model:\/\/)|["\\]|$)/g
+    const parts = [...raw.matchAll(innerRe)]
+    if (parts.length === 0) continue
+    let cursor = 0
+    let outStr = ''
+    let changed = false
+    for (const m of parts) {
+      const uri = m[0]
+      const start = m.index
+      const end = start + uri.length
+      outStr += raw.slice(cursor, start)
+      try {
+        const sp = splitTypeUri(uri)
+        if (!sp) {
+          outStr += uri
+        } else {
+          const mapping = await getMapping(sp.modelUri)
+          const stable = computeStable(mapping, uri)
+          if (stable) {
+            outStr += stable
+            changed = true
+          } else {
+            console.warn(`[transpile] No mapping found for ${uri}`)
+            outStr += uri
+          }
+        }
+      } catch (e) {
+        console.warn(`[transpile] Failed inner mapping for ${uri}: ${e.message}`)
+        outStr += uri
+      }
+      cursor = end
     }
-
-    replacements.set(str, `"${stable}"`)
+    outStr += raw.slice(cursor)
+    if (!changed) continue
+    const replaced = isEscaped ? `\\"${outStr}\\"` : `"${outStr}"`
+    replacements.set(str, replaced)
   }
 
   if (replacements.size === 0) {

@@ -1,0 +1,592 @@
+[
+  {
+    "queryType": "RTContextKey",
+    "query": {
+      "users": [
+        {
+          "value": "model://perspectives.domains#SharedFileServices$SharedFileServices$Manager",
+          "type": "CR"
+        }
+      ],
+      "statesPerProperty": [
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$AccountName",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$Name",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$Password",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$StorageType",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ]
+      ],
+      "states": [
+        "model://perspectives.domains#SharedFileServices$SharedFileServices",
+        "model://perspectives.domains#System$RootContext"
+      ],
+      "selfOnly": false,
+      "modifies": false,
+      "description": {
+        "constructor": "ZQ",
+        "bw": {
+          "range": {
+            "cdom": {
+              "constructor": "UET",
+              "arg": "\"model://perspectives.domains#SharedFileServices$SharedFileServices\""
+            }
+          },
+          "isMandatory": "True",
+          "isFunctional": "True",
+          "function": {
+            "constructor": "DataTypeGetter",
+            "arg2": "",
+            "arg1": "\"context\""
+          },
+          "domain": {
+            "rdom": {
+              "constructor": "UET",
+              "arg": "{\"role\":\"model://perspectives.domains#SharedFileServices$SharedFileServices$MySharedFileService\",\"context\":\"model://perspectives.domains#SharedFileServices$SharedFileServices\"}"
+            }
+          },
+          "constructor": "SQD",
+          "args": []
+        }
+      },
+      "authorOnly": false
+    },
+    "model": "model://perspectives.domains#SharedFileServices",
+    "keys": [
+      "model://perspectives.domains#SharedFileServices$SharedFileServices$MySharedFileServicemodel://perspectives.domains#SharedFileServices$SharedFileServices",
+      "model://perspectives.domains#SharedFileServices$SharedFileServicemodel://perspectives.domains#SharedFileServices",
+      "model://perspectives.domains#System$RoleWithIdmodel://perspectives.domains#System"
+    ]
+  },
+  {
+    "queryType": "RTContextKey",
+    "query": {
+      "users": [
+        {
+          "value": "model://perspectives.domains#SharedFileServices$SharedFileServices$Manager",
+          "type": "CR"
+        }
+      ],
+      "statesPerProperty": [
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$AccountName",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$Name",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$Password",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$StorageType",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$FileShareCredentials",
+            "type": "CP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ]
+      ],
+      "states": [
+        "model://perspectives.domains#SharedFileServices$SharedFileServices",
+        "model://perspectives.domains#System$RootContext"
+      ],
+      "selfOnly": false,
+      "modifies": false,
+      "description": {
+        "constructor": "ZQ",
+        "bw": {
+          "range": {
+            "cdom": {
+              "constructor": "UET",
+              "arg": "\"model://perspectives.domains#SharedFileServices$SharedFileServices\""
+            }
+          },
+          "isMandatory": "True",
+          "isFunctional": "True",
+          "function": {
+            "constructor": "BinaryCombinator",
+            "arg2": "",
+            "arg1": "\"compose\""
+          },
+          "domain": {
+            "cdom": {
+              "constructor": "UET",
+              "arg": "\"model://perspectives.domains#SharedFileServices$SharedFileServices\""
+            }
+          },
+          "constructor": "BQD",
+          "args": [
+            {
+              "range": {
+                "rdom": {
+                  "constructor": "UET",
+                  "arg": "{\"role\":\"model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer\",\"context\":\"model://perspectives.domains#SharedFileServices$SharedFileServices\"}"
+                }
+              },
+              "isMandatory": "False",
+              "isFunctional": "True",
+              "function": {
+                "constructor": "FilterF",
+                "arg2": "",
+                "arg1": ""
+              },
+              "domain": {
+                "cdom": {
+                  "constructor": "UET",
+                  "arg": "\"model://perspectives.domains#SharedFileServices$SharedFileServices\""
+                }
+              },
+              "constructor": "UQD",
+              "args": [
+                {
+                  "range": {
+                    "range": {
+                      "range": "PBool"
+                    }
+                  },
+                  "isMandatory": "False",
+                  "isFunctional": "True",
+                  "function": {
+                    "constructor": "UnaryCombinator",
+                    "arg2": "",
+                    "arg1": "\"not\""
+                  },
+                  "domain": {
+                    "rdom": {
+                      "constructor": "UET",
+                      "arg": "{\"role\":\"model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer\",\"context\":\"model://perspectives.domains#SharedFileServices$SharedFileServices\"}"
+                    }
+                  },
+                  "constructor": "UQD",
+                  "args": [
+                    {
+                      "range": {
+                        "range": {
+                          "range": "PBool"
+                        },
+                        "maybeproperty": {
+                          "value": "model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer$Disabled",
+                          "type": "ENP"
+                        }
+                      },
+                      "isMandatory": "False",
+                      "isFunctional": "True",
+                      "function": {
+                        "constructor": "PropertyGetter",
+                        "arg2": "",
+                        "arg1": "{\"value\":\"model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer$Disabled\",\"type\":\"ENP\"}"
+                      },
+                      "domain": {
+                        "rdom": {
+                          "constructor": "UET",
+                          "arg": "{\"role\":\"model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer\",\"context\":\"model://perspectives.domains#SharedFileServices$SharedFileServices\"}"
+                        }
+                      },
+                      "constructor": "SQD",
+                      "args": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "range": {
+                "cdom": {
+                  "constructor": "UET",
+                  "arg": "\"model://perspectives.domains#SharedFileServices$SharedFileServices\""
+                }
+              },
+              "isMandatory": "True",
+              "isFunctional": "True",
+              "function": {
+                "constructor": "DataTypeGetter",
+                "arg2": "",
+                "arg1": "\"context\""
+              },
+              "domain": {
+                "rdom": {
+                  "constructor": "UET",
+                  "arg": "{\"role\":\"model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer\",\"context\":\"model://perspectives.domains#SharedFileServices$SharedFileServices\"}"
+                }
+              },
+              "constructor": "SQD",
+              "args": []
+            }
+          ]
+        }
+      },
+      "authorOnly": false
+    },
+    "model": "model://perspectives.domains#SharedFileServices",
+    "keys": [
+      "model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServermodel://perspectives.domains#SharedFileServices$SharedFileServices",
+      "model://perspectives.domains#SharedFileServices$SharedFileServicemodel://perspectives.domains#SharedFileServices",
+      "model://perspectives.domains#System$RoleWithIdmodel://perspectives.domains#System"
+    ]
+  },
+  {
+    "queryType": "RTPropertyKey",
+    "query": {
+      "users": [
+        {
+          "value": "model://perspectives.domains#SharedFileServices$SharedFileServices$Manager",
+          "type": "CR"
+        }
+      ],
+      "statesPerProperty": [
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$AccountName",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$Name",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$Password",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$StorageType",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$FileShareCredentials",
+            "type": "CP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ]
+      ],
+      "states": [
+        "model://perspectives.domains#SharedFileServices$SharedFileServices",
+        "model://perspectives.domains#System$RootContext"
+      ],
+      "selfOnly": false,
+      "modifies": false,
+      "description": {
+        "constructor": "ZQ",
+        "bw": {
+          "range": {
+            "cdom": {
+              "constructor": "UET",
+              "arg": "\"model://perspectives.domains#SharedFileServices$SharedFileServices\""
+            }
+          },
+          "isMandatory": "True",
+          "isFunctional": "True",
+          "function": {
+            "constructor": "BinaryCombinator",
+            "arg2": "",
+            "arg1": "\"compose\""
+          },
+          "domain": {
+            "range": {
+              "range": "PBool"
+            },
+            "maybeproperty": {
+              "value": "model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer$Disabled",
+              "type": "ENP"
+            }
+          },
+          "constructor": "BQD",
+          "args": [
+            {
+              "range": {
+                "rdom": {
+                  "constructor": "UET",
+                  "arg": "{\"role\":\"model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer\",\"context\":\"model://perspectives.domains#SharedFileServices$SharedFileServices\"}"
+                }
+              },
+              "isMandatory": "True",
+              "isFunctional": "True",
+              "function": {
+                "constructor": "Value2Role",
+                "arg2": "",
+                "arg1": "{\"value\":\"model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer$Disabled\",\"type\":\"ENP\"}"
+              },
+              "domain": {
+                "range": {
+                  "range": "PBool"
+                },
+                "maybeproperty": {
+                  "value": "model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer$Disabled",
+                  "type": "ENP"
+                }
+              },
+              "constructor": "SQD",
+              "args": []
+            },
+            {
+              "range": {
+                "cdom": {
+                  "constructor": "UET",
+                  "arg": "\"model://perspectives.domains#SharedFileServices$SharedFileServices\""
+                }
+              },
+              "isMandatory": "True",
+              "isFunctional": "True",
+              "function": {
+                "constructor": "DataTypeGetter",
+                "arg2": "",
+                "arg1": "\"context\""
+              },
+              "domain": {
+                "rdom": {
+                  "constructor": "UET",
+                  "arg": "{\"role\":\"model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer\",\"context\":\"model://perspectives.domains#SharedFileServices$SharedFileServices\"}"
+                }
+              },
+              "constructor": "SQD",
+              "args": []
+            }
+          ]
+        }
+      },
+      "authorOnly": false
+    },
+    "model": "model://perspectives.domains#SharedFileServices",
+    "keys": [
+      "model://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer$Disabledmodel://perspectives.domains#SharedFileServices$SharedFileServices$DefaultFileServer"
+    ]
+  },
+  {
+    "queryType": "RTContextKey",
+    "query": {
+      "users": [
+        {
+          "value": "model://perspectives.domains#SharedFileServices$SharedFileServices$Manager",
+          "type": "CR"
+        }
+      ],
+      "statesPerProperty": [
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$AccountName",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$Name",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$Password",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$StorageType",
+            "type": "ENP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ],
+        [
+          {
+            "value": "model://perspectives.domains#SharedFileServices$SharedFileService$FileShareCredentials",
+            "type": "CP"
+          },
+          [
+            "model://perspectives.domains#System$RootContext",
+            "model://perspectives.domains#SharedFileServices$SharedFileServices"
+          ]
+        ]
+      ],
+      "states": [
+        "model://perspectives.domains#SharedFileServices$SharedFileServices",
+        "model://perspectives.domains#System$RootContext"
+      ],
+      "selfOnly": false,
+      "modifies": false,
+      "description": {
+        "constructor": "ZQ",
+        "bw": {
+          "range": {
+            "cdom": {
+              "constructor": "UET",
+              "arg": "\"model://perspectives.domains#SharedFileServices$SharedFileServices\""
+            }
+          },
+          "isMandatory": "True",
+          "isFunctional": "True",
+          "function": {
+            "constructor": "DataTypeGetter",
+            "arg2": "",
+            "arg1": "\"context\""
+          },
+          "domain": {
+            "rdom": {
+              "constructor": "UET",
+              "arg": "{\"role\":\"model://perspectives.domains#SharedFileServices$SharedFileServices$MySharedFileService\",\"context\":\"model://perspectives.domains#SharedFileServices$SharedFileServices\"}"
+            }
+          },
+          "constructor": "SQD",
+          "args": []
+        }
+      },
+      "authorOnly": false
+    },
+    "model": "model://perspectives.domains#SharedFileServices",
+    "keys": [
+      "model://perspectives.domains#SharedFileServices$SharedFileServices$MySharedFileServicemodel://perspectives.domains#SharedFileServices$SharedFileServices",
+      "model://perspectives.domains#SharedFileServices$SharedFileServicemodel://perspectives.domains#SharedFileServices",
+      "model://perspectives.domains#System$RoleWithIdmodel://perspectives.domains#System"
+    ]
+  },
+  {
+    "queryType": "RTContextKey",
+    "query": {
+      "users": [],
+      "statesPerProperty": [],
+      "states": [
+        "model://perspectives.domains#SharedFileServices$ReadyToInstall"
+      ],
+      "selfOnly": false,
+      "modifies": false,
+      "description": {
+        "constructor": "ZQ",
+        "bw": {
+          "range": {
+            "cdom": {
+              "constructor": "UET",
+              "arg": "\"model://perspectives.domains#SharedFileServices\""
+            }
+          },
+          "isMandatory": "True",
+          "isFunctional": "True",
+          "function": {
+            "constructor": "DataTypeGetter",
+            "arg2": "",
+            "arg1": "\"context\""
+          },
+          "domain": {
+            "rdom": {
+              "constructor": "UET",
+              "arg": "{\"role\":\"model://perspectives.domains#System$PerspectivesSystem$Installer\",\"context\":\"model://perspectives.domains#SharedFileServices\"}"
+            }
+          },
+          "constructor": "SQD",
+          "args": []
+        }
+      },
+      "authorOnly": false
+    },
+    "model": "model://perspectives.domains#SharedFileServices",
+    "keys": [
+      "model://perspectives.domains#System$PerspectivesSystem$Installermodel://perspectives.domains#SharedFileServices",
+      "model://perspectives.domains#System$PerspectivesSystem$Installermodel://perspectives.domains#System$PerspectivesSystem"
+    ]
+  }
+]
