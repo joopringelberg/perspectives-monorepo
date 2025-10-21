@@ -40,3 +40,6 @@ stats.json
 /accounts
 
 /.VSCodeCounter
+
+# Ignore transpiler sidecar cache
+/.cache/sidecars/
