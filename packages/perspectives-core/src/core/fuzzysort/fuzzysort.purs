@@ -29,8 +29,9 @@ import Data.Array (uncons)
 import Data.Function.Uncurried (Fn2, runFn2)
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Newtype (unwrap)
+import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (Object, fromFoldable, keys, lookup)
+import Foreign.Object (Object, fromFoldable, keys, lookup, toUnfoldable)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
@@ -38,7 +39,8 @@ import Perspectives.ModelDependencies (indexedContextFuzzies)
 import Perspectives.Names (getMySystem)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..))
-import Prelude (bind, map, pure, ($), (<$>), discard, (>=))
+import Perspectives.Sidecar.ToReadable (IndexedContext(..), runWithSideCars, toReadable)
+import Prelude (bind, map, pure, ($), (<$>), discard, (>=), (>>=))
 import Simple.JSON (writeJSON)
 
 -- const result = fuzzysort.single('query', 'some string that contains my query.')
@@ -69,15 +71,20 @@ matchStrings = runFn2 matchStringsImpl
 -- | If s is the empty string, all IndexedContextNames will be returned.
 matchIndexedContextNames :: String -> ContextInstance ~~> Value
 matchIndexedContextNames s _ = ArrayT do
-  indexedNames <- lift $ gets _.indexedContexts
-  sortedMatches <- pure $ matchStrings s (keys indexedNames)
+  -- The keys are the Stable identifiers chosen for the Indexed Context Names in the models.
+  indexedNames :: Object ContextInstance <- lift $ gets _.indexedContexts
+  -- map the Stable keys to Readable names for fuzzy matching
+  readableIndexedNames <- lift $ runWithSideCars $ fromFoldable <$> for ((toUnfoldable indexedNames) :: Array (Tuple String ContextInstance)) \(Tuple stableId contextInstance) -> do
+    toReadable (IndexedContext stableId) >>= \(IndexedContext readableId) -> pure (Tuple readableId contextInstance)
+  sortedMatches <- pure $ matchStrings s (keys readableIndexedNames)
+  -- These are Readable names matching the fuzzy search.
   (matchingIndexedNames :: Array String) <- pure (_.target <$> sortedMatches)
   mysystem <- lift $ getMySystem
   tell $ ArrayWithoutDoubles [ RoleAssumption (ContextInstance mysystem) (EnumeratedRoleType indexedContextFuzzies) ]
   pure
     [ Value $ writeJSON $ fromFoldable
         ( map
-            (\iname -> Tuple iname (unwrap $ unsafePartial $ fromJust $ lookup iname indexedNames))
+            (\iname -> Tuple iname (unwrap $ unsafePartial $ fromJust $ lookup iname readableIndexedNames))
             matchingIndexedNames
         )
     ]

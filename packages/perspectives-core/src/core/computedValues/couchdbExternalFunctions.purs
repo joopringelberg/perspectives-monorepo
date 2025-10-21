@@ -113,8 +113,6 @@ import Unsafe.Coerce (unsafeCoerce)
 theWorld :: String
 theWorld = "model://perspectives.domains#tiodn6tcyc$xzummxis57"
 
-
-
 -- | Retrieves all instances of a particular role type from Couchdb. Instances that have the type as aspect are returned as well!
 -- | For example: `user: Users = callExternal cdb:RoleInstances(sysUser) returns: model://perspectives.domains#System$PerspectivesSystem$User`
 -- | Notice that only the first element of the array argument is actually used.
