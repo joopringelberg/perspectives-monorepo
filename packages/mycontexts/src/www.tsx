@@ -125,7 +125,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               component.props.onMounted()
 
               // Compute systemUser immediately and store it; do not wait for clipboard subscription.
-              const resolvedSystemUser = (systemIdentifier + "$" + deconstructLocalName( ModelDependencies.sysUser)) as RoleInstanceT
+              // const resolvedSystemUser = (systemIdentifier + "$" + deconstructLocalName( ModelDependencies.sysUser)) as RoleInstanceT
+              const resolvedSystemUser = (systemIdentifier + "$User") as RoleInstanceT
               component.setState({ systemIdentifier, systemUser: resolvedSystemUser })
 
               pproxy.subscribeSelectedRoleFromClipboard(

@@ -329,6 +329,7 @@ type NameAndVersion =
   , versionedModelManifest :: Maybe RoleInstance
   }
 
+-- TODO: werkt vermoedelijk met Readable en Stable type identifiers.
 computeVersionedAndUnversiondName :: ModelUri Stable -> MonadPerspectives NameAndVersion
 computeVersionedAndUnversiondName (ModelUri modelname) = do
   unversionedModelname <- pure $ unversionedModelUri modelname
@@ -485,7 +486,7 @@ initSystem = do
     Right system@(ContextInstance systemId) -> do
       -- Now create the user role (the instance of sys:PerspectivesSystem$User; it is cached automatically).
       -- This will also create the IndexedRole in the System instance, filled with the new User instance.
-      userId <- pure (systemId <> "$" <> (typeUri2LocalName_ DEP.sysUser))
+      userId <- pure (systemId <> "$User")
       me <- createAndAddRoleInstance_ (EnumeratedRoleType DEP.sysUser) systemId
         ( RolSerialization
             { id: Just userId
