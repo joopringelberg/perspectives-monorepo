@@ -284,7 +284,8 @@ fromRepository = true
 fromLocalModels :: Boolean
 fromLocalModels = false
 
--- | Load the stable ID mapping sidecar for a given model (if any), from the Repository.
+-- | Load the stable ID mapping sidecar for a given model (if any), from the Repository or from the local models.
+-- | When taken from the repository, ModelUri should include a version number.
 loadStableMapping :: ModelUri Stable -> Boolean -> MonadPerspectives (Maybe StableIdMapping)
 loadStableMapping (ModelUri domeinFileName) fromRepo = do
   let split = unsafePartial modelUri2ModelUrl domeinFileName

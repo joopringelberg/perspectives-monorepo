@@ -23,10 +23,12 @@ module Perspectives.Sidecar.NormalizeTypeNames
   ( Env
   , StableIdMappingForModel
   , WithSideCars
+  , class Normalize
   , class NormalizeTypeNames
   , fqn2tid
   , getSideCars
   , getinstalledModelCuids
+  , normalize
   , normalizeTypeNames
   , normalizeTypes
   ) where
@@ -40,12 +42,13 @@ import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (fromFoldable, toUnfoldable)
+import Foreign.Object (Object, fromFoldable, toUnfoldable)
 import Foreign.Object as OBJ
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
 import Perspectives.Data.EncodableMap (EncodableMap, toUnfoldable, fromFoldable) as EM
 import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), UpstreamAutomaticEffect(..), UpstreamStateNotification(..))
 import Perspectives.Identifiers (splitTypeUri)
+import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding)
 import Perspectives.InvertedQuery (InvertedQuery)
 import Perspectives.ModelDependencies (modelURI, modelURIReadable, modelsInUse, versionedModelURI)
@@ -75,6 +78,7 @@ import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.HashQFD (qfdSignature)
 import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), fromLocalModels, idUriForAction, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
+import Perspectives.Sync.SignedDelta (SignedDelta)
 
 -- Environment carried during normalization: sidecars and a perspective id rewrite map
 type Env =
@@ -757,6 +761,27 @@ instance normalizePropertyRestrictionsInst :: Normalize (EM.EncodableMap Propert
   normalize em = do
     let pairs = EM.toUnfoldable em :: Array (Tuple PropertyType (Array PropertyVerb))
     EM.fromFoldable <$> for pairs (\(Tuple k v) -> Tuple <$> fqn2tid k <*> pure v)
+
+instance Normalize PerspectContext where
+  normalize (PerspectContext pc) = do
+    pspType' <- fqn2tid pc.pspType
+    allTypes' <- traverse fqn2tid pc.allTypes
+    rolInContext' <- fromFoldable <$> for ((toUnfoldable pc.rolInContext) :: Array (Tuple String (Array RoleInstance))) \(Tuple roltype roles) -> Tuple <$> (unwrap <$> fqn2tid (EnumeratedRoleType roltype)) <*> pure roles
+    preferredUserRoleType' <- traverse fqn2tid pc.preferredUserRoleType
+    states' <- traverse fqn2tid pc.states
+    pure $ PerspectContext pc { pspType = pspType', allTypes = allTypes', rolInContext = rolInContext', preferredUserRoleType = preferredUserRoleType', states = states' }
+
+instance Normalize PerspectRol where
+  normalize (PerspectRol pr) = do
+    pspType' <- fqn2tid pr.pspType
+    allTypes' <- traverse fqn2tid pr.allTypes
+    properties' <- fromFoldable <$> for ((toUnfoldable pr.properties) :: Array (Tuple String (Array Value))) \(Tuple proptype values) -> Tuple <$> (unwrap <$> fqn2tid (EnumeratedPropertyType proptype)) <*> pure values
+    filledRoles' <- pure pr.filledRoles
+    propertyDeltas' <- fromFoldable <$> for ((toUnfoldable pr.propertyDeltas) :: Array (Tuple String (Object SignedDelta))) \(Tuple proptype values) -> Tuple <$> (unwrap <$> fqn2tid (EnumeratedPropertyType proptype)) <*> pure values
+    states' <- traverse fqn2tid pr.states
+    roleAliases' <- fromFoldable <$> for ((toUnfoldable pr.roleAliases) :: Array (Tuple String String)) \(Tuple roltype alias) -> Tuple <$> (unwrap <$> fqn2tid (EnumeratedRoleType roltype)) <*> (unwrap <$> fqn2tid (EnumeratedRoleType alias))
+    contextAliases' <- fromFoldable <$> for ((toUnfoldable pr.contextAliases) :: Array (Tuple String String)) \(Tuple ctype alias) -> Tuple <$> (unwrap <$> fqn2tid (ContextType ctype)) <*> (unwrap <$> fqn2tid (ContextType alias))
+    pure $ PerspectRol pr { pspType = pspType', properties = properties', filledRoles = filledRoles', propertyDeltas = propertyDeltas', states = states', roleAliases = roleAliases', contextAliases = contextAliases' }
 
 -- Helper for widget fields (cannot have an instance for a type synonym record)
 normalizeWidgetCommonFields :: WidgetCommonFieldsDef -> WithSideCars WidgetCommonFieldsDef

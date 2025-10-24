@@ -194,6 +194,8 @@ fetchTranslations (ModelUri namespace) = do
 -- | If no manifest is found, the empty string is returned. This causes retrieveDomainFile to retrieve a versionless document!
 -- | This function must be able to run without any type information, as it is run on system install, too.
 -- | The modelURI should not include a version.
+-- TODO: After the transition to Stable identifiers, the mapping from Readable to CUID can be removed.
+-- NOTICE: works with Readable model URIs as well as Stable model URIs.
 getVersionToInstall :: ModelUri Stable -> MonadPerspectives (Maybe { semver :: String, versionedModelManifest :: RoleInstance })
 getVersionToInstall (ModelUri modelUri) = case unsafePartial modelUri2ManifestUrl modelUri of
   -- Retrieve the property from the external role of the manifest that indicates the version we should install.
@@ -203,18 +205,18 @@ getVersionToInstall (ModelUri modelUri) = case unsafePartial modelUri2ManifestUr
     mRol <- tryGetDocument repositoryUrl (buitenRol manifestName)
     case mRol of
       Just (PerspectRol { id, properties }) -> case head $ maybe [] identity (lookup versionToInstall properties) of
-        -- TODO. Nu we de modelDependencies hebben afgebeeld op Stable identifiers, lukt de lookup niet meer als we met een resource te maken hebben die nog in Readable identifiers is gesteld.
+        -- TODO: After the transition to Stable identifiers, the mapping from Readable to CUID can be removed.
         Nothing -> case head $ maybe [] identity (lookup "model://perspectives.domains#CouchdbManagement$ModelManifest$External$VersionToInstall" properties) of
           Nothing -> pure Nothing
           Just v -> pure $ Just { semver: unwrap v, versionedModelManifest: makeVersionedModelManifest (unwrap v) id }
         Just v -> pure $ Just { semver: unwrap v, versionedModelManifest: makeVersionedModelManifest (unwrap v) id }
-      -- TODO. Na de transitie naar Stable identifiers kan dit weg.
+      -- TODO: After the transition to Stable identifiers, the mapping from Readable to CUID can be removed.
       -- _ -> Nothing -> pure Nothing
       _ -> case lookup modelUri modelStableToReadable of
         Just cuid -> getVersionToInstall (ModelUri cuid)
         Nothing -> pure Nothing
   where
-  -- TODO. Als alle modellen op Stable identifiers draaien, kan de mapping van Readable naar CUID weg.
+  -- TODO: After the transition to Stable identifiers, the mapping from Readable to CUID can be removed.
   makeVersionedModelManifest :: String -> RoleInstance -> RoleInstance
   makeVersionedModelManifest semver (RoleInstance modelManifest) =
     let
@@ -223,6 +225,7 @@ getVersionToInstall (ModelUri modelUri) = case unsafePartial modelUri2ManifestUr
     in
       RoleInstance $ buitenRol ((deconstructBuitenRol (replace (Pattern localModelName) (Replacement modelCuid) modelManifest)) <> "@" <> semver)
 
+-- TODO: After the transition to Stable identifiers, the mapping from Readable to CUID can be removed.
 getPatchAndBuild :: RoleInstance -> MonadPerspectives { patch :: String, build :: String }
 getPatchAndBuild rid = do
   -- TODO. In de transitieperiode proberen we de Readable name te vervangen door de CUID.
