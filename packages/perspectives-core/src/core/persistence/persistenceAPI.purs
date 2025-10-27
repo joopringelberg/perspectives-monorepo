@@ -774,7 +774,6 @@ foreign import getViewOnDatabaseImpl
 -----------------------------------------------------------
 resetViewIndex :: forall f. DatabaseName -> ViewName -> MonadPouchdb f Boolean
 resetViewIndex dbName viewname = withDatabase dbName
-  -- NOTICE: THIS IS A STUB
   \db -> lift $ toAffE (resetViewIndexImpl_ db viewname)
 
 foreign import resetViewIndexImpl :: EffectFn2 PouchdbDatabase String (Promise Boolean)

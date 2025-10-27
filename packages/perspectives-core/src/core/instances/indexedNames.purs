@@ -53,6 +53,9 @@ replaceIndexedNames s = do
   s' <- pure $ foldl (\(crl_ :: String) iname -> replaceAll (Pattern iname) (Replacement $ unwrap $ unsafeIndex roleReplacements iname) crl_) s (keys roleReplacements)
   pure $ foldl (\(crl_ :: String) iname -> replaceAll (Pattern iname) (Replacement $ unwrap $ unsafeIndex contextReplacements iname) crl_) s' (keys contextReplacements)
 
+-- | Given an array of instances of IndexedRoles, build an object mapping indexed role names to the actual indexed role instances.
+-- | The former are universal unique strings, the latter are the actual role instances in a given installation (not the instances of IndexedRoles!).
+-- | These role instances have property ModelDepencies.indexedRoleName set to the universal unique string coined in models by authors.
 indexedRoles_ :: Array RoleInstance -> MonadPerspectives (Object RoleInstance)
 indexedRoles_ roleIds = do
   rows <- foldM
@@ -70,6 +73,9 @@ indexedRoles_ roleIds = do
       Nothing -> throwError (error ("An instance of sys:PerspectivesSystem$IndexedRoles$Name has no value: " <> identifier_ r))
       Just (Value iname) -> pure (Tuple iname b)
 
+-- | Given an array of instances of role IndexedContexts, build an object mapping indexed role names to the actual indexed context instances.
+-- | The former are universal unique strings, the latter are the actual context instances in a given installation.
+-- | NOTICE that the unique strings are NOT represented on the context instances, but on the IndexedContexts instances.
 indexedContexts_ :: Array RoleInstance -> MonadPerspectives (Object ContextInstance)
 indexedContexts_ contextRoleIds = do
   rows <- foldM

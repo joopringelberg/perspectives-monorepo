@@ -781,7 +781,7 @@ instance Normalize PerspectRol where
     states' <- traverse fqn2tid pr.states
     roleAliases' <- fromFoldable <$> for ((toUnfoldable pr.roleAliases) :: Array (Tuple String String)) \(Tuple roltype alias) -> Tuple <$> (unwrap <$> fqn2tid (EnumeratedRoleType roltype)) <*> (unwrap <$> fqn2tid (EnumeratedRoleType alias))
     contextAliases' <- fromFoldable <$> for ((toUnfoldable pr.contextAliases) :: Array (Tuple String String)) \(Tuple ctype alias) -> Tuple <$> (unwrap <$> fqn2tid (ContextType ctype)) <*> (unwrap <$> fqn2tid (ContextType alias))
-    pure $ PerspectRol pr { pspType = pspType', properties = properties', filledRoles = filledRoles', propertyDeltas = propertyDeltas', states = states', roleAliases = roleAliases', contextAliases = contextAliases' }
+    pure $ PerspectRol pr { pspType = pspType', properties = properties', filledRoles = filledRoles', propertyDeltas = propertyDeltas', states = states', roleAliases = roleAliases', contextAliases = contextAliases', allTypes = allTypes' }
 
 -- Helper for widget fields (cannot have an instance for a type synonym record)
 normalizeWidgetCommonFields :: WidgetCommonFieldsDef -> WithSideCars WidgetCommonFieldsDef

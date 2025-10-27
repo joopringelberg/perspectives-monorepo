@@ -30,14 +30,16 @@ import Prelude
 import Control.Monad.Cont (lift)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Reader.Trans (runReaderT)
-import Data.Array (catMaybes, elemIndex, foldM, union)
+import Control.Monad.Writer (runWriterT)
+import Data.Array (catMaybes, elemIndex, foldM, head, length, union)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), Replacement(..), replace)
-import Data.Traversable (for)
+import Data.Traversable (for, traverse)
+import Data.Tuple (fst)
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign (unsafeToForeign)
@@ -47,25 +49,27 @@ import Main.RecompileBasicModels (UninterpretedDomeinFile, executeInTopologicalO
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (cacheAndSave, setProperty)
+import Perspectives.ContextAndRole (rol_property)
 import Perspectives.CoreTypes (MonadPerspectives, (##=))
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
+import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ErrorLogging (logPerspectivesError)
-import Perspectives.Extern.Couchdb (updateModel', updateModel_)
+import Perspectives.Extern.Couchdb (roleInstancesFromCouchdb, updateModel', updateModel_)
 import Perspectives.Extern.Utilities (isLowerVersion, pdrVersion)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
-import Perspectives.Identifiers (buitenRol, unversionedModelUri)
+import Perspectives.Identifiers (buitenRol, splitTypeUri, unversionedModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter)
 import Perspectives.Instances.ObjectGetters (binding, getProperty)
-import Perspectives.ModelDependencies (isSystemModel, rootName, settings, startContexts, sysUser, systemModelName, theSystem)
+import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, isSystemModel, rootName, settings, startContexts, sysUser, systemModelName, theSystem)
 import Perspectives.ModelDependencies.ReadableStableMappings (modelStableToReadable)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (createDatabase, databaseInfo, documentsInDatabase, includeDocs)
+import Perspectives.Persistence.API (createDatabase, databaseInfo, documentsInDatabase, includeDocs, resetViewIndex)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspectRol, saveEntiteit_, saveMarkedResources)
+import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspectRol, saveEntiteit_, saveMarkedResources, tryGetPerspectRol)
 import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Identifiable (identifier)
@@ -75,8 +79,8 @@ import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransac
 import Perspectives.SetupCouchdb (setContext2RoleView, setFilled2FillerView, setFiller2FilledView, setRole2ContextView)
 import Perspectives.SetupUser (setupInvertedQueryDatabase)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
-import Perspectives.Sidecar.NormalizeTypeNames (normalize)
-import Perspectives.Sidecar.StableIdMapping (StableIdMapping, fromRepository, loadStableMapping)
+import Perspectives.Sidecar.NormalizeTypeNames (fqn2tid, normalize)
+import Perspectives.Sidecar.StableIdMapping (StableIdMapping, fromRepository, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
 import Simple.JSON (read)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -222,6 +226,9 @@ runDataUpgrades = do
   runUpgrade installedVersion "3.0.12"
     normalizeTypes
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
+
+  runUpgrade installedVersion "3.0.29"
+    normalizeIndexedNames
   ----------------------------------------------------------------------------------------
   ------- SET CURRENT VERSION
   ----------------------------------------------------------------------------------------
@@ -412,16 +419,13 @@ normalizeTypes _ = runMonadPerspectivesTransaction'
         , ModelUri "model://perspectives.domains#piln392sut@2.0"
         , ModelUri "model://perspectives.domains#m203lt2idk@2.0"
         ]
-    -- LET OP: ik denk dat na deze instructie het nieuwe model geheel in werking is. Is dat wel wat we willen?
-    -- Als contexten, rollen of properties veranderd worden, kan dat misschien fout gaan.
-    -- en de andere modellen
     -- no dependencies to install (false); don't add to the installation (false)
     for_ referredModels \modelUri -> updateModel' modelUri false false
 
     -- Normalize all contexts and roles. In this process, there is no reliance on the current type names.
     entitiesDb <- lift $ entitiesDatabaseName
     { rows: allEntities } <- lift $ documentsInDatabase entitiesDb includeDocs
-    -- run in WithSideCars.
+
     sidecars :: Map.Map (ModelUri Readable) StableIdMapping <- foldM
       ( \scs modelUri@(ModelUri domeinFileName) -> do
           mmapping <- lift $ loadStableMapping modelUri fromRepository
@@ -432,6 +436,7 @@ normalizeTypes _ = runMonadPerspectivesTransaction'
       Map.empty
       referredModels
 
+    -- run in WithSideCars.
     (entities :: Array Entity) <- pure $ unwrap $ runReaderT
       ( for
           allEntities
@@ -446,11 +451,117 @@ normalizeTypes _ = runMonadPerspectivesTransaction'
       { sidecars, perspMap: empty }
     lift $ for_ entities save
 
-  where
-  save :: Entity -> MonadPerspectives Unit
-  save (Ctxt ctxt) = void $ saveEntiteit_ (identifier ctxt) ctxt
-  save (Rle rol) = void $ saveEntiteit_ (identifier rol) rol
-  save Unknown = pure unit
+save :: Entity -> MonadPerspectives Unit
+save (Ctxt ctxt) = void $ saveEntiteit_ (identifier ctxt) ctxt
+save (Rle rol) = void $ saveEntiteit_ (identifier rol) rol
+save Unknown = pure unit
 
-  toReadable :: ModelUri Stable -> ModelUri Readable
-  toReadable (ModelUri uri) = ModelUri $ unsafePartial fromJust $ lookup uri modelStableToReadable
+toReadable :: ModelUri Stable -> ModelUri Readable
+toReadable (ModelUri uri) = ModelUri $ unsafePartial fromJust $ lookup uri modelStableToReadable
+
+getAllSideCars :: MonadPerspectives (Map.Map (ModelUri Readable) StableIdMapping)
+getAllSideCars = do
+  let
+    (referredModels :: (Array (ModelUri Stable))) =
+      [ ModelUri "model://perspectives.domains#tiodn6tcyc@5.0"
+      , ModelUri "model://perspectives.domains#xyfxpg3lzq@11.0"
+      , ModelUri "model://perspectives.domains#bxxptg50jp@4.0"
+      , ModelUri "model://perspectives.domains#xjrfkxrzyt@3.0"
+      , ModelUri "model://perspectives.domains#zjuzxbqpgc@5.0"
+      , ModelUri "model://perspectives.domains#hkfgpmwt93@3.0"
+      , ModelUri "model://perspectives.domains#l75w588kuk@2.0"
+      , ModelUri "model://perspectives.domains#nip6odtx4r@3.0"
+      , ModelUri "model://perspectives.domains#dcm0arlqnz@2.0"
+      , ModelUri "model://perspectives.domains#s2gyoyohau@2.0"
+      , ModelUri "model://perspectives.domains#salp36dvb9@2.0"
+      , ModelUri "model://perspectives.domains#piln392sut@2.0"
+      , ModelUri "model://perspectives.domains#m203lt2idk@2.0"
+      ]
+
+  foldM
+    ( \scs modelUri@(ModelUri domeinFileName) -> do
+        mmapping <- loadStableMapping modelUri fromRepository
+        case mmapping of
+          Nothing -> pure scs
+          Just submapping -> pure $ Map.insert (toReadable (ModelUri $ unversionedModelUri domeinFileName)) submapping scs
+    )
+    Map.empty
+    referredModels
+
+normalizeIndexedNames :: Upgrade
+normalizeIndexedNames _ = runMonadPerspectivesTransaction'
+  false
+  (ENR $ EnumeratedRoleType sysUser)
+  do
+    sidecars <- lift getAllSideCars
+    log ("Loaded sidecars for " <> show (Map.size sidecars) <> " models.")
+
+    -- Repair the allTypes of all PerspectRol instances.
+    entitiesDb <- lift $ entitiesDatabaseName
+    { rows: allEntities } <- lift $ documentsInDatabase entitiesDb includeDocs
+
+    -- run in WithSideCars. 
+    (entities :: Array Entity) <- pure $ unwrap $ runReaderT
+      ( for
+          allEntities
+          ( \{ doc } ->
+              unsafePartial case read <$> doc of
+                Just (Right r@(PerspectRol rol)) -> Rle <$> do
+                  allTypes' <- traverse fqn2tid rol.allTypes
+                  pure $ PerspectRol rol { allTypes = allTypes' }
+                Just _ -> case read <$> doc of
+                  Just (Right c@(PerspectContext ctxt)) -> Ctxt <$> do
+                    allTypes' <- traverse fqn2tid ctxt.allTypes
+                    pure $ PerspectContext ctxt { allTypes = allTypes' }
+                  _ -> pure $ Unknown
+          )
+      )
+      { sidecars, perspMap: empty }
+    lift $ for_ entities save
+
+    log ("Starting normalization of indexed names")
+    -- Reset the view index for IndexedRoles and IndexedContexts.
+    (lift entitiesDatabaseName) >>= \db -> lift $ void $ resetViewIndex db "defaultViews/roleView"
+    contextInstances <- lift (fst <$> runWriterT (runArrayT (roleInstancesFromCouchdb [ indexedContext ] (ContextInstance ""))))
+    log ("Loaded " <> show (length contextInstances) <> " indexed context instances.")
+
+    -- Remember that the property values are still in 'readable' form. Hence we need to index the sidecars by Readable ModelUris.
+    void $ for contextInstances \rid -> do
+      mrol <- lift $ tryGetPerspectRol rid
+      case mrol of
+        Nothing -> pure unit
+        Just rol -> case head $ rol_property rol (EnumeratedPropertyType indexedContextName) of
+          Nothing -> pure unit
+          Just (Value readableName) -> do
+            stableName <- pure $ do
+              case splitTypeUri readableName of
+                -- Fall back to readableName when no stable mapping is found.
+                Nothing -> readableName
+                Just { modelUri } -> case Map.lookup (ModelUri modelUri) sidecars of
+                  Nothing -> readableName
+                  Just sim -> case lookupContextIndividualId sim readableName of
+                    Nothing -> readableName
+                    Just stableId -> stableId
+            -- Set the property on the IndexedContexts role instance.
+            setProperty [ rid ] (EnumeratedPropertyType indexedContextName) Nothing [ Value stableName ]
+
+    (roleInstances :: Array RoleInstance) <- lift (fst <$> runWriterT (runArrayT (roleInstancesFromCouchdb [ indexedRole ] (ContextInstance ""))))
+    log ("Loaded " <> show (length roleInstances) <> " indexed role instances.")
+    void $ for roleInstances \rid -> do
+      mrol <- lift $ tryGetPerspectRol rid
+      case mrol of
+        Nothing -> pure unit
+        Just rol -> case head $ rol_property rol (EnumeratedPropertyType indexedRoleName) of
+          Nothing -> pure unit
+          Just (Value readableName) -> do
+            stableName <- pure $ do
+              case splitTypeUri readableName of
+                -- Fall back to readableName when no stable mapping is found.
+                Nothing -> readableName
+                Just { modelUri } -> case Map.lookup (ModelUri modelUri) sidecars of
+                  Nothing -> readableName
+                  Just sim -> case lookupRoleIndividualId sim readableName of
+                    Nothing -> readableName
+                    Just stableId -> stableId
+            -- Set the property on the IndexedRoles role instance.
+            setProperty [ rid ] (EnumeratedPropertyType indexedRoleName) Nothing [ Value stableName ]
