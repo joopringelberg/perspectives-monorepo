@@ -63,5 +63,24 @@ export default [
       '@typescript-eslint/no-unused-vars': 'off',
       'no-undef': 'warn'
     }
+  },
+  // purescript-lru-cache FFI files configuration
+  {
+    files: ['**/packages/purescript-lru-cache/src/**/*.js'],
+    languageOptions: {
+      globals: {
+        Response: 'readonly',
+        File: 'readonly',
+        fetch: 'readonly',
+        console: 'readonly',
+        btoa: 'readonly',
+        Buffer: 'readonly'
+      }
+    },
+    rules: {
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'no-undef': 'warn'
+    }
   }
 ];
