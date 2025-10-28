@@ -29,7 +29,8 @@
 		},
 		{
 			"path": "."
-		},
+		}
+
 
 	],
 	"settings": {
@@ -44,8 +45,10 @@
 			"monorepo",
 			"models",
 			"perspectives-proxy",
-			"perspectives language"
+			"perspectives language",
+			"purescript-lru-cache"
 		],
-		"purescript.buildCommand": "pnpm exec spago build --json-errors"
+		"purescript.buildCommand": "pnpm exec spago build --json-errors",
+		"git.openRepositoryInParentFolders": "always"
 	}
 }

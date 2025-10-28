@@ -66,6 +66,18 @@
         "kind": "build",
         "isDefault": false
       }
+    },
+    {
+      "label": "build purescript-lru-cache",
+      "type": "shell",
+      "command": "pnpm exec spago build",
+      "options": {
+        "cwd": "${workspaceFolder}/packages/purescript-lru-cache"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
     }
   ]
 }

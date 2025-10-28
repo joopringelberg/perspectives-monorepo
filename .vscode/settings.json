@@ -2,5 +2,6 @@
   "purescript.addSpagoSources": true,
   "purescript.addNpmPath": true,
   "purescript.pursExe": "purs",
-  "purescript.buildCommand": "pnpm exec spago build --json-errors"
+  "purescript.buildCommand": "pnpm exec spago build --json-errors",
+  "purescript.autoStartPscIde": false
 }
