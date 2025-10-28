@@ -231,3 +231,8 @@ export function logDisposal( item )
             }
     }
 }
+
+export function runEffect_ ( effect )
+{
+    return effect();
+}

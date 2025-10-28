@@ -16,8 +16,8 @@ module LRUCache
   ( Cache
   , CreateOptions
   , DisposeFunction
-  , Reason
   , Key
+  , Reason
   , SetOptions
   , SizeCalculation
   , calculatedSize
@@ -36,6 +36,7 @@ module LRUCache
   , keys
   , load
   , logDisposal
+  , makeDisposeFunctionFromEffect
   , newCache
   , peek
   , pop
@@ -113,7 +114,7 @@ type CreateOptions a =
 -- | the required memory allocation is done up-front.
 defaultCreateOptions :: forall a. CreateOptions a
 defaultCreateOptions =
-  { max: Just 500
+  { max: Just 2500
   , maxSize: Nothing
   , sizeCalculation: Nothing
   , dispose: Nothing
@@ -133,6 +134,14 @@ type SizeCalculation a = a -> Key -> Int
 
 type Reason = String
 type DisposeFunction a = a -> Key -> Reason -> Unit
+
+makeDisposeFunctionFromEffect :: forall a. (a -> Key -> Reason -> Effect Unit) -> DisposeFunction a
+makeDisposeFunctionFromEffect f a b c = runEffect (f a b c)
+
+runEffect :: forall r. Effect r -> r
+runEffect = runEffect_
+
+foreign import runEffect_ :: forall r. Effect r -> r
 
 foreign import uncurry2_ :: forall a b c. (a -> b -> c) -> EffectFn2 a b c
 foreign import uncurry3_ :: forall a b c d. (a -> b -> c -> d) -> EffectFn3 a b c d
