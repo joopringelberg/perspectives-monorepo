@@ -23,7 +23,28 @@
 -- | A 'data-upgrade' is a procedure that is carried out on stored data of an installation, in order to ensure
 -- | that they can be handled by a new version of the PDR.
 
-module Perspectives.DataUpgrade where
+module Perspectives.DataUpgrade
+  ( Entity(..)
+  , PDRVersion
+  , Upgrade
+  , addFixingUpdates
+  , addIsSystemModel
+  , addSettingsType
+  , getAllSideCars
+  , indexedQueries
+  , normalizeIndexedNames
+  , normalizeTypes
+  , runDataUpgrades
+  , runUpgrade
+  , save
+  , updateModels0250
+  , updateModels0254
+  , updateModels0260
+  , updateModels02611
+  , updateModels0266
+  , updateModels0267
+  , updateModels0269
+  ) where
 
 import Prelude
 
@@ -50,7 +71,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (cacheAndSave, setProperty)
 import Perspectives.ContextAndRole (rol_property)
-import Perspectives.CoreTypes (MonadPerspectives, (##=))
+import Perspectives.CoreTypes (MonadPerspectives, removeInternally, (##=))
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinFile (DomeinFile(..))
@@ -223,12 +244,15 @@ runDataUpgrades = do
           do
             updateModel_ [ "model://perspectives.domains#System@3.0" ] [ "false" ] (RoleInstance "")
     )
-  runUpgrade installedVersion "3.0.12"
-    normalizeTypes
+
+  runUpgrade installedVersion "3.0.39"
+    ( \_ -> do
+        normalizeTypes unit
+        normalizeIndexedNames unit
+    )
+
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 
-  runUpgrade installedVersion "3.0.29"
-    normalizeIndexedNames
   ----------------------------------------------------------------------------------------
   ------- SET CURRENT VERSION
   ----------------------------------------------------------------------------------------
@@ -396,7 +420,7 @@ updateModels02611 _ = runMonadPerspectivesTransaction'
     updateModel_ [ "model://perspectives.domains#Files@1.0" ] [ "false" ] (RoleInstance "")
     updateModel_ [ "model://perspectives.domains#RabbitMQ@1.0" ] [ "false" ] (RoleInstance "")
 
-data Entity = Ctxt PerspectContext | Rle PerspectRol | Unknown
+data Entity = Ctxt PerspectContext | Rle PerspectRol | DoNotSaveRole RoleInstance | DoNotSaveContext ContextInstance | Unknown
 
 normalizeTypes :: Upgrade
 normalizeTypes _ = runMonadPerspectivesTransaction'
@@ -442,18 +466,28 @@ normalizeTypes _ = runMonadPerspectivesTransaction'
           allEntities
           ( \{ doc } ->
               unsafePartial case read <$> doc of
-                Just (Right r@(PerspectRol rol)) -> Rle <$> normalize r
+                Just (Right r@(PerspectRol rol)) -> do
+                  r' <- normalize r
+                  if r' == r then pure $ DoNotSaveRole (identifier r)
+                  else pure $ Rle r'
                 Just _ -> case read <$> doc of
-                  Just (Right c@(PerspectContext ctxt)) -> Ctxt <$> normalize c
+                  Just (Right c@(PerspectContext ctxt)) -> do
+                    c' <- normalize c
+                    if c' == c then pure $ DoNotSaveContext (identifier c)
+                    else pure $ Ctxt c'
                   _ -> pure $ Unknown
           )
       )
       { sidecars, perspMap: empty }
     lift $ for_ entities save
+    lift $ saveMarkedResources
 
+-- | puts the modified entity in cache when it needs to be saved, or removes it from cache when marked as DoNotSave.
 save :: Entity -> MonadPerspectives Unit
 save (Ctxt ctxt) = void $ saveEntiteit_ (identifier ctxt) ctxt
 save (Rle rol) = void $ saveEntiteit_ (identifier rol) rol
+save (DoNotSaveRole rle) = void $ removeInternally rle
+save (DoNotSaveContext ctxt) = void $ removeInternally ctxt
 save Unknown = pure unit
 
 toReadable :: ModelUri Stable -> ModelUri Readable
@@ -506,13 +540,15 @@ normalizeIndexedNames _ = runMonadPerspectivesTransaction'
           allEntities
           ( \{ doc } ->
               unsafePartial case read <$> doc of
-                Just (Right r@(PerspectRol rol)) -> Rle <$> do
+                Just (Right r@(PerspectRol rol)) -> do
                   allTypes' <- traverse fqn2tid rol.allTypes
-                  pure $ PerspectRol rol { allTypes = allTypes' }
+                  if allTypes' == rol.allTypes then pure $ DoNotSaveRole (identifier r)
+                  else pure $ Rle $ PerspectRol rol { allTypes = allTypes' }
                 Just _ -> case read <$> doc of
-                  Just (Right c@(PerspectContext ctxt)) -> Ctxt <$> do
+                  Just (Right c@(PerspectContext ctxt)) -> do
                     allTypes' <- traverse fqn2tid ctxt.allTypes
-                    pure $ PerspectContext ctxt { allTypes = allTypes' }
+                    if allTypes' == ctxt.allTypes then pure $ DoNotSaveContext (identifier c)
+                    else pure $ Ctxt $ PerspectContext ctxt { allTypes = allTypes' }
                   _ -> pure $ Unknown
           )
       )
@@ -565,3 +601,4 @@ normalizeIndexedNames _ = runMonadPerspectivesTransaction'
                     Just stableId -> stableId
             -- Set the property on the IndexedRoles role instance.
             setProperty [ rid ] (EnumeratedPropertyType indexedRoleName) Nothing [ Value stableName ]
+    lift $ saveMarkedResources
