@@ -22,7 +22,7 @@
 //// SERVICE WORKER
 ////////////////////////////////////////////////////////////////////////////////
 
-const currentVersion = "3.0.0" + 323;
+const currentVersion = "3.0.0" + 340;
 let previousVersion = '';
 
 const cacheName = "mycontexts" + currentVersion;

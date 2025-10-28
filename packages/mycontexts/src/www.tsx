@@ -397,7 +397,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                const p = perspectives[0];
                const mostRecent = mostRecentRoleId(p, ModelDependencies.lastShownOnScreen);
                  if (mostRecent === undefined) {
-                   component.openWelcomePage();
+                  //  component.openWelcomePage();
                  } else {
                    PDRproxy.getBinding( mostRecent, bindings => {
                      if (bindings.length > 0) {
