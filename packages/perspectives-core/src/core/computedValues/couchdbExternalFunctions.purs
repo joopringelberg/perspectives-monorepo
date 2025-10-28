@@ -624,7 +624,7 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
             )
           -- dbName is also the url that is provided in a "public Visitor at <location>" declaration.
           -- Hence we can use it to construct an instance of TheWorld in that database.
-          theworldid <- pure (ContextInstance $ "pub:https://" <> namespace <> "/#TheWorld")
+          theworldid <- pure (ContextInstance $ "pub:https://" <> namespace <> databaseName <> "/#TheWorld")
           mtheWorld <- lift $ tryGetPerspectContext theworldid
           case mtheWorld of
             Nothing -> do
