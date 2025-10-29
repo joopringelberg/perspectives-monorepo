@@ -44,6 +44,7 @@ import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, fromFoldable, toUnfoldable)
 import Foreign.Object as OBJ
+import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
 import Perspectives.Data.EncodableMap (EncodableMap, toUnfoldable, fromFoldable) as EM
 import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), UpstreamAutomaticEffect(..), UpstreamStateNotification(..))
@@ -69,10 +70,10 @@ import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), InvertedQ
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..), stateSpec2StateIdentifier, PropertyVerbs(..))
-import Perspectives.Representation.QueryFunction (QueryFunction(..))
+import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.Sentence (Sentence(..))
-import Perspectives.Representation.State (Notification(..), State(..), StateFulObject(..))
+import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
 import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
@@ -253,8 +254,11 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
     roleAspects' <- for er.roleAspects normalize
     properties' <- for er.properties fqn2tid
     (propertyAliases' :: Array (Tuple String EnumeratedPropertyType)) <- for (toUnfoldable er.propertyAliases) \(Tuple key value) -> Tuple <$> (unwrap <$> (fqn2tid $ EnumeratedPropertyType key)) <*> (fqn2tid value)
+    binding' <- case er.binding of
+      Nothing -> pure Nothing
+      Just b -> Just <$> traverse normalize b
     completeType' <- traverseDPROD normalize er.completeType
-    actions' <- EM.fromFoldable <$> for (EM.toUnfoldable er.actions) (\(Tuple ss objActs) -> Tuple ss <$> normalizeActionsForState ss objActs)
+    actions' <- EM.fromFoldable <$> for (EM.toUnfoldable er.actions) (\(Tuple ss objActs) -> Tuple <$> normalize ss <*> normalizeActionsForState ss objActs)
     -- Derive stable perspective IDs using the owning role's stable ID
     perspectives' <- traverse (normalizePerspectiveWithOwner (unwrap id')) er.perspectives
     -- Normalize indexed role instance if present via sidecar individuals (use the sidecar for the individual's namespace)
@@ -269,17 +273,20 @@ instance NormalizeTypeNames EnumeratedRole EnumeratedRoleType where
               Nothing -> Nothing
               Just sim -> lookupRoleIndividualId sim ident
         pure $ Just (RoleInstance (maybe ident identity stableId))
+    publicUrl' <- traverse normalize er.publicUrl
     pure $ EnumeratedRole $ er
       { id = id'
       , context = context'
       , views = views'
       , roleAspects = roleAspects'
+      , binding = binding'
       , properties = properties'
       , propertyAliases = fromFoldable propertyAliases'
       , completeType = completeType'
       , actions = actions'
       , perspectives = perspectives'
       , indexedRole = indexedRole'
+      , publicUrl = publicUrl'
       }
 
 instance NormalizeTypeNames CalculatedRole CalculatedRoleType where
@@ -461,7 +468,8 @@ instance NormalizeTypeNames State StateIdentifier where
     notifyOnExit' <- EM.fromFoldable <$> for (EM.toUnfoldable s.notifyOnExit) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalize n
     automaticOnEntry' <- EM.fromFoldable <$> for (EM.toUnfoldable s.automaticOnEntry) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalize n
     automaticOnExit' <- EM.fromFoldable <$> for (EM.toUnfoldable s.automaticOnExit) \(Tuple rtype n) -> Tuple <$> fqn2tid rtype <*> normalize n
-    pure $ State s { id = id', stateFulObject = stateFulObject', query = query', object = object', subStates = subStates', notifyOnEntry = notifyOnEntry', notifyOnExit = notifyOnExit', automaticOnEntry = automaticOnEntry', automaticOnExit = automaticOnExit' }
+    perspectivesOnEntry' <- EM.fromFoldable <$> for (EM.toUnfoldable s.perspectivesOnEntry) \(Tuple rtype p) -> Tuple <$> fqn2tid rtype <*> normalize p
+    pure $ State s { id = id', stateFulObject = stateFulObject', query = query', object = object', subStates = subStates', notifyOnEntry = notifyOnEntry', notifyOnExit = notifyOnExit', automaticOnEntry = automaticOnEntry', automaticOnExit = automaticOnExit', perspectivesOnEntry = perspectivesOnEntry' }
 
 instance NormalizeTypeNames Prop.Property PropertyType where
   fqn2tid (ENP fqn) = ENP <$> fqn2tid fqn
@@ -559,6 +567,14 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
     normalizeQueryFunction (SetPropertyValue pt) = SetPropertyValue <$> fqn2tid pt
     normalizeQueryFunction (CreateFileF s pt) = CreateFileF s <$> fqn2tid pt
     normalizeQueryFunction (FilledF rt ct) = FilledF <$> fqn2tid rt <*> fqn2tid ct
+    normalizeQueryFunction (TypeTimeOnlyContextF ct) = TypeTimeOnlyContextF <$> (unwrap <$> fqn2tid (ContextType ct))
+    normalizeQueryFunction (TypeTimeOnlyEnumeratedRoleF er) = TypeTimeOnlyEnumeratedRoleF <$> (unwrap <$> fqn2tid (EnumeratedRoleType er))
+    normalizeQueryFunction (TypeTimeOnlyCalculatedRoleF er) = TypeTimeOnlyCalculatedRoleF <$> (unwrap <$> fqn2tid (CalculatedRoleType er))
+    normalizeQueryFunction (DataTypeGetterWithParameter function parameter) = unsafePartial case function of
+      GetRoleInstancesForContextFromDatabaseF -> DataTypeGetterWithParameter <$> pure function <*> (unwrap <$> fqn2tid (EnumeratedRoleType parameter))
+      FillerF -> DataTypeGetterWithParameter <$> pure function <*> (unwrap <$> fqn2tid (ContextType parameter))
+      SpecialisesRoleTypeF -> DataTypeGetterWithParameter <$> pure function <*> (unwrap <$> fqn2tid (EnumeratedRoleType parameter))
+      IsInStateF -> DataTypeGetterWithParameter <$> pure function <*> (unwrap <$> fqn2tid (StateIdentifier parameter))
     -- Translate readable individuals to stable instance IDs using sidecar individuals maps
     normalizeQueryFunction (ContextIndividual (ContextInstance ident)) = do
       env <- ask
@@ -782,6 +798,15 @@ instance Normalize PerspectRol where
     roleAliases' <- fromFoldable <$> for ((toUnfoldable pr.roleAliases) :: Array (Tuple String String)) \(Tuple roltype alias) -> Tuple <$> (unwrap <$> fqn2tid (EnumeratedRoleType roltype)) <*> (unwrap <$> fqn2tid (EnumeratedRoleType alias))
     contextAliases' <- fromFoldable <$> for ((toUnfoldable pr.contextAliases) :: Array (Tuple String String)) \(Tuple ctype alias) -> Tuple <$> (unwrap <$> fqn2tid (ContextType ctype)) <*> (unwrap <$> fqn2tid (ContextType alias))
     pure $ PerspectRol pr { pspType = pspType', properties = properties', filledRoles = filledRoles', propertyDeltas = propertyDeltas', states = states', roleAliases = roleAliases', contextAliases = contextAliases', allTypes = allTypes' }
+
+instance Normalize StateDependentPerspective where
+  normalize (ContextPerspective sdp) = do
+    properties' <- for sdp.properties fqn2tid
+    pure $ ContextPerspective sdp { properties = properties' }
+  normalize (RolePerspective sdp) = do
+    properties' <- for sdp.properties fqn2tid
+    currentContextCalculation' <- normalize sdp.currentContextCalculation
+    pure $ RolePerspective sdp { properties = properties', currentContextCalculation = currentContextCalculation' }
 
 -- Helper for widget fields (cannot have an instance for a type synonym record)
 normalizeWidgetCommonFields :: WidgetCommonFieldsDef -> WithSideCars WidgetCommonFieldsDef

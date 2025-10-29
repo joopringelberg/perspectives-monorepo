@@ -74,6 +74,7 @@ import Perspectives.ContextAndRole (rol_property)
 import Perspectives.CoreTypes (MonadPerspectives, removeInternally, (##=))
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
+import Perspectives.DomeinCache (storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Extern.Couchdb (roleInstancesFromCouchdb, updateModel', updateModel_)
@@ -87,10 +88,11 @@ import Perspectives.Instances.ObjectGetters (binding, getProperty)
 import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, isSystemModel, rootName, settings, startContexts, sysUser, systemModelName, theSystem)
 import Perspectives.ModelDependencies.ReadableStableMappings (modelStableToReadable)
 import Perspectives.Names (getMySystem)
+import Perspectives.Parsing.Arc.PhaseTwoDefs (toReadableDomeinFile, toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (createDatabase, databaseInfo, documentsInDatabase, includeDocs, resetViewIndex)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspectRol, saveEntiteit_, saveMarkedResources, tryGetPerspectRol)
+import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspectRol, saveEntiteit_, saveMarkedResources, tryGetPerspectEntiteit, tryGetPerspectRol)
 import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Identifiable (identifier)
@@ -100,7 +102,7 @@ import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransac
 import Perspectives.SetupCouchdb (setContext2RoleView, setFilled2FillerView, setFiller2FilledView, setRole2ContextView)
 import Perspectives.SetupUser (setupInvertedQueryDatabase)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
-import Perspectives.Sidecar.NormalizeTypeNames (fqn2tid, normalize)
+import Perspectives.Sidecar.NormalizeTypeNames (fqn2tid, normalize, normalizeTypeNames)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping, fromRepository, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
 import Simple.JSON (read)
 import Unsafe.Coerce (unsafeCoerce)
@@ -250,6 +252,8 @@ runDataUpgrades = do
         normalizeTypes unit
         normalizeIndexedNames unit
     )
+
+  runUpgrade installedVersion "3.0.47" normalizeLocalDomeinFiles
 
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 
@@ -602,3 +606,36 @@ normalizeIndexedNames _ = runMonadPerspectivesTransaction'
             -- Set the property on the IndexedRoles role instance.
             setProperty [ rid ] (EnumeratedPropertyType indexedRoleName) Nothing [ Value stableName ]
     lift $ saveMarkedResources
+
+normalizeLocalDomeinFiles :: Upgrade
+normalizeLocalDomeinFiles _ = runMonadPerspectivesTransaction'
+  false
+  (ENR $ EnumeratedRoleType sysUser)
+  ( do
+      let
+        (referredModels :: (Array (ModelUri Stable))) =
+          [ ModelUri "model://perspectives.domains#tiodn6tcyc"
+          , ModelUri "model://perspectives.domains#xyfxpg3lzq"
+          , ModelUri "model://perspectives.domains#bxxptg50jp"
+          , ModelUri "model://perspectives.domains#xjrfkxrzyt"
+          , ModelUri "model://perspectives.domains#zjuzxbqpgc"
+          , ModelUri "model://perspectives.domains#hkfgpmwt93"
+          , ModelUri "model://perspectives.domains#l75w588kuk"
+          , ModelUri "model://perspectives.domains#nip6odtx4r"
+          , ModelUri "model://perspectives.domains#dcm0arlqnz"
+          , ModelUri "model://perspectives.domains#s2gyoyohau"
+          , ModelUri "model://perspectives.domains#salp36dvb9"
+          , ModelUri "model://perspectives.domains#piln392sut"
+          , ModelUri "model://perspectives.domains#m203lt2idk"
+          ]
+      sidecars <- lift getAllSideCars
+      -- no dependencies to install (false); don't add to the installation (false)
+      models :: Array (DomeinFile Stable) <- lift (catMaybes <$> (for referredModels tryGetPerspectEntiteit))
+      (updatedModels :: Array (DomeinFile Readable)) <- pure $ unwrap $ runReaderT
+        (for models \model -> normalizeTypeNames (toReadableDomeinFile model))
+        { sidecars, perspMap: empty }
+      lift $ for_ updatedModels \model -> do
+        log ("Saving normalized local model: " <> show (identifier model))
+        let stableModel = toStableDomeinFile model
+        storeDomeinFileInCouchdbPreservingAttachments stableModel
+  )
