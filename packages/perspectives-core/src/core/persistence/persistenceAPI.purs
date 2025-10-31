@@ -32,6 +32,8 @@ module Perspectives.Persistence.API
 
 import Prelude
 
+import Affjax.StatusCode (StatusCode(..))
+import Affjax.Web as AJ
 import Control.Alt ((<|>))
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Except (runExcept)
@@ -40,6 +42,7 @@ import Control.Promise (Promise, toAffE)
 import Control.Promise as Promise
 import Data.Array.NonEmpty (index)
 import Data.Either (Either(..))
+import Data.HTTP.Method (Method(..))
 import Data.Maybe (Maybe(..), fromJust)
 import Data.MediaType (MediaType)
 import Data.Nullable (Nullable, toNullable)
@@ -65,9 +68,6 @@ import Perspectives.Persistence.RunEffectAff (runEffectFnAff1, runEffectFnAff2, 
 import Perspectives.Persistence.State (getCouchdbBaseURL)
 import Perspectives.Persistence.Types (AttachmentName, CouchdbUrl, DatabaseName, DocumentName, DocumentWithRevision, MonadPouchdb, Password, PouchError, PouchdbDatabase, PouchdbExtraState, PouchdbState, PouchdbUser, SystemIdentifier, Url, UserName, ViewName, decodePouchdbUser', encodePouchdbUser', readPouchError)
 import Simple.JSON (class ReadForeign, class WriteForeign, read, read', write)
-import Affjax.Web as AJ
-import Affjax.StatusCode (StatusCode(..))
-import Data.HTTP.Method (Method(..))
 
 -----------------------------------------------------------
 -- CREATE DATABASE
@@ -854,3 +854,11 @@ foreign import fromBlobImpl
   :: EffectFn1
        Foreign
        (Promise.Promise String)
+
+-----------------------------------------------------------
+-- ISOFFLINE
+-----------------------------------------------------------
+isOffLine :: Aff Boolean
+isOffLine = liftEffect isOffLineImpl
+
+foreign import isOffLineImpl :: Effect Boolean

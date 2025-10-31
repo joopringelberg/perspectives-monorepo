@@ -592,3 +592,8 @@ export function resetViewIndexImpl(db, viewName) {
       });
   });
 }
+
+export function isOffLineImpl()
+{
+  return navigator.online;
+}

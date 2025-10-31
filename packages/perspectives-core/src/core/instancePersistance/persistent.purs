@@ -62,8 +62,6 @@ module Perspectives.Persistent
 
 import Prelude
 
-import Affjax.ResponseFormat (json)
-import Affjax.Web (get)
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (try)
 import Control.Monad.Except (catchError, lift, throwError)
@@ -87,7 +85,7 @@ import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (AttachmentName, AuthoritySource(..), MonadPouchdb, addDocument, deleteDocument, ensureAuthentication, getDocument, retrieveDocumentVersion)
+import Perspectives.Persistence.API (AttachmentName, AuthoritySource(..), MonadPouchdb, addDocument, deleteDocument, ensureAuthentication, getDocument, isOffLine, retrieveDocumentVersion)
 import Perspectives.Persistence.API (addAttachment) as P
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.PerspectivesState (getMissingResource)
@@ -229,14 +227,8 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
 -- Instead, we want to notify the user that, being offline, some resources cannot be accessed.
 internetRequiredButMissing :: ResourceIdentifier -> MonadPerspectives Boolean
 internetRequiredButMissing s =
-  if isInPublicScheme s || isInRemoteScheme s then do
-    isOffLine
+  if isInPublicScheme s || isInRemoteScheme s then lift $ isOffLine
   else pure false
-  where
-  isOffLine :: MonadPerspectives Boolean
-  isOffLine = lift $ get json "https://www.google.com/favicon.ico" >>= case _ of
-    Left _ -> pure true
-    Right _ -> pure false
 
 -- | Saves a previously cached entity.
 -- | NOTE: the entity may not be saved immediately, due to the scheme of periodic saving.
