@@ -253,7 +253,7 @@ runDataUpgrades = do
         normalizeIndexedNames unit
     )
 
-  runUpgrade installedVersion "3.0.47" normalizeLocalDomeinFiles
+  runUpgrade installedVersion "3.0.48" normalizeLocalDomeinFiles
 
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 

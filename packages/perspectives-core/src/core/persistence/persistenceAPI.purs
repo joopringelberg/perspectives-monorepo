@@ -57,14 +57,17 @@ import Foreign (F, Foreign, unsafeToForeign)
 import Foreign.Object (Object, delete, empty, insert, lookup)
 import Partial.Unsafe (unsafePartial)
 import Persistence.Attachment (class Attachment)
-import Perspectives.Couchdb (DeleteCouchdbDocument(..), PutCouchdbDocument(..), ViewDocResult(..), ViewDocResultRow(..), ViewResult(..), ViewResultRow(..), DocumentConflicts)
+import Perspectives.Couchdb (DeleteCouchdbDocument(..), PutCouchdbDocument(..), ViewDocResult(..), ViewDocResultRow(..), ViewResult(..), ViewResultRow(..), DocumentConflicts, onAccepted_)
 import Perspectives.Couchdb.Revision (class Revision, Revision_)
-import Perspectives.Persistence.Authentication (AuthoritySource(..), ensureAuthentication)
+import Perspectives.Persistence.Authentication (AuthoritySource(..), ensureAuthentication, defaultPerspectRequest)
 import Perspectives.Persistence.Errors (handleNotFound, handlePouchError, parsePouchError)
 import Perspectives.Persistence.RunEffectAff (runEffectFnAff1, runEffectFnAff2, runEffectFnAff3, runEffectFnAff6)
 import Perspectives.Persistence.State (getCouchdbBaseURL)
 import Perspectives.Persistence.Types (AttachmentName, CouchdbUrl, DatabaseName, DocumentName, DocumentWithRevision, MonadPouchdb, Password, PouchError, PouchdbDatabase, PouchdbExtraState, PouchdbState, PouchdbUser, SystemIdentifier, Url, UserName, ViewName, decodePouchdbUser', encodePouchdbUser', readPouchError)
 import Simple.JSON (class ReadForeign, class WriteForeign, read, read', write)
+import Affjax.Web as AJ
+import Affjax.StatusCode (StatusCode(..))
+import Data.HTTP.Method (Method(..))
 
 -----------------------------------------------------------
 -- CREATE DATABASE
@@ -80,6 +83,8 @@ createDatabase dbname =
     -- A remote database is actually created immediately if it does not exist.
     -- If the server indicates we're not authenticated, ensureAuthentication requests a session and then repeats the action.
     pdb <- ensureAuthentication (Url dbname) (\_ -> liftEffect $ runEffectFn1 createDatabaseImpl dbname)
+    -- Ensure the remote database exists (idempotent): PUT /{db} and accept 201 (created) or 412 (already exists)
+    _ <- ensureAuthentication (Url dbname) (\_ -> createRemoteDatabaseIfMissing dbname)
     -- Make sure the database is created.
     catchError
       do
@@ -101,6 +106,22 @@ createDatabase dbname =
         -- If the server indicates we're not authenticated, ensureAuthentication requests a session and then repeats the action.
         pdb <- ensureAuthentication (Authority prefix) (\_ -> liftEffect $ runEffectFn2 createRemoteDatabaseImpl dbname prefix)
         modify \(s@{ databases }) -> s { databases = insert dbname pdb databases }
+
+-- | PUT the database URL once to ensure it exists. Accept 201 (created) and 412 (already exists).
+createRemoteDatabaseIfMissing :: forall f. DatabaseName -> MonadPouchdb f Unit
+createRemoteDatabaseIfMissing dbUrl = do
+  (rq :: AJ.Request String) <- defaultPerspectRequest
+  res <- liftAff $ AJ.request $ rq
+    { method = Left PUT
+    , url = dbUrl
+    , content = Nothing
+    }
+  onAccepted_
+    (\response _ -> throwError (error $ "Failure in createRemoteDatabaseIfMissing. HTTP statuscode " <> show response.status))
+    res
+    [ StatusCode 201, StatusCode 202, StatusCode 412 ]
+    "createRemoteDatabaseIfMissing"
+    (\_ -> pure unit)
 
 endpointRegex :: Regex
 endpointRegex = unsafeRegex "^https?" noFlags

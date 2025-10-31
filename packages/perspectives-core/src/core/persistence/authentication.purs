@@ -60,6 +60,8 @@ instance Show AuthoritySource where
 -- | A string of the form https://authority
 type Authority = String
 
+-- | Ensures that the user is authenticated for the given AuthoritySource.
+-- If not authenticated, it requests authentication and retries the action.
 ensureAuthentication :: forall f a. AuthoritySource -> (Unit -> MonadPouchdb f a) -> MonadPouchdb f a
 ensureAuthentication authSource a = catchJust
   (\e -> if isUnauthorized e then Just true else Nothing)
