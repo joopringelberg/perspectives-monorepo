@@ -26,10 +26,12 @@ import Data.Array (elemIndex, head)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Monoid.Disj (Disj(..))
 import Data.Newtype (unwrap)
+import Data.String (Pattern(..), Replacement(..), replace)
 import Foreign.Object (foldMap)
 import Perspectives.ContextAndRole (context_allTypes, context_iedereRolInContext, rol_allTypes, rol_binding, rol_context, rol_gevuldeRollen)
 import Perspectives.Couchdb (SecurityDocument(..), User)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
+import Perspectives.ModelDependencies (userWithCredentials)
 import Perspectives.Persistence.API (MonadPouchdb, addViewToDatabase, createDatabase, databaseInfo)
 import Perspectives.Persistence.CouchdbFunctions (setSecurityDocument)
 import Perspectives.Persistence.State (withCouchdbUrl)
@@ -165,7 +167,12 @@ foreign import contextSpecialisations :: String
 -- However, only instances whose `isMe` value is true, are returned.
 -----------------------------------------------------------
 setCredentialsView :: forall f. String -> MonadPouchdb f Unit
-setCredentialsView dbname = void $ addViewToDatabase dbname "defaultViews" "credentialsView" ({ map: credentials, reduce: Nothing })
+setCredentialsView dbname = void $ addViewToDatabase dbname "defaultViews" "credentialsView"
+  -- NOTE: we replace the model reference in the view definition with the actual model reference used in this installation.
+  ( { map: replace (Pattern "model://perspectives.domains#System$WithCredentials") (Replacement userWithCredentials) credentials
+    , reduce: Nothing
+    }
+  )
 
 -- | Import the view definition as a String.
 foreign import credentials :: String
