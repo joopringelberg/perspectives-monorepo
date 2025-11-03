@@ -78,22 +78,13 @@ import Simple.JSON (class ReadForeign, class WriteForeign, read, read', write)
 -- | Ensures authentication for non-pouchdb databases.
 -- | Database names must comply to rules given in https://docs.couchdb.org/en/stable/api/database/common.html#db
 createDatabase :: forall f. DatabaseName -> MonadPouchdb f Unit
-createDatabase dbname =
+createDatabase dbname = createDatabaseConnector dbname
+
+-- | Create a PouchDB connector and store it in state under the given name. No auth, no existence guarantee.
+createDatabaseConnector :: forall f. DatabaseName -> MonadPouchdb f Unit
+createDatabaseConnector dbname =
   if startsWithDatabaseEndpoint dbname then do
-    -- A remote database is actually created immediately if it does not exist.
-    -- If the server indicates we're not authenticated, ensureAuthentication requests a session and then repeats the action.
-    pdb <- ensureAuthentication (Url dbname) (\_ -> liftEffect $ runEffectFn1 createDatabaseImpl dbname)
-    -- Ensure the remote database exists (idempotent): PUT /{db} and accept 201 (created) or 412 (already exists)
-    _ <- ensureAuthentication (Url dbname) (\_ -> createRemoteDatabaseIfMissing dbname)
-    -- Make sure the database is created.
-    catchError
-      do
-        f <- lift $ fromEffectFnAff $ databaseInfoImpl pdb
-        case (read f) of
-          Left e -> throwError $ error ("databaseInfo: error in decoding result: " <> show e)
-          (Right (dbInfo :: DatabaseInfo)) -> pure unit
-      -- Convert the incoming message to a PouchError type.
-      (handlePouchError "databaseInfo" dbname)
+    pdb <- liftEffect $ runEffectFn1 createDatabaseImpl dbname
     modify \(s@{ databases }) -> s { databases = insert dbname pdb databases }
   else do
     mprefix <- getCouchdbBaseURL
@@ -102,9 +93,7 @@ createDatabase dbname =
         pdb <- liftEffect $ runEffectFn1 createDatabaseImpl dbname
         modify \(s@{ databases }) -> s { databases = insert dbname pdb databases }
       Just prefix -> do
-        -- A remote database is actually created immediately if it does not exist.
-        -- If the server indicates we're not authenticated, ensureAuthentication requests a session and then repeats the action.
-        pdb <- ensureAuthentication (Authority prefix) (\_ -> liftEffect $ runEffectFn2 createRemoteDatabaseImpl dbname prefix)
+        pdb <- liftEffect $ runEffectFn2 createRemoteDatabaseImpl dbname prefix
         modify \(s@{ databases }) -> s { databases = insert dbname pdb databases }
 
 -- | PUT the database URL once to ensure it exists. Accept 201 (created) and 412 (already exists).
@@ -206,13 +195,17 @@ withDatabase dbName fun = do
     mdb <- gets \{ databases } -> lookup dbName databases
     case mdb of
       Nothing -> do
-        -- actually creates a remote database and authenticates if necessary.
-        -- If a Pouchdb database, doesn't create and doesn't authenticate. 
-        -- However, neither are necessary.
-        createDatabase dbName
+        -- Always create a connector first (no auth, no network guarantee).
+        createDatabaseConnector dbName
+        -- If this is a remote endpoint, ensure it actually exists under authentication.
+        if startsWithDatabaseEndpoint dbName then
+          ensureAuthentication (Url dbName) (\_ -> ensureDatabaseExists dbName)
+        else do
+          mprefix <- getCouchdbBaseURL
+          case mprefix of
+            Nothing -> pure unit
+            Just _ -> ensureAuthentication (Authority "") (\_ -> ensureDatabaseExists dbName)
         db <- gets \{ databases } -> unsafePartial $ fromJust $ lookup dbName databases
-        -- Access the database to trigger authentication.
-        -- lift $ void $ fromEffectFnAff $ databaseInfoImpl db
         pure db
       Just db -> do
         -- We have accessed this database before, but we don't know whether
@@ -223,6 +216,39 @@ withDatabase dbName fun = do
           Left e -> throwError (error "unauthorized")
           (Right (i :: DatabaseInfo)) -> pure unit
         pure db
+
+-- | Ensure that a remote database exists. For local/IndexedDB, this is a no-op.
+ensureDatabaseExists :: forall f. DatabaseName -> MonadPouchdb f Unit
+ensureDatabaseExists dbName = do
+  let isUrl = startsWithDatabaseEndpoint dbName
+  dbUrl <-
+    if isUrl then pure dbName
+    else do
+      mprefix <- getCouchdbBaseURL
+      case mprefix of
+        Nothing -> pure ""
+        Just prefix -> pure (prefix <> dbName)
+  if dbUrl == "" then pure unit
+  else do
+    mdb <- gets \{ databases } -> lookup dbName databases
+    case mdb of
+      Nothing -> pure unit
+      Just db -> do
+        infoOk <- catchError
+          do
+            _ <- lift $ fromEffectFnAff $ databaseInfoImpl db
+            pure true
+          \e -> do
+            ({ status } :: PouchError) <- parsePouchError "databaseInfo" dbUrl e
+            case status of
+              Just 404 -> pure false
+              _ -> throwError e
+        if infoOk then pure unit
+        else do
+          -- Try to create and then re-probe once.
+          createRemoteDatabaseIfMissing dbUrl
+          _ <- lift $ fromEffectFnAff $ databaseInfoImpl db
+          pure unit
 
 -----------------------------------------------------------
 -- DATABASEINFO

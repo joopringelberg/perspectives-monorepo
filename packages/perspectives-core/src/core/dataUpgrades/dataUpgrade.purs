@@ -90,7 +90,7 @@ import Perspectives.ModelDependencies.ReadableStableMappings (modelStableToReada
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (toReadableDomeinFile, toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (createDatabase, databaseInfo, documentsInDatabase, includeDocs, resetViewIndex)
+import Perspectives.Persistence.API (databaseInfo, documentsInDatabase, includeDocs, resetViewIndex)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspectRol, saveEntiteit_, saveMarkedResources, tryGetPerspectEntiteit, tryGetPerspectRol)
 import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage)
@@ -300,7 +300,6 @@ indexedQueries _ = do
   addAllExternalFunctions
   sysId <- getSystemIdentifier
   -- Create the indexedQueries database
-  createDatabase $ sysId <> "_invertedqueries"
   void $ databaseInfo $ sysId <> "_invertedqueries"
   -- set all the views
   setupInvertedQueryDatabase

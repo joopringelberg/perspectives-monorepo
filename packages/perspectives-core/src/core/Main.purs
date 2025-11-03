@@ -66,7 +66,7 @@ import Perspectives.ModelDependencies (indexedContext, indexedContextName, index
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (DatabaseName, Keys(..), PouchdbUser, UserName, compactDatabase, createDatabase, databaseInfo, decodePouchdbUser', deleteDatabase)
+import Perspectives.Persistence.API (DatabaseName, Keys(..), PouchdbUser, UserName, compactDatabase, databaseInfo, decodePouchdbUser', deleteDatabase)
 import Perspectives.Persistence.API (recoverFromRecoveryPoint) as Persistence
 import Perspectives.Persistence.CouchdbFunctions (setSecurityDocument)
 import Perspectives.Persistence.State (getSystemIdentifier, withCouchdbUrl)
@@ -653,17 +653,13 @@ resetAccount usr rawPouchdbUser options callback = void $ runAff handler
   clearModelDatabase = do
     dbname <- modelsDatabaseName
     catchError (deleteDatabase dbname)
-      \_ -> createDatabase dbname
-    createDatabase dbname
+      \_ -> pure unit
     -- If this is a remote (Couchdb) database, set a security policy:
     mcouchdbUrl <- gets _.couchdbUrl
     case mcouchdbUrl of
       Nothing -> pure unit
       _ -> do
-        -- We need to do this because we use the Pouchdb adapter.
-        -- Pouchdb actually creates the database only with the first action on it.
-        -- As setSecurityDocument is implemented using Affjax, it bypasses Pouchdb
-        -- and tries to set a security policy on a database that does not yet exist.
+        -- databaseInfo runs through withDatabase, which creates the connector, ensures authentication and ensure the remote DB exists.
         void $ databaseInfo dbname
         -- Now set the security document such that there is no role restriction for members.
         -- (only applies to Couchdb backends).
@@ -682,15 +678,15 @@ clearPostDatabase :: MonadPerspectives Unit
 clearPostDatabase = do
   dbname <- postDatabaseName
   catchError (deleteDatabase dbname)
-    \_ -> createDatabase dbname
-  createDatabase dbname
+    \_ -> pure unit
+  void $ databaseInfo dbname
 
 clearUserDatabase :: MonadPerspectives Unit
 clearUserDatabase = do
   userDatabaseName <- entitiesDatabaseName
   catchError (deleteDatabase userDatabaseName)
-    \_ -> createDatabase userDatabaseName
-  createDatabase userDatabaseName
+    \_ -> pure unit
+  void $ databaseInfo userDatabaseName
 
 deleteDb :: DatabaseName -> MonadPerspectives Unit
 deleteDb dbname = do

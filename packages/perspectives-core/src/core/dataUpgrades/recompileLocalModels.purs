@@ -22,6 +22,7 @@
 
 module Perspectives.DataUpgrade.RecompileLocalModels where
 
+import Control.Alt (void)
 import Control.Monad.Except (runExceptT)
 import Data.Array (catMaybes)
 import Data.Either (Either(..))
@@ -33,7 +34,7 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (createDatabase, deleteDatabase, documentsInDatabase, includeDocs)
+import Perspectives.Persistence.API (databaseInfo, deleteDatabase, documentsInDatabase, includeDocs)
 import Perspectives.Persistent (invertedQueryDatabaseName, saveMarkedResources)
 import Perspectives.PerspectivesState (modelsDatabaseName)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
@@ -70,5 +71,5 @@ recompileLocalModels =
   clearInvertedQueriesDatabase = do
     db <- invertedQueryDatabaseName
     deleteDatabase db
-    createDatabase db
+    void $ databaseInfo db
     setupInvertedQueryDatabase

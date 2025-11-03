@@ -45,7 +45,7 @@ import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (bottom, externalRole)
 import Perspectives.ModelDependencies (addressHost, addressPort, addressRelayHost, addressRelayPort, channel, channelDatabase, channelInitiator, channelPartner, privateChannel)
 import Perspectives.Names (getUserIdentifier)
-import Perspectives.Persistence.API (Url, createDatabase)
+import Perspectives.Persistence.API (Url, databaseInfo)
 import Perspectives.Persistence.CouchdbFunctions (endReplication, replicateContinuously)
 import Perspectives.Persistence.State (getCouchdbBaseURL, getSystemIdentifier)
 import Perspectives.PerspectivesState (getPerspectivesUser)
@@ -63,7 +63,7 @@ createChannel :: Url -> MonadPerspectivesTransaction ContextInstance
 createChannel couchdbUrl = do
   channelID <- createResourceIdentifier (CType $ ContextType channel)
   channel <- createChannelContext couchdbUrl channelID
-  lift (guid channelID >>= createDatabase)
+  void $ lift (guid channelID >>= databaseInfo)
   pure channel
 
 createChannelContext :: Url -> String -> MonadPerspectivesTransaction ContextInstance

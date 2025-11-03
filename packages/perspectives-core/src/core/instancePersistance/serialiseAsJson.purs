@@ -48,7 +48,7 @@ import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (binding, bottom, context, getEnumeratedRoleInstances, roleType, roleType_)
 import Perspectives.ModelDependencies (privateChannel)
-import Perspectives.Persistence.API (createDatabase)
+import Perspectives.Persistence.API (databaseInfo)
 import Perspectives.Persistence.State (getCouchdbBaseURL, withCouchdbUrl)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol)
 import Perspectives.Representation.Class.Property (propertyTypeIsAuthorOnly)
@@ -188,7 +188,7 @@ createCopyOfChannelDatabase arrWithChannelName invitation =
     ( case ARR.head arrWithChannelName of
         Just channelName -> void $ lift $ withCouchdbUrl \url -> do
           -- If the database existed prior to this line, nothing is created.
-          void $ createDatabase channelName
+          void $ databaseInfo channelName
           mchannelContext <- invitation ##> (getEnumeratedRoleInstances (EnumeratedRoleType privateChannel) >=> binding >=> context)
           case mchannelContext of
             Just channelContext -> setChannelReplication url channelContext
