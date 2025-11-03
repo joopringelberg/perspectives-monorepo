@@ -29,7 +29,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), 
 import Perspectives.RunPerspectives (runPerspectivesWithState)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (Env, fqn2tid)
-import Perspectives.Sidecar.StableIdMapping (loadStableMapping_)
+import Perspectives.Sidecar.StableIdMapping (fromLocalModels, loadStableMapping, loadStableMapping_)
 
 -- This module contains functions to switch types on the fly.
 -- We only need it during the transition from Readable to Stable types,
@@ -78,14 +78,18 @@ mapReadableToStable ttbm@(TypeToBeMapped { kind, fqn }) =
       Nothing -> do
         case lookup (unwrap mu) modelReadableToStable of
           Just stableFqn -> do
-            -- TODO: we hebben het versienummer nodig.
             { versionedModelName } <- lift $ computeVersionedAndUnversiondName (ModelUri stableFqn)
             { repositoryUrl, documentName } <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
             mmapping <- lift $ loadStableMapping_ repositoryUrl documentName
             case mmapping of
               Just mapping ->
                 void $ modify \env -> env { sidecars = Map.insert mu mapping sidecars }
-              Nothing -> throwError (error ("Could not load StableIdMapping for model " <> unwrap mu))
+              Nothing -> do
+                mlocalMapping <- lift $ loadStableMapping (ModelUri $ stableFqn) fromLocalModels
+                case mlocalMapping of
+                  Just mapping ->
+                    void $ modify \env -> env { sidecars = Map.insert mu mapping sidecars }
+                  Nothing -> throwError (error ("Could not load StableIdMapping for model " <> unwrap mu))
           Nothing -> throwError (error ("No stable mapping found for model " <> unwrap mu))
 
 forkedTypeFixer :: AVar (TypeFix) -> AVar PerspectivesState -> Aff Unit
