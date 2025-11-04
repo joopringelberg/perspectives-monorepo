@@ -848,7 +848,25 @@ updateStableMappingForModel (ModelUri stableModelUri) modelCuid correctedDFR mMa
 
   let mapping2 = mapping1 { contextIndividuals = finalCtxInd, roleIndividuals = finalRolInd }
 
-  pure mapping2
+  -- Ensure the model root (readable ModelUri) reuses the modelCuid deterministically and aliases to the Stable root.
+  -- This prevents re-minting a fresh CUID for the readable root on every compilation.
+  let
+    -- Find readable ModelUri context FQNs present in the current DFR (canonical entries)
+    readableRootFqns = do
+      fqn <- OBJ.keys cur.contexts
+      if isModelUri fqn && fqn /= stableModelUri then [ fqn ] else []
+    -- Force mapping: readable root -> modelCuid, and alias readable -> stable
+    contextCuidsFixed = foldl (\acc fqn -> OBJ.insert fqn modelCuid acc) mapping2.contextCuids readableRootFqns
+    contextAliasesFixed = foldl
+      ( \acc fqn -> case OBJ.lookup fqn acc of
+          Nothing -> OBJ.insert fqn stableModelUri acc
+          Just _ -> acc
+      )
+      mapping2.contexts
+      readableRootFqns
+    mapping3 = mapping2 { contextCuids = contextCuidsFixed, contexts = contextAliasesFixed }
+
+  pure mapping3
 
 -- Merge the current key snapshots with the previous sidecar to generate/update alias maps.
 mergeStableIdMapping

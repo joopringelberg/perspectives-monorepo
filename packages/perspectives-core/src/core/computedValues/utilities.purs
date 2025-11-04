@@ -79,7 +79,6 @@ import Prelude (class Show, bind, discard, pure, show, void, ($), (<<<), (<>), (
 import Simple.JSON (readJSON, write, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
--- TODO: verander naar echte gegenereerde identifiers.
 genSym :: RoleInstance -> MonadPerspectivesQuery String
 genSym _ =
   try
