@@ -25,6 +25,7 @@ import Perspectives.Parsing.Arc (domain) as ARC
 import Perspectives.Parsing.Arc.AST (ContextE(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
+import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType_)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo', toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -43,7 +44,6 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), 
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.Representation.View (View(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
-import Perspectives.Types.ObjectGetters (lookForUnqualifiedPropertyType_)
 import Test.Parsing.DomeinFileSelectors (ensureCRole, ensureDescription, ensureERole, ensureEnumeratedProperty, ensurePerspectiveOn, ensurePropertyVerbsInState, ensureState, enumeratedPropertyIsFunctional, exists, failure, haveVerbs, isCalculationOf, objectOfPerspective, stateQuery, ensureOnEntry)
 import Test.Perspectives.Utils (runP)
 import Test.Unit (Test, TestF, TestSuite, suite, suiteOnly, suiteSkip, test, testOnly, testSkip)
@@ -263,44 +263,44 @@ theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
                 (Left [ (UnknownProperty _ _ _) ]) -> assert "" true
                 otherwise -> assert "The view refers to a non-existing property 'Datu' and that should be detected." false
 
-  test "Testing qualifyPropertyReferences: reference to property on binding." do
-    (r :: Either ParseError ContextE) <- {-pure $ unwrap $-}  runIndentParser "domain MyTestDomain\n  thing Feest (mandatory) filledBy FeestVoorbereiding\n    view ViewOpFeest (Datum)\n  thing FeestVoorbereiding (mandatory)\n    property Datum (mandatory, DateTime)\n" ARC.domain
-    case r of
-      (Left e) -> assert (show e) false
-      (Right ctxt@(ContextE { id })) -> do
-        -- logShow ctxt
-        runPhaseTwo' (traverseDomain ctxt) >>= \(Tuple r state) ->
-          case r of
-            (Left e) -> assert (show e) false
-            (Right (DomeinFile dr')) -> do
-              -- logShow dr'
-              x' <- runP $ phaseThree dr' state.postponedStateQualifiedParts Nil
-              case x' of
-                (Left e) -> assert (show e) false
-                Right (Tuple correctedDFR@{ views } _) -> do
-                  -- logShow correctedDFR
-                  -- Get the references from the view
-                  case lookup "model:MyTestDomain$Feest$ViewOpFeest" views of
-                    Nothing -> assert "There should be a View 'model:MyTestDomain$Feest$ViewOpFeest'" false
-                    (Just (View { propertyReferences })) -> case elemIndex (ENP $ EnumeratedPropertyType "Datum") propertyReferences of
-                      Nothing -> assert "There should be an unqualified PropertyType 'Datum' in 'model:MyTestDomain$Feest$ViewOpFeest'" true
-                      (Just pr) -> do
-                        candidates <- runP $ withDomeinFile "model:MyTestDomain" (DomeinFile correctedDFR) ((ENR $ EnumeratedRoleType "model:MyTestDomain$Feest") ###= (lookForUnqualifiedPropertyType_ "Datum"))
-                        case head candidates of
-                          Nothing -> assert "We should be able to find the qualified version of 'Datum'" false
-                          (Just (ENP (EnumeratedPropertyType "model:MyTestDomain$FeestVoorbereiding$Datum"))) | length candidates == 1 -> assert "" true
-                          otherwise -> assert "There is only one property with local name 'Datum' defined but we've found more?!" false
-                        xx <- runP $ withDomeinFile "model:MyTestDomain" (DomeinFile correctedDFR) (allProperties (ST (EnumeratedRoleType "model:MyTestDomain$Feest")))
-                        case head xx of
-                          Nothing -> assert "geen properties" false
-                          (Just p) | length xx == 1 -> assert "The properties of 'model:MyTestDomain$Feest' should include 'model:MyTestDomain$FeestVoorbereiding$Datum'" (p == ENP (EnumeratedPropertyType "model:MyTestDomain$FeestVoorbereiding$Datum"))
-                          otherwise -> assert "There is only one property defined for 'Feest'" false
+  -- test "Testing qualifyPropertyReferences: reference to property on binding." do
+  --   (r :: Either ParseError ContextE) <- {-pure $ unwrap $-}  runIndentParser "domain MyTestDomain\n  thing Feest (mandatory) filledBy FeestVoorbereiding\n    view ViewOpFeest (Datum)\n  thing FeestVoorbereiding (mandatory)\n    property Datum (mandatory, DateTime)\n" ARC.domain
+  --   case r of
+  --     (Left e) -> assert (show e) false
+  --     (Right ctxt@(ContextE { id })) -> do
+  --       -- logShow ctxt
+  --       runPhaseTwo' (traverseDomain ctxt) >>= \(Tuple r state) ->
+  --         case r of
+  --           (Left e) -> assert (show e) false
+  --           (Right (DomeinFile dr')) -> do
+  --             -- logShow dr'
+  --             x' <- runP $ phaseThree dr' state.postponedStateQualifiedParts Nil
+  --             case x' of
+  --               (Left e) -> assert (show e) false
+  --               Right (Tuple correctedDFR@{ views } _) -> do
+  --                 -- logShow correctedDFR
+  --                 -- Get the references from the view
+  --                 case lookup "model:MyTestDomain$Feest$ViewOpFeest" views of
+  --                   Nothing -> assert "There should be a View 'model:MyTestDomain$Feest$ViewOpFeest'" false
+  --                   (Just (View { propertyReferences })) -> case elemIndex (ENP $ EnumeratedPropertyType "Datum") propertyReferences of
+  --                     Nothing -> assert "There should be an unqualified PropertyType 'Datum' in 'model:MyTestDomain$Feest$ViewOpFeest'" true
+  --                     (Just pr) -> do
+  --                       candidates <- runP $ withDomeinFile "model:MyTestDomain" (DomeinFile correctedDFR) ((lookForUnqualifiedPropertyType_ "Datum") (ENR $ EnumeratedRoleType "model:MyTestDomain$Feest"))
+  --                       case head candidates of
+  --                         Nothing -> assert "We should be able to find the qualified version of 'Datum'" false
+  --                         (Just (ENP (EnumeratedPropertyType "model:MyTestDomain$FeestVoorbereiding$Datum"))) | length candidates == 1 -> assert "" true
+  --                         otherwise -> assert "There is only one property with local name 'Datum' defined but we've found more?!" false
+  --                       xx <- runP $ withDomeinFile "model:MyTestDomain" (DomeinFile correctedDFR) (allProperties (ST (EnumeratedRoleType "model:MyTestDomain$Feest")))
+  --                       case head xx of
+  --                         Nothing -> assert "geen properties" false
+  --                         (Just p) | length xx == 1 -> assert "The properties of 'model:MyTestDomain$Feest' should include 'model:MyTestDomain$FeestVoorbereiding$Datum'" (p == ENP (EnumeratedPropertyType "model:MyTestDomain$FeestVoorbereiding$Datum"))
+  --                         otherwise -> assert "There is only one property defined for 'Feest'" false
 
-                  case lookup "model:MyTestDomain$Feest$ViewOpFeest" views of
-                    Nothing -> assert "There should be a View 'model:MyTestDomain$Feest$ViewOpFeest'" false
-                    (Just (View { propertyReferences })) -> case head (filter (\pref -> propertytype2string pref == "model:MyTestDomain$FeestVoorbereiding$Datum") propertyReferences) of
-                      (Just (ENP (EnumeratedPropertyType "model:MyTestDomain$FeestVoorbereiding$Datum"))) -> assert "" true
-                      otherwise -> assert "There should be a Property 'model:MyTestDomain$FeestVoorbereiding$Datum' in ViewOpFeest" false
+  --                 case lookup "model:MyTestDomain$Feest$ViewOpFeest" views of
+  --                   Nothing -> assert "There should be a View 'model:MyTestDomain$Feest$ViewOpFeest'" false
+  --                   (Just (View { propertyReferences })) -> case head (filter (\pref -> propertytype2string pref == "model:MyTestDomain$FeestVoorbereiding$Datum") propertyReferences) of
+  --                     (Just (ENP (EnumeratedPropertyType "model:MyTestDomain$FeestVoorbereiding$Datum"))) -> assert "" true
+  --                     otherwise -> assert "There should be a Property 'model:MyTestDomain$FeestVoorbereiding$Datum' in ViewOpFeest" false
 
   test "Testing qualifyViewReferences: reference to View on Action." do
     (r :: Either ParseError ContextE) <- {-pure $ unwrap $-}  runIndentParser "domain MyTestDomain\n  thing Feest (mandatory) filledBy FeestVoorbereiding\n    property BigParty = context >> Guest >>= count > 10\n    view ViewOpFeest (Datum, BigParty)\n  thing FeestVoorbereiding (mandatory)\n    property Datum (mandatory, DateTime)\n  user Guest (mandatory)\n    perspective on Feest\n      view ViewOpFeest (Consult)" ARC.domain

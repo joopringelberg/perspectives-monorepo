@@ -32,8 +32,9 @@ import Perspectives.Sidecar.NormalizeTypeNames (Env, fqn2tid)
 import Perspectives.Sidecar.StableIdMapping (fromLocalModels, loadStableMapping, loadStableMapping_)
 
 -- This module contains functions to switch types on the fly.
--- We only need it during the transition from Readable to Stable types,
+-- We may only need it during the transition from Readable to Stable types,
 -- probably just to be able to make a first installation with Stable types.
+-- But maybe it is neccesary during model compilation as well.
 
 mapReadableToStable :: TypeToBeMapped -> StateT Env MonadPerspectives TypeToBeMapped
 mapReadableToStable ttbm@(TypeToBeMapped { kind, fqn }) =

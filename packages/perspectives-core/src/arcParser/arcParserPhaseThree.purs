@@ -30,14 +30,14 @@ module Perspectives.Parsing.Arc.PhaseThree where
 
 import Control.Monad.Error.Class (catchError, try)
 import Control.Monad.Reader (runReaderT)
-import Control.Monad.State (gets) as State
+import Control.Monad.State (gets, modify) as State
 import Control.Monad.Trans.Class (lift)
 import Data.Array (cons, elemIndex, filter, find, findIndex, foldM, foldl, foldr, fromFoldable, head, index, intercalate, length, nub, null, uncons, union, updateAt)
 import Data.Either (Either(..))
 import Data.Foldable (for_, traverse_)
 import Data.Identity as Identity
 import Data.List (catMaybes, List, concat, filter, filterM, fromFoldable) as LIST
-import Data.Map (values) as Map
+import Data.Map (Map, fromFoldable, toUnfoldable, values) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, isNothing, maybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), indexOf)
@@ -70,6 +70,7 @@ import Perspectives.Parsing.Arc.PhaseThree.CheckPerspectivesModifiers (checkPers
 import Perspectives.Parsing.Arc.PhaseThree.PerspectiveContextualisation (addAspectsToExternalRoles, contextualisePerspectives)
 import Perspectives.Parsing.Arc.PhaseThree.Screens (collectPropertyTypes, collectRoles, handleScreens, roleIdentification2Context, roleIdentification2Step)
 import Perspectives.Parsing.Arc.PhaseThree.SetInvertedQueries (setInvertedQueries)
+import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType_)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, lift2, modifyDF, runPhaseTwo_', throwError, toReadableDomeinFile, toStableDomeinFile, toStableModelUri, withDomeinFile, withFrame)
 import Perspectives.Parsing.Arc.Position (ArcPosition, arcParserStartPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
@@ -105,7 +106,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (getSideCars)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
 import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith)
-import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, hasContextAspect, isPerspectiveOnSelf, lookForUnqualifiedPropertyType_, roleStates, statesPerProperty, string2RoleType)
+import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, hasContextAspect, isPerspectiveOnSelf, roleStates, statesPerProperty, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
 import Prelude (Unit, append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=))
 
@@ -144,7 +145,7 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
   -- Register that we are compiling this model.
   setModelUnderCompilation (Just id)
   -- SideCar files for all referred models (insofar as they have been compiled with Stable Identifiers yet).
-  sideCars <- getSideCars (DomeinFile df) false -- not versioned
+  (sideCars :: (Map.Map (ModelUri Readable) StableIdMapping)) <- getSideCars (DomeinFile df) false -- not versioned
   void $ storeDomeinFileInCache (toStableModelUri id) (toStableDomeinFile (DomeinFile df))
   -- The Readable identifier of all context individuals from all imported models, combined with their context type.
   -- The computation depends on these models being installed - which is indeed part of the contract for phase three.
@@ -181,6 +182,13 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
   (Tuple ei { dfr, invertedQueries }) <-
     runPhaseTwo_'
       ( do
+          void $ lift $ State.modify \s -> s
+            { sidecars =
+                let
+                  (pairs :: Array (Tuple (ModelUri Readable) StableIdMapping)) = Map.toUnfoldable sideCars
+                in
+                  Map.fromFoldable ((\(Tuple modelUri sc) -> (Tuple (unwrap modelUri) sc) :: Tuple String StableIdMapping) <$> pairs)
+            }
           addAspectsToExternalRoles
           checkAspectRoleReferences
           inferFromAspectRoles
@@ -417,7 +425,7 @@ qualifyPropertyReferences = do
         if isJust (lookup (propertytype2string propType) calculatedProperties) then pure $ CP $ CalculatedPropertyType (propertytype2string propType)
         else pure propType
       else do
-        (candidates :: Array PropertyType) <- lift2 (rtype ###= lookForUnqualifiedPropertyType_ (propertytype2string propType))
+        (candidates :: Array PropertyType) <- lookForUnqualifiedPropertyType_ (propertytype2string propType) rtype
         case head candidates of
           Nothing -> throwError $ UnknownProperty pos propType (ST rtype)
           (Just t) | length candidates == 1 -> pure t

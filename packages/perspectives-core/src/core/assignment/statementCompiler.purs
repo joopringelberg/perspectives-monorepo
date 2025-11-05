@@ -40,10 +40,10 @@ import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.External.CoreModuleList (isExternalCoreModule)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionCardinality, lookupHiddenFunctionIsEffect, lookupHiddenFunctionNArgs)
 import Perspectives.Identifiers (areLastSegmentsOf, buitenRol, typeUri2ModelUri, endsWithSegments, isExternalRole, isTypeUri)
-import Perspectives.Instances.Combinators (filter')
 import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (Step, VarBinding(..))
+import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, addBinding, getsDF, lift2, throwError, withFrame)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..), Statements(..))
@@ -64,7 +64,7 @@ import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Verbs
-import Perspectives.Types.ObjectGetters (externalRole, generalisesRoleType_, hasPerspectiveOnPropertyWithVerb, isDatabaseQueryRole, isEnumeratedProperty, lookForRoleTypeOfADT, lookForUnqualifiedPropertyType, lookForUnqualifiedRoleTypeOfADT)
+import Perspectives.Types.ObjectGetters (externalRole, generalisesRoleType_, hasPerspectiveOnPropertyWithVerb, isDatabaseQueryRole, isEnumeratedProperty, lookForRoleTypeOfADT, lookForUnqualifiedRoleTypeOfADT)
 import Prelude (bind, discard, pure, show, unit, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>), (>>=), (||))
 
 ------------------------------------------------------------------------------------
@@ -546,7 +546,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       (rt :: ADT EnumeratedRoleType) <- case range roleQfd of
         (RDOM rt') -> pure $ roleInContext2Role <$> rt'
         otherwise -> throwError $ NotARoleDomain otherwise start end
-      (candidates :: Array PropertyType) <- lift2 (rt ###= (filter' (lookForUnqualifiedPropertyType propertyIdentifier) isEnumeratedProperty))
+      (candidates :: Array PropertyType) <- filter isEnumeratedProperty <$> (lookForUnqualifiedPropertyType propertyIdentifier) rt
       case head candidates of
         Just (ENP et) | length candidates == 1 -> pure et
         otherwise -> throwError $ RoleHasNoEnumeratedProperty rt propertyIdentifier start end

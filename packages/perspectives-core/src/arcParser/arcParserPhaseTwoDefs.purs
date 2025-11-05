@@ -50,6 +50,7 @@ import Perspectives.Query.QueryTypes (QueryFunctionDescription)
 import Perspectives.Representation.Perspective (Perspective)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType, EnumeratedRoleType, RoleType)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
+import Perspectives.Sidecar.ToReadable (SideCarMap)
 import Prelude (class Eq, class Monad, Unit, bind, discard, eq, identity, map, pure, show, void, ($), (<$>), (<<<), (<>), (>>=))
 
 -- TODO
@@ -74,6 +75,7 @@ type PhaseTwoState =
   , perspectives :: MAP.Map (Tuple RoleType Step) Perspective
   , loopdetection :: LoopDetection
   , invertedQueries :: StoredQueries
+  , sidecars :: SideCarMap
   }
 
 data CurrentlyCalculated = Prop CalculatedPropertyType | Role CalculatedRoleType
@@ -117,6 +119,7 @@ runPhaseTwo_' computation dfr indexedContexts indexedRoles postponedParts = runS
   , perspectives: MAP.empty
   , loopdetection: []
   , invertedQueries: []
+  , sidecars: MAP.empty
   }
 
 -- | Run a computation in `PhaseTwo`, returning Errors or the result of the computation.
@@ -138,6 +141,7 @@ evalPhaseTwo_' computation drf indexedContexts indexedRoles = evalStateT (runExc
   , perspectives: MAP.empty
   , loopdetection: []
   , invertedQueries: []
+  , sidecars: MAP.empty
   }
 
 -- type PhaseTwo a = PhaseTwo' a Identity

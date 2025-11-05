@@ -34,7 +34,7 @@ import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..), fst, snd)
 import Foreign.Object (Object, keys, lookup)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (MonadPerspectives, (###=), (###>))
+import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Data.EncodableMap (empty, insert, singleton) as EM
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.HumanReadableType (swapDisplayName)
@@ -44,6 +44,7 @@ import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(.
 import Perspectives.Parsing.Arc.AST (ColumnE(..), FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), WhatE(..), WidgetCommonFields) as AST
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
+import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, lift2, modifyDF, throwError, withDomeinFile)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -60,7 +61,7 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optim
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), roletype2string)
 import Perspectives.Representation.Verbs (allPropertyVerbs, roleVerbList2Verbs)
 import Perspectives.Representation.View (View(..))
-import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_, lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
+import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_)
 import Prelude (Unit, bind, discard, eq, flip, map, not, pure, unit, ($), (<#>), (<$>), (<*>), (<<<), (==), (>>=))
 
 handleScreens :: LIST.List AST.ScreenE -> PhaseThree Unit
@@ -247,8 +248,8 @@ handleScreens screenEs = do
             pure $ MarkDownPerspectiveDef { widgetFields: widgetFields', conditionProperty: Nothing }
           Just conditionProp -> do
             (objectRoleType :: RoleType) <- unsafePartial ARRP.head <$> collectRoles widgetFields.perspective
-            mconditionProperty <- lift $ lift (objectRoleType ###> (lookForUnqualifiedPropertyType_ conditionProp))
-            case mconditionProperty of
+            candidates <- lookForUnqualifiedPropertyType_ conditionProp objectRoleType
+            case head candidates of
               -- The condition property cannot be recognised as a property of the role with the markdown property.
               Nothing -> throwError (UnknownMarkDownConditionProperty s e conditionProp objectRoleType)
               Just conditionProperty -> do
@@ -273,7 +274,7 @@ handleScreens screenEs = do
         where
         qualifyProperty :: RoleType -> String -> PhaseThree EnumeratedPropertyType
         qualifyProperty chatRoleType prop = do
-          candidates <- lift2 (chatRoleType ###= lookForUnqualifiedPropertyType_ prop)
+          candidates <- lookForUnqualifiedPropertyType_ prop chatRoleType
           case head candidates of
             Nothing -> throwError $ UnknownProperty start' (ENP $ EnumeratedPropertyType prop) (ST chatRoleType)
             (Just t) | length candidates == 1 -> case t of
@@ -430,7 +431,7 @@ collectPropertyTypes (AST.Properties ps) object start = do
   roleADT <- roleIdentification2rangeADT object
   PSet <$> for (fromFoldable ps)
     \localPropertyName -> do
-      candidates <- lift2 (roleADT ###= lookForUnqualifiedPropertyType localPropertyName)
+      candidates <- lookForUnqualifiedPropertyType localPropertyName roleADT
       case head candidates of
         -- NOTICE that we have to choose a kind of property and arbitrarily choose to report it as Enumerated.
         Nothing -> throwError $ UnknownProperty start (ENP $ EnumeratedPropertyType localPropertyName) (ENR <$> roleADT)

@@ -52,7 +52,7 @@ import Perspectives.Persistence.API (Keys(..), getViewOnDatabase)
 import Perspectives.Persistent (modelDatabaseName)
 import Perspectives.Persistent.PublicStore (PublicStore)
 import Perspectives.Query.QueryTypes (Calculation, QueryFunctionDescription, RoleInContext(..), domain2roleType, queryFunction, range, roleInContext2Role, roleRange, secondOperand)
-import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, computeExpandedBoolean, equalsOrGeneralises_, equalsOrSpecialises_, equals_, generalises_, specialises_)
+import Perspectives.Representation.ADT (ADT, allLeavesInADT, computeExpandedBoolean, equalsOrGeneralises_, equalsOrSpecialises_, equals_, generalises_, specialises_)
 import Perspectives.Representation.Action (Action)
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.Class.Context (contextADT, contextRole, roleInContext, userRole) as ContextClass
@@ -66,7 +66,7 @@ import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec, objectOfPerspective, perspectiveSupportsOneOfRoleVerbs, perspectiveSupportsProperty, perspectiveSupportsPropertyForVerb, stateSpec2StateIdentifier)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType, propertytype2string, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType, roletype2string)
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as TI
 import Perspectives.Representation.Verbs (PropertyVerb, RoleVerb)
 import Perspectives.Representation.View (propertyReferences)
@@ -283,34 +283,6 @@ externalRole = getPerspectType >=> pure <<< CTCLASS.externalRole
 -- | The substates registered in the state definition (not their transitive closure, nor Aspect states).
 subStates_ :: StateIdentifier -> MonadPerspectives (Array StateIdentifier)
 subStates_ = tryGetState >=> pure <<< (maybe [] _.subStates <<< map unwrap)
-
-----------------------------------------------------------------------------------------
-------- FUNCTIONS TO FIND A PROPERTYTYPE WORKING FROM STRINGS OR ADT'S
-----------------------------------------------------------------------------------------
-
--- | Look for an unqualified Property on a given RoleType
--- | (recursing on aspects and on the binding of Enumerated Roles), using a criterium.
-lookForUnqualifiedPropertyType_ :: String -> (RoleType ~~~> PropertyType)
-lookForUnqualifiedPropertyType_ s (ENR i) = lookForProperty (propertytype2string >>> areLastSegmentsOf s) (ST i)
-lookForUnqualifiedPropertyType_ s (CR i) = (lift $ getCalculatedRole i) >>= lift <<< roleADT >>= lookForProperty (propertytype2string >>> areLastSegmentsOf s) <<< map roleInContext2Role
-
--- | Look for a Property on a given ADT, using a qualified name (recursing on aspects
--- | and on the binding of Enumerated Roles).
--- | Note: use this function to check that the property is actually defined.
-lookForPropertyType :: String -> (ADT EnumeratedRoleType ~~~> PropertyType)
-lookForPropertyType s = lookForProperty (propertytype2string >>> ((==) s))
-
--- | Look for a Property on a given ADT (recursing on aspects and on the binding of
--- | Enumerated Roles) using the postfix of a name.
-lookForUnqualifiedPropertyType :: String -> (ADT EnumeratedRoleType ~~~> PropertyType)
-lookForUnqualifiedPropertyType s = lookForProperty (propertytype2string >>> areLastSegmentsOf s)
-
--- | Look for a Property on a given ADT (recursing on aspects and on the binding of
--- | Enumerated Roles), using a criterium.
-lookForProperty :: (PropertyType -> Boolean) -> ADT EnumeratedRoleType ~~~> PropertyType
-lookForProperty criterium adt = ArrayT (allProperties adt >>= pure <<< filter criterium)
-
--- lookForProperty criterium = COMB.filter' (ArrayT <<< allProperties) criterium
 
 -- | All properties, computed recursively over binding and Aspects, of the Role.
 propertiesOfRole :: String ~~~> PropertyType

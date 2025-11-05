@@ -33,6 +33,7 @@ import Data.Traversable (for, traverse)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.InvertedQuery (QueryWithAKink(..), backwards)
 import Perspectives.ModelDependencies (mySystem)
+import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (ensurePropertiesAreReadable)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, addBinding, lift2, lookupVariableBinding, throwError, withFrame)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.Inversion (invertFunction, queryFunctionIsFunctional, queryFunctionIsMandatory)
@@ -285,7 +286,7 @@ invert_ qfd@(SQD dom@(RDOM roleAdt) f@(PropertyGetter prop@(ENP _)) ran fun man)
         Nothing -> throwError (Custom $ "An impossible situation in module Perspectives.Query.Kinked, invert_.expandPropertyQuery. This property cannot be found: " <> show prop)
 
   roleHasProperty :: ADT RoleInContext -> PhaseThree Boolean
-  roleHasProperty adt = lift $ lift (allLocallyRepresentedProperties (roleInContext2Role <$> adt) >>= pure <<< isJust <<< (elemIndex prop))
+  roleHasProperty adt = (lift $ lift $ allLocallyRepresentedProperties (roleInContext2Role <$> adt)) >>= ensurePropertiesAreReadable >>= pure <<< isJust <<< (elemIndex prop)
 
 -- The individual takes us to an instance of the range (`ran`), whatever the domain (`dom`) is. RoleIndividual is a constant function.
 -- Its inversion takes us to all instances of the domain.
