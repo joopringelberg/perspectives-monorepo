@@ -90,13 +90,13 @@ defaultIndexedNames = do
     ]
 
 -----------------------------------------------------------
--- LOOKUP INDEXED NAMES
+-- LOOKUP STABLE INDEXED NAMES
 -----------------------------------------------------------
--- | Look up a fully qualified indexed name, e.g. model:System$Me
+-- | Look up a fully qualified, Stable indexed name, e.g. "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$auftu9ldl2$smvtnanqq6" (sys:Me) and maps it to a local RoleInstance, e.g. "def:#<CUID>".
 lookupIndexedRole :: String -> MonadPerspectives (Maybe RoleInstance)
 lookupIndexedRole iname = gets _.indexedRoles >>= pure <<< OBJ.lookup iname
 
--- | Look up a fully qualified indexed name, e.g. maps "sys:Me" to "def:#<GUID>$User".
+-- | Look up a fully qualified, Stable indexed name, e.g. "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$msufk1679v" (sys:MySystem) and maps it to a local ContextInstance, e.g. "def:#<CUID>".
 lookupIndexedContext :: String -> MonadPerspectives (Maybe ContextInstance)
 lookupIndexedContext iname = gets _.indexedContexts >>= pure <<< OBJ.lookup iname
 

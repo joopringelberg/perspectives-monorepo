@@ -311,24 +311,25 @@ compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
   mLocalIndexedContextType <- isIndexedContextInCurrentCompilation ident
   case mLocalIndexedContextType of
     Just indexedContextType -> pure $ SQD currentDomain (QF.ContextIndividual (ContextInstance ident)) (CDOM (UET indexedContextType)) True True
-    -- Now ident is either not an indexed context, or it is an indexed context defined in a model that is still in terms of Readable identifiers.
-    -- TODO: as soon as all models are in terms of Stable identifiers, we can remove the next check.
+    -- TODO: once we're on Stable identifiers, we can remove this case.
     _ -> do
+      -- TODO: we look up in a list of Stable identifiers, so a match will never be found.
       mIndexedContext <- lift2 $ lookupIndexedContext ident
       case mIndexedContext of
         Just indexedContext -> do
           ctype <- lift2 $ contextType_ indexedContext
           pure $ SQD currentDomain (QF.ContextIndividual (ContextInstance ident)) (CDOM (UET ctype)) True True
         Nothing -> do
-          -- The next line just looks for indexed roles in the current model.
+          -- Look for the ident as an indexed role in one of the imported models, or in the current model IF IT HAS BEEN INSTALLED BEFORE COMPILATION!
           mLocalIndexedRoleType <- isIndexedRoleInCurrentCompilation ident
           case mLocalIndexedRoleType of
             Just role -> do
               -- For context, we take the syntactically embedding context type of the indexed role.
               context <- lift2 $ enumeratedRoleContextType role
               pure $ SQD currentDomain (QF.RoleIndividual (RoleInstance ident)) (RDOM (UET (RoleInContext { context, role }))) True True
-            -- Now ident is either not an indexed role, or it is an indexed role defined in a model that is still in terms of Readable identifiers.
-            -- TODO: as soon as all models are in terms of Stable identifiers, we can remove the next check.
+            -- Now ident is either not an indexed role, or it is an indexed role defined in another model.
+            -- TODO: we look up in a list of Stable identifiers, so a match will never be found.
+            -- TODO: once we're on Stable identifiers, we can remove this case.
             _ -> do
               mIndexedRole <- lift2 $ lookupIndexedRole ident
               case mIndexedRole of

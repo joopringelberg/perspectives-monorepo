@@ -32,7 +32,7 @@ import Perspectives.ModelDependencies (bodiesWithAccountsModelName, couchdbManag
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, invertedQueryDatabaseName, modelDatabaseName)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction)
-import Perspectives.SetupCouchdb (setContext2RoleView, setContextSpecialisationsView, setContextView, setCredentialsView, setFilled2FillerView, setFiller2FilledView, setModelView, setPendingInvitationView, setRTContextKeyView, setRTFilledKeyView, setRTFillerKeyView, setRTPropertyKeyView, setRTRoleKeyView, setRole2ContextView, setRoleFromContextView, setRoleSpecialisationsView, setRoleView)
+import Perspectives.SetupCouchdb (setContext2RoleView, setContextSpecialisationsView, setContextView, setCredentialsView, setFilled2FillerView, setFiller2FilledView, setModelIdNamespaceView, setModelView, setPendingInvitationView, setRTContextKeyView, setRTFilledKeyView, setRTFillerKeyView, setRTPropertyKeyView, setRTRoleKeyView, setRole2ContextView, setRoleFromContextView, setRoleSpecialisationsView, setRoleView)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer)
 import Prelude (Unit, bind, discard, void, ($), (>>=))
@@ -60,6 +60,7 @@ setupUser uninterpretedIdentityDoc = do
 
   modelDatabaseName >>= setRoleSpecialisationsView
   modelDatabaseName >>= setContextSpecialisationsView
+  modelDatabaseName >>= setModelIdNamespaceView
   -- Finally, upload model:System to perspect_models.
   void $ runMonadPerspectivesTransaction
     (ENR $ EnumeratedRoleType sysUser)
@@ -89,6 +90,8 @@ reSetupUser = do
   entitiesDatabaseName >>= setFilled2FillerView
   entitiesDatabaseName >>= setContext2RoleView
   entitiesDatabaseName >>= setRole2ContextView
+  -- Ensure the models database has the id+namespace view as well during re-setup
+  modelDatabaseName >>= setModelIdNamespaceView
   DomeinFile { referredModels } <- getDomeinFile (ModelUri systemModelName)
   -- INSTALLATION / MODEL DEPENDENCY HERE: we assume these models will have been installed.
   void $ runMonadPerspectivesTransaction (ENR $ EnumeratedRoleType sysUser)

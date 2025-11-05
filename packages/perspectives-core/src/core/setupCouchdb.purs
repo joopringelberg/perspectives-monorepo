@@ -162,6 +162,17 @@ setContextSpecialisationsView dbname = void $ addViewToDatabase dbname "defaultV
 foreign import contextSpecialisations :: String
 
 -----------------------------------------------------------
+-- THE VIEW 'MODELIDNAMESPACE'
+-- This view emits for each model file the combination of its id and namespace.
+-----------------------------------------------------------
+-- | Add a view to the couchdb installation in the models db that returns { id, namespace } for each document.
+setModelIdNamespaceView :: forall f. String -> MonadPouchdb f Unit
+setModelIdNamespaceView dbname = void $ addViewToDatabase dbname "defaultViews" "modelIdNamespace" ({ map: modelIdNamespaceView, reduce: Nothing })
+
+-- | Import the view definition as a String.
+foreign import modelIdNamespaceView :: String
+
+-----------------------------------------------------------
 -- THE VIEW 'CREDENTIALSVIEW'
 -- This view collects instances of roles of type "model://perspectives.domains#System$WithCredentials".
 -- However, only instances whose `isMe` value is true, are returned.

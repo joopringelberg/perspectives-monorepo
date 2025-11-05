@@ -62,9 +62,9 @@ type PhaseTwoState =
   , dfr :: DomeinFileRecord Readable
   , namespaces :: Object String
   , referredModels :: Array (ModelUri Readable)
-  -- The keys are the Readable identifiers of indexed contexts in all referred models, including the current model. The values are their ContextTypes.
+  -- The keys are the Readable identifiers of indexed contexts in all referred models, not including the current model on first compilation! The values are their ContextTypes.
   , indexedContexts :: Object ContextType
-  -- Similarly for indexed roles.
+  -- The keys are the Readable identifiers of indexed roles in all referred models, not including the current model on first compilation! The values are their EnumeratedRoleTypes.
   , indexedRoles :: Object EnumeratedRoleType
   -- In PhaseTwoState, variables are bound to QueryFunctionDescriptions.
   -- In PerspectivesState, variables are bound to Strings.
@@ -239,7 +239,7 @@ expandNamespace s = do
   pure $ expandNamespaces namespaces s
 
 -- | From an expanded name like "model:System$MySystem" returns a Maybe ContextType.
--- | Note: returns indexed context names from PhaseTwoState.
+-- | Note: returns indexed context names from PhaseTwoState. On first compilation, these do not include indexed context names from the current model.
 isIndexedContextInCurrentCompilation :: forall m. Monad m => String -> (PhaseTwo' m) (Maybe ContextType)
 isIndexedContextInCurrentCompilation n = do
   indexedContexts <- lift $ gets _.indexedContexts

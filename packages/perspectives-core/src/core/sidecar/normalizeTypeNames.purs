@@ -52,9 +52,11 @@ import Perspectives.Identifiers (splitTypeUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding)
 import Perspectives.InvertedQuery (InvertedQuery)
-import Perspectives.ModelDependencies (modelURI, modelURIReadable, modelsInUse, versionedModelURI)
+import Perspectives.ModelDependencies (modelURIReadable, modelsInUse, versionedModelURI)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (toStableDomeinFile)
+import Perspectives.Persistence.API (Keys(..), getViewOnDatabase)
+import Perspectives.Persistent (modelDatabaseName)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), traverseQfd)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
 import Perspectives.Representation.ADT (ADT)
@@ -104,23 +106,35 @@ getSideCars df@(DomeinFile { referredModels }) versioned = do
   -- Notice that referredModels from a freshly parsed Arc source will be FQNs with names given by the modeller, rather than underlying cuids.
   cuidMap <- getinstalledModelCuids versioned
   foldM
-    ( \scs (ModelUri referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
-        Nothing -> pure scs
+    ( \sidecars (ModelUri referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
+        Nothing -> pure sidecars
         Just (domeinFileName :: ModelUri Stable) -> do
           mmapping <- loadStableMapping domeinFileName fromLocalModels
           case mmapping of
-            Nothing -> pure scs
-            Just submapping -> pure $ Map.insert (ModelUri referredModel) submapping scs
+            Nothing -> pure sidecars
+            Just submapping -> pure $ Map.insert (ModelUri referredModel) submapping sidecars
     )
     Map.empty
     referredModels
 
--- | A map from ModelUri Readable to ModelUri Stable.
+-- | A map from ModelUri Readable to ModelUri Stable, for all installed models (registered in the role PerspectivesSystem$ModelsInUse).
 -- | Not every installed model need have cuid, as long as we have not completely moved to stable identifiers!
 -- | The Stable ModelUri will be versioned iff parameter versioned is true.
+-- | NOTE: The System model will not be included here when versioned==true, as it is not registered in ModelsInUse!
 getinstalledModelCuids :: Boolean -> MonadPerspectives StableIdMappingForModel
-getinstalledModelCuids versioned = do
-  let modelProp = if versioned then versionedModelURI else modelURI
+getinstalledModelCuids versioned =
+  if versioned then
+    getVersionedInstalledModelCuids
+  else do
+    modelsDb <- modelDatabaseName
+    result :: Array { id :: String, namespace :: String } <- getViewOnDatabase modelsDb "defaultViews/modelIdNamespace" (NoKey :: Keys String)
+    pure $ Map.fromFoldable $ ((\{ id, namespace } -> (Tuple (ModelUri namespace) (ModelUri id))) <$> result)
+
+-- | A map from ModelUri Readable to versioned ModelUri Stable, for all installed models (registered in the role PerspectivesSystem$ModelsInUse).
+-- | Not every installed model need have cuid, as long as we have not completely moved to stable identifiers!
+-- | NOTE: The System model will not be included here, as it is not registered in ModelsInUse!
+getVersionedInstalledModelCuids :: MonadPerspectives StableIdMappingForModel
+getVersionedInstalledModelCuids = do
   system <- getMySystem
   -- Instances of ModelInUse are filled with instances of sys:VersionedModelManifest
   modelRoles <- (ContextInstance system) ##= getRoleInstances (ENR $ EnumeratedRoleType modelsInUse)
@@ -129,7 +143,7 @@ getinstalledModelCuids versioned = do
     case mreadableModelUri of
       Nothing -> pure Nothing
       Just (Value readableModelUri) -> do
-        mstableModelUri <- ri ##> binding >=> getPropertyValues (CP $ CalculatedPropertyType modelProp)
+        mstableModelUri <- ri ##> binding >=> getPropertyValues (CP $ CalculatedPropertyType versionedModelURI)
         case mstableModelUri of
           Nothing -> pure Nothing
           -- The Stable name.
@@ -375,7 +389,8 @@ normalizePerspectiveWithOwner ownerRoleTid (Perspective pr) = do
         pure (Tuple ss' objActs')
     )
   automaticStates' <- traverse fqn2tid pr.automaticStates
-  let perspSig = qfdSignature object'
+  -- TODO: Dit is een tijdelijke workaround. Zet object terug op object'.
+  let perspSig = qfdSignature pr.object
   let stableId = ownerRoleTid <> "_" <> perspSig
   pure $ Perspective pr
     { id = stableId

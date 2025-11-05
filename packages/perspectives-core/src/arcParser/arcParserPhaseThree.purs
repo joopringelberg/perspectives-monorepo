@@ -133,7 +133,7 @@ phaseThreeWithMapping df@{ id } postponedParts screens mMapping = do
   removeDomeinFileFromCache (toStableModelUri id)
   pure result
 
--- New entry that accepts an optional sidecar mapping.
+-- NOTE: this function is currently never called with a mapping.
 phaseThreeWithMapping_
   :: DomeinFileRecord Readable
   -> LIST.List AST.StateQualifiedPart
@@ -146,6 +146,8 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
   -- SideCar files for all referred models (insofar as they have been compiled with Stable Identifiers yet).
   sideCars <- getSideCars (DomeinFile df) false -- not versioned
   void $ storeDomeinFileInCache (toStableModelUri id) (toStableDomeinFile (DomeinFile df))
+  -- The Readable identifier of all context individuals from all imported models, combined with their context type.
+  -- The computation depends on these models being installed - which is indeed part of the contract for phase three.
   indexedContexts :: LIST.List (Maybe (Tuple String ContextType)) <- LIST.concat <$>
     ( for
         (Map.values sideCars)
@@ -158,6 +160,8 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
                 ctype <- contextType_ individual
                 pure $ Just $ Tuple readableString ctype
     )
+  -- The Readable identifier of all role individuals from all imported models, combined with their role type.
+  -- The computation depends on these models being installed - which is indeed part of the contract for phase three.
   indexedRoles :: LIST.List (Maybe (Tuple String EnumeratedRoleType)) <- LIST.concat <$>
     ( for
         (Map.values sideCars)

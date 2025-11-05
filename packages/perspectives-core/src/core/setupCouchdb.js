@@ -90,6 +90,15 @@ export const contextSpecialisations = (function( doc )
    );
  }.toString());
 
+ // Emit both id and namespace for each model document.
+ export const modelIdNamespaceView = (function (doc)
+ {
+   if (doc.id && doc.namespace)
+   {
+     emit(doc.id, { id: doc.id, namespace: doc.namespace });
+   }
+ }).toString();
+
  export const credentials = (function (doc)
  {
     // Only PerspectRol instances have an isMe field. roleAliases
