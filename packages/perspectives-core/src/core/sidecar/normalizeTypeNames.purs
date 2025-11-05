@@ -91,7 +91,7 @@ type Env =
 
 normalizeTypes :: DomeinFile Readable -> StableIdMapping -> MonadPerspectives (DomeinFile Stable)
 normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
-  sidecars <- Map.insert namespace mapping <$> getSideCars df true
+  sidecars <- Map.insert namespace mapping <$> getSideCars df false
   -- Pre-compute a mapping from old perspective ids to stable ones using the sidecars only
   let env0 = { sidecars, perspMap: OBJ.fromFoldable [] }
   let perspMap = buildPerspectiveIdMap df env0

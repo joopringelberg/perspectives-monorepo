@@ -16,6 +16,7 @@ import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.PerspectivesState (getModelUnderCompilation)
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), EnumeratedPropertyType(..), CalculatedPropertyType(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping, fromLocalModels, loadStableMapping)
@@ -77,16 +78,29 @@ instance StableToReadable PropertyType where
 
 ensureSideCar :: String -> StateT SideCarMap MonadPerspectives (Maybe StableIdMapping)
 ensureSideCar stableId = do
-  sidecars <- get
   let modelUri = unsafePartial typeUri2ModelUri_ stableId
-  case lookup modelUri sidecars of
-    Just mapping -> pure $ Just mapping
-    Nothing -> do
-      mmapping <- lift $ loadStableMapping (ModelUri modelUri) fromLocalModels
-      case mmapping of
-        Just mapping -> do
-          modify_ (insert stableId mapping)
-          pure $ Just mapping
-        Nothing -> do
-          logPerspectivesError (Custom $ "Failed to load stable mapping for sidecar with id: " <> modelUri)
-          pure Nothing
+  mmodelUnderCompilation <- lift $ getModelUnderCompilation
+  case mmodelUnderCompilation of
+    Just (ModelUri modelUnderCompilation) ->
+      if modelUri == modelUnderCompilation then
+        -- Do not try to load the sidecar for the model under compilation itself. 
+        -- On first compilation, it will not be available yet.
+        -- Neiter do we need it: all identifiers from the model under compilation are still readable.
+        pure Nothing
+      else lookupSideCar modelUri
+    Nothing -> lookupSideCar modelUri
+  where
+  lookupSideCar :: String -> StateT SideCarMap MonadPerspectives (Maybe StableIdMapping)
+  lookupSideCar modelUri = do
+    sidecars <- get
+    case lookup modelUri sidecars of
+      Just mapping -> pure $ Just mapping
+      Nothing -> do
+        mmapping <- lift $ loadStableMapping (ModelUri modelUri) fromLocalModels
+        case mmapping of
+          Just mapping -> do
+            modify_ (insert stableId mapping)
+            pure $ Just mapping
+          Nothing -> do
+            logPerspectivesError (Custom $ "Failed to load stable mapping for sidecar with id: " <> modelUri)
+            pure Nothing
