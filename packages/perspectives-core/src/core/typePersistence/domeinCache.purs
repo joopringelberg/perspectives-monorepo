@@ -57,7 +57,7 @@ import Perspectives.ModelDependencies.ReadableStableMappings (modelReadableToCui
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, fromBlob, getAttachment, tryGetDocument)
 import Perspectives.Persistent (forceSaveDomeinFile, getDomeinFile, modelDatabaseName, removeEntiteit, saveEntiteit, tryGetPerspectEntiteit, tryGetPerspectRol, tryRemoveEntiteit, updateRevision)
-import Perspectives.PerspectivesState (domeinCacheRemove, getModelToLoad, getTranslationTable, setTranslationTable)
+import Perspectives.PerspectivesState (domeinCacheRemove, getModelToLoad, getModelUnderCompilation, getTranslationTable, setTranslationTable)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Cacheable (cacheEntity, setRevision, tryReadEntiteitFromCache)
@@ -127,45 +127,54 @@ modifyStateInDomeinFile modelUri sr@(State { id }) = modifyDomeinFileInCache mod
 -- | Also loads the translations table for the namespace of the DomeinFile.
 -- | The modelUri parameter may be bound to a Versioned ModelURI.
 retrieveDomeinFile :: ModelUri Stable -> MonadPerspectives (DomeinFile Stable)
-retrieveDomeinFile domeinFileId@(ModelUri modelUri) = do
-  -- TODO: As soon as we have moved all models to Stable identifiers, we can remove the fallback to Readable identifiers.
-  case lookup (unversionedModelUri modelUri) modelReadableToStable of
-    Just stableFqn -> case modelUriVersion modelUri of
-      Just version -> retrieveDomeinFile (ModelUri $ stableFqn <> "@" <> version)
-      Nothing -> retrieveDomeinFile (ModelUri stableFqn)
-    Nothing -> do
-      mdf <- tryReadEntiteitFromCache (ModelUri $ unversionedModelUri modelUri)
-      case mdf of
-        -- The DomeinFile is in the cache, meaning we have loaded the translations table before.
-        Just df -> pure df
-        -- The DomeinFile is not in the cache, so we have to load the translations table.
-        Nothing -> tryGetPerspectEntiteit (ModelUri $ unversionedModelUri modelUri) >>= case _ of
-          -- the DomeinFile is not available in the local database. Retrieve it from a remote repository and store it in the local "models" database of this user.
-          Nothing -> do
-            version <- case modelUriVersion modelUri of
-              Nothing -> map _.semver <$> getVersionToInstall domeinFileId
-              Just v -> pure $ Just v
-            modelToLoadAVar <- getModelToLoad
-            liftAff $ put (LoadModel (ModelUri ((unversionedModelUri modelUri) <> (maybe "" ((<>) "@") version)))) modelToLoadAVar
-            result <- liftAff $ take modelToLoadAVar
-            -- Now the forking process waits (blocks) until retrieveFromDomeinFile fills it with another LoadModel request.
-            case result of
-              -- We now take up communication with the forked process that actually loads the model:
-              HotLine hotline -> do
-                loadingResult <- liftAff $ take hotline
-                case loadingResult of
-                  -- The stop condition for this recursion is tryGetPerspectEntiteit!
-                  -- It will now find the model in the local database (but not yet in cache)
-                  -- the recursive call will then load the translations table.
-                  ModelLoaded -> retrieveDomeinFile domeinFileId
-                  LoadingFailed reason -> throwError (error $ "Cannot get " <> modelUri <> " from a repository. Reason: " <> reason)
-                  _ -> throwError (error $ "Model retrieval from repository was not executed for " <> modelUri <> ".")
-              -- This should not happen
-              _ -> throwError (error $ "Wrong communication from the forked model loading process!")
-          -- The model was available in the local database, but as it was not in cache, we have to load the translations.
-          Just df -> fetchTranslations' df
+retrieveDomeinFile (ModelUri modelUri') = do
+  mu <- getModelUnderCompilation
+  case lookup (unversionedModelUri modelUri') modelReadableToStable of
+    -- Apparantly, modelUri' is a Readable model URI and we have a mapping to a Stable model URI.
+    Just stableFqn -> case mu of
+      -- but if it is the model we're compiling, we stick with the Readable model URI.
+      Just compilingModelUri | compilingModelUri == ModelUri modelUri' -> retrieveDomeinFile' (ModelUri modelUri')
+      -- otherwise, we use the Stable model URI.
+      _ -> case modelUriVersion modelUri' of
+        -- If the Readable model URI has a version, we tack that onto the Stable model URI.
+        Just version -> retrieveDomeinFile' (ModelUri $ stableFqn <> "@" <> version)
+        Nothing -> retrieveDomeinFile' (ModelUri stableFqn)
+    Nothing -> retrieveDomeinFile' (ModelUri modelUri')
 
   where
+  retrieveDomeinFile' :: ModelUri Stable -> MonadPerspectives (DomeinFile Stable)
+  retrieveDomeinFile' domeinFileId@(ModelUri modelUri) = do
+    mdf <- tryReadEntiteitFromCache (ModelUri $ unversionedModelUri modelUri)
+    case mdf of
+      -- The DomeinFile is in the cache, meaning we have loaded the translations table before.
+      Just df -> pure df
+      -- The DomeinFile is not in the cache, so we have to load the translations table.
+      Nothing -> tryGetPerspectEntiteit (ModelUri $ unversionedModelUri modelUri) >>= case _ of
+        -- the DomeinFile is not available in the local database. Retrieve it from a remote repository and store it in the local "models" database of this user.
+        Nothing -> do
+          version <- case modelUriVersion modelUri of
+            Nothing -> map _.semver <$> getVersionToInstall domeinFileId
+            Just v -> pure $ Just v
+          modelToLoadAVar <- getModelToLoad
+          liftAff $ put (LoadModel (ModelUri ((unversionedModelUri modelUri) <> (maybe "" ((<>) "@") version)))) modelToLoadAVar
+          result <- liftAff $ take modelToLoadAVar
+          -- Now the forking process waits (blocks) until retrieveFromDomeinFile fills it with another LoadModel request.
+          case result of
+            -- We now take up communication with the forked process that actually loads the model:
+            HotLine hotline -> do
+              loadingResult <- liftAff $ take hotline
+              case loadingResult of
+                -- The stop condition for this recursion is tryGetPerspectEntiteit!
+                -- It will now find the model in the local database (but not yet in cache)
+                -- the recursive call will then load the translations table.
+                ModelLoaded -> retrieveDomeinFile domeinFileId
+                LoadingFailed reason -> throwError (error $ "Cannot get " <> modelUri <> " from a repository. Reason: " <> reason)
+                _ -> throwError (error $ "Model retrieval from repository was not executed for " <> modelUri <> ".")
+            -- This should not happen
+            _ -> throwError (error $ "Wrong communication from the forked model loading process!")
+        -- The model was available in the local database, but as it was not in cache, we have to load the translations.
+        Just df -> fetchTranslations' df
+
   fetchTranslations' :: DomeinFile Stable -> MonadPerspectives (DomeinFile Stable)
   fetchTranslations' df = do
     fetchTranslations (identifier df)

@@ -150,7 +150,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Rol
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, ResourceType, RoleType, StateIdentifier)
 import Perspectives.ResourceIdentifiers.Parser (pouchdbDatabaseName)
-import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.Sync.Transaction (Transaction)
 import Prelude (class Eq, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, eq, pure, show, unit, ($), (<<<), (<>), (>>=))
 import Simple.JSON (class ReadForeign, class WriteForeign)
@@ -235,6 +235,7 @@ type PerspectivesExtraState =
 
   , typeToBeFixed :: AVar TypeFix
 
+  , modelUnderCompilation :: Maybe (ModelUri Readable)
   )
 
 -- | These are options that can be provided to the PDR at startup.

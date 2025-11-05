@@ -44,7 +44,7 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
-import Perspectives.SideCar.PhantomTypedNewtypes (Stable)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
 import Prelude (Unit, bind, discard, pure, unit, void, ($), (+), (<<<), (>>=), (<>))
 import Simple.JSON (writeJSON)
 
@@ -97,6 +97,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , translations: empty
   , setPDRStatus: \_ -> pure unit
   , typeToBeFixed
+  , modelUnderCompilation: Nothing
   }
 
 defaultRuntimeOptions :: RuntimeOptions
@@ -240,6 +241,12 @@ removeMessage msg = do
 
 getTypeToBeFixed :: MonadPerspectives (AVar TypeFix)
 getTypeToBeFixed = gets _.typeToBeFixed
+
+getModelUnderCompilation :: MonadPerspectives (Maybe (ModelUri Readable))
+getModelUnderCompilation = gets _.modelUnderCompilation
+
+setModelUnderCompilation :: Maybe (ModelUri Readable) -> MonadPerspectives Unit
+setModelUnderCompilation mu = modify \s -> s { modelUnderCompilation = mu }
 
 -----------------------------------------------------------
 -- PERSPECTIVESUSER

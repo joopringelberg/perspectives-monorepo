@@ -72,8 +72,8 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), 
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), StableIdMapping, loadStableMapping) as Sidecar
-import Perspectives.Sidecar.StableIdMapping (fromRepository)
-import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_, loadAndCompileArcFileWithSidecar_)
+import Perspectives.Sidecar.StableIdMapping (fromLocalModels, fromRepository)
+import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFileWithSidecar_, loadAndCompileArcFile_)
 import Simple.JSON (readJSON, readJSON_, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -145,7 +145,11 @@ uploadToRepository modelUri_ arcSource_ versionedModelManifest =
     ( case head modelUri_, head arcSource_ of
         Just modelUri, Just arcSource -> do
           -- Retrieve existing sidecar (if any) from repository. modelUri should be Stable.
-          mMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri modelUri) fromRepository
+          mMapping <- do
+            m <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri modelUri) fromRepository
+            case m of
+              Nothing -> lift $ Sidecar.loadStableMapping (Sidecar.ModelUri $ unversionedModelUri modelUri) fromLocalModels
+              Just mapping -> pure (Just mapping)
           let split = unsafePartial modelUri2ModelUrl modelUri
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           case mmodelCuid of

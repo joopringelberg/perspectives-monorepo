@@ -51,7 +51,7 @@ import Perspectives.Parsing.Messages (MultiplePerspectivesErrors, PerspectivesEr
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.SideCar.PhantomTypedNewtypes (Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (StableIdMappingForModel, getinstalledModelCuids, normalizeTypes)
-import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, fromRepository, idUriForContext, loadStableMapping)
+import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, fromLocalModels, fromRepository, idUriForContext, loadStableMapping)
 import Perspectives.Sidecar.UniqueTypeNames as UTN
 import Prelude (bind, discard, pure, show, ($), (<<<), (==), (>=>))
 
@@ -74,10 +74,19 @@ loadAndCompileArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> Mona
 loadAndCompileArcFile_ dfid text saveInCache modelCuid = do
   -- Retrieve existing sidecar (if any) from repository. domeinFilename should be Stable.
   mMapping <- lift $ loadStableMapping dfid fromRepository
-  x <- loadAndCompileArcFileWithSidecar_ dfid text saveInCache mMapping modelCuid
-  pure case x of
-    Left errs -> Left errs
-    Right (Tuple df (Tuple iqs _m)) -> Right (Tuple df iqs)
+  -- TODO: when the universe is fully on Stable, we can remove this fallback to local models.
+  case mMapping of
+    Nothing -> do
+      mlocalMapping <- lift $ loadStableMapping dfid fromLocalModels
+      x <- loadAndCompileArcFileWithSidecar_ dfid text saveInCache mlocalMapping modelCuid
+      pure case x of
+        Left errs -> Left errs
+        Right (Tuple df (Tuple iqs _m)) -> Right (Tuple df iqs)
+    Just _ -> do
+      x <- loadAndCompileArcFileWithSidecar_ dfid text saveInCache mMapping modelCuid
+      pure case x of
+        Left errs -> Left errs
+        Right (Tuple df (Tuple iqs _m)) -> Right (Tuple df iqs)
 
 -- New: sidecar-aware API that returns the updated mapping with results.
 loadAndCompileArcFileWithSidecar_ :: ModelUri Stable -> Source -> Boolean -> Maybe StableIdMapping -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))

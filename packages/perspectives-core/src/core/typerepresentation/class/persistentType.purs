@@ -46,7 +46,7 @@ import Perspectives.DomeinCache (modifyDomeinFileInCache, retrieveDomeinFile)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (typeUri2ModelUri)
 import Perspectives.ModelDependencies.ReadableStableMappings (modelStableToReadable)
-import Perspectives.PerspectivesState (getTypeToBeFixed)
+import Perspectives.PerspectivesState (getModelUnderCompilation, getTypeToBeFixed)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty)
 import Perspectives.Representation.CalculatedRole (CalculatedRole)
 import Perspectives.Representation.Class.Identifiable (class Identifiable, identifier)
@@ -57,7 +57,7 @@ import Perspectives.Representation.State (State)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PerspectiveType(..), StateIdentifier(..), ViewType(..))
 import Perspectives.Representation.View (View)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
-import Prelude (class Eq, class Show, Unit, bind, const, pure, show, unit, ($), (<<<), (<>), (>>=), (<$>), discard)
+import Prelude (class Eq, class Show, Unit, bind, const, pure, show, unit, ($), (<<<), (<>), (>>=), (<$>), discard, (==))
 
 type Namespace = String
 
@@ -76,8 +76,12 @@ getPerspectType id = do
     Just modelUri -> case lookup modelUri modelStableToReadable of
       -- This is a proxy for having a Stable type (it works for the system models).
       Just _ -> pure id
-      -- No Stable type, so we need to switch.
-      Nothing -> switch id
+      -- No Stable type, so we need to switch, unless this model is under compilation.
+      Nothing -> do
+        mu <- getModelUnderCompilation
+        case mu of
+          Just compilingModelUri | compilingModelUri == ModelUri modelUri -> pure id
+          _ -> switch id
   case typeUri2ModelUri (unwrap id') of
     Nothing -> throwError (error $ "getPerspectType cannot retrieve type with incorrectly formed id: '" <> show id <> "'.")
     (Just ns) -> retrieveFromDomein id' (ModelUri ns)
