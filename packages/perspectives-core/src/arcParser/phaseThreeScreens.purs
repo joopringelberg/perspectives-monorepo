@@ -39,7 +39,7 @@ import Perspectives.Data.EncodableMap (empty, insert, singleton) as EM
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.HumanReadableType (swapDisplayName)
 import Perspectives.Identifiers (areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_)
-import Perspectives.ModelDependencies (chatAspect)
+import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), PropertyVerbE(..), PropsOrView, RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..))
 import Perspectives.Parsing.Arc.AST (ColumnE(..), FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), WhatE(..), WidgetCommonFields) as AST
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
@@ -175,7 +175,7 @@ handleScreens screenEs = do
         -- Collect all roles the subject role type has a perspective on.
         (objectRoles :: Array RoleType) <- pure $ perspectives <#> \(Perspective { roleTypes }) -> unsafePartial fromJust $ head roleTypes
         -- Filter the roles that are not a specialization of the chatAspect role type.
-        chatRoles <- filterA (equalsOrGeneralisesRoleType_ (ENR $ EnumeratedRoleType chatAspect)) objectRoles
+        chatRoles <- filterA (equalsOrGeneralisesRoleType_ (ENR $ EnumeratedRoleType READABLE.chatAspect)) objectRoles
         -- For each of these roles, find the properties with the MessageProperty and MediaProperty facets.
         -- Finally construct a ChatDef for each of those roles, where the chatInstance is Nothing.
         catMaybes <$> for chatRoles \chatRole -> do

@@ -41,7 +41,7 @@ import Perspectives.External.CoreModuleList (isExternalCoreModule)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionCardinality, lookupHiddenFunctionIsEffect, lookupHiddenFunctionNArgs)
 import Perspectives.Identifiers (areLastSegmentsOf, buitenRol, typeUri2ModelUri, endsWithSegments, isExternalRole, isTypeUri)
 import Perspectives.Instances.Combinators (filter')
-import Perspectives.ModelDependencies (rootContext)
+import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (Step, VarBinding(..))
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, addBinding, getsDF, lift2, throwError, withFrame)
@@ -254,7 +254,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
           -- As there is no role to fill, the user cannot have a perspective on it. Hence we cannot check that perspective!
           -- In other words, any user can create a RootContext. In practice RootContexts are only used for 'apps'.
           er <- lift $ lift $ externalRole qualifiedContextTypeIdentifier
-          allowed <- lift $ lift ((ENR $ EnumeratedRoleType rootContext) `generalisesRoleType_` (ENR er))
+          allowed <- lift $ lift ((ENR $ EnumeratedRoleType READABLE.rootContext) `generalisesRoleType_` (ENR er))
           if allowed then case mnameGetterDescription of
             Nothing -> pure $ UQD originDomain (QF.CreateRootContext qualifiedContextTypeIdentifier) cte (CDOM $ UET qualifiedContextTypeIdentifier) True True
             Just nameGetterDescription -> pure $ BQD originDomain (QF.CreateRootContext qualifiedContextTypeIdentifier) cte nameGetterDescription (CDOM $ UET qualifiedContextTypeIdentifier) True True

@@ -57,7 +57,7 @@ import Perspectives.Identifiers (Namespace, concatenateSegments, isTypeUri, qual
 import Perspectives.Instances.ObjectGetters (contextType_, roleType_)
 import Perspectives.InvertedQuery (RelevantProperties(..))
 import Perspectives.InvertedQuery.Storable (StoredQueries)
-import Perspectives.ModelDependencies (contextWithNotification)
+import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ContextActionE(..), NotificationE(..), PropertyVerbE(..), RoleVerbE(..), ScreenE, SelfOnly(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..)) as AST
 import Perspectives.Parsing.Arc.AST (RoleIdentification(..), SegmentedPath, SentenceE(..), SentencePartE(..), StateTransitionE(..), roleIdentification2context)
@@ -74,7 +74,7 @@ import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, lift2, modifyD
 import Perspectives.Parsing.Arc.Position (ArcPosition, arcParserStartPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
 import Perspectives.Persistent (getDomeinFile)
-import Perspectives.PerspectivesState (addWarning)
+import Perspectives.PerspectivesState (addWarning, setModelUnderCompilation)
 import Perspectives.Query.ExpressionCompiler (compileAndDistributeStep, compileAndSaveProperty, compileAndSaveRole, compileExpression, compileStep, qualifyLocalContextName, qualifyLocalEnumeratedRoleName, qualifyLocalRoleName)
 import Perspectives.Query.Kinked (completeInversions)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), domain, domain2roleInContext, domain2roleType, mandatory, range, replaceContext, roleInContext2Role, sumOfDomains, traverseQfd)
@@ -141,6 +141,8 @@ phaseThreeWithMapping_
   -> Maybe StableIdMapping
   -> MP (Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries))
 phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping = do
+  -- Register that we are compiling this model.
+  setModelUnderCompilation (Just id)
   -- SideCar files for all referred models (insofar as they have been compiled with Stable Identifiers yet).
   sideCars <- getSideCars (DomeinFile df) false -- not versioned
   void $ storeDomeinFileInCache (toStableModelUri id) (toStableDomeinFile (DomeinFile df))
@@ -205,6 +207,8 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
       -- Keys are Readable names, values are EnumeratedRoleTypes.
       ((OBJ.fromFoldable $ LIST.catMaybes indexedRoles) `OBJ.union` (collectLocalIndexedRoles dfMapped))
       postponedParts
+  -- Restore the register that that holds the model we have compiled.
+  setModelUnderCompilation Nothing
   pure $ case ei of
     Left e -> Left e
     Right _ -> Right (Tuple dfr invertedQueries)
@@ -832,7 +836,7 @@ handlePostponedStateQualifiedParts = do
       Nothing -> pure Nothing
       Just qfd -> Just <$> roleIdentificationToQueryFunctionDescription qfd start
     objectMustBeRole objectQfd start end
-    hasNotificationAspect <- lift2 ((roleIdentification2context user) ###>> hasContextAspect (ContextType contextWithNotification))
+    hasNotificationAspect <- lift2 ((roleIdentification2context user) ###>> hasContextAspect (ContextType READABLE.contextWithNotification))
     if hasNotificationAspect then pure unit
     else lift2 $ addWarning $ show $ NoNotificationAspect (roleIdentification2context user) start end
     modifyAllStates
