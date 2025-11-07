@@ -29,6 +29,7 @@ module Perspectives.Sidecar.NormalizeTypeNames
   , getSideCars
   , getinstalledModelCuids
   , normalize
+  , normalizeInvertedQueries
   , normalizeTypeNames
   , normalizeTypes
   ) where
@@ -51,7 +52,9 @@ import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), Upstr
 import Perspectives.Identifiers (splitTypeUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding)
-import Perspectives.InvertedQuery (InvertedQuery)
+import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..))
+import Perspectives.InvertedQuery.Storable (StoredQueries, StorableInvertedQuery)
+import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey(..), deserializeInvertedQueryKey, serializeInvertedQueryKey)
 import Perspectives.ModelDependencies (modelURIReadable, modelsInUse, versionedModelURI)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (toStableDomeinFile)
@@ -97,6 +100,14 @@ normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
   let perspMap = buildPerspectiveIdMap df env0
   -- Run normalization with full environment
   pure $ toStableDomeinFile $ unwrap $ runReaderT (normalizeTypeNames df) { sidecars, perspMap }
+
+normalizeInvertedQueries :: DomeinFile Readable -> StableIdMapping -> StoredQueries -> MonadPerspectives StoredQueries
+normalizeInvertedQueries df@(DomeinFile { namespace, referredModels }) mapping invertedQueries = do
+  sidecars <- Map.insert namespace mapping <$> getSideCars df false
+  -- Pre-compute a mapping from old perspective ids to stable ones using the sidecars only
+  let env0 = { sidecars, perspMap: OBJ.fromFoldable [] }
+  -- Run normalization with full environment
+  pure $ unwrap $ runReaderT (traverse normalizeStorableInvertedQuery invertedQueries) env0
 
 type StableIdMappingForModel = (Map.Map (ModelUri Readable) (ModelUri Stable))
 
@@ -664,7 +675,15 @@ instance normalizeSeparateInvertedQueryInst :: Normalize SeparateInvertedQuery w
     pure $ OnPropertyDelta invertedQueryKeys' typeName' invertedQuery'
 
 instance normalizeInvertedQueryInst :: Normalize InvertedQuery where
-  normalize invertedQuery = pure invertedQuery
+  normalize (InvertedQuery r) = do
+    description' <- normalize r.description
+    users' <- for r.users fqn2tid
+    states' <- for r.states fqn2tid
+    statesPerProperty' <- EM.fromFoldable <$> for (EM.toUnfoldable r.statesPerProperty) \(Tuple pt sps) -> Tuple <$> fqn2tid pt <*> for sps fqn2tid
+    pure $ InvertedQuery r { description = description', users = users', states = states', statesPerProperty = statesPerProperty' }
+
+instance Normalize QueryWithAKink where
+  normalize (ZQ backwards forwards) = ZQ <$> traverse normalize backwards <*> traverse normalize forwards
 
 instance normalizeInvertedQueryKeyInst :: Normalize InvertedQueryKey where
   normalize (InvertedQueryKey contextType1 contextType2 enumeratedRoleType) =
@@ -824,6 +843,28 @@ instance Normalize StateDependentPerspective where
     currentContextCalculation' <- normalize sdp.currentContextCalculation
     pure $ RolePerspective sdp { properties = properties', currentContextCalculation = currentContextCalculation' }
 
+instance Normalize RunTimeInvertedQueryKey where
+  normalize (RTPropertyKey { property, role }) =
+    (\p r -> RTPropertyKey { property: p, role: r }) <$> fqn2tid property <*> fqn2tid role
+  normalize (RTContextKey { role_origin, context_destination }) =
+    (\r c -> RTContextKey { role_origin: r, context_destination: c }) <$> fqn2tid role_origin <*> fqn2tid context_destination
+  normalize (RTRoleKey { context_origin, role_destination }) =
+    (\c r -> RTRoleKey { context_origin: c, role_destination: r }) <$> fqn2tid context_origin <*> fqn2tid role_destination
+  normalize (RTFillerKey { filledRole_origin, filledContext_origin, fillerRole_destination, fillerContext_destination }) =
+    (\fro fco fde fcd -> RTFillerKey { filledRole_origin: fro, filledContext_origin: fco, fillerRole_destination: fde, fillerContext_destination: fcd }) <$> fqn2tid filledRole_origin <*> fqn2tid filledContext_origin <*> fqn2tid fillerRole_destination <*> fqn2tid fillerContext_destination
+  normalize (RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }) =
+    (\fro fco fde fcd -> RTFilledKey { fillerRole_origin: fro, fillerContext_origin: fco, filledRole_destination: fde, filledContext_destination: fcd }) <$> fqn2tid fillerRole_origin <*> fqn2tid fillerContext_origin <*> fqn2tid filledRole_destination <*> fqn2tid filledContext_destination
+
+normalizeStorableInvertedQuery :: StorableInvertedQuery -> WithSideCars StorableInvertedQuery
+normalizeStorableInvertedQuery siq@{ queryType, keys, query, model } = do
+  keys' <- do
+    deserialisedKeys <- pure $ catMaybes (deserializeInvertedQueryKey queryType <$> keys)
+    readableKeys <- for deserialisedKeys normalize
+    pure $ serializeInvertedQueryKey <$> readableKeys
+  query' <- normalize query
+  model' <- fqn2tid model
+  pure { queryType, query: query', keys: keys', model: model' }
+
 -- Helper for widget fields (cannot have an instance for a type synonym record)
 normalizeWidgetCommonFields :: WidgetCommonFieldsDef -> WithSideCars WidgetCommonFieldsDef
 normalizeWidgetCommonFields w = do
@@ -876,3 +917,4 @@ buildPerspectiveIdMap (DomeinFile dfr) env0 =
           mkTuples ownerTid cr.perspectives
   in
     OBJ.fromFoldable (erTuples <> crTuples)
+

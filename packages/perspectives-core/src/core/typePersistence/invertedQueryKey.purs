@@ -24,10 +24,18 @@ module Perspectives.InvertedQueryKey where
 
 import Prelude
 
+import Data.Maybe (Maybe(..))
+import Data.Array (filter, toUnfoldable)
+import Data.List (List(..))
 import Data.Newtype (unwrap)
+import Data.String (Pattern(..), split)
+-- import Data.String.Regex.Unsafe (unsafeRegex)
 import Foreign (ForeignError(..), fail, F)
-import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType)
+import Perspectives.Representation.Class.Cacheable (EnumeratedPropertyType(..), EnumeratedRoleType(..))
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType)
 import Simple.JSON (class ReadForeign, class WriteForeign, read', write)
+
+-- import Web.HTML.HTMLKeygenElement (keytype)
 
 -----------------------------------------------------------
 -- RUNTIME KEYS FOR INVERTED QUERIES
@@ -118,3 +126,58 @@ serializeInvertedQueryKey (RTFillerKey { filledRole_origin, filledContext_origin
   unwrap filledRole_origin <> unwrap filledContext_origin <> unwrap fillerRole_destination <> unwrap fillerContext_destination
 serializeInvertedQueryKey (RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }) =
   unwrap fillerRole_origin <> unwrap fillerContext_origin <> unwrap filledRole_destination <> unwrap filledContext_destination
+
+deserializeInvertedQueryKey :: String -> String -> Maybe RunTimeInvertedQueryKey
+deserializeInvertedQueryKey keyType s =
+  let
+    parts = filter (_ /= "") (split (Pattern "model://") s)
+
+    lst :: List String
+    lst = toUnfoldable parts
+  in
+    case keyType of
+      "RTPropertyKey" ->
+        case lst of
+          Cons property (Cons role Nil) ->
+            Just $ RTPropertyKey
+              { property: EnumeratedPropertyType ("model://" <> property)
+              , role: EnumeratedRoleType ("model://" <> role)
+              }
+          _ -> Nothing
+      "RTRoleKey" ->
+        case lst of
+          Cons context_origin (Cons role_destination Nil) ->
+            Just $ RTRoleKey
+              { context_origin: ContextType ("model://" <> context_origin)
+              , role_destination: EnumeratedRoleType ("model://" <> role_destination)
+              }
+          _ -> Nothing
+      "RTContextKey" ->
+        case lst of
+          Cons role_origin (Cons context_destination Nil) ->
+            Just $ RTContextKey
+              { role_origin: EnumeratedRoleType ("model://" <> role_origin)
+              , context_destination: ContextType ("model://" <> context_destination)
+              }
+          _ -> Nothing
+      "RTFillerKey" ->
+        case lst of
+          Cons filledRole_origin (Cons filledContext_origin (Cons fillerRole_destination (Cons fillerContext_destination Nil))) ->
+            Just $ RTFillerKey
+              { filledRole_origin: EnumeratedRoleType ("model://" <> filledRole_origin)
+              , filledContext_origin: ContextType ("model://" <> filledContext_origin)
+              , fillerRole_destination: EnumeratedRoleType ("model://" <> fillerRole_destination)
+              , fillerContext_destination: ContextType ("model://" <> fillerContext_destination)
+              }
+          _ -> Nothing
+      "RTFilledKey" ->
+        case lst of
+          Cons fillerRole_origin (Cons fillerContext_origin (Cons filledRole_destination (Cons filledContext_destination Nil))) ->
+            Just $ RTFilledKey
+              { fillerRole_origin: EnumeratedRoleType ("model://" <> fillerRole_origin)
+              , fillerContext_origin: ContextType ("model://" <> fillerContext_origin)
+              , filledRole_destination: EnumeratedRoleType ("model://" <> filledRole_destination)
+              , filledContext_destination: ContextType ("model://" <> filledContext_destination)
+              }
+          _ -> Nothing
+      _ -> Nothing

@@ -50,7 +50,7 @@ import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwoState, runPhaseTwo_', toSt
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors, PerspectivesError(..))
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.SideCar.PhantomTypedNewtypes (Readable)
-import Perspectives.Sidecar.NormalizeTypeNames (StableIdMappingForModel, getinstalledModelCuids, normalizeTypes)
+import Perspectives.Sidecar.NormalizeTypeNames (StableIdMappingForModel, getinstalledModelCuids, normalizeInvertedQueries, normalizeTypes)
 import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, fromLocalModels, fromRepository, idUriForContext, loadStableMapping)
 import Perspectives.Sidecar.UniqueTypeNames as UTN
 import Prelude (bind, discard, pure, show, ($), (<<<), (==), (>=>))
@@ -132,7 +132,9 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
 
                         if saveInCache then void $ lift $ storeDomeinFileInCache (toStableModelUri id) normalizedDf else pure unit
 
-                        pure $ Right $ Tuple normalizedDf (Tuple invertedQueries mapping2)
+                        normalizedInvertedQueries <- lift $ normalizeInvertedQueries df mapping2 invertedQueries
+
+                        pure $ Right $ Tuple normalizedDf (Tuple normalizedInvertedQueries mapping2)
                       else
                         pure $ Left typeCheckErrors
             else
