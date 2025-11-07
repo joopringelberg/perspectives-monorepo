@@ -21,9 +21,10 @@
 -- END LICENSE
 
 module Perspectives.Representation.Class.PersistentType
-  ( module Perspectives.Representation.Class.PersistentType
-  , module Perspectives.Couchdb.Revision
+  ( module Perspectives.Couchdb.Revision
+  , module Perspectives.Representation.Class.PersistentType
   , module Perspectives.Representation.TypeIdentifiers
+  , readable2stable
   ) where
 
 import Perspectives.Couchdb.Revision
@@ -37,7 +38,6 @@ import Data.Time.Duration (Milliseconds(..))
 import Effect.AVar (AVar)
 import Effect.Aff (delay)
 import Effect.Aff.AVar (empty, put, read)
-import Effect.Class.Console (log)
 import Effect.Exception (error)
 import Foreign.Object (insert, lookup) as FO
 import Foreign.Object (lookup)
@@ -77,35 +77,41 @@ getPerspectType id = do
       -- This is a proxy for having a Stable type (it works for the system models).
       Just _ -> pure id
       -- No Stable type, so we need to switch, unless this model is under compilation.
-      Nothing -> do
-        mu <- getModelUnderCompilation
-        case mu of
-          Just compilingModelUri | compilingModelUri == ModelUri modelUri -> pure id
-          _ -> switch id
+      Nothing -> readable2stable id
   case typeUri2ModelUri (unwrap id') of
     Nothing -> throwError (error $ "getPerspectType cannot retrieve type with incorrectly formed id: '" <> show id <> "'.")
     (Just ns) -> retrieveFromDomein id' (ModelUri ns)
-  where
-  switch :: i -> MonadPerspectives i
-  switch i0 = do
-    -- Create a hotline for this specific request.
-    -- Fill it with a Fix message.
-    hotline <- lift $ empty
-    lift $ put (Fix (toTypeToBeMapped i0)) hotline
-    typeToBeFixed <- getTypeToBeFixed
-    -- Push the hotline into the coordination AVar so it will be picked up by the fixer.
-    lift $ put (TypeFixingHotline hotline) typeToBeFixed
-    -- Wait for the fixer to pick up the Fix and post the result or an error.
-    hotlineOrError <- waitForHotline hotline
-    case hotlineOrError of
-      Right (Fixed (TypeToBeMapped { kind, fqn })) -> do
-        -- lift $ log ("getPerspectType: received Fixed; fqn=" <> fqn)
-        pure (wrap fqn)
-      Left e -> do
-        -- lift $ log ("getPerspectType: TypeFixingError (hotline) for " <> show i0 <> ": " <> e)
-        throwError (error ("getPerspectType: error during type fixing: " <> e))
-      _ -> throwError (error "getPerspectType: unexpected hotline state.")
 
+-- | Convert a Readable type identifier to a Stable one.
+-- | Ensures a type is Stable, unless the model it belongs to is currently under compilation.
+readable2stable :: forall v i. PersistentType v i => i -> MonadPerspectives i
+readable2stable i0 = do
+  case (typeUri2ModelUri (unwrap i0)) of
+    Nothing -> throwError (error $ "getPerspectType cannot retrieve type with incorrectly formed id: '" <> show i0 <> "'.")
+    Just modelUri -> do
+      mu <- getModelUnderCompilation
+      case mu of
+        Just compilingModelUri | compilingModelUri == ModelUri modelUri -> pure i0
+        _ -> do
+          -- Create a hotline for this specific request.
+          -- Fill it with a Fix message.
+          hotline <- lift $ empty
+          lift $ put (Fix (toTypeToBeMapped i0)) hotline
+          typeToBeFixed <- getTypeToBeFixed
+          -- Push the hotline into the coordination AVar so it will be picked up by the fixer.
+          lift $ put (TypeFixingHotline hotline) typeToBeFixed
+          -- Wait for the fixer to pick up the Fix and post the result or an error.
+          hotlineOrError <- waitForHotline hotline
+          case hotlineOrError of
+            Right (Fixed (TypeToBeMapped { kind, fqn })) -> do
+              -- lift $ log ("getPerspectType: received Fixed; fqn=" <> fqn)
+              pure (wrap fqn)
+            Left e -> do
+              -- lift $ log ("getPerspectType: TypeFixingError (hotline) for " <> show i0 <> ": " <> e)
+              throwError (error ("getPerspectType: error during type fixing: " <> e))
+            _ -> throwError (error "getPerspectType: unexpected hotline state.")
+
+  where
   waitForHotline :: AVar TypeFix -> MonadPerspectives (Either String TypeFix)
   waitForHotline hotline = loop false
     where

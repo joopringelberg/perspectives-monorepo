@@ -7,7 +7,7 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
 import Data.Array (catMaybes, concat, cons, difference, filter, filterA, foldM, foldl, fromFoldable, intercalate, null, uncons)
 import Data.FoldableWithIndex (foldlWithIndex)
-import Data.Map (Map, empty, insert, insertWith, lookup, toUnfoldable, values) as Map
+import Data.Map (Map, empty, insert, insertWith, lookup, toUnfoldable, values, fromFoldable) as Map
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Traversable (for, for_, traverse)
@@ -24,6 +24,7 @@ import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, modifyDF, with
 import Perspectives.Query.QueryTypes (Domain(..), RoleInContext, domain2roleInContext, domain2roleType, range, replaceRange, roleInContext2Role)
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
 import Perspectives.Representation.ADT (ADT, allLeavesInADT, equalsOrGeneralises_)
+import Perspectives.Representation.CNF (traverseDPROD)
 import Perspectives.Representation.Class.Identifiable (identifier_)
 import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
 import Perspectives.Representation.Class.Role (allLocalAliases, toConjunctiveNormalForm_)
@@ -33,6 +34,7 @@ import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(.
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), externalRoleType, propertytype2string, roletype2string)
 import Perspectives.Representation.Verbs (RoleVerbList)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
+import Perspectives.Sidecar.ToReadable (SideCarMap, runWithPreloadedSideCars, toReadable)
 import Perspectives.Types.ObjectGetters (allEnumeratedRoles, aspectRoles, aspectsOfRole, equalsOrSpecialisesRoleInContext)
 
 contextualisePerspectives :: PhaseThree Unit
@@ -59,33 +61,29 @@ contextualisePerspectives = do
   contextualisePerspectives'' role@(EnumeratedRole r@{ perspectives, roleAspects, context }) =
     if null roleAspects then pure role
     else do
+      -- Preload sidecars for all subsequent Stable->Readable conversions.
+      sidecars <- lift $ gets _.sidecars
       -- As contextualising requires other EnumeratedRoles that may by now have been 
       -- changed in PhaseTwoState, always retrieve the aspects again from PhaseTwoState!
       -- Only the current role has not yet been modified and can be used as is (because of topological ordering).
+      -- NOTICE that aspects defined in imported models will be Stable, local aspects will be Readable!
       userRoleAspects <- catMaybes <$> traverse getRole roleAspects
       -- Enrich the user role's perspectives with the perspectives of his aspects.
-      perspectives' <- traverse (contextualisePerspective userRoleAspects) perspectives
+      perspectives' <- lift $ lift $ runWithPreloadedSideCars sidecars (traverse (contextualisePerspective userRoleAspects) perspectives)
       -- The roles in the context that are taken as is from context aspects.
       aspectObjectRolesInContext <- lift $ lift (context ###= aspectRoles)
-      -- If an Aspect user role has a perspective on an (Aspect) role that has
-      -- been added _as is_ to the user's context, add that perspective to the 
-      -- user's perspectives.
-      aspectPerspectives <- lift $ lift $ execWriterT (for_ userRoleAspects (writePerspectiveOnAddedRole aspectObjectRolesInContext))
+      -- Aspect user role perspectives that directly apply.
+      aspectPerspectives <- lift $ lift $ runWithPreloadedSideCars sidecars (execWriterT (for_ userRoleAspects (writePerspectiveOnAddedRole aspectObjectRolesInContext)))
+      -- A Map of EnumeratedRoleTypes in the context (including the external role) and each of their Aspect roles.
       rolesWithAspects <- collectRolesWithAspects context
-      -- If an Aspect user role has a perspective on an Aspect Object that is 
-      -- specialised in the context, where the user does not have a perspective on that 
-      -- specialisation, contextualise the perspective:
-      --    * replace its object with the specialised role(s)
-      --    * apply property mappings.
-      -- and add it to the user role.
-      -- We can safely use `perspectives` instead of the enriched `perspectives'`, because we only use the object and that hasn't changed.
-      contextualisedAspectPerspectives <- lift $ lift $ execWriterT (for_ userRoleAspects (writeContextualisedPerspective context perspectives rolesWithAspects))
-
+      -- Contextualised aspect perspectives (specialisation + property mapping).
+      contextualisedAspectPerspectives <- lift $ lift $ runWithPreloadedSideCars sidecars (execWriterT (for_ userRoleAspects (writeContextualisedPerspective context perspectives rolesWithAspects)))
       saveRole (EnumeratedRole r { perspectives = perspectives' <> aspectPerspectives <> contextualisedAspectPerspectives })
 
   saveRole :: EnumeratedRole -> PhaseThree EnumeratedRole
   saveRole r = (modifyDF \(dfr@{ enumeratedRoles }) -> dfr { enumeratedRoles = OBJ.insert (identifier_ r) r enumeratedRoles }) *> pure r
 
+  -- This will cater for aspects defined in the model we're compiling as well as aspects defined in external models.
   getRole :: QT.RoleInContext -> PhaseThree (Maybe EnumeratedRole)
   getRole (QT.RoleInContext { role }) = do
     mRole <- (getsDF \{ enumeratedRoles } -> OBJ.lookup (unwrap role) enumeratedRoles)
@@ -94,45 +92,66 @@ contextualisePerspectives = do
       _ -> pure mRole
 
   -- Write an aspect user role perspective (unmodified) if its object generalises (or is equal to) one of the aspect roles that were added to the context (potentalObjects).
-  writePerspectiveOnAddedRole :: Array EnumeratedRoleType -> EnumeratedRole -> WriterT (Array Perspective) MP Unit
-  writePerspectiveOnAddedRole potentialObjects (EnumeratedRole { perspectives: aspectUserPerspectives }) =
+  -- The EnumeratedRole is an aspect role of the user role. It may be written in Stable or Readable format.
+  -- potentialObjects: the roles in the context that were added as is from context aspect roles. May be Stable or Readable.
+  writePerspectiveOnAddedRole :: Array EnumeratedRoleType -> EnumeratedRole -> WriterT (Array Perspective) (StateT SideCarMap MP) Unit
+  writePerspectiveOnAddedRole potentialObjects (EnumeratedRole { perspectives: aspectUserPerspectives }) = do
+    readablePotentialObjects <- lift $ traverse toReadable potentialObjects
     for_ aspectUserPerspectives \(p@(Perspective { object: aspectUserPerspectiveObject })) -> do
       -- Include fillers in the expansion.
-      aspectPerspectivesObjectDNF <- lift $ toConjunctiveNormalForm_ (unsafePartial domain2roleInContext $ range aspectUserPerspectiveObject)
+      aspectPerspectivesObjectDNF <- lift $ lift $ toConjunctiveNormalForm_ (unsafePartial domain2roleInContext $ range aspectUserPerspectiveObject)
+      readableAspectPerspectivesObjectDNF <- lift $ traverseDPROD toReadable aspectPerspectivesObjectDNF
       found <- not <<< null <$> filterA
-        ( lift <<<
-            ( \(potentialObject :: EnumeratedRoleType) -> do
-                expandedPotentialObject <- getEnumeratedRole potentialObject >>= pure <<< _.completeType <<< unwrap
-                -- expandedAspectPerspectivesObject -> expandedPotentialObject
-                pure (aspectPerspectivesObjectDNF `equalsOrGeneralises_` expandedPotentialObject)
-            )
+        ( ( \(potentialObject :: EnumeratedRoleType) -> do
+              expandedPotentialObject <- (lift $ lift $ getEnumeratedRole potentialObject) >>= pure <<< _.completeType <<< unwrap
+              -- expandedAspectPerspectivesObject -> expandedPotentialObject
+              -- NOTICE that both ADTs may be in different formats (Stable vs Readable). All combinations can occur.
+              pure (readableAspectPerspectivesObjectDNF `equalsOrGeneralises_` expandedPotentialObject)
+          )
         )
-        potentialObjects
+        readablePotentialObjects
       if found then tell [ p ]
       else pure unit
 
   -- Write an aspect user role perspective (contextualised) if its object is specialised in the context,
   -- but only if the user role's own perspectives do not cover that specialisation.
-  writeContextualisedPerspective :: ContextType -> Array Perspective -> RolesWithAspects -> EnumeratedRole -> WriterT (Array Perspective) MP Unit
+  -- rolesWithAspects: a Map of EnumeratedRoleTypes in the context (including the external role) and each of their Aspect roles.
+  -- Notice that the Aspect roles in rolesWithAspects may be defined in imported models (Stable) or locally (Readable).
+  -- The last argument is an aspect role of the user role. It may be written in Stable or Readable format. Hence, `aspectUserPerspectives` are potential perspectives to contextualise.
+  writeContextualisedPerspective :: ContextType -> Array Perspective -> RolesWithAspects -> EnumeratedRole -> WriterT (Array Perspective) (StateT SideCarMap MP) Unit
   writeContextualisedPerspective context ownPerspectives rolesWithAspects (EnumeratedRole { perspectives: aspectUserPerspectives }) = do
-    (substitutions :: Map.Map EnumeratedRoleType (Array EnumeratedRoleType)) <- pure $ invertRolesWithAspects rolesWithAspects
-    for_ aspectUserPerspectives
-      \(Perspective precord@{ object, propertyVerbs }) -> do
-        rolesInObject <- pure $ allLeavesInADT (roleInContext2Role <$> (unsafePartial domain2roleInContext $ range object))
-        if null (rolesInObject `difference` (concat <$> fromFoldable $ Map.values rolesWithAspects))
+    -- substitutions: Map of AspectRoleType to the RoleTypes in context that have that aspect. May be Stable or Readable.
+    readableRolesWithAspects <- Map.fromFoldable <$>
+      ( traverse
+          ( \(Tuple aspectRole specialisedRoles) ->
+              do
+                aspectRole' <- lift $ toReadable aspectRole
+                specialisedRoles' <- lift $ traverse toReadable specialisedRoles
+                pure (Tuple aspectRole' specialisedRoles')
+          )
+          ((Map.toUnfoldable rolesWithAspects) :: Array (Tuple EnumeratedRoleType (Array EnumeratedRoleType)))
+      )
+    (substitutions :: Map.Map EnumeratedRoleType (Array EnumeratedRoleType)) <- pure $ invertRolesWithAspects readableRolesWithAspects
+    for_ aspectUserPerspectives -- A potential perspective to contextualise.
+
+      \(Perspective precord@{ object: aspectObject, propertyVerbs }) -> do
+        readableAspectObject <- lift $ toReadable (unsafePartial domain2roleInContext $ range aspectObject)
+        -- As aspect perspectives may be defined in imported models, their object may be Stable.
+        readableRolesInObject <- pure $ allLeavesInADT (roleInContext2Role <$> readableAspectObject)
+        if null (readableRolesInObject `difference` (concat <$> fromFoldable $ Map.values readableRolesWithAspects))
         -- all role types in the aspect object can be substituted with role types in the context we contextualise in.
         then do
           -- Now compute all objects we can create by substituting the roles in the aspect object with roles in the context.
-          contextualisedObjects :: Array (ADT RoleInContext) <- pure $ computeAllContextualisedObjects (unsafePartial domain2roleInContext $ range object) (Map.toUnfoldable substitutions)
-          for_ contextualisedObjects \contextualisedObject -> do
+          readableContextualisedObjects :: Array (ADT RoleInContext) <- pure $ computeAllContextualisedObjects readableAspectObject (Map.toUnfoldable substitutions)
+          for_ readableContextualisedObjects \contextualisedObject -> do
             (roleTypes :: Array RoleType) <- pure (ENR <$> allLeavesInADT (roleInContext2Role <$> contextualisedObject))
             covered <- lift $ coveredByOwnPerspectives contextualisedObject
             if covered then pure unit
             else do
-              propertyVerbs' <- lift $ applyPropertyMapping contextualisedObject propertyVerbs
+              propertyVerbs' <- lift $ lift $ applyPropertyMapping contextualisedObject propertyVerbs
               tell
                 [ Perspective precord
-                    { object = replaceRange object (RDOM contextualisedObject)
+                    { object = replaceRange aspectObject (RDOM contextualisedObject)
                     , roleTypes = roleTypes
                     , displayName = (intercalate ", " (typeUri2LocalName_ <<< roletype2string <$> roleTypes))
                     -- Apply property mappings found in the contextualisedObject ADT to the propertyVerbs.
@@ -158,6 +177,7 @@ contextualisePerspectives = do
             tail
 
     -- Retrieve the property mappings in the ADT and replace any propertytype in the PropertyVerbs with its local destination property.
+    -- TODO: controleer Readable - Stable.
     applyPropertyMapping :: ADT RoleInContext -> EncodableMap StateSpec (Array PropertyVerbs) -> MP (EncodableMap StateSpec (Array PropertyVerbs))
     applyPropertyMapping adt pverbs = do
       (aliases :: OBJ.Object EnumeratedPropertyType) <- OBJ.fromFoldable <$> allLocalAliases (roleInContext2Role <$> adt)
@@ -173,14 +193,15 @@ contextualisePerspectives = do
 
     -- None of the perspectives in `ownPerspectives` (those of the specialised user role) is on an object (whose range) equals (or is a generalisation of, 
     -- which is unlikely to happen) the contextualised object ADT.
-    coveredByOwnPerspectives :: ADT QT.RoleInContext -> MP Boolean
-    coveredByOwnPerspectives objectADT = foldM
+    coveredByOwnPerspectives :: ADT QT.RoleInContext -> StateT SideCarMap MP Boolean
+    coveredByOwnPerspectives readableObjectADT = foldM
       ( \found (ownPerspectiveObjectADT :: ADT RoleInContext) ->
           if found then pure true
           -- Does ownPerspectiveObjectADT cover objectADT?
           -- objectADT -> ownPerspectiveObjectADT
           -- e.g. objectADT is an Aspect of ownPerspectiveObjectADT, or fills it.
-          else objectADT `equalsOrSpecialisesRoleInContext` ownPerspectiveObjectADT
+          -- Notice that objectADT may be in Stable form, whereas ownPerspectiveObjectADT will be in Readable form.
+          else lift (readableObjectADT `equalsOrSpecialisesRoleInContext` ownPerspectiveObjectADT)
       )
       false
       (ownPerspectives <#> (\(Perspective { object }) -> unsafePartial domain2roleInContext $ range object))
@@ -189,6 +210,7 @@ contextualisePerspectives = do
     --   (\(ownPerspectiveObjectADT :: ADT RoleInContext) -> ownPerspectiveObjectADT `equalsOrGeneralisesRoleInContext` objectADT)
     --   (ownPerspectives <#> (\(Perspective{object}) -> unsafePartial domain2roleInContext $ range object))
 
+    -- Invert the RolesWithAspects map to a map of AspectRole to the roles in context that have that aspect.
     invertRolesWithAspects :: RolesWithAspects -> Map.Map EnumeratedRoleType (Array EnumeratedRoleType)
     invertRolesWithAspects rwas = foldlWithIndex
       ( \(erole :: EnumeratedRoleType) (accum :: Map.Map EnumeratedRoleType (Array EnumeratedRoleType)) (aspectRoles :: Array EnumeratedRoleType) ->
@@ -197,29 +219,28 @@ contextualisePerspectives = do
       Map.empty
       rwas
 
-  contextualisePerspective :: Array EnumeratedRole -> Perspective -> PhaseThree Perspective
-  contextualisePerspective aspects p = foldM contextualiseWithAspect p aspects
-
+  -- The perspective p is defined in the model we're compiling, on some user role.
+  contextualisePerspective :: Array EnumeratedRole -> Perspective -> StateT SideCarMap MP Perspective
+  contextualisePerspective aspects localPerspective = foldM contextualiseWithAspect localPerspective aspects
     where
-    contextualiseWithAspect :: Perspective -> EnumeratedRole -> PhaseThree Perspective
-    contextualiseWithAspect perspective (EnumeratedRole { perspectives: aspectPerspectives }) =
-      foldM contextualiseWithAspectPerspective perspective aspectPerspectives
+    contextualiseWithAspect :: Perspective -> EnumeratedRole -> StateT SideCarMap MP Perspective
+    contextualiseWithAspect localPerspective' (EnumeratedRole { perspectives: aspectPerspectives }) =
+      foldM contextualiseWithAspectPerspective localPerspective' aspectPerspectives
 
-    contextualiseWithAspectPerspective :: Perspective -> Perspective -> PhaseThree Perspective
+    contextualiseWithAspectPerspective :: Perspective -> Perspective -> StateT SideCarMap MP Perspective
     contextualiseWithAspectPerspective
-      perspective@(Perspective r@{ object, roleVerbs, propertyVerbs, actions })
+      localPerspective'@(Perspective localPerspectiveRecord@{ object, roleVerbs, propertyVerbs, actions })
       (Perspective { actions: aspectActions, object: aspectObject, roleVerbs: aspectRoleVerbs, propertyVerbs: aspectPropertyVerbs }) = do
-      -- is the object of the perspective a specialisation of the object of the aspect perspective?
-      -- aspectObject -> object
-      isASpecialisation <- lift $ lift ((unsafePartial domain2roleType $ range object) `equalsOrSpecialisesRoleInContext` (unsafePartial domain2roleType $ range aspectObject))
+      -- Direct Stable->Readable conversion using preloaded sidecars state.
+      readableAspectObject <- toReadable (unsafePartial domain2roleType $ range aspectObject)
+      isASpecialisation <- lift ((unsafePartial domain2roleType $ range object) `equalsOrSpecialisesRoleInContext` readableAspectObject)
       if isASpecialisation then
-        pure $ Perspective r
+        pure $ Perspective localPerspectiveRecord
           { roleVerbs = addAspectRoleVerbs roleVerbs aspectRoleVerbs
           , propertyVerbs = addAspectPropertyVerbs propertyVerbs aspectPropertyVerbs
           , actions = actions <> aspectActions
           }
-      -- We cannot establish here that the aspect perspective should be added to the role.
-      else pure perspective
+      else pure localPerspective'
 
     -- In this situation we have established that the context is a specialisation of the aspect context, the
     -- subject role is a specialisation of the aspect subject role, and the 

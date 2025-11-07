@@ -129,7 +129,7 @@ forkedTypeFixer typeToBeFixed state = do
                   put (TypeFixingError (show e)) hotline
                 Right (Tuple mapped env') -> do
                   -- Return the Fixed value to the requester.
-                  log ("On the fly type mapping completed for fqn=" <> fqn)
+                  -- log ("On the fly type mapping completed for fqn=" <> fqn)
                   put (Fixed mapped) hotline
                   -- Merge new env into shared envVar atomically.
                   cur <- take envVar

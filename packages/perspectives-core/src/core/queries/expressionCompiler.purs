@@ -55,7 +55,7 @@ import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), UnaryStep(..), VarBinding(..))
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
 import Perspectives.Parsing.Arc.PhaseThree.SetInvertedQueries (setInvertedQueries)
-import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForPropertyType, lookForUnqualifiedPropertyType)
+import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForPropertyType, lookForUnqualifiedPropertyType, lookForUnqualifiedRoleTypeOfADT)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (CurrentlyCalculated(..), PhaseThree, addBinding, getsDF, isBeingCalculated, isIndexedContextInCurrentCompilation, isIndexedRoleInCurrentCompilation, lift2, lookupVariableBinding, loopErrorMessage, throwError, withCurrentCalculation, withFrame)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -77,7 +77,7 @@ import Perspectives.Representation.ThreeValuedLogic (and, or) as THREE
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as RTI
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
-import Perspectives.Types.ObjectGetters (allTypesInContextADT, allTypesInRoleADT, enumeratedRoleContextType, equals, isUnlinked_, lookForRoleTypeOfADT, lookForUnqualifiedRoleTypeOfADT, qualifyContextInDomain, qualifyEnumeratedRoleInDomain, qualifyRoleInDomain)
+import Perspectives.Types.ObjectGetters (allTypesInContextADT, allTypesInRoleADT, enumeratedRoleContextType, equals, isUnlinked_, lookForRoleTypeOfADT, qualifyContextInDomain, qualifyEnumeratedRoleInDomain, qualifyRoleInDomain)
 import Prelude (bind, discard, eq, map, pure, show, unit, void, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>>=), (||))
 
 ------------------------------------------------------------------------------------
@@ -349,7 +349,7 @@ compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
                           if isTypeUri ident then
                             if isExternalRole ident then pure [ ENR $ EnumeratedRoleType ident ]
                             else lift2 $ runArrayT $ lookForRoleTypeOfADT ident c
-                          else lift2 $ runArrayT $ lookForUnqualifiedRoleTypeOfADT ident c
+                          else lift2 $ lookForUnqualifiedRoleTypeOfADT ident c
                         case uncons rts of
                           Nothing -> throwError $ ContextHasNoRole c ident pos (endOf $ Simple s)
                           Just { head, tail } ->
@@ -397,6 +397,8 @@ compileSimpleStep currentDomain s@(Filler pos membeddingContext) = do
             -- Try to qualify the name within the Domain.
             else do
               { id } <- lift $ gets _.dfr
+              -- The namespace is Readable here, but we can safely pretend it is Stable, because we have the DomeinFile in cache in Readable form.
+              -- As typeName is Readable, too, it can be looked up in it.
               (qnames :: Array ContextType) <- lift2 $ runArrayT $ qualifyContextInDomain context (ModelUri $ unwrap id)
               case head qnames of
                 Nothing -> throwError $ UnknownContext pos (ContextType context)
@@ -413,6 +415,8 @@ compileSimpleStep currentDomain s@(Filled pos binderName membeddingContext) = do
         -- Try to qualify the name within the Domain.
         else do
           { id } <- lift $ gets _.dfr
+          -- The namespace is Readable here, but we can safely pretend it is Stable, because we have the DomeinFile in cache in Readable form.
+          -- As typeName is Readable, too, it can be looked up in it.
           (qnames :: Array EnumeratedRoleType) <- lift2 $ runArrayT $ qualifyEnumeratedRoleInDomain binderName (ModelUri $ unwrap id)
           case head qnames of
             Nothing -> throwError $ UnknownRole pos binderName
@@ -429,6 +433,8 @@ compileSimpleStep currentDomain s@(Filled pos binderName membeddingContext) = do
           -- Try to qualify the name within the Domain.
           else do
             { id } <- lift $ gets _.dfr
+            -- The namespace is Readable here, but we can safely pretend it is Stable, because we have the DomeinFile in cache in Readable form.
+            -- As typeName is Readable, too, it can be looked up in it.
             (qnames :: Array ContextType) <- lift2 $ runArrayT $ qualifyContextInDomain context (ModelUri $ unwrap id)
             case head qnames of
               Nothing -> throwError $ UnknownContext pos (ContextType context)
@@ -451,6 +457,8 @@ compileSimpleStep currentDomain s@(TypeOfContext pos) = do
 
 compileSimpleStep currentDomain s@(RoleTypeIndividual pos typeName) = do
   nameSpace <- getsDF _.id
+  -- The namespace is Readable here, but we can safely pretend it is Stable, because we have the DomeinFile in cache in Readable form.
+  -- As typeName is Readable, too, it can be looked up in it.
   typeCandidates <- lift $ lift ((ModelUri $ unwrap nameSpace) ###= qualifyRoleInDomain typeName)
   case length typeCandidates, head typeCandidates of
     0, _ -> throwError $ UnknownRole pos typeName
@@ -459,6 +467,8 @@ compileSimpleStep currentDomain s@(RoleTypeIndividual pos typeName) = do
 
 compileSimpleStep currentDomain s@(ContextTypeIndividual pos typeName) = do
   nameSpace <- getsDF _.id
+  -- The namespace is Readable here, but we can safely pretend it is Stable, because we have the DomeinFile in cache in Readable form.
+  -- As typeName is Readable, too, it can be looked up in it.
   typeCandidates <- lift $ lift ((ModelUri $ unwrap nameSpace) ###= qualifyContextInDomain typeName)
   case length typeCandidates, head typeCandidates of
     0, _ -> throwError $ UnknownContext pos (ContextType typeName)
@@ -480,6 +490,8 @@ compileSimpleStep currentDomain s@(SpecialisesRoleType pos roleName) = do
         -- Try to qualify the name within the Domain.
         else do
           { id } <- lift $ gets _.dfr
+          -- The namespace is Readable here, but we can safely pretend it is Stable, because we have the DomeinFile in cache in Readable form.
+          -- As typeName is Readable, too, it can be looked up in it.
           (qnames :: Array EnumeratedRoleType) <- lift2 $ runArrayT $ qualifyEnumeratedRoleInDomain roleName (ModelUri $ unwrap id)
           case head qnames of
             Nothing -> throwError $ UnknownRole pos roleName

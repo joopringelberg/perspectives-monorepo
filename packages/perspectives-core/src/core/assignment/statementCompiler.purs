@@ -35,7 +35,6 @@ import Data.Traversable (for_, traverse)
 import Foreign.Object (Object, keys, values)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Checking.Authorization (roleHasPerspectiveOnRoleWithVerb)
-import Perspectives.CoreTypes ((###=))
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.External.CoreModuleList (isExternalCoreModule)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionCardinality, lookupHiddenFunctionIsEffect, lookupHiddenFunctionNArgs)
@@ -43,7 +42,7 @@ import Perspectives.Identifiers (areLastSegmentsOf, buitenRol, typeUri2ModelUri,
 import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (Step, VarBinding(..))
-import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType)
+import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType, lookForUnqualifiedRoleTypeOfADT, readableRoletype2stable)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, addBinding, getsDF, lift2, throwError, withFrame)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..), Statements(..))
@@ -54,7 +53,7 @@ import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equalsOrGeneralises_, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.Class.Identifiable (identifier)
-import Perspectives.Representation.Class.PersistentType (getEnumeratedProperty, getEnumeratedRole)
+import Perspectives.Representation.Class.PersistentType (getEnumeratedProperty, getEnumeratedRole, readable2stable)
 import Perspectives.Representation.Class.Property (range) as PT
 import Perspectives.Representation.Class.Role (completeDeclaredFillerRestriction, roleKindOfRoleType, toConjunctiveNormalForm_)
 import Perspectives.Representation.Class.Role (roleTypeIsFunctional) as ROLE
@@ -64,7 +63,7 @@ import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Verbs
-import Perspectives.Types.ObjectGetters (externalRole, generalisesRoleType_, hasPerspectiveOnPropertyWithVerb, isDatabaseQueryRole, isEnumeratedProperty, lookForRoleTypeOfADT, lookForUnqualifiedRoleTypeOfADT)
+import Perspectives.Types.ObjectGetters (externalRole, generalisesRoleType_, hasPerspectiveOnPropertyWithVerb, isDatabaseQueryRole, isEnumeratedProperty, lookForRoleTypeOfADT)
 import Prelude (bind, discard, pure, show, unit, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>), (>>=), (||))
 
 ------------------------------------------------------------------------------------
@@ -402,9 +401,15 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       for_ subjects
         ( \subject -> for_ (roleInContext2Role <$> (allLeavesInADT $ unsafePartial roleRange roleQfd))
             -- I assume the object of the perspective has been compiled.
-            ( \object -> (lift $ lift $ unsafePartial hasPerspectiveOnPropertyWithVerb subject object qualifiedProperty Verbs.DeleteProperty) >>=
-                if _ then pure unit
-                else throwError (UnauthorizedForProperty "Auteur" subject (ENR object) (ENP qualifiedProperty) (Verbs.DeleteProperty) (Just start) (Just end))
+            ( \object ->
+                ( lift $ lift $ do
+                    stableSubject <- readableRoletype2stable subject
+                    stableObject <- readable2stable object
+                    stableProperty <- readable2stable qualifiedProperty
+                    (unsafePartial hasPerspectiveOnPropertyWithVerb stableSubject stableObject stableProperty Verbs.DeleteProperty)
+                ) >>=
+                  if _ then pure unit
+                  else throwError (UnauthorizedForProperty "Auteur" subject (ENR object) (ENP qualifiedProperty) (Verbs.DeleteProperty) (Just start) (Just end))
             )
         )
       pure $ UQD originDomain (QF.DeleteProperty qualifiedProperty) roleQfd originDomain True True
@@ -434,9 +439,15 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       for_ subjects
         ( \subject -> for_ (roleInContext2Role <$> (allLeavesInADT $ unsafePartial roleRange roleQfd))
             -- I assume the object of the perspective has been compiled.
-            ( \object -> (lift $ lift $ unsafePartial hasPerspectiveOnPropertyWithVerb subject object qualifiedProperty verb) >>=
-                if _ then pure unit
-                else throwError (UnauthorizedForProperty "Auteur" subject (ENR object) (ENP qualifiedProperty) verb (Just start) (Just end))
+            ( \object ->
+                ( lift $ lift $ do
+                    stableSubject <- readableRoletype2stable subject
+                    stableObject <- readable2stable object
+                    stableProperty <- readable2stable qualifiedProperty
+                    unsafePartial hasPerspectiveOnPropertyWithVerb stableSubject stableObject stableProperty verb
+                ) >>=
+                  if _ then pure unit
+                  else throwError (UnauthorizedForProperty "Auteur" subject (ENR object) (ENP qualifiedProperty) verb (Just start) (Just end))
             )
         )
       case range valueQfd of
@@ -524,7 +535,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
           (ST (ContextType cid)) -> pure [ ENR (EnumeratedRoleType (cid <> "$External")) ]
           (UET (ContextType cid)) -> pure [ ENR (EnumeratedRoleType (cid <> "$External")) ]
           otherwise -> throwError $ Custom ("Cannot get the external role of a compound type: " <> show otherwise)
-        else lift2 (ct ###= lookForUnqualifiedRoleTypeOfADT roleIdentifier)
+        else lift2 (lookForUnqualifiedRoleTypeOfADT roleIdentifier ct)
       case head rtarr of
         Just et@(ENR _) -> pure et
         Just ct'@(CR _) -> pure ct'
@@ -631,3 +642,4 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
         --   Nothing -> pure (SQD originDomain (QF.DataTypeGetter QF.ContextF) currentcontextDomain True True)
         --   Just embeddingContext -> pure (SQD originDomain (QF.DataTypeGetter QF.ContextF) (CDOM $ ST embeddingContext) True True)
         (Just (stp :: Step)) -> ensureContext subjects stp
+

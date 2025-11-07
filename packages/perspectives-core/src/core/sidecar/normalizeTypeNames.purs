@@ -728,7 +728,8 @@ instance normalizeFormDefInst :: Normalize FormDef where
 instance normalizeMarkDownDefInst :: Normalize MarkDownDef where
   normalize (MarkDownConstantDef r) = do
     condition' <- traverse normalize r.condition
-    pure $ MarkDownConstantDef r { condition = condition' }
+    domain' <- unwrap <$> fqn2tid (ContextType r.domain)
+    pure $ MarkDownConstantDef r { condition = condition', domain = domain' }
   normalize (MarkDownPerspectiveDef r) = do
     widgetFields' <- normalizeWidgetCommonFields r.widgetFields
     conditionProperty' <- traverse fqn2tid r.conditionProperty

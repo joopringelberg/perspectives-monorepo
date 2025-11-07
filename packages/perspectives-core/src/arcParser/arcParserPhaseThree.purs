@@ -37,7 +37,7 @@ import Data.Either (Either(..))
 import Data.Foldable (for_, traverse_)
 import Data.Identity as Identity
 import Data.List (catMaybes, List, concat, filter, filterM, fromFoldable) as LIST
-import Data.Map (Map, fromFoldable, toUnfoldable, values) as Map
+import Data.Map (Map, fromFoldable, singleton, toUnfoldable) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, isNothing, maybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), indexOf)
@@ -87,7 +87,7 @@ import Perspectives.Representation.CNF (toConjunctiveNormalForm)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Identifiable (identifier)
-import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedRole, tryGetPerspectType)
+import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedRole, readable2stable, tryGetPerspectType)
 import Perspectives.Representation.Class.Role (Role(..), allProperties, completeExpandedType, displayNameOfRoleType, getCalculation, getRole, getRoleType, roleADT, roleADTOfRoleType)
 import Perspectives.Representation.Context (Context(..)) as CTXT
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
@@ -105,6 +105,7 @@ import Perspectives.Representation.View (View(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (getSideCars)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
+import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, toReadable)
 import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith)
 import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, hasContextAspect, isPerspectiveOnSelf, roleStates, statesPerProperty, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
@@ -151,28 +152,32 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
   -- The computation depends on these models being installed - which is indeed part of the contract for phase three.
   indexedContexts :: LIST.List (Maybe (Tuple String ContextType)) <- LIST.concat <$>
     ( for
-        (Map.values sideCars)
-        \({ contextIndividuals }) -> for (toUnfoldable contextIndividuals)
+        (Map.toUnfoldable sideCars)
+        \(Tuple modelUri sidecar@{ contextIndividuals }) -> for (toUnfoldable contextIndividuals)
           \(Tuple readableString stableString) -> do
             mIndividual <- lookupIndexedContext stableString
             case mIndividual of
               Nothing -> pure Nothing
               Just individual -> do
                 ctype <- contextType_ individual
-                pure $ Just $ Tuple readableString ctype
+                -- We need readable types, in Phase Three!
+                ctype' <- runWithPreloadedSideCars (Map.singleton (unwrap modelUri) sidecar) (toReadable ctype)
+                pure $ Just $ Tuple readableString ctype'
     )
   -- The Readable identifier of all role individuals from all imported models, combined with their role type.
   -- The computation depends on these models being installed - which is indeed part of the contract for phase three.
   indexedRoles :: LIST.List (Maybe (Tuple String EnumeratedRoleType)) <- LIST.concat <$>
     ( for
-        (Map.values sideCars)
-        \({ roleIndividuals }) -> for (toUnfoldable roleIndividuals)
+        (Map.toUnfoldable sideCars)
+        \(Tuple modelUri sidecar@{ roleIndividuals }) -> for (toUnfoldable roleIndividuals)
           \(Tuple readableString stableString) -> do
             mIndividual <- lookupIndexedRole stableString
             case mIndividual of
               Nothing -> pure Nothing
               Just individual -> do
                 ctype <- roleType_ individual
+                -- We need readable types, in Phase Three!
+                ctype' <- runWithPreloadedSideCars (Map.singleton (unwrap modelUri) sidecar) (toReadable ctype)
                 pure $ Just $ Tuple readableString ctype
     )
   let
@@ -200,6 +205,7 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
           -- As all Calculated roles and Properties are now compiled, we can safely compile public Url calculations.
           compilePublicUrls
           qualifyPropertyReferences
+          -- Everything is qualified now.
           computeCompleteEnumeratedTypes
           handlePostponedStateQualifiedParts
           compileStateQueries
@@ -239,7 +245,7 @@ checkAspectRoleReferences = do
     (checkAspectRoles' df)
   where
   checkAspectRoles' :: DomeinFileRecord Readable -> PhaseThree Unit
-  checkAspectRoles' { contexts } = do
+  checkAspectRoles' { id: modelUri, contexts } = do
     contexts' <- for contexts
       \(CTXT.Context r@{ contextRol, rolInContext, gebruikerRol }) -> do
         contextRol' <- traverse check contextRol
@@ -248,8 +254,25 @@ checkAspectRoleReferences = do
         pure $ CTXT.Context $ r { contextRol = contextRol', rolInContext = rolInContext', gebruikerRol = gebruikerRol' }
     modifyDF \dfr -> dfr { contexts = contexts' }
     where
+    -- An aspect role might be defined in an imported model. As we still deal with Readable names here, we will not find
+    -- them in their DomeinFiles. So if we deal with a type whose ModelUri is different from the current DomeinFile, we have to 
+    -- convert it on the fly to a Stable identifier. Only then can we look up the RoleType.
+    -- Aspect roles from the current DomeinFile will be looked up in its cached version, which is in terms of Readable names.
     check :: RoleType -> PhaseThree RoleType
-    check rt = lift $ lift $ string2RoleType $ roletype2string rt
+    check rt@(ENR ert@(EnumeratedRoleType id)) =
+      if unsafePartial typeUri2ModelUri_ id == unwrap modelUri then lift $ lift $ string2RoleType $ roletype2string rt
+      else do
+        mEnumerated <- try (lift $ lift $ readable2stable ert)
+        case mEnumerated of
+          -- Do not convert to Stable. Phase Three works with Readable names.
+          Right _ -> pure rt
+          Left _ -> do
+            mCalculated <- try (lift $ lift $ readable2stable (CalculatedRoleType id))
+            case mCalculated of
+              Right _ -> pure $ CR (CalculatedRoleType id)
+              Left _ -> throwError $ UnknownRole arcParserStartPosition id
+    -- Calculated roles are ok by construction, here.
+    check rt@(CR _) = pure rt
 
 -- | Qualifies the identifiers used in the filledBy part of an EnumeratedRole declaration.
 -- | A binding is represented as an ADT. We transform all elements of the form `ST segmentedName` in the tree

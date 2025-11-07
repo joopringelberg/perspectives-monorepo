@@ -71,6 +71,7 @@ import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as TI
 import Perspectives.Representation.Verbs (PropertyVerb, RoleVerb)
 import Perspectives.Representation.View (propertyReferences)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
+import Perspectives.Sidecar.ToReadable (runWithSideCars, toReadable)
 import Perspectives.Utilities (addUnique)
 import Prelude (Unit, append, bind, eq, flip, not, pure, show, unit, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>), (||), (<*>))
 
@@ -128,6 +129,8 @@ isPublic = roleKindOfRoleType >=> \rk -> pure (rk == TI.Public || rk == TI.Publi
 ----------------------------------------------------------------------------------------
 ------- FUNCTIONS TO FIND A ROLETYPE WORKING FROM STRINGS OR ADT'S
 ----------------------------------------------------------------------------------------
+-- | If a role with the given qualified name is available in the Context or its (in)direct aspects,
+-- | return it as a RoleType. Thus we determine whether it is Enumerated or Calculated.
 string2RoleType :: String -> MonadPerspectives RoleType
 string2RoleType qualifiedRoleName = getEnumeratedRole (EnumeratedRoleType qualifiedRoleName) *> pure (ENR $ EnumeratedRoleType qualifiedRoleName) <|> pure (CR $ CalculatedRoleType qualifiedRoleName)
 
@@ -139,6 +142,8 @@ string2EnumeratedRoleType qualifiedRoleName = getEnumeratedRole (EnumeratedRoleT
 lookForRoleType :: String -> (ContextType ~~~> RoleType)
 lookForRoleType s c = (lift $ getContext c) >>= pure <<< ContextClass.contextADT >>= lookForRoleTypeOfADT s
 
+-- | String must be fully qualified. 
+-- | The string and the adt must both be either in Readable or in Stable form.
 lookForRoleTypeOfADT :: String -> (ADT ContextType ~~~> RoleType)
 lookForRoleTypeOfADT s = lookForRoleOfADT (roletype2string >>> ((==) s)) s
 
@@ -147,6 +152,7 @@ lookForUnqualifiedRoleType :: String -> ContextType ~~~> RoleType
 lookForUnqualifiedRoleType s c = (lift $ getContext c) >>= pure <<< ContextClass.contextADT >>= lookForUnqualifiedRoleTypeOfADT s
 
 -- | We simply require the Pattern to match the end of the string.
+-- | The string and the adt must both be either in Readable or in Stable form.
 lookForUnqualifiedRoleTypeOfADT :: String -> ADT ContextType ~~~> RoleType
 lookForUnqualifiedRoleTypeOfADT s = lookForRoleOfADT (roletype2string >>> areLastSegmentsOf s) s
 
@@ -594,6 +600,7 @@ qualifyEnumeratedRoleInDomain localName namespace = ArrayT do
     handleDomeinFileError' "qualifyEnumeratedRoleInDomain" []
       \(DomeinFile { enumeratedRoles }) -> pure $ map EnumeratedRoleType (filter (\id -> id `endsWithSegments` localName) (OBJ.keys enumeratedRoles))
 
+-- NOTE: THIS FUNCTION IS NOT USED ANYWHERE CURRENTLY.
 qualifyCalculatedRoleInDomain :: String -> (ModelUri Stable) ~~~> CalculatedRoleType
 qualifyCalculatedRoleInDomain localName namespace = ArrayT do
   (try $ retrieveDomeinFile namespace) >>=
@@ -695,14 +702,16 @@ findPerspective subjectType criterium = execStateT f Nothing
 -- | PARTIAL: can only be used after object of Perspective has been compiled in PhaseThree.
 -- | This function tests whether a user RoleType has a perspective on an object that carries the requested PropertyType.
 hasPerspectiveOnPropertyWithVerb :: Partial => RoleType -> EnumeratedRoleType -> EnumeratedPropertyType -> PropertyVerb -> MonadPerspectives Boolean
-hasPerspectiveOnPropertyWithVerb subjectType roleType property verb =
+hasPerspectiveOnPropertyWithVerb subjectType roleType property verb = do
+  readableProperty <- runWithSideCars (toReadable property)
   isJust <$> findPerspective
     subjectType
     ( \perspective -> do
         a <- pure $ perspectiveSupportsPropertyForVerb perspective (ENP property) verb
+        a' <- pure $ perspectiveSupportsPropertyForVerb perspective (ENP readableProperty) verb
         b <- perspective `isPerspectiveOnRoleType` (ENR roleType)
         c <- perspective `isPerspectiveOnRoleFilledWithRoleType` (ENR roleType)
-        pure (a && (b || c))
+        pure ((a || a') && (b || c))
     )
 
 -- | All role types in a context type that have a perspective on a given object role, with a perspective on the given property.

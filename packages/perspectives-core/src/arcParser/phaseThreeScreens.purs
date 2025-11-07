@@ -44,7 +44,7 @@ import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(.
 import Perspectives.Parsing.Arc.AST (ColumnE(..), FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), WhatE(..), WidgetCommonFields) as AST
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
-import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
+import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_, readableRoletype2stable)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, lift2, modifyDF, throwError, withDomeinFile)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -313,7 +313,8 @@ handleScreens screenEs = do
     -- in its member roleTypes.
     -- So we fetch the user role, get its Perspectives, and find the one that refers to the objectRoleType.
     perspectives <- lift2 $ perspectivesOfRoleType subjectRoleType
-    case find (\(Perspective { roleTypes }) -> isJust $ elemIndex objectRoleType roleTypes) perspectives of
+    stableObjectRoleType <- lift2 $ readableRoletype2stable objectRoleType
+    case find (\(Perspective { roleTypes }) -> isJust $ elemIndex stableObjectRoleType roleTypes) perspectives of
       -- This case is probably that the object and user exist, but the latter
       -- has no perspective on the former!
       Nothing -> do

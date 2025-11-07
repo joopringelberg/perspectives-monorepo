@@ -3,17 +3,18 @@ module Perspectives.Parsing.Arc.PhaseThree.TypeLookup where
 import Control.Monad.State (gets)
 import Control.Monad.Trans.Class (lift)
 import Control.Plus (map)
-import Data.Array (filter)
+import Data.Array (filter, filterA)
 import Data.Traversable (traverse)
+import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Identifiers (areLastSegmentsOf)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree)
 import Perspectives.Query.QueryTypes (roleInContext2Role)
 import Perspectives.Representation.ADT (ADT(..))
-import Perspectives.Representation.Class.PersistentType (getCalculatedRole)
-import Perspectives.Representation.Class.Role (allProperties, roleADT)
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType, PropertyType, RoleType(..), propertytype2string)
-import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, toReadable)
-import Prelude (pure, ($), (<<<), (==), (>>=), (>>>), bind)
+import Perspectives.Representation.Class.PersistentType (getCalculatedRole, readable2stable)
+import Perspectives.Representation.Class.Role (allProperties, allRoles, roleADT)
+import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType, PropertyType, RoleType(..), propertytype2string, roletype2string)
+import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, runWithSideCars, toReadable)
+import Prelude (pure, ($), (<<<), (==), (>>=), (>>>), bind, (>=>), (<$>))
 
 ----------------------------------------------------------------------------------------
 ------- FUNCTIONS TO FIND A PROPERTYTYPE WORKING FROM STRINGS OR ADT'S
@@ -49,3 +50,12 @@ ensurePropertiesAreReadable :: Array PropertyType -> PhaseThree (Array PropertyT
 ensurePropertiesAreReadable props = do
   sideCars <- lift $ gets \s -> s.sidecars
   lift $ lift $ runWithPreloadedSideCars sideCars (traverse toReadable props)
+
+lookForUnqualifiedRoleTypeOfADT :: String -> ADT ContextType -> MonadPerspectives (Array RoleType)
+lookForUnqualifiedRoleTypeOfADT s adt = do
+  roles <- allRoles adt
+  runWithSideCars $ filterA (toReadable >=> roletype2string >>> areLastSegmentsOf s >>> pure) roles
+
+readableRoletype2stable :: RoleType -> MonadPerspectives RoleType
+readableRoletype2stable (CR calculatedType) = CR <$> (readable2stable calculatedType)
+readableRoletype2stable (ENR enumeratedType) = ENR <$> (readable2stable enumeratedType)
