@@ -400,8 +400,7 @@ normalizePerspectiveWithOwner ownerRoleTid (Perspective pr) = do
         pure (Tuple ss' objActs')
     )
   automaticStates' <- traverse fqn2tid pr.automaticStates
-  -- TODO: Dit is een tijdelijke workaround. Zet object terug op object'.
-  let perspSig = qfdSignature pr.object
+  let perspSig = qfdSignature object'
   let stableId = ownerRoleTid <> "_" <> perspSig
   pure $ Perspective pr
     { id = stableId
