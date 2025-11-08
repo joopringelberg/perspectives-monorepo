@@ -1,5 +1,5 @@
 model://perspectives.domains#tiodn6tcyc:
-  version: "5.0"
+  version: "6.0"
   contexts:
     TheWorld:
       translations:
