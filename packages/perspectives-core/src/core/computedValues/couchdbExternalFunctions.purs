@@ -603,6 +603,8 @@ createCouchdbDatabase databaseUrls databaseNames _ =
     >>= handleExternalStatementError "model://perspectives.domains#CreateCouchdbDatabase"
 
 -- | Create a database with all views that are useful for retrieving role- and context instances
+-- | Notice that we require the end user to provide a database url that ends on a slash. Hence,
+-- | namespace ends on a slash, too.
 createEntitiesDatabase :: Array Url -> Array DatabaseName -> Array Namespace -> RoleInstance -> MonadPerspectivesTransaction Unit
 createEntitiesDatabase databaseUrls databaseNames namespaces _ =
   try
@@ -624,7 +626,7 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
             )
           -- dbName is also the url that is provided in a "public Visitor at <location>" declaration.
           -- Hence we can use it to construct an instance of TheWorld in that database.
-          theworldid <- pure (ContextInstance $ "pub:https://" <> namespace <> "/" <> databaseName <> "/#TheWorld")
+          theworldid <- pure (ContextInstance $ "pub:https://" <> namespace <> databaseName <> "/#TheWorld")
           mtheWorld <- lift $ tryGetPerspectContext theworldid
           case mtheWorld of
             Nothing -> do
