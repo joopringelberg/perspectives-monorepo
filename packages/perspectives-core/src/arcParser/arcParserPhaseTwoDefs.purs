@@ -91,7 +91,11 @@ type LoopDetection = Array CurrentlyCalculated
 -- | It also allows for a variable bottom of the monadic stack.
 type PhaseTwo' m = ExceptT MultiplePerspectivesErrors (StateT PhaseTwoState m)
 
-throwError :: forall a m. Monad m => PerspectivesError -> PhaseTwo' m a
+-- | Generalized error throwing helper: works for any monad supporting 'MonadError MultiplePerspectivesErrors'.
+-- | Wraps a single 'PerspectivesError' in an array so it fits the accumulator semantics.
+-- | Generalized error throwing helper: works for any underlying monad; returns an ExceptT specialized to MultiplePerspectivesErrors.
+-- | This is more general than the previous PhaseTwo'-specific signature and can be used wherever an ExceptT MultiplePerspectivesErrors layer exists.
+throwError :: forall a m. Monad m => PerspectivesError -> ExceptT MultiplePerspectivesErrors m a
 throwError = EXCEPT.throwError <<< singleton
 
 -- | Run a computation in `PhaseTwo`, returning Errors or a Tuple holding both the state and the result of the computation.
