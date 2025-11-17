@@ -26,6 +26,7 @@ module Perspectives.Query.StatementCompiler
   ( compileStatement
   ) where
 
+import Control.Monad.State.Class (gets)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (filter, filterA, foldM, head, length, null, uncons)
 import Data.Either (Either(..))
@@ -51,7 +52,7 @@ import Perspectives.Query.ExpressionCompiler (compileExpression, makeSequence)
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext, adtContext2AdtRoleInContext, domain2contextType, domain2roleType, functional, mandatory, range, roleInContext2Context, roleInContext2Role, roleRange)
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equalsOrGeneralises_, equalsOrSpecialises_)
-import Perspectives.Representation.CNF (CNF)
+import Perspectives.Representation.CNF (CNF, traverseDPROD)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.Class.PersistentType (getEnumeratedProperty, getEnumeratedRole, readable2stable)
 import Perspectives.Representation.Class.Property (range) as PT
@@ -63,6 +64,7 @@ import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Verbs
+import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, toReadable)
 import Perspectives.Types.ObjectGetters (externalRole, generalisesRoleType_, hasPerspectiveOnPropertyWithVerb, isDatabaseQueryRole, isEnumeratedProperty, lookForRoleTypeOfADT)
 import Prelude (bind, discard, pure, show, unit, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>), (>>=), (||))
 
@@ -253,7 +255,9 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
           -- As there is no role to fill, the user cannot have a perspective on it. Hence we cannot check that perspective!
           -- In other words, any user can create a RootContext. In practice RootContexts are only used for 'apps'.
           er <- lift $ lift $ externalRole qualifiedContextTypeIdentifier
-          allowed <- lift $ lift ((ENR $ EnumeratedRoleType READABLE.rootContext) `generalisesRoleType_` (ENR er))
+          sidecars <- gets _.sidecars
+          readableER <- lift $ lift $ runWithPreloadedSideCars sidecars (toReadable er)
+          allowed <- lift $ lift ((ENR $ EnumeratedRoleType READABLE.rootContext) `generalisesRoleType_` (ENR readableER))
           if allowed then case mnameGetterDescription of
             Nothing -> pure $ UQD originDomain (QF.CreateRootContext qualifiedContextTypeIdentifier) cte (CDOM $ UET qualifiedContextTypeIdentifier) True True
             Just nameGetterDescription -> pure $ BQD originDomain (QF.CreateRootContext qualifiedContextTypeIdentifier) cte nameGetterDescription (CDOM $ UET qualifiedContextTypeIdentifier) True True
@@ -308,8 +312,12 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
         case mfillerRestriction of
           Nothing -> pure true
           Just fillerRestriction -> do
-            -- fillerRestriction -> fillers
-            pure (fillers `equalsOrSpecialises_` fillerRestriction)
+            sidecars <- gets _.sidecars
+            lift $ lift $ runWithPreloadedSideCars sidecars do
+              readableFillers <- traverseDPROD toReadable fillers
+              readableFillerRestriction <- traverseDPROD toReadable fillerRestriction
+              -- fillerRestriction -> fillers
+              pure (readableFillers `equalsOrSpecialises_` readableFillerRestriction)
       if qualifies
       -- Create a function description that describes the actual role creating and binding.
       then pure $ BQD originDomain (QF.Bind qualifiedRoleIdentifier) bindings cte originDomain True True
@@ -535,7 +543,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
           (ST (ContextType cid)) -> pure [ ENR (EnumeratedRoleType (cid <> "$External")) ]
           (UET (ContextType cid)) -> pure [ ENR (EnumeratedRoleType (cid <> "$External")) ]
           otherwise -> throwError $ Custom ("Cannot get the external role of a compound type: " <> show otherwise)
-        else lift2 (lookForUnqualifiedRoleTypeOfADT roleIdentifier ct)
+        else (lookForUnqualifiedRoleTypeOfADT roleIdentifier ct)
       case head rtarr of
         Just et@(ENR _) -> pure et
         Just ct'@(CR _) -> pure ct'
@@ -576,14 +584,20 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
         (enumeratedRoles :: Object EnumeratedRole) <- getsDF _.enumeratedRoles
         (nameMatches :: Array EnumeratedRole) <- pure (filter (\(EnumeratedRole { id: roleId }) -> (unwrap roleId) `endsWithSegments` ident) (values enumeratedRoles))
         -- EnumeratedRoles that can be filled with `fillers`.
-        (candidates :: Array EnumeratedRole) <- lift $ lift
+        (candidates :: Array EnumeratedRole) <-
           ( filterA
               ( \(candidate :: EnumeratedRole) -> do
-                  (mexpandedCandidateRestriction :: Maybe (CNF RoleInContext)) <- completeDeclaredFillerRestriction candidate >>= traverse toConjunctiveNormalForm_
+                  (mexpandedCandidateRestriction :: Maybe (CNF RoleInContext)) <- lift $ lift (completeDeclaredFillerRestriction candidate >>= traverse toConjunctiveNormalForm_)
                   case mexpandedCandidateRestriction of
                     Nothing -> pure true
                     -- The restriction on filling the candidate must be equal to or more general (less specialised) than the fillers.
-                    Just expandedCandidateRestriction -> pure (expandedCandidateRestriction `equalsOrGeneralises_` expandedFillers)
+                    Just expandedCandidateRestriction -> do
+                      sidecars <- gets _.sidecars
+                      lift $ lift $ runWithPreloadedSideCars sidecars do
+                        readableFillers <- traverseDPROD toReadable expandedFillers
+                        readableCandidateRestriction <- traverseDPROD toReadable expandedCandidateRestriction
+                        -- expandedCandidateRestriction -> expandedFillers
+                        pure (readableCandidateRestriction `equalsOrGeneralises_` readableFillers)
               )
               nameMatches
           )

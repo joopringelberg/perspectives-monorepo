@@ -31,6 +31,7 @@ module Perspectives.Parsing.Arc.PhaseThree where
 import Control.Monad.Error.Class (catchError, try)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (gets, modify) as State
+import Control.Monad.State.Class (gets)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (cons, elemIndex, filter, find, findIndex, foldM, foldl, foldr, fromFoldable, head, index, intercalate, length, nub, null, uncons, union, updateAt)
 import Data.Either (Either(..))
@@ -78,17 +79,17 @@ import Perspectives.Persistent (getDomeinFile)
 import Perspectives.PerspectivesState (addWarning, setModelUnderCompilation)
 import Perspectives.Query.ExpressionCompiler (compileAndDistributeStep, compileAndSaveProperty, compileAndSaveRole, compileExpression, compileStep, qualifyLocalContextName, qualifyLocalEnumeratedRoleName, qualifyLocalRoleName)
 import Perspectives.Query.Kinked (completeInversions)
-import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), domain, domain2roleInContext, domain2roleType, mandatory, range, replaceContext, roleInContext2Role, sumOfDomains, traverseQfd)
+import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), domain, domain2roleInContext, domain2roleType, mandatory, range, replaceContext, roleInContext2Role, roleRange, sumOfDomains, traverseQfd)
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
 import Perspectives.Query.StatementCompiler (compileStatement)
-import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, transform)
+import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equals_, transform)
 import Perspectives.Representation.Action (AutomaticAction(..), Action(..))
-import Perspectives.Representation.CNF (toConjunctiveNormalForm)
+import Perspectives.Representation.CNF (toConjunctiveNormalForm, traverseDPROD)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedRole, readable2stable, tryGetPerspectType)
-import Perspectives.Representation.Class.Role (Role(..), allProperties, completeExpandedType, displayNameOfRoleType, getCalculation, getRole, getRoleType, roleADT, roleADTOfRoleType)
+import Perspectives.Representation.Class.Role (Role(..), allProperties, completeExpandedType, displayNameOfRoleType, getCalculation, getRole, getRoleType, roleADT, roleADTOfRoleType, toConjunctiveNormalForm_)
 import Perspectives.Representation.Context (Context(..)) as CTXT
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
@@ -107,7 +108,7 @@ import Perspectives.Sidecar.NormalizeTypeNames (getSideCars)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
 import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, toReadable)
 import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith)
-import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, hasContextAspect, isPerspectiveOnSelf, roleStates, statesPerProperty, string2RoleType)
+import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, hasContextAspect, roleStates, statesPerProperty, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
 import Prelude (Unit, append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=))
 
@@ -1164,7 +1165,7 @@ handlePostponedStateQualifiedParts = do
     modifyAllSubjectPerspectives qualifiedUsers objectQfd = for_ qualifiedUsers
       -- If this is not a selfPerspective, generate an error.
       \qualifiedUser -> do
-        isSelfPerspective <- lift $ lift (qualifiedUser ###>> (unsafePartial isPerspectiveOnSelf objectQfd))
+        isSelfPerspective <- unsafePartial isPerspectiveOnSelf objectQfd qualifiedUser
         if isSelfPerspective then modifyPerspective objectQfd object start (\(Perspective pr) -> Perspective pr { selfOnly = true }) qualifiedUser
         else throwError $ NotASelfPerspective start end
 
@@ -1323,7 +1324,7 @@ handlePostponedStateQualifiedParts = do
       -> RoleType
       -> PhaseThree (EM.EncodableMap RoleType StateDependentPerspective)
     addStateDependentPerspectiveForUser currentContextCalculation perspectivesOnEntry qualifiedUser = do
-      isSelfPerspective <- (lift $ lift (qualifiedUser ###>> (unsafePartial isPerspectiveOnSelf objectQfd)))
+      isSelfPerspective <- unsafePartial isPerspectiveOnSelf objectQfd qualifiedUser
       case EM.lookup qualifiedUser perspectivesOnEntry of
         Nothing -> pure $ EM.insert
           qualifiedUser
@@ -1357,7 +1358,7 @@ handlePostponedStateQualifiedParts = do
   modifyPerspective objectQfd roleSpec start modifier userRole = do
     (roleTypes :: Array RoleType) <- collectRoles roleSpec
     displayName <- lift2 $ intercalate ", " <$> traverse displayNameOfRoleType roleTypes
-    isSelfPerspective <- (lift $ lift (userRole ###>> (unsafePartial isPerspectiveOnSelf objectQfd)))
+    isSelfPerspective <- unsafePartial isPerspectiveOnSelf objectQfd userRole
     case userRole of
       ENR (EnumeratedRoleType r) -> do
         EnumeratedRole er@{ perspectives } <- getsDF (unsafePartial fromJust <<< lookup r <<< _.enumeratedRoles)
@@ -1465,6 +1466,20 @@ handlePostponedStateQualifiedParts = do
 
   isRoleRootState :: StateIdentifier -> PhaseThree Boolean
   isRoleRootState (StateIdentifier s) = State.gets _.dfr >>= pure <<< isJust <<< lookup s <<< _.enumeratedRoles
+
+  -- True, iff one of the types of the role instance is a specialisation of the range of the QueryFunctionDescription.
+  -- The function is partial because it should only be used on a QueryFunctionDescription whose range
+  -- represents a role type.
+  isPerspectiveOnSelf :: Partial => QueryFunctionDescription -> RoleType -> PhaseThree Boolean
+  isPerspectiveOnSelf qfd userRole' = do
+    dnf <- lift $ lift $ toConjunctiveNormalForm_ (roleRange qfd)
+    roleAdt <- lift $ lift $ roleADTOfRoleType userRole'
+    userRoleDNF <- lift $ lift $ toConjunctiveNormalForm_ roleAdt
+    sidecars <- gets _.sidecars
+    lift $ lift $ runWithPreloadedSideCars sidecars do
+      readableDnf <- traverseDPROD toReadable dnf
+      readableUserRoleDNF <- traverseDPROD toReadable userRoleDNF
+      pure (readableUserRoleDNF `equals_` readableDnf)
 
 -- | Checks if the state is an upstream model state.
 -- An upstream model state is a state that is not part of the current model, but is

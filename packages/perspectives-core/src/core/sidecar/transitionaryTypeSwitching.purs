@@ -83,12 +83,14 @@ mapReadableToStable ttbm@(TypeToBeMapped { kind, fqn }) =
             { repositoryUrl, documentName } <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
             mmapping <- lift $ loadStableMapping_ repositoryUrl documentName
             case mmapping of
-              Just mapping ->
+              Just mapping -> do
+                log ("Loaded StableIdMapping for model " <> unwrap mu <> " from repository.")
                 void $ modify \env -> env { sidecars = Map.insert mu mapping sidecars }
               Nothing -> do
                 mlocalMapping <- lift $ loadStableMapping (ModelUri $ stableFqn) fromLocalModels
                 case mlocalMapping of
-                  Just mapping ->
+                  Just mapping -> do
+                    log ("Loaded StableIdMapping for model " <> unwrap mu <> " from local models.")
                     void $ modify \env -> env { sidecars = Map.insert mu mapping sidecars }
                   Nothing -> throwError (error ("Could not load StableIdMapping for model " <> unwrap mu))
           Nothing -> throwError (error ("No stable mapping found for model " <> unwrap mu))

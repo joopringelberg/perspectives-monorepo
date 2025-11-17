@@ -45,7 +45,7 @@ import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleDomeinFileError', handlePerspectRolError')
 import Perspectives.Identifiers (areLastSegmentsOf, typeUri2ModelUri, endsWithSegments, isExternalRole, startsWithSegments)
-import Perspectives.Instances.Combinators (closure_, conjunction, filter', some)
+import Perspectives.Instances.Combinators (closure_, conjunction, filter')
 import Perspectives.Instances.Combinators (filter', filter) as COMB
 import Perspectives.ModelDependencies (rootUser)
 import Perspectives.Persistence.API (Keys(..), getViewOnDatabase)
@@ -475,11 +475,13 @@ generalisesRoleType_ t1 t2 = do
   (et2 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t2
   pure (et1 `generalises_` et2)
 
+-- NOT IN USE
 specialisesRoleType :: RoleType -> (RoleType ~~~> Value)
 specialisesRoleType t1 t2 = ArrayT do
   x <- (t1 `specialisesRoleType_` t2)
   pure [ Value $ show x ]
 
+-- ONLY IN USE IN THIS MODULE
 specialisesRoleType_ :: RoleType -> (RoleType -> MonadPerspectives Boolean)
 specialisesRoleType_ t1 t2 = do
   -- expand
@@ -487,6 +489,7 @@ specialisesRoleType_ t1 t2 = do
   (et2 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t2
   pure (et1 `specialises_` et2)
 
+-- CURRENTLY NOT IN USE
 equalsOrGeneralisesRoleType :: RoleType -> (RoleType ~~~> Value)
 equalsOrGeneralisesRoleType t1 t2 = ArrayT do
   x <- (t1 `equalsOrGeneralisesRoleType_` t2)
@@ -499,11 +502,13 @@ equalsOrGeneralisesRoleType_ t1 t2 = do
   (et2 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t2
   pure (et1 `equalsOrGeneralises_` et2)
 
+-- THIS FUNCTION IS NOT USED.
 equalsOrSpecialisesRoleType :: RoleType -> (RoleType ~~~> Value)
 equalsOrSpecialisesRoleType t1 t2 = ArrayT do
   x <- (t1 `equalsOrSpecialisesRoleType_` t2)
   pure [ Value $ show x ]
 
+-- THIS FUNCTION IS NOT USED OUTSIDE THIS MODULE.
 equalsOrSpecialisesRoleType_ :: RoleType -> (RoleType -> MonadPerspectives Boolean)
 equalsOrSpecialisesRoleType_ t1 t2 = do
   -- expand
@@ -811,18 +816,6 @@ addPerspectiveTo (Perspective perspectiveAspect) (Perspective perspective) = Per
   , selfOnly = perspectiveAspect.selfOnly || perspective.selfOnly
   , authorOnly = perspectiveAspect.authorOnly || perspective.authorOnly
   }
-
--- True, iff one of the types of the role instance is a specialisation of the range of the QueryFunctionDescription.
--- The function is partial because it should only be used on a QueryFunctionDescription whose range
--- represents a role type.
-isPerspectiveOnSelf :: Partial => QueryFunctionDescription -> (RoleType ~~~> Boolean)
-isPerspectiveOnSelf qfd =
-  some
-    ( \userRole' -> do
-        dnf <- lift $ toConjunctiveNormalForm_ (roleRange qfd)
-        (lift $ roleADTOfRoleType userRole') >>= lift <<< toConjunctiveNormalForm_ >>=
-          (\userRoleDNF -> pure (userRoleDNF `equals_` dnf))
-    )
 
 ----------------------------------------------------------------------------------------
 ------- FUNCTIONS FOR ACTIONS

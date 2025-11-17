@@ -13,7 +13,7 @@ import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.PersistentType (getCalculatedRole, readable2stable)
 import Perspectives.Representation.Class.Role (allProperties, allRoles, roleADT)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType, PropertyType, RoleType(..), propertytype2string, roletype2string)
-import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, runWithSideCars, toReadable)
+import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, toReadable)
 import Prelude (pure, ($), (<<<), (==), (>>=), (>>>), bind, (>=>), (<$>))
 
 ----------------------------------------------------------------------------------------
@@ -51,10 +51,11 @@ ensurePropertiesAreReadable props = do
   sideCars <- lift $ gets \s -> s.sidecars
   lift $ lift $ runWithPreloadedSideCars sideCars (traverse toReadable props)
 
-lookForUnqualifiedRoleTypeOfADT :: String -> ADT ContextType -> MonadPerspectives (Array RoleType)
+lookForUnqualifiedRoleTypeOfADT :: String -> ADT ContextType -> PhaseThree (Array RoleType)
 lookForUnqualifiedRoleTypeOfADT s adt = do
-  roles <- allRoles adt
-  runWithSideCars $ filterA (toReadable >=> roletype2string >>> areLastSegmentsOf s >>> pure) roles
+  sideCars <- lift $ gets \st -> st.sidecars
+  roles <- lift $ lift $ allRoles adt
+  lift $ lift $ runWithPreloadedSideCars sideCars $ filterA (toReadable >=> roletype2string >>> areLastSegmentsOf s >>> pure) roles
 
 readableRoletype2stable :: RoleType -> MonadPerspectives RoleType
 readableRoletype2stable (CR calculatedType) = CR <$> (readable2stable calculatedType)

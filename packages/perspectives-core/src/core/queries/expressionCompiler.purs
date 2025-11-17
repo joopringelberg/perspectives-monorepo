@@ -77,6 +77,7 @@ import Perspectives.Representation.ThreeValuedLogic (and, or) as THREE
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as RTI
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
+import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, toReadable, WithSideCars)
 import Perspectives.Types.ObjectGetters (allTypesInContextADT, allTypesInRoleADT, enumeratedRoleContextType, equals, isUnlinked_, lookForRoleTypeOfADT, qualifyContextInDomain, qualifyEnumeratedRoleInDomain, qualifyRoleInDomain)
 import Prelude (bind, discard, eq, map, pure, show, unit, void, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>>=), (||))
 
@@ -349,7 +350,7 @@ compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
                           if isTypeUri ident then
                             if isExternalRole ident then pure [ ENR $ EnumeratedRoleType ident ]
                             else lift2 $ runArrayT $ lookForRoleTypeOfADT ident c
-                          else lift2 $ lookForUnqualifiedRoleTypeOfADT ident c
+                          else lookForUnqualifiedRoleTypeOfADT ident c
                         case uncons rts of
                           Nothing -> throwError $ ContextHasNoRole c ident pos (endOf $ Simple s)
                           Just { head, tail } ->
@@ -826,16 +827,20 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
 
   comparison :: ArcPosition -> QueryFunctionDescription -> QueryFunctionDescription -> FunctionName -> PhaseThree QueryFunctionDescription
   comparison pos left' right' functionName = do
-    -- Both ranges must be equal, both sides must be functional.
-    ((range left') `equalDomains` (range right')) >>=
-      if _ then
-        if (pessimistic $ functional left') && (pessimistic $ functional right') then pure $ BQD currentDomain (QF.BinaryCombinator functionName) left' right' (VDOM PBool Nothing) (isFunctionalFunction functionName) True
-        else throwError $ ExpressionsShouldBeFunctional (pessimistic $ functional left') (pessimistic $ functional right') pos
-      else throwError $ TypesCannotBeCompared pos (range left') (range right')
+    sidecars <- gets _.sidecars
+    areEqual <- lift $ lift $ runWithPreloadedSideCars sidecars do
+      leftRange <- toReadable (range left')
+      rightRange <- toReadable (range right')
+      -- Both ranges must be equal, both sides must be functional.
+      (leftRange `equalDomains` rightRange)
+    if areEqual then
+      if (pessimistic $ functional left') && (pessimistic $ functional right') then pure $ BQD currentDomain (QF.BinaryCombinator functionName) left' right' (VDOM PBool Nothing) (isFunctionalFunction functionName) True
+      else throwError $ ExpressionsShouldBeFunctional (pessimistic $ functional left') (pessimistic $ functional right') pos
+    else throwError $ TypesCannotBeCompared pos (range left') (range right')
     where
-    equalDomains :: Domain -> Domain -> PhaseThree Boolean
+    equalDomains :: Domain -> Domain -> WithSideCars Boolean
     -- special case for RDOM
-    equalDomains (RDOM r1) (RDOM r2) = lift $ lift $ equals r1 r2
+    equalDomains (RDOM r1) (RDOM r2) = lift $ equals r1 r2
     equalDomains d1 d2 = pure $ eq d1 d2
 
   binOp :: ArcPosition -> QueryFunctionDescription -> QueryFunctionDescription -> Array Range -> FunctionName -> PhaseThree QueryFunctionDescription

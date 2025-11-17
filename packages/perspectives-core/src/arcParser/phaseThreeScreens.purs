@@ -22,6 +22,7 @@
 module Perspectives.Parsing.Arc.PhaseThree.Screens where
 
 import Control.Monad.State (gets) as State
+import Control.Monad.State.Class (gets)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
 import Data.Array (catMaybes, cons, elemIndex, filter, filterA, find, findIndex, foldM, fromFoldable, head, length, nub, null)
@@ -61,6 +62,7 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optim
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), roletype2string)
 import Perspectives.Representation.Verbs (allPropertyVerbs, roleVerbList2Verbs)
 import Perspectives.Representation.View (View(..))
+import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, toReadable)
 import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_)
 import Prelude (Unit, bind, discard, eq, flip, map, not, pure, unit, ($), (<#>), (<$>), (<*>), (<<<), (==), (>>=))
 
@@ -169,17 +171,19 @@ handleScreens screenEs = do
           }
 
       constructChatDefs :: PhaseThree (Array ChatDef)
-      constructChatDefs = lift2 do
+      constructChatDefs = do
         -- NOTE that we ignore perspectives that the user role's aspects may have!
         -- These have been added in compile time.
-        (perspectives :: Array Perspective) <- perspectivesOfRoleType subjectRoleType
+        (perspectives :: Array Perspective) <- lift2 $ perspectivesOfRoleType subjectRoleType
         -- Collect all roles the subject role type has a perspective on.
         (objectRoles :: Array RoleType) <- pure $ perspectives <#> \(Perspective { roleTypes }) -> unsafePartial fromJust $ head roleTypes
         -- Filter the roles that are not a specialization of the chatAspect role type.
-        chatRoles <- filterA (equalsOrGeneralisesRoleType_ (ENR $ EnumeratedRoleType READABLE.chatAspect)) objectRoles
+        sidecars <- gets _.sidecars
+        readableObjectRoles <- lift2 (runWithPreloadedSideCars sidecars (traverse toReadable objectRoles))
+        chatRoles <- lift2 $ filterA (equalsOrGeneralisesRoleType_ (ENR $ EnumeratedRoleType READABLE.chatAspect)) readableObjectRoles
         -- For each of these roles, find the properties with the MessageProperty and MediaProperty facets.
         -- Finally construct a ChatDef for each of those roles, where the chatInstance is Nothing.
-        catMaybes <$> for chatRoles \chatRole -> do
+        catMaybes <$> for chatRoles \chatRole -> lift2 do
           -- Get the properties of the role.
           allProps <- roleADTOfRoleType chatRole >>= allProperties <<< map roleInContext2Role
           -- Filter the properties to find the MessageProperty and MediaProperty.

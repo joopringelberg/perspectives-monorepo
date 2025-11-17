@@ -17,7 +17,7 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Identifiers (typeUri2LocalName, typeUri2ModelUri_)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.PerspectivesState (getModelUnderCompilation)
-import Perspectives.Query.QueryTypes (RoleInContext(..))
+import Perspectives.Query.QueryTypes (Domain(..), RoleInContext(..))
 import Perspectives.Representation.ADT (ADT)
 import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), PropertyType(..), RoleType(..))
@@ -28,16 +28,18 @@ import Perspectives.Sidecar.StableIdMapping (StableIdMapping, fromLocalModels, l
 
 type SideCarMap = Map String StableIdMapping
 
+type WithSideCars = StateT SideCarMap MonadPerspectives
+
 newtype IndexedContext = IndexedContext String
 
-runWithSideCars :: forall a. StateT SideCarMap MonadPerspectives a -> MonadPerspectives a
+runWithSideCars :: forall a. WithSideCars a -> MonadPerspectives a
 runWithSideCars action = evalStateT action empty
 
-runWithPreloadedSideCars :: forall a. Map String StableIdMapping -> StateT SideCarMap MonadPerspectives a -> MonadPerspectives a
+runWithPreloadedSideCars :: forall a. Map String StableIdMapping -> WithSideCars a -> MonadPerspectives a
 runWithPreloadedSideCars preloaded action = evalStateT action preloaded
 
 class StableToReadable a where
-  toReadable :: a -> StateT SideCarMap MonadPerspectives a
+  toReadable :: a -> WithSideCars a
 
 instance StableToReadable IndexedContext where
   toReadable (IndexedContext stableId) = do
@@ -143,6 +145,19 @@ instance StableToReadable RoleInContext where
 instance StableToReadable (ADT RoleInContext) where
   toReadable adtRoleInContext = traverse toReadable adtRoleInContext
 
+instance StableToReadable (ADT ContextType) where
+  toReadable adtContextType = traverse toReadable adtContextType
+
+instance StableToReadable Domain where
+  toReadable (RDOM adt) = RDOM <$> toReadable adt
+  toReadable (CDOM adt) = CDOM <$> toReadable adt
+  toReadable (VDOM r mproptype) = do
+    mproptype' <- case mproptype of
+      Just proptype -> Just <$> toReadable proptype
+      Nothing -> pure Nothing
+    pure $ VDOM r mproptype'
+  toReadable x = pure x
+
 ensureSideCar :: String -> StateT SideCarMap MonadPerspectives (Maybe StableIdMapping)
 ensureSideCar stableId = do
   let modelUri = unsafePartial typeUri2ModelUri_ stableId
@@ -166,7 +181,7 @@ ensureSideCar stableId = do
         mmapping <- lift $ loadStableMapping (ModelUri modelUri) fromLocalModels
         case mmapping of
           Just mapping -> do
-            modify_ (insert stableId mapping)
+            modify_ (insert modelUri mapping)
             pure $ Just mapping
           Nothing -> do
             logPerspectivesError (Custom $ "Failed to load stable mapping for sidecar with id: " <> modelUri)
