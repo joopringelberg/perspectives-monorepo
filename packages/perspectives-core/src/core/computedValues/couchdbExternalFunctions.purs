@@ -40,7 +40,7 @@ import Data.Maybe (Maybe(..), maybe)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (over, unwrap)
 import Data.Nullable (toMaybe)
-import Data.String (Replacement(..), replace, Pattern(..))
+import Data.String (Pattern(..), Replacement(..), replace, stripSuffix)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (traverse)
@@ -603,8 +603,6 @@ createCouchdbDatabase databaseUrls databaseNames _ =
     >>= handleExternalStatementError "model://perspectives.domains#CreateCouchdbDatabase"
 
 -- | Create a database with all views that are useful for retrieving role- and context instances
--- | Notice that we require the end user to provide a database url that ends on a slash. Hence,
--- | namespace ends on a slash, too.
 createEntitiesDatabase :: Array Url -> Array DatabaseName -> Array Namespace -> RoleInstance -> MonadPerspectivesTransaction Unit
 createEntitiesDatabase databaseUrls databaseNames namespaces _ =
   try
@@ -626,7 +624,9 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
             )
           -- dbName is also the url that is provided in a "public Visitor at <location>" declaration.
           -- Hence we can use it to construct an instance of TheWorld in that database.
-          theworldid <- pure (ContextInstance $ "pub:https://" <> namespace <> databaseName <> "/#TheWorld")
+          -- CURRENTLY, CouchdbManagement is such that namespace may or may not end with a slash.
+          -- Hence we make sure it does.
+          theworldid <- pure (ContextInstance $ "pub:https://" <> ensureSlash namespace <> databaseName <> "/#TheWorld")
           mtheWorld <- lift $ tryGetPerspectContext theworldid
           case mtheWorld of
             Nothing -> do
@@ -636,6 +636,12 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
         _, _, _ -> pure unit
     )
     >>= handleExternalStatementError "model://perspectives.domains#CreateEntitiesDatabase"
+
+  where
+  ensureSlash :: String -> String
+  ensureSlash ns = case stripSuffix (Pattern "/") ns of
+    Just _ -> ns
+    Nothing -> ns <> "/"
 
 -- | RoleInstance is an instance of model:CouchdbManagement$CouchdbServer$Repositories.
 -- | Execution of this function requires the user to have a SERVERADMIN account.
