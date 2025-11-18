@@ -305,7 +305,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
           case description of
             ZQ Nothing _ -> pure unit
             left -> do
-              (ArrayUnions keys) <- lift $ lift $ lift $ typeLevelKeyForRoleQueries qfd
+              (ArrayUnions keys) <- lift $ typeLevelKeyForRoleQueries qfd
               lift $ addStorableInvertedQuery
                 { keys: serializeInvertedQueryKey <$> keys
                 , queryType: "RTRoleKey"
@@ -334,7 +334,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
         Nothing -> pure qWithAK
         -- If there is a filter, prepend it to the backwards part.
         Just filter -> pure $ ZQ ((makeComposition filter) <$> backwards qWithAK) (forwards qWithAK)
-      (ArrayUnions keys) <- lift $ lift $ lift $ typeLevelKeyForContextQueries qfd
+      (ArrayUnions keys) <- lift $ typeLevelKeyForContextQueries qfd
       lift $ addStorableInvertedQuery
         { keys: serializeInvertedQueryKey <$> keys
         , queryType: "RTContextKey"
@@ -390,7 +390,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
         case description of
           ZQ Nothing _ -> pure unit
           left -> do
-            (ArrayUnions keys) <- lift $ lift $ lift $ typeLevelKeyForRoleQueries qfd
+            (ArrayUnions keys) <- lift $ typeLevelKeyForRoleQueries qfd
             lift $ addStorableInvertedQuery
               { keys: serializeInvertedQueryKey <$> keys
               , queryType: "RTRoleKey"

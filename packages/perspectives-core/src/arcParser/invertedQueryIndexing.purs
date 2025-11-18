@@ -326,19 +326,34 @@ typeLevelKeyForPropertyQueries p qfd = do
         (maybe property identity replacementProperty)
 
 -- | Add these keys to an inverted query starting on a Role step.
-typeLevelKeyForRoleQueries :: QueryFunctionDescription -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
+typeLevelKeyForRoleQueries :: QueryFunctionDescription -> PhaseThree (ArrayUnions RunTimeInvertedQueryKey)
 typeLevelKeyForRoleQueries qfd =
   for
     (computeCollection singleton (unsafePartial roleRange qfd))
-    (\(RoleInContext { context, role }) -> roleContextCombinations role context)
+    (\(RoleInContext { context, role }) -> readableRoleContextCombinations role context)
     >>= pure <<< (map \(Tuple role_destination context_origin) -> RTRoleKey { context_origin, role_destination }) <<< join <<< ArrayUnions
 
 -- | Add these keys to an inverted query starting on a Context step.
-typeLevelKeyForContextQueries :: QueryFunctionDescription -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
+typeLevelKeyForContextQueries :: QueryFunctionDescription -> PhaseThree (ArrayUnions RunTimeInvertedQueryKey)
 typeLevelKeyForContextQueries qfd =
   -- Notice that we first collect all leaves and then traverse them with roleContextCombinations. This is because we do not have a Traversable instance of
   -- ADT and this is semantically equivalent.
   for
     (computeCollection singleton (unsafePartial roleDomain qfd))
-    (\(RoleInContext { context, role }) -> roleContextCombinations role context)
+    (\(RoleInContext { context, role }) -> readableRoleContextCombinations role context)
     >>= pure <<< (map \(Tuple role_origin context_destination) -> RTContextKey { role_origin, context_destination }) <<< join <<< ArrayUnions
+
+-- | Construct the combination of the role type and its aspects 
+-- with their lexical contexts, and add to that the combination of the role type and the instantiation context type.
+readableRoleContextCombinations :: EnumeratedRoleType -> ContextType -> PhaseThree (ArrayUnions (Tuple EnumeratedRoleType ContextType))
+readableRoleContextCombinations roleType instantiationContext = do
+  readableInstantiationContext <- loadSideCarsAndRun $ toReadable instantiationContext
+  roleTypes <- lift $ lift $ (roleType ###= roleAspectsClosure)
+  readableRoleTypes <- loadSideCarsAndRun $ traverse toReadable roleTypes
+  combinations <- execWriterT $ for readableRoleTypes \role_origin -> do
+    lexicalContext <- lift $ lift $ lift (getPerspectType role_origin >>= pure <<< contextOfRepresentation)
+    readableLexicalContext <- lift $ loadSideCarsAndRun $ toReadable lexicalContext
+    if readableLexicalContext == readableInstantiationContext then pure unit
+    -- Only push this key if it is not a duplicate of the key with the instantiation context!
+    else tell [ (Tuple role_origin readableLexicalContext) ]
+  pure $ ArrayUnions $ cons (Tuple roleType readableInstantiationContext) combinations
