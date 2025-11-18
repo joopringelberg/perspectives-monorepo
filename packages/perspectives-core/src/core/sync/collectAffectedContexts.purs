@@ -787,7 +787,7 @@ aisInPropertyDelta
   if _ then pure []
   else do
     typeOfInstanceOnpath <- lift $ roleType_ instanceOnPath
-    (allKeys :: Array RunTimeInvertedQueryKey) <- lift $ runtimeIndexForPropertyQueries
+    (allKeys :: Array RunTimeInvertedQueryKey) <- pure $ runtimeIndexForPropertyQueries
       typeOfInstanceOnpath
       propertyBearingType
       property

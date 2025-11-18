@@ -30,20 +30,22 @@
 
 module Perspective.InvertedQuery.Indices where
 
+import Control.Monad.State.Class (gets)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
 import Data.Array (cons, elemIndex, singleton)
 import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.Newtype (unwrap)
-import Data.Traversable (for)
+import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (lookup)
+import Foreign.Object (fromFoldable, lookup, toUnfoldable)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ArrayUnions (ArrayUnions(..))
-import Perspectives.CoreTypes (MonadPerspectives, MP, (###=))
+import Perspectives.CoreTypes (MonadPerspectives, (###=))
 import Perspectives.Identifiers (startsWithSegments, typeUri2typeNameSpace_)
 import Perspectives.Instances.ObjectGetters (context', contextType_)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey(..))
+import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription, RoleInContext(..), domain, domain2roleInContext, domain2roleType, queryFunction, range, roleDomain, roleInContext2Role, roleRange)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInExpandedADT, computeCollection)
 import Perspectives.Representation.Class.PersistentType (getEnumeratedRole, getPerspectType)
@@ -52,6 +54,7 @@ import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..))
+import Perspectives.Sidecar.ToReadable (WithSideCars, runWithPreloadedSideCars, toReadable)
 import Perspectives.Types.ObjectGetters (roleAspectsClosure)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..))
 import Prelude (class Eq, class Ord, Unit, bind, compare, discard, eq, identity, join, map, not, pure, unit, ($), (&&), (/=), (<#>), (<$>), (<<<), (==), (>=>), (>>=))
@@ -146,7 +149,7 @@ runTimeIndexForRoleQueries r c = contextType_ c >>= roleContextCombinations r >>
 
 -- | Keys for queries from property to role.
 -- | Query the InvertedQueryDatase with these keys.
-runtimeIndexForPropertyQueries :: EnumeratedRoleType -> EnumeratedRoleType -> EnumeratedPropertyType -> EnumeratedPropertyType -> MonadPerspectives (Array RunTimeInvertedQueryKey)
+runtimeIndexForPropertyQueries :: EnumeratedRoleType -> EnumeratedRoleType -> EnumeratedPropertyType -> EnumeratedPropertyType -> (Array RunTimeInvertedQueryKey)
 runtimeIndexForPropertyQueries typeOfInstanceOnPath typeOfPropertyBearingInstance property replacementProperty =
   let
     aspectRoleType = EnumeratedRoleType $ typeUri2typeNameSpace_ (unwrap property)
@@ -160,34 +163,34 @@ runtimeIndexForPropertyQueries typeOfInstanceOnPath typeOfPropertyBearingInstanc
       then
         if property /= replacementProperty
         -- A replacement was used for the aspect property (5).
-        then pure
+        then
           [ RTPropertyKey { property: replacementProperty, role: typeOfPropertyBearingInstance }
           , RTPropertyKey { property, role: aspectRoleType }
           ]
         -- No replacement was used for the aspect property (it was not contextualized to the role bearing the Aspect) (3).
-        else pure
+        else
           [ RTPropertyKey { property, role: typeOfPropertyBearingInstance }
           , RTPropertyKey { property, role: aspectRoleType }
           ]
       -- The property is NOT an Aspect property (1)
-      else pure [ RTPropertyKey { property, role: typeOfPropertyBearingInstance } ]
+      else [ RTPropertyKey { property, role: typeOfPropertyBearingInstance } ]
     -- The property value is represented on a filler of the role instance on the path (2, 4, 6)
     else if property `isAspectPropertyOf` typeOfInstanceOnPath
     -- The property is an Aspect property (4, 6).
     then
       if property /= replacementProperty
       -- A replacement was used for the Aspect property (6)
-      then pure
+      then
         [ RTPropertyKey { property: replacementProperty, role: typeOfPropertyBearingInstance }
         , RTPropertyKey { property: property, role: aspectRoleType }
         ]
       -- No replacement was used for the aspect property (it was not contextualized to the role bearing the Aspect) (4).
-      else pure
+      else
         [ RTPropertyKey { property, role: typeOfPropertyBearingInstance }
         , RTPropertyKey { property, role: aspectRoleType }
         ]
     -- The property is NOT an aspect property (2)
-    else pure [ RTPropertyKey { property, role: typeOfPropertyBearingInstance } ]
+    else [ RTPropertyKey { property, role: typeOfPropertyBearingInstance } ]
   where
   isAspectPropertyOf :: EnumeratedPropertyType -> EnumeratedRoleType -> Boolean
   isAspectPropertyOf (EnumeratedPropertyType propId) (EnumeratedRoleType rtId) = not (propId `startsWithSegments` rtId)
@@ -267,35 +270,53 @@ instance Eq PropertyBearer where
       &&
         querysteprole1 == querysteprole2
 
+loadSideCarsAndRun :: forall a. WithSideCars a -> PhaseThree a
+loadSideCarsAndRun action = do
+  sidecars <- gets _.sidecars
+  lift $ lift $ runWithPreloadedSideCars sidecars action
+
 -- | Find the EnumeratedRoleType whose instances can actually store values for the property type.
 -- | If the property type turns out to be an alias, return the original property (the final destination or key under which a value will be stored)
 -- | and include the alias in a Maybe value.
-getPropertyTypeBearingRoleInstances :: EnumeratedPropertyType -> ADT RoleInContext -> MP (ArrayUnions PropertyBearer)
+-- | `prop` should be Readable.
+getPropertyTypeBearingRoleInstances :: EnumeratedPropertyType -> ADT RoleInContext -> PhaseThree (ArrayUnions PropertyBearer)
 getPropertyTypeBearingRoleInstances prop adt = ArrayUnions <$> execWriterT (descendInFiller adt)
   where
 
-  descendInFiller :: ADT RoleInContext -> WriterT (Array PropertyBearer) MP Unit
+  descendInFiller :: ADT RoleInContext -> WriterT (Array PropertyBearer) PhaseThree Unit
   descendInFiller adt' = do
     -- Using the Traversable instance, we replace all terminal RoleInContext values with one or zero PropertyBearers. 
     -- We then collect them using foldMapADT (computeCollection) and tell them in the WriterT monad.
-    lift ((for adt' ((getEnumeratedRole <<< roleInContext2Role) >=> getPropertyBearers)) >>= pure <<< computeCollection identity) >>= tell
-    mfiller <- lift (bindingOfADT adt')
+    propBearers <- lift $ for adt' ((lift <<< lift <<< getEnumeratedRole <<< roleInContext2Role) >=> getPropertyBearers)
+    tell $ computeCollection identity propBearers
+    mfiller <- lift $ lift $ lift (bindingOfADT adt')
     case mfiller of
       Nothing -> pure unit
       Just filler -> descendInFiller filler
 
-  getPropertyBearers :: EnumeratedRole -> MP (Array PropertyBearer)
-  getPropertyBearers (EnumeratedRole { propertyAliases, id: eroleType }) = case lookup (unwrap prop) propertyAliases of
-    Just destination -> pure $ [ PropertyBearer destination (Just prop) eroleType eroleType ]
-    Nothing -> do
-      allProps <- allLocallyRepresentedProperties (ST eroleType)
-      if isJust $ elemIndex (ENP prop) allProps then pure $ [ PropertyBearer prop Nothing eroleType eroleType ]
-      else pure $ []
+  getPropertyBearers :: EnumeratedRole -> PhaseThree (Array PropertyBearer)
+  getPropertyBearers (EnumeratedRole { propertyAliases, id: eroleType }) = do
+    readableAliases <- loadSideCarsAndRun do
+      (aliases :: Array (Tuple String EnumeratedPropertyType)) <- for (toUnfoldable propertyAliases) \(Tuple alias destination) -> do
+        readableAlias <- toReadable (EnumeratedPropertyType alias)
+        readableDestination <- toReadable destination
+        pure (Tuple (unwrap readableAlias) readableDestination)
+      pure $ fromFoldable aliases
+    readableEroleType <- loadSideCarsAndRun $ toReadable eroleType
+    case lookup (unwrap prop) readableAliases of
+      Just destination -> pure $ [ PropertyBearer destination (Just prop) readableEroleType readableEroleType ]
+      Nothing -> do
+        -- Map all properties to Readable identifiers.
+        allProps <- lift $ lift $ allLocallyRepresentedProperties (ST eroleType)
+        readableProps <- loadSideCarsAndRun $ traverse toReadable allProps
+        if isJust $ elemIndex (ENP prop) readableProps then pure $ [ PropertyBearer prop Nothing readableEroleType readableEroleType ]
+        else pure $ []
 
-typeLevelKeyForPropertyQueries :: EnumeratedPropertyType -> QueryFunctionDescription -> MonadPerspectives (Array RunTimeInvertedQueryKey)
+typeLevelKeyForPropertyQueries :: EnumeratedPropertyType -> QueryFunctionDescription -> PhaseThree (Array RunTimeInvertedQueryKey)
 typeLevelKeyForPropertyQueries p qfd = do
-  (ArrayUnions propBearers) <- getPropertyTypeBearingRoleInstances p (unsafePartial domain2roleType $ range qfd)
-  join <$> for propBearers
+  readableP <- loadSideCarsAndRun $ toReadable p
+  (ArrayUnions propBearers) <- getPropertyTypeBearingRoleInstances readableP (unsafePartial domain2roleType $ range qfd)
+  pure $ join $ propBearers <#>
     \(PropertyBearer property replacementProperty typeOfPropertyBearingInstance typeOfInstanceOnPath) ->
       runtimeIndexForPropertyQueries
         typeOfInstanceOnPath

@@ -293,6 +293,8 @@ invert_ qfd@(SQD dom@(RDOM roleAdt) f@(PropertyGetter prop@(ENP _)) ran fun man)
 -- The individual takes us to an instance of the range (`ran`), whatever the domain (`dom`) is. RoleIndividual is a constant function.
 -- Its inversion takes us to all instances of the domain.
 invert_ (SQD dom (RoleIndividual rid) ran fun man) = do
+  -- TODO: dit is niet nodig. De parameter van de MQD wordt helemaal niet gebruikt in de UnsafeCompiler.
+  -- In plaats daarvan gebruiken we de range...
   sidecars <- gets _.sidecars
   pure $ runInEnv sidecars $
     case dom of
@@ -326,6 +328,8 @@ invert_ (SQD dom (RoleIndividual rid) ran fun man) = do
 
 -- Get all instances of the type of the domain. 
 invert_ (SQD dom (ContextIndividual rid) ran fun man) = do
+  -- TODO: dit is niet nodig. De parameter van de MQD wordt helemaal niet gebruikt in de UnsafeCompiler.
+  -- In plaats daarvan gebruiken we de range...
   sidecars <- gets _.sidecars
   pure $ runInEnv sidecars
     case dom of
