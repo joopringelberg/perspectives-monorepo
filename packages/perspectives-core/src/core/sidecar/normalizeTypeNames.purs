@@ -32,13 +32,14 @@ module Perspectives.Sidecar.NormalizeTypeNames
   , normalizeInvertedQueries
   , normalizeTypeNames
   , normalizeTypes
+  , runInEnv
   ) where
 
 import Prelude
 
 import Control.Monad.Reader (Reader, ask, runReaderT)
 import Data.Array (catMaybes, foldM)
-import Data.Map (Map, empty, fromFoldable, insert, lookup) as Map
+import Data.Map (Map, empty, fromFoldable, insert, lookup, toUnfoldable) as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
@@ -91,6 +92,17 @@ type Env =
   { sidecars :: Map.Map (ModelUri Readable) StableIdMapping
   , perspMap :: OBJ.Object String -- oldId -> stableId
   }
+
+-- | This monad supports 'ask'. `ask` will return an object whose keys are Model Ids (MIDs).
+type WithSideCars = Reader Env
+
+runInEnv :: forall a. Map.Map String StableIdMapping -> WithSideCars a -> a
+runInEnv sidecars_ action =
+  let
+    (pairs :: Array (Tuple String StableIdMapping)) = Map.toUnfoldable sidecars_
+    sidecars = Map.fromFoldable ((\(Tuple modelUri sc) -> (Tuple (ModelUri modelUri) sc) :: Tuple (ModelUri Readable) StableIdMapping) <$> pairs)
+  in
+    unwrap $ runReaderT action { sidecars, perspMap: OBJ.fromFoldable [] }
 
 normalizeTypes :: DomeinFile Readable -> StableIdMapping -> MonadPerspectives (DomeinFile Stable)
 normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
@@ -160,9 +172,6 @@ getVersionedInstalledModelCuids = do
           -- The Stable name.
           Just (Value stableModelUri) -> pure $ Just $ Tuple (ModelUri readableModelUri) (ModelUri stableModelUri)
   pure $ Map.fromFoldable $ catMaybes x
-
--- | This monad supports 'ask'. `ask` will return an object whose keys are Model Ids (MIDs).
-type WithSideCars = Reader Env
 
 class NormalizeTypeNames v ident | v -> ident, ident -> v where
   -- | Replace user readable local names given in the model text by Cuids in the given object.

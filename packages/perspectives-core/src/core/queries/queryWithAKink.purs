@@ -23,6 +23,7 @@
 module Perspectives.Query.Kinked where
 
 import Control.Alternative (guard)
+import Control.Monad.State.Class (gets)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (catMaybes, elemIndex, foldr, head, intercalate, last, snoc, unsnoc)
 import Data.Generic.Rep (class Generic)
@@ -47,6 +48,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..))
+import Perspectives.Sidecar.NormalizeTypeNames (fqn2tid, runInEnv)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint, prettyPrint')
 import Prelude (class Show, append, bind, discard, eq, join, map, pure, show, ($), (<$>), (<*>), (<<<), (<>), (==), (>=>), (>>=))
 
@@ -290,55 +292,68 @@ invert_ qfd@(SQD dom@(RDOM roleAdt) f@(PropertyGetter prop@(ENP _)) ran fun man)
 
 -- The individual takes us to an instance of the range (`ran`), whatever the domain (`dom`) is. RoleIndividual is a constant function.
 -- Its inversion takes us to all instances of the domain.
-invert_ (SQD dom (RoleIndividual rid) ran fun man) = case dom of
-  -- Find all context instances whose type is one of the ContextTypes in CDOM adt. 
-  -- NOTE: WE ARBITRARILY TAKE THE FIRST SUCH TYPE.
-
-  CDOM adt -> pure
-    [ ZQ_
-        [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
-            [ SQD dom (Constant PString (unwrap $ unsafePartial $ fromJust $ head $ allLeavesInADT adt)) (VDOM PString Nothing) True True ]
-            dom
-            Unknown
-            Unknown
-        ]
-        Nothing
-    ]
-  RDOM adt -> pure
-    [ ZQ_
-        [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
-            [ SQD dom (Constant PString (unwrap $ roleInContext2Role $ unsafePartial $ fromJust $ head $ allLeavesInADT adt)) (VDOM PString Nothing) True True ]
-            dom
-            Unknown
-            Unknown
-        ]
-        Nothing
-    ]
-  _ -> pure []
+invert_ (SQD dom (RoleIndividual rid) ran fun man) = do
+  sidecars <- gets _.sidecars
+  pure $ runInEnv sidecars $
+    case dom of
+      -- Find all context instances whose type is one of the ContextTypes in CDOM adt. 
+      -- NOTE: WE ARBITRARILY TAKE THE FIRST SUCH TYPE.
+      CDOM adt -> do
+        ctxt <- fqn2tid $ unsafePartial $ fromJust (head $ allLeavesInADT adt)
+        pure
+          [ ZQ_
+              [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
+                  [ SQD dom (Constant PString (unwrap ctxt)) (VDOM PString Nothing) True True ]
+                  dom
+                  Unknown
+                  Unknown
+              ]
+              Nothing
+          ]
+      RDOM adt -> do
+        rl <- fqn2tid $ roleInContext2Role $ unsafePartial $ fromJust (head $ allLeavesInADT adt)
+        pure
+          [ ZQ_
+              [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
+                  [ SQD dom (Constant PString (unwrap rl)) (VDOM PString Nothing) True True ]
+                  dom
+                  Unknown
+                  Unknown
+              ]
+              Nothing
+          ]
+      _ -> pure []
 
 -- Get all instances of the type of the domain. 
-invert_ (SQD dom (ContextIndividual rid) ran fun man) = case dom of
-  CDOM adt -> pure
-    [ ZQ_
-        [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
-            [ SQD dom (Constant PString (unwrap $ unsafePartial $ fromJust $ head $ allLeavesInADT adt)) (VDOM PString Nothing) True True ]
-            dom
-            Unknown
-            Unknown
-        ]
-        Nothing
-    ]
-  RDOM adt -> pure
-    [ ZQ_
-        [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
-            [ SQD dom (Constant PString (unwrap $ roleInContext2Role $ unsafePartial $ fromJust $ head $ allLeavesInADT adt)) (VDOM PString Nothing) True True ]
-            dom
-            Unknown
-            Unknown
-        ]
-        Nothing
-    ]
-  _ -> pure []
+invert_ (SQD dom (ContextIndividual rid) ran fun man) = do
+  sidecars <- gets _.sidecars
+  pure $ runInEnv sidecars
+    case dom of
+      CDOM adt -> do
+        ctxt <- fqn2tid $ unsafePartial $ fromJust $ head $ allLeavesInADT adt
+        pure
+          [ ZQ_
+              [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
+                  [ SQD dom (Constant PString (unwrap ctxt)) (VDOM PString Nothing) True True ]
+                  dom
+                  Unknown
+                  Unknown
+              ]
+              Nothing
+          ]
+      RDOM adt -> do
+        rl <- fqn2tid $ roleInContext2Role $ unsafePartial $ fromJust $ head $ allLeavesInADT adt
+        pure
+          [ ZQ_
+              [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
+                  [ SQD dom (Constant PString (unwrap rl)) (VDOM PString Nothing) True True ]
+                  dom
+                  Unknown
+                  Unknown
+              ]
+              Nothing
+          ]
+      _ -> pure []
 
 invert_ (SQD dom f ran _ _) = do
   (minvertedF :: Maybe QueryFunction) <- invertFunction dom f ran
