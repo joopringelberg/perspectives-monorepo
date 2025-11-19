@@ -48,6 +48,7 @@ type CalculatedRoleRecord =
   { id :: CalculatedRoleType
   , _rev :: Revision_
   , displayName :: String
+  , readableName :: CalculatedRoleType
   , kindOfRole :: RoleKind
   , context :: ContextType
   , views :: Array ViewType
@@ -66,6 +67,7 @@ defaultCalculatedRole qname dname kindOfRole context pos = CalculatedRole
   { id: CalculatedRoleType qname
   , _rev: Nothing
   , displayName: dname
+  , readableName: CalculatedRoleType qname
   , kindOfRole: kindOfRole
 
   , calculation: S (Simple $ Identity $ ArcPosition { column: 0, line: 0 }) false

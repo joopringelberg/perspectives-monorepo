@@ -52,6 +52,7 @@ type ViewRecord =
   { id :: ViewType
   , _rev :: Revision_
   , displayName :: String
+  , readableName :: ViewType
 
   -- TODO: maak er een NonEmpty Array van.
   , propertyReferences :: Array PropertyType

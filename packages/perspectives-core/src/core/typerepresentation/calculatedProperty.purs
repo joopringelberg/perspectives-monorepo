@@ -45,6 +45,7 @@ type CalculatedPropertyRecord =
   { id :: CalculatedPropertyType
   , _rev :: Revision_
   , displayName :: String
+  , readableName :: CalculatedPropertyType
 
   , calculation :: Calculation
   -- , computation :: Maybe (RoleInContext ~~> Value)
@@ -60,6 +61,7 @@ defaultCalculatedProperty id dn role pos = CalculatedProperty
   { id: CalculatedPropertyType id
   , _rev: Nothing
   , displayName: dn
+  , readableName: CalculatedPropertyType id
   , calculation: S (Simple $ Identity $ ArcPosition { column: 0, line: 0 }) false
   , role: EnumeratedRoleType role
   , constrainingFacets: Nothing

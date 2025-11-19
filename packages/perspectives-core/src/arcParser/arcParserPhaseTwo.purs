@@ -428,6 +428,7 @@ traverseViewE (ViewE { id, viewParts, pos }) rtype = do
     { id: ViewType viewName
     , _rev: Nothing
     , displayName: id
+    , readableName: ViewType viewName
     , propertyReferences: expandedPropertyReferences
     , role: rtype
     , pos: pos

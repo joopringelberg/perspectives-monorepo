@@ -55,6 +55,7 @@ type EnumeratedRoleRecord =
   { id :: EnumeratedRoleType
   , _rev :: Revision_
   , displayName :: String
+  , readableName :: EnumeratedRoleType
   , kindOfRole :: RoleKind
   , context :: ContextType
   , views :: Array ViewType
@@ -95,6 +96,7 @@ defaultEnumeratedRole qname dname kindOfRole context pos = EnumeratedRole
   { id: EnumeratedRoleType qname
   , _rev: Nothing
   , displayName: dname
+  , readableName: EnumeratedRoleType qname
   , kindOfRole: kindOfRole
 
   , roleAspects: []

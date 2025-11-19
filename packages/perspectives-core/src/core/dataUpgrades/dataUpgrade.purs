@@ -255,6 +255,10 @@ runDataUpgrades = do
 
   runUpgrade installedVersion "3.0.48" normalizeLocalDomeinFiles
 
+  runUpgrade installedVersion "3.0.49"
+    ( \_ -> void recompileLocalModels
+    )
+
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 
   ----------------------------------------------------------------------------------------

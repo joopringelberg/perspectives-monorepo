@@ -48,6 +48,7 @@ type ContextRecord =
   { id :: ContextType
   , _rev :: Revision_
   , displayName :: String
+  , readableName :: ContextType
   , kindOfContext :: ContextKind
   , public :: Maybe PublicStore
 
@@ -86,6 +87,7 @@ defaultContext id dname kind context pos public = Context
   { id: (ContextType id)
   , _rev: Nothing
   , displayName: dname
+  , readableName: ContextType id
   , kindOfContext: kind
   , contextAspects: []
   , defaultPrototype: Nothing

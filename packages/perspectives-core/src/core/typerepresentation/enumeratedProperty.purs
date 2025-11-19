@@ -46,6 +46,7 @@ type EnumeratedPropertyRecord =
   { id :: EnumeratedPropertyType
   , _rev :: Revision_
   , displayName :: String
+  , readableName :: EnumeratedPropertyType
 
   , role :: EnumeratedRoleType
   , range :: Range
@@ -67,6 +68,7 @@ defaultEnumeratedProperty id dn role range pos = EnumeratedProperty
   { id: EnumeratedPropertyType id
   , _rev: Nothing
   , displayName: dn
+  , readableName: EnumeratedPropertyType id
   , role: EnumeratedRoleType role
   , range: range
   , functional: true

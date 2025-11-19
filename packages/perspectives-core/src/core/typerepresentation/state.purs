@@ -47,6 +47,7 @@ type StateRecord =
   { id :: StateIdentifier
   -- NOTE: the Maybe is temporary to prevent a breaking change in DomeinFile. It will be removed in a future version.
   , displayName :: Maybe String
+  , readableName :: StateIdentifier
   , stateFulObject :: StateFulObject
   , query :: Calculation
   , object :: Maybe QueryFunctionDescription
@@ -121,6 +122,7 @@ constructState :: StateIdentifier -> String -> Calculation -> StateFulObject -> 
 constructState id displayName condition stateFulObject subStates = State
   { id: id
   , displayName: Just displayName
+  , readableName: id
   , stateFulObject
   , query: condition
   , object: Nothing -- used to compute the objects in enteringState, to bind to "currentobject".

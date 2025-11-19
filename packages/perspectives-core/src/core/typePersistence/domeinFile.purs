@@ -49,7 +49,7 @@ import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), InvertedQueryKey)
 import Perspectives.Representation.ScreenDefinition (ScreenDefinition, ScreenKey)
 import Perspectives.Representation.State (State(..), Notification) as PEState
-import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType, RoleType, StateIdentifier(..))
+import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, RoleType, StateIdentifier(..))
 import Perspectives.Representation.UserGraph (UserGraph(..))
 import Perspectives.Representation.View (View)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
@@ -79,6 +79,13 @@ type DomeinFileRecord f = PouchbdDocumentFields
   , upstreamAutomaticEffects :: Object (Array UpstreamAutomaticEffect)
   , userGraph :: UserGraph
   , screens :: EncodableMap ScreenKey ScreenDefinition
+  , toStableContextType :: EncodableMap ContextType ContextType
+  , toStableEnumeratedRoleType :: EncodableMap EnumeratedRoleType EnumeratedRoleType
+  , toStableCalculatedRoleType :: EncodableMap EnumeratedRoleType EnumeratedRoleType
+  , toStableEnumeratedPropertyType :: EncodableMap EnumeratedPropertyType EnumeratedPropertyType
+  , toStableCalculatedPropertyType :: EncodableMap EnumeratedPropertyType EnumeratedPropertyType
+  -- , toReadableContextIndividuals :: EncodableMap IndexedContext IndexedContext
+  -- , toReadableEnumeratedRoleIndividuals :: Map IndexedRole IndexedRole
   , _attachments :: Maybe AttachmentInfo
   )
 
@@ -227,6 +234,11 @@ defaultDomeinFileRecord =
   , upstreamAutomaticEffects: empty
   , userGraph: UserGraph $ EM.empty
   , screens: EM.empty
+  , toStableContextType: EM.empty
+  , toStableEnumeratedRoleType: EM.empty
+  , toStableCalculatedRoleType: EM.empty
+  , toStableEnumeratedPropertyType: EM.empty
+  , toStableCalculatedPropertyType: EM.empty
   , _attachments: Nothing
   }
 

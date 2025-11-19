@@ -64,6 +64,7 @@ type PerspectiveRecord =
   , isEnumerated :: Boolean
   , roleVerbs :: EncodableMap StateSpec RoleVerbList
   , propertyVerbs :: EncodableMap StateSpec (Array PropertyVerbs)
+  -- The keys of (Object Action) are the id members of ActionE as produced by the parser.
   , actions :: EncodableMap StateSpec (Object Action)
   -- selfonly is just for a user's perspective on his own role. So the object of this perspective
   -- must be a user role and the perspective _is of_ that user role, too.
