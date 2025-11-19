@@ -163,8 +163,6 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
         ( do
             addAllExternalFunctions
             addIndexedNames
-            retrieveAllCredentials
-            retrieveBrokerService
         )
         state
 
@@ -174,6 +172,8 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
             key <- getPrivateKey
             modify \(s@{ runtimeOptions }) -> s { runtimeOptions = runtimeOptions { privateKey = unsafeCoerce key } }
             runDataUpgrades
+            retrieveAllCredentials
+            retrieveBrokerService
         )
         state
 
