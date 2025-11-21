@@ -48,7 +48,7 @@ import Foreign.Object (Object, fromFoldable, toUnfoldable)
 import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
-import Perspectives.Data.EncodableMap (EncodableMap, toUnfoldable, fromFoldable) as EM
+import Perspectives.Data.EncodableMap (EncodableMap, toUnfoldable, fromFoldable, empty) as EM
 import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), UpstreamAutomaticEffect(..), UpstreamStateNotification(..))
 import Perspectives.Identifiers (splitTypeUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
@@ -80,7 +80,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
 import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.HashQFD (qfdSignature)
@@ -207,6 +207,15 @@ instance NormalizeTypeNames (DomeinFile Readable) (ModelUri Readable) where
       ( for ((EM.toUnfoldable df.screens) :: Array (Tuple ScreenKey ScreenDefinition)) $
           \(Tuple ct sd) -> Tuple <$> normalize ct <*> normalize sd
       )
+    env <- ask
+    let sidecars = env.sidecars
+    toReadableContextIndividuals <- case Map.lookup df.id sidecars of
+      Nothing -> pure EM.empty -- no sidecar for this model
+      (Just stableIdMapping) -> pure $ EM.fromFoldable
+        ( map
+            (\(Tuple readable stable) -> Tuple (IndexedContext stable) (IndexedContext readable))
+            (toUnfoldable stableIdMapping.contextIndividuals) :: Array (Tuple IndexedContext IndexedContext)
+        )
     id' <- fqn2tid df.id
     pure $ DomeinFile df
       { contexts = contexts'
@@ -221,6 +230,7 @@ instance NormalizeTypeNames (DomeinFile Readable) (ModelUri Readable) where
       , upstreamStateNotifications = upstreamStateNotifications'
       , upstreamAutomaticEffects = upstreamAutomaticEffects'
       , screens = screens'
+      , toReadableContextIndividuals = toReadableContextIndividuals
       , id = id'
       }
 

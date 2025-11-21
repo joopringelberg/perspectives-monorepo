@@ -49,7 +49,7 @@ import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), InvertedQueryKey)
 import Perspectives.Representation.ScreenDefinition (ScreenDefinition, ScreenKey)
 import Perspectives.Representation.State (State(..), Notification) as PEState
-import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, RoleType, StateIdentifier(..))
+import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, IndexedContext, RoleType, StateIdentifier(..))
 import Perspectives.Representation.UserGraph (UserGraph(..))
 import Perspectives.Representation.View (View)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
@@ -84,7 +84,7 @@ type DomeinFileRecord f = PouchbdDocumentFields
   , toStableCalculatedRoleType :: EncodableMap EnumeratedRoleType EnumeratedRoleType
   , toStableEnumeratedPropertyType :: EncodableMap EnumeratedPropertyType EnumeratedPropertyType
   , toStableCalculatedPropertyType :: EncodableMap EnumeratedPropertyType EnumeratedPropertyType
-  -- , toReadableContextIndividuals :: EncodableMap IndexedContext IndexedContext
+  , toReadableContextIndividuals :: EncodableMap IndexedContext IndexedContext
   -- , toReadableEnumeratedRoleIndividuals :: Map IndexedRole IndexedRole
   , _attachments :: Maybe AttachmentInfo
   )
@@ -239,6 +239,7 @@ defaultDomeinFileRecord =
   , toStableCalculatedRoleType: EM.empty
   , toStableEnumeratedPropertyType: EM.empty
   , toStableCalculatedPropertyType: EM.empty
+  , toReadableContextIndividuals: EM.empty
   , _attachments: Nothing
   }
 

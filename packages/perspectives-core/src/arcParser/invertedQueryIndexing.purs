@@ -30,7 +30,6 @@
 
 module Perspective.InvertedQuery.Indices where
 
-import Control.Monad.State.Class (gets)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
 import Data.Array (cons, elemIndex, singleton)
@@ -54,7 +53,7 @@ import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..))
-import Perspectives.Sidecar.ToReadable (WithSideCars, runWithPreloadedSideCars, toReadable)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Types.ObjectGetters (roleAspectsClosure)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..))
 import Prelude (class Eq, class Ord, Unit, bind, compare, discard, eq, identity, join, map, not, pure, unit, ($), (&&), (/=), (<#>), (<$>), (<<<), (==), (>=>), (>>=))
@@ -270,51 +269,46 @@ instance Eq PropertyBearer where
       &&
         querysteprole1 == querysteprole2
 
-loadSideCarsAndRun :: forall a. WithSideCars a -> PhaseThree a
-loadSideCarsAndRun action = do
-  sidecars <- gets _.sidecars
-  lift $ lift $ runWithPreloadedSideCars sidecars action
-
 -- | Find the EnumeratedRoleType whose instances can actually store values for the property type.
 -- | If the property type turns out to be an alias, return the original property (the final destination or key under which a value will be stored)
 -- | and include the alias in a Maybe value.
 -- | `prop` should be Readable.
-getPropertyTypeBearingRoleInstances :: EnumeratedPropertyType -> ADT RoleInContext -> PhaseThree (ArrayUnions PropertyBearer)
+getPropertyTypeBearingRoleInstances :: EnumeratedPropertyType -> ADT RoleInContext -> MonadPerspectives (ArrayUnions PropertyBearer)
 getPropertyTypeBearingRoleInstances prop adt = ArrayUnions <$> execWriterT (descendInFiller adt)
   where
 
-  descendInFiller :: ADT RoleInContext -> WriterT (Array PropertyBearer) PhaseThree Unit
+  descendInFiller :: ADT RoleInContext -> WriterT (Array PropertyBearer) MonadPerspectives Unit
   descendInFiller adt' = do
     -- Using the Traversable instance, we replace all terminal RoleInContext values with one or zero PropertyBearers. 
     -- We then collect them using foldMapADT (computeCollection) and tell them in the WriterT monad.
-    propBearers <- lift $ for adt' ((lift <<< lift <<< getEnumeratedRole <<< roleInContext2Role) >=> getPropertyBearers)
+    propBearers <- lift $ for adt' ((getEnumeratedRole <<< roleInContext2Role) >=> getPropertyBearers)
     tell $ computeCollection identity propBearers
-    mfiller <- lift $ lift $ lift (bindingOfADT adt')
+    mfiller <- lift $ (bindingOfADT adt')
     case mfiller of
       Nothing -> pure unit
       Just filler -> descendInFiller filler
 
-  getPropertyBearers :: EnumeratedRole -> PhaseThree (Array PropertyBearer)
+  getPropertyBearers :: EnumeratedRole -> MonadPerspectives (Array PropertyBearer)
   getPropertyBearers (EnumeratedRole { propertyAliases, id: eroleType }) = do
-    readableAliases <- loadSideCarsAndRun do
+    readableAliases <- do
       (aliases :: Array (Tuple String EnumeratedPropertyType)) <- for (toUnfoldable propertyAliases) \(Tuple alias destination) -> do
         readableAlias <- toReadable (EnumeratedPropertyType alias)
         readableDestination <- toReadable destination
         pure (Tuple (unwrap readableAlias) readableDestination)
       pure $ fromFoldable aliases
-    readableEroleType <- loadSideCarsAndRun $ toReadable eroleType
+    readableEroleType <- toReadable eroleType
     case lookup (unwrap prop) readableAliases of
       Just destination -> pure $ [ PropertyBearer destination (Just prop) readableEroleType readableEroleType ]
       Nothing -> do
         -- Map all properties to Readable identifiers.
-        allProps <- lift $ lift $ allLocallyRepresentedProperties (ST eroleType)
-        readableProps <- loadSideCarsAndRun $ traverse toReadable allProps
+        allProps <- allLocallyRepresentedProperties (ST eroleType)
+        readableProps <- traverse toReadable allProps
         if isJust $ elemIndex (ENP prop) readableProps then pure $ [ PropertyBearer prop Nothing readableEroleType readableEroleType ]
         else pure $ []
 
-typeLevelKeyForPropertyQueries :: EnumeratedPropertyType -> QueryFunctionDescription -> PhaseThree (Array RunTimeInvertedQueryKey)
+typeLevelKeyForPropertyQueries :: EnumeratedPropertyType -> QueryFunctionDescription -> MonadPerspectives (Array RunTimeInvertedQueryKey)
 typeLevelKeyForPropertyQueries p qfd = do
-  readableP <- loadSideCarsAndRun $ toReadable p
+  readableP <- toReadable p
   (ArrayUnions propBearers) <- getPropertyTypeBearingRoleInstances readableP (unsafePartial domain2roleType $ range qfd)
   pure $ join $ propBearers <#>
     \(PropertyBearer property replacementProperty typeOfPropertyBearingInstance typeOfInstanceOnPath) ->
@@ -346,13 +340,13 @@ typeLevelKeyForContextQueries qfd =
 -- | Construct the combination of the role type and its aspects 
 -- with their lexical contexts, and add to that the combination of the role type and the instantiation context type.
 readableRoleContextCombinations :: EnumeratedRoleType -> ContextType -> PhaseThree (ArrayUnions (Tuple EnumeratedRoleType ContextType))
-readableRoleContextCombinations roleType instantiationContext = do
-  readableInstantiationContext <- loadSideCarsAndRun $ toReadable instantiationContext
-  roleTypes <- lift $ lift $ (roleType ###= roleAspectsClosure)
-  readableRoleTypes <- loadSideCarsAndRun $ traverse toReadable roleTypes
+readableRoleContextCombinations roleType instantiationContext = lift $ lift do
+  readableInstantiationContext <- toReadable instantiationContext
+  roleTypes <- roleType ###= roleAspectsClosure
+  readableRoleTypes <- traverse toReadable roleTypes
   combinations <- execWriterT $ for readableRoleTypes \role_origin -> do
-    lexicalContext <- lift $ lift $ lift (getPerspectType role_origin >>= pure <<< contextOfRepresentation)
-    readableLexicalContext <- lift $ loadSideCarsAndRun $ toReadable lexicalContext
+    lexicalContext <- lift (getPerspectType role_origin >>= pure <<< contextOfRepresentation)
+    readableLexicalContext <- lift $ toReadable lexicalContext
     if readableLexicalContext == readableInstantiationContext then pure unit
     -- Only push this key if it is not a duplicate of the key with the instantiation context!
     else tell [ (Tuple role_origin readableLexicalContext) ]

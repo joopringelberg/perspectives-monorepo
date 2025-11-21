@@ -259,6 +259,10 @@ runDataUpgrades = do
     ( \_ -> void recompileLocalModels
     )
 
+  runUpgrade installedVersion "3.0.51"
+    ( \_ -> void recompileLocalModels
+    )
+
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 
   ----------------------------------------------------------------------------------------

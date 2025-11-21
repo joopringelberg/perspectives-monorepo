@@ -5,22 +5,28 @@ import Prelude
 import Control.Monad.State (StateT, evalStateT)
 import Control.Monad.State.Class (get, modify_)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (find)
 import Data.Map (Map, empty, insert, lookup)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse)
-import Data.Tuple (Tuple(..), swap)
-import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
+import Perspectives.DomeinFile (DomeinFile(..))
+import Perspectives.Data.EncodableMap as EM
 import Perspectives.ErrorLogging (logPerspectivesError)
-import Perspectives.Identifiers (typeUri2LocalName, typeUri2ModelUri_)
+import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.Persistent (getDomeinFile)
 import Perspectives.PerspectivesState (getModelUnderCompilation)
 import Perspectives.Query.QueryTypes (Domain(..), RoleInContext(..))
 import Perspectives.Representation.ADT (ADT)
-import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), PropertyType(..), RoleType(..))
+import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
+import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
+import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType)
+import Perspectives.Representation.Class.PersistentType (getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole)
+import Perspectives.Representation.Context (Context(..))
+import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
+import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType, CalculatedRoleType, ContextType, EnumeratedPropertyType, IndexedContext(..), PropertyType(..), RoleType(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping, fromLocalModels, loadStableMapping)
 
@@ -30,8 +36,6 @@ type SideCarMap = Map String StableIdMapping
 
 type WithSideCars = StateT SideCarMap MonadPerspectives
 
-newtype IndexedContext = IndexedContext String
-
 runWithSideCars :: forall a. WithSideCars a -> MonadPerspectives a
 runWithSideCars action = evalStateT action empty
 
@@ -39,63 +43,24 @@ runWithPreloadedSideCars :: forall a. Map String StableIdMapping -> WithSideCars
 runWithPreloadedSideCars preloaded action = evalStateT action preloaded
 
 class StableToReadable a where
-  toReadable :: a -> WithSideCars a
+  toReadable :: a -> MonadPerspectives a
 
 instance StableToReadable IndexedContext where
-  toReadable (IndexedContext stableId) = do
-    mmapping <- ensureSideCar stableId
-    case mmapping of
-      Just { contextIndividuals } -> do
-        -- Is our stable id one of the values in this mapping?
-        case OBJ.lookup stableId (OBJ.fromFoldable (swap <$> ((OBJ.toUnfoldable contextIndividuals) :: Array (Tuple String String)))) of
-          Just readableId -> pure (IndexedContext readableId)
-          Nothing -> pure (IndexedContext stableId)
-      Nothing -> pure (IndexedContext stableId)
+  toReadable ic@(IndexedContext stableId) = do
+    getDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ stableId) >>= \(DomeinFile { toReadableContextIndividuals }) -> case EM.lookup ic toReadableContextIndividuals of
+      Just readableId -> pure readableId
+      Nothing -> do
+        logPerspectivesError (Custom $ "Failed to convert IndexedContext from stable to readable: no mapping found for stable id " <> stableId)
+        pure (IndexedContext stableId)
 
 instance StableToReadable ContextType where
-  toReadable (ContextType stableContextId) = do
-    mmapping <- ensureSideCar stableContextId
-    case mmapping of
-      Just { contextCuids } -> do
-        let
-          cuid = case typeUri2LocalName stableContextId of
-            Just x -> x
-            Nothing -> stableContextId
-          pairs = (OBJ.toUnfoldable contextCuids :: Array (Tuple String String))
-        case find (\(Tuple _ c) -> c == cuid) pairs of
-          Just (Tuple fqn _) -> pure $ ContextType fqn
-          Nothing -> pure $ ContextType stableContextId
-      Nothing -> pure $ ContextType stableContextId
+  toReadable ct = getContext ct >>= \(Context { readableName }) -> pure readableName
 
 instance StableToReadable EnumeratedRoleType where
-  toReadable (EnumeratedRoleType stableRoleId) = do
-    mmapping <- ensureSideCar stableRoleId
-    case mmapping of
-      Just { roleCuids } -> do
-        let
-          cuid = case typeUri2LocalName stableRoleId of
-            Just x -> x
-            Nothing -> stableRoleId
-          pairs = (OBJ.toUnfoldable roleCuids :: Array (Tuple String String))
-        case find (\(Tuple _ c) -> c == cuid) pairs of
-          Just (Tuple fqn _) -> pure $ EnumeratedRoleType fqn
-          Nothing -> pure $ EnumeratedRoleType stableRoleId
-      Nothing -> pure $ EnumeratedRoleType stableRoleId
+  toReadable er = getEnumeratedRole er >>= \(EnumeratedRole { readableName }) -> pure readableName
 
 instance StableToReadable CalculatedRoleType where
-  toReadable (CalculatedRoleType stableRoleId) = do
-    mmapping <- ensureSideCar stableRoleId
-    case mmapping of
-      Just { roleCuids } -> do
-        let
-          cuid = case typeUri2LocalName stableRoleId of
-            Just x -> x
-            Nothing -> stableRoleId
-          pairs = (OBJ.toUnfoldable roleCuids :: Array (Tuple String String))
-        case find (\(Tuple _ c) -> c == cuid) pairs of
-          Just (Tuple fqn _) -> pure $ CalculatedRoleType fqn
-          Nothing -> pure $ CalculatedRoleType stableRoleId
-      Nothing -> pure $ CalculatedRoleType stableRoleId
+  toReadable er = getCalculatedRole er >>= \(CalculatedRole { readableName }) -> pure readableName
 
 instance StableToReadable RoleType where
   toReadable (ENR r) = ENR <$> toReadable r
@@ -107,34 +72,10 @@ instance StableToReadable PropertyType where
   toReadable (CP p) = CP <$> toReadable p
 
 instance StableToReadable EnumeratedPropertyType where
-  toReadable (EnumeratedPropertyType stablePropId) = do
-    mmapping <- ensureSideCar stablePropId
-    case mmapping of
-      Just { propertyCuids } -> do
-        let
-          cuid = case typeUri2LocalName stablePropId of
-            Just x -> x
-            Nothing -> stablePropId
-          pairs = (OBJ.toUnfoldable propertyCuids :: Array (Tuple String String))
-        case find (\(Tuple _ c) -> c == cuid) pairs of
-          Just (Tuple fqn _) -> pure (EnumeratedPropertyType fqn)
-          Nothing -> pure (EnumeratedPropertyType stablePropId)
-      Nothing -> pure (EnumeratedPropertyType stablePropId)
+  toReadable er = getEnumeratedProperty er >>= \(EnumeratedProperty { readableName }) -> pure readableName
 
 instance StableToReadable CalculatedPropertyType where
-  toReadable (CalculatedPropertyType stablePropId) = do
-    mmapping <- ensureSideCar stablePropId
-    case mmapping of
-      Just { propertyCuids } -> do
-        let
-          cuid = case typeUri2LocalName stablePropId of
-            Just x -> x
-            Nothing -> stablePropId
-          pairs = (OBJ.toUnfoldable propertyCuids :: Array (Tuple String String))
-        case find (\(Tuple _ c) -> c == cuid) pairs of
-          Just (Tuple fqn _) -> pure (CalculatedPropertyType fqn)
-          Nothing -> pure (CalculatedPropertyType stablePropId)
-      Nothing -> pure (CalculatedPropertyType stablePropId)
+  toReadable er = getCalculatedProperty er >>= \(CalculatedProperty { readableName }) -> pure readableName
 
 instance StableToReadable RoleInContext where
   toReadable (RoleInContext { role, context }) = do

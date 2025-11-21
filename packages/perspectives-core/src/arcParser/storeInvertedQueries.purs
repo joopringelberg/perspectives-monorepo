@@ -147,7 +147,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
       then pure unit
       else case pt of
         ENP p -> do
-          keys <- lift $ typeLevelKeyForPropertyQueries p qfd
+          keys <- lift $ lift $ lift $ typeLevelKeyForPropertyQueries p qfd
           lift $ addStorableInvertedQuery
             { keys: serializeInvertedQueryKey <$> keys
             , queryType: "RTPropertyKey"

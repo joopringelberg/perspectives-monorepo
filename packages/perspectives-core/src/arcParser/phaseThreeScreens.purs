@@ -62,7 +62,7 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optim
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), roletype2string)
 import Perspectives.Representation.Verbs (allPropertyVerbs, roleVerbList2Verbs)
 import Perspectives.Representation.View (View(..))
-import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, toReadable)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_)
 import Prelude (Unit, bind, discard, eq, flip, map, not, pure, unit, ($), (<#>), (<$>), (<*>), (<<<), (==), (>>=))
 
@@ -179,7 +179,7 @@ handleScreens screenEs = do
         (objectRoles :: Array RoleType) <- pure $ perspectives <#> \(Perspective { roleTypes }) -> unsafePartial fromJust $ head roleTypes
         -- Filter the roles that are not a specialization of the chatAspect role type.
         sidecars <- gets _.sidecars
-        readableObjectRoles <- lift2 (runWithPreloadedSideCars sidecars (traverse toReadable objectRoles))
+        readableObjectRoles <- lift2 (traverse toReadable objectRoles)
         chatRoles <- lift2 $ filterA (equalsOrGeneralisesRoleType_ (ENR $ EnumeratedRoleType READABLE.chatAspect)) readableObjectRoles
         -- For each of these roles, find the properties with the MessageProperty and MediaProperty facets.
         -- Finally construct a ChatDef for each of those roles, where the chatInstance is Nothing.

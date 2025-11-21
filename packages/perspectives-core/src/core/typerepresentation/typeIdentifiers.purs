@@ -349,3 +349,24 @@ instance Ord ResourceType where
   compare (RType ct1) (RType ct2) = compare ct1 ct2
   compare (CType ct1) (RType ct2) = GT
   compare (RType ct1) (CType ct2) = LT
+
+newtype IndexedContext = IndexedContext String
+
+derive instance Newtype IndexedContext _
+derive instance Generic IndexedContext _
+instance Show IndexedContext where
+  show i = "IndexedContext " <> (unwrap i)
+
+instance Eq IndexedContext where
+  eq (IndexedContext id1) (IndexedContext id2) = id1 == id2
+
+instance Ord IndexedContext where
+  compare (IndexedContext s1) (IndexedContext s2) = compare s1 s2
+
+instance PrettyPrint IndexedContext where
+  prettyPrint' t = show
+
+derive newtype instance writeForeignIndexedContext :: WriteForeign IndexedContext
+derive newtype instance readForeignIndexedContext :: ReadForeign IndexedContext
+instance semiGroupIndexedContext :: Semigroup IndexedContext where
+  append (IndexedContext s1) (IndexedContext s2) = if s1 == "" then IndexedContext s2 else IndexedContext (s1 <> "$" <> s2)

@@ -71,7 +71,7 @@ import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as TI
 import Perspectives.Representation.Verbs (PropertyVerb, RoleVerb)
 import Perspectives.Representation.View (propertyReferences)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
-import Perspectives.Sidecar.ToReadable (runWithSideCars, toReadable)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Utilities (addUnique)
 import Prelude (Unit, append, bind, eq, flip, not, pure, show, unit, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>), (||), (<*>))
 
@@ -708,7 +708,7 @@ findPerspective subjectType criterium = execStateT f Nothing
 -- | This function tests whether a user RoleType has a perspective on an object that carries the requested PropertyType.
 hasPerspectiveOnPropertyWithVerb :: Partial => RoleType -> EnumeratedRoleType -> EnumeratedPropertyType -> PropertyVerb -> MonadPerspectives Boolean
 hasPerspectiveOnPropertyWithVerb subjectType roleType property verb = do
-  readableProperty <- runWithSideCars (toReadable property)
+  readableProperty <- toReadable property
   isJust <$> findPerspective
     subjectType
     ( \perspective -> do

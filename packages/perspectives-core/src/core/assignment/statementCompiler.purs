@@ -64,7 +64,7 @@ import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Verbs
-import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, toReadable)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Types.ObjectGetters (externalRole, generalisesRoleType_, hasPerspectiveOnPropertyWithVerb, isDatabaseQueryRole, isEnumeratedProperty, lookForRoleTypeOfADT)
 import Prelude (bind, discard, pure, show, unit, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>), (>>=), (||))
 
@@ -256,7 +256,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
           -- In other words, any user can create a RootContext. In practice RootContexts are only used for 'apps'.
           er <- lift $ lift $ externalRole qualifiedContextTypeIdentifier
           sidecars <- gets _.sidecars
-          readableER <- lift $ lift $ runWithPreloadedSideCars sidecars (toReadable er)
+          readableER <- lift $ lift $ toReadable er
           allowed <- lift $ lift ((ENR $ EnumeratedRoleType READABLE.rootContext) `generalisesRoleType_` (ENR readableER))
           if allowed then case mnameGetterDescription of
             Nothing -> pure $ UQD originDomain (QF.CreateRootContext qualifiedContextTypeIdentifier) cte (CDOM $ UET qualifiedContextTypeIdentifier) True True
@@ -313,7 +313,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
           Nothing -> pure true
           Just fillerRestriction -> do
             sidecars <- gets _.sidecars
-            lift $ lift $ runWithPreloadedSideCars sidecars do
+            lift $ lift do
               readableFillers <- traverseDPROD toReadable fillers
               readableFillerRestriction <- traverseDPROD toReadable fillerRestriction
               -- fillerRestriction -> fillers
@@ -591,13 +591,11 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
                   case mexpandedCandidateRestriction of
                     Nothing -> pure true
                     -- The restriction on filling the candidate must be equal to or more general (less specialised) than the fillers.
-                    Just expandedCandidateRestriction -> do
-                      sidecars <- gets _.sidecars
-                      lift $ lift $ runWithPreloadedSideCars sidecars do
-                        readableFillers <- traverseDPROD toReadable expandedFillers
-                        readableCandidateRestriction <- traverseDPROD toReadable expandedCandidateRestriction
-                        -- expandedCandidateRestriction -> expandedFillers
-                        pure (readableCandidateRestriction `equalsOrGeneralises_` readableFillers)
+                    Just expandedCandidateRestriction -> lift $ lift do
+                      readableFillers <- traverseDPROD toReadable expandedFillers
+                      readableCandidateRestriction <- traverseDPROD toReadable expandedCandidateRestriction
+                      -- expandedCandidateRestriction -> expandedFillers
+                      pure (readableCandidateRestriction `equalsOrGeneralises_` readableFillers)
               )
               nameMatches
           )

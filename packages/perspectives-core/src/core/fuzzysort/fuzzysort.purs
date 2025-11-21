@@ -38,8 +38,8 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.ModelDependencies (indexedContextFuzzies)
 import Perspectives.Names (getMySystem)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Value(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..))
-import Perspectives.Sidecar.ToReadable (IndexedContext(..), runWithSideCars, toReadable)
+import Perspectives.Representation.TypeIdentifiers (IndexedContext(..), EnumeratedRoleType(..))
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Prelude (bind, map, pure, ($), (<$>), discard, (>=), (>>=))
 import Simple.JSON (writeJSON)
 
@@ -74,7 +74,7 @@ matchIndexedContextNames s _ = ArrayT do
   -- The keys are the Stable identifiers chosen for the Indexed Context Names in the models.
   indexedNames :: Object ContextInstance <- lift $ gets _.indexedContexts
   -- map the Stable keys to Readable names for fuzzy matching
-  readableIndexedNames <- lift $ runWithSideCars $ fromFoldable <$> for ((toUnfoldable indexedNames) :: Array (Tuple String ContextInstance)) \(Tuple stableId contextInstance) -> do
+  readableIndexedNames <- lift $ fromFoldable <$> for ((toUnfoldable indexedNames) :: Array (Tuple String ContextInstance)) \(Tuple stableId contextInstance) -> do
     toReadable (IndexedContext stableId) >>= \(IndexedContext readableId) -> pure (Tuple readableId contextInstance)
   sortedMatches <- pure $ matchStrings s (keys readableIndexedNames)
   -- These are Readable names matching the fuzzy search.

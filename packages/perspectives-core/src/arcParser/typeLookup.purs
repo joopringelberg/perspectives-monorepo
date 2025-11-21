@@ -1,6 +1,5 @@
 module Perspectives.Parsing.Arc.PhaseThree.TypeLookup where
 
-import Control.Monad.State (gets)
 import Control.Monad.Trans.Class (lift)
 import Control.Plus (map)
 import Data.Array (filter, filterA)
@@ -13,7 +12,7 @@ import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.PersistentType (getCalculatedRole, readable2stable)
 import Perspectives.Representation.Class.Role (allProperties, allRoles, roleADT)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType, PropertyType, RoleType(..), propertytype2string, roletype2string)
-import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, toReadable)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Prelude (pure, ($), (<<<), (==), (>>=), (>>>), bind, (>=>), (<$>))
 
 ----------------------------------------------------------------------------------------
@@ -47,15 +46,12 @@ lookForProperty :: (PropertyType -> Boolean) -> ADT EnumeratedRoleType -> PhaseT
 lookForProperty criterium adt = (lift $ lift $ allProperties adt) >>= ensurePropertiesAreReadable >>= pure <<< filter criterium
 
 ensurePropertiesAreReadable :: Array PropertyType -> PhaseThree (Array PropertyType)
-ensurePropertiesAreReadable props = do
-  sideCars <- lift $ gets \s -> s.sidecars
-  lift $ lift $ runWithPreloadedSideCars sideCars (traverse toReadable props)
+ensurePropertiesAreReadable props = lift $ lift (traverse toReadable props)
 
 lookForUnqualifiedRoleTypeOfADT :: String -> ADT ContextType -> PhaseThree (Array RoleType)
 lookForUnqualifiedRoleTypeOfADT s adt = do
-  sideCars <- lift $ gets \st -> st.sidecars
   roles <- lift $ lift $ allRoles adt
-  lift $ lift $ runWithPreloadedSideCars sideCars $ filterA (toReadable >=> roletype2string >>> areLastSegmentsOf s >>> pure) roles
+  lift $ lift $ filterA (toReadable >=> roletype2string >>> areLastSegmentsOf s >>> pure) roles
 
 readableRoletype2stable :: RoleType -> MonadPerspectives RoleType
 readableRoletype2stable (CR calculatedType) = CR <$> (readable2stable calculatedType)

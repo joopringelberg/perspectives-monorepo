@@ -38,7 +38,7 @@ import Data.Either (Either(..))
 import Data.Foldable (for_, traverse_)
 import Data.Identity as Identity
 import Data.List (catMaybes, List, concat, filter, filterM, fromFoldable) as LIST
-import Data.Map (Map, fromFoldable, singleton, toUnfoldable) as Map
+import Data.Map (Map, fromFoldable, toUnfoldable) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, isNothing, maybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), indexOf)
@@ -106,7 +106,7 @@ import Perspectives.Representation.View (View(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (getSideCars)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
-import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, toReadable)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith)
 import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, hasContextAspect, roleStates, statesPerProperty, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
@@ -162,7 +162,7 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
               Just individual -> do
                 ctype <- contextType_ individual
                 -- We need readable types, in Phase Three!
-                ctype' <- runWithPreloadedSideCars (Map.singleton (unwrap modelUri) sidecar) (toReadable ctype)
+                ctype' <- toReadable ctype
                 pure $ Just $ Tuple readableString ctype'
     )
   -- The Readable identifier of all role individuals from all imported models, combined with their role type.
@@ -178,7 +178,7 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
               Just individual -> do
                 ctype <- roleType_ individual
                 -- We need readable types, in Phase Three!
-                ctype' <- runWithPreloadedSideCars (Map.singleton (unwrap modelUri) sidecar) (toReadable ctype)
+                ctype' <- toReadable ctype
                 pure $ Just $ Tuple readableString ctype
     )
   let
@@ -1476,7 +1476,7 @@ handlePostponedStateQualifiedParts = do
     roleAdt <- lift $ lift $ roleADTOfRoleType userRole'
     userRoleDNF <- lift $ lift $ toConjunctiveNormalForm_ roleAdt
     sidecars <- gets _.sidecars
-    lift $ lift $ runWithPreloadedSideCars sidecars do
+    lift $ lift do
       readableDnf <- traverseDPROD toReadable dnf
       readableUserRoleDNF <- traverseDPROD toReadable userRoleDNF
       pure (readableUserRoleDNF `equals_` readableDnf)

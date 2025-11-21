@@ -42,7 +42,7 @@ import Data.Newtype (unwrap)
 import Data.Traversable (traverse)
 import Foreign.Object (keys, lookup)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes ((###=))
+import Perspectives.CoreTypes (MonadPerspectives, (###=))
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (modifyCalculatedPropertyInDomeinFile, modifyCalculatedRoleInDomeinFile)
 import Perspectives.External.CoreModuleList (isExternalCoreModule)
@@ -77,7 +77,7 @@ import Perspectives.Representation.ThreeValuedLogic (and, or) as THREE
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as RTI
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
-import Perspectives.Sidecar.ToReadable (runWithPreloadedSideCars, toReadable, WithSideCars)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Types.ObjectGetters (allTypesInContextADT, allTypesInRoleADT, enumeratedRoleContextType, equals, isUnlinked_, lookForRoleTypeOfADT, qualifyContextInDomain, qualifyEnumeratedRoleInDomain, qualifyRoleInDomain)
 import Prelude (bind, discard, eq, map, pure, show, unit, void, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>>=), (||))
 
@@ -827,8 +827,7 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
 
   comparison :: ArcPosition -> QueryFunctionDescription -> QueryFunctionDescription -> FunctionName -> PhaseThree QueryFunctionDescription
   comparison pos left' right' functionName = do
-    sidecars <- gets _.sidecars
-    areEqual <- lift $ lift $ runWithPreloadedSideCars sidecars do
+    areEqual <- lift $ lift do
       leftRange <- toReadable (range left')
       rightRange <- toReadable (range right')
       -- Both ranges must be equal, both sides must be functional.
@@ -838,9 +837,9 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
       else throwError $ ExpressionsShouldBeFunctional (pessimistic $ functional left') (pessimistic $ functional right') pos
     else throwError $ TypesCannotBeCompared pos (range left') (range right')
     where
-    equalDomains :: Domain -> Domain -> WithSideCars Boolean
+    equalDomains :: Domain -> Domain -> MonadPerspectives Boolean
     -- special case for RDOM
-    equalDomains (RDOM r1) (RDOM r2) = lift $ equals r1 r2
+    equalDomains (RDOM r1) (RDOM r2) = equals r1 r2
     equalDomains d1 d2 = pure $ eq d1 d2
 
   binOp :: ArcPosition -> QueryFunctionDescription -> QueryFunctionDescription -> Array Range -> FunctionName -> PhaseThree QueryFunctionDescription
