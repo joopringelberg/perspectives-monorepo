@@ -58,7 +58,7 @@ import Perspectives.DomeinFile (DomeinFile(..), addDownStreamAutomaticEffect, ad
 import Perspectives.Error.Boundaries (handleDomeinFileError)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.ExecuteInTopologicalOrder (executeInTopologicalOrder) as TOP
-import Perspectives.Identifiers (modelUri2LocalName)
+import Perspectives.Identifiers (domeinFileVersion, modelUri2LocalName)
 import Perspectives.InvertedQuery.Storable (saveInvertedQueries)
 import Perspectives.ModelDependencies (domeinFileName, modelManifest, versionToInstall)
 import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
@@ -95,27 +95,30 @@ recompileModelsAtUrl modelsDb manifestsDb = do
   recompileModelAtUrl model@(UninterpretedDomeinFile { id, namespace, _id, _rev, arc, _attachments }) =
     do
       log ("Recompiling " <> namespace)
-      -- Load sidecar from repository DB and compile with it
-      mRepoMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id) fromRepository
-      -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
-      r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id))
-      case r of
-        Left m -> logPerspectivesError $ Custom ("recompileModelsAtUrl: " <> show m)
-        Right (Tuple df@(DomeinFile dfr@{ id: id' }) (Tuple invertedQueries mapping')) -> lift $ lift do
-          log $ "Recompiled '" <> namespace <> "' succesfully (" <> namespace <> ")!"
-          df' <- pure $ DomeinFile dfr { _id = _id, _rev = Just _rev, _attachments = _attachments }
-          _rev' <- addDocument modelsDb df' namespace
-          attachments <- case _attachments of
-            Nothing -> pure empty
-            Just atts -> traverseWithIndex
-              (\attName { content_type } -> Tuple (MediaType content_type) <$> getAttachment modelsDb _id attName)
-              atts
-          newRev <- execStateT (addAttachments modelsDb _id attachments) _rev'
-          -- Persist updated sidecar to repository DB
-          mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping')
-          DeleteCouchdbDocument { rev: newRev2 } <- addAttachment modelsDb _id newRev "stableIdMapping.json" mappingFile (MediaType "application/json")
-          setRevision id' newRev2
-      pure model
+      case domeinFileVersion $ _id of
+        Nothing -> lift $ logPerspectivesError (Custom ("recompileModelAtUrl: no version found in model id '" <> unwrap id <> "'.")) *> pure model
+        Just version -> do
+          -- Load sidecar from repository DB and compile with it. We need the version to take the right sidecar.
+          mRepoMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id <> "@" <> version) fromRepository
+          -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
+          r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id))
+          case r of
+            Left m -> logPerspectivesError $ Custom ("recompileModelsAtUrl: " <> show m)
+            Right (Tuple df@(DomeinFile dfr@{ id: id' }) (Tuple invertedQueries mapping')) -> lift $ lift do
+              log $ "Recompiled '" <> namespace <> "' succesfully (" <> namespace <> ")!"
+              df' <- pure $ DomeinFile dfr { _id = _id, _rev = Just _rev, _attachments = _attachments }
+              _rev' <- addDocument modelsDb df' namespace
+              attachments <- case _attachments of
+                Nothing -> pure empty
+                Just atts -> traverseWithIndex
+                  (\attName { content_type } -> Tuple (MediaType content_type) <$> getAttachment modelsDb _id attName)
+                  atts
+              newRev <- execStateT (addAttachments modelsDb _id attachments) _rev'
+              -- Persist updated sidecar to repository DB
+              mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping')
+              DeleteCouchdbDocument { rev: newRev2 } <- addAttachment modelsDb _id newRev "stableIdMapping.json" mappingFile (MediaType "application/json")
+              setRevision id' newRev2
+          pure model
 
   getVersionedDomeinFileName :: RoleInstance -> MonadPerspectivesTransaction (Maybe String)
   getVersionedDomeinFileName rid = do
