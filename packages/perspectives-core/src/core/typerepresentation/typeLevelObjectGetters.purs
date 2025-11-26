@@ -26,9 +26,9 @@ import Control.Monad.Error.Class (try)
 import Control.Monad.State (StateT, execStateT, get, put)
 import Control.Monad.Trans.Class (lift)
 import Control.Plus (map, (<|>), empty)
-import Data.Array (concat, cons, elemIndex, filter, filterA, findIndex, foldl, foldr, fromFoldable, null, singleton)
+import Data.Array (concat, cons, elemIndex, filter, filterA, findIndex, foldl, foldr, foldM, fromFoldable, null, singleton)
 import Data.FoldableWithIndex (foldWithIndexM)
-import Data.List (foldl) as LIST
+import Data.List (List, foldM, foldl) as LIST
 import Data.Map (Map, empty, lookup, insert, keys, unionWith, values) as Map
 import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.Newtype (unwrap)
@@ -62,9 +62,9 @@ import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getC
 import Perspectives.Representation.Class.Role (actionsOfRoleType, adtOfRole, allProperties, allRoleProperties, allRoles, allViews, bindingOfADT, calculation, expandUnexpandedLeaves, getRole, getRoleADT, perspectives, perspectivesOfRoleType, roleADT, roleADTOfRoleType, roleKindOfRoleType, toConjunctiveNormalForm_)
 import Perspectives.Representation.Context (Context)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
-import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
+import Perspectives.Representation.ExplicitSet (ExplicitSet(..), isElementOf)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
-import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec, objectOfPerspective, perspectiveSupportsOneOfRoleVerbs, perspectiveSupportsProperty, perspectiveSupportsPropertyForVerb, stateSpec2StateIdentifier)
+import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec, objectOfPerspective, perspectiveSupportsOneOfRoleVerbs, perspectiveSupportsProperty, stateSpec2StateIdentifier)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType, roletype2string)
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as TI
@@ -708,16 +708,39 @@ findPerspective subjectType criterium = execStateT f Nothing
 -- | This function tests whether a user RoleType has a perspective on an object that carries the requested PropertyType.
 hasPerspectiveOnPropertyWithVerb :: Partial => RoleType -> EnumeratedRoleType -> EnumeratedPropertyType -> PropertyVerb -> MonadPerspectives Boolean
 hasPerspectiveOnPropertyWithVerb subjectType roleType property verb = do
+  readableSubject <- toReadable subjectType
+  readableObject <- toReadable roleType
   readableProperty <- toReadable property
   isJust <$> findPerspective
-    subjectType
+    readableSubject
     ( \perspective -> do
-        a <- pure $ perspectiveSupportsPropertyForVerb perspective (ENP property) verb
-        a' <- pure $ perspectiveSupportsPropertyForVerb perspective (ENP readableProperty) verb
-        b <- perspective `isPerspectiveOnRoleType` (ENR roleType)
-        c <- perspective `isPerspectiveOnRoleFilledWithRoleType` (ENR roleType)
-        pure ((a || a') && (b || c))
+        a <- (perspective `supportsPropertyForVerb` (ENP readableProperty)) verb
+        b <- perspective `isPerspectiveOnRoleType` (ENR readableObject)
+        c <- perspective `isPerspectiveOnRoleFilledWithRoleType` (ENR readableObject)
+        pure (a && (b || c))
     )
+
+  where
+
+  -- | Disregarding state, returns true iff the perspective lets the user apply the
+  -- | verb to the property.
+  -- | NOTE: the property should be readable.
+  supportsPropertyForVerb :: Perspective -> PropertyType -> PropertyVerb -> MonadPerspectives Boolean
+  supportsPropertyForVerb (Perspective { propertyVerbs }) property' verb' = find $ Map.values $ unwrap propertyVerbs
+    where
+    find :: LIST.List (Array PropertyVerbs) -> MonadPerspectives Boolean
+    find pvs = LIST.foldM
+      ( \found (pva :: Array PropertyVerbs) -> foldM
+          ( \acc (PropertyVerbs pset pverbs) -> do
+              readableProps <- traverse toReadable pset
+              if acc then pure true
+              else pure $ isElementOf property' readableProps && (isElementOf verb' pverbs)
+          )
+          found
+          pva
+      )
+      false
+      pvs
 
 -- | All role types in a context type that have a perspective on a given object role, with a perspective on the given property.
 rolesWithPerspectiveOnRoleAndProperty :: Partial => RoleType -> PropertyType -> ContextType ~~~> RoleType

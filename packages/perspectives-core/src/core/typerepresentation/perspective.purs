@@ -133,19 +133,6 @@ objectOfPerspective :: Partial => Perspective -> ADT RoleInContext
 objectOfPerspective (Perspective { object }) = case range object of
   RDOM adt -> adt
 
--- | Disregarding state, returns true iff the perspective lets the user apply the
--- | verb to the property.
-perspectiveSupportsPropertyForVerb :: Perspective -> PropertyType -> PropertyVerb -> Boolean
-perspectiveSupportsPropertyForVerb (Perspective { propertyVerbs }) property verb = find $ MAP.values $ unwrap propertyVerbs
-  where
-  find :: List (Array PropertyVerbs) -> Boolean
-  find pvs = isJust $ LST.findIndex
-    ( \(pva :: Array PropertyVerbs) -> isJust $ findIndex
-        (\(PropertyVerbs pset pverbs) -> isElementOf property pset && (isElementOf verb pverbs))
-        pva
-    )
-    pvs
-
 -- | Disregarding state, returns true iff the perspective lets the user apply *some*
 -- | verb to the property.
 perspectiveSupportsProperty :: Perspective -> PropertyType -> Boolean

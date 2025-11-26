@@ -24,10 +24,12 @@ module Perspectives.Representation.ExplicitSet where
 
 import Prelude
 
-import Data.Array (delete, elemIndex, find, foldM, foldl, intersect, nub, null, uncons)
+import Data.Array (delete, elemIndex, find, foldM, foldMap, foldl, foldr, intersect, nub, null, uncons)
+import Data.Foldable (class Foldable)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Set (subset, fromFoldable)
+import Data.Traversable (class Traversable, traverse)
 import Partial.Unsafe (unsafePartial)
 import Simple.JSON (class ReadForeign, class WriteForeign, read', writeImpl)
 
@@ -63,17 +65,37 @@ instance ReadForeign a => ReadForeign (ExplicitSet a) where
       "Empty" -> pure Empty
       "PSet" -> pure $ PSet set
 
-instance functorExplicitSet :: Functor ExplicitSet where
-  map f Universal = Universal
-  map f Empty = Empty
-  map f (PSet as) = PSet (f <$> as)
+instance Functor ExplicitSet where
+  map _ Universal = Universal
+  map _ Empty = Empty
+  map g (PSet as) = PSet (map g as)
 
-instance semigroupExplicitSet :: Semigroup (ExplicitSet a) where
+instance Semigroup (ExplicitSet a) where
   append Universal _ = Universal
   append _ Universal = Universal
   append Empty x = x
   append x Empty = x
   append (PSet a1) (PSet a2) = PSet (a1 <> a2)
+
+instance Monoid (ExplicitSet a) where
+  mempty = Empty
+
+instance Foldable ExplicitSet where
+  foldr _ z Universal = z
+  foldr _ z Empty = z
+  foldr g z (PSet as) = foldr g z as
+  foldl _ z Universal = z
+  foldl _ z Empty = z
+  foldl g z (PSet as) = foldl g z as
+  foldMap _ Universal = mempty
+  foldMap _ Empty = mempty
+  foldMap g (PSet as) = foldMap g as
+
+instance Traversable ExplicitSet where
+  traverse _ Universal = pure Universal
+  traverse _ Empty = pure Empty
+  traverse g (PSet as) = PSet <$> traverse g as
+  sequence = traverse identity
 
 -----------------------------------------------------------
 -- FUNCTIONS ON EXPLICITSET

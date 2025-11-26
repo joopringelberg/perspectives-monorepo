@@ -88,7 +88,7 @@ import Perspectives.Representation.CNF (toConjunctiveNormalForm, traverseDPROD)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Identifiable (identifier)
-import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedRole, readable2stable, tryGetPerspectType)
+import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedRole, tryGetPerspectType)
 import Perspectives.Representation.Class.Role (Role(..), allProperties, completeExpandedType, displayNameOfRoleType, getCalculation, getRole, getRoleType, roleADT, roleADTOfRoleType, toConjunctiveNormalForm_)
 import Perspectives.Representation.Context (Context(..)) as CTXT
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
@@ -107,6 +107,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (getSideCars)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
 import Perspectives.Sidecar.ToReadable (toReadable)
+import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith)
 import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, hasContextAspect, roleStates, statesPerProperty, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
@@ -263,12 +264,12 @@ checkAspectRoleReferences = do
     check rt@(ENR ert@(EnumeratedRoleType id)) =
       if unsafePartial typeUri2ModelUri_ id == unwrap modelUri then lift $ lift $ string2RoleType $ roletype2string rt
       else do
-        mEnumerated <- try (lift $ lift $ readable2stable ert)
+        mEnumerated <- try (lift $ lift $ toStable ert)
         case mEnumerated of
           -- Do not convert to Stable. Phase Three works with Readable names.
           Right _ -> pure rt
           Left _ -> do
-            mCalculated <- try (lift $ lift $ readable2stable (CalculatedRoleType id))
+            mCalculated <- try (lift $ lift $ toStable (CalculatedRoleType id))
             case mCalculated of
               Right _ -> pure $ CR (CalculatedRoleType id)
               Left _ -> throwError $ UnknownRole arcParserStartPosition id

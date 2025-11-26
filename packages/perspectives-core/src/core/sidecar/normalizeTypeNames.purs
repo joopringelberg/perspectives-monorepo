@@ -44,7 +44,7 @@ import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (Object, fromFoldable, toUnfoldable)
+import Foreign.Object (Object, fromFoldable, toUnfoldable, values)
 import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
@@ -216,6 +216,13 @@ instance NormalizeTypeNames (DomeinFile Readable) (ModelUri Readable) where
             (\(Tuple readable stable) -> Tuple (IndexedContext stable) (IndexedContext readable))
             (toUnfoldable stableIdMapping.contextIndividuals) :: Array (Tuple IndexedContext IndexedContext)
         )
+    toStableContextIndividuals <- case Map.lookup df.id sidecars of
+      Nothing -> pure EM.empty -- no sidecar for this model
+      (Just stableIdMapping) -> pure $ EM.fromFoldable
+        ( map
+            (\(Tuple readable stable) -> Tuple (IndexedContext readable) (IndexedContext stable))
+            (toUnfoldable stableIdMapping.contextIndividuals) :: Array (Tuple IndexedContext IndexedContext)
+        )
     id' <- fqn2tid df.id
     pure $ DomeinFile df
       { contexts = contexts'
@@ -230,7 +237,15 @@ instance NormalizeTypeNames (DomeinFile Readable) (ModelUri Readable) where
       , upstreamStateNotifications = upstreamStateNotifications'
       , upstreamAutomaticEffects = upstreamAutomaticEffects'
       , screens = screens'
+      , toStableContextType = EM.fromFoldable (values contexts' <#> \(Context { id, readableName }) -> Tuple readableName id)
+      , toStableEnumeratedRoleType = EM.fromFoldable (values enumeratedRoles' <#> \(EnumeratedRole { id, readableName }) -> Tuple readableName id)
+      , toStableCalculatedRoleType = EM.fromFoldable (values calculatedRoles' <#> \(CalculatedRole { id, readableName }) -> Tuple readableName id)
+      , toStableEnumeratedPropertyType = EM.fromFoldable (values enumeratedProperties' <#> \(EnumeratedProperty { id, readableName }) -> Tuple readableName id)
+      , toStableCalculatedPropertyType = EM.fromFoldable (values calculatedProperties' <#> \(CalculatedProperty { id, readableName }) -> Tuple readableName id)
+      , toStableStateIdentifier = EM.fromFoldable (values states' <#> \(State { id, readableName }) -> Tuple readableName id)
+      , toStableViewType = EM.fromFoldable (values views' <#> \(View { id, readableName }) -> Tuple readableName id)
       , toReadableContextIndividuals = toReadableContextIndividuals
+      , toStableContextIndividuals = toStableContextIndividuals
       , id = id'
       }
 

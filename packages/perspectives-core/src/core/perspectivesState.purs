@@ -25,7 +25,7 @@ module Perspectives.PerspectivesState where
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (cons)
-import Data.Map (empty) as Map
+import Data.Map (Map, empty, insert, lookup) as Map
 import Data.Maybe (Maybe(..))
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
@@ -98,6 +98,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , setPDRStatus: \_ -> pure unit
   , typeToBeFixed
   , modelUnderCompilation: Nothing
+  , modelUris: Map.empty
   }
 
 defaultRuntimeOptions :: RuntimeOptions
@@ -247,6 +248,20 @@ getModelUnderCompilation = gets _.modelUnderCompilation
 
 setModelUnderCompilation :: Maybe (ModelUri Readable) -> MonadPerspectives Unit
 setModelUnderCompilation mu = modify \s -> s { modelUnderCompilation = mu }
+
+getModelUris :: MonadPerspectives (Map.Map (ModelUri Readable) (ModelUri Stable))
+getModelUris = gets _.modelUris
+
+setModelUri :: ModelUri Readable -> ModelUri Stable -> MonadPerspectives Unit
+setModelUri muReadable muStable = modify \s -> s { modelUris = Map.insert muReadable muStable s.modelUris }
+
+setModelUris :: Map.Map (ModelUri Readable) (ModelUri Stable) -> MonadPerspectives Unit
+setModelUris muMap = modify \s -> s { modelUris = muMap }
+
+lookupModelUri :: ModelUri Readable -> MonadPerspectives (Maybe (ModelUri Stable))
+lookupModelUri muReadable = do
+  muMap <- getModelUris
+  pure $ Map.lookup muReadable muMap
 
 -----------------------------------------------------------
 -- PERSPECTIVESUSER

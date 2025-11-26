@@ -227,15 +227,6 @@ runDataUpgrades = do
               system
               (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
     )
-  runUpgrade installedVersion "3.0.10"
-    ( \_ -> do
-        -- Add IsSystemModel to various models.
-        runMonadPerspectivesTransaction'
-          false
-          (ENR $ EnumeratedRoleType sysUser)
-          do
-            updateModel_ [ "model://perspectives.domains#System@3.0" ] [ "false" ] (RoleInstance "")
-    )
 
   runUpgrade installedVersion "3.0.11"
     ( \_ -> do
@@ -255,11 +246,7 @@ runDataUpgrades = do
 
   runUpgrade installedVersion "3.0.48" normalizeLocalDomeinFiles
 
-  runUpgrade installedVersion "3.0.49"
-    ( \_ -> void recompileLocalModels
-    )
-
-  runUpgrade installedVersion "3.0.51"
+  runUpgrade installedVersion "3.0.57"
     ( \_ -> void recompileLocalModels
     )
 

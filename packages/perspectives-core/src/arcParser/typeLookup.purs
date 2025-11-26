@@ -9,10 +9,11 @@ import Perspectives.Identifiers (areLastSegmentsOf)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree)
 import Perspectives.Query.QueryTypes (roleInContext2Role)
 import Perspectives.Representation.ADT (ADT(..))
-import Perspectives.Representation.Class.PersistentType (getCalculatedRole, readable2stable)
+import Perspectives.Representation.Class.PersistentType (getCalculatedRole)
 import Perspectives.Representation.Class.Role (allProperties, allRoles, roleADT)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType, PropertyType, RoleType(..), propertytype2string, roletype2string)
 import Perspectives.Sidecar.ToReadable (toReadable)
+import Perspectives.Sidecar.ToStable (toStable)
 import Prelude (pure, ($), (<<<), (==), (>>=), (>>>), bind, (>=>), (<$>))
 
 ----------------------------------------------------------------------------------------
@@ -54,5 +55,5 @@ lookForUnqualifiedRoleTypeOfADT s adt = do
   lift $ lift $ filterA (toReadable >=> roletype2string >>> areLastSegmentsOf s >>> pure) roles
 
 readableRoletype2stable :: RoleType -> MonadPerspectives RoleType
-readableRoletype2stable (CR calculatedType) = CR <$> (readable2stable calculatedType)
-readableRoletype2stable (ENR enumeratedType) = ENR <$> (readable2stable enumeratedType)
+readableRoletype2stable (CR calculatedType) = CR <$> (toStable calculatedType)
+readableRoletype2stable (ENR enumeratedType) = ENR <$> (toStable enumeratedType)

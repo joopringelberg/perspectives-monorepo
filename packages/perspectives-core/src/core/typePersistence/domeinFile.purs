@@ -49,7 +49,7 @@ import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), InvertedQueryKey)
 import Perspectives.Representation.ScreenDefinition (ScreenDefinition, ScreenKey)
 import Perspectives.Representation.State (State(..), Notification) as PEState
-import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, IndexedContext, RoleType, StateIdentifier(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType, CalculatedRoleType, ContextType, EnumeratedPropertyType, EnumeratedRoleType, IndexedContext, RoleType, StateIdentifier(..), ViewType)
 import Perspectives.Representation.UserGraph (UserGraph(..))
 import Perspectives.Representation.View (View)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
@@ -81,10 +81,14 @@ type DomeinFileRecord f = PouchbdDocumentFields
   , screens :: EncodableMap ScreenKey ScreenDefinition
   , toStableContextType :: EncodableMap ContextType ContextType
   , toStableEnumeratedRoleType :: EncodableMap EnumeratedRoleType EnumeratedRoleType
-  , toStableCalculatedRoleType :: EncodableMap EnumeratedRoleType EnumeratedRoleType
+  , toStableCalculatedRoleType :: EncodableMap CalculatedRoleType CalculatedRoleType
   , toStableEnumeratedPropertyType :: EncodableMap EnumeratedPropertyType EnumeratedPropertyType
-  , toStableCalculatedPropertyType :: EncodableMap EnumeratedPropertyType EnumeratedPropertyType
+  , toStableCalculatedPropertyType :: EncodableMap CalculatedPropertyType CalculatedPropertyType
+  , toStableStateIdentifier :: EncodableMap StateIdentifier StateIdentifier
+  , toStableViewType :: EncodableMap ViewType ViewType
+
   , toReadableContextIndividuals :: EncodableMap IndexedContext IndexedContext
+  , toStableContextIndividuals :: EncodableMap IndexedContext IndexedContext
   -- , toReadableEnumeratedRoleIndividuals :: Map IndexedRole IndexedRole
   , _attachments :: Maybe AttachmentInfo
   )
@@ -239,7 +243,10 @@ defaultDomeinFileRecord =
   , toStableCalculatedRoleType: EM.empty
   , toStableEnumeratedPropertyType: EM.empty
   , toStableCalculatedPropertyType: EM.empty
+  , toStableStateIdentifier: EM.empty
+  , toStableViewType: EM.empty
   , toReadableContextIndividuals: EM.empty
+  , toStableContextIndividuals: EM.empty
   , _attachments: Nothing
   }
 

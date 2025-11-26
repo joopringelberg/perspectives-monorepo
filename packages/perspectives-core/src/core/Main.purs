@@ -73,7 +73,7 @@ import Perspectives.Persistence.State (getSystemIdentifier, withCouchdbUrl)
 import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Persistent (entitiesDatabaseName, invertedQueryDatabaseName, postDatabaseName, saveMarkedResources)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (defaultRuntimeOptions, modelsDatabaseName, newPerspectivesState, pushMessage, removeMessage, resetCaches)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, modelsDatabaseName, newPerspectivesState, pushMessage, removeMessage, resetCaches, setModelUris)
 import Perspectives.Proxy (handleClientRequest) as Proxy
 import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope, getPropertyFunction, getRoleFunction, getterFromPropertyType)
 import Perspectives.ReferentialIntegrity (fixReferences)
@@ -85,7 +85,8 @@ import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmb
 import Perspectives.RunPerspectives (runPerspectivesWithState)
 import Perspectives.SetupCouchdb (createUserDatabases)
 import Perspectives.SetupUser (reSetupUser, setupUser)
-import Perspectives.Sidecar.TransitionaryTypeSwitching (forkedTypeFixer)
+import Perspectives.Sidecar.NormalizeTypeNames (getinstalledModelCuids)
+import Perspectives.Sidecar.StableIdMapping (fromLocalModels)
 import Perspectives.Sync.Channel (endChannelReplication)
 import Perspectives.Sync.Transaction (UninterpretedTransactionForPeer(..))
 import Perspectives.SystemClocks (forkedSystemClocks)
@@ -151,9 +152,6 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
       -- Fork aff to restore referential integrity
       void $ forkAff $ forkReferentialIntegrityFixer missingResource state
 
-      -- Fork aff to fix types that need to be mapped.
-      void $ forkAff $ forkedTypeFixer typeToBeFixed state
-
       -- Fork aff to save to the database
       void $ forkAff $ forkDatabasePersistence state
 
@@ -171,6 +169,7 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
         ( do
             key <- getPrivateKey
             modify \(s@{ runtimeOptions }) -> s { runtimeOptions = runtimeOptions { privateKey = unsafeCoerce key } }
+            getinstalledModelCuids fromLocalModels >>= setModelUris
             runDataUpgrades
             retrieveAllCredentials
             retrieveBrokerService
@@ -519,8 +518,6 @@ createAccount perspectivesUser rawPouchdbUser runtimeOptions nullableIdentityDoc
       void $ forkAff $ forkCreateIndexedResources indexedResourceToCreate state
       -- Fork aff to restore referential integrity
       void $ forkAff $ forkReferentialIntegrityFixer missingResource state
-      -- Fork aff to fix types that need to be mapped.
-      void $ forkAff $ forkedTypeFixer typeToBeFixed state
 
       -- Set up.
       runPerspectivesWithState

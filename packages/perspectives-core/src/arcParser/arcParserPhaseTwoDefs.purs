@@ -50,7 +50,7 @@ import Perspectives.Query.QueryTypes (QueryFunctionDescription)
 import Perspectives.Representation.Perspective (Perspective)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType, EnumeratedRoleType, RoleType)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
-import Perspectives.Sidecar.ToReadable (SideCarMap)
+import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
 import Prelude (class Eq, class Monad, Unit, bind, discard, eq, identity, map, pure, show, void, ($), (<$>), (<<<), (<>), (>>=))
 
 -- TODO
@@ -75,7 +75,7 @@ type PhaseTwoState =
   , perspectives :: MAP.Map (Tuple RoleType Step) Perspective
   , loopdetection :: LoopDetection
   , invertedQueries :: StoredQueries
-  , sidecars :: SideCarMap
+  , sidecars :: MAP.Map String StableIdMapping
   }
 
 data CurrentlyCalculated = Prop CalculatedPropertyType | Role CalculatedRoleType

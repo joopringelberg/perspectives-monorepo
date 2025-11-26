@@ -185,8 +185,8 @@ executeInTopologicalOrder
   -> m Boolean
 executeInTopologicalOrder toSort action =
   TOP.executeInTopologicalOrder
-    (\(UninterpretedDomeinFile { namespace }) -> namespace)
-    (\(UninterpretedDomeinFile { namespace, referredModels }) -> difference referredModels [ namespace ])
+    (\(UninterpretedDomeinFile { id }) -> unwrap id)
+    (\(UninterpretedDomeinFile { id, referredModels }) -> difference referredModels [ unwrap id ])
     toSort
     action
     >>=

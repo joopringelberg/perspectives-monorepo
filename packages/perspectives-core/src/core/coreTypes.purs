@@ -236,6 +236,8 @@ type PerspectivesExtraState =
   , typeToBeFixed :: AVar TypeFix
 
   , modelUnderCompilation :: Maybe (ModelUri Readable)
+
+  , modelUris :: Map (ModelUri Readable) (ModelUri Stable)
   )
 
 -- | These are options that can be provided to the PDR at startup.
