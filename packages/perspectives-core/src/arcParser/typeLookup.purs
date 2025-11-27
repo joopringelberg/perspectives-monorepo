@@ -57,3 +57,9 @@ lookForUnqualifiedRoleTypeOfADT s adt = do
 readableRoletype2stable :: RoleType -> MonadPerspectives RoleType
 readableRoletype2stable (CR calculatedType) = CR <$> (toStable calculatedType)
 readableRoletype2stable (ENR enumeratedType) = ENR <$> (toStable enumeratedType)
+
+-- | String must be fully qualified. 
+lookForRoleTypeOfADT :: String -> ADT ContextType -> PhaseThree (Array RoleType)
+lookForRoleTypeOfADT s adt = do
+  roles <- lift $ lift $ allRoles adt
+  lift $ lift $ filterA (toReadable >=> roletype2string >>> ((==) s) >>> pure) roles

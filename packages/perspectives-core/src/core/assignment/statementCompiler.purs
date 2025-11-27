@@ -36,14 +36,13 @@ import Data.Traversable (for_, traverse)
 import Foreign.Object (Object, keys, values)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Checking.Authorization (roleHasPerspectiveOnRoleWithVerb)
-import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.External.CoreModuleList (isExternalCoreModule)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionCardinality, lookupHiddenFunctionIsEffect, lookupHiddenFunctionNArgs)
 import Perspectives.Identifiers (areLastSegmentsOf, buitenRol, typeUri2ModelUri, endsWithSegments, isExternalRole, isTypeUri)
 import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (Step, VarBinding(..))
-import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType, lookForUnqualifiedRoleTypeOfADT)
+import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForRoleTypeOfADT, lookForUnqualifiedPropertyType, lookForUnqualifiedRoleTypeOfADT)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, addBinding, getsDF, lift2, throwError, withFrame)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..), Statements(..))
@@ -65,7 +64,7 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessi
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Verbs
 import Perspectives.Sidecar.ToReadable (toReadable)
-import Perspectives.Types.ObjectGetters (externalRole, generalisesRoleType_, hasPerspectiveOnPropertyWithVerb, isDatabaseQueryRole, isEnumeratedProperty, lookForRoleTypeOfADT)
+import Perspectives.Types.ObjectGetters (externalRole, generalisesRoleType_, hasPerspectiveOnPropertyWithVerb, isDatabaseQueryRole, isEnumeratedProperty)
 import Prelude (bind, discard, pure, show, unit, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>), (>>=), (||))
 
 ------------------------------------------------------------------------------------
@@ -532,7 +531,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       rtarr <-
         if isTypeUri roleIdentifier then
           if isExternalRole roleIdentifier then pure [ ENR $ EnumeratedRoleType roleIdentifier ]
-          else lift2 $ runArrayT $ lookForRoleTypeOfADT roleIdentifier ct
+          else lookForRoleTypeOfADT roleIdentifier ct
         else if roleIdentifier == "External" then case ct of
           (ST (ContextType cid)) -> pure [ ENR (EnumeratedRoleType (cid <> "$External")) ]
           (UET (ContextType cid)) -> pure [ ENR (EnumeratedRoleType (cid <> "$External")) ]

@@ -55,7 +55,7 @@ import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), UnaryStep(..), VarBinding(..))
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
 import Perspectives.Parsing.Arc.PhaseThree.SetInvertedQueries (setInvertedQueries)
-import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForPropertyType, lookForUnqualifiedPropertyType, lookForUnqualifiedRoleTypeOfADT)
+import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForPropertyType, lookForRoleTypeOfADT, lookForUnqualifiedPropertyType, lookForUnqualifiedRoleTypeOfADT)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (CurrentlyCalculated(..), PhaseThree, addBinding, getsDF, isBeingCalculated, isIndexedContextInCurrentCompilation, isIndexedRoleInCurrentCompilation, lift2, lookupVariableBinding, loopErrorMessage, throwError, withCurrentCalculation, withFrame)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -78,7 +78,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), Cont
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as RTI
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
-import Perspectives.Types.ObjectGetters (allTypesInContextADT, allTypesInRoleADT, enumeratedRoleContextType, equals, isUnlinked_, lookForRoleTypeOfADT, qualifyContextInDomain, qualifyEnumeratedRoleInDomain, qualifyRoleInDomain)
+import Perspectives.Types.ObjectGetters (allTypesInContextADT, allTypesInRoleADT, enumeratedRoleContextType, equals, isUnlinked_, qualifyContextInDomain, qualifyEnumeratedRoleInDomain, qualifyRoleInDomain)
 import Prelude (bind, discard, eq, map, pure, show, unit, void, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>>=), (||))
 
 ------------------------------------------------------------------------------------
@@ -349,7 +349,7 @@ compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
                         (rts :: Array RoleType) <-
                           if isTypeUri ident then
                             if isExternalRole ident then pure [ ENR $ EnumeratedRoleType ident ]
-                            else lift2 $ runArrayT $ lookForRoleTypeOfADT ident c
+                            else lookForRoleTypeOfADT ident c
                           else lookForUnqualifiedRoleTypeOfADT ident c
                         case uncons rts of
                           Nothing -> throwError $ ContextHasNoRole c ident pos (endOf $ Simple s)
