@@ -111,7 +111,7 @@ import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith)
 import Perspectives.Types.ObjectGetters (actionStates, automaticStates, contextAspectsClosure, enumeratedRoleContextType, hasContextAspect, roleStates, statesPerProperty, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
-import Prelude (Unit, append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=))
+import Prelude (Unit, append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (/=))
 
 -- Currently only used in tests and in loadArcFS - but that has to change to phaseThreeWithMapping.
 phaseThree
@@ -264,15 +264,12 @@ checkAspectRoleReferences = do
     check rt@(ENR ert@(EnumeratedRoleType id)) =
       if unsafePartial typeUri2ModelUri_ id == unwrap modelUri then lift $ lift $ string2RoleType $ roletype2string rt
       else do
-        mEnumerated <- try (lift $ lift $ toStable ert)
-        case mEnumerated of
-          -- Do not convert to Stable. Phase Three works with Readable names.
-          Right _ -> pure rt
-          Left _ -> do
-            mCalculated <- try (lift $ lift $ toStable (CalculatedRoleType id))
-            case mCalculated of
-              Right _ -> pure $ CR (CalculatedRoleType id)
-              Left _ -> throwError $ UnknownRole arcParserStartPosition id
+        stableErt <- lift $ lift $ toStable ert
+        if stableErt /= ert then pure $ ENR stableErt
+        else do
+          stableCrt <- lift $ lift $ toStable (CalculatedRoleType id)
+          if stableCrt /= (CalculatedRoleType id) then pure $ CR stableCrt
+          else throwError $ UnknownRole arcParserStartPosition id
     -- Calculated roles are ok by construction, here.
     check rt@(CR _) = pure rt
 
