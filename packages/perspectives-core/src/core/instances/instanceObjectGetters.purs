@@ -68,6 +68,7 @@ import Perspectives.Representation.Context (Context(..)) as CONTEXT
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser(..), RoleInstance(..), Value(..), roleInstance2PerspectivesUser)
 import Perspectives.Representation.Perspective (StateSpec(..)) as SP
+import Perspectives.Representation.Perspective (stateSpec2StateIdentifier)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleKind(..), RoleType, StateIdentifier)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, isInPublicScheme, takeGuid)
 import Perspectives.SetupCouchdb (FillerInfo, context2RoleFilter, filled2FillerInfo, filled2fillerFilter, filler2filledFilter, role2ContextFilter, roleFromContextFilter)
@@ -165,7 +166,7 @@ getContextActions userRoleType userRoleInstance cid = ArrayT do
     ( \(cumulatedActions :: Array (Tuple String String)) (nextState :: SP.StateSpec) -> case Map.lookup nextState stateActionMap of
         Nothing -> pure cumulatedActions
         Just (actions :: Object Action) -> do
-          moreActions <- for (keys actions) \actionName -> Tuple actionName <$> (lift $ translateType (qualifyWith (unwrap cType) actionName))
+          moreActions <- for (keys actions) \actionName -> Tuple actionName <$> (lift $ translateType actionName)
           pure (cumulatedActions <> moreActions)
     )
     []
