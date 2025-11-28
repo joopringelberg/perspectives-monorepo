@@ -96,23 +96,31 @@ type Options = { pageHostingPDRPort?: (pdr: any) => MessagePort };
 export function configurePDRproxy(channeltype: "internalChannel" | "sharedWorkerChannel" | "hostPageChannel", options: Options): void 
 {
   let sharedWorkerChannel, sharedWorker;
-  switch( channeltype )
-  {
-    case "sharedWorkerChannel":
-      sharedWorker =  new SharedWorker(new URL('perspectives-sharedworker', import.meta.url), { type: 'module' })
-      //// Its port property is a MessagePort, as documented in https://developer.mozilla.org/en-US/docs/Web/API/MessagePort.
-      sharedWorkerChannel = new SharedWorkerChannel( sharedWorker.port );
-      sharedWorkerChannelResolver( sharedWorkerChannel );
-      pdrProxyResolver( new PerspectivesProxy( sharedWorkerChannel ) );
+  switch (channeltype) {
+    case "sharedWorkerChannel": {
+      sharedWorker = new SharedWorker(new URL('perspectives-sharedworker', import.meta.url), { type: 'module' });
+      sharedWorkerChannel = new SharedWorkerChannel(sharedWorker.port);
+      sharedWorkerChannelResolver(sharedWorkerChannel);
+      const instance = new PerspectivesProxy(sharedWorkerChannel);
+      // Dev-only global hook for console debugging
+      if (typeof window !== "undefined") {
+        (window as any).pdr = instance;
+      }
+      pdrProxyResolver(instance);
       break;
-    case "hostPageChannel":
-        import( "perspectives-core" ).then( pdr => {
-        // pageHostingPDRPort returns a MessageChannel as documented here: https://developer.mozilla.org/en-US/docs/Web/API/MessagePort.
-        sharedWorkerChannel = new SharedWorkerChannel( options.pageHostingPDRPort!( pdr ) );
-        sharedWorkerChannelResolver( sharedWorkerChannel );
-        pdrProxyResolver( new PerspectivesProxy( sharedWorkerChannel ) );
-        });
-       break;
+    }
+    case "hostPageChannel": {
+      import("perspectives-core").then(core => {
+        sharedWorkerChannel = new SharedWorkerChannel(options.pageHostingPDRPort!(core));
+        sharedWorkerChannelResolver(sharedWorkerChannel);
+        const instance = new PerspectivesProxy(sharedWorkerChannel);
+        if (typeof window !== "undefined") {
+          (window as any).pdr = instance;
+        }
+        pdrProxyResolver(instance);
+      });
+      break;
+    }
   }
 }
 
@@ -252,7 +260,7 @@ class SharedWorkerChannel
           // As soon as the SharedWorker receives a port from this proxy, it will return the channels id.
           // {serviceWorkerMessage: "channelId", channelId: i} where i is a multiple of a million.
           // Handle the port identification message that is sent by the service worker.
-          console.log( "SharedWorkerChannel received a channelId: " + e.data.channelId );
+          // console.log( "SharedWorkerChannel received a channelId: " + e.data.channelId );
           this.channelIdResolver!( e.data.channelId );
           break;
         case "pdrStarted":
@@ -578,6 +586,8 @@ export class PerspectivesProxy
     // Log errors to the console anyway for the developer.
     const handleErrors = function(response : Response) // response = PerspectivesApiTypes.ResponseRecord
     {
+      // Log a result has been received.
+      // console.log( "Response received for request: " + req.trackingNumber + " of type " + req.request );
       // Restore cursor shape
       cursor.restore(req);
       if (response.responseType === "APIerror")
@@ -1732,14 +1742,21 @@ type ChatParticipantFields = {roleInstance : RoleInstanceT, firstname? : ValueT,
 ////////////////////////////////////////////////////////////////////////////////
 //// CURSOR HANDLING
 ////////////////////////////////////////////////////////////////////////////////
-type Message = { identifier: string, text: string};
+type Message = {
+  identifier: string;
+  text: string;
+  startedAt: number;
+  timeoutId?: number;
+  // Optional: attach the original request for debugging
+  req?: RequestRecord;
+};
 
 class Cursor {
   private static loadingOverlayElement: HTMLDivElement | null = null;
-  private PDRStatus: string = "Processing..."
+  private PDRStatus: string = "Processing...";
   private messages: Message[] = [];
   private queuePromise = Promise.resolve();
-  
+
   constructor() {
     // Create the overlay element once
     if (!Cursor.loadingOverlayElement) {
@@ -1796,63 +1813,61 @@ class Cursor {
     }
   }
 
-  pushMessage(identifier: string, text: string) {
-    this.messages.unshift({ identifier, text });
-    this.setOverlayText(text);
-    this.setOverlayVisibility(true);
-    // For desktop:
-    document.body.style.cursor = "wait";
-    }
+  pushMessage(identifier: string, text: string, req?: RequestRecord) {
+    this.enqueue(() => {
+      const msg: Message = { identifier, text, startedAt: Date.now(), req };
+      this.messages.unshift(msg);
+      this.setOverlayText(text);
+      this.setOverlayVisibility(true);
+      // For desktop:
+      document.body.style.cursor = "wait";
+    });
+  }
   
   removeMessage(identifier: string) {
     this.enqueue(() => {
       const index = this.messages.findIndex(msg => msg.identifier === identifier);
-      if (index == 0)
-      {
-        this.messages.shift();
-        if (this.messages.length > 0)
-        {
-          // Since we had at least two messages, we can safely assume the overlay is visible.
-          this.setOverlayText( this.messages[0].text);
-        }
-        else
-        {
-          // No messages left, hide the overlay.
-          this.setOverlayVisibility(false);
-          // For desktop:
-          document.body.style.cursor = "auto";
-        }
+      if (index === -1) return;
+
+      // Clear any safety timeout
+      const [msg] = this.messages.splice(index, 1);
+      if (msg?.timeoutId != null) {
+        clearTimeout(msg.timeoutId);
       }
-      if (index > 0)
-      {
-        this.messages.splice(index, 1);
+
+      if (this.messages.length > 0) {
+        // Since we had at least one message left, we can safely assume the overlay is visible.
+        this.setOverlayText(this.messages[0].text);
+      } else {
+        // No messages left, hide the overlay.
+        this.setOverlayVisibility(false);
+        // For desktop:
+        document.body.style.cursor = "auto";
       }
     });
   }
 
-  // PDR status messages become active immediately.
-  setPDRStatus({ action , message } : { action: "push" | "remove", message: string }) {
-    if (action == "push")
-    {
-      this.pushMessage(message, message)
-    }
-    else if (action == "remove")
-    {
-      this.removeMessage(message);
+  // PDR status messages become active immediately, use a fixed id so remove matches reliably.
+  setPDRStatus({ action, message }: { action: "push" | "remove"; message: string }) {
+    const STATUS_ID = "PDR_STATUS";
+    if (action === "push") {
+      this.pushMessage(STATUS_ID, message);
+    } else if (action === "remove") {
+      this.removeMessage(STATUS_ID);
     }
   }
 
   // Show the loading overlay if it is not already visible
   setOverlayVisibility(visible: boolean) {
     if (Cursor.loadingOverlayElement) {
-      Cursor.loadingOverlayElement.style.display = visible ? 'flex' : 'none';
+      Cursor.loadingOverlayElement.style.display = visible ? "flex" : "none";
     }
   }
 
   setOverlayText(text: string) {
     this.PDRStatus = text;
     if (Cursor.loadingOverlayElement) {
-      const statusElement = Cursor.loadingOverlayElement.querySelector('#pdrstatus');
+      const statusElement = Cursor.loadingOverlayElement.querySelector("#pdrstatus");
       if (statusElement) {
         statusElement.textContent = text;
       }
@@ -1861,42 +1876,67 @@ class Cursor {
 
   wait(request: RequestRecord) {
     const component = this;
-    // Add the message to the top of the messages array.
-    // But do not yet display it.
     const identifier = request.trackingNumber!.toString();
-    this.enqueue(() => this.messages.unshift({ identifier, text: "Processing..." })
-    );
-    
+
+    // Add the message (not yet shown) and arm a safety timeout
+    this.enqueue(() => {
+      const msg: Message = { identifier, text: "Processing...", startedAt: Date.now(), req: request };
+      this.messages.unshift(msg);
+
+      // Auto-clear after 60s with a warning (tune as needed)
+      msg.timeoutId = window.setTimeout(() => {
+        console.warn("[Cursor] Auto-clearing stale request", {
+          identifier,
+          request,
+          startedAt: msg.startedAt
+        });
+        component.removeMessage(identifier);
+      }, 60_000);
+    });
+
+    // After 400ms, if still pending, display it
     setTimeout(() => {
       component.enqueue(() => {
         const index = component.messages.findIndex(msg => msg.identifier === identifier);
-        if ( index >= 0 )
-        {
-          // As the message is still waiting in the array, we can display it now.
-          // Move it to the top of the array.
+        if (index >= 0) {
           const message = component.messages[index];
           component.messages.splice(index, 1);
           component.messages.unshift(message);
-          // Display it.
           component.setOverlayText(message.text);
           component.setOverlayVisibility(true);
         }
-      })}, 400);
+      });
+    }, 400);
   }
   
   restore(request: RequestRecord) {
     this.enqueue(() => {
-      this.removeMessage(request.trackingNumber!.toString())
+      this.removeMessage(request.trackingNumber!.toString());
     });
   }
 
-// Execute operations sequentially
+  // Execute operations sequentially
   private enqueue<T>(operation: () => T | Promise<T>): Promise<T> {
     const result = this.queuePromise.then(() => operation());
-    this.queuePromise = result.then(() => undefined, () => undefined) as Promise<void>; // Ensure queue continues even if operation fails
+    this.queuePromise = result.then(() => undefined, () => undefined) as Promise<void>;
     return result;
   }
+
+  // Debug helpers: inspect/clear pending messages
+  dumpPending(): Message[] {
+    // Shallow copy to avoid external mutation
+    return this.messages.slice();
   }
+
+  clearAll(reason = "manual-clear") {
+    console.warn("[Cursor] Clearing all pending messages:", reason, this.messages);
+    // Clear any timeouts
+    this.messages.forEach(m => m.timeoutId != null && clearTimeout(m.timeoutId));
+    this.messages = [];
+    this.setOverlayVisibility(false);
+    document.body.style.cursor = "auto";
+  }
+}
 
 // See: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input
 // We add "markdown"
@@ -1913,7 +1953,7 @@ export function mapRange( range : PRange ) : InputType
       return "date";
     case "PTime":
       return "time";
-      case "PNumber":
+    case "PNumber":
       return "number";
     case "PEmail":
       return "email";
