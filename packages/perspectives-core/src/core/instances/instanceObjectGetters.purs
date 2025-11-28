@@ -48,7 +48,7 @@ import Perspectives.ContextRolAccessors (getContextMember, getRolMember)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MonadPerspectives, runMonadPerspectivesQuery)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Error.Boundaries (handlePerspectContextError', handlePerspectRolError')
-import Perspectives.Identifiers (LocalName, deconstructBuitenRol, qualifyWith, typeUri2LocalName, typeUri2ModelUri)
+import Perspectives.Identifiers (LocalName, deconstructBuitenRol, typeUri2LocalName, typeUri2ModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..), externalRole, states) as IP
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.InstanceRepresentation.PublicUrl (PublicUrl)
@@ -68,7 +68,6 @@ import Perspectives.Representation.Context (Context(..)) as CONTEXT
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser(..), RoleInstance(..), Value(..), roleInstance2PerspectivesUser)
 import Perspectives.Representation.Perspective (StateSpec(..)) as SP
-import Perspectives.Representation.Perspective (stateSpec2StateIdentifier)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleKind(..), RoleType, StateIdentifier)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, isInPublicScheme, takeGuid)
 import Perspectives.SetupCouchdb (FillerInfo, context2RoleFilter, filled2FillerInfo, filled2fillerFilter, filler2filledFilter, role2ContextFilter, roleFromContextFilter)

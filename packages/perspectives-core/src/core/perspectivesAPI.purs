@@ -552,7 +552,6 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
         (ContextInstance mysystem)
         onlyOnce
 
-    -- { request: "GetRoleFromClipboard", subject: RoleInstance }
     Api.RemoveRoleFromClipboard -> do
       mysystem <- getMySystem
       mrole <- (ContextInstance mysystem) ##> filter
