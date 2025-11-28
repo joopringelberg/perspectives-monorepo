@@ -148,7 +148,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
         if (inner) target = inner;
       }
       if (target && document.activeElement !== target) {
-        console.log("TableCell.setFocus: focusing element for column " + component.props.propertyname + " roleinstance " + component.props.roleinstance + (target !== root ? " (inner control)" : " (wrapper)"));
+        // console.log("TableCell.setFocus: focusing element for column " + component.props.propertyname + " roleinstance " + component.props.roleinstance + (target !== root ? " (inner control)" : " (wrapper)"));
         try { target.focus(); } catch (_) { /* ignore */ }
         return true;
       }

@@ -169,7 +169,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     const oldValue = component.valueOnProps();
     if (component.props.roleId !== undefined)
     {
-      if (val == "")
+      if (val == "" && oldValue != "")
       {
         PDRproxy.then(
           function(pproxy)
