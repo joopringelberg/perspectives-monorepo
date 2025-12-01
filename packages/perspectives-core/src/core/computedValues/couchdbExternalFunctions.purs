@@ -626,7 +626,7 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
           -- Hence we can use it to construct an instance of TheWorld in that database.
           -- CURRENTLY, CouchdbManagement is such that namespace may or may not end with a slash.
           -- Hence we make sure it does.
-          theworldid <- pure (ContextInstance $ "pub:https://" <> ensureSlash namespace <> databaseName <> "/#TheWorld")
+          theworldid <- pure (ContextInstance $ "pub:https://" <> ensureSlash namespace <> ensureSlash databaseName <> "#TheWorld")
           mtheWorld <- lift $ tryGetPerspectContext theworldid
           case mtheWorld of
             Nothing -> do
@@ -638,10 +638,14 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
     >>= handleExternalStatementError "model://perspectives.domains#CreateEntitiesDatabase"
 
   where
+  -- An empty string is mapped to an empty string.
+  -- All other strings are ensured to end with a slash.
   ensureSlash :: String -> String
-  ensureSlash ns = case stripSuffix (Pattern "/") ns of
-    Just _ -> ns
-    Nothing -> ns <> "/"
+  ensureSlash ns =
+    if ns == "" then ns
+    else case stripSuffix (Pattern "/") ns of
+      Just _ -> ns
+      Nothing -> ns <> "/"
 
 -- | RoleInstance is an instance of model:CouchdbManagement$CouchdbServer$Repositories.
 -- | Execution of this function requires the user to have a SERVERADMIN account.

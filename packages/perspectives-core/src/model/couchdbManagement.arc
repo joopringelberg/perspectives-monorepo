@@ -574,7 +574,7 @@ domain model://perspectives.domains#CouchdbManagement
         on entry
           do for CBAdmin
             DatabaseName = "cw_" + callExternal util:GenSym() returns String + "/" 
-            callEffect cdb:CreateCouchdbDatabase( BaseUrl, DatabaseName )
+            callEffect cdb:CreateEntitiesDatabase( BaseUrl, DatabaseName, BaseUrl >> callExternal util:Replace( "https://", "") returns String )
             DatabaseLocation = BaseUrl + DatabaseName
             callEffect cdb:MakeAdminOfDb( BaseUrl, DatabaseName, context >> Owner >> UserName )
       state Publish = (exists DatabaseName) and Public
