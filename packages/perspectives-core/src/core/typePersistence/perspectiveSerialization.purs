@@ -234,7 +234,7 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyRestri
   translatedActions <- lift
     ( fromFoldable <$> for (nub $ concat (keys <$> (catMaybes $ (flip EM.lookup actions) <$> (contextStates <> subjectStates))))
         \actionName -> do
-          translatedActionName <- translateType (qualifyWith (unwrap cType) actionName)
+          translatedActionName <- translateType actionName
           pure $ Tuple actionName translatedActionName
     )
   pure
