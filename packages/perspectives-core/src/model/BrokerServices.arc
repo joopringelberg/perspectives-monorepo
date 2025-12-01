@@ -77,6 +77,8 @@ domain model://perspectives.domains#BrokerServices
         only (Create, Fill, CreateAndFill, Remove)
         props (Name) verbs (Consult)
         props (StorageLocation) verbs (Consult, SetPropertyValue)
+      action AddNewBroker
+        create role ManagedBrokers
       perspective on Contracts
         view BrokerContract$External$ForAccountHolder verbs (Consult)
       perspective on ContractInUse
@@ -150,10 +152,11 @@ domain model://perspectives.domains#BrokerServices
             master
               markdown <### Managed broker services
                         These are the broker services you manage. You can add new ones, remove existing ones, 
-                        or change their storage location.
+                        or change their storage location. Add an empty role instance, then specify its storage location
+                        (identifying a Bespoke Database). Upon saving, the broker service context will be created.
                         **NOTE**: Most people will **not** manage broker services, but use the ones that are available.
                       >
-              without props (StorageLocation)
+              --with props (Name, StorageLocation)
             detail
           
   -- A Managed service.
