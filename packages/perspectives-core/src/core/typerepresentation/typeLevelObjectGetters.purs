@@ -37,6 +37,7 @@ import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for_, traverse)
 import Foreign.Object (Object, keys, lookup, union) as OBJ
+import Foreign.Object (values)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (type (~~>), type (~~~>), MP, MonadPerspectives, (###=), (###>), (###>>))
 import Perspectives.Data.EncodableMap (EncodableMap(..))
@@ -53,7 +54,7 @@ import Perspectives.Persistent (modelDatabaseName)
 import Perspectives.Persistent.PublicStore (PublicStore)
 import Perspectives.Query.QueryTypes (Calculation, QueryFunctionDescription, RoleInContext(..), domain2roleType, queryFunction, range, roleInContext2Role, roleRange, secondOperand)
 import Perspectives.Representation.ADT (ADT, allLeavesInADT, computeExpandedBoolean, equalsOrGeneralises_, equalsOrSpecialises_, equals_, generalises_, specialises_)
-import Perspectives.Representation.Action (Action)
+import Perspectives.Representation.Action (Action(..))
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.Class.Context (contextADT, contextRole, roleInContext, userRole) as ContextClass
 import Perspectives.Representation.Class.Context (contextAspects)
@@ -863,6 +864,29 @@ getContextAction actionName userRoleType = do
     ( \maction (stateDepActions :: OBJ.Object Action) -> case maction of
         Just action -> Just action
         Nothing -> OBJ.lookup actionName stateDepActions
+    )
+    Nothing
+    (Map.values stateActionMap)
+
+getContextActionFromUnqualifiedName :: ActionName -> RoleType -> MonadPerspectives (Maybe Action)
+getContextActionFromUnqualifiedName actionName userRoleType = do
+  stateActionMap <- actionsOfRoleType userRoleType
+  pure $ LIST.foldl
+    ( \(maction :: Maybe Action) (stateDepActions :: OBJ.Object Action) -> case maction of
+        -- Found already
+        Just action -> Just action
+        -- Compare each key (a fully qualified action name) with the unqualified action name.
+        -- If the former ends with the latter, we have a match.
+        -- Use that key to lookup the action.
+        Nothing ->
+          foldl
+            ( \(foundAction :: Maybe Action) act@(Action { readable }) ->
+                if isJust foundAction then foundAction
+                else if readable == actionName then Just act
+                else Nothing
+            )
+            Nothing
+            (values stateDepActions)
     )
     Nothing
     (Map.values stateActionMap)

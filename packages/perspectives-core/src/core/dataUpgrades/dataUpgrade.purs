@@ -246,7 +246,7 @@ runDataUpgrades = do
 
   runUpgrade installedVersion "3.0.48" normalizeLocalDomeinFiles
 
-  runUpgrade installedVersion "3.0.57"
+  runUpgrade installedVersion "3.0.58"
     ( \_ -> void recompileLocalModels
     )
 

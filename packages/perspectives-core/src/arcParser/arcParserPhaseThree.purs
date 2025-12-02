@@ -1015,7 +1015,7 @@ handlePostponedStateQualifiedParts = do
     modifyAllSubjectPerspectives
       qualifiedUsers
       compiledObject
-      (Action theAction)
+      (Action { qfd: theAction, readable: id })
       stateSpecs
     where
     -- | Modifies the DomeinFile in PhaseTwoState.
@@ -1244,7 +1244,7 @@ handlePostponedStateQualifiedParts = do
     modifyAllSubjectRoles
       qualifiedUsers
       id
-      (Action theAction)
+      (Action { qfd: theAction, readable: id })
       stateSpecs
     where
     -- Add the action to the map of StateSpecs to an Object of Action identifier to Action of all user roles.

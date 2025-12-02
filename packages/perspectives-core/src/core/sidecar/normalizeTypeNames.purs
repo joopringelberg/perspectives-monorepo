@@ -385,8 +385,8 @@ normalizeActionsForState stateSpec obj = do
   let
     stateFqn = unwrap (stateSpec2StateIdentifier stateSpec)
     pairs = OBJ.toUnfoldable obj :: Array (Tuple String Action)
-  folded <- for pairs \(Tuple localName (Action qfd)) -> do
-    act <- Action <$> traverseQfd normalize qfd
+  folded <- for pairs \(Tuple localName (Action { qfd, readable })) -> do
+    act <- (\qfd' -> Action { qfd: qfd', readable }) <$> traverseQfd normalize qfd
     case splitTypeUri (stateFqn <> "$" <> localName) of
       Nothing -> pure (Tuple localName act)
       Just { modelUri } -> case Map.lookup (ModelUri modelUri) sidecars of

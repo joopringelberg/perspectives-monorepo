@@ -81,7 +81,7 @@ instance ReadForeign AutomaticAction where
           { r } :: { r :: TimeFacets (effect :: QueryFunctionDescription) } <- read' f
           pure $ ContextAction r
 
-newtype Action = Action QueryFunctionDescription
+newtype Action = Action { qfd :: QueryFunctionDescription, readable :: String }
 
 derive instance genericAction :: Generic Action _
 derive instance newtypeAction :: Newtype Action _
@@ -95,7 +95,7 @@ derive newtype instance WriteForeign Action
 derive newtype instance ReadForeign Action
 
 instance Semigroup Action where
-  append (Action qfd1) (Action qfd2) = Action $ makeSequence qfd1 qfd2
+  append (Action { qfd: qfd1, readable: readable1 }) (Action { qfd: qfd2, readable: readable2 }) = Action { qfd: makeSequence qfd1 qfd2, readable: readable1 <> " <> " <> readable2 }
     where
     makeSequence :: QueryFunctionDescription -> QueryFunctionDescription -> QueryFunctionDescription
     makeSequence left right = BQD (domain left) (BinaryCombinator SequenceF) left right (range right) (THREE.and (functional left) (functional right)) (THREE.or (functional left) (functional right))

@@ -96,7 +96,7 @@ import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUser, serialisedTableFormForContextAndUser)
 import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableNameFromTelescope, perspectiveForContextAndUser, perspectivesForContextAndUser, settingsPerspective)
-import Perspectives.Types.ObjectGetters (findPerspective, getAction, getContextAction, isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
+import Perspectives.Types.ObjectGetters (findPerspective, getAction, getContextAction, getContextActionFromUnqualifiedName, isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
 import Prelude (Unit, bind, discard, eq, flip, identity, map, negate, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (/=), (&&))
 import Simple.JSON (read, readJSON_, unsafeStringify, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
@@ -819,7 +819,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
             maction <- (map $ getAction actionName) <$> (findPerspective authoringRole (\(Perspective { id }) -> pure $ id `eq` perspectiveId))
             mauthoringRoleInstance <- (ContextInstance object) ##> getMeInRoleAndContext authoringRole
             case mauthoringRoleInstance, maction of
-              Just author, Just (Just (ACTION.Action action)) -> do
+              Just author, Just (Just (ACTION.Action { qfd: action })) -> do
                 void $ runMonadPerspectivesTransaction authoringRole
                   do
                     oldFrame <- lift $ pushFrame
@@ -836,16 +836,16 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     -- { request: Action
     -- , subject: RoleType // the user role type
     -- , predicate: String // action identifier
-    -- , object: RoleInstance // the context identifier.
+    -- , object: ContextInstance // the context identifier.
     -- }
     Api.ContextAction -> catchError
       ( do
           -- Find the action from the subject type and the Action name.
           userRoleType <- getRoleType subject
-          maction <- getContextAction predicate userRoleType
+          maction <- if isTypeUri predicate then getContextAction predicate userRoleType else getContextActionFromUnqualifiedName predicate userRoleType
           muserRoleInstance <- (ContextInstance object) ##> getMeInRoleAndContext userRoleType
           case muserRoleInstance, maction of
-            Just user, Just (ACTION.Action action) -> do
+            Just user, Just (ACTION.Action { qfd: action }) -> do
               void $ runMonadPerspectivesTransaction userRoleType
                 do
                   oldFrame <- lift $ pushFrame
