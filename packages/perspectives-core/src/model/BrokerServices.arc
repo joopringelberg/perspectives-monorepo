@@ -452,6 +452,8 @@ domain model://perspectives.domains#BrokerServices
       perspective on extern
         props (Url, Exchange, CurrentQueueName) verbs (Consult)
         props (Registered, UseExpiresOn, GracePeriodExpiresOn, TerminatesOn, ContractTerminated) verbs (SetPropertyValue)
+        action TerminateContract
+          ContractTerminated = true
       perspective on AccountHolder
         all roleverbs
         props (AccountName, AccountPassword) verbs (Consult, SetPropertyValue)
