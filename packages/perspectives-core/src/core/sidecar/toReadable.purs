@@ -16,11 +16,12 @@ import Perspectives.Query.QueryTypes (Domain(..), RoleInContext(..))
 import Perspectives.Representation.ADT (ADT)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
-import Perspectives.Representation.Class.PersistentType (getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole)
+import Perspectives.Representation.Class.PersistentType (getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole, getState)
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType, CalculatedRoleType, ContextType, EnumeratedPropertyType, EnumeratedRoleType, IndexedContext(..), PropertyType(..), RoleType(..))
+import Perspectives.Representation.State (State(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType, CalculatedRoleType, ContextType, EnumeratedPropertyType, EnumeratedRoleType, IndexedContext(..), PropertyType(..), RoleType(..), StateIdentifier)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 
 -- Also see module Perspectives.HumanReadableType, where we convert from Stable to Readable based on the displayName property of the type.
@@ -59,6 +60,9 @@ instance ToReadable EnumeratedPropertyType where
 
 instance ToReadable CalculatedPropertyType where
   toReadable er = getCalculatedProperty er >>= \(CalculatedProperty { readableName }) -> pure readableName
+
+instance ToReadable StateIdentifier where
+  toReadable sid = getState sid >>= \(State { readableName }) -> pure readableName
 
 instance ToReadable RoleInContext where
   toReadable (RoleInContext { role, context }) = do

@@ -76,6 +76,7 @@ import Perspectives.ResourceIdentifiers (createPublicIdentifier, isInPublicSchem
 import Perspectives.SaveUserData (removeBinding, removeContextIfUnbound, replaceBinding, scheduleContextRemoval, scheduleRoleRemoval, setFirstBinding, synchronise)
 import Perspectives.SerializableNonEmptyArray (toArray, toNonEmptyArray)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo)
@@ -133,7 +134,7 @@ executeRoleBindingDelta (RoleBindingDelta { filled, filler, deltaType, subject }
 executeRolePropertyDelta :: RolePropertyDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeRolePropertyDelta d@(RolePropertyDelta { id, roleType, deltaType, values, property, subject }) signedDelta = do
   padding <- lift transactionLevel
-  log (padding <> show deltaType <> " for " <> show id <> " and property " <> show property)
+  lift $ toReadable property >>= \readableProperty -> log (padding <> show deltaType <> " for " <> show id <> " and property " <> show readableProperty)
   case deltaType of
     AddProperty -> do
       -- we need not check whether the model is known if we assume valid transactions:
@@ -205,7 +206,7 @@ handleError e = liftEffect $ log (show e)
 executeUniverseContextDelta :: UniverseContextDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, subject }) signedDelta = do
   padding <- lift transactionLevel
-  log (padding <> show deltaType <> " with id " <> show id <> " and with type " <> show contextType)
+  lift $ toReadable contextType >>= \readableContextType -> log (padding <> show deltaType <> " with id " <> show id <> " and with type " <> show readableContextType)
   allTypes <- lift (contextType ###= contextAspectsClosure)
   externalRoleExists <- lift $ entityExists (RoleInstance $ buitenRol $ unwrap id)
   if externalRoleExists then case deltaType of
@@ -252,7 +253,7 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
 executeUniverseRoleDelta :: UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, authorizedRole, deltaType, subject }) s = do
   padding <- lift transactionLevel
-  log (padding <> show deltaType <> " for/from " <> show id <> " with ids " <> show roleInstances <> " with type " <> show roleType <> " for user role " <> show subject)
+  lift $ toReadable roleType >>= \readableRoleType -> log (padding <> show deltaType <> " for/from " <> show id <> " with ids " <> show roleInstances <> " with type " <> show readableRoleType <> " for user role " <> show subject)
   void $ lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ $ unwrap roleType)
   case deltaType of
     ConstructEmptyRole -> do

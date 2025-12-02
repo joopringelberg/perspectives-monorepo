@@ -70,6 +70,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleIns
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), PropertyType, RoleType, StateIdentifier)
 import Perspectives.ScheduledAssignment (StateEvaluation(..))
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (hasContextAspect, subStates_)
 
@@ -132,7 +133,7 @@ evaluateContextState contextId stateId = do
         contextWasInState <- lift $ isActive stateId contextId
         if contextWasInState then do
           padding <- lift transactionLevel
-          log (padding <> "Already in context state " <> unwrap stateId <> ": " <> unwrap contextId)
+          lift $ toReadable stateId >>= \readableStateId -> log (padding <> "Already in context state " <> unwrap readableStateId <> ": " <> unwrap contextId)
           subStates <- lift $ subStates_ stateId
           for_ subStates (evaluateContextState contextId)
         else enteringState contextId stateId
@@ -157,7 +158,7 @@ evaluateContextState contextId stateId = do
 enteringState :: ContextInstance -> StateIdentifier -> MonadPerspectivesTransaction Unit
 enteringState contextId stateId = do
   padding <- lift transactionLevel
-  log (padding <> "Entering context state " <> unwrap stateId <> " for context " <> unwrap contextId)
+  lift $ toReadable stateId >>= \readableStateId -> log (padding <> "Entering context state " <> unwrap readableStateId <> " for context " <> unwrap contextId)
   -- Add the state identifier to the path of states in the context instance, triggering query updates
   -- just before running the current Transaction is finished.
   setActiveContextState stateId contextId

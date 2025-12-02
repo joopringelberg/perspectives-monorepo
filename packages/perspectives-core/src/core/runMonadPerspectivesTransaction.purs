@@ -63,6 +63,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), Enum
 import Perspectives.RoleStateCompiler (enteringRoleState, evaluateRoleState, exitingRoleState)
 import Perspectives.SaveUserData (changeRoleBinding, removeContextInstance, removeRoleInstance, stateEvaluationAndQueryUpdatesForContext, queryUpdatesForRole)
 import Perspectives.ScheduledAssignment (ScheduledAssignment(..), StateEvaluation(..), contextsToBeRemoved)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.HandleTransaction (executeDeltas, expandDeltas)
 import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
 import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..), createTransaction)
@@ -327,7 +328,7 @@ phase2 share authoringRole r = do
                   -- Run embedded, do not share.
                   lift $ runEmbeddedIfNecessary false authoringRole (executeDeltas deltas)
                 -- If the URL is not computed, we log this and do nothing. In this installation, there probably should not be a proxy for the public role anyway; but we don't have a way of knowing that on constructing the context.
-                Nothing -> log (padding <> "Cannot compute a URL to publish to for this user role type and instance: " <> show userType <> " ('" <> show userId <> "')")
+                Nothing -> lift $ toReadable userType >>= \readableUserType -> log (padding <> "Cannot compute a URL to publish to for this user role type and instance: " <> show readableUserType <> " ('" <> show userId <> "')")
             Just (S _ _) -> throwError (error ("Attempt to acces QueryFunctionDescription of the url of a public role before the expression has been compiled. This counts as a system programming error. User type = " <> (show userType)))
         Peer _ -> pure unit
     -- Remove the deltas; we don't want to execute them again.

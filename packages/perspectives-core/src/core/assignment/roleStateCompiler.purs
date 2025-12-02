@@ -74,6 +74,7 @@ import Perspectives.Representation.State (Notification(..), State(..), StateDepe
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), RoleType, StateIdentifier)
 import Perspectives.ScheduledAssignment (StateEvaluation(..))
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (hasContextAspect, subStates_)
 
@@ -136,7 +137,7 @@ evaluateRoleState roleId stateId = do
         roleWasInState <- lift $ isActive stateId roleId
         if roleWasInState then do
           padding <- lift transactionLevel
-          log (padding <> "Already in role state " <> unwrap stateId <> ": " <> unwrap roleId)
+          lift $ toReadable stateId >>= \readableStateId -> log (padding <> "Already in role state " <> unwrap readableStateId <> ": " <> unwrap roleId)
           subStates <- lift $ subStates_ stateId
           for_ subStates (evaluateRoleState roleId)
         else enteringRoleState roleId stateId
@@ -161,7 +162,7 @@ evaluateRoleState roleId stateId = do
 enteringRoleState :: RoleInstance -> StateIdentifier -> MonadPerspectivesTransaction Unit
 enteringRoleState roleId stateId = do
   padding <- lift transactionLevel
-  log (padding <> "Entering role state " <> unwrap stateId <> " for role " <> unwrap roleId)
+  lift $ toReadable stateId >>= \readableStateId -> log (padding <> "Entering role state " <> unwrap readableStateId <> " for role " <> unwrap roleId)
   -- Add the state identifier to the states in the role instance, triggering query updates
   -- just before running the current Transaction is finished.
   setActiveRoleState stateId roleId
@@ -289,7 +290,8 @@ notify compiledSentence contextGetter roleId = do
 exitingRoleState :: RoleInstance -> StateIdentifier -> MonadPerspectivesTransaction Unit
 exitingRoleState roleId stateId = do
   padding <- lift transactionLevel
-  log (padding <> "Exiting role state " <> unwrap stateId <> " for role " <> unwrap roleId)
+  lift $ toReadable stateId >>= \readableStateId -> log (padding <> "Exiting role state " <> unwrap readableStateId <> " for role " <> unwrap roleId)
+
   -- Recur. We do this first, because we have to exit the deepest nested substate first.
   subStates <- lift $ subStates_ stateId
   for_ subStates \subStateId -> do

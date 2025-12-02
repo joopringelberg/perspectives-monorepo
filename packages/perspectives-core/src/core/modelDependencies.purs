@@ -279,37 +279,37 @@ addressRelayPort = "model://perspectives.domains#tiodn6tcyc$nt9e6zaovz$b0zwl7rvk
 -- BROKERSERVICES
 ------------------------------------------------------------------------------------
 brokerService :: String
-brokerService = "model://perspectives.domains#zjuzxbqpgc$nami0qer9d"
+brokerService = "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp"
 
 myBrokers :: String
-myBrokers = "model://perspectives.domains#zjuzxbqpgc$fmx94rj1sn$ksarfim1ee"
+myBrokers = "model://perspectives.domains#zjuzxbqpgc$me48uhv82h$i54ha6wb35"
 
 brokerServiceAccounts :: String
-brokerServiceAccounts = "model://perspectives.domains#zjuzxbqpgc$nami0qer9d$vv80iskte1"
+brokerServiceAccounts = "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$gu1peg7mtj"
 
 brokerServiceContractInUse :: String
-brokerServiceContractInUse = "model://perspectives.domains#zjuzxbqpgc$fmx94rj1sn$tuo5fmjocd"
+brokerServiceContractInUse = "model://perspectives.domains#zjuzxbqpgc$me48uhv82h$dkh9yd3gpt"
 
 brokerEndpoint :: String
-brokerEndpoint = "model://perspectives.domains#zjuzxbqpgc$viqjnzqjvv$External$w39b22ossh"
+brokerEndpoint = "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$jj9n99rz37"
 
 brokerServiceExchange :: String
-brokerServiceExchange = "model://perspectives.domains#zjuzxbqpgc$viqjnzqjvv$External$csguz2yqnl"
+brokerServiceExchange = "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$qz92s62qi8"
 
 brokerContract :: String
-brokerContract = "model://perspectives.domains#zjuzxbqpgc$viqjnzqjvv"
+brokerContract = "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0"
 
 accountHolder :: String
-accountHolder = "model://perspectives.domains#zjuzxbqpgc$viqjnzqjvv$ox3efdbz2j"
+accountHolder = "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$gpwpevx4e5"
 
 accountHolderName :: String
-accountHolderName = "model://perspectives.domains#zjuzxbqpgc$viqjnzqjvv$ox3efdbz2j$ezjf5fr6ea"
+accountHolderName = "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$gpwpevx4e5$r24zt90qck"
 
 accountHolderPassword :: String
-accountHolderPassword = "model://perspectives.domains#zjuzxbqpgc$viqjnzqjvv$ox3efdbz2j$y5ag1miyv1"
+accountHolderPassword = "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$gpwpevx4e5$vwlg6809lk"
 
 accountHolderQueueName :: String
-accountHolderQueueName = "model://perspectives.domains#zjuzxbqpgc$viqjnzqjvv$External$nje6vo9y2u"
+accountHolderQueueName = "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$nj59oprdwa"
 
 -- "model:perspectives.domains#Couchdb$ContextInstances"
 
