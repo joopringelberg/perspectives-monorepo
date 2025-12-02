@@ -514,7 +514,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance];
     if (roleInstanceWithProps && roleInstanceWithProps.publicUrl)
     {
-      const url = window.location.origin + "?opencontext=" + encodeURIComponent( roleInstanceWithProps.publicUrl );
+      const url = window.location.origin + window.location.pathname + "?opencontext=" + encodeURIComponent( roleInstanceWithProps.publicUrl );
       return [<Dropdown.Item
         key="PublicUrl"
         eventKey="PublicUrl"
