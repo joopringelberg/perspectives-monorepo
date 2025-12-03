@@ -24,7 +24,7 @@
 
 module Perspectives.Extern.Couchdb where
 
-import Control.Monad.AvarMonadAsk (gets)
+import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.AvarMonadAsk (modify, gets) as AMA
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Except (runExceptT)
@@ -60,7 +60,7 @@ import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.Assignment.Update (withAuthoringRole)
 import Perspectives.Authenticate (getMyPublicKey)
 import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_id)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectivesTransaction, MonadPerspectives, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2)
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2)
 import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.Deltas (addCreatedContextToTransaction)
@@ -624,13 +624,20 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
             )
           -- dbName is also the url that is provided in a "public Visitor at <location>" declaration.
           -- Hence we can use it to construct an instance of TheWorld in that database.
-          -- CURRENTLY, CouchdbManagement is such that namespace may or may not end with a slash.
+          -- CURRENTLY, CouchdbManagement is such that `namespace` may or may not end with a slash.
           -- Hence we make sure it does.
           theworldid <- pure (ContextInstance $ "pub:https://" <> ensureSlash namespace <> ensureSlash databaseName <> "#TheWorld")
           mtheWorld <- lift $ tryGetPerspectContext theworldid
           case mtheWorld of
             Nothing -> do
-              void $ runExceptT $ constructEmptyContext theworldid theWorld "TheWorld" (PropertySerialization empty) Nothing
+              -- We must take care to create TheWorld with PerspectivesUser being the public version of the system user,
+              -- otherwise we'll end up with deltas that refer to the local instance of the system user.
+              sysUser <- lift getSystemIdentifier
+              void
+                $ withPerspectivesUser (PerspectivesUser $ "pub:https://" <> ensureSlash namespace <> ensureSlash databaseName <> sysUser)
+                    -- Notice that the deltas in the result of constructEmptyContext are not added to the Transaction yet.
+                    -- This is what we want; we take a short route to creating a public instance of TheWorld here.
+                    (runExceptT $ constructEmptyContext theworldid theWorld "TheWorld" (PropertySerialization empty) Nothing)
               lift $ void $ saveEntiteit theworldid
             _ -> pure unit
         _, _, _ -> pure unit
@@ -646,6 +653,14 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
     else case stripSuffix (Pattern "/") ns of
       Just _ -> ns
       Nothing -> ns <> "/"
+
+  withPerspectivesUser :: forall a. PerspectivesUser -> MonadPerspectivesTransaction a -> MonadPerspectivesTransaction a
+  withPerspectivesUser pu computation = do
+    oldPu <- lift $ getPerspectivesUser
+    void $ lift $ modify \s -> s { perspectivesUser = pu }
+    r <- computation
+    void $ lift $ modify \s -> s { perspectivesUser = oldPu }
+    pure r
 
 -- | RoleInstance is an instance of model:CouchdbManagement$CouchdbServer$Repositories.
 -- | Execution of this function requires the user to have a SERVERADMIN account.
