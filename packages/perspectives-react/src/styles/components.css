@@ -110,3 +110,6 @@ for a discussion about variables and sass. */
   box-shadow: none;
 }
 
+.public-role {
+  background-color: #e6f7ff !important; /* Light blue background for public roles */
+}

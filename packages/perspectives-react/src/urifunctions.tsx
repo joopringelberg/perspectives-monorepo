@@ -109,6 +109,12 @@ export function isSchemedResourceIdentifier(s : string) : boolean
   return s.match(schemedResourceRegEx) !== null;
 }
 
+export function isInPublicScheme(s : string) : boolean
+{
+  const publicSchemeRegEx = new RegExp( "^(pub:)(.*)$" );
+  return s.match(publicSchemeRegEx) !== null;
+}
+
 export function takeCUID(s : string) : string
 {
   const r = new RegExp("^[^#$]+#(.+)");

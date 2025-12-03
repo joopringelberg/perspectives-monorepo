@@ -33,6 +33,7 @@ import i18next from "i18next";
 import { CardProperties } from "./cardbehaviour.js";
 import { cardWithConfigurableBehaviour } from "./adorningComponentWrapper.js";
 import { isEqual } from 'lodash';
+import { isInPublicScheme } from "./urifunctions.js";
 
 ////////////////////////////////////////////////////////////////////////////////
 // PERSPECTIVEBASEDFORM
@@ -189,6 +190,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
 
     function Controls()
     {
+      const isPublic = component.state.roleInstanceWithProps ? isInPublicScheme(component.state.roleInstanceWithProps!.roleId) : false;
       return  <RoleInstance
                 roleinstance={component.state.roleInstanceWithProps ? component.state.roleInstanceWithProps.roleId : undefined}
                 roletype={component.props.perspective.roleType!}
@@ -207,6 +209,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
                   // No roleinstance.
                   myroletype={component.props.perspective.userRoleType}
                   card={ <DraggableCard 
+                      className={isPublic ? 'public-role' : ''}
                       behaviourNames={component.props.behaviours || []}
                       aria-label={component.props.cardtitle} 
                       title={component.props.perspective.displayName}/> }
@@ -225,6 +228,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
                     myroletype={component.props.perspective.userRoleType}
                     card={ <DraggableCard 
                       tabIndex={0}
+                      className={isPublic ? 'public-role' : ''}
                       behaviourNames={component.props.behaviours || []}
                       aria-label={component.props.cardtitle} 
                       title={component.state.roleInstanceWithProps?.readableName || component.props.cardtitle}/> }
@@ -305,8 +309,8 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
 
 const RoleCard: React.FC<CardProperties> = (props) => {
   // The rest will be aria-label and className.
-  return (<Card aria-label={props["aria-label"]} className={props.className}>
-    <Card.Body className="navbarCard">
+  return (<Card aria-label={props["aria-label"]}>
+    <Card.Body className={'navbarCard' + (props.className ? ' ' + props.className : '')}>
       <Card.Text>
         {props.title}
       </Card.Text>

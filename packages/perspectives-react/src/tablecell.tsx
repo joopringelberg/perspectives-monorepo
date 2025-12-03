@@ -20,7 +20,7 @@
 
 import React, { createRef } from "react"; // 2
 import PerspectivesComponent from "./perspectivesComponent";
-import {deconstructLocalName} from "./urifunctions.js";
+import {deconstructLocalName, isInPublicScheme} from "./urifunctions.js";
 import SmartFieldControl from "./smartfieldcontrol.js";
 import RoleInstance from "./roleinstance.js";
 
@@ -244,6 +244,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     const component = this;
     const title = component.values().length > 0 ? formatPropertyValue(component.values(), component.inputType) : undefined;
     const ariaLabel = title ? title : component.props.perspective.displayName; 
+    const isPublic = isInPublicScheme(component.props.roleinstance);
 
     if (component.props.iscard)
     {
@@ -291,7 +292,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                     aria-label={ariaLabel}
                     // Other properties to pass on.
                     tabIndex={receiveFocusByKeyboard}
-                    className={`shadow ${component.props.isselected ? 'card-selected' : ''}`}
+                    className={`shadow ${component.props.isselected ? 'card-selected' : ''} ${isPublic ? 'public-role' : ''}`}
                     onClick={component.handleClick}
                     type={component.inputType == 'date' ? 'text' : component.inputType || 'text'}
                   />
@@ -309,7 +310,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                 key={component.props.roleinstance}
                 tabIndex={focusable}
                 {... (title !== undefined ? { title } : {})}
-                className={`shadow ${component.props.isselected ? 'card-selected' : ''}`}
+                className={`shadow ${component.props.isselected ? 'card-selected' : ''}` + ` ${isPublic ? 'public-role' : ''}`}
                 onClick={component.handleClick}
                 aria-label={ariaLabel}
                 type={component.inputType == 'date' ? 'text' : component.inputType || 'text'}
