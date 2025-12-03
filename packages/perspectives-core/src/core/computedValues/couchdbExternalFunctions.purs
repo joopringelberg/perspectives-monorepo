@@ -99,6 +99,7 @@ import Perspectives.RoleAssignment (roleIsMe)
 import Perspectives.SaveUserData (scheduleContextRemoval, setFirstBinding)
 import Perspectives.SetupCouchdb (contextViewFilter, roleViewFilter, setContext2RoleView, setContextView, setCredentialsView, setFiller2FilledView, setFilled2FillerView, setPendingInvitationView, setRoleFromContextView, setRoleView, setRole2ContextView)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
+import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer(..))
 import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>>=))
@@ -125,14 +126,15 @@ roleInstancesFromCouchdb roleTypes _ =
         case head roleTypes of
           Nothing -> pure []
           Just rt -> do
-            (tell $ ArrayWithoutDoubles [ RoleAssumption (ContextInstance "def:AnyContext") (EnumeratedRoleType rt) ])
-            instancesInCouchdb <- (lift entitiesDatabaseName) >>= \db -> lift $ getSafeViewOnDatabase db "defaultViews/roleView" (maybe NoKey Key (head roleTypes))
+            stableRt :: EnumeratedRoleType <- lift $ toStable (EnumeratedRoleType rt)
+            (tell $ ArrayWithoutDoubles [ RoleAssumption (ContextInstance "def:AnyContext") stableRt ])
+            instancesInCouchdb <- (lift entitiesDatabaseName) >>= \db -> lift $ getSafeViewOnDatabase db "defaultViews/roleView" (Key stableRt)
             instancesInCache <- lift
               ( do
                   cache <- roleCache
                   cachedRoleAvars <- liftAff $ liftEffect (rvalues cache >>= pure <<< toArray)
                   cachedRoles <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
-                  pure $ rol_id <$> filter (roleViewFilter $ EnumeratedRoleType rt) cachedRoles
+                  pure $ rol_id <$> filter (roleViewFilter stableRt) cachedRoles
               )
             pure $ instancesInCouchdb `union` instancesInCache
     )
@@ -145,14 +147,15 @@ contextInstancesFromCouchdb contextTypeArr _ =
         case head contextTypeArr of
           Nothing -> pure []
           Just ct -> do
+            stableCt :: ContextType <- lift $ toStable (ContextType ct)
             -- push assumption!
-            instancesInCouchdb <- (lift entitiesDatabaseName) >>= \db -> lift $ getSafeViewOnDatabase db "defaultViews/contextView" (maybe NoKey Key (head contextTypeArr))
+            instancesInCouchdb <- (lift entitiesDatabaseName) >>= \db -> lift $ getSafeViewOnDatabase db "defaultViews/contextView" (Key stableCt)
             instancesInCache <- lift
               ( do
                   cache <- contextCache
                   cachedContextAvars <- liftAff $ liftEffect (rvalues cache >>= pure <<< toArray)
                   cachedContexts <- catMaybes <$> (lift $ traverse tryRead cachedContextAvars)
-                  pure $ context_id <$> filter (contextViewFilter $ ContextType ct) cachedContexts
+                  pure $ context_id <$> filter (contextViewFilter stableCt) cachedContexts
               )
             pure $ instancesInCouchdb `union` instancesInCache
     )
