@@ -39,7 +39,7 @@ The behaviour annotations are kept in an array of strings in the member "addedBe
 // THE CARD INTERFACES
 ////////////////////////////////////////
 export interface InnerCardProperties {
-  title: string;
+  title?: string;
   "aria-label": string;
   className?: string;
   type?: InputType

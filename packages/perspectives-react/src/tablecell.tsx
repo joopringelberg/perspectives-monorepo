@@ -242,7 +242,8 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
   render ()
   {
     const component = this;
-    const title = component.values().length > 0 ? formatPropertyValue(component.values(), component.inputType) : deconstructLocalName(component.props.propertyname);
+    const title = component.values().length > 0 ? formatPropertyValue(component.values(), component.inputType) : undefined;
+    const ariaLabel = title ? title : component.props.perspective.displayName; 
 
     if (component.props.iscard)
     {
@@ -257,7 +258,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
             >
               <SmartFieldControl
                 inputRef={component.inputRef as React.RefObject<HTMLElement>}
-                aria-label={title}
+                aria-label={ariaLabel}
                 serialisedProperty={component.props.serialisedProperty}
                 propertyValues={component.props.propertyValues}
                 roleId={component.props.roleinstance}
@@ -286,8 +287,8 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                     externalRef={component.inputRef as React.RefObject<HTMLElement>}
                     key={component.props.roleinstance}
                     // The title is the value of the cell. It is picked up automatically.
-                    title={title}
-                    aria-label={title}
+                    {... (title !== undefined ? { title } : {})}
+                    aria-label={ariaLabel}
                     // Other properties to pass on.
                     tabIndex={receiveFocusByKeyboard}
                     className={`shadow ${component.props.isselected ? 'card-selected' : ''}`}
@@ -307,10 +308,10 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                 externalRef={component.inputRef as React.RefObject<HTMLElement>}
                 key={component.props.roleinstance}
                 tabIndex={focusable}
-                title={title}
-        className={`shadow ${component.props.isselected ? 'card-selected' : ''}`}
+                {... (title !== undefined ? { title } : {})}
+                className={`shadow ${component.props.isselected ? 'card-selected' : ''}`}
                 onClick={component.handleClick}
-                aria-label={title} // deconstructLocalName ( component.props.propertyname )
+                aria-label={ariaLabel}
                 type={component.inputType == 'date' ? 'text' : component.inputType || 'text'}
               />
           </td>);

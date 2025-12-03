@@ -46,6 +46,7 @@ const RoleCard: React.FC<CardProperties> = (props) => {
   return  <Form.Control
             readOnly
             value={props.title}
+            placeholder={props["aria-label"]}
             
             className={`ps-2 ${props.className || ''}`}
             aria-label={props["aria-label"] || props.title}
