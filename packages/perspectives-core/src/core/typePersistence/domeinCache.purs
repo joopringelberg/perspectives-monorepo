@@ -28,36 +28,34 @@ module Perspectives.DomeinCache
 import Control.Monad.Cont.Trans (lift)
 import Control.Monad.Except (throwError)
 import Control.Monad.State (StateT, execStateT, get, put) as State
-import Data.Array (foldl, head)
+import Data.Array (head)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
-import Data.Maybe (Maybe(..), fromJust, maybe)
+import Data.Maybe (Maybe(..), maybe)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (unwrap)
 import Data.Show (show)
-import Data.String (Pattern(..), Replacement(..), replace)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
 import Effect.Aff.AVar (AVar, put, take)
 import Effect.Aff.Class (liftAff)
 import Effect.Exception (error)
 import Foreign (Foreign)
-import Foreign.Object (Object, empty, insert, keys, lookup)
+import Foreign.Object (Object, empty, insert, lookup)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (JustInTimeModelLoad(..), MonadPerspectives, retrieveInternally)
 import Perspectives.Couchdb (DeleteCouchdbDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ErrorLogging (logPerspectivesError, warnModeller)
-import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, modelUri2LocalName, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
+import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.ModelDependencies (build, patch, versionToInstall)
-import Perspectives.ModelDependencies.ReadableStableMappings (modelReadableToCuid, modelReadableToStable, modelStableToReadable)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, fromBlob, getAttachment, tryGetDocument)
-import Perspectives.Persistent (forceSaveDomeinFile, getDomeinFile, modelDatabaseName, removeEntiteit, saveEntiteit, tryGetPerspectEntiteit, tryGetPerspectRol, tryRemoveEntiteit, updateRevision)
-import Perspectives.PerspectivesState (domeinCacheRemove, getModelToLoad, getModelUnderCompilation, getTranslationTable, setTranslationTable)
+import Perspectives.Persistent (forceSaveDomeinFile, getDomeinFile, getPerspectRol, modelDatabaseName, removeEntiteit, saveEntiteit, tryGetPerspectEntiteit, tryRemoveEntiteit, updateRevision)
+import Perspectives.PerspectivesState (domeinCacheRemove, getModelToLoad, getModelUnderCompilation, getTranslationTable, lookupModelUri, setTranslationTable)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Cacheable (cacheEntity, setRevision, tryReadEntiteitFromCache)
@@ -66,7 +64,7 @@ import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value)
 import Perspectives.Representation.State (State(..))
 import Perspectives.ResourceIdentifiers (resourceIdentifier2DocLocator)
-import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (Unit, bind, discard, identity, map, pure, unit, void, ($), (*>), (<$>), (<<<), (<>), (>>=), (==))
 import Simple.JSON (readJSON)
@@ -127,19 +125,21 @@ modifyStateInDomeinFile modelUri sr@(State { id }) = modifyDomeinFileInCache mod
 -- | Also loads the translations table for the namespace of the DomeinFile.
 -- | The modelUri parameter may be bound to a Versioned ModelURI.
 retrieveDomeinFile :: ModelUri Stable -> MonadPerspectives (DomeinFile Stable)
-retrieveDomeinFile (ModelUri modelUri') = do
-  mu <- getModelUnderCompilation
-  case lookup (unversionedModelUri modelUri') modelReadableToStable of
-    -- Apparantly, modelUri' is a Readable model URI and we have a mapping to a Stable model URI.
-    Just stableFqn -> case mu of
-      -- but if it is the model we're compiling, we stick with the Readable model URI.
-      Just compilingModelUri | compilingModelUri == ModelUri modelUri' -> retrieveDomeinFile' (ModelUri modelUri')
-      -- otherwise, we use the Stable model URI.
-      _ -> case modelUriVersion modelUri' of
-        -- If the Readable model URI has a version, we tack that onto the Stable model URI.
-        Just version -> retrieveDomeinFile' (ModelUri $ stableFqn <> "@" <> version)
-        Nothing -> retrieveDomeinFile' (ModelUri stableFqn)
-    Nothing -> retrieveDomeinFile' (ModelUri modelUri')
+retrieveDomeinFile m@(ModelUri modelUri') = do
+  stableFqn :: ModelUri Stable <- lookupStableModelUri (ModelUri modelUri')
+  mu :: Maybe (ModelUri Readable) <- getModelUnderCompilation
+  if stableFqn == m then
+    -- m was indeed stable
+    retrieveDomeinFile' stableFqn
+  -- m was readable.
+  else case mu of
+    -- but if it is the model we're compiling, we stick with the Readable model URI.
+    Just compilingModelUri | compilingModelUri == ModelUri modelUri' -> retrieveDomeinFile' (ModelUri modelUri')
+    -- otherwise, we use the Stable model URI.
+    _ -> case modelUriVersion modelUri' of
+      -- If the Readable model URI has a version, we tack that onto the Stable model URI.
+      Just version -> retrieveDomeinFile' (ModelUri (unwrap stableFqn <> "@" <> version))
+      Nothing -> retrieveDomeinFile' stableFqn
 
   where
   retrieveDomeinFile' :: ModelUri Stable -> MonadPerspectives (DomeinFile Stable)
@@ -203,10 +203,9 @@ fetchTranslations (ModelUri namespace) = do
 -- | If no manifest is found, the empty string is returned. This causes retrieveDomainFile to retrieve a versionless document!
 -- | This function must be able to run without any type information, as it is run on system install, too.
 -- | The modelURI should not include a version.
--- TODO: After the transition to Stable identifiers, the mapping from Readable to CUID can be removed.
 -- NOTICE: works with Readable model URIs as well as Stable model URIs.
 getVersionToInstall :: ModelUri Stable -> MonadPerspectives (Maybe { semver :: String, versionedModelManifest :: RoleInstance })
-getVersionToInstall (ModelUri modelUri) = case unsafePartial modelUri2ManifestUrl modelUri of
+getVersionToInstall m@(ModelUri modelUri) = case unsafePartial modelUri2ManifestUrl modelUri of
   -- Retrieve the property from the external role of the manifest that indicates the version we should install.
   -- To achieve this, we have an Enumerated property that reflects the version to install in the external role of the Manifest.
   -- We retrieve this role as a Couchdb document and read that value directly from its structure.
@@ -214,51 +213,21 @@ getVersionToInstall (ModelUri modelUri) = case unsafePartial modelUri2ManifestUr
     mRol <- tryGetDocument repositoryUrl (buitenRol manifestName)
     case mRol of
       Just (PerspectRol { id, properties }) -> case head $ maybe [] identity (lookup versionToInstall properties) of
-        -- TODO: After the transition to Stable identifiers, the mapping from Readable to CUID can be removed.
-        Nothing -> case head $ maybe [] identity (lookup "model://perspectives.domains#CouchdbManagement$ModelManifest$External$VersionToInstall" properties) of
-          Nothing -> pure Nothing
-          Just v -> pure $ Just { semver: unwrap v, versionedModelManifest: makeVersionedModelManifest (unwrap v) id }
         Just v -> pure $ Just { semver: unwrap v, versionedModelManifest: makeVersionedModelManifest (unwrap v) id }
-      -- TODO: After the transition to Stable identifiers, the mapping from Readable to CUID can be removed.
-      -- _ -> Nothing -> pure Nothing
-      _ -> case lookup modelUri modelStableToReadable of
-        Just cuid -> getVersionToInstall (ModelUri cuid)
         Nothing -> pure Nothing
+      _ -> pure Nothing
   where
-  -- TODO: After the transition to Stable identifiers, the mapping from Readable to CUID can be removed.
   makeVersionedModelManifest :: String -> RoleInstance -> RoleInstance
-  makeVersionedModelManifest semver (RoleInstance modelManifest) =
-    let
-      localModelName = unsafePartial modelUri2LocalName modelUri
-      modelCuid = maybe localModelName identity (lookup localModelName modelReadableToCuid)
-    in
-      RoleInstance $ buitenRol ((deconstructBuitenRol (replace (Pattern localModelName) (Replacement modelCuid) modelManifest)) <> "@" <> semver)
+  makeVersionedModelManifest semver (RoleInstance modelManifest) = RoleInstance $ buitenRol ((deconstructBuitenRol modelManifest) <> "@" <> semver)
 
--- TODO: After the transition to Stable identifiers, the mapping from Readable to CUID can be removed.
 getPatchAndBuild :: RoleInstance -> MonadPerspectives { patch :: String, build :: String }
 getPatchAndBuild rid = do
-  -- TODO. In de transitieperiode proberen we de Readable name te vervangen door de CUID.
-  -- Dit kan weg als alle modellen op Stable identifiers draaien (revert naar onderstaande).
-  -- (PerspectRol { id, properties }) <- getPerspectRol rid
-  -- case lookup patch properties, lookup build properties of
-  --   Just p, Just b -> pure { patch: firstOrDefault p, build: firstOrDefault b }
-  --   Just p, Nothing -> pure { patch: firstOrDefault p, build: default }
-  --   Nothing, Just b -> pure { patch: default, build: firstOrDefault b }
-  --   Nothing, Nothing -> pure { patch: default, build: default }
-  mrol <- tryGetPerspectRol rid
-  case mrol of
-    Just (PerspectRol { id, properties }) -> do
-      case lookup patch properties, lookup build properties of
-        Just p, Just b -> pure { patch: firstOrDefault p, build: firstOrDefault b }
-        Just p, Nothing -> pure { patch: firstOrDefault p, build: default }
-        Nothing, Just b -> pure { patch: default, build: firstOrDefault b }
-        Nothing, Nothing -> pure { patch: default, build: default }
-    Nothing -> do
-      let stableRid = foldl (\final nextReadable -> replace (Pattern nextReadable) (Replacement $ unsafePartial fromJust $ lookup nextReadable modelReadableToCuid) final) (unwrap rid) (keys modelReadableToCuid)
-      if stableRid == unwrap rid then
-        throwError (error $ "getPatchAndBuild cannot find role " <> show rid)
-      else
-        getPatchAndBuild (RoleInstance stableRid)
+  (PerspectRol { id, properties }) <- getPerspectRol rid
+  case lookup patch properties, lookup build properties of
+    Just p, Just b -> pure { patch: firstOrDefault p, build: firstOrDefault b }
+    Just p, Nothing -> pure { patch: firstOrDefault p, build: default }
+    Nothing, Just b -> pure { patch: default, build: firstOrDefault b }
+    Nothing, Nothing -> pure { patch: default, build: default }
   where
   default :: String
   default = "0"
@@ -338,3 +307,14 @@ cascadeDeleteDomeinFile dfid = do
       -- One of the dependencies may have removed dfid.
       void $ tryRemoveEntiteit dfid
     otherwise -> pure unit
+
+-- | Readable to Stable ModelUri mapping.
+lookupStableModelUri :: ModelUri Readable -> MonadPerspectives (ModelUri Stable)
+lookupStableModelUri muReadable = do
+  mmuStable <- lookupModelUri muReadable
+  case mmuStable of
+    Just muStable -> pure muStable
+    Nothing -> pure (ModelUri $ unwrap muReadable)
+
+lookupReadableModelUri :: ModelUri Stable -> MonadPerspectives (ModelUri Readable)
+lookupReadableModelUri muStable = getDomeinFile muStable >>= \(DomeinFile { namespace }) -> pure namespace

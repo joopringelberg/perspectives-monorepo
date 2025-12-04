@@ -2,30 +2,20 @@ module Perspectives.Sidecar.ToStable where
 
 import Prelude
 
-import Data.Map (lookup)
 import Data.Maybe (Maybe(..))
-import Data.Newtype (unwrap)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Data.EncodableMap as EM
-import Perspectives.DomeinCache (retrieveDomeinFile)
+import Perspectives.DomeinCache (retrieveDomeinFile, lookupStableModelUri)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.PerspectivesState (getModelUris)
 import Perspectives.Representation.Class.Cacheable (ViewType(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), StateIdentifier(..))
-import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable, Readable)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 
 -- Also see module Perspectives.HumanReadableType, where we convert from Stable to Readable based on the displayName property of the type.
-
-lookupStableModelUri :: ModelUri Readable -> MonadPerspectives (ModelUri Stable)
-lookupStableModelUri muReadable = do
-  muMap <- getModelUris
-  case lookup muReadable muMap of
-    Just muStable -> pure muStable
-    Nothing -> pure (ModelUri $ unwrap muReadable)
 
 class ToStable i where
   toStable :: i -> MonadPerspectives i

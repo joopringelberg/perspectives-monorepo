@@ -60,11 +60,11 @@ import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), Replacement(..), replace)
 import Data.Traversable (for, traverse)
-import Data.Tuple (fst)
+import Data.Tuple (Tuple(..), fst)
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign (unsafeToForeign)
-import Foreign.Object (empty, lookup)
+import Foreign.Object (Object, empty, fromFoldable, lookup)
 import IDBKeyVal (idbGet, idbSet)
 import Main.RecompileBasicModels (UninterpretedDomeinFile, executeInTopologicalOrder, recompileModel)
 import Partial.Unsafe (unsafePartial)
@@ -86,7 +86,6 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter)
 import Perspectives.Instances.ObjectGetters (binding, getProperty)
 import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, isSystemModel, rootName, settings, startContexts, sysUser, systemModelName, theSystem)
-import Perspectives.ModelDependencies.ReadableStableMappings (modelStableToReadable)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (toReadableDomeinFile, toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -487,6 +486,32 @@ save (Rle rol) = void $ saveEntiteit_ (identifier rol) rol
 save (DoNotSaveRole rle) = void $ removeInternally rle
 save (DoNotSaveContext ctxt) = void $ removeInternally ctxt
 save Unknown = pure unit
+
+------------------------------------------------------------------------------------
+-- MODEL CUIDS
+------------------------------------------------------------------------------------
+-- We moved from Readable identifiers to Stable ones in October 2025. In transitioning,
+-- we have public resources in perspectives.domains that, under the new logic, should have their
+-- names derived from model CUIDs. Instead, they are still derived from the Readable identifiers.
+-- In the transition period, we need to be able to refer to these resources by their old names.
+
+modelStableToReadable :: Object String
+modelStableToReadable = fromFoldable
+  [ (Tuple "model://perspectives.domains#tiodn6tcyc" "model://perspectives.domains#System")
+  , (Tuple "model://perspectives.domains#xyfxpg3lzq" "model://perspectives.domains#CouchdbManagement")
+  , (Tuple "model://perspectives.domains#bxxptg50jp" "model://perspectives.domains#BodiesWithAccounts")
+  , (Tuple "model://perspectives.domains#xjrfkxrzyt" "model://perspectives.domains#SharedFileServices")
+  , (Tuple "model://perspectives.domains#zjuzxbqpgc" "model://perspectives.domains#BrokerServices")
+  , (Tuple "model://perspectives.domains#hkfgpmwt93" "model://perspectives.domains#HyperContext")
+  , (Tuple "model://perspectives.domains#l75w588kuk" "model://perspectives.domains#Utilities")
+  , (Tuple "model://perspectives.domains#nip6odtx4r" "model://perspectives.domains#Couchdb")
+  , (Tuple "model://perspectives.domains#dcm0arlqnz" "model://perspectives.domains#Serialise")
+  , (Tuple "model://perspectives.domains#s2gyoyohau" "model://perspectives.domains#Sensor")
+  , (Tuple "model://perspectives.domains#salp36dvb9" "model://perspectives.domains#Parsing")
+  , (Tuple "model://perspectives.domains#piln392sut" "model://perspectives.domains#Files")
+  , (Tuple "model://perspectives.domains#m203lt2idk" "model://perspectives.domains#RabbitMQ")
+
+  ]
 
 toReadable :: ModelUri Stable -> ModelUri Readable
 toReadable (ModelUri uri) = ModelUri $ unsafePartial fromJust $ lookup uri modelStableToReadable
