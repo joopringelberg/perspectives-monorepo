@@ -82,7 +82,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addDocument_, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, splitRepositoryFileUrl, tryGetDocument_, withDatabase)
 import Perspectives.Persistence.API (deleteDocument, documentsInDatabase, excludeDocs) as Persistence
 import Perspectives.Persistence.Authentication (addCredentials) as Authentication
-import Perspectives.Persistence.CouchdbFunctions (addRoleToUser, concatenatePathSegments, removeRoleFromUser)
+import Perspectives.Persistence.CouchdbFunctions (addRoleToUser, concatenatePathSegments, removeRoleFromUser, user2couchdbuser)
 import Perspectives.Persistence.CouchdbFunctions as CDB
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (UserName, Password)
@@ -725,7 +725,7 @@ createUser :: Array Url -> Array UserName -> Array Password -> RoleInstance -> M
 createUser databaseUrls userNames passwords _ =
   try
     ( case head databaseUrls, head userNames, head passwords of
-        Just databaseurl, Just userName, Just password -> lift $ CDB.createUser databaseurl userName password []
+        Just databaseurl, Just userName, Just password -> lift $ CDB.createUser databaseurl (user2couchdbuser userName) password []
         _, _, _ -> pure unit
     )
     >>= handleExternalStatementError "model://perspectives.domains#Couchdb$CreateUser"
@@ -736,7 +736,7 @@ deleteUser :: Array Url -> Array UserName -> RoleInstance -> MonadPerspectivesTr
 deleteUser databaseUrls userNames _ =
   try
     ( case head databaseUrls, head userNames of
-        Just databaseurl, Just userName -> lift $ void $ CDB.deleteUser databaseurl userName
+        Just databaseurl, Just userName -> lift $ void $ CDB.deleteUser databaseurl (user2couchdbuser userName)
         _, _ -> pure unit
     )
     >>= handleExternalStatementError "model://perspectives.domains#Couchdb$DeleteUser"
@@ -757,17 +757,17 @@ updateSecurityDocument fname updater databaseUrls databaseNames userNames _ =
 -- | The RoleInstance is an instance of model:CouchdbManagement$Repository$Admin
 -- | Execution of this function requires the user to have a DATABASEADMIN or SERVERADMIN account.
 makeAdminOfDb :: Array Url -> Array DatabaseName -> Array UserName -> RoleInstance -> MonadPerspectivesTransaction Unit
-makeAdminOfDb = updateSecurityDocument "MakeAdminOfDb" \userName (SecurityDocument r) -> SecurityDocument r { admins = { names: Just $ maybe [ userName ] (ARR.union [ userName ]) r.admins.names, roles: r.admins.roles } }
+makeAdminOfDb = updateSecurityDocument "MakeAdminOfDb" \userName (SecurityDocument r) -> SecurityDocument r { admins = { names: Just $ maybe [ unwrap $ user2couchdbuser userName ] (ARR.union [ unwrap $ user2couchdbuser userName ]) r.admins.names, roles: r.admins.roles } }
 
 -- | The RoleInstance is an instance of model:CouchdbManagement$Repository$Admin
 -- | Execution of this function requires the user to have a DATABASEADMIN or SERVERADMIN account.
 removeAsAdminFromDb :: Array Url -> Array DatabaseName -> Array UserName -> RoleInstance -> MonadPerspectivesTransaction Unit
-removeAsAdminFromDb = updateSecurityDocument "RemoveAsAdminFromDb" \userName (SecurityDocument r) -> SecurityDocument r { admins = { names: ARR.delete userName <$> r.admins.names, roles: r.admins.roles } }
+removeAsAdminFromDb = updateSecurityDocument "RemoveAsAdminFromDb" \userName (SecurityDocument r) -> SecurityDocument r { admins = { names: ARR.delete (unwrap $ user2couchdbuser userName) <$> r.admins.names, roles: r.admins.roles } }
 
 -- | The RoleInstance is an instance of model:CouchdbManagement$Repository$Admin
 -- | Execution of this function requires the user to have a DATABASEADMIN or SERVERADMIN account.
 makeMemberOf :: Array Url -> Array DatabaseName -> Array UserName -> RoleInstance -> MonadPerspectivesTransaction Unit
-makeMemberOf = updateSecurityDocument "MakeMemberOf" \userName (SecurityDocument r) -> SecurityDocument r { members = { names: Just (maybe [ userName ] (ARR.union [ userName ]) r.members.names), roles: r.members.roles } }
+makeMemberOf = updateSecurityDocument "MakeMemberOf" \userName (SecurityDocument r) -> SecurityDocument r { members = { names: Just (maybe [ unwrap $ user2couchdbuser userName ] (ARR.union [ unwrap $ user2couchdbuser userName ]) r.members.names), roles: r.members.roles } }
 
 -- | The RoleInstance is an instance of model:CouchdbManagement$Repository$Admin
 -- | Execution of this function requires the user to have a DATABASEADMIN or SERVERADMIN account.
@@ -776,7 +776,7 @@ removeAsMemberOf = updateSecurityDocument "RemoveAsMemberOf"
   \userName (SecurityDocument r) ->
     SecurityDocument r
       { members =
-          { names: ARR.delete userName <$> r.members.names
+          { names: ARR.delete (unwrap $ user2couchdbuser userName) <$> r.members.names
           , roles: r.admins.roles
           }
       }
@@ -788,7 +788,7 @@ makeWritingMemberOf :: Array Url -> Array DatabaseName -> Array UserName -> Role
 makeWritingMemberOf databaseUrls databaseNames userNames _ =
   try
     ( case head databaseUrls, head databaseNames, head userNames of
-        Just databaseUrl, Just databaseName, Just userName -> lift $ addRoleToUser databaseUrl userName databaseName
+        Just databaseUrl, Just databaseName, Just userName -> lift $ addRoleToUser databaseUrl (user2couchdbuser userName) databaseName
         _, _, _ -> pure unit
     )
     >>= handleExternalStatementError "model://perspectives.domains#Couchdb$MakeWritingMemberOf"
@@ -800,7 +800,7 @@ removeAsWritingMemberOf :: Array Url -> Array DatabaseName -> Array UserName -> 
 removeAsWritingMemberOf databaseUrls databaseNames userNames _ =
   try
     ( case head databaseUrls, head databaseNames, head userNames of
-        Just databaseUrl, Just databaseName, Just userName -> lift $ removeRoleFromUser databaseUrl userName databaseName
+        Just databaseUrl, Just databaseName, Just userName -> lift $ removeRoleFromUser databaseUrl (user2couchdbuser userName) databaseName
         _, _, _ -> pure unit
     )
     >>= handleExternalStatementError "model://perspectives.domains#Couchdb$RemoveAsWritingMemberOf"
@@ -874,7 +874,7 @@ resetPassword :: Array Url -> Array UserName -> Array Password -> RoleInstance -
 resetPassword databaseUrls userNames passwords _ =
   try
     ( case head databaseUrls, head userNames, head passwords of
-        Just databaseUrl, Just userName, Just password -> lift $ CDB.setPassword databaseUrl userName password
+        Just databaseUrl, Just userName, Just password -> lift $ CDB.setPassword databaseUrl (user2couchdbuser userName) password
         _, _, _ -> pure unit
     )
     >>= handleExternalStatementError "model://perspectives.domains#ResetPassword"

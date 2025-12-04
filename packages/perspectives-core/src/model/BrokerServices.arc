@@ -107,7 +107,7 @@ domain model://perspectives.domains#BrokerServices
             markdown <## Get connected
                       MyContexts is most useful when you connect to other people. 
                       This installation has not yet a means to connect to others. 
-                      Move to the [[link:pub:https://perspectives.domains/cw_j4qovsczpm/#gobbccbstw$External|Perspectives Broker Service]] 
+                      Move to the [[link:pub:https://perspectives.domains/cw_v74vfn21lx/#rbdaciupyn$External|Perspectives Broker Service]] 
                       page to get online. You will read further instructions there.
                      >
               when not (exists bs:MyBrokers >> PublicBrokers)

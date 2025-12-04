@@ -32,16 +32,17 @@ module Perspectives.Persistence.CouchdbFunctions
   , setPassword
   , setSecurityDocument
   , user2couchdbuser
+  , User(..)
   ) where
 
 import Prelude
 
 import Affjax (Response)
-import Affjax.Web as AJ
 import Affjax.RequestBody as RequestBody
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.ResponseHeader (ResponseHeader, name, value)
 import Affjax.StatusCode (StatusCode(..))
+import Affjax.Web as AJ
 import Control.Monad.Error.Class (class MonadError, throwError)
 import Data.Argonaut (Json)
 import Data.Array (difference, find, union)
@@ -196,9 +197,10 @@ derive newtype instance WriteForeign UserDocument
 -----------------------------------------------------------
 -- CREATE USER
 -----------------------------------------------------------
--- NOTE. These functions may be redundant, as I believe we can manage documents
--- in the _users database through Pouchdb.
-type User = String
+-- | The string in User should not have a storage scheme and should be suitable as a Couchdb user name.
+newtype User = User String
+
+instance Newtype User String
 type Password = String
 
 -- | Create a non-admin user.
@@ -207,14 +209,14 @@ createUser base user password roles = ensureAuthentication (Authority base) \_ -
   rq <- defaultPerspectRequest
   (content :: Json) <- pure
     ( toJson
-        { _id: "org.couchdb.user:" <> user2couchdbuser user
-        , name: user2couchdbuser user
+        { _id: "org.couchdb.user:" <> unwrap user
+        , name: unwrap user
         , password
         , roles
         , type: "user"
         }
     )
-  res <- liftAff $ AJ.request $ rq { method = Left PUT, url = (base <> "_users/org.couchdb.user:" <> user2couchdbuser user), content = Just $ RequestBody.json content }
+  res <- liftAff $ AJ.request $ rq { method = Left PUT, url = (base <> "_users/org.couchdb.user:" <> unwrap user), content = Just $ RequestBody.json content }
   onAccepted res [ StatusCode 200, StatusCode 201 ] "createUser" (\_ -> pure unit)
 
 type Role = String
@@ -223,7 +225,7 @@ type Role = String
 -- GET USER
 -----------------------------------------------------------
 getUserDocument :: forall f. Url -> User -> MonadPouchdb f UserDocument
-getUserDocument base user = getDocumentFromUrl (base <> "_users/org.couchdb.user:" <> user2couchdbuser user)
+getUserDocument base user = getDocumentFromUrl (base <> "_users/org.couchdb.user:" <> unwrap user)
 
 -----------------------------------------------------------
 -- ADD OR REMOVE ROLE
@@ -236,7 +238,7 @@ addRoleToUser base user role = do
   UserDocument urecord@{ roles } <- getUserDocument base user
   res <- liftAff $ AJ.request $ rq
     { method = Left PUT
-    , url = (base <> "_users/org.couchdb.user:" <> user2couchdbuser user)
+    , url = (base <> "_users/org.couchdb.user:" <> unwrap user)
     , content = Just $ RequestBody.json $ toJson (urecord { roles = union [ role ] roles })
     }
   onAccepted res [ StatusCode 200, StatusCode 201 ] "createUser" (\_ -> pure unit)
@@ -248,7 +250,7 @@ removeRoleFromUser base user role = do
   UserDocument urecord@{ roles } <- getUserDocument base user
   res <- liftAff $ AJ.request $ rq
     { method = Left PUT
-    , url = (base <> "_users/org.couchdb.user:" <> user2couchdbuser user)
+    , url = (base <> "_users/org.couchdb.user:" <> unwrap user)
     , content = Just $ RequestBody.json $ toJson (urecord { roles = difference roles [ role ] })
     }
   onAccepted res [ StatusCode 200, StatusCode 201 ] "createUser" (\_ -> pure unit)
@@ -257,7 +259,7 @@ removeRoleFromUser base user role = do
 -- DELETE USER
 -----------------------------------------------------------
 deleteUser :: forall f. Url -> User -> MonadPouchdb f Boolean
-deleteUser base user = deleteDocument (base <> "_users/org.couchdb.user:" <> user2couchdbuser user) Nothing
+deleteUser base user = deleteDocument (base <> "_users/org.couchdb.user:" <> unwrap user) Nothing
 
 -----------------------------------------------------------
 -- SETPASSWORD
@@ -267,7 +269,7 @@ setPassword base user password = ensureAuthentication (Authority base) \_ -> do
   rq <- defaultPerspectRequest
   (res :: (Either AJ.Error (Response Json))) <- liftAff $ AJ.request $ rq
     { method = Left GET
-    , url = (base <> "_users/org.couchdb.user:" <> user2couchdbuser user)
+    , url = (base <> "_users/org.couchdb.user:" <> unwrap user)
     , responseFormat = ResponseFormat.json
     }
   onAccepted
@@ -275,7 +277,7 @@ setPassword base user password = ensureAuthentication (Authority base) \_ -> do
     [ StatusCode 200 ]
     "setPassword"
     \response -> do
-      res1 <- liftAff $ AJ.request $ rq { method = Left PUT, url = (base <> "_users/org.couchdb.user:" <> user2couchdbuser user), content = Just $ RequestBody.json (changePassword response.body password) }
+      res1 <- liftAff $ AJ.request $ rq { method = Left PUT, url = (base <> "_users/org.couchdb.user:" <> unwrap user), content = Just $ RequestBody.json (changePassword response.body password) }
       onAccepted res1 [ StatusCode 200, StatusCode 201 ] "createUser" \_ -> pure unit
 
 changePassword :: Json -> Password -> Json
@@ -406,8 +408,8 @@ databaseStatusCodes = MAP.fromFoldable
 -- user2couchdbuser
 -----------------------------------------------------------
 -- | Transforms a canonical user identification in Perspectives to an acceptable user name in Couchdb, by stripping away the storage scheme.
-user2couchdbuser :: String -> String
-user2couchdbuser = takeGuid
+user2couchdbuser :: String -> User
+user2couchdbuser = User <<< takeGuid
 
 -----------------------------------------------------------
 -- concatenatePathSegments

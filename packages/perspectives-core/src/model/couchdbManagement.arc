@@ -395,6 +395,7 @@ domain model://perspectives.domains#CouchdbManagement
       perspective on Repositories
         props (Repositories$NameSpace, IsPublic, RepositoryUrl) verbs (Consult)
       
+      -- NOTICE a flaw in this design: each Accounts instance has full control over all BespokeDatabases - including those owned by other Accounts!
       perspective on BespokeDatabases
         only (CreateAndFill, RemoveContext)
         props (Description) verbs (Consult, SetPropertyValue)
@@ -600,7 +601,7 @@ domain model://perspectives.domains#CouchdbManagement
     user CBAdmin = extern >> binder BespokeDatabases >> context >> Admin
       perspective on External
         props (DatabaseLocation, Endorsed, DatabaseName) verbs (Consult, SetPropertyValue)
-        props (BaseUrl) verbs (Consult)
+        props (BaseUrl, Name) verbs (Consult)
       perspective on Owner
         all roleverbs
         props (LastName) verbs (Consult)
