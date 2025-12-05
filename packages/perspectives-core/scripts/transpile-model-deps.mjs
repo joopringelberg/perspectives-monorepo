@@ -76,25 +76,6 @@ const modelUri2ModelUrl = (s) => {
   }
 }
 
-// Load modelReadableToStable from src/core/readableStableMappings.purs
-async function loadReadableToStable() {
-  const mappingPath = path.join(root, 'src', 'core', 'readableStableMappings.purs')
-  try {
-    const file = await fs.readFile(mappingPath, 'utf8')
-    const start = file.indexOf('modelReadableToStable = fromFoldable')
-    if (start === -1) return {}
-    const chunk = file.slice(start)
-    const arrayStart = chunk.indexOf('[')
-    const arrayEnd = chunk.indexOf(']\n', arrayStart)
-    const body = chunk.slice(arrayStart + 1, arrayEnd === -1 ? undefined : arrayEnd)
-    const entries = [...body.matchAll(/\(Tuple\s+"([^"]+)"\s+"([^"]+)"\)/g)].map(([, k, v]) => [k, v])
-    return Object.fromEntries(entries)
-  } catch (e) {
-    console.warn(`[transpile] Could not read mappings at ${path.relative(root, mappingPath)}: ${e.message}`)
-    return {}
-  }
-}
-
 // Simple fetch with cache and optional refresh; adds cache-busting
 async function fetchWithCache(urlStr, cachePath, { refresh = false } = {}) {
   await fs.mkdir(path.dirname(cachePath), { recursive: true })
@@ -231,7 +212,24 @@ function hasSingleLocalSegment(s) {
 // Main
 ;(async () => {
   // Map readable model URIs to stable ones (fallback to given URI if unmapped)
-  const readableToStable = await loadReadableToStable()
+  // NOTE: extend this map as needed.
+  const readableToStable = 
+    {
+      "model://perspectives.domains#System": "model://perspectives.domains#tiodn6tcyc",
+      "model://perspectives.domains#CouchdbManagement": "model://perspectives.domains#xyfxpg3lzq",
+      "model://perspectives.domains#BodiesWithAccounts": "model://perspectives.domains#bxxptg50jp",
+      "model://perspectives.domains#SharedFileServices": "model://perspectives.domains#xjrfkxrzyt",
+      "model://perspectives.domains#BrokerServices": "model://perspectives.domains#zjuzxbqpgc",
+      "model://perspectives.domains#HyperContext": "model://perspectives.domains#hkfgpmwt93",
+      "model://perspectives.domains#Utilities": "model://perspectives.domains#l75w588kuk",
+      "model://perspectives.domains#Couchdb": "model://perspectives.domains#nip6odtx4r",
+      "model://perspectives.domains#Serialise": "model://perspectives.domains#dcm0arlqnz",
+      "model://perspectives.domains#Sensor": "model://perspectives.domains#s2gyoyohau",
+      "model://perspectives.domains#Parsing": "model://perspectives.domains#salp36dvb9",
+      "model://perspectives.domains#Files": "model://perspectives.domains#piln392sut",
+      "model://perspectives.domains#RabbitMQ": "model://perspectives.domains#m203lt2idk"
+    };
+    
   const text = await fs.readFile(srcFile, 'utf8')
 
   // Find all string literals containing model:// URIs
