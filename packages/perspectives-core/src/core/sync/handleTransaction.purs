@@ -253,7 +253,9 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
 executeUniverseRoleDelta :: UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, authorizedRole, deltaType, subject }) s = do
   padding <- lift transactionLevel
-  lift $ toReadable roleType >>= \readableRoleType -> log (padding <> show deltaType <> " for/from " <> show id <> " with ids " <> show roleInstances <> " with type " <> show readableRoleType <> " for user role " <> show subject)
+  readableRoleType <- lift $ toReadable roleType
+  readableSubject <- lift $ toReadable subject
+  log (padding <> show deltaType <> " for/from " <> show id <> " with ids " <> show roleInstances <> " with type " <> show readableRoleType <> " for user role " <> show readableSubject)
   void $ lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ $ unwrap roleType)
   case deltaType of
     ConstructEmptyRole -> do
