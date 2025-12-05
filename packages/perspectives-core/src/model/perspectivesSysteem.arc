@@ -150,9 +150,10 @@ domain model://perspectives.domains#System
       aspect sys:Addressable
       -- The unique key provided to each new participant in the Perspectives Trusted Network by one of his peers.
       -- It can be used to store a limited number of media files in the perspectives sharedfile storage.
+      -- We don't want to hand out keys to users as seen by public users.
       -- PDRDEPENDENCY (actually, a MyContexts dependency)
       property SharedFileServerKey (String)
-      state NoKey = (not HasKey) and (exists sys:SocialMe >> SharedFileServerKey)
+      state NoKey = (not HasKey) and (exists sys:SocialMe >> SharedFileServerKey) and (not (callExternal util:BottomIdentifier() returns String matches regexp "^pub:.*"))
         on entry
           do for Initializer
             SharedFileServerKey = callExternal util:GetSharedFileServerKey( sys:SocialMe >> SharedFileServerKey ) returns String
