@@ -1,4 +1,5 @@
-model://perspectives.domains#SharedFileServices:
+model://perspectives.domains#xjrfkxrzyt:
+  version: "4.0"
   contexts:
     SharedFileServices:
       translations:

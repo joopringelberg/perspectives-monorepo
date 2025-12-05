@@ -199,7 +199,7 @@ domain model://perspectives.domains#BrokerServices
           props(LastNameOfAccountHolder) verbs (Consult)
       perspective on Administrator
         props (FirstName, LastName) verbs (Consult)
-        props (AdminUserName, AdminPassword) verbs (SetPropertyValue)
+        props (AdminUserName, AdminPassword, SharedFileServerKey) verbs (SetPropertyValue)
       perspective on extern
         props (Name, Url, ManagementEndpoint, SelfRegisterEndpoint, Exchange, ServiceDescription, TerminationPeriod, GracePeriod, ContractPeriod) verbs (Consult, SetPropertyValue)
         props (PublicUrl) verbs (Consult)
@@ -209,9 +209,13 @@ domain model://perspectives.domains#BrokerServices
           Administrator
             master
               markdown <### Administrator
-                        Manage your account details with the external broker service here.
-                       >
-              without props (FirstName, AdminUserName, AdminPassword, HasKey)
+                        As you are the manager of this BrokerService, it is important that you have a key for the shared file storage service (if any).
+                        This key allows you to hand out keys to people who connect to you to get an account on your Broker Service.
+                        It also allows you to upload files to the shared file storage that your connected peers can download.
+                        This key should be manually added to the state file of the shared file storage relay service.
+                        See [perspectives-sharedfilestorage](https://github.com/joopringelberg/perspectives-sharedfilestorage) for more information.
+                      >
+              without props (FirstName, AdminUserName, AdminPassword, HasKey, SharedFileServerKey)
             detail
               without props (HasKey)
         what
