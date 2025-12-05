@@ -637,7 +637,7 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
               -- otherwise we'll end up with deltas that refer to the local instance of the system user.
               sysUser <- lift getSystemIdentifier
               void
-                $ withPerspectivesUser (PerspectivesUser $ "pub:https://" <> ensureSlash namespace <> ensureSlash databaseName <> sysUser)
+                $ withPerspectivesUser (PerspectivesUser $ "pub:https://" <> ensureSlash namespace <> ensureSlash databaseName <> "#" <> sysUser)
                     -- Notice that the deltas in the result of constructEmptyContext are not added to the Transaction yet.
                     -- This is what we want; we take a short route to creating a public instance of TheWorld here.
                     (runExceptT $ constructEmptyContext theworldid theWorld "TheWorld" (PropertySerialization empty) Nothing)
