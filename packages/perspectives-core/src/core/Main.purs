@@ -725,20 +725,14 @@ removeAccount usr rawPouchdbUser callback = void $ runAff handler
           typeToBeFixed
         runPerspectivesWithState
           do
-            -- Get all Channels
-            getChannels <- getRoleFunction "sys:PerspectivesSystem$Channels"
-            -- End their replication
-            system <- getMySystem
-            (channels :: Array ContextInstance) <- (ContextInstance system) ##= getChannels >=> context
-            void $ withCouchdbUrl \url -> for_ channels (endChannelReplication url)
-            -- remove the channels
-            getChannelDbId <- getPropertyFunction "sys:Channel$External$ChannelDatabaseName"
-            for_ channels \c -> (c ##>> externalRole >=> getChannelDbId) >>= deleteDb <<< unwrap
             -- remove the databases
             entitiesDatabaseName >>= deleteDb
             modelsDatabaseName >>= deleteDb
             postDatabaseName >>= deleteDb
             invertedQueryDatabaseName >>= deleteDb
+            -- Remove recovery databases, too.
+            entitiesDatabaseName >>= deleteDb <<< ((<>) "_recovery")
+            modelsDatabaseName >>= deleteDb <<< ((<>) "_recovery")
             liftAff $ liftEffect clear
           state
   where
