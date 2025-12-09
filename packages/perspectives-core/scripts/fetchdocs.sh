@@ -106,8 +106,8 @@ while :; do
   count=$(printf '%s' "$resp" | jq '.rows|length')
   [ "$count" -eq 0 ] && break
 
-  # alleen IDs opslaan (erg klein)
-  printf '%s' "$resp" | jq -r '.rows[].id' >> "$IDS"
+  # Alleen geldige IDs opslaan: sla _design docs over en verwijderde docs
+  printf '%s' "$resp" | jq -r '.rows[] | select((.id | startswith("_design/")) | not) | select(.value.deleted != true) | .id' >> "$IDS"
 
   last_id=$(printf '%s' "$resp" | jq -r '.rows[-1].id')
   startkey="$last_id"

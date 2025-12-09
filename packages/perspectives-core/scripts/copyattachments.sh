@@ -189,8 +189,20 @@ while IFS= read -r id; do
     code=$(cat "$put_status")
     newrev=$(jq -r '._rev // empty' <"$put_json" 2>/dev/null || true)
 
-    if [ "$code" = "201" ] && [ -n "$newrev" ]; then
-      rev="$newrev"
+    if [ "$code" = "201" ]; then
+      # Treat 201 as success even if body lacks _rev (some proxies/servers strip response bodies)
+      if [ -n "$newrev" ]; then
+        rev="$newrev"
+      else
+        # Fallback: fetch latest rev to keep subsequent PUTs consistent
+        tmp_json=$(mktemp) ; tmp_status=$(mktemp)
+        curl_json "$AUTH_DST" "$DBDST/$eid" "$tmp_json" "$tmp_status"
+        if [ "$(cat "$tmp_status")" = "200" ]; then
+          rev_retry=$(jq -r '._rev // empty' <"$tmp_json")
+          [ -n "$rev_retry" ] && rev="$rev_retry"
+        fi
+        rm -f "$tmp_json" "$tmp_status"
+      fi
       success=$((success+1))
     elif [ "$code" = "409" ]; then
       # conflict: haal nieuwste rev op en probeer 1x opnieuw
