@@ -33,7 +33,7 @@ import {thisAppsLocation} from "perspectives-react";
 
 import { SharedWorkerChannelPromise as PDRHandler } from 'perspectives-proxy';
 import { constructPouchdbUser, getInstallationData } from "./installationData";
-import { clear } from 'idb-keyval';
+import { clear, set, del } from 'idb-keyval';
 import { startPDR } from "./startPDR";
 
 export default function ManageScreen()
@@ -86,6 +86,14 @@ export default function ManageScreen()
                 </Col>
                 <Col className="d-flex align-items-center">
                 <Button variant="success" onClick={recompileLocalModels}>Recompile local models</Button>
+                </Col>
+              </Row>
+              <Row>
+                <Col className="alert alert-info">
+                  Swap to the remote CouchDB endpoint for this browser session.
+                </Col>
+                <Col className="d-flex align-items-center">
+                  <Button variant="secondary" onClick={swapToRemoteCouchdb}>SwapToRemoteCouchdb</Button>
                 </Col>
               </Row>
               <Row>
@@ -174,6 +182,14 @@ function deleteAccount()
       const user = constructPouchdbUser(data);
       PDRHandler.then( pdrHandler => pdrHandler.recompileLocalModels(user));
     });
+  }
+
+  function swapToRemoteCouchdb()
+  {
+    // Remove local port override and set the remote CouchDB URL
+    del('couchdbPort')
+      .catch(() => {})
+      .then(() => set('couchdbUrl', 'https://joopringelberg.nl/_data'));
   }
 
   function recoverFromRecoveryPoint()
