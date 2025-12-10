@@ -71,7 +71,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (cacheAndSave, setProperty)
 import Perspectives.ContextAndRole (rol_property)
-import Perspectives.CoreTypes (MonadPerspectives, removeInternally, (##=))
+import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, removeInternally, (##=))
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (storeDomeinFileInCouchdbPreservingAttachments)
@@ -85,13 +85,15 @@ import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter)
 import Perspectives.Instances.ObjectGetters (binding, getProperty)
+import Perspectives.Instances.Values (PerspectivesFile, parsePerspectivesFile, writePerspectivesFile)
 import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, isSystemModel, rootName, settings, startContexts, sysUser, systemModelName, theSystem)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (toReadableDomeinFile, toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (databaseInfo, documentsInDatabase, includeDocs, resetViewIndex)
+import Perspectives.Persistence.API (Keys(..), databaseInfo, documentsInDatabase, includeDocs, resetViewIndex)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspectRol, saveEntiteit_, saveMarkedResources, tryGetPerspectEntiteit, tryGetPerspectRol)
+import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Identifiable (identifier)
@@ -103,6 +105,7 @@ import Perspectives.SetupUser (setupInvertedQueryDatabase)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.Sidecar.NormalizeTypeNames (fqn2tid, normalize, normalizeTypeNames)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping, fromRepository, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
+import Perspectives.Sidecar.ToStable (toStable)
 import Simple.JSON (read)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -249,6 +252,10 @@ runDataUpgrades = do
     ( \_ -> void recompileLocalModels
     )
 
+  runUpgrade installedVersion "3.0.59"
+    ( \_ -> do
+        fixDatabaseInPerspectivesFiles unit
+    )
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 
   ----------------------------------------------------------------------------------------
@@ -658,3 +665,49 @@ normalizeLocalDomeinFiles _ = runMonadPerspectivesTransaction'
         let stableModel = toStableDomeinFile model
         storeDomeinFileInCouchdbPreservingAttachments stableModel
   )
+
+fixDatabaseInPerspectivesFiles :: Upgrade
+fixDatabaseInPerspectivesFiles _ = runMonadPerspectivesTransaction'
+  false
+  (ENR $ EnumeratedRoleType sysUser)
+  ( do
+      fixArcFile
+      fixTranslationFile
+  )
+  where
+
+  fixArcFile :: MonadPerspectivesTransaction Unit
+  fixArcFile = fixCase (EnumeratedRoleType "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External")
+    (EnumeratedPropertyType "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ArcFile")
+
+  fixTranslationFile :: MonadPerspectivesTransaction Unit
+  fixTranslationFile = fixCase
+    (EnumeratedRoleType "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation")
+    (EnumeratedPropertyType "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$TranslationYaml")
+
+  fixCase :: EnumeratedRoleType -> EnumeratedPropertyType -> MonadPerspectivesTransaction Unit
+  fixCase roleTypeR filePropertyTypeR = do
+    roleType <- lift $ toStable roleTypeR
+    filePropertyType <- lift $ toStable filePropertyTypeR
+    -- Get directly from the database all role instances of type model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ArcFile
+    instancesInCouchdb :: Array RoleInstance <- (lift entitiesDatabaseName) >>=
+      \db -> lift $ getSafeViewOnDatabase db "defaultViews/roleView" (Key $ roleType)
+    void $ for instancesInCouchdb \ri -> do
+      -- Read the property "ArcFile"
+      -- Parse it as a PerspectivesFile
+      -- change the database component to the entities database name
+      -- Serialize back to text
+      -- Save back to the property
+      mrol <- lift $ tryGetPerspectRol ri
+      case mrol of
+        Nothing -> pure unit
+        Just rol -> case head $ rol_property rol filePropertyType of
+          Nothing -> pure unit
+          Just (Value fileText) -> do
+            case parsePerspectivesFile fileText of
+              (Right (pf :: PerspectivesFile)) -> do
+                entitiesDb <- lift $ entitiesDatabaseName
+                let pf' = pf { database = Just entitiesDb }
+                let fileText' = writePerspectivesFile pf'
+                setProperty [ ri ] filePropertyType Nothing [ Value fileText' ]
+              (Left errs) -> lift $ logPerspectivesError (Custom ("Cannot parse ArcFile property as PerspectivesFile: " <> show errs))
