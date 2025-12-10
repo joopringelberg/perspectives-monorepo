@@ -36,7 +36,7 @@ import Data.Array (union, delete) as ARR
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
-import Data.Maybe (Maybe(..), maybe)
+import Data.Maybe (Maybe(..), isNothing, maybe)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (over, unwrap)
 import Data.Nullable (toMaybe)
@@ -102,7 +102,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer(..))
-import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>>=))
+import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>>=), (||))
 import Simple.JSON (read_)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -499,8 +499,9 @@ initSystem = do
         )
         true
       roleIsMe me system
+      mIdoc <- gets \(Transaction { identityDocument }) -> identityDocument
       isFirstInstallation <- lift $ AMA.gets (_.isFirstInstallation <<< _.runtimeOptions)
-      if isFirstInstallation then do
+      if isFirstInstallation || isNothing mIdoc then do
         mpublicKey <- lift getMyPublicKey
         case mpublicKey of
           Just publicKey -> do
@@ -543,7 +544,6 @@ initSystem = do
           Nothing -> logPerspectivesError (Custom "No public key found on setting up!")
       -- Instead, read the Identity document.
       else do
-        mIdoc <- gets \(Transaction { identityDocument }) -> identityDocument
         case mIdoc of
           Just (UninterpretedTransactionForPeer i) ->
             case read_ i of
