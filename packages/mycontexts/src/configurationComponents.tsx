@@ -66,20 +66,20 @@ export const KeyPairFileUploader: FC<{ setKeyPairFile: (json: KeyPair | null) =>
     if (fileList?.length) {
       fileList[0].text()
         .then(t => {
-          json = JSON.parse(t);
-                  // Check if the file is a keypair file
-        if (json.privateKey && json.publicKey) {
-          event.target.setCustomValidity('');
-            setFeedback('')
-            setKeyPairFile(json);
-            // We don't store the keypair file in IndexedDB. It would compromise the security of the keypair.
-            }
-          else {
-            // Otherwise tell the end user this is not a correct Identity file. 
-            event.target.setCustomValidity(i18next.t("uploadkeypairdialog_wrongJson", {ns: 'mycontexts'}));
-            setFeedback(i18next.t("uploadkeypairdialog_wrongJson", {ns: 'mycontexts'}));
-            setKeyPairFile(null);
-          }})
+          json = JSON.parse( decodeURIComponent(t));
+          // Check if the file is a keypair file
+          if (json.privateKey && json.publicKey) {
+            event.target.setCustomValidity('');
+              setFeedback('')
+              setKeyPairFile(json);
+              // We don't store the keypair file in IndexedDB. It would compromise the security of the keypair.
+              }
+            else {
+              // Otherwise tell the end user this is not a correct Identity file. 
+              event.target.setCustomValidity(i18next.t("uploadkeypairdialog_wrongJson", {ns: 'mycontexts'}));
+              setFeedback(i18next.t("uploadkeypairdialog_wrongJson", {ns: 'mycontexts'}));
+              setKeyPairFile(null);
+            }})
         .catch( () => {
           // If the file is not a JSON file, tell the end user to upload a JSON file
           event.target.setCustomValidity( i18next.t("uploadKeypairDialog_NoJson", {ns: 'mycontexts'}));

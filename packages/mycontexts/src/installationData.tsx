@@ -17,7 +17,9 @@ export function getInstallationData(): Promise<InstallationData> {
   })) }
 
 export function constructPouchdbUser(installationData: InstallationData): PouchdbUser {
-  const couchdbUrl = installationData.couchdbUrl ? installationData.couchdbUrl + ":" + installationData.couchdbPort + "/": undefined;
+  const couchdbUrl = installationData.couchdbUrl ? installationData.couchdbUrl 
+    + (installationData.couchdbPort ? ":" + installationData.couchdbPort : "")
+    + "/": undefined;
   return { userName: installationData.userName as string
          , password: installationData.password as string
          , couchdbUrl

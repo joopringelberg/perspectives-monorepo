@@ -180,7 +180,6 @@ const InstallModal: FC<{ show: boolean; onHide: () => void, callback: (data: Ins
                   <Col sm="9">
                     <Form.Control
                     type="number"
-                    required
                     value={couchdbPort || ''}
                     min={1000}
                     max={65536}
@@ -288,7 +287,6 @@ function handleInstall ( { deviceName, keyPair, identityFile, couchdbUrl, couchd
     // Get the perspectivesUsersId from the identity file
     // Save the identity file
     perspectivesUserId = takeCUID( identityFile.author )
-    perspectivesUserId = identityFile.author;
   } else {
     perspectivesUserId = cuid2();
   }
@@ -296,10 +294,33 @@ function handleInstall ( { deviceName, keyPair, identityFile, couchdbUrl, couchd
   
   // If there is no privateKey, generate a new keypair.
   if (keyPair) {
-    // Save the private key in a way that it cannot be exported.
-    setValue( perspectivesUserId + PUBLICKEY, keyPair.publicKey )
-    setValue( perspectivesUserId + PRIVATEKEY, keyPair.privateKey )
-    callback({type: 'NoKeyPairData', perspectivesUserId});
+    // Import provided JWKs into CryptoKeys and persist like createKeypair/savePrivateKey
+    const importPublicKey = window.crypto.subtle.importKey(
+      'jwk',
+      keyPair.publicKey,
+      { name: 'ECDSA', namedCurve: 'P-384' },
+      true,
+      ['verify']
+    );
+    const importPrivateKey = window.crypto.subtle.importKey(
+      'jwk',
+      keyPair.privateKey,
+      { name: 'ECDSA', namedCurve: 'P-384' },
+      true,
+      ['sign']
+    );
+
+    Promise.all([importPublicKey, importPrivateKey])
+      .then(([pubKey, privKey]) =>
+        Promise.all([
+          setValue(perspectivesUserId + PUBLICKEY, pubKey),
+          savePrivateKey(perspectivesUserId, privKey)
+        ])
+      )
+      .then(() => {
+        // No need to return the pair for download; user supplied it
+        callback({ type: 'NoKeyPairData', perspectivesUserId });
+      });
   }
     else {
     // Generate a new keypair
