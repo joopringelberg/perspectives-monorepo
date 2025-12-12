@@ -46,7 +46,8 @@
 			"models",
 			"perspectives-proxy",
 			"perspectives language",
-			"purescript-lru-cache"
+			"purescript-lru-cache",
+			"dataupgrade"
 		],
 		"purescript.buildCommand": "pnpm exec spago build --json-errors",
 		"git.openRepositoryInParentFolders": "always"
