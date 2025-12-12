@@ -69,17 +69,18 @@ expandNamespaces namespaces s =
 
 defaultNamespaces :: OBJ.Object String
 defaultNamespaces = OBJ.fromFoldable
-  [ Tuple "sys" "model://perspectives.domains#System"
-  , Tuple "cm" "model://perspectives.domains#CouchdbManagement"
+  [ Tuple "sys" "model://perspectives.domains#tiodn6tcyc"
+  , Tuple "cm" "model://perspectives.domains#xyfxpg3lzq"
   -- External core modules: this depends on the list in module Perspectives.External.CoreModules.
-  , Tuple "cdb" "model://perspectives.domains#Couchdb"
-  , Tuple "ser" "model://perspectives.domains#Serialise"
-  , Tuple "parse" "model://perspectives.domains#Parsing"
-  , Tuple "util" "model://perspectives.domains#Utilities"
-  , Tuple "sens" "model://perspectives.domains#Sensor"
-  , Tuple "rabbit" "model://perspectives.domains#RabbitMQ"
-  , Tuple "files" "model://perspectives.domains#Files"
-  , Tuple "bs" "model://perspectives.domains#BrokerServices"
+  , Tuple "cdb" "model://perspectives.domains#nip6odtx4r"
+  , Tuple "ser" "model://perspectives.domains#dcm0arlqnz"
+  , Tuple "parse" "model://perspectives.domains#salp36dvb9"
+  , Tuple "util" "model://perspectives.domains#l75w588kuk"
+  , Tuple "sens" "model://perspectives.domains#s2gyoyohau"
+  , Tuple "rabbit" "model://perspectives.domains#m203lt2idk"
+  , Tuple "files" "model://perspectives.domains#piln392sut"
+  , Tuple "bs" "model://perspectives.domains#zjuzxbqpgc"
+  , Tuple "acc" "model://perspectives.domains#bxxptg50jp"
   ]
 
 defaultIndexedNames :: MonadPerspectives (OBJ.Object String)
