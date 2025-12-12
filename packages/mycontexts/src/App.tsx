@@ -27,9 +27,9 @@ interface AppState {
   updateAvailable: boolean,
 }
 
-export default class App extends Component<{}, AppState>
+export default class App extends Component<Record<string, never>, AppState>
 {
-  constructor(props: {})
+  constructor(props: Record<string, never>)
   {
     super(props);
     const component = this;
@@ -73,22 +73,22 @@ export default class App extends Component<{}, AppState>
   }
   }
 
-  componentDidUpdate(prevProps: Readonly<{}>, prevState: Readonly<AppState>, snapshot?: any): void {    
+  componentDidUpdate(_prevProps: Readonly<Record<string, never>>, _prevState: Readonly<AppState>, _snapshot?: unknown): void {    
     if (this.state.phase === 'installing') {
       this.createAccount();
     }
   }
 
   createAccount(): void {
-    const options : RuntimeOptions = 
-      { isFirstInstallation: this.state.installationResult.type === 'KeyPairData' ? true : false
-        , useSystemVersion: null
-        , myContextsVersion: __MYCONTEXTS_VERSION__
-      };
-
-    let installationData: InstallationData, pouchdbUser: PouchdbUser, couchdbUrl: string | undefined;
+    let options : RuntimeOptions;
+    let installationData: InstallationData, pouchdbUser: PouchdbUser;
       getInstallationData().then((data: InstallationData) => {
         installationData = data;
+        options = 
+          { isFirstInstallation: installationData.identityFile === undefined
+            , useSystemVersion: null
+            , myContextsVersion: __MYCONTEXTS_VERSION__
+          };
         pouchdbUser = constructPouchdbUser(installationData);
       }).then(() => {
         PDRHandler.then( pdrHandler => 
