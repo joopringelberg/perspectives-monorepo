@@ -79,11 +79,11 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.Range (Duration_(..), isDateOrTime, isPDuration)
 import Perspectives.Representation.Range (Range(..)) as RAN
 import Perspectives.Representation.State (State(..), StateFulObject(..)) as STATE
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.Time (string2Date, string2DateTime, string2Time)
 import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextTypeModelName', generalisesRoleType, propertyAliases, publicUserRole, roleTypeModelName')
 import Perspectives.Utilities (prettyPrint)
-import Prelude (class Eq, class Ord, add, bind, const, discard, eq, flip, identity, mul, negate, notEq, pure, show, sub, ($), (&&), (*), (+), (-), (/), (<), (<$>), (<*>), (<<<), (<=), (<>), (==), (>), (>=), (>=>), (>>=), (||))
+import Prelude (class Eq, class Ord, add, bind, discard, eq, flip, identity, mul, negate, notEq, pure, show, sub, ($), (&&), (*), (+), (-), (/), (<), (<$>), (<*>), (<<<), (<=), (<>), (==), (>), (>=), (>=>), (>>=), (||))
 import Unsafe.Coerce (unsafeCoerce)
 
 -- TODO. String dekt de lading niet sinds we RoleTypes toelaten. Een variabele zou
@@ -139,9 +139,9 @@ compileFunction (SQD dom (DataTypeGetter ModelNameF) _ _ _) = case dom of
 
 compileFunction (SQD _ (TypeGetter TypeOfContextF) _ _ _) = pure $ unsafeCoerce contextType
 
-compileFunction (SQD _ (RoleTypeConstant qname) RoleKind _ _) = pure $ unsafeCoerce ((pure <<< const qname) :: String ~~> RoleType)
+compileFunction (SQD _ (RoleTypeConstant qname) RoleKind _ _) = pure ((\_ -> pure $ roletype2string qname))
 
-compileFunction (SQD _ (ContextTypeConstant qname) ContextKind _ _) = pure $ unsafeCoerce ((pure <<< const qname) :: String ~~> ContextType)
+compileFunction (SQD _ (ContextTypeConstant qname) ContextKind _ _) = pure $ (\_ -> pure $ unwrap qname)
 
 compileFunction (SQD _ (TypeGetter RoleTypesF) _ _ _) = pure $ unsafeCoerce (liftToInstanceLevel allRoleTypesInContext)
 
@@ -169,7 +169,7 @@ compileFunction (SQD dom (PublicContext individual) _ _ _) = pure $ unsafeCoerce
 
 compileFunction (SQD dom (Value2Role _) _ _ _) = pure $ unsafeCoerce (\x -> pure x :: MPQ String)
 
-compileFunction (MQD _ (ExternalCoreContextGetter functionName) args ran _ _) = do
+compileFunction (MQD _ (ExternalCoreContextGetter functionName) _ ran _ _) = do
   (f :: HiddenFunction) <- pure $ unsafeCoerce $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
   pure $ unsafeCoerce f [ ctype ran ]
   where

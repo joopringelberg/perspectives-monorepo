@@ -79,7 +79,7 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Effect.Exception (error)
 import Persistence.Attachment (class Attachment)
-import Perspectives.CoreTypes (class Persistent, IntegrityFix(..), MP, MonadPerspectives, ResourceToBeStored(..), addPublicResource, dbLocalName, removeInternally, representInternally, resourceToBeStored, retrieveInternally, typeOfInstance)
+import Perspectives.CoreTypes (class Persistent, IntegrityFix(..), MP, MonadPerspectives, ResourceToBeStored(..), addPublicResource, removeInternally, representInternally, resourceToBeStored, retrieveInternally, typeOfInstance)
 import Perspectives.Couchdb (DeleteCouchdbDocument(..))
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.ErrorLogging (logPerspectivesError)
@@ -94,7 +94,7 @@ import Perspectives.Representation.Class.Identifiable (identifier, identifier_)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.ResourceIdentifiers (isInPublicScheme, isInRemoteScheme, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator)
 import Perspectives.ResourceIdentifiers.Parser (ResourceIdentifier)
-import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
 import Simple.JSON (class WriteForeign)
 
 fix :: Boolean
@@ -123,7 +123,7 @@ postDatabaseName :: forall f. MonadPouchdb f String
 postDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_post")
 
 modelDatabaseName :: MonadPerspectives String
-modelDatabaseName = dbLocalName ((ModelUri "model://perspectives.domains#System") :: ModelUri Stable)
+modelDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_models")
 
 invertedQueryDatabaseName :: MonadPerspectives String
 invertedQueryDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_invertedqueries")

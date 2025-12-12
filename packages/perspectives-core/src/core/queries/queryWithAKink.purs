@@ -23,12 +23,10 @@
 module Perspectives.Query.Kinked where
 
 import Control.Alternative (guard)
-import Control.Monad.State.Class (gets)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (catMaybes, elemIndex, foldr, head, intercalate, last, snoc, unsnoc)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), fromJust, isJust)
-import Data.Newtype (unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (for, traverse)
 import Partial.Unsafe (unsafePartial)
@@ -38,17 +36,15 @@ import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (ensurePropertiesAreReadab
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, addBinding, lift2, lookupVariableBinding, throwError, withFrame)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.Inversion (invertFunction, queryFunctionIsFunctional, queryFunctionIsMandatory)
-import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext, composeOverMaybe, domain, makeComposition, range, replaceDomain, roleInContext2Role)
+import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext, composeOverMaybe, domain, domain2roleInContext, makeComposition, range, replaceDomain, roleInContext2Context, roleInContext2Role)
 import Perspectives.Representation.ADT (ADT, allLeavesInADT)
 import Perspectives.Representation.Class.PersistentType (getCalculatedProperty)
 import Perspectives.Representation.Class.Property (calculation)
 import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, bindingOfADT, getCalculation, getRole)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
-import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..))
-import Perspectives.Sidecar.NormalizeTypeNames (fqn2tid, runInEnv)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint, prettyPrint')
 import Prelude (class Show, append, bind, discard, eq, join, map, pure, show, ($), (<$>), (<*>), (<<<), (<>), (==), (>=>), (>>=))
 
@@ -112,11 +108,16 @@ invert = invert_ >=> pure <<< catMaybes <<< map h
 -- | The QueryFunctionDescriptions in the Array of each QueryWithAKink_
 -- | are inversed wrt the orinal query.
 invert_ :: QueryFunctionDescription -> PhaseThree (Array QueryWithAKink_)
--- NOTE moeten we hier niet iets met de args?
 -- The inversion depends on the function f.
-invert_ (MQD dom (ExternalCoreRoleGetter f) args ran _ _) = case f of
-  "model://perspectives.domains#Couchdb$PendingInvitations" -> pure [ ZQ_ [ SQD ran (ContextIndividual (ContextInstance mySystem)) dom True True ] Nothing ]
-  _ -> pure $ [ ZQ_ [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances") args dom Unknown Unknown ] Nothing ]
+invert_ (MQD dom (ExternalCoreRoleGetter f) args ran _ _) = do
+  -- If we have a Constant argument, we must replace it with a ContextTypeConstant.
+  let ctype = unsafePartial fromJust $ head $ allLeavesInADT $ roleInContext2Context <$> unsafePartial domain2roleInContext ran
+  args' <- for args \qfd -> case qfd of
+    (SQD _dom (Constant _ _) _ _ _) -> pure $ SQD ran (ContextTypeConstant ctype) ContextKind True True
+    _ -> pure qfd
+  case f of
+    "model://perspectives.domains#Couchdb$PendingInvitations" -> pure [ ZQ_ [ SQD ran (ContextIndividual (ContextInstance mySystem)) dom True True ] Nothing ]
+    _ -> pure $ [ ZQ_ [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances") args' dom Unknown Unknown ] Nothing ]
 
 invert_ (MQD _ _ args _ _ _) = join <$> traverse invert_ args
 
@@ -293,71 +294,63 @@ invert_ qfd@(SQD dom@(RDOM roleAdt) f@(PropertyGetter prop@(ENP _)) ran fun man)
 -- The individual takes us to an instance of the range (`ran`), whatever the domain (`dom`) is. RoleIndividual is a constant function.
 -- Its inversion takes us to all instances of the domain.
 invert_ (SQD dom (RoleIndividual rid) ran fun man) = do
-  -- TODO: dit is niet nodig. De parameter van de MQD wordt helemaal niet gebruikt in de UnsafeCompiler.
-  -- In plaats daarvan gebruiken we de range...
-  sidecars <- gets _.sidecars
-  pure $ runInEnv sidecars $
-    case dom of
-      -- Find all context instances whose type is one of the ContextTypes in CDOM adt. 
-      -- NOTE: WE ARBITRARILY TAKE THE FIRST SUCH TYPE.
-      CDOM adt -> do
-        ctxt <- fqn2tid $ unsafePartial $ fromJust (head $ allLeavesInADT adt)
-        pure
-          [ ZQ_
-              [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
-                  [ SQD dom (Constant PString (unwrap ctxt)) (VDOM PString Nothing) True True ]
-                  dom
-                  Unknown
-                  Unknown
-              ]
-              Nothing
-          ]
-      RDOM adt -> do
-        rl <- fqn2tid $ roleInContext2Role $ unsafePartial $ fromJust (head $ allLeavesInADT adt)
-        pure
-          [ ZQ_
-              [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
-                  [ SQD dom (Constant PString (unwrap rl)) (VDOM PString Nothing) True True ]
-                  dom
-                  Unknown
-                  Unknown
-              ]
-              Nothing
-          ]
-      _ -> pure []
+  case dom of
+    -- Find all context instances whose type is one of the ContextTypes in CDOM adt. 
+    -- NOTE: WE ARBITRARILY TAKE THE FIRST SUCH TYPE.
+    CDOM adt -> do
+      ctxt <- pure $ unsafePartial $ fromJust (head $ allLeavesInADT adt)
+      pure
+        [ ZQ_
+            [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
+                [ SQD dom (ContextTypeConstant ctxt) ContextKind True True ]
+                dom
+                Unknown
+                Unknown
+            ]
+            Nothing
+        ]
+    RDOM adt -> do
+      rl <- pure $ roleInContext2Role $ unsafePartial $ fromJust (head $ allLeavesInADT adt)
+      pure
+        [ ZQ_
+            [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
+                [ SQD dom (RoleTypeConstant $ ENR rl) RoleKind True True ]
+                dom
+                Unknown
+                Unknown
+            ]
+            Nothing
+        ]
+    _ -> pure []
 
 -- Get all instances of the type of the domain. 
 invert_ (SQD dom (ContextIndividual rid) ran fun man) = do
-  -- TODO: dit is niet nodig. De parameter van de MQD wordt helemaal niet gebruikt in de UnsafeCompiler.
-  -- In plaats daarvan gebruiken we de range...
-  sidecars <- gets _.sidecars
-  pure $ runInEnv sidecars
-    case dom of
-      CDOM adt -> do
-        ctxt <- fqn2tid $ unsafePartial $ fromJust $ head $ allLeavesInADT adt
-        pure
-          [ ZQ_
-              [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
-                  [ SQD dom (Constant PString (unwrap ctxt)) (VDOM PString Nothing) True True ]
-                  dom
-                  Unknown
-                  Unknown
-              ]
-              Nothing
-          ]
-      RDOM adt -> do
-        rl <- fqn2tid $ roleInContext2Role $ unsafePartial $ fromJust $ head $ allLeavesInADT adt
-        pure
-          [ ZQ_
-              [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
-                  [ SQD dom (Constant PString (unwrap rl)) (VDOM PString Nothing) True True ]
-                  dom
-                  Unknown
-                  Unknown
-              ]
-              Nothing
-          ]
-      _ -> pure []
+  case dom of
+    CDOM adt -> do
+      ctxt <- pure $ unsafePartial $ fromJust $ head $ allLeavesInADT adt
+      pure
+        [ ZQ_
+            [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
+                [ SQD dom (ContextTypeConstant ctxt) ContextKind True True ]
+                dom
+                Unknown
+                Unknown
+            ]
+            Nothing
+        ]
+    RDOM adt -> do
+      rl <- pure $ roleInContext2Role $ unsafePartial $ fromJust $ head $ allLeavesInADT adt
+      pure
+        [ ZQ_
+            [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
+                [ SQD dom (RoleTypeConstant $ ENR rl) RoleKind True True ]
+                dom
+                Unknown
+                Unknown
+            ]
+            Nothing
+        ]
+    _ -> pure []
 
 invert_ (SQD dom f ran _ _) = do
   (minvertedF :: Maybe QueryFunction) <- invertFunction dom f ran

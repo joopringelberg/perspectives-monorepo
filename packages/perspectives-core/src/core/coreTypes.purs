@@ -142,6 +142,7 @@ import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
 import Perspectives.Instances.Environment (Environment)
 import Perspectives.InvertedQuery (InvertedQuery)
+import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (PouchdbState)
 import Perspectives.Persistent.ChangesFeed (EventSource)
 import Perspectives.Repetition (Duration)
@@ -150,7 +151,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Rol
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, ResourceType, RoleType, StateIdentifier)
 import Perspectives.ResourceIdentifiers.Parser (pouchdbDatabaseName)
-import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
 import Perspectives.Sync.Transaction (Transaction)
 import Prelude (class Eq, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, eq, pure, show, unit, ($), (<<<), (<>), (>>=))
 import Simple.JSON (class ReadForeign, class WriteForeign)
@@ -641,7 +642,9 @@ remove g k = do
   pure ma
 
 instance persistentInstanceDomeinFile :: Persistent (DomeinFile Stable) (ModelUri Stable) where
-  dbLocalName (ModelUri id) = pouchdbDatabaseName id
+  dbLocalName _ = do
+    sysId <- getSystemIdentifier
+    pure $ (sysId <> "_models")
   addPublicResource _ = pure unit
   resourceToBeStored df = Dfile $ identifier df
   resourceIdToBeStored id = Dfile id

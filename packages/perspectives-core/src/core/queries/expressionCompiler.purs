@@ -39,7 +39,7 @@ import Data.Either (Either(..))
 import Data.Map (empty)
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (unwrap)
-import Data.Traversable (traverse)
+import Data.Traversable (for, traverse)
 import Foreign.Object (keys, lookup)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (###=))
@@ -922,17 +922,25 @@ compileComputationStep currentDomain (ComputationStep { functionName, arguments,
                     isFunctional <- pure $ unsafePartial $ fromJust $ lookupHiddenFunctionCardinality functionName
                     case computedType of
                       -- Collect property instances.
+                      -- NOTE: as of yet, we do not have external core functions that return a property with a type argument. If we ever do, that argument will be compiled as a Constant QFD.
+                      -- That will cause problems because we cannot map that Readable identifier to a Stable one. We must then introduce a PropertyTypeConstant QFD.
                       ComputedRange r -> pure $ MQD currentDomain (QF.ExternalCorePropertyGetter functionName) (fromFoldable compiledArgs) (VDOM r Nothing) isFunctional Unknown
                       OtherType s -> (lift $ lift $ typeExists (ContextType s)) >>=
                         if _
                         -- Collect Context instances.
+                        -- NOTE: since we ignore the compiledArgs here, we need not replace a Constant QFD that holds the context type with a ContextTypeConstant QFD.
                         then pure $ SQD currentDomain (QF.ExternalCoreContextGetter functionName) (CDOM (UET (ContextType s))) isFunctional Unknown
 
                         -- Collect role instances. Having no other information, we conjecture these instances to have their
                         -- role type in their lexical context.
                         else do
                           context <- lift2 $ enumeratedRoleContextType (EnumeratedRoleType s)
-                          pure $ MQD currentDomain (QF.ExternalCoreRoleGetter functionName) (fromFoldable compiledArgs) (RDOM (UET $ RoleInContext { context, role: EnumeratedRoleType s })) isFunctional Unknown
+                          -- TODO: compiledArgs *may* contain a Constant QFD that holds the role type. If so, we must replace it with a RoleTypeConstant QFD.
+                          compiledArgs' <- for compiledArgs \qfd -> case qfd of
+                            (SQD dom (QF.Constant _ _) _ _ _) -> pure $ SQD dom (QF.RoleTypeConstant $ ENR $ EnumeratedRoleType s) RoleKind True True
+                            _ -> pure qfd
+
+                          pure $ MQD currentDomain (QF.ExternalCoreRoleGetter functionName) (fromFoldable compiledArgs') (RDOM (UET $ RoleInContext { context, role: EnumeratedRoleType s })) isFunctional Unknown
                   else throwError (WrongNumberOfArguments start end functionName expectedNrOfArgs (length arguments))
           )
         else do
