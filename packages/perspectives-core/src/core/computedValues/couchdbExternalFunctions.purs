@@ -501,7 +501,7 @@ initSystem = do
       roleIsMe me system
       mIdoc <- gets \(Transaction { identityDocument }) -> identityDocument
       isFirstInstallation <- lift $ AMA.gets (_.isFirstInstallation <<< _.runtimeOptions)
-      if isFirstInstallation || isNothing mIdoc then do
+      if isFirstInstallation then do
         mpublicKey <- lift getMyPublicKey
         case mpublicKey of
           Just publicKey -> do
@@ -635,9 +635,9 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
             Nothing -> do
               -- We must take care to create TheWorld with PerspectivesUser being the public version of the system user,
               -- otherwise we'll end up with deltas that refer to the local instance of the system user.
-              sysUser <- lift getSystemIdentifier
+              sysUser <- lift getPerspectivesUser
               void
-                $ withPerspectivesUser (PerspectivesUser $ "pub:https://" <> ensureSlash namespace <> ensureSlash databaseName <> "#" <> sysUser)
+                $ withPerspectivesUser (PerspectivesUser $ "pub:https://" <> ensureSlash namespace <> ensureSlash databaseName <> "#" <> unwrap sysUser)
                     -- Notice that the deltas in the result of constructEmptyContext are not added to the Transaction yet.
                     -- This is what we want; we take a short route to creating a public instance of TheWorld here.
                     (runExceptT $ constructEmptyContext theworldid theWorld "TheWorld" (PropertySerialization empty) Nothing)
