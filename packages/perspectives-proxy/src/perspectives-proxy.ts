@@ -1891,7 +1891,7 @@ class Cursor {
           startedAt: msg.startedAt
         });
         component.removeMessage(identifier);
-      }, 60_000);
+      }, 15_000);
     });
 
     // After 400ms, if still pending, display it
