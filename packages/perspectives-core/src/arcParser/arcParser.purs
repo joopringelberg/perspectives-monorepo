@@ -1702,32 +1702,54 @@ widgetCommonFields = do
     setObject perspective
     if isIndented' then withPos do
       -- Parse at most one selector: either `with …` or `without …`.
-      mSelection <- optionMaybe
-        ( (Right <$> (reserved "with" *> withProperties))
-            <|>
-              (Left <$> (reserved "without" *> withoutProperties))
-        )
-      let
-        withProps = case mSelection of
-          Just (Right p) -> Just p
-          _ -> Nothing
-        withoutProps = case mSelection of
-          Just (Left p) -> Just p
-          _ -> Nothing
-      -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
-      (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
-      mroleVerbs <- optionMaybe roleVerbs
-      end <- getPosition
-      pure
-        { title
-        , perspective
-        , withProps
-        , withoutProps
-        , withoutVerbs
-        , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
-        , start
-        , end
-        }
+      keyword <- scanIdentifier
+      case keyword of
+        "with" -> do
+          withProps <- reserved "with" *> withoutProperties
+          -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
+          (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
+          mroleVerbs <- optionMaybe roleVerbs
+          end <- getPosition
+          pure
+            { title
+            , perspective
+            , withProps: Just withProps
+            , withoutProps: Nothing
+            , withoutVerbs
+            , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
+            , start
+            , end
+            }
+        "without" -> do
+          withoutProps <- reserved "without" *> withoutProperties
+          -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
+          (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
+          mroleVerbs <- optionMaybe roleVerbs
+          end <- getPosition
+          pure
+            { title
+            , perspective
+            , withProps: Nothing
+            , withoutProps: Just withoutProps
+            , withoutVerbs
+            , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
+            , start
+            , end
+            }
+        _ -> do
+          (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
+          mroleVerbs <- optionMaybe roleVerbs
+          end <- getPosition
+          pure
+            { title
+            , perspective
+            , withProps: Nothing
+            , withoutProps: Nothing
+            , withoutVerbs
+            , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
+            , start
+            , end
+            }
     else do
       end <- getPosition
       pure
