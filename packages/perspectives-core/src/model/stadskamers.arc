@@ -1,8 +1,8 @@
 -- Stadskamers - Copyright Joop Ringelberg and Cor Baars 2025
 
-domain model://perspectives.domains#Stadskamers
+domain model://joopringelberg.nl#Stadskamers
   use sys for model://perspectives.domains#System
-  use sk for model://perspectives.domains#Stadskamers
+  use sk for model://joopringelberg.nl#Stadskamers
   
   -------------------------------------------------------------------------------
   ---- SETTING UP

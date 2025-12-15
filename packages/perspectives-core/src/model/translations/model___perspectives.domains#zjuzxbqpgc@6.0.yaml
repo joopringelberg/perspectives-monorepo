@@ -22,17 +22,17 @@ model://perspectives.domains#zjuzxbqpgc:
                 orig: "## Get connected\n
                   MyContexts is most useful when you connect to other people.\n
                   This installation has not yet a means to connect to others.\n
-                  Move to the [[link:pub:https://perspectives.domains/cw_j4qovsczpm/#gobbccbstw$External|Perspectives Broker Service]]\n
+                  Move to the [[link:pub:https://perspectives.domains/cw_v74vfn21lx/#rbdaciupyn$External|Perspectives Broker Service]]\n
                   page to get online. You will read further instructions there."
                 nl: "## Maak verbinding\n
                    MyContexts is het meest nuttig wanneer je verbinding maakt met andere mensen.\n
                    Deze installatie heeft nog geen middel om verbinding te maken met anderen.\n
-                   Ga naar de [[link:pub:https://perspectives.domains/cw_j4qovsczpm/#gobbccbstw$External|Perspectives Broker Service]]\n
+                   Ga naar de [[link:pub:https://perspectives.domains/cw_v74vfn21lx/#rbdaciupyn$External|Perspectives Broker Service]]\n
                    pagina om online te gaan. Je vindt daar verdere instructies."
                 en: "## Get connected\n
                    MyContexts is most useful when you connect to other people.\n
                    This installation has not yet a means to connect to others.\n
-                   Move to the [[link:pub:https://perspectives.domains/cw_j4qovsczpm/#gobbccbstw$External|Perspectives Broker Service]]\n
+                   Move to the [[link:pub:https://perspectives.domains/cw_v74vfn21lx/#rbdaciupyn$External|Perspectives Broker Service]]\n
                    page to get online. You will read further instructions there."
             1:
               translations:
@@ -292,11 +292,13 @@ model://perspectives.domains#zjuzxbqpgc:
             0:
               translations:
                 orig: "### Administrator\n
-                  Manage your account details with the external broker service here."
-                nl: "### Beheerder\n
-                   Beheer hier je accountgegevens bij de externe broker service."
-                en: "### Administrator\n
-                   Manage your account details with the external broker service here."
+                  As you are the manager of this BrokerService, it is important that you have a key for the shared file storage service (if any).\n
+                  This key allows you to hand out keys to people who connect to you to get an account on your Broker Service.\n
+                  It also allows you to upload files to the shared file storage that your connected peers can download.\n
+                  This key should be manually added to the state file of the shared file storage relay service.\n
+                  See [perspectives-sharedfilestorage](https://github.com/joopringelberg/perspectives-sharedfilestorage) for more information."
+                nl: "MISSING nl"
+                en: "MISSING en"
             1:
               translations:
                 orig: "### Broker service\n
@@ -452,8 +454,8 @@ model://perspectives.domains#zjuzxbqpgc:
             model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$External$ayh7cizuqe:
               rihcmz8o5o:
                 translations:
-                  nl: Voeg BrokerService toe
-                  en: Add Broker Service
+                  nl: MISSING nl
+                  en: MISSING en
           titles:
             0:
               translations:

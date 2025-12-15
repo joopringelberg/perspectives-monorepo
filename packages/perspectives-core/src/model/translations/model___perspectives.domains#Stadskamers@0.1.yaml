@@ -1,4 +1,5 @@
-model://perspectives.domains#Stadskamers:
+model://joopringelberg.nl#yxnsmx3fr4:
+  version: "1.0"
   contexts:
     StadskamersApp:
       translations:

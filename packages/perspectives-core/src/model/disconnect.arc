@@ -1,7 +1,8 @@
-domain model://joopringelberg.nl#Disconnect
+domain model://perspectives.domains#Disconnect
   use sys for model://perspectives.domains#System
-  use dc for model://joopringelberg.nl#Disconnect
-
+  use dc for model://perspectives.domains#Disconnect
+  use cdb for model://perspectives.domains#Couchdb
+  
   -------------------------------------------------------------------------------
   ---- SETTING UP
   -------------------------------------------------------------------------------
@@ -100,7 +101,7 @@ domain model://joopringelberg.nl#Disconnect
             bind currentactor to Disconnecter in binding >> context
     
     -- All DisconnectedPeers that do not fill an instance of DisconnectedPeers in this context.
-    context IncomingDisconnections = filter callExternal cdb:RoleInstances( "model://joopringelberg.nl#Disconnect$DisconnectedPeer$External" ) returns dc:DisconnectedPeer$External
+    context IncomingDisconnections = filter callExternal cdb:RoleInstances( "model://perspectives.domains#Disconnect$DisconnectedPeer$External" ) returns dc:DisconnectedPeer$External
       with not (binder DisconnectedPeers >> context >>= first) == dc:DisconnectApp
     -- context IncomingDisconnections = sys:SocialMe >> binder Disconnected >> context >> extern
 

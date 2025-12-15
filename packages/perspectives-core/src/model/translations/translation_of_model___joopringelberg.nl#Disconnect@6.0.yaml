@@ -1,4 +1,5 @@
-model://joopringelberg.nl#Disconnect:
+model://perspectives.domains#kxrm2cilp9:
+  version: "1.0"
   contexts:
     Disconnect:
       translations:

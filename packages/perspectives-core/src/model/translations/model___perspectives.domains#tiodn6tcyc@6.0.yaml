@@ -55,9 +55,21 @@ model://perspectives.domains#tiodn6tcyc:
         nl: Perspectivessysteem
       external:
         properties:
+          MaxHistoryLength:
+            translations:
+              nl: Maximale geschiedenis lengte
+              en: Maximum history length
+          Restart:
+            translations:
+              nl: Herstart
+              en: Restart
+          OnStartup:
+            translations:
+              nl: Bij opstarten
+              en: On startup
           ShowSystemApps:
             translations:
-              nl: Show systeem apps
+              nl: Toon systeem apps
               en: Show system apps
           PreviousLanguage:
             translations:
@@ -131,11 +143,6 @@ model://perspectives.domains#tiodn6tcyc:
                 translations:
                   en: Delete notifications
                   nl: Verwijder meldingen
-            model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled:
-              Detach:
-                translations:
-                  en: Detach model
-                  nl: Ontkoppel van model
             model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled:
               Reattach:
                 translations:
@@ -212,6 +219,23 @@ model://perspectives.domains#tiodn6tcyc:
                    These are the repositories that you have access to.\n
                    Open a repository to see the models it contains."
       things:
+        SystemDataUpgrade:
+          translations:
+            nl: Systeem data upgrade
+            en: System data upgrade
+        RecoveryPoint:
+          translations:
+            nl: Herstelpunt
+            en: Recovery point
+          properties:
+            ModelsLastSeq:
+              translations:
+                nl: Laatste modelvolgnummer
+                en: Last model sequence number
+            InstancesLastSeq:
+              translations:
+                nl: Laatste instantievolgnummer
+                en: Last instance sequence number
         SelectedClipboardItem:
           translations:
             en: Selected clipboard item
@@ -321,14 +345,14 @@ model://perspectives.domains#tiodn6tcyc:
           notifications:
             0:
               translations:
-                orig: Installing a new patch for $1 .
-                en: Installing a new patch for $1 .
-                nl: Bezig met installeren van een patch voor $1.
+                orig: Installing a new patch for $0 .
+                nl: Installeer een nieuwe patch voor $0 .
+                en: Installing a new patch for $0 .
             1:
               translations:
-                orig: Installing build $1 of $3 (replacing $5 ).
-                en: Installing build $1 of $3 (replacing $5 ).
-                nl: Bezig met installeren van build $1 van $3 (vervanging van $5).
+                orig: Installing build $0 of $1 (replacing $2 ).
+                nl: Bezig met installeren van build $0 van $1 (ter vervanging van $2 ).
+                en: Installing build $0 of $1 (replacing $2 ).
           properties:
             DetachedFiller:
               translations:
@@ -688,6 +712,10 @@ model://perspectives.domains#tiodn6tcyc:
         nl: Modelmanifest
       external:
         properties:
+          ModelCuid:
+            translations:
+              nl: Model CUID
+              en: Model CUID
           DomeinFileName:
             translations:
               en: Domain filename
@@ -740,6 +768,10 @@ model://perspectives.domains#tiodn6tcyc:
             translations:
               nl: Versienaam
               en: Version name
+          VersionedDomeinFileName:
+            translations:
+              nl: Geversioneerde domein bestandsnaam
+              en: Versioned domain filename
           Version:
             translations:
               en: Version
@@ -762,6 +794,15 @@ model://perspectives.domains#tiodn6tcyc:
             en: Visitor
             nl: Bezoeker
   roles:
+    SystemDataUpgrade:
+      translations:
+        nl: System data upgrade
+        en: System data upgrade
+      properties:
+        LastHandledUpgrade:
+          translations:
+            nl: Laatste upgrade verwerkt
+            en: Last handled upgrade
     RoleWithId:
       translations:
         en: Role with identification
@@ -831,6 +872,14 @@ model://perspectives.domains#tiodn6tcyc:
         nl: Adresseerbaar
         en: Adressable
       properties:
+        Phone:
+          translations:
+            nl: Telefoon
+            en: Phone
+        EmailAddress:
+          translations:
+            nl: Email adres
+            en: Email address
         Country:
           translations:
             nl: Land
@@ -851,3 +900,7 @@ model://perspectives.domains#tiodn6tcyc:
           translations:
             nl: Straat
             en: Street
+    Upgrader:
+      translations:
+        nl: Upgrader
+        en: Upgrader
