@@ -580,10 +580,10 @@ domain model://perspectives.domains#CouchdbManagement
             callEffect cdb:MakeAdminOfDb( BaseUrl, DatabaseName, context >> Owner >> UserName )
       state Publish = (exists DatabaseName) and Public
         on entry
-          do for CBAdmin
+          do for Owner
             callEffect cdb:MakeDatabasePublic( BaseUrl, DatabaseName )
         -- on exit
-        --   do for CBAdmin
+        --   do for Owner
         --     callEffect cdb:MakeDatabasePrivate( BaseUrl, DatabaseName )
       on exit
         do for CBAdmin
@@ -642,7 +642,6 @@ domain model://perspectives.domains#CouchdbManagement
       property RepositoryUrl = "https://" + NameSpace + "/"
       property AdminLastName = context >> Admin >> LastName
       property RepoHasDatabases (functional) = binder Repositories >> HasDatabases
-      property NextModelCuid (String)
 
     -- We need the ServerAdmin in this context in order to configure the local Admin and to give Authors write access.
     user ServerAdmin (functional) = extern >> binder Repositories >> context >> CouchdbServer$Admin
@@ -714,7 +713,6 @@ domain model://perspectives.domains#CouchdbManagement
       
       perspective on External
         props (IsPublic, NameSpace_, RepositoryUrl) verbs (Consult)
-        props (NextModelCuid) verbs (SetPropertyValue, Consult)
 
       action CompileRepositoryModels
         callEffect p:CompileRepositoryModels( extern >> (RepositoryUrl + ModelsDatabase), extern >> (RepositoryUrl + InstancesDatabase) )
@@ -728,11 +726,8 @@ domain model://perspectives.domains#CouchdbManagement
         only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
         props (DomeinFileName, LocalModelName) verbs (SetPropertyValue, Consult)
         props (Description, ModelCuid) verbs (Consult)
-        props (ModelCuid) verbs (SetPropertyValue)
-        -- in object state NoLocalModelName
-        --   props (ModelCuid) verbs (SetPropertyValue)
-        action GenerateCuid
-            ModelCuid = callExternal util:GenSym() returns String
+        in object state ReadyToMake
+          props (ModelCuid) verbs (SetPropertyValue)
       
       action CreateManifest
         create role Manifests
@@ -754,7 +749,7 @@ domain model://perspectives.domains#CouchdbManagement
             detail
           Authors
             master
-              without props(FirstName, UserName, Password)
+              without props (FirstName, UserName, Password)
             detail
         what
           row
@@ -765,7 +760,7 @@ domain model://perspectives.domains#CouchdbManagement
                       Use it to recompile all models in the repository when the shape of the model representation has changed.
                       >
             form "Repository" External
-              props (RepositoryUrl, IsPublic, NextModelCuid) verbs (Consult, SetPropertyValue)
+              with props (RepositoryUrl, IsPublic)
         where
           Manifests
             master
@@ -773,11 +768,11 @@ domain model://perspectives.domains#CouchdbManagement
                         Add a manifest by opening the menu and creating a new empty role.
                         Then enter the *unqualified* name of the model in the column `Local model name`.
                         For the domain 'model://perspectives.domains#System' for example, this would be 'System'.
-                      >
+                        >
               -- Notice that we will have a table with both LocalModelName and Name. The latter is the ReadableName. 
               -- We cannot omit the readable name. It equals the LocalModelName, but we cannot edit it. 
               -- Hence we need both.
-              without props (Description, DomeinFileName)
+              without props (DomeinFileName, LocalModelName, Description, ModelCuid)
             detail
       
     -- This role requires credentials for the ServerUrl. It 'inherits' them from its filler.
@@ -896,15 +891,15 @@ domain model://perspectives.domains#CouchdbManagement
     context Manifests (relational) filledBy ModelManifest
       aspect sys:ManifestCollection$Manifests
       -- LocalModelName
+      -- ModelCuid
       state NoLocalModelName = not exists LocalModelName
-      state ReadyToMake = (not exists binding) and (exists context >> extern >> NextModelCuid)
+      state ReadyToMake = (not exists binding)
         on entry
           do for Admin
             letA 
               -- TODO: temporary workaround to avoid generating a new cuid each time.
               -- Comment out once we're in a Stable universe.
-              -- cuid <- callExternal util:GenSym() returns String
-              cuid <- context >> extern >> NextModelCuid
+              cuid <- callExternal util:GenSym() returns String
               manifestname <- (context >> extern >> NameSpace_ + "-" + cuid)
             in
               -- As the PDR derives this name from the modelURI, we have to name the ModelManifest with its LocalModelName.
@@ -912,9 +907,6 @@ domain model://perspectives.domains#CouchdbManagement
               bind currentactor to Author in origin >> binding >> context
               DomeinFileName = manifestname + ".json" for origin >> binding
               ModelCuid = cuid for origin >> binding
-              -- TODO: temporary workaround to avoid generating a new cuid each time.
-              -- Remove once we're in a Stable universe.
-              -- delete property NextModelCuid for context >> extern
 
           do for Authors
             letA 

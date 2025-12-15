@@ -1,175 +1,322 @@
 {
-  "contents": {
-    "timeStamp": 1656676231345,
-    "deltas": [
-      {
-        "contents": {
-          "encryptedDelta": {
-            "contents": {
-              "subject": {
-                "contents": "model:User$prod2$User",
-                "tag": "UserInstance"
-              },
-              "roleType": "model:System$PerspectivesSystem$External",
-              "roleInstances": [
-                "model:User$prod2$External"
-              ],
-              "id": "model:User$prod2",
-              "deltaType": {
-                "tag": "ConstructExternalRole"
-              },
-              "authorizedRole": null
-            },
-            "tag": "UniverseRoleDelta"
-          },
-          "author": "model:User$prod2$User"
-        },
-        "tag": "SignedDelta"
-      },
-      {
-        "contents": {
-          "encryptedDelta": {
-            "contents": {
-              "subject": {
-                "contents": "model:User$prod2$User",
-                "tag": "UserInstance"
-              },
-              "id": "model:User$prod2",
-              "deltaType": {
-                "tag": "ConstructEmptyContext"
-              },
-              "contextType": "model:System$PerspectivesSystem"
-            },
-            "tag": "UniverseContextDelta"
-          },
-          "author": "model:User$prod2$User"
-        },
-        "tag": "SignedDelta"
-      },
-      {
-        "contents": {
-          "encryptedDelta": {
-            "contents": {
-              "subject": {
-                "contents": "model:User$prod2$User",
-                "tag": "UserInstance"
-              },
-              "roleType": "model:System$PerspectivesSystem$User",
-              "roleInstances": [
-                "model:User$prod2$User"
-              ],
-              "id": "model:User$prod2",
-              "deltaType": {
-                "tag": "ConstructEmptyRole"
-              },
-              "authorizedRole": null
-            },
-            "tag": "UniverseRoleDelta"
-          },
-          "author": "model:User$prod2$User"
-        },
-        "tag": "SignedDelta"
-      },
-      {
-        "contents": {
-          "encryptedDelta": {
-            "contents": {
-              "subject": {
-                "contents": "model:User$prod2$User",
-                "tag": "UserInstance"
-              },
-              "roleType": "model:System$PerspectivesSystem$User",
-              "roleInstance": "model:User$prod2$User",
-              "destinationContext": null,
-              "deltaType": {
-                "tag": "AddRoleInstancesToContext"
-              },
-              "contextInstance": "model:User$prod2"
-            },
-            "tag": "ContextDelta"
-          },
-          "author": "model:User$prod2$User"
-        },
-        "tag": "SignedDelta"
-      },
-      {
-        "contents": {
-          "encryptedDelta": {
-            "contents": {
-              "values": [
-                "prod2"
-              ],
-              "subject": {
-                "contents": {
-                  "contents": "model:System$PerspectivesSystem$User",
-                  "tag": "ENR"
-                },
-                "tag": "UserType"
-              },
-              "property": "model:System$PerspectivesSystem$User$FirstName",
-              "id": "model:User$prod2$User",
-              "deltaType": {
-                "tag": "AddProperty"
-              }
-            },
-            "tag": "RolePropertyDelta"
-          },
-          "author": "model:User$prod2$User"
-        },
-        "tag": "SignedDelta"
-      },
-      {
-        "contents": {
-          "encryptedDelta": {
-            "contents": {
-              "values": [
-                "producer2"
-              ],
-              "subject": {
-                "contents": {
-                  "contents": "model:System$PerspectivesSystem$User",
-                  "tag": "ENR"
-                },
-                "tag": "UserType"
-              },
-              "property": "model:System$PerspectivesSystem$User$LastName",
-              "id": "model:User$prod2$User",
-              "deltaType": {
-                "tag": "AddProperty"
-              }
-            },
-            "tag": "RolePropertyDelta"
-          },
-          "author": "model:User$prod2$User"
-        },
-        "tag": "SignedDelta"
-      },
-      {
-        "contents": {
-          "encryptedDelta": {
-            "contents": {
-              "subject": {
-                "contents": {
-                  "contents": "model:BrokerServices$BrokerContract$Guest",
-                  "tag": "CR"
-                },
-                "tag": "UserType"
-              },
-              "oldFiller": null,
-              "filler": "model:User$prod2$User",
-              "filled": "model:User$cb969a050_0ab7_4cde_ac08_ad0409b360c2$AccountHolder_0000",
-              "deltaType": {
-                "tag": "SetFirstBinding"
-              }
-            },
-            "tag": "RoleBindingDelta"
-          },
-          "author": "model:User$prod2$User"
-        },
-        "tag": "SignedDelta"
-      }
-    ],
-    "author": "model:User$prod2$User"
+  "Your lease of the BrokerService has ended. Within $0 days, you will no longer be able to receive information from peers.": {
+    "orig": "Your lease of the BrokerService has ended. Within $0 days, you will no longer be able to receive information from peers.",
+    "nl": "Je lease van de BrokerService is beëindigd. Binnen $0 dagen kun je geen informatie meer ontvangen van andere gebruikers.",
+    "en": "Your lease of the BrokerService has ended. Within $0 days, you will no longer be able to receive information from peers."
   },
-  "tag": "TransactionForPeer"
+  "You now have an account at the BrokerService $0": {
+    "orig": "You now have an account at the BrokerService $0",
+    "nl": "Je hebt nu een account bij de BrokerService $0",
+    "en": "You now have an account at the BrokerService $0"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$rcu2nweeb1$uyitenjvm7": {
+    "en": "Queue name",
+    "nl": "Queue naam"
+  },
+  "Broker Service": {
+    "orig": "Broker Service",
+    "nl": "Broker Service",
+    "en": "Broker Service"
+  },
+  "Queues": {
+    "orig": "Queues",
+    "en": "Queues",
+    "nl": "Queues"
+  },
+  "### Administrator\nThis is the administrator of the Broker Service.\nYou can contact him or her if you have questions about the service.": {
+    "orig": "### Administrator\nThis is the administrator of the Broker Service.\nYou can contact him or her if you have questions about the service.",
+    "nl": "### Beheerder\n Dit is de beheerder van de Broker Service.\n Je kunt contact opnemen met hem of haar als je vragen hebt over de service.",
+    "en": "### Administrator\n This is the administrator of the Broker Service.\n You can contact him or her if you have questions about the service."
+  },
+  "### Account holder\nThis is your account at the Broker Service.\nYou can see when it expires, and you can cancel it.": {
+    "orig": "### Account holder\nThis is your account at the Broker Service.\nYou can see when it expires, and you can cancel it.",
+    "nl": "### Account houder\n Dit is je account bij de Broker Service.\n Je kunt zien wanneer het verloopt en je kunt het opzeggen.",
+    "en": "### Account holder\n This is your account at the Broker Service.\n You can see when it expires, and you can cancel it."
+  },
+  "### Broker service account\nThis is your account at the Broker Service.\nYou can see when it expires, and you can cancel it.": {
+    "orig": "### Broker service account\nThis is your account at the Broker Service.\nYou can see when it expires, and you can cancel it.",
+    "nl": "### Broker service account\n Dit is je account bij de Broker Service.\n Je kunt zien wanneer het verloopt en je kunt het opzeggen.",
+    "en": "### Broker service account\n This is your account at the Broker Service.\n You can see when it expires, and you can cancel it."
+  },
+  "model://perspectives.domains#BrokerServices$BrokerContract$TerminateContract": {
+    "nl": "Beeindig contract",
+    "en": "Terminate contract"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$gpwpevx4e5$vwlg6809lk": {
+    "en": "Account password",
+    "nl": "Deelnemers paswoord"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$gpwpevx4e5$r24zt90qck": {
+    "en": "Account name",
+    "nl": "Lidmaatschap naam"
+  },
+  "model://perspectives.domains#BrokerServices$BrokerContract$rihcmz8o5o": {
+    "nl": "MISSING nl",
+    "en": "MISSING en"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$ap0zelqthq": {
+    "en": "Contract terminated",
+    "nl": "Contract beëindigd"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$pv8kv7mlcq": {
+    "en": "Contract end date",
+    "nl": "Einddatum contract"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$upz17uy2ay": {
+    "en": "Grace period end date",
+    "nl": "Coulance periode einddatum"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$nw9hp7xjdy": {
+    "en": "Usage ends on",
+    "nl": "Gebruik eindigt op"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$ugla7plil2": {
+    "en": "Registerd",
+    "nl": "Geregistreerd"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$nj59oprdwa": {
+    "en": "Queue name",
+    "nl": "Queue naam"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$ggbu5gpsfc": {
+    "en": "Last name of account holder",
+    "nl": "Achternaam van deelnemer"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$vxjyt3pckj": {
+    "en": "First name of account holder",
+    "nl": "Voornaam van deelnemer"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$s791vqsxga": {
+    "en": "Name",
+    "nl": "Naam"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$qz92s62qi8": {
+    "en": "Exchange",
+    "nl": "Exchange"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$beyr8ron47": {
+    "en": "Self register endpoint",
+    "nl": "Endpoint voor zelf-registratie"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$cg7pdbstvh": {
+    "en": "Management endpoint",
+    "nl": "Endpoint voor beheer"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External$jj9n99rz37": {
+    "en": "URL",
+    "nl": "URL"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$w1m9157z0h": {
+    "en": "Add this server",
+    "nl": "Voeg deze server toe"
+  },
+  "### Administrator\nAs you are the manager of this BrokerService, it is important that you have a key for the shared file storage service (if any).\nThis key allows you to hand out keys to people who connect to you to get an account on your Broker Service.\nIt also allows you to upload files to the shared file storage that your connected peers can download.\nThis key should be manually added to the state file of the shared file storage relay service.\nSee [perspectives-sharedfilestorage](https://github.com/joopringelberg/perspectives-sharedfilestorage) for more information.": {
+    "orig": "### Administrator\nAs you are the manager of this BrokerService, it is important that you have a key for the shared file storage service (if any).\nThis key allows you to hand out keys to people who connect to you to get an account on your Broker Service.\nIt also allows you to upload files to the shared file storage that your connected peers can download.\nThis key should be manually added to the state file of the shared file storage relay service.\nSee [perspectives-sharedfilestorage](https://github.com/joopringelberg/perspectives-sharedfilestorage) for more information.",
+    "nl": "MISSING nl",
+    "en": "MISSING en"
+  },
+  "### Broker service\nPerspectives needs a broker service to exchange information with peers.\nCurrently, we rely on [RabbitMQ](https://www.rabbitmq.com/), a popular open source message broker.\nIf you are the administrator of such a service, you can fill in the details below.\nNotice the **Public URL**: this is the URL that other people can use to connect to your service. It is,\nin fact, the location of this context as seen by its Visitor role.\nThe **Self Register Endpoint** is used as a proxy for the RabbitMQ server, to enable self-signup.\nThis service can be set up using the [perspectives-rabbitmq-service](https://github.com/joopringelberg/perspectives-rabbitmq-service)\nopen source project.\nThe **Management Endpoint** is a location on the server that runs RabbitMQ. It should be configured\n(e.g. in Apache) as a reverse proxy for RabbitMQ, that is used by the BrokerServices App to register\nand service accounts on RabbitMQ. Only the Administrator user uses that endpoint.\nThe **Description of the service**, finally is what is seen by Visitors and other non-Administrator roles.": {
+    "orig": "### Broker service\nPerspectives needs a broker service to exchange information with peers.\nCurrently, we rely on [RabbitMQ](https://www.rabbitmq.com/), a popular open source message broker.\nIf you are the administrator of such a service, you can fill in the details below.\nNotice the **Public URL**: this is the URL that other people can use to connect to your service. It is,\nin fact, the location of this context as seen by its Visitor role.\nThe **Self Register Endpoint** is used as a proxy for the RabbitMQ server, to enable self-signup.\nThis service can be set up using the [perspectives-rabbitmq-service](https://github.com/joopringelberg/perspectives-rabbitmq-service)\nopen source project.\nThe **Management Endpoint** is a location on the server that runs RabbitMQ. It should be configured\n(e.g. in Apache) as a reverse proxy for RabbitMQ, that is used by the BrokerServices App to register\nand service accounts on RabbitMQ. Only the Administrator user uses that endpoint.\nThe **Description of the service**, finally is what is seen by Visitors and other non-Administrator roles.",
+    "nl": "### Broker service\n Perspectives heeft een broker service nodig om informatie uit te wisselen met andere gebruikers.\n Momenteel gebruiken we [RabbitMQ](https://www.rabbitmq.com/), een populaire open source message broker.\n Als je de beheerder bent van zo'n service, kun je hieronder de details invullen.\n Let op de **Openbare URL**: dit is de URL die andere mensen kunnen gebruiken om verbinding te maken met je service. Het is,\n in feite, de locatie van deze context zoals gezien door de Bezoeker rol.\n Het **Endpoint voor zelf-registratie** wordt gebruikt als proxy voor de RabbitMQ server, om zelf-registratie mogelijk te maken.\n Deze service kan worden opgezet met behulp van het [perspectives-rabbitmq-service](https://github.com/joopringelberg/perspectives-rabbitmq-service)\n open source project.\n Het **Endpoint voor beheer** is een locatie op de server waarop RabbitMQ draait. Het moet worden geconfigureerd\n (bijv. in Apache) als een reverse proxy voor RabbitMQ, die wordt gebruikt door de BrokerServices App om accounts\n te registreren en te beheren op RabbitMQ. Alleen de Beheerder gebruikt dat endpoint.\n De **Beschrijving van de service**, tenslotte, is wat wordt gezien door Bezoekers en andere niet-Beheerder rollen.",
+    "en": "### Broker service\n Perspectives needs a broker service to exchange information with peers.\n Currently, we rely on [RabbitMQ](https://www.rabbitmq.com/), a popular open source message broker.\n If you are the administrator of such a service, you can fill in the details below.\n Notice the **Public URL**: this is the URL that other people can use to connect to your service. It is,\n in fact, the location of this context as seen by its Visitor role.\n The **Self Register Endpoint** is used as a proxy for the RabbitMQ server, to enable self-signup.\n This service can be set up using the [perspectives-rabbitmq-service](https://github.com/joopringelberg/perspectives-rabbitmq-service)\n open source project.\n The **Management Endpoint** is a location on the server that runs RabbitMQ. It should be configured\n (e.g. in Apache) as a reverse proxy for RabbitMQ, that is used by the BrokerServices App to register\n and service accounts on RabbitMQ. Only the Administrator user uses that endpoint.\n The **Description of the service**, finally is what is seen by Visitors and other non-Administrator roles."
+  },
+  "### Accounts\nThese are the accounts at the Broker Service.\nYou can create new accounts, or remove existing ones.": {
+    "orig": "### Accounts\nThese are the accounts at the Broker Service.\nYou can create new accounts, or remove existing ones.",
+    "nl": "### Accounts\n Dit zijn de accounts bij de Broker Service.\n Je kunt nieuwe accounts aanmaken of bestaande verwijderen.",
+    "en": "### Accounts\n These are the accounts at the Broker Service.\n You can create new accounts, or remove existing ones."
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$wsdav9jq9l$nsai2qmuq6": {
+    "en": "Admin password",
+    "nl": "Paswoord van beheerder"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$wsdav9jq9l$gcpg8bdd6p": {
+    "en": "Admin user name",
+    "nl": "Gebruikersnaam van beheerder"
+  },
+  "This service": {
+    "orig": "This service",
+    "en": "This service",
+    "nl": "Deze service"
+  },
+  "### Broker service\nThis is a 'broker service'. It is a program running on\na webserver that programs use to exchange messages. MyContexts\ninstallations use it to synchronize information.": {
+    "orig": "### Broker service\nThis is a 'broker service'. It is a program running on\na webserver that programs use to exchange messages. MyContexts\ninstallations use it to synchronize information.",
+    "nl": "### Broker service\n Dit is een 'broker service'. Het is een programma dat draait op\n een webserver dat programma's gebruiken om berichten uit te wisselen. MyContexts\n installaties gebruiken het om informatie te synchroniseren.",
+    "en": "### Broker service\n This is a 'broker service'. It is a program running on\n a webserver that programs use to exchange messages. MyContexts\n installations use it to synchronize information."
+  },
+  "### Do you want to add this service?\nThis service is not yet available in your installation.\nYou might want to add it so you can sign up to it afterwards in order\nto connect to other people on MyContexts.\n[[action: AddThisServer|Add the service]]": {
+    "orig": "### Do you want to add this service?\nThis service is not yet available in your installation.\nYou might want to add it so you can sign up to it afterwards in order\nto connect to other people on MyContexts.\n[[action: AddThisServer|Add the service]]",
+    "nl": "### Wil je deze service toevoegen?\n Deze service is nog niet beschikbaar in je installatie.\n Misschien wil je het toevoegen zodat je je er daarna voor kunt inschrijven om\n verbinding te maken met andere mensen op MyContexts.\n [[action: AddThisServer|Voeg de service toe]]",
+    "en": "### Do you want to add this service?\n This service is not yet available in your installation.\n You might want to add it so you can sign up to it afterwards in order\n to connect to other people on MyContexts.\n [[action: AddThisServer|Add the service]]"
+  },
+  "### Service available, sign up!\nThis service is available in your installation. However, you have not signed up to it.\nMove to the [[link:model://perspectives.domains#BrokerServices$MyBrokers|Broker Services Management]]\npage to read how to sign up.": {
+    "orig": "### Service available, sign up!\nThis service is available in your installation. However, you have not signed up to it.\nMove to the [[link:model://perspectives.domains#BrokerServices$MyBrokers|Broker Services Management]]\npage to read how to sign up.",
+    "nl": "### Service beschikbaar, schrijf je in!\n Deze service is beschikbaar in je installatie. Je hebt je er echter nog niet voor ingeschreven.\n Ga naar de [[link:model://perspectives.domains#BrokerServices$MyBrokers|Broker Services Beheer]]\n pagina om te lezen hoe je je kunt inschrijven.",
+    "en": "### Service available, sign up!\n This service is available in your installation. However, you have not signed up to it.\n Move to the [[link:model://perspectives.domains#BrokerServices$MyBrokers|Broker Services Management]]\n page to read how to sign up."
+  },
+  "### Public broker services\nThese are the public broker services that you are signed up to (or can sign up to).\nYou can only sign up to a single service.": {
+    "orig": "### Public broker services\nThese are the public broker services that you are signed up to (or can sign up to).\nYou can only sign up to a single service.",
+    "nl": "### Openbare broker services\n Dit zijn de openbare broker services waarvoor je je hebt ingeschreven (of kunt inschrijven).\n Je kunt je slechts voor één service inschrijven.",
+    "en": "### Public broker services\n These are the public broker services that you are signed up to (or can sign up to).\n You can only sign up to a single service."
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$External$y4kfk8tkf5": {
+    "en": "Description of the service",
+    "nl": "Beschrijving van de service"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$External$rc3v219ihw": {
+    "en": "Termination period (after grace till termination)",
+    "nl": "Afsluitingsperiode (na coulance tot afsluiting)"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$External$aob2ibv7rx": {
+    "en": "Grace period (na einddatum)",
+    "nl": "Coulance periode (na einddatum)"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$External$csx7iku1jn": {
+    "en": "Contract period",
+    "nl": "Contract periode"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$External$oaakaqfcwt": {
+    "en": "Public URL",
+    "nl": "Openbare URL"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$External$safypuqms7": {
+    "en": "Self register endpoint",
+    "nl": "Endpoint voor zelf-registratie"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$External$d1aw4s5in7": {
+    "en": "Management endpoint",
+    "nl": "Endpoint voor beheer"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$External$g27edej5sx": {
+    "en": "Exchange",
+    "nl": "Exchange"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$External$ncr77pkxia": {
+    "en": "URL",
+    "nl": "URL"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$External$cwvylcqyfy": {
+    "en": "Name",
+    "nl": "Naam"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$me48uhv82h$qddsmcspmo$g293ci1c4r": {
+    "en": "Storage location",
+    "nl": "Locatie van opslag"
+  },
+  "## Get connected\nMyContexts is most useful when you connect to other people.\nThis installation has not yet a means to connect to others.\nMove to the [[link:pub:https://perspectives.domains/cw_v74vfn21lx/#rbdaciupyn$External|Perspectives Broker Service]]\npage to get online. You will read further instructions there.": {
+    "orig": "## Get connected\nMyContexts is most useful when you connect to other people.\nThis installation has not yet a means to connect to others.\nMove to the [[link:pub:https://perspectives.domains/cw_v74vfn21lx/#rbdaciupyn$External|Perspectives Broker Service]]\npage to get online. You will read further instructions there.",
+    "nl": "## Maak verbinding\n MyContexts is het meest nuttig wanneer je verbinding maakt met andere mensen.\n Deze installatie heeft nog geen middel om verbinding te maken met anderen.\n Ga naar de [[link:pub:https://perspectives.domains/cw_v74vfn21lx/#rbdaciupyn$External|Perspectives Broker Service]]\n pagina om online te gaan. Je vindt daar verdere instructies.",
+    "en": "## Get connected\n MyContexts is most useful when you connect to other people.\n This installation has not yet a means to connect to others.\n Move to the [[link:pub:https://perspectives.domains/cw_v74vfn21lx/#rbdaciupyn$External|Perspectives Broker Service]]\n page to get online. You will read further instructions there."
+  },
+  "## Sign up to a service\nYou cannot yet connect to peers, but a service to do so is available below.\nSelect a row with a service (there is probably just one) by clicking it.\nThen, in the toolbar below, click the bolt icon. A menu will drop down.\nClick the \"SignUp\" item.\n***NOTE*** that by signing up, you will share your first- and last name\nwith the manager of the service. He or she will be able to contact you\nthrough MyContexts.\nA little later, an icon will appear in the top left part of your screen,\nindicating you can now connect with peers.": {
+    "orig": "## Sign up to a service\nYou cannot yet connect to peers, but a service to do so is available below.\nSelect a row with a service (there is probably just one) by clicking it.\nThen, in the toolbar below, click the bolt icon. A menu will drop down.\nClick the \"SignUp\" item.\n***NOTE*** that by signing up, you will share your first- and last name\nwith the manager of the service. He or she will be able to contact you\nthrough MyContexts.\nA little later, an icon will appear in the top left part of your screen,\nindicating you can now connect with peers.",
+    "nl": "## Schrijf je in voor een service\n Je kunt nog geen verbinding maken met andere gebruikers, maar er is een service beschikbaar om dit te doen.\n Open 'Openbare broker services' onder 'Waar'.\n Selecteer een rij met een service (er is waarschijnlijk maar één) door erop te klikken.\n Open vervolgens het menu (aangegeven door drie puntjes) op deze sectie.\n Klik op het item \"Inschrijven\".\n ***LET OP*** door je in te schrijven, deel je je voor- en achternaam\n met de beheerder van de service. Hij of zij kan contact met je opnemen\n via MyContexts.\n Even later verschijnt er een pictogram in de linkerbovenhoek van je scherm,\n wat aangeeft dat je nu verbinding kunt maken met andere gebruikers.",
+    "en": "## Sign up to a service\n You cannot yet connect to peers, but a service to do so is available.\n Open 'Public broker services' under 'Where'.\n Then open the menu (indicated by three dots) on this section.\n Select a row with a service (there is probably just one) by clicking it.\n Now click the item \"SignUp\" in the menu.\n ***NOTE*** that by signing up, you will share your first- and last name\n with the manager of the service. He or she will be able to contact you\n through MyContexts.\n A little later, an icon will appear in the top left part of your screen,\n indicating you can now connect with peers."
+  },
+  "## You can connect to peers\nThis installation is subscribed to a Broker Service and is able to exchange information\nautomatically with peers you are in contact with (including the manager of this service).": {
+    "orig": "## You can connect to peers\nThis installation is subscribed to a Broker Service and is able to exchange information\nautomatically with peers you are in contact with (including the manager of this service).",
+    "nl": "## Je kunt verbinding maken met andere gebruikers\n Deze installatie is geabonneerd op een Broker Service en kan automatisch informatie uitwisselen\n met andere gebruikers waarmee je in contact staat (inclusief de beheerder van deze service).",
+    "en": "## You can connect to peers\n This installation is subscribed to a Broker Service and is able to exchange information\n automatically with peers you are in contact with (including the manager of this service)."
+  },
+  "### Public broker service(s)\nThese are the public broker services that you can sign up to.\nYou can only sign up to a single service.": {
+    "orig": "### Public broker service(s)\nThese are the public broker services that you can sign up to.\nYou can only sign up to a single service.",
+    "nl": "### Openbare broker service(s)\n Dit zijn de openbare broker services waar je je voor kunt inschrijven.\n Je kunt je slechts voor één service inschrijven.",
+    "en": "### Public broker service(s)\n These are the public broker services that you can sign up to.\n You can only sign up to a single service."
+  },
+  "### Your contract\nThis is the contract you have with the broker service.\nYou can see when it expires, and you can cancel it.": {
+    "orig": "### Your contract\nThis is the contract you have with the broker service.\nYou can see when it expires, and you can cancel it.",
+    "nl": "### Jouw contract\n Dit is het contract dat je hebt met de broker service.\n Je kunt zien wanneer het verloopt, en je kunt het opzeggen.",
+    "en": "### Your contract\n This is the contract you have with the broker service.\n You can see when it expires, and you can cancel it."
+  },
+  "### Managed broker services\nThese are the broker services you manage. You can add new ones, remove existing ones,\nor change their storage location. Add an empty role instance, then specify its storage location\n(identifying a Bespoke Database). Upon saving, the broker service context will be created.\n**NOTE**: Most people will **not** manage broker services, but use the ones that are available.": {
+    "orig": "### Managed broker services\nThese are the broker services you manage. You can add new ones, remove existing ones,\nor change their storage location. Add an empty role instance, then specify its storage location\n(identifying a Bespoke Database). Upon saving, the broker service context will be created.\n**NOTE**: Most people will **not** manage broker services, but use the ones that are available.",
+    "nl": "### Beheerde broker services\n Dit zijn de broker services die je beheert. Je kunt nieuwe toevoegen, bestaande verwijderen,\n of hun opslaglocatie wijzigen. Voeg een lege rol instantie toe en specificeer vervolgens de opslaglocatie\n (die een Bespoke Database identificeert). Na het opslaan wordt de broker service context aangemaakt.\n **LET OP**: De meeste mensen zullen broker services **niet** beheren, maar de beschikbare gebruiken.",
+    "en": "### Managed broker services\n These are the broker services you manage. You can add new ones, remove existing ones,\n or change their storage location. Add an empty role instance, then specify its storage location\n (identifying a Bespoke Database). Upon saving, the broker service context will be created.\n **NOTE**: Most people will **not** manage broker services, but use the ones that are available."
+  },
+  "model://perspectives.domains#zjuzxbqpgc$me48uhv82h$jobejb7pa3": {
+    "nl": "Voeg BrokerService toe",
+    "en": "Add Broker Service"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$me48uhv82h": {
+    "en": "Message Broker Services",
+    "nl": "Message Broker Services"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$me48uhv82h$External": {},
+  "model://perspectives.domains#zjuzxbqpgc$me48uhv82h$gsq6u8ihji": {
+    "en": "Manager",
+    "nl": "Beheerder"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$me48uhv82h$dkh9yd3gpt": {
+    "en": "Contract in use",
+    "nl": "Contract in gebruik"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$me48uhv82h$yp2cwiszca": {
+    "en": "Contracts",
+    "nl": "Contracten"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$me48uhv82h$xp1l1ho8k4": {
+    "en": "Public brokers",
+    "nl": "Openbare brokers"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$me48uhv82h$qddsmcspmo": {
+    "en": "Managed brokers",
+    "nl": "Beheerde brokers"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp": {
+    "en": "Broker service",
+    "nl": "Broker service"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$External": {},
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$zseqzik7jh": {
+    "en": "Visitor",
+    "nl": "Bezoeker"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$pegcvy93wb": {
+    "en": "Guest",
+    "nl": "Gast"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$wsdav9jq9l": {
+    "en": "Administrator",
+    "nl": "Beheerder"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$fv87gfip3n": {
+    "en": "Visitor proxy",
+    "nl": "Bezoeker proxy"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$dv5izy28yl": {
+    "nl": "Publieke brokers",
+    "en": "Public Brokers"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$gu1peg7mtj": {
+    "en": "Accounts",
+    "nl": "Deelnemers"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0": {
+    "en": "Broker contract",
+    "nl": "Broker contract"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$External": {},
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$bmtbj82w7r": {
+    "en": "Administrator",
+    "nl": "Beheerder"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$gpwpevx4e5": {
+    "en": "Account holder",
+    "nl": "Deelnemer"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$j66ewf1k42": {
+    "en": "Service",
+    "nl": "Service"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$rcu2nweeb1": {
+    "en": "Queues",
+    "nl": "Queues"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$ko3z3d4oeg": {
+    "en": "Unfilled queue role",
+    "nl": "Queue rol zonder vuller"
+  },
+  "model://perspectives.domains#zjuzxbqpgc$s7vfzzt1es": {
+    "en": "Broker",
+    "nl": "Broker"
+  }
 }

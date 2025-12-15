@@ -1,209 +1,226 @@
 {
-	"views": {},
-	"viewKeys": {},
-	"viewCuids": {},
-	"version": 4,
-	"states": {},
-	"stateKeys": {
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts": {
-			"queryHash": "qfd-a2fa95be",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$Accounts"
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled": {
-			"queryHash": "qfd-41962748",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled"
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled$Waiting": {
-			"queryHash": "qfd-7c6dbbfa",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled$Waiting"
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled$Rejected": {
-			"queryHash": "qfd-17b0934d",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled$Rejected"
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled$Accepted": {
-			"queryHash": "qfd-eec8b453",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled$Accepted"
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled$NoPassword": {
-			"queryHash": "qfd-f7d393ef",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled$NoPassword"
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body$Admin": {
-			"queryHash": "qfd-921f8767",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$Admin"
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body": {
-			"queryHash": "qfd-33aac442",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body"
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body$NoAccounts": {
-			"queryHash": "qfd-98a54828",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$NoAccounts"
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body$External": {
-			"queryHash": "qfd-33aac442",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$External"
-		},
-		"model://perspectives.domains#BodiesWithAccounts$BodiesWithAccountsApp$External": {
-			"queryHash": "qfd-46497ccb",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$BodiesWithAccountsApp$External"
-		},
-		"model://perspectives.domains#BodiesWithAccounts$BodiesWithAccountsApp": {
-			"queryHash": "qfd-71d211a7",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$BodiesWithAccountsApp"
-		},
-		"model://perspectives.domains#BodiesWithAccounts": {
-			"queryHash": "qfd-495df9d0",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts"
-		},
-		"model://perspectives.domains#BodiesWithAccounts$External": {
-			"queryHash": "qfd-495df9d0",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$External"
-		}
+	"rg1ba7bgts": {
+		"nrOfUploadedFiles": 2,
+		"nrOfRequestedKeys": 16
 	},
-	"stateCuids": {
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts": "ofpgonne8w",
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled": "yhmoswry36",
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled$Waiting": "uagiez0ppv",
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled$Rejected": "yw0k30y3zy",
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled$Accepted": "niumzqiwxw",
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsFilled$NoPassword": "f5u49zofec",
-		"model://perspectives.domains#BodiesWithAccounts$Body$Admin": "ldpz60w2ao",
-		"model://perspectives.domains#BodiesWithAccounts$Body": "bvyqsqsyob",
-		"model://perspectives.domains#BodiesWithAccounts$Body$NoAccounts": "u2k9hucd2w",
-		"model://perspectives.domains#BodiesWithAccounts$Body$External": "ya7hyzmxx6",
-		"model://perspectives.domains#BodiesWithAccounts$BodiesWithAccountsApp$External": "p8b1lngf9c",
-		"model://perspectives.domains#BodiesWithAccounts$BodiesWithAccountsApp": "zyr7n2tolf",
-		"model://perspectives.domains#BodiesWithAccounts": "szxwk8a0tm",
-		"model://perspectives.domains#BodiesWithAccounts$External": "h9rc5tti7h"
+	"fckjw1vwlk": {
+		"nrOfUploadedFiles": 10,
+		"nrOfRequestedKeys": 1
 	},
-	"roles": {},
-	"roleKeys": {
-		"model://perspectives.domains#BodiesWithAccounts$Body$Guest": {
-			"properties": [],
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$Guest",
-			"declaringContextFqn": "model://perspectives.domains#BodiesWithAccounts$Body",
-			"bindingTypes": [],
-			"aspects": []
-		},
-		"model://perspectives.domains#BodiesWithAccounts$External": {
-			"properties": [],
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$External",
-			"declaringContextFqn": "model://perspectives.domains#BodiesWithAccounts",
-			"bindingTypes": [],
-			"aspects": []
-		},
-		"model://perspectives.domains#BodiesWithAccounts$BodiesWithAccountsApp$External": {
-			"properties": [],
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$BodiesWithAccountsApp$External",
-			"declaringContextFqn": "model://perspectives.domains#BodiesWithAccounts$BodiesWithAccountsApp",
-			"bindingTypes": [],
-			"aspects": []
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body$External": {
-			"properties": [],
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$External",
-			"declaringContextFqn": "model://perspectives.domains#BodiesWithAccounts$Body",
-			"bindingTypes": [],
-			"aspects": []
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body$Admin": {
-			"properties": [],
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$Admin",
-			"declaringContextFqn": "model://perspectives.domains#BodiesWithAccounts$Body",
-			"bindingTypes": [],
-			"aspects": []
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts": {
-			"properties": [
-				"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsRejected",
-				"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsAccepted"
-			],
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$Accounts",
-			"declaringContextFqn": "model://perspectives.domains#BodiesWithAccounts$Body",
-			"bindingTypes": [],
-			"aspects": []
-		}
+	"q0aqtnflic": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
 	},
-	"roleIndividuals": {},
-	"roleIndividualKeys": {},
-	"roleCuids": {
-		"model://perspectives.domains#BodiesWithAccounts$Body$Guest": "iu4pzui0dn",
-		"model://perspectives.domains#BodiesWithAccounts$Body$Admin": "a2aqbh28r9",
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts": "j05xjb52cn",
-		"model://perspectives.domains#BodiesWithAccounts$BodiesWithAccountsApp$External": "External",
-		"model://perspectives.domains#BodiesWithAccounts$Body$External": "External",
-		"model://perspectives.domains#BodiesWithAccounts$External": "External"
+	"ymy1gmaupc": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 1
 	},
-	"propertyKeys": {
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsAccepted": {
-			"valueType": "PBool",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsAccepted",
-			"facets": [],
-			"declaringRoleFqn": "model://perspectives.domains#BodiesWithAccounts$Body$Accounts",
-			"aspects": []
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsRejected": {
-			"valueType": "PBool",
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsRejected",
-			"facets": [],
-			"declaringRoleFqn": "model://perspectives.domains#BodiesWithAccounts$Body$Accounts",
-			"aspects": []
-		}
+	"md95p0v7z4": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
 	},
-	"propertyCuids": {
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsAccepted": "xsulwql6n4",
-		"model://perspectives.domains#BodiesWithAccounts$Body$Accounts$IsRejected": "pnwnuon7fs"
+	"hc8rdhvddr": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
 	},
-	"properties": {},
-	"modelIdentifier": "model://perspectives.domains#bxxptg50jp",
-	"contexts": {},
-	"contextKeys": {
-		"model://perspectives.domains#BodiesWithAccounts$BodiesWithAccountsApp": {
-			"roles": [],
-			"properties": [],
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$BodiesWithAccountsApp",
-			"declaringContextFqn": "model://perspectives.domains#BodiesWithAccounts",
-			"aspects": [
-				"model://perspectives.domains#System$RootContext"
-			]
-		},
-		"model://perspectives.domains#BodiesWithAccounts$Body": {
-			"roles": [
-				"model://perspectives.domains#BodiesWithAccounts$Body$Accounts",
-				"model://perspectives.domains#BodiesWithAccounts$Body$Admin"
-			],
-			"properties": [],
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body",
-			"declaringContextFqn": "model://perspectives.domains#BodiesWithAccounts",
-			"aspects": []
-		},
-		"model://perspectives.domains#BodiesWithAccounts": {
-			"roles": [],
-			"properties": [],
-			"fqn": "model://perspectives.domains#BodiesWithAccounts",
-			"declaringContextFqn": "model://perspectives.domains#BodiesWithAccounts",
-			"aspects": []
-		}
+	"sxbcco85o4": {
+		"nrOfUploadedFiles": 1,
+		"nrOfRequestedKeys": 0
 	},
-	"contextIndividuals": {},
-	"contextIndividualKeys": {},
-	"contextCuids": {
-		"model://perspectives.domains#BodiesWithAccounts$BodiesWithAccountsApp": "aditsgksqq",
-		"model://perspectives.domains#BodiesWithAccounts$Body": "w71ja3uzfr",
-		"model://perspectives.domains#BodiesWithAccounts": "l7q4licc47",
-		"model://perspectives.domains#bxxptg50jp": "bxxptg50jp"
+	"f9rsopdndb": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
 	},
-	"actions": {},
-	"actionKeys": {
-		"model://perspectives.domains#BodiesWithAccounts$Body$NoAccounts$RequestAccount": {
-			"fqn": "model://perspectives.domains#BodiesWithAccounts$Body$NoAccounts$RequestAccount",
-			"declaringStateFqn": "model://perspectives.domains#BodiesWithAccounts$Body$NoAccounts",
-			"declaringRoleFqn": "model://perspectives.domains#BodiesWithAccounts$Body$Guest"
-		}
+	"zenx4sqthn": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
 	},
-	"actionCuids": {
-		"model://perspectives.domains#BodiesWithAccounts$Body$NoAccounts$RequestAccount": "jzma7afhfz"
+	"mjph038nad": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"qnjto9o73l": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 2
+	},
+	"kzno4tm50j": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"mm737iq8wy": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"d5ycd6hhd1": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 5
+	},
+	"fhkjmqn2bg": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"tqnq4pcic8": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"kcubw5sec6": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"t8ee1wjbtr": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"fmc8obddrl": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 3
+	},
+	"dgeabju7iw": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"v475okkczu": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"rkmk70kjfw": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"fbhijbwjgz": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 3
+	},
+	"owerymnimz": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"cyb9c5sfie": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"kcbgezvbfm": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"fyjyo6uk7e": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 4
+	},
+	"rveut9qmfr": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"znmliyadcr": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"gf7xf663l4": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"tc14fhwfch": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"wf752qhxta": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 2
+	},
+	"ub4y3i2t8h": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"izzmcx6q7n": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"li7o0c5qa6": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 17
+	},
+	"r01gndci00": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"vnr1x09lrf": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"c8eg3ybcuw": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"alx4yda8v5": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"x4x89u9cat": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"se9e1fmpcf": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"wqqas9roaz": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"lgkyme9obm": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"awp4zcd4ow": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"zny8cm4zvd": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"nr6ckhwd1j": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"oho0j25j90": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"fun29s974y": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 1
+	},
+	"uixpnfcy0g": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"bvnsbnszig": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"e8cibaeb3i": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"sr60g3xrvd": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"z24i0uzoix": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"nra2dndd7p": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"awgx4w5x09": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
+	},
+	"b36xefyt9e": {
+		"nrOfUploadedFiles": 0,
+		"nrOfRequestedKeys": 0
 	}
 }

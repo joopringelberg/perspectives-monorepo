@@ -161,6 +161,8 @@ domain model://perspectives.domains#System
       property HasKey (Boolean)
 
       perspective on PerspectivesUsers
+        -- As this perspective is selfonly, it doesn't cause synchronization with peers.
+        -- In other words: a PerspectivesUsers instance cannot see other PerspectivesUsers instances.
         selfonly
         props (SharedFileServerKey, HasKey) verbs (Consult)
     
@@ -308,7 +310,8 @@ domain model://perspectives.domains#System
       state FillWithPerspectivesUser = (not exists binding) and exists sys:MySocialEnvironment >> Me
         on entry
           do for User
-            -- User has a sufficient perspective on itself to do this.
+            -- User has a sufficient perspective on itself to do this. 
+            -- It will be filled with the Persons instance that is filled by the same PerspectivesUsers instance as SocialEnvironment$Me.
             bind_ sys:MySocialEnvironment >> Me >> binding >> binder Persons >>= first to origin
 
       -- PDRDEPENDENCY
