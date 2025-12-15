@@ -365,6 +365,7 @@ domain model://perspectives.domains#BrokerServices
             Administrator >> AdminUserName,
             Administrator >> AdminPassword,
             AccountHolder >> AccountName)
+          -- Deleting the queue will cause it to be removed from the RabbitMQ server.
           delete context bound to Queues
           Registered = false for extern
 
@@ -443,13 +444,6 @@ domain model://perspectives.domains#BrokerServices
             bind_ (sys:MySystem >> extern) to (context >> EmptyQueue)
             callEffect rabbit:StartListening()
 
-      on exit
-        do for BrokerContract$Administrator
-          callEffect rabbit:DeleteAMQPaccount(
-            context >> extern >> ManagementEndpoint,
-            context >> Administrator >> AdminUserName,
-            context >> Administrator >> AdminPassword,
-            AccountName)
 
       view ForAccountHolder (AccountName, AccountPassword, LastName)
 
