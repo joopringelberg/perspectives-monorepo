@@ -29,17 +29,21 @@ import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web (Response, printError, request)
 import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Error.Class (throwError, try)
+import Control.Monad.Reader (runReaderT)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (head, singleton)
 import Data.Either (Either(..))
+import Data.Function (flip)
 import Data.HTTP.Method (Method(..))
 import Data.Int (floor)
+import Data.Map (catMaybes)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), Replacement(..))
 import Data.String (replace) as String
 import Data.String.Regex (regex, replace) as REGEX
 import Data.String.Regex.Flags (noFlags)
+import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Data.Unit (Unit, unit)
 import Data.Version (Version, parseVersion)
@@ -50,6 +54,7 @@ import Effect.Class.Console (log)
 import Effect.Exception (error)
 import Effect.Random (randomRange)
 import Effect.Uncurried (EffectFn3, runEffectFn3)
+import Foreign.Object (empty)
 import IDBKeyVal (idbSet) as IDBKeyVal
 import Parsing (ParseError)
 import Perspectives.Authenticate (getMyPublicKey)
@@ -66,6 +71,7 @@ import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (evalPhaseTwo')
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors)
 import Perspectives.Persistence.State (getSystemIdentifier)
+import Perspectives.PerspectivesState (getModelUris)
 import Perspectives.PerspectivesState (setCurrentLanguage) as PState
 import Perspectives.Query.ExpandPrefix (ensureModel, expandPrefix)
 import Perspectives.Query.ExpressionCompiler (compileExpression)
@@ -75,7 +81,9 @@ import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.ResourceIdentifiers (createCuid)
-import Prelude (class Show, bind, discard, pure, show, void, ($), (<<<), (<>), (>=>), (>>=), (*>), (<))
+import Perspectives.Sidecar.NormalizeTypeNames (normalize)
+import Perspectives.Sidecar.StableIdMapping (fromLocalModels, loadStableMapping)
+import Prelude (class Show, bind, discard, pure, show, void, ($), (<<<), (<>), (>=>), (>>=), (*>), (<), (<$>))
 import Simple.JSON (readJSON, write, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -202,7 +210,14 @@ evalExpression expr roleId@(RoleInstance id) = do
           case t of
             Left errs -> pure $ show (PSPE errs)
             Right qfd -> do
-              calculator <- lift $ lift $ compileFunction qfd
+              -- Get a list of all models in the installation.
+              modelUriMap <- lift $ lift $ getModelUris
+              -- Retrieve the sidecar for each of them.
+              sidecars <- lift $ lift $ (catMaybes <$> (for modelUriMap (flip loadStableMapping fromLocalModels)))
+              -- Normalize the QFD with all sidecars.
+              normalizedQfd <- pure $ unwrap $ runReaderT (normalize qfd) { sidecars, perspMap: empty }
+              -- Compile and run the function.
+              calculator <- lift $ lift $ compileFunction normalizedQfd
               result <- calculator id
               pure $ "result#" <> result
 
