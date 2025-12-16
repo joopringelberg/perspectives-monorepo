@@ -88,7 +88,7 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (UserName, Password)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (clearQueryCache, contextCache, getCurrentLanguage, getPerspectivesUser, modelsDatabaseName, removeTranslationTable, roleCache)
+import Perspectives.PerspectivesState (clearQueryCache, contextCache, getCurrentLanguage, getPerspectivesUser, modelsDatabaseName, removeTranslationTable, roleCache, setModelUri)
 import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, Value(..), perspectivesUser2RoleInstance)
@@ -355,7 +355,7 @@ computeVersionedAndUnversiondName (ModelUri modelname) = do
 
 -- | Also saves the attachments.
 installModelLocally :: (Tuple (DomeinFileRecord Stable) AttachmentFiles) -> Boolean -> StoredQueries -> MonadPerspectivesTransaction Unit
-installModelLocally (Tuple dfrecord@{ id, referredModels, invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects, _attachments } attachmentFiles) isInitialLoad' storedQueries = do
+installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects, _attachments } attachmentFiles) isInitialLoad' storedQueries = do
   { patch, build, versionedModelName, unversionedModelname, versionedModelManifest } <- lift $ computeVersionedAndUnversiondName id
   -- Store the model in Couchdb, that is: in the local store of models.
   -- Save it with the revision of the local version that we have, if any (do not use the repository version).
@@ -398,6 +398,8 @@ installModelLocally (Tuple dfrecord@{ id, referredModels, invertedQueriesInOther
   lift $ forceSaveDomeinFile id
   (DomeinFile { _rev }) <- lift $ getDomeinFile id
   void $ lift $ execStateT (addAttachments dbName unversionedDocumentName attachmentFiles) _rev
+  -- Add an entry to the map of Readable to Stable model URIs.
+  lift $ setModelUri namespace id
   -- Now uncache the DomeinFile, as it no longer holds the right revision, neither has the attachments.
   lift $ decache id
 
