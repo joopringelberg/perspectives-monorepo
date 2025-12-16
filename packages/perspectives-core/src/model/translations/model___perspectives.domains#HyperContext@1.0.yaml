@@ -1,174 +1,166 @@
-model://perspectives.domains#hkfgpmwt93:
-  version: "3.0"
+model://perspectives.domains#zs6x290shy:
+  version: "1.0"
   contexts:
     HyperTexts:
       translations:
-        en: Hypertext app
-        nl: Hypertext app
+        nl: Hyptertexten
+        en: Hypertexts
       users:
         Manager:
           translations:
-            en: Manager
-            nl: Beheerder
+            nl: Manager
+            en: Beheerder
+          markdowns:
+            0:
+              translations:
+                orig: "### Write and manage hypertext pages"
+                nl: "### Schrijf en beheer hypertext pagina's"
+                en: "### Write and manage hypertext pages"
         Initializer:
           translations:
+            nl: Initializer
             en: Initializer
-            nl: Initialisatierol
       contextroles:
         PublicPageCollections:
           translations:
+            nl: Publieke pagina-collecties
             en: Public page collections
-            nl: Openbare pagina collecties
         Pages:
           translations:
+            nl: Pagina's
             en: Pages
-            nl: Paginas
     Page:
       translations:
-        en: Page
         nl: Pagina
+        en: Page
       external:
         properties:
           ShowAllBlocks:
             translations:
-              en: Show all blocks
               nl: Toon alle blokken
+              en: Show all blocks
           Title:
             translations:
-              en: Title
               nl: Titel
+              en: Title
       users:
         TestReader:
           translations:
-            en: Test reader
             nl: Testlezer
+            en: Test reader
         Reader:
           translations:
-            en: Reader
             nl: Lezer
+            en: Reader
         Author:
           translations:
-            en: Author
             nl: Auteur
+            en: Author
+          markdowns:
+            0:
+              translations:
+                orig: "### A simple page editor"
+                nl: "### Een eenvoudige pagina-editor"
+                en: "### A simple page editor"
           titles:
             0:
               translations:
-                orig: Page Editor
-                en: Page editor
-                nl: Pagina editor
+                orig: Text blocks
+                nl: Tekstblokken
+                en: Text blocks
             1:
               translations:
-                orig: Text blocks
-                en: Text blocks
-                nl: Tekstblokken
-            2:
-              translations:
                 orig: Conditions
+                nl: Voorwaarden
                 en: Conditions
-                nl: Condities
-            3:
-              translations:
-                orig: Links
-                en: Links
-                nl: Links
       things:
         TextBlocks:
           translations:
-            en: Text blocks
             nl: Tekstblokken
+            en: Text blocks
           properties:
             ShowToAuthor:
               translations:
-                en: Show to author
                 nl: Toon aan auteur
+                en: Show to author
             ShowBlock:
               translations:
-                en: Show block
                 nl: Toon blok
+                en: Show block
             ConditionResult:
               translations:
+                nl: Voorwaarderesultaat
                 en: Condition result
-                nl: Conditie resultaat
             RawConditionResult:
               translations:
+                nl: Ongeinterpreteerd voorwaarderesultaat
                 en: Raw condition result
-                nl: Onbewerkt conditie resultaat
             Condition:
               translations:
+                nl: Voorwaarde
                 en: Condition
-                nl: Conditie
             MD:
               translations:
+                nl: Markdown
                 en: Markdown
-                nl: Mardown
             Title:
               translations:
-                en: Title
                 nl: Titel
+                en: Title
       contextroles:
         LinkedPages:
           translations:
+            nl: Gekoppelde pagina's
             en: Linked pages
-            nl: Paginas waar naar verwezen wordt
     PublicPageCollection:
       translations:
+        nl: Publieke pagina-collectie
         en: Public page collection
-        nl: Collectie openbare pagina's
       external:
         properties:
           Name:
             translations:
-              en: Name
               nl: Naam
+              en: Name
       users:
         Author:
           translations:
-            en: Author
             nl: Auteur
-          titles:
+            en: Author
+          markdowns:
             0:
               translations:
-                orig: Public Page Collection
-                en: Public page collection
-                nl: Collectie openbare pagina's
-            1:
-              translations:
-                orig: Entrypoint
-                en: Entrypoint
-                nl: Beginpunt
-            2:
-              translations:
-                orig: Public Pages
-                en: Public pages
-                nl: Openbare pagina's
+                orig: "### A public page collection"
+                nl: "### Een publieke pagina-collectie"
+                en: "### A public page collection"
         Creator:
           translations:
-            en: Creator
             nl: Maker
+            en: Creator
       contextroles:
         EntryPoint:
           translations:
-            en: Entry point
             nl: Beginpunt
+            en: Entry point
         PublicPages:
           translations:
+            nl: Publieke pagina's
             en: Public pages
-            nl: Openbare pagina's
     PublicPage:
       translations:
+        nl: Publieke pagina
         en: Public page
-        nl: Openbare pagina
       users:
         Visitor:
           translations:
-            en: Visitor
             nl: Bezoeker
+            en: Visitor
         VisitorProxy:
           translations:
-            en: 
-            nl: 
+            nl: Bezoeker-proxy
+            en: Visitor proxy
       contextroles:
         LinkedPages:
           translations:
+            nl: Gekoppelde pagina's
             en: Linked pages
-            nl: Paginas waar naar verwezen wordt

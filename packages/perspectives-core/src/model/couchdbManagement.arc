@@ -864,6 +864,10 @@ domain model://perspectives.domains#CouchdbManagement
         props (LocalModelName, ModelCuid, ModelManifest$External$Name, Description) verbs (Consult)
       perspective on extern
         props (NameSpace_, NameSpace) verbs (Consult)
+      perspective on sys:MySystem >> Repositories
+        only (Create, Fill, Remove)
+      action AddThisRepository
+        bind extern to Repositories in sys:MySystem
 
       screen
         who
@@ -872,6 +876,8 @@ domain model://perspectives.domains#CouchdbManagement
             markdown <### Repository
                       This repository is a collection of manifests describing models and versions of those manifests.
                       Visit a manifest context to install a new app or to update an existing app.
+                      Add this repository to your PerspectivesSystem by choosing *Add this repository* from the menu, 
+                      or just click [[action: AddThisRepository|Add this repository]].
                       >
           row
             form External
