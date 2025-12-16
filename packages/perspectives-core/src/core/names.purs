@@ -81,6 +81,9 @@ defaultNamespaces = OBJ.fromFoldable
   , Tuple "files" "model://perspectives.domains#piln392sut"
   , Tuple "bs" "model://perspectives.domains#zjuzxbqpgc"
   , Tuple "acc" "model://perspectives.domains#bxxptg50jp"
+  , Tuple "sfs" "model://perspectives.domains#xjrfkxrzyt"
+  , Tuple "disconnect" "model://perspectives.domains#kxrm2cilp9"
+  , Tuple "hypercontext" "model://perspectives.domains#zs6x290shy"
   ]
 
 defaultIndexedNames :: MonadPerspectives (OBJ.Object String)

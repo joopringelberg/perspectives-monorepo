@@ -1,7 +1,8 @@
 domain model://perspectives.domains#HyperContext
   use sys for model://perspectives.domains#System
-  use ht for model://perspectives.domains#HyperContext
+  use hypercontext for model://perspectives.domains#HyperContext
   use cm for model://perspectives.domains#CouchdbManagement
+  use util for model://perspectives.domains#Utilities
 
   -------------------------------------------------------------------------------
   ---- SETTING UP
@@ -22,14 +23,14 @@ domain model://perspectives.domains#HyperContext
   on exit
     do for sys:PerspectivesSystem$Installer
       letA
-        startcontext <- filter sys:MySystem >> StartContexts with filledBy (ht:HyperTextApp >> extern)
+        startcontext <- filter sys:MySystem >> StartContexts with filledBy (hypercontext:HyperTextApp >> extern)
       in
         remove role startcontext
 
   aspect user sys:PerspectivesSystem$Installer
   
   case HyperTexts
-    indexed ht:HyperTextApp
+    indexed hypercontext:HyperTextApp
     aspect sys:RootContext
 
     external
@@ -222,13 +223,13 @@ domain model://perspectives.domains#HyperContext
     context EntryPoint filledBy PublicPage
 
   case PublicPage
-    aspect ht:Page
+    aspect hypercontext:Page
 
     context LinkedPages (relational) filledBy PublicPage
-      aspect ht:Page$LinkedPages
+      aspect hypercontext:Page$LinkedPages
 
     public Visitor at extern >> binder PublicPages >> context >> Author >> BespokeDatabaseUrl = sys:SocialMe
-      perspective on ht:Page$TextBlocks
+      perspective on hypercontext:Page$TextBlocks
         props (MD, Condition, RawConditionResult, ConditionResult, ShowBlock) verbs (Consult)
       perspective on LinkedPages
         props (Title) verbs (Consult)
@@ -237,11 +238,11 @@ domain model://perspectives.domains#HyperContext
       screen
         row 
           -- Conditional read only view of blocks.
-          markdown ht:Page$TextBlocks
+          markdown hypercontext:Page$TextBlocks
             props (MD) without (SetPropertyValue, AddPropertyValue, RemovePropertyValue, DeleteProperty)
             when ShowBlock
 
-    aspect user ht:Page$Author
+    aspect user hypercontext:Page$Author
 
-    aspect thing ht:Page$TextBlocks
+    aspect thing hypercontext:Page$TextBlocks
 

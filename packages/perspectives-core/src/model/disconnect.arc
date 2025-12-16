@@ -1,6 +1,6 @@
 domain model://perspectives.domains#Disconnect
   use sys for model://perspectives.domains#System
-  use dc for model://perspectives.domains#Disconnect
+  use disconnect for model://perspectives.domains#Disconnect
   use cdb for model://perspectives.domains#Couchdb
   
   -------------------------------------------------------------------------------
@@ -20,14 +20,14 @@ domain model://perspectives.domains#Disconnect
   on exit
     do for sys:PerspectivesSystem$Installer
       letA
-        startcontext <- filter sys:MySystem >> StartContexts with filledBy (dc:DisconnectApp >> extern)
+        startcontext <- filter sys:MySystem >> StartContexts with filledBy (disconnect:DisconnectApp >> extern)
       in
         remove role startcontext
 
   aspect user sys:PerspectivesSystem$Installer
 
   case Disconnect
-    indexed dc:DisconnectApp
+    indexed disconnect:DisconnectApp
     aspect sys:RootContext
 
     state NoManager = not exists Manager
@@ -101,8 +101,8 @@ domain model://perspectives.domains#Disconnect
             bind currentactor to Disconnecter in binding >> context
     
     -- All DisconnectedPeers that do not fill an instance of DisconnectedPeers in this context.
-    context IncomingDisconnections = filter callExternal cdb:RoleInstances( "model://perspectives.domains#Disconnect$DisconnectedPeer$External" ) returns dc:DisconnectedPeer$External
-      with not (binder DisconnectedPeers >> context >>= first) == dc:DisconnectApp
+    context IncomingDisconnections = filter callExternal cdb:RoleInstances( "model://perspectives.domains#Disconnect$DisconnectedPeer$External" ) returns disconnect:DisconnectedPeer$External
+      with not (binder DisconnectedPeers >> context >>= first) == disconnect:DisconnectApp
     -- context IncomingDisconnections = sys:SocialMe >> binder Disconnected >> context >> extern
 
     context ActualDisconnectedPeers = DisconnectedPeers >> binding
