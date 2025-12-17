@@ -1,0 +1,135 @@
+model://perspectives.domains#vwx1yglbsu:
+  version: "1.0"
+  contexts:
+    IntroductionApp:
+      translations:
+        en: Introduction app
+        nl: Introductie app
+      users:
+        Manager:
+          translations:
+            en: Manager
+            nl: Beheerder
+          titles:
+            0:
+              translations:
+                orig: "### Introducing acquiantances\n
+                  This is the place where you can introduce people to each other.\n
+                  After introducing them, they will be able to communicate with each other through MyContexts.\n
+                  Within an introduction context, the introducer and introducees can chat with each other."
+                nl: "### Kennissen introduceren\n
+                  Dit is de plaats waar u mensen aan elkaar kunt introduceren.\n
+                  Na introductie kunnen zij met elkaar communiceren via MyContexts.\n
+                  In een introductiecontext kunnen de introduceerder en introducees met elkaar chatten."
+                en: "### Introducing acquiantances\n
+                  This is the place where you can introduce people to each other.\n
+                  After introducing them, they will be able to communicate with each other through MyContexts.\n
+                  Within an introduction context, the introducer and introducees can chat with each other."
+            1:
+              translations:
+                orig: "### Introductions\n
+                  These are the persons that have been introduced to each other by you."
+                nl: "### Introducties\n
+                  Dit zijn de personen die door u aan elkaar zijn geïntroduceerd."
+                en: "### Introductions\n
+                  These are the persons that have been introduced to each other by you."
+            2:
+              translations:
+                orig: "### Incoming introductions\n
+                  You have been introduced to these persons by others."
+                nl: "### Inkomende introducties\n
+                  U bent door anderen aan deze personen geïntroduceerd."
+                en: "### Incoming introductions\n
+                  You have been introduced to these persons by others."
+      contextroles:
+        IncomingIntroductions:
+          translations:
+            nl: "Inkomende introducties"
+            en: "Incoming introductions"
+        Introductions:
+          translations:
+            nl: Introducties
+            en: Introductions
+    Introduction:
+      translations:
+        nl: Introductio
+        en: Introduction
+      external:
+        properties:
+          Title:
+            translations:
+              nl: Titel
+              en: Title
+      users:
+        Introducee:
+          translations:
+            nl: Introducee
+            en: Introducee
+          actions:
+            model://perspectives.domains#Introduction$Introduction$Introducee:
+              StartConversation:
+                translations:
+                  nl: Begin gesprek
+                  en: Start conversation
+          markdowns:
+            0:
+              translations:
+                orig: "### Introducees\n
+                  These are the persons that have been introduced to you."
+                nl: "### Introducees\n
+                  Dit zijn de personen die aan u zijn geïntroduceerd."
+                en: "### Introducees\n
+                  These are the persons that have been introduced to you."
+            1:
+              translations:
+                orig: "### Introduction\n
+                  You have been introduced to others by the introducer of this context.\n
+                  You can chat with the others under *Who*.\n
+                  The introducees have been added to your contacts."
+                nl: "### Introductie\n
+                  U bent door de introduceerder van deze context aan anderen geïntroduceerd.\n
+                  U kunt met de anderen chatten onder *Wie*.\n
+                  De introducees zijn aan uw contacten toegevoegd."
+                en: "### Introduction\n
+                  You have been introduced to others by the introducer of this context.\n
+                  You can chat with the others under *Who*.\n
+                  The introducees have been added to your contacts."
+        Introducer:
+          translations:
+            en: Introducer
+            nl: Introducer
+          actions:
+            model://perspectives.domains#Introduction$Introduction$Introducer:
+              StartConversation:
+                translations:
+                  nl: Begin gesprek
+                  en: Start conversation
+          markdowns:
+            0:
+              translations:
+                orig: "### Introducees\n
+                  These are the persons that have been introduced to each other by you."
+                nl: "### Introducties\n
+                  Dit zijn de personen die door u aan elkaar zijn geïntroduceerd."
+                en: "### Introductions\n
+                  These are the persons that have been introduced to each other by you."
+            1:
+              translations:
+                orig: "### Introduction\n
+                  The purpose of this context is to introduce people to each other.\n
+                  You can chat with the others under *Who*."
+                nl: "### Introductie\n
+                  Het doel van deze context is om mensen aan elkaar te introduceren.\n
+                  U kunt met de anderen chatten onder *Wie*."
+                en: "### Introduction\n
+                  The purpose of this context is to introduce people to each other.\n
+                  You can chat with the others under *Who*."
+        Guest:
+          translations:
+            en: Guest
+            nl: Gast
+      things:
+        Conversation:
+          translations:
+            nl: Vertalingen
+            en: Translations

@@ -1,4 +1,4 @@
--- Copyright Joop Ringelberg and Cor Baars 2019, 2020, 2021, 2023
+-- Copyright Joop Ringelberg and Cor Baars 2019, 2020, 2021, 2023, 2025
 domain model://perspectives.domains#Introduction
   use sys for model://perspectives.domains#System
   use intro for model://perspectives.domains#Introduction
