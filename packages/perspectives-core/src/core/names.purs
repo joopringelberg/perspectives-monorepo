@@ -90,6 +90,27 @@ defaultNamespaces = OBJ.fromFoldable
   , Tuple "sfs" "model://perspectives.domains#xjrfkxrzyt"
   , Tuple "disconnect" "model://perspectives.domains#kxrm2cilp9"
   , Tuple "hypercontext" "model://perspectives.domains#zs6x290shy"
+  , Tuple "introduction" "model://perspectives.domains#vwx1yglbsu"
+  ]
+
+defaultReadableNamespaces :: OBJ.Object String
+defaultReadableNamespaces = OBJ.fromFoldable
+  [ Tuple "sys" "model://perspectives.domains#System"
+  , Tuple "cm" "model://perspectives.domains#CouchdbManagement"
+  -- External core modules: this depends on the list in module Perspectives.External.CoreModules.
+  , Tuple "cdb" "model://perspectives.domains#Couchdb"
+  , Tuple "ser" "model://perspectives.domains#Serialise"
+  , Tuple "parse" "model://perspectives.domains#Parsing"
+  , Tuple "util" "model://perspectives.domains#Utilities"
+  , Tuple "sens" "model://perspectives.domains#Sensor"
+  , Tuple "rabbit" "model://perspectives.domains#RabbitMQ"
+  , Tuple "files" "model://perspectives.domains#Files"
+  , Tuple "bs" "model://perspectives.domains#BrokerServices"
+  , Tuple "acc" "model://perspectives.domains#BodiesWithAccounts"
+  , Tuple "sfs" "model://perspectives.domains#SharedFileServices"
+  , Tuple "disconnect" "model://perspectives.domains#Disconnect"
+  , Tuple "hypercontext" "model://perspectives.domains#HyperContext"
+  , Tuple "introduction" "model://perspectives.domains#Introduction"
   ]
 
 defaultIndexedNames :: MonadPerspectives (OBJ.Object String)

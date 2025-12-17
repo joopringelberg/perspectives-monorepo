@@ -41,7 +41,7 @@ import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinF
 import Perspectives.Instances.Environment (Environment, _pushFrame)
 import Perspectives.Instances.Environment (addVariable, empty, lookup) as ENV
 import Perspectives.InvertedQuery.Storable (StoredQueries, StorableInvertedQuery)
-import Perspectives.Names (defaultNamespaces, expandNamespaces)
+import Perspectives.Names (defaultReadableNamespaces, expandNamespaces)
 import Perspectives.Parsing.Arc.AST (ContextPart(..), ScreenE, StateQualifiedPart)
 import Perspectives.Parsing.Arc.Expression.AST (Step)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
@@ -113,7 +113,7 @@ runPhaseTwo_'
 runPhaseTwo_' computation dfr indexedContexts indexedRoles postponedParts = runStateT (runExceptT computation)
   { bot: false
   , dfr: dfr
-  , namespaces: defaultNamespaces
+  , namespaces: defaultReadableNamespaces
   , referredModels: []
   , indexedContexts
   , indexedRoles
@@ -135,7 +135,7 @@ evalPhaseTwo_' :: forall a m. Monad m => PhaseTwo' m a -> DomeinFileRecord Reada
 evalPhaseTwo_' computation drf indexedContexts indexedRoles = evalStateT (runExceptT computation)
   { bot: false
   , dfr: drf
-  , namespaces: defaultNamespaces
+  , namespaces: defaultReadableNamespaces
   , referredModels: []
   , indexedContexts
   , indexedRoles
