@@ -513,7 +513,7 @@ domain model://perspectives.domains#System
         only (Remove)
       perspective on RecentContexts
         only (Remove, Delete)
-        props (LastShownOnScreen) verbs (Consult)
+        -- props (LastShownOnScreen) verbs (Consult)
       perspective on ActualRecentContexts
 
     context OutgoingInvitations (relational) filledBy Invitation
