@@ -316,5 +316,12 @@ lookupStableModelUri muReadable = do
     Just muStable -> pure muStable
     Nothing -> pure (ModelUri $ unwrap muReadable)
 
+lookupStableModelUri_ :: ModelUri Readable -> MonadPerspectives (Maybe (ModelUri Stable))
+lookupStableModelUri_ muReadable = do
+  mmuStable <- lookupModelUri muReadable
+  case mmuStable of
+    Just muStable -> pure $ Just muStable
+    Nothing -> pure Nothing
+
 lookupReadableModelUri :: ModelUri Stable -> MonadPerspectives (ModelUri Readable)
 lookupReadableModelUri muStable = getDomeinFile muStable >>= \(DomeinFile { namespace }) -> pure namespace

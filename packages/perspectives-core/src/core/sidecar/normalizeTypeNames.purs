@@ -80,7 +80,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), IndexedRole(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
 import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.HashQFD (qfdSignature)
@@ -223,6 +223,13 @@ instance NormalizeTypeNames (DomeinFile Readable) (ModelUri Readable) where
             (\(Tuple readable stable) -> Tuple (IndexedContext readable) (IndexedContext stable))
             (toUnfoldable stableIdMapping.contextIndividuals) :: Array (Tuple IndexedContext IndexedContext)
         )
+    toStableRoleIndividuals <- case Map.lookup df.id sidecars of
+      Nothing -> pure EM.empty -- no sidecar for this model
+      (Just stableIdMapping) -> pure $ EM.fromFoldable
+        ( map
+            (\(Tuple readable stable) -> Tuple (IndexedRole readable) (IndexedRole stable))
+            (toUnfoldable stableIdMapping.roleIndividuals) :: Array (Tuple IndexedRole IndexedRole)
+        )
     id' <- fqn2tid df.id
     pure $ DomeinFile df
       { contexts = contexts'
@@ -246,6 +253,7 @@ instance NormalizeTypeNames (DomeinFile Readable) (ModelUri Readable) where
       , toStableViewType = EM.fromFoldable (values views' <#> \(View { id, readableName }) -> Tuple readableName id)
       , toReadableContextIndividuals = toReadableContextIndividuals
       , toStableContextIndividuals = toStableContextIndividuals
+      , toStableRoleIndividuals = toStableRoleIndividuals
       , id = id'
       }
 

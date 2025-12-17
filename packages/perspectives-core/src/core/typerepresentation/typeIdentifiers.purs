@@ -370,3 +370,24 @@ derive newtype instance writeForeignIndexedContext :: WriteForeign IndexedContex
 derive newtype instance readForeignIndexedContext :: ReadForeign IndexedContext
 instance semiGroupIndexedContext :: Semigroup IndexedContext where
   append (IndexedContext s1) (IndexedContext s2) = if s1 == "" then IndexedContext s2 else IndexedContext (s1 <> "$" <> s2)
+
+newtype IndexedRole = IndexedRole String
+
+derive instance Newtype IndexedRole _
+derive instance Generic IndexedRole _
+instance Show IndexedRole where
+  show i = "IndexedRole " <> (unwrap i)
+
+instance Eq IndexedRole where
+  eq (IndexedRole id1) (IndexedRole id2) = id1 == id2
+
+instance Ord IndexedRole where
+  compare (IndexedRole s1) (IndexedRole s2) = compare s1 s2
+
+instance PrettyPrint IndexedRole where
+  prettyPrint' t = show
+
+derive newtype instance writeForeignIndexedRole :: WriteForeign IndexedRole
+derive newtype instance readForeignIndexedRole :: ReadForeign IndexedRole
+instance semiGroupIndexedRole :: Semigroup IndexedRole where
+  append (IndexedRole s1) (IndexedRole s2) = if s1 == "" then IndexedRole s2 else IndexedRole (s1 <> "$" <> s2)

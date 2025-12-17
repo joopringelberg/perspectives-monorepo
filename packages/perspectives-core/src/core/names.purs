@@ -28,10 +28,16 @@ import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, delete, filter, fromFoldable, keys, lookup) as OBJ
 import Perspectives.CoreTypes (MonadPerspectives)
-import Perspectives.Identifiers (deconstructLocalNameFromCurie, deconstructPrefix, isTypeUri)
+import Perspectives.Data.EncodableMap (lookup) as MAP
+import Perspectives.DomeinCache (lookupStableModelUri_)
+import Perspectives.DomeinFile (DomeinFile(..))
+import Perspectives.Identifiers (deconstructLocalNameFromCurie, deconstructPrefix, isTypeUri, typeUri2ModelUri)
 import Perspectives.ModelDependencies (sysMe)
 import Perspectives.Persistence.State (getSystemIdentifier)
+import Perspectives.Persistent (getDomeinFile)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
+import Perspectives.Representation.TypeIdentifiers (IndexedContext(..), IndexedRole(..))
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Prelude (Unit, append, bind, eq, flip, pure, ($), (<<<), (<>), (>>=))
 
 -----------------------------------------------------------
@@ -103,6 +109,48 @@ lookupIndexedRole iname = gets _.indexedRoles >>= pure <<< OBJ.lookup iname
 -- | Look up a fully qualified, Stable indexed name, e.g. "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$msufk1679v" (sys:MySystem) and maps it to a local ContextInstance, e.g. "def:#<CUID>".
 lookupIndexedContext :: String -> MonadPerspectives (Maybe ContextInstance)
 lookupIndexedContext iname = gets _.indexedContexts >>= pure <<< OBJ.lookup iname
+
+-----------------------------------------------------------
+-- LOOKUP READABLE INDEXED NAMES
+-----------------------------------------------------------
+lookupReadableIndexedRole :: String -> MonadPerspectives (Maybe RoleInstance)
+lookupReadableIndexedRole iname = do
+  -- First extract the model uri from the readable indexed name.
+  -- Then look up the stable model uri for that model uri.
+  -- Then get the DomeinFile for that stable model uri.
+  -- Then look up the readable indexed role name in that DomeinFile's toStableRoleIndividuals.
+  -- Finally apply lookupIndexedRole to get the local RoleInstance
+  case typeUri2ModelUri iname of
+    Nothing -> pure Nothing
+    Just modelUri -> do
+      stableModelUriM <- lookupStableModelUri_ (ModelUri modelUri)
+      case stableModelUriM of
+        Nothing -> pure Nothing
+        Just stableModelUri -> do
+          DomeinFile { toStableRoleIndividuals } <- getDomeinFile stableModelUri
+          case MAP.lookup (IndexedRole iname) toStableRoleIndividuals of
+            Nothing -> pure Nothing
+            Just (IndexedRole stableIndexedName) -> lookupIndexedRole stableIndexedName
+
+-- | Look up a fully qualified, Readable indexed name, e.g.  'model://perspectives.domains#BrokerServices$MyBrokers' and maps it to a local RoleInstance, e.g. "def:#<CUID>".
+lookupReadableIndexedContext :: String -> MonadPerspectives (Maybe ContextInstance)
+lookupReadableIndexedContext iname = do
+  -- First extract the model uri from the readable indexed name.
+  -- Then look up the stable model uri for that model uri.
+  -- Then get the DomeinFile for that stable model uri.
+  -- Then look up the readable indexed context name in that DomeinFile's toStableContextIndividuals.
+  -- Finally apply lookupIndexedContext to get the local ContextInstance
+  case typeUri2ModelUri iname of
+    Nothing -> pure Nothing
+    Just modelUri -> do
+      stableModelUriM <- lookupStableModelUri_ (ModelUri modelUri)
+      case stableModelUriM of
+        Nothing -> pure Nothing
+        Just stableModelUri -> do
+          DomeinFile { toStableContextIndividuals } <- getDomeinFile stableModelUri
+          case MAP.lookup (IndexedContext iname) toStableContextIndividuals of
+            Nothing -> pure Nothing
+            Just (IndexedContext stableIndexedName) -> lookupIndexedContext stableIndexedName
 
 -----------------------------------------------------------
 -- REVERSE LOOKUP RESOURCES IN INDEXED NAMES

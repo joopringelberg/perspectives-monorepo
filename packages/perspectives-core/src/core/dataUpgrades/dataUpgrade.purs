@@ -66,15 +66,16 @@ import Effect.Class.Console (log)
 import Foreign (unsafeToForeign)
 import Foreign.Object (Object, empty, fromFoldable, lookup)
 import IDBKeyVal (idbGet, idbSet)
-import Main.RecompileBasicModels (UninterpretedDomeinFile, executeInTopologicalOrder, recompileModel)
+import Main.RecompileBasicModels (UninterpretedDomeinFile(..), executeInTopologicalOrder, recompileModel)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (cacheAndSave, setProperty)
 import Perspectives.ContextAndRole (rol_property)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, removeInternally, (##=))
+import Perspectives.Data.EncodableMap as EM
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
-import Perspectives.DomeinCache (storeDomeinFileInCouchdbPreservingAttachments)
+import Perspectives.DomeinCache (storeDomeinFileInCache, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Extern.Couchdb (roleInstancesFromCouchdb, updateModel', updateModel_)
@@ -107,6 +108,7 @@ import Perspectives.Sidecar.NormalizeTypeNames (fqn2tid, normalize, normalizeTyp
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping, fromRepository, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
 import Perspectives.Sidecar.ToStable (toStable)
 import Simple.JSON (read)
+import Simple.JSON as JSON
 import Unsafe.Coerce (unsafeCoerce)
 
 type PDRVersion = String
@@ -248,14 +250,17 @@ runDataUpgrades = do
 
   runUpgrade installedVersion "3.0.48" normalizeLocalDomeinFiles
 
-  runUpgrade installedVersion "3.0.58"
-    ( \_ -> void recompileLocalModels
+  -- runUpgrade installedVersion "3.0.59"
+  --   ( \_ -> do
+  --       fixDatabaseInPerspectivesFiles unit
+  --   )
+
+  runUpgrade installedVersion "3.0.60"
+    ( \_ -> do
+        addToStableIndexedRolesToModels unit
+        void recompileLocalModels
     )
 
-  runUpgrade installedVersion "3.0.59"
-    ( \_ -> do
-        fixDatabaseInPerspectivesFiles unit
-    )
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 
   ----------------------------------------------------------------------------------------
@@ -711,3 +716,20 @@ fixDatabaseInPerspectivesFiles _ = runMonadPerspectivesTransaction'
                 let fileText' = writePerspectivesFile pf'
                 setProperty [ ri ] filePropertyType Nothing [ Value fileText' ]
               (Left errs) -> lift $ logPerspectivesError (Custom ("Cannot parse ArcFile property as PerspectivesFile: " <> show errs))
+
+addToStableIndexedRolesToModels :: Unit -> MonadPerspectives Unit
+addToStableIndexedRolesToModels _ =
+  do
+    modelsDb <- modelsDatabaseName
+    { rows: allModels } <- documentsInDatabase modelsDb includeDocs
+    -- As doc is still uninterpreted, we can only rely on the rows.id member of the PouchdbAllDocs record. These, however, are DomeinFileIdentifiers.
+    -- We do not have a useful test on the form of such identifiers.
+    uninterpretedDomeinFiles <- for allModels \({ id, doc }) -> case JSON.read <$> doc of
+      Just (Left errs) -> (logPerspectivesError (Custom ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs))) *> pure Nothing
+      Nothing -> logPerspectivesError (Custom ("No document retrieved for model '" <> id <> "'.")) *> pure Nothing
+      Just (Right (df :: UninterpretedDomeinFile)) -> pure $ Just df
+    for_ uninterpretedDomeinFiles \mdf -> case mdf of
+      Nothing -> pure unit
+      Just (UninterpretedDomeinFile r) -> do
+        df :: DomeinFile Stable <- pure $ DomeinFile $ (unsafeCoerce r) { toStableRoleIndividuals = EM.empty }
+        void $ storeDomeinFileInCache r.id df

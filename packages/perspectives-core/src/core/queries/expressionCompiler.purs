@@ -49,7 +49,7 @@ import Perspectives.External.CoreModuleList (isExternalCoreModule)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunctionCardinality, lookupHiddenFunctionIsEffect, lookupHiddenFunctionNArgs)
 import Perspectives.Identifiers (endsWithSegments, isExternalRole, isTypeUri, qualifyWith, typeUri2ModelUri)
 import Perspectives.Instances.ObjectGetters (contextType_, roleType_)
-import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
+import Perspectives.Names (lookupReadableIndexedContext, lookupReadableIndexedRole)
 import Perspectives.Parsing.Arc.ContextualVariables (addContextualBindingsToExpression, makeContextStep, makeIdentityStep, stepContainsVariableReference)
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), UnaryStep(..), VarBinding(..))
@@ -313,10 +313,8 @@ compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
   mLocalIndexedContextType <- isIndexedContextInCurrentCompilation ident
   case mLocalIndexedContextType of
     Just indexedContextType -> pure $ SQD currentDomain (QF.ContextIndividual (ContextInstance ident)) (CDOM (UET indexedContextType)) True True
-    -- TODO: once we're on Stable identifiers, we can remove this case.
     _ -> do
-      -- TODO: we look up in a list of Stable identifiers, so a match will never be found.
-      mIndexedContext <- lift2 $ lookupIndexedContext ident
+      mIndexedContext <- lift2 $ lookupReadableIndexedContext ident
       case mIndexedContext of
         Just indexedContext -> do
           ctype <- lift2 $ contextType_ indexedContext
@@ -330,10 +328,8 @@ compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
               context <- lift2 $ enumeratedRoleContextType role
               pure $ SQD currentDomain (QF.RoleIndividual (RoleInstance ident)) (RDOM (UET (RoleInContext { context, role }))) True True
             -- Now ident is either not an indexed role, or it is an indexed role defined in another model.
-            -- TODO: we look up in a list of Stable identifiers, so a match will never be found.
-            -- TODO: once we're on Stable identifiers, we can remove this case.
             _ -> do
-              mIndexedRole <- lift2 $ lookupIndexedRole ident
+              mIndexedRole <- lift2 $ lookupReadableIndexedRole ident
               case mIndexedRole of
                 Just indexedRole -> do
                   role <- lift2 $ roleType_ indexedRole
