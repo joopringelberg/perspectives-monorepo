@@ -227,34 +227,39 @@ export function handleClientRequest( pdr, channels, request )
         break;
       case "runPDR":
         // runPDR :: UserName -> PouchdbUser RuntimeOptions -> Effect Unit
-        try
-          {
-            pdr.runPDR( req.username) (req.pouchdbuser) (req.options)
+        if (pdrStartedIsResolved)
+        {
+          // PDR is already running.
+          channels[corrId2ChannelId(req.channelId)].postMessage({responseType: "WorkerResponse", serviceWorkerMessage: "runPDR", startSuccesful: true });
+          break;
+        }
+        else {
+          try {
+            pdr.runPDR(req.username)(req.pouchdbuser)(req.options)
               // eslint-disable-next-line no-unexpected-multiline
-              (function(success) // (Boolean -> Effect Unit), the callback.
+              (function (success) // (Boolean -> Effect Unit), the callback.
               {
-                return function() // This function is the Effect that is returned.
+                return function () // This function is the Effect that is returned.
                 {
-                  if (success)
-                  {
+                  if (success) {
                     pdrStartedIsResolved = true;
                     pdrResolver(true);
                   }
-                  else
-                  {
+                  else {
                     pdrRejecter(false);
                   }
-                  channels[corrId2ChannelId(req.channelId)].postMessage({responseType: "WorkerResponse", serviceWorkerMessage: "runPDR", startSuccesful: success });
+                  channels[corrId2ChannelId(req.channelId)].postMessage({ responseType: "WorkerResponse", serviceWorkerMessage: "runPDR", startSuccesful: success });
                   return {};
                 };
               })();
             break;
           }
-          catch (e)
-          {
+          catch (e) {
             // Return the error message to the client.
-            channels[corrId2ChannelId(req.channelId)].postMessage({serviceWorkerMessage: "runPDR", error: e });
+            channels[corrId2ChannelId(req.channelId)].postMessage({ serviceWorkerMessage: "runPDR", error: e });
           }
+
+        }
         break;
       case "close":
         internalChannelPromise.then( ic => ic.close() );
