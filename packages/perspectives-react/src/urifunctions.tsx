@@ -1,6 +1,6 @@
 // NOTE DEPENDENCIES. Code in this section is adapted from module Perspectives.Identifiers.
 
-import { PropertyType, RoleInstanceT } from "perspectives-proxy";
+import { PropertyType, RoleInstanceT, ContextType, RoleType } from "perspectives-proxy";
 
 // deconstructSegments :: String -> String
 // For type identifiers: from model://some.domain#System$any$segment, take any$segment.
@@ -37,6 +37,10 @@ export function externalRole( s : string) : RoleInstanceT
   return s + "$External" as RoleInstanceT;
 }
 
+export function externalRoleType( c : ContextType) : RoleType
+{
+  return c + "$External" as RoleType;
+}
 export function isExternalRole( s : string) : boolean
 {
   const r = new RegExp("External$");

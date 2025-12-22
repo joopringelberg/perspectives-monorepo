@@ -106,6 +106,7 @@
   , "www_what": "What"
   , "www_where": "Where"
   , "www_pincontext": "Pin this context"
+  , "www_copycontext": "Copy this context"
   , "www_pincontext_title": "Pinned this context"
   , "www_pincontext_message": "Succesfully added this context to the Pinned Contexts."
   , "www_myroles": "My roles"

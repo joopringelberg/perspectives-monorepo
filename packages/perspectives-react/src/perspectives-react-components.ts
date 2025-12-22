@@ -11,6 +11,7 @@ export {
   deconstructContext,
   isQualifiedName,
   externalRole,
+  externalRoleType,
   deconstructLocalName,
   isSchemedResourceIdentifier,
   takeCUID

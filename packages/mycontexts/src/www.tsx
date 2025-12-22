@@ -9,7 +9,7 @@ declare global {
 }
 import './styles/www.css';
 import './styles/accessibility.css'
-import {i18next} from 'perspectives-react';
+import {addRoleToClipboard, externalRoleType, i18next} from 'perspectives-react';
 import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective } from 'perspectives-proxy';
 import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
@@ -397,7 +397,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                const p = perspectives[0];
                const mostRecent = mostRecentRoleId(p, ModelDependencies.lastShownOnScreen);
                  if (mostRecent === undefined) {
-                  //  component.openWelcomePage();
+                   component.openWelcomePage();
                  } else {
                    PDRproxy.getBinding( mostRecent, bindings => {
                      if (bindings.length > 0) {
@@ -727,6 +727,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           </>
           : null }
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
+        { component.state.openContext ? <NavDropdown.Item onClick={ () => component.copyContext( component.state.openContext! ) }>{ i18next.t("www_copycontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
       <Navbar.Brand href="#home" className='text-light navbar-title'>
         <FlippingTitle
@@ -797,6 +798,33 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               , error: undefined
             }));
     }));
+  }
+
+  copyContext( eRole : RoleInstanceT )
+  {
+    navigator.clipboard.writeText(eRole);
+    addRoleToClipboard(eRole,
+      {
+        roleData: {
+          rolinstance: eRole,
+          cardTitle: this.state.title || "No title",
+          roleType: externalRoleType( this.state.openContextType! ),
+          contextType: this.state.openContextType!,
+        },
+        addedBehaviour: ["fillARole"],
+        myroletype: this.state.openContextUserType!,
+      },
+      externalRole( this.state.systemIdentifier ),
+      this.state.openContextUserType!
+      ).catch((e) =>
+            UserMessagingPromise.then((um) =>
+              um.addMessageForEndUser({
+                title: i18next.t("clipboardSet_title", { ns: "preact" }),
+                message: i18next.t("clipboardSet_message", { ns: "preact" }),
+                error: e.toString(),
+              })
+            )
+          );
   }
 
   renderDesktop() {
