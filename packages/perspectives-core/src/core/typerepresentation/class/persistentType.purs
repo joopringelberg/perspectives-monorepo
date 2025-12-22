@@ -67,12 +67,14 @@ getPerspectType id = do
     Nothing -> throwError (error $ "getPerspectType cannot retrieve type with incorrectly formed id: '" <> show id <> "'.")
     Just modelUri -> lookupModelUri (ModelUri modelUri) >>=
       case _ of
-        -- No Stable type, so we need to switch, unless this model is under compilation.
+        -- This implies the model URI is Readable. We must look up the Stable version of id, unless this model is under compilation.
         Just _ -> do
           mu <- getModelUnderCompilation
           case mu of
             Just compilingModelUri | compilingModelUri == ModelUri modelUri -> pure id
             _ -> toStable id
+        -- In this case either id is Stable, or the model is not yet known. We just use id as is.
+        -- In the second case id can be either Stable or Readable.
         Nothing -> pure id
   case typeUri2ModelUri (unwrap id') of
     Nothing -> throwError (error $ "getPerspectType cannot retrieve type with incorrectly formed id: '" <> show id <> "'.")

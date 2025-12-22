@@ -74,7 +74,7 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.PerspectivesState (getModelUris)
 import Perspectives.PerspectivesState (setCurrentLanguage) as PState
 import Perspectives.Query.ExpandPrefix (ensureModel, expandPrefix)
-import Perspectives.Query.ExpressionCompiler (compileExpression)
+import Perspectives.Query.ExpressionCompiler (compileExpression) as ExpressionCompiler
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription, RoleInContext(..))
 import Perspectives.Query.UnsafeCompiler (compileFunction)
 import Perspectives.Representation.ADT (ADT(..))
@@ -206,7 +206,7 @@ evalExpression expr roleId@(RoleInstance id) = do
         Right parseTree' -> do
           lift $ lift $ void $ ensureModel parseTree'
           (t :: Either MultiplePerspectivesErrors QueryFunctionDescription) <- lift $ lift $ evalPhaseTwo'
-            (compileExpression (RDOM $ UET $ RoleInContext { context: ct, role: rt }) parseTree')
+            (ExpressionCompiler.compileExpression (RDOM $ UET $ RoleInContext { context: ct, role: rt }) parseTree')
           case t of
             Left errs -> pure $ show (PSPE errs)
             Right qfd -> do
@@ -229,6 +229,58 @@ evalExpression_ exprArray roleId =
         _ -> pure []
     )
     >>= handleExternalFunctionError "model://perspectives.domains#Utilities$EvalExpression"
+
+compileExpression_ :: Array String -> RoleInstance -> MonadPerspectivesQuery String
+compileExpression_ exprArray roleId =
+  try
+    ( ArrayT case head exprArray of
+        Just expr -> runArrayT $ compileExpression expr roleId
+        _ -> pure []
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$CompileExpression"
+
+compileExpression :: String -> RoleInstance -> MonadPerspectivesQuery String
+compileExpression expr roleId = do
+  rt <- roleType roleId
+  ct <- (context >=> contextType) roleId
+  (r :: Either ParseError Step) <- liftAff $ runIndentParser expr step
+  case r of
+    Left e -> pure $ show (PE e)
+    Right (parseTree :: Step) -> do
+      s <- liftAff $ evalPhaseTwo' (expandPrefix parseTree)
+      case s of
+        Left e -> pure $ show (PSPE e)
+        Right parseTree' -> do
+          lift $ lift $ void $ ensureModel parseTree'
+          (t :: Either MultiplePerspectivesErrors QueryFunctionDescription) <- lift $ lift $ evalPhaseTwo'
+            (ExpressionCompiler.compileExpression (RDOM $ UET $ RoleInContext { context: ct, role: rt }) parseTree')
+          case t of
+            Left errs -> pure $ show (PSPE errs)
+            Right qfd -> do
+              -- Get a list of all models in the installation.
+              modelUriMap <- lift $ lift $ getModelUris
+              -- Retrieve the sidecar for each of them.
+              sidecars <- lift $ lift $ (catMaybes <$> (for modelUriMap (flip loadStableMapping fromLocalModels)))
+              -- Normalize the QFD with all sidecars.
+              normalizedQfd <- pure $ unwrap $ runReaderT (normalize qfd) { sidecars, perspMap: empty }
+              -- Serialize the normalized QFD.
+              pure $ writeJSON normalizedQfd
+
+runCompiledExpression_ :: Array String -> RoleInstance -> MonadPerspectivesQuery String
+runCompiledExpression_ compiledExprs roleId@(RoleInstance id) =
+  try
+    ( ArrayT case head compiledExprs of
+        Just expr -> runArrayT $ do
+          -- Compile and run the function.
+          case readJSON expr of
+            Left e -> throwError $ error ("model://perspectives.domains#Utilities$RunCompiledExpression: " <> show e)
+            Right (qfd :: QueryFunctionDescription) -> do
+              calculator <- lift $ lift $ compileFunction qfd
+              result <- calculator id
+              pure $ "result#" <> result
+        _ -> pure []
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$RunCompiledExpression"
 
 -- | Return various values from PerspectivesState or even other state.
 systemParameter_ :: Array String -> ContextInstance -> MonadPerspectivesQuery String
@@ -344,6 +396,8 @@ externalFunctions =
   , Tuple "model://perspectives.domains#Utilities$Random" { func: unsafeCoerce random, nArgs: 2, isFunctional: True, isEffect: false }
   , Tuple "model://perspectives.domains#Utilities$FormatDateTime" { func: unsafeCoerce formatDateTime_, nArgs: 3, isFunctional: True, isEffect: false }
   , Tuple "model://perspectives.domains#Utilities$EvalExpression" { func: unsafeCoerce evalExpression_, nArgs: 1, isFunctional: Unknown, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$CompileExpression" { func: unsafeCoerce compileExpression_, nArgs: 1, isFunctional: Unknown, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$RunCompiledExpression" { func: unsafeCoerce runCompiledExpression_, nArgs: 1, isFunctional: Unknown, isEffect: false }
   , Tuple "model://perspectives.domains#Utilities$SystemParameter" { func: unsafeCoerce systemParameter_, nArgs: 1, isFunctional: True, isEffect: false }
   , Tuple "model://perspectives.domains#Utilities$CreateInvitation" { func: unsafeCoerce createInvitation_, nArgs: 3, isFunctional: True, isEffect: false }
   , Tuple "model://perspectives.domains#Utilities$GetSharedFileServerKey" { func: unsafeCoerce getSharedFileServerKey, nArgs: 1, isFunctional: True, isEffect: false }

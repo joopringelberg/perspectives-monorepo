@@ -291,14 +291,19 @@ addModelToLocalStore_ modelNames _ = try (for_ modelNames (flip addModelToLocalS
 -- | Parameter `isUpdate` should be true iff the model has been added to the local installation before.
 -- | Attachments are fetched from the repository and stored locally.
 -- | Invariant: the model is not in cache when this function returns.
+-- | Idempotent: if the model is already in the local store, does nothing.
 -- | The modelName may be UNVERSIONED or VERSIONED.
 addModelToLocalStore :: ModelUri Stable -> Boolean -> MonadPerspectivesTransaction Unit
 addModelToLocalStore dfid isInitialLoad' = do
-  { versionedModelName } <- lift $ computeVersionedAndUnversiondName dfid
-  domeinFileAndAttachments <- retrieveModelFromRepository versionedModelName
-  { repositoryUrl, documentName } <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
-  storedQueries <- lift $ getInvertedQueriesOfModel repositoryUrl documentName
-  installModelLocally domeinFileAndAttachments isInitialLoad' storedQueries
+  mDomeinFile :: Maybe (DomeinFile Stable) <- (lift $ tryGetPerspectEntiteit (ModelUri $ unversionedModelUri (unwrap dfid)))
+  case mDomeinFile of
+    Just _ -> pure unit
+    Nothing -> do
+      { versionedModelName } <- lift $ computeVersionedAndUnversiondName dfid
+      domeinFileAndAttachments <- retrieveModelFromRepository versionedModelName
+      { repositoryUrl, documentName } <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
+      storedQueries <- lift $ getInvertedQueriesOfModel repositoryUrl documentName
+      installModelLocally domeinFileAndAttachments isInitialLoad' storedQueries
 
 retrieveModelFromRepository :: String -> MonadPerspectivesTransaction (Tuple (DomeinFileRecord Stable) AttachmentFiles)
 retrieveModelFromRepository versionedModelName = do
