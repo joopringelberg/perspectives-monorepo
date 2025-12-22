@@ -56,6 +56,12 @@ model://perspectives.domains#zs6x290shy:
           translations:
             nl: Auteur
             en: Author
+          actions:
+            model://perspectives.domains#HyperContext$Page$Author:
+              CompileCondition:
+                translations:
+                  nl: Voorwaarde compileren
+                  en: Compile condition
           markdowns:
             0:
               translations:
@@ -95,6 +101,10 @@ model://perspectives.domains#zs6x290shy:
               translations:
                 nl: Ongeinterpreteerd voorwaarderesultaat
                 en: Raw condition result
+            CompiledCondition:
+              translations:
+                nl: Gecompileerde voorwaarde
+                en: Compiled condition
             Condition:
               translations:
                 nl: Voorwaarde

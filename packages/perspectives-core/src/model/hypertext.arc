@@ -2,6 +2,7 @@ domain model://perspectives.domains#HyperContext
   use sys for model://perspectives.domains#System
   use hypercontext for model://perspectives.domains#HyperContext
   use cm for model://perspectives.domains#CouchdbManagement
+  use cdb for model://perspectives.domains#Couchdb
   use util for model://perspectives.domains#Utilities
 
   -------------------------------------------------------------------------------
@@ -92,8 +93,10 @@ domain model://perspectives.domains#HyperContext
         props (Title, ShowAllBlocks) verbs (Consult, SetPropertyValue)
       perspective on TextBlocks
         only (Create, Remove)
-        props (MD, Condition, Title) verbs (Consult, SetPropertyValue)
+        props (MD, Condition, Title, CompiledCondition, OldCondition) verbs (Consult, SetPropertyValue)
         props (RawConditionResult, ShowBlock, ShowToAuthor) verbs (Consult)
+        action CompileCondition
+          CompiledCondition = callExternal util:CompileExpression( Condition ) returns String
       perspective on LinkedPages
         all roleverbs
         props (Title) verbs (Consult, SetPropertyValue)
@@ -110,20 +113,20 @@ domain model://perspectives.domains#HyperContext
           row
             column
               table "Text blocks" TextBlocks
-                without props (MD, RawConditionResult, ShowBlock, ShowToAuthor)
+                without props (MD, RawConditionResult, ShowBlock, ShowToAuthor, CompiledCondition, OldCondition)
             column
               table "Conditions" TextBlocks
-                without props (Title, MD, Condition, ShowBlock, ShowToAuthor)
+                without props (Title, MD, Condition, ShowBlock, ShowToAuthor, CompiledCondition, OldCondition)
                 props (RawConditionResult) verbs (Consult)
           row
             -- editor
             column
               markdown TextBlocks
-                without props (Title, RawConditionResult, ShowBlock, ShowToAuthor)
+                without props (Title, RawConditionResult, ShowBlock, ShowToAuthor, CompiledCondition, OldCondition)
             -- preview
             column
               markdown TextBlocks
-                without props (Title, RawConditionResult, ShowBlock, Condition)
+                without props (Title, RawConditionResult, ShowBlock, Condition, CompiledCondition, OldCondition)
                 props (MD) without (SetPropertyValue, AddPropertyValue, RemovePropertyValue, DeleteProperty)
                 when ShowToAuthor
         where
@@ -136,10 +139,18 @@ domain model://perspectives.domains#HyperContext
       property MD (MarkDown)
         minLength = 100
       property Condition (String)
-      property RawConditionResult = callExternal util:EvalExpression( Condition ) returns String
+      property CompiledCondition (String)
+      property OldCondition (String)
+      property RawConditionResult = callExternal util:RunCompiledExpression( CompiledCondition ) returns String
       property ConditionResult = RawConditionResult >> callExternal util:SelectR( "^result#(.*)" ) returns String
       property ShowBlock = (exists ConditionResult) and ConditionResult == "true"
       property ShowToAuthor = ShowBlock or context >> extern >> ShowAllBlocks
+      -- NOTA BENE: Dit werkt niet gegeven het huidige executie model van Perspectives.
+      state ConditionsUnequal = not (OldCondition == Condition)
+        on entry
+          do for Author
+            CompiledCondition = callExternal util:CompileExpression( Condition ) returns String
+            OldCondition = Condition
     
     context LinkedPages (relational) filledBy (Page, PublicPage)
       state PageAvailable = exists binding
@@ -230,7 +241,7 @@ domain model://perspectives.domains#HyperContext
 
     public Visitor at extern >> binder PublicPages >> context >> Author >> BespokeDatabaseUrl = sys:SocialMe
       perspective on hypercontext:Page$TextBlocks
-        props (MD, Condition, RawConditionResult, ConditionResult, ShowBlock) verbs (Consult)
+        props (MD, Condition, RawConditionResult, ConditionResult, ShowBlock, CompiledCondition) verbs (Consult)
       perspective on LinkedPages
         props (Title) verbs (Consult)
       -- perspective on Author
@@ -245,4 +256,3 @@ domain model://perspectives.domains#HyperContext
     aspect user hypercontext:Page$Author
 
     aspect thing hypercontext:Page$TextBlocks
-
