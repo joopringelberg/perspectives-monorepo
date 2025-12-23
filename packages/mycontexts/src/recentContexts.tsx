@@ -136,6 +136,7 @@ export class RecentContexts extends PerspectivesComponent<RecentContextsProps, R
               perspective={this.state.perspective} 
               showcontrolsandcaption={false}
               showAsAccordionItem={true}
+              sortOnHiddenProperty={ModelDependencies.lastShownOnScreen}
               />;
     }
   }
