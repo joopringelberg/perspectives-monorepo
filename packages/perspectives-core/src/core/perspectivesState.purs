@@ -268,6 +268,7 @@ lookupModelUri muReadable = do
 -----------------------------------------------------------
 -- | Returns the role in TheWorld that fills SocialEnvironment$Me (and this instance in turn fills PerspectivesSystem$User).
 -- | This is dependent on model://perspectives.domains#System.
+-- | The result is in the default storage scheme (def).
 getPerspectivesUser :: MonadPerspectives PerspectivesUser
 getPerspectivesUser = gets _.perspectivesUser
 
