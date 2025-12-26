@@ -1,7 +1,7 @@
 import * as React from "react"
 import { createRef } from "react";
 import { PDRproxy, RoleInstanceT, ContextAndName } from "perspectives-proxy";
-import { i18next, ModelDependencies, PerspectivesComponent, PerspectiveTable } from "perspectives-react";
+import { i18next, isInPublicScheme, ModelDependencies, PerspectivesComponent, PerspectiveTable } from "perspectives-react";
 import { Accordion, ListGroup } from "react-bootstrap";
 
 interface WiderContextsProps {
@@ -58,8 +58,13 @@ export class WiderContexts extends PerspectivesComponent<WiderContextsProps, Wid
                 <ListGroup defaultActiveKey="#link1">
                 {
                   this.state.widerContexts.map(({ externalRole, readableName }) => {
+                    const isPublic = isInPublicScheme(externalRole);
                     return (
-                      <ListGroup.Item key={externalRole} action onDoubleClick={(_ : any) => component.openContext(externalRole)}>
+                      <ListGroup.Item 
+                        key={externalRole} 
+                        action 
+                        onDoubleClick={(_ : any) => component.openContext(externalRole)}
+                        className={ isPublic ? "public-role" : "" }>
                         {readableName}
                       </ListGroup.Item>
                     );
@@ -68,24 +73,5 @@ export class WiderContexts extends PerspectivesComponent<WiderContextsProps, Wid
                 </ListGroup>
               </div>)
     }
-
-    return (  <Accordion.Item eventKey="widercontexts" key="widercontexts" ref={component.domEl}>
-                <Accordion.Header onClick={() => component.domEl.current?.dispatchEvent(new CustomEvent('OpenAccordionItem', {detail: "widercontexts", bubbles: true}))}>
-                  { i18next.t( "wider_contexts_title", {ns: 'mycontexts'})}
-                </Accordion.Header>
-                <Accordion.Body>
-                  <ListGroup defaultActiveKey="#link1">
-                  {
-                    this.state.widerContexts.map(({ externalRole, readableName }) => {
-                      return (
-                        <ListGroup.Item key={externalRole} action onDoubleClick={(_ : any) => component.openContext(externalRole)}>
-                          {readableName}
-                        </ListGroup.Item>
-                      );
-                    })
-                  }
-                  </ListGroup>
-                </Accordion.Body>
-              </Accordion.Item>);
   }
 }

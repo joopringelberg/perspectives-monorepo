@@ -14,7 +14,8 @@ export {
   externalRoleType,
   deconstructLocalName,
   isSchemedResourceIdentifier,
-  takeCUID
+  takeCUID,
+  isInPublicScheme
 } from "./urifunctions";
 export { default as Screen } from "./screen";
 export { default as RemoveRol } from "./removeRol";
