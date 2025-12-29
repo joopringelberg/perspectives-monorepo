@@ -587,7 +587,7 @@ instance Translation PropertiesTranslation where
       Just ts -> ts
 
 instance Translation ActionsTranslation where
-  -- keys are action names, namespace SHOULD be state name. MAYBE NO QUALIFICATION IS NECESSARY
+  -- keys are action names, namespace SHOULD be state name.
   qualify namespace (ActionsTranslation obj) = ActionsTranslation $ qualifyObjectKeys namespace obj
   writeKeys (ActionsTranslation actionTranslations) = void $ modify \allTranslations -> allTranslations `union` actionTranslations
   writeYaml indent (ActionsTranslation actions) = void $ forWithIndex actions
@@ -601,15 +601,12 @@ instance Translation ActionsTranslation where
 
 instance Translation ActionsPerStateTranslation where
   qualify namespace (ActionsPerStateTranslation obj) =
-    let
-      namespace' = typeUri2typeNameSpace_ namespace
-    in
-      ActionsPerStateTranslation $ singleton namespace'
-        ( ActionsTranslation $ fromFoldable $ join
-            ( ((toUnfoldable obj) :: Array (Tuple String ActionsTranslation)) <#>
-                \(Tuple key val) -> toUnfoldable (unwrap (qualify namespace' val))
-            )
-        )
+    ActionsPerStateTranslation $ singleton namespace
+      ( ActionsTranslation $ fromFoldable $ join
+          ( ((toUnfoldable obj) :: Array (Tuple String ActionsTranslation)) <#>
+              \(Tuple key val) -> toUnfoldable (unwrap (qualify namespace val))
+          )
+      )
 
   -- ActionsPerStateTranslation $ fromFoldable 
   --   (((toUnfoldable obj) :: Array (Tuple String ActionsTranslation)) <#> 
