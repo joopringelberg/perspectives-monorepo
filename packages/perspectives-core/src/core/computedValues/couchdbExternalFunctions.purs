@@ -276,7 +276,7 @@ updateModel withDependencies install dfid@(ModelUri modelName) domeinFileAndAtta
       lift clearQueryCache
       -- The model is now decached, but the translations table is still in cache.
       -- It will be loaded when a new type lookup is performed.
-      lift $ removeTranslationTable modelName
+      lift $ removeTranslationTable unversionedModelname
       lift $ fetchTranslations dfid
 
 -- | Retrieve the model(s) from the modelName(s) and add them to the local couchdb installation.
