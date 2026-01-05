@@ -452,10 +452,10 @@ model://perspectives.domains#zjuzxbqpgc:
             nl: Beheerder
           actions:
             model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$External$ayh7cizuqe:
-              rihcmz8o5o:
+              CreateInvitation:
                 translations:
-                  nl: MISSING nl
-                  en: MISSING en
+                  nl: Maak uiknodiging aan
+                  en: Create invitation
           titles:
             0:
               translations:
@@ -479,7 +479,7 @@ model://perspectives.domains#zjuzxbqpgc:
             model://perspectives.domains#BrokerServices$BrokerContract$AccountHolder:
               TerminateContract:
                 translations:
-                  nl: Beeindig contract
+                  nl: Beëindig contract
                   en: Terminate contract
           markdowns:
             0:
