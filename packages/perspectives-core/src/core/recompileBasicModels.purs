@@ -28,10 +28,12 @@ module Main.RecompileBasicModels where
 
 import Prelude
 
+import Control.Monad.AvarMonadAsk (modify)
 import Control.Monad.Error.Class (class MonadThrow)
 import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.State (execState, execStateT)
 import Control.Monad.Trans.Class (lift)
+import Control.Monad.Writer (runWriterT)
 import Data.Array (catMaybes, difference, elemIndex, filter, head, null)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
@@ -43,7 +45,7 @@ import Data.Newtype (unwrap)
 import Data.String (Pattern(..), Replacement(..), replace)
 import Data.Traversable (for, traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
-import Data.Tuple (Tuple(..))
+import Data.Tuple (Tuple(..), fst)
 import Effect.Aff (try)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
@@ -51,23 +53,26 @@ import Foreign (unsafeToForeign)
 import Foreign.Object (empty)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ContextAndRole (rol_property)
-import Perspectives.CoreTypes (MonadPerspectivesTransaction)
+import Perspectives.CoreTypes (MonadPerspectivesTransaction, MonadPerspectives)
 import Perspectives.Couchdb (AttachmentInfo, DeleteCouchdbDocument(..))
+import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (addAttachments, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..), addDownStreamAutomaticEffect, addDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.ExecuteInTopologicalOrder (executeInTopologicalOrder) as TOP
+import Perspectives.Extern.Couchdb (roleInstancesFromCouchdb)
 import Perspectives.Identifiers (domeinFileVersion, modelUri2LocalName)
+import Perspectives.Instances.Indexed (indexedContexts_, indexedRoles_)
 import Perspectives.InvertedQuery.Storable (saveInvertedQueries)
-import Perspectives.ModelDependencies (domeinFileName, modelManifest, versionToInstall)
+import Perspectives.ModelDependencies (domeinFileName, indexedContext, indexedRole, modelManifest, versionToInstall)
 import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
 import Perspectives.Persistence.API (Keys(..), addAttachment, addDocument, documentsInDatabase, getAttachment, includeDocs, retrieveDocumentVersion, toFile)
 import Perspectives.Persistence.Types (Url)
 import Perspectives.Persistent (getDomeinFile, getPerspectRol, modelDatabaseName)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.Representation.Class.Cacheable (setRevision)
-import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance, Value(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (Stable)
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), fromLocalModels, fromRepository, loadStableMapping)
@@ -138,7 +143,7 @@ recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _
     mlocalMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id) fromLocalModels
     -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
     -- It should also be the local part of the id.
-    r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mlocalMapping (unsafePartial modelUri2LocalName (unwrap id))
+    r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc true mlocalMapping (unsafePartial modelUri2LocalName (unwrap id))
     case r of
       Left m -> logPerspectivesError $ Custom ("recompileModel: " <> show m)
       Right (Tuple df@(DomeinFile drf@{ invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects }) (Tuple invertedQueries mapping')) -> lift $ lift do
@@ -147,6 +152,14 @@ recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _
         df' <- pure $ DomeinFile drf { _id = _id, _attachments = _attachments }
         storeDomeinFileInCouchdbPreservingAttachments df'
         saveInvertedQueries invertedQueries
+        -- Right after recompiling the System model, add indexed resources.
+        -- Even though we retrieve those indexed resources before running data upgrades, they may not be present in state because 
+        -- retrieving them requires access to the System model. We typically recompile when DomeinFile shape has changed.
+        -- In that case, no indexed resources are present and we rely on them on compiling models that import this model.
+        if namespace == "model://perspectives.domains#System" then do
+          log "Adding indexed resources after recompiling System model."
+          addIndexedNames
+        else pure unit
         -- Persist updated sidecar mapping back to local DB
         db <- modelDatabaseName
         mRev <- retrieveDocumentVersion db _id
@@ -168,6 +181,18 @@ recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _
                 \(DomeinFile dfr) -> do
                   (storeDomeinFileInCouchdbPreservingAttachments (DomeinFile $ execState (for_ automaticEffects addDownStreamAutomaticEffect) dfr))
     pure model
+
+-- | Retrieve all instances of sys:Model$IndexedRole and sys:Model$IndexedContext and create a table of
+-- | all known indexed names and their private replacements in PerspectivesState.
+-- | By retrieving the role and context instances directly from Couchdb using a view, we don't have to 
+-- | rely on model://perspectives.domains$System in this early stage of starting up.
+addIndexedNames :: MonadPerspectives Unit
+addIndexedNames = do
+  (roleInstances :: Array RoleInstance) <- fst <$> runWriterT (runArrayT (roleInstancesFromCouchdb [ indexedRole ] (ContextInstance "")))
+  iRoles <- indexedRoles_ roleInstances
+  contextInstances <- fst <$> runWriterT (runArrayT (roleInstancesFromCouchdb [ indexedContext ] (ContextInstance "")))
+  iContexts <- indexedContexts_ contextInstances
+  modify \ps -> ps { indexedRoles = iRoles, indexedContexts = iContexts }
 
 --------------------------------------------------------------------------------------------
 -- TOPOLOGICAL SORTING

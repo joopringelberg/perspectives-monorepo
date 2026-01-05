@@ -457,7 +457,7 @@ domain model://perspectives.domains#BrokerServices
         props (AccountName, AccountPassword) verbs (Consult, SetPropertyValue)
       
       perspective on Queues
-        only (Create, Fill)
+        only (Create, Fill, Remove)
         props (QueueName) verbs (SetPropertyValue, Consult)
 
       screen

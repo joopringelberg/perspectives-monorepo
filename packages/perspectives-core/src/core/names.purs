@@ -23,9 +23,11 @@
 module Perspectives.Names where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
+import Control.Monad.Error.Class (throwError)
 import Data.Array (head)
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
+import Effect.Exception (error)
 import Foreign.Object (Object, delete, filter, fromFoldable, keys, lookup) as OBJ
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Data.EncodableMap (lookup) as MAP
@@ -35,23 +37,23 @@ import Perspectives.Identifiers (deconstructLocalNameFromCurie, deconstructPrefi
 import Perspectives.ModelDependencies (sysMe)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (getDomeinFile)
+import Perspectives.PerspectivesState (getModelUnderCompilation)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (IndexedContext(..), IndexedRole(..))
+import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
-import Prelude (Unit, append, bind, eq, flip, pure, ($), (<<<), (<>), (>>=))
+import Prelude (Unit, append, bind, eq, flip, pure, ($), (<<<), (<>), (>>=), (==))
 
 -----------------------------------------------------------
 -- EXPAND DEFAULT NAMESPACES
 -----------------------------------------------------------
 -- | Useful for expanding local names used in bindings, property- and view references.
 expandDefaultNamespaces :: String -> MonadPerspectives String
-expandDefaultNamespaces n = do
-  names <- defaultIndexedNames
-  (pure $ expandNamespaces defaultNamespaces n) >>= pure <<< expandIndexedNames names
-
--- | As expandDefaultNamespaces, but provide both indexed names and namespaces.
-expandDefaultNamespaces_ :: OBJ.Object String -> OBJ.Object String -> String -> String
-expandDefaultNamespaces_ indexedNames namespaces n = expandIndexedNames indexedNames (expandNamespaces namespaces n)
+expandDefaultNamespaces n = case expandNamespaces defaultNamespaces n of
+  Nothing -> throwError $ error $ "Could not expand indexed name: " <> n
+  Just expandedName -> do
+    names <- defaultIndexedNames
+    pure $ expandIndexedNames names expandedName
 
 -- | Replace model:System$Me by "def:#<guid>$User".
 expandIndexedNames :: OBJ.Object String -> String -> String
@@ -60,18 +62,19 @@ expandIndexedNames defaults expandedName =
     (Just ind) -> ind
     Nothing -> expandedName
 
-expandNamespaces :: OBJ.Object String -> String -> String
+expandNamespaces :: OBJ.Object String -> String -> Maybe String
 expandNamespaces namespaces s =
-  if isTypeUri s then s
+  if isTypeUri s then Just s
+  else if isResourceIdentifier s then Just s
   else
     case deconstructPrefix s of
       (Just pre) -> do
         case OBJ.lookup pre namespaces of
           (Just modelName) -> case deconstructLocalNameFromCurie s of
-            (Just ln) -> (modelName <> "$" <> ln)
-            Nothing -> s
-          Nothing -> s
-      Nothing -> s
+            (Just ln) -> Just (modelName <> "$" <> ln)
+            Nothing -> Just s
+          Nothing -> Nothing
+      Nothing -> Just s
 
 defaultNamespaces :: OBJ.Object String
 defaultNamespaces = OBJ.fromFoldable
@@ -141,17 +144,29 @@ lookupReadableIndexedRole iname = do
   -- Then get the DomeinFile for that stable model uri.
   -- Then look up the readable indexed role name in that DomeinFile's toStableRoleIndividuals.
   -- Finally apply lookupIndexedRole to get the local RoleInstance
-  case typeUri2ModelUri iname of
-    Nothing -> pure Nothing
-    Just modelUri -> do
-      stableModelUriM <- lookupStableModelUri_ (ModelUri modelUri)
-      case stableModelUriM of
+  mcurrentModel <- getModelUnderCompilation
+  case mcurrentModel of
+    Just (ModelUri currentModel) ->
+      case typeUri2ModelUri iname of
         Nothing -> pure Nothing
-        Just stableModelUri -> do
-          DomeinFile { toStableRoleIndividuals } <- getDomeinFile stableModelUri
-          case MAP.lookup (IndexedRole iname) toStableRoleIndividuals of
-            Nothing -> pure Nothing
-            Just (IndexedRole stableIndexedName) -> lookupIndexedRole stableIndexedName
+        Just namespace ->
+          if namespace == currentModel then pure Nothing
+          else lookupReadableIndexedRole'
+    Nothing -> lookupReadableIndexedRole'
+  where
+  lookupReadableIndexedRole' :: MonadPerspectives (Maybe RoleInstance)
+  lookupReadableIndexedRole' =
+    case typeUri2ModelUri iname of
+      Nothing -> pure Nothing
+      Just modelUri -> do
+        stableModelUriM <- lookupStableModelUri_ (ModelUri modelUri)
+        case stableModelUriM of
+          Nothing -> pure Nothing
+          Just stableModelUri -> do
+            DomeinFile { toStableRoleIndividuals } <- getDomeinFile stableModelUri
+            case MAP.lookup (IndexedRole iname) toStableRoleIndividuals of
+              Nothing -> pure Nothing
+              Just (IndexedRole stableIndexedName) -> lookupIndexedRole stableIndexedName
 
 -- | Look up a fully qualified, Readable indexed name, e.g.  'model://perspectives.domains#BrokerServices$MyBrokers' and maps it to a local RoleInstance, e.g. "def:#<CUID>".
 lookupReadableIndexedContext :: String -> MonadPerspectives (Maybe ContextInstance)
@@ -161,17 +176,29 @@ lookupReadableIndexedContext iname = do
   -- Then get the DomeinFile for that stable model uri.
   -- Then look up the readable indexed context name in that DomeinFile's toStableContextIndividuals.
   -- Finally apply lookupIndexedContext to get the local ContextInstance
-  case typeUri2ModelUri iname of
-    Nothing -> pure Nothing
-    Just modelUri -> do
-      stableModelUriM <- lookupStableModelUri_ (ModelUri modelUri)
-      case stableModelUriM of
+  mcurrentModel <- getModelUnderCompilation
+  case mcurrentModel of
+    Just (ModelUri currentModel) ->
+      case typeUri2ModelUri iname of
         Nothing -> pure Nothing
-        Just stableModelUri -> do
-          DomeinFile { toStableContextIndividuals } <- getDomeinFile stableModelUri
-          case MAP.lookup (IndexedContext iname) toStableContextIndividuals of
-            Nothing -> pure Nothing
-            Just (IndexedContext stableIndexedName) -> lookupIndexedContext stableIndexedName
+        Just namespace ->
+          if namespace == currentModel then pure Nothing
+          else lookupReadableIndexedContext'
+    Nothing -> lookupReadableIndexedContext'
+  where
+  lookupReadableIndexedContext' :: MonadPerspectives (Maybe ContextInstance)
+  lookupReadableIndexedContext' =
+    case typeUri2ModelUri iname of
+      Nothing -> pure Nothing
+      Just modelUri -> do
+        stableModelUriM <- lookupStableModelUri_ (ModelUri modelUri)
+        case stableModelUriM of
+          Nothing -> pure Nothing
+          Just stableModelUri -> do
+            DomeinFile { toStableContextIndividuals } <- getDomeinFile stableModelUri
+            case MAP.lookup (IndexedContext iname) toStableContextIndividuals of
+              Nothing -> pure Nothing
+              Just (IndexedContext stableIndexedName) -> lookupIndexedContext stableIndexedName
 
 -----------------------------------------------------------
 -- REVERSE LOOKUP RESOURCES IN INDEXED NAMES

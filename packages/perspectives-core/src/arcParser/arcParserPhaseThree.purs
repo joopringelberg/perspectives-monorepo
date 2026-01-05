@@ -61,7 +61,7 @@ import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ContextActionE(..), NotificationE(..), PropertyVerbE(..), RoleVerbE(..), ScreenE, SelfOnly(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..)) as AST
-import Perspectives.Parsing.Arc.AST (RoleIdentification(..), SegmentedPath, SentenceE(..), SentencePartE(..), StateTransitionE(..), roleIdentification2context)
+import Perspectives.Parsing.Arc.AST (RoleIdentification(..), SegmentedPath, SentenceE(..), SentencePartE(..), StateTransitionE(..), roleIdentification2context, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AspectInference (inferFromAspectRoles)
 import Perspectives.Parsing.Arc.CheckSynchronization (checkSynchronization) as SYNC
 import Perspectives.Parsing.Arc.ContextualVariables (addContextualBindingsToExpression, addContextualBindingsToStatements, makeContextStep, makeIdentityStep, makeTypeTimeOnlyContextStep, makeTypeTimeOnlyRoleStep)
@@ -100,7 +100,7 @@ import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.Sentence (Sentence(..)) as Sentence
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..), StateRecord, constructState)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), and)
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), propertytype2string, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.Representation.UserGraph.Build (buildUserGraph)
 import Perspectives.Representation.View (View(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
@@ -1012,16 +1012,17 @@ handlePostponedStateQualifiedParts = do
       effectWithEnvironment
 
     stateSpecs <- stateSpecificationToStateSpec state
+    let actionId@(ActionIdentifier actionName) = ActionIdentifier $ qualifyWith (roletype2string $ roleIdentification2subject subject) id
     modifyAllSubjectPerspectives
       qualifiedUsers
       compiledObject
-      (Action { qfd: theAction, readable: id })
+      (Action { qfd: theAction, readable: id, id: actionId })
       stateSpecs
     where
     -- | Modifies the DomeinFile in PhaseTwoState.
     -- Add the action for all users to their perspective on the object in all states.
     modifyAllSubjectPerspectives :: Array RoleType -> QueryFunctionDescription -> Action -> Array StateSpec -> PhaseThree Unit
-    modifyAllSubjectPerspectives qualifiedUsers objectQfd theAction states = for_ qualifiedUsers
+    modifyAllSubjectPerspectives qualifiedUsers objectQfd theAction@(Action { id: actionId }) states = for_ qualifiedUsers
       ( modifyPerspective
           objectQfd
           syntacticObject
@@ -1030,8 +1031,8 @@ handlePostponedStateQualifiedParts = do
             { actions =
                 ( foldr
                     ( \stateId actionsMap -> case EM.lookup stateId actionsMap of
-                        Nothing -> EM.insert stateId (singleton id theAction) actionsMap
-                        Just actionsInState -> EM.insert stateId (insert id theAction actionsInState) actionsMap
+                        Nothing -> EM.insert stateId (singleton (unwrap actionId) theAction) actionsMap
+                        Just actionsInState -> EM.insert stateId (insert (unwrap actionId) theAction actionsInState) actionsMap
                     )
                     actions
                     states
@@ -1240,11 +1241,11 @@ handlePostponedStateQualifiedParts = do
     stateSpecs <- case state of
       AST.ContextState ctx mpath -> pure [ ContextState $ StateIdentifier (maybe (unwrap ctx) (maybeQualifyWith (unwrap ctx)) mpath) ]
       _ -> stateSpecificationToStateSpec state
-
+    let actionId@(ActionIdentifier actionName) = ActionIdentifier $ qualifyWith (roletype2string $ roleIdentification2subject subject) id
     modifyAllSubjectRoles
       qualifiedUsers
-      id
-      (Action { qfd: theAction, readable: id })
+      actionName
+      (Action { qfd: theAction, readable: id, id: actionId })
       stateSpecs
     where
     -- Add the action to the map of StateSpecs to an Object of Action identifier to Action of all user roles.

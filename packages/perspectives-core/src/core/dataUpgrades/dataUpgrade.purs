@@ -73,6 +73,8 @@ import Perspectives.Assignment.Update (cacheAndSave, setProperty)
 import Perspectives.ContextAndRole (rol_property)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, removeInternally, (##=))
 import Perspectives.Data.EncodableMap as EM
+import Perspectives.DataUpgrade.PatchModels (patchModels)
+import Perspectives.DataUpgrade.PatchModels.PDR3061 as PDR3061
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (storeDomeinFileInCache, storeDomeinFileInCouchdbPreservingAttachments)
@@ -261,6 +263,13 @@ runDataUpgrades = do
         void recompileLocalModels
     )
 
+  runUpgrade installedVersion "3.0.61"
+    ( \_ -> do
+        patchModels PDR3061.replacements
+        void recompileLocalModels
+    )
+
+  log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 
   ----------------------------------------------------------------------------------------

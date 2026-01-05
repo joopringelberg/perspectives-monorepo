@@ -28,12 +28,14 @@ import Control.Alt ((<|>))
 import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe)
-import Data.Newtype (class Newtype)
+import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
+import Perspectives.Identifiers (typeUri2LocalName_)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription(..), domain, functional, range)
 import Perspectives.Repetition (Duration, Repeater)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.ThreeValuedLogic as THREE
+import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..))
 import Simple.JSON (class ReadForeign, class WriteForeign, read', writeImpl)
 
 data AutomaticAction
@@ -81,7 +83,7 @@ instance ReadForeign AutomaticAction where
           { r } :: { r :: TimeFacets (effect :: QueryFunctionDescription) } <- read' f
           pure $ ContextAction r
 
-newtype Action = Action { qfd :: QueryFunctionDescription, readable :: String }
+newtype Action = Action { qfd :: QueryFunctionDescription, readable :: String, id :: ActionIdentifier }
 
 derive instance genericAction :: Generic Action _
 derive instance newtypeAction :: Newtype Action _
@@ -95,7 +97,12 @@ derive newtype instance WriteForeign Action
 derive newtype instance ReadForeign Action
 
 instance Semigroup Action where
-  append (Action { qfd: qfd1, readable: readable1 }) (Action { qfd: qfd2, readable: readable2 }) = Action { qfd: makeSequence qfd1 qfd2, readable: readable1 <> " <> " <> readable2 }
+  append (Action { qfd: qfd1, readable: readable1, id: id1 }) (Action { qfd: qfd2, readable: readable2, id: id2 }) = Action
+    { qfd: makeSequence qfd1 qfd2
+    , readable: readable1 <> " <> " <> readable2
+    -- Arbitrarily append the local name of the second action's id to the first action's id
+    , id: ActionIdentifier (unwrap id1 <> "_" <> typeUri2LocalName_ (unwrap id2))
+    }
     where
     makeSequence :: QueryFunctionDescription -> QueryFunctionDescription -> QueryFunctionDescription
     makeSequence left right = BQD (domain left) (BinaryCombinator SequenceF) left right (range right) (THREE.and (functional left) (functional right)) (THREE.or (functional left) (functional right))

@@ -29,7 +29,7 @@ import Data.Array (cons, elemIndex, singleton, tail, union)
 import Data.Either (Either)
 import Data.List (List(..), filter)
 import Data.Map (Map, empty, lookup) as MAP
-import Data.Maybe (Maybe, isJust, maybe)
+import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
 import Foreign.Object (Object, empty, values)
@@ -44,8 +44,8 @@ import Perspectives.InvertedQuery.Storable (StoredQueries, StorableInvertedQuery
 import Perspectives.Names (defaultReadableNamespaces, expandNamespaces)
 import Perspectives.Parsing.Arc.AST (ContextPart(..), ScreenE, StateQualifiedPart)
 import Perspectives.Parsing.Arc.Expression.AST (Step)
-import Perspectives.Parsing.Arc.Position (ArcPosition)
-import Perspectives.Parsing.Messages (PerspectivesError, MultiplePerspectivesErrors)
+import Perspectives.Parsing.Arc.Position (ArcPosition(..))
+import Perspectives.Parsing.Messages (MultiplePerspectivesErrors, PerspectivesError(..))
 import Perspectives.Query.QueryTypes (QueryFunctionDescription)
 import Perspectives.Representation.Perspective (Perspective)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType, EnumeratedRoleType, RoleType)
@@ -240,11 +240,14 @@ withNamespaces pairs pt = do
   void $ modify \s -> s { namespaces = ns }
   pure ctxt
 
--- | Expand prefixes to full model names.
+-- | Expand prefixes to full model names, using the namespaces in PhaseTwoState.
+-- | These are the default namespaces plus any added with 'withNamespaces'.
 expandNamespace :: forall m. Monad m => String -> (PhaseTwo' m) String
 expandNamespace s = do
   namespaces <- lift $ gets _.namespaces
-  pure $ expandNamespaces namespaces s
+  case expandNamespaces namespaces s of
+    Nothing -> throwError $ UndeclaredPrefix (ArcPosition { line: 0, column: 0 }) (ArcPosition { line: 0, column: 0 }) s
+    Just expandedName -> pure expandedName
 
 -- | From an expanded name like "model:System$MySystem" returns a Maybe ContextType.
 -- | Note: returns indexed context names from PhaseTwoState. On first compilation, these do not include indexed context names from the current model.

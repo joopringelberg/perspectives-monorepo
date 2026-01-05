@@ -86,6 +86,7 @@ traverseContextE (ContextE { id, kindOfContext, public, contextParts, pos }) ns 
   contextIdentifier <- pure $ modelName id
   -- Notice that we use the test ns == "domain" to establish that this context is a domain, in which case the surrounding context is Nothing.
   context <- pure $ defaultContext contextIdentifier id kindOfContext (if ns == "domain" then Nothing else (Just ns)) pos public
+  -- Add to state.namespaces (on the Domain level these are the default prefix-ModelUri combinations) all namespaces found in the contextParts, that is all declarations like 'use ns for model ...'.
   withNamespaces
     contextParts
     do

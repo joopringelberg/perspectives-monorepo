@@ -396,6 +396,9 @@ roleIdentification2context :: RoleIdentification -> ContextType
 roleIdentification2context (ExplicitRole ct _ _) = ct
 roleIdentification2context (ImplicitRole ct _) = ct
 
+roleIdentification2subject :: Partial => RoleIdentification -> RoleType
+roleIdentification2subject (ExplicitRole _ rt _) = rt
+
 derive instance genericRoleIdentification :: Generic RoleIdentification _
 instance eqRoleIdentification :: Eq RoleIdentification where
   eq = genericEq

@@ -23,7 +23,6 @@ module Main where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Cont (lift)
-import Control.Monad.Writer (runWriterT)
 import Data.Array (cons, foldM)
 import Data.DateTime.Instant (Instant, instant, unInstant)
 import Data.Either (Either(..))
@@ -32,7 +31,7 @@ import Data.Map (insert)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Nullable (Nullable, toMaybe, toNullable)
-import Data.Tuple (Tuple(..), fst)
+import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff, Error, Fiber, Milliseconds(..), catchError, delay, error, forkAff, joinFiber, runAff, throwError, try)
 import Effect.Aff.AVar (AVar, empty, new, put, take, read)
@@ -52,16 +51,15 @@ import Perspectives.CoreTypes (IndexedResource(..), IntegrityFix(..), JustInTime
 import Perspectives.Couchdb (SecurityDocument(..))
 import Perspectives.DataUpgrade (runDataUpgrades)
 import Perspectives.DataUpgrade.RecompileLocalModels as RECOMPILE
-import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.Error.Boundaries (handlePerspectRolError')
 import Perspectives.ErrorLogging (logPerspectivesError)
-import Perspectives.Extern.Couchdb (addModelToLocalStore, isInitialLoad, roleInstancesFromCouchdb)
+import Perspectives.Extern.Couchdb (addModelToLocalStore, isInitialLoad)
 import Perspectives.Extern.Utilities (pdrVersion)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
-import Perspectives.Instances.Indexed (indexedContexts_, indexedRoles_)
 import Perspectives.Instances.ObjectGetters (context, externalRole)
+import Main.RecompileBasicModels (addIndexedNames)
 import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, onStartUp, sysUser, userWithCredentialsAuthorizedDomain, userWithCredentialsPassword, userWithCredentialsUsername)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem)
@@ -167,6 +165,8 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
       -- Start by running data upgrades. We need the private key now if we want to make changes to data!
       runPerspectivesWithState
         ( do
+            addAllExternalFunctions
+            addIndexedNames
             key <- getPrivateKey
             modify \(s@{ runtimeOptions }) -> s { runtimeOptions = runtimeOptions { privateKey = unsafeCoerce key } }
             getinstalledModelCuids fromLocalModels >>= setModelUris
@@ -744,18 +744,6 @@ removeAccount usr rawPouchdbUser callback = void $ runAff handler
     logPerspectivesError $ Custom $ "removeAccount an account " <> usr
     callback true
 
--- | Retrieve all instances of sys:Model$IndexedRole and sys:Model$IndexedContext and create a table of
--- | all known indexed names and their private replacements in PerspectivesState.
--- | By retrieving the role and context instances directly from Couchdb using a view, we don't have to 
--- | rely on model://perspectives.domains$System in this early stage of starting up.
-addIndexedNames :: MonadPerspectives Unit
-addIndexedNames = do
-  (roleInstances :: Array RoleInstance) <- fst <$> runWriterT (runArrayT (roleInstancesFromCouchdb [ indexedRole ] (ContextInstance "")))
-  iRoles <- indexedRoles_ roleInstances
-  contextInstances <- fst <$> runWriterT (runArrayT (roleInstancesFromCouchdb [ indexedContext ] (ContextInstance "")))
-  iContexts <- indexedContexts_ contextInstances
-  modify \ps -> ps { indexedRoles = iRoles, indexedContexts = iContexts }
-
 -- | Recompiles all models in an installation. Use this function when the definition of the DomeinFile
 -- | has changed. The local models directory of the user that is provided, will have the freshly compiled
 -- | DomeinFiles, so this user can be booted. 
@@ -782,7 +770,12 @@ recompileLocalModels rawPouchdbUser callback = void $ runAff handler
           indexedResourceToCreate
           missingResource
           typeToBeFixed
-        runPerspectivesWithState RECOMPILE.recompileLocalModels state
+        runPerspectivesWithState
+          do
+            (getinstalledModelCuids fromLocalModels >>= setModelUris)
+            addIndexedNames
+            RECOMPILE.recompileLocalModels
+          state
   where
   handler :: Either Error Boolean -> Effect Unit
   handler (Left e) = do

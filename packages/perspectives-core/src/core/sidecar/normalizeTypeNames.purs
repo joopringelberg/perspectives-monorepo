@@ -50,7 +50,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
 import Perspectives.Data.EncodableMap (EncodableMap, toUnfoldable, fromFoldable, empty) as EM
 import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), UpstreamAutomaticEffect(..), UpstreamStateNotification(..))
-import Perspectives.Identifiers (splitTypeUri)
+import Perspectives.Identifiers (qualifyWith, splitTypeUri, typeUri2typeNameSpace)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding)
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..))
@@ -80,11 +80,11 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), IndexedRole(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
+import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), IndexedRole(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
 import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.HashQFD (qfdSignature)
-import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), fromLocalModels, idUriForAction, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
+import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), fromLocalModels, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping, lookupActionCuid, lookupContextIndividualId, lookupRoleIndividualId)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 
 -- Environment carried during normalization: sidecars and a perspective id rewrite map
@@ -393,15 +393,10 @@ normalizeActionsForState stateSpec obj = do
   let
     stateFqn = unwrap (stateSpec2StateIdentifier stateSpec)
     pairs = OBJ.toUnfoldable obj :: Array (Tuple String Action)
-  folded <- for pairs \(Tuple localName (Action { qfd, readable })) -> do
-    act <- (\qfd' -> Action { qfd: qfd', readable }) <$> traverseQfd normalize qfd
-    case splitTypeUri (stateFqn <> "$" <> localName) of
-      Nothing -> pure (Tuple localName act)
-      Just { modelUri } -> case Map.lookup (ModelUri modelUri) sidecars of
-        Nothing -> pure (Tuple localName act)
-        Just mapping -> case idUriForAction mapping (ActionUri (stateFqn <> "$" <> localName)) of
-          Nothing -> pure (Tuple localName act)
-          Just stableKey -> pure (Tuple stableKey act)
+  folded <- for pairs \(Tuple localName (Action { qfd, readable, id })) -> do
+    id'@(ActionIdentifier actionName) <- normalize id
+    qfd' <- traverseQfd normalize qfd
+    pure $ Tuple actionName (Action { qfd: qfd', readable, id: id' })
   pure $ OBJ.fromFoldable folded
 
 -- Normalize a Perspective record structurally: translate type ids and action keys
@@ -570,6 +565,33 @@ class Normalize v where
 instance normalizeModelUri :: Normalize (ModelUri Stable) where
   normalize (ModelUri fqn) = ModelUri <<< unwrap <$> fqn2tid (ContextType fqn)
 
+instance Normalize ActionIdentifier where
+  normalize act@(ActionIdentifier fqn) = case typeUri2typeNameSpace fqn of
+    Nothing -> pure act
+    Just roleName -> do
+      { sidecars } :: Env <- ask
+      case splitTypeUri fqn of
+        Nothing -> pure act -- not a type uri
+        Just { modelUri } -> case Map.lookup (ModelUri modelUri) sidecars of
+          Nothing -> pure act -- no sidecar for this model
+          Just sidecar -> do
+            EnumeratedRoleType asEnumerated <- fqn2tid (EnumeratedRoleType roleName)
+            if asEnumerated == roleName then do
+              CalculatedRoleType (asCalculated) <- fqn2tid (CalculatedRoleType roleName)
+              if asCalculated == roleName then
+                -- We cannot normalize this action identifier
+                pure act
+              else do
+                case lookupActionCuid sidecar (ActionUri fqn) of
+                  -- Action identifier unknown. Leave as is.
+                  Nothing -> pure act
+                  Just cuid -> pure (ActionIdentifier $ qualifyWith asCalculated cuid)
+            else do
+              case lookupActionCuid sidecar (ActionUri fqn) of
+                -- Action identifier unknown. Leave as is.
+                Nothing -> pure act
+                Just cuid -> pure (ActionIdentifier $ qualifyWith asEnumerated cuid)
+
 instance normalizeRoleInContext :: Normalize RoleInContext where
   normalize (RoleInContext { role, context }) =
     (\role' context' -> RoleInContext { role: role', context: context' })
@@ -615,6 +637,7 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
     normalizeDomain (VDOM r (mp :: Maybe PropertyType)) = VDOM <$> pure r <*> (traverse fqn2tid mp)
     normalizeDomain d = pure d
 
+    normalizeQueryFunction :: QueryFunction -> WithSideCars QueryFunction
     normalizeQueryFunction (PropertyGetter pt) = PropertyGetter <$> fqn2tid pt
     normalizeQueryFunction (Value2Role pt) = Value2Role <$> fqn2tid pt
     normalizeQueryFunction (RolGetter pt) = RolGetter <$> fqn2tid pt
