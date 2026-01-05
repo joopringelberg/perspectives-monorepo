@@ -54,10 +54,11 @@ import Perspectives.Data.EncodableMap (lookup)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.DomeinFile (DomeinFile(..))
+import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Instances.ObjectGetters (contextType_)
 import Perspectives.ModelDependencies (chatAspect)
-import Perspectives.ModelTranslation (translateType, translationOf)
+import Perspectives.ModelTranslation (translationOf)
 import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Query.Interpreter (lift2MPQ)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription)
@@ -85,7 +86,7 @@ screenForContextAndUser :: RoleInstance -> RoleType -> ContextType -> (ContextIn
 screenForContextAndUser userRoleInstance userRoleType contextType contextInstance = do
   DomeinFile df <- lift2MPQ $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ $ unwrap contextType)
   title <- lift (getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST $ externalRoleType contextType) (externalRole contextInstance))
-  translatedUserRoleType <- lift $ lift $ translateType (roletype2string userRoleType)
+  translatedUserRoleType <- lift $ lift $ translateType userRoleType
   case lookup (ScreenKey contextType userRoleType) df.screens of
     Just s -> populateScreen s title translatedUserRoleType
     Nothing -> do
@@ -402,7 +403,7 @@ instance AddPerspectives MarkDownDef where
 instance AddPerspectives ChatDef where
   addPerspectives (ChatDef r@{ chatRole }) user ctxt = do
     chatRoleInstance <- runArrayT (getRoleInstances chatRole ctxt)
-    title <- lift $ translateType (roletype2string chatRole)
+    title <- lift $ translateType chatRole
     pure $ ChatDef r { chatInstance = head chatRoleInstance, title = Just title }
 
 traverseScreenElement :: RoleInstance -> ContextInstance -> ScreenElementDef -> AssumptionTracking (Maybe ScreenElementDef)

@@ -14,10 +14,10 @@ import Prelude
 import Data.Maybe (Maybe(..))
 import Data.Traversable (for, traverse)
 import Perspectives.CoreTypes (MonadPerspectives)
-import Perspectives.HumanReadableType (swapDisplayName)
 import Perspectives.Identifiers (typeUri2ModelUri, typeUri2LocalName_)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..))
+import Perspectives.Sidecar.ToReadable (toReadable)
 
 -- | Convert a PerspectivesError to a human-friendly string by replacing
 -- | stable ids in typed fields with readable display names where possible.
@@ -51,20 +51,20 @@ humanizePerspectivesError e = case e of
     pure (UnknownMarkDownConditionProperty start end prop rt')
 
   StateDoesNotExist sid start end -> do
-    sid' <- swapDisplayName sid
+    sid' <- toReadable sid
     pure (StateDoesNotExist sid' start end)
 
   -- Constructors that carry only strings: try to prettify strings that look like URIs.
   UnknownProperty pos qname adt -> do
     adt' <- for adt \x -> case x of
-      ENR rtype -> ENR <$> swapDisplayName rtype
-      CR rtype -> CR <$> swapDisplayName rtype
+      ENR rtype -> ENR <$> toReadable rtype
+      CR rtype -> CR <$> toReadable rtype
 
     qname' <- swapPropertyType qname
     pure (UnknownProperty pos qname' adt')
 
   UnknownRole pos s -> UnknownRole pos <$> humanizeString s
-  UnknownContext pos s -> UnknownContext pos <$> swapDisplayName s
+  UnknownContext pos s -> UnknownContext pos <$> toReadable s
   UnknownView pos s -> UnknownView pos <$> humanizeString s
   NotAViewOfObject pos s -> NotAViewOfObject pos <$> humanizeString s
   NotUniquelyIdentifyingPropertyType pos lname alts -> do
@@ -72,23 +72,23 @@ humanizePerspectivesError e = case e of
     alts' <- traverse swapPropertyType alts
     pure (NotUniquelyIdentifyingPropertyType pos lname alts')
   NotUniquelyIdentifyingView pos lname alts -> do
-    lname' <- swapDisplayName lname
-    alts' <- traverse swapDisplayName alts
+    lname' <- toReadable lname
+    alts' <- traverse toReadable alts
     pure (NotUniquelyIdentifyingView pos lname' alts')
   NotUniquelyIdentifyingContext pos lname alts -> do
-    lname' <- swapDisplayName lname
-    alts' <- traverse swapDisplayName alts
+    lname' <- toReadable lname
+    alts' <- traverse toReadable alts
     pure (NotUniquelyIdentifyingContext pos lname' alts')
   NotUniquelyIdentifyingRoleType pos lname alts -> do
     lname' <- swapRoleType lname
     alts' <- traverse swapRoleType alts
     pure (NotUniquelyIdentifyingRoleType pos lname' alts')
   NotUniquelyIdentifyingState pos lname alts -> do
-    lname' <- swapDisplayName lname
-    alts' <- traverse swapDisplayName alts
+    lname' <- toReadable lname
+    alts' <- traverse toReadable alts
     pure (NotUniquelyIdentifyingState pos lname' alts')
   NoCalculatedAspect pos ert -> do
-    ert' <- swapDisplayName ert
+    ert' <- toReadable ert
     pure (NoCalculatedAspect pos ert')
   CannotModifyCalculatedProperty props start end -> do
     props' <- traverse swapPropertyType props
@@ -96,7 +96,7 @@ humanizePerspectivesError e = case e of
   RoleHasNoProperty adt pt start end -> do
     -- It may be that this error arose during the compilation of a model. In that case
     -- compilation failed and this error will be in terms of Readable ids.
-    adt' <- traverse swapDisplayName adt
+    adt' <- traverse toReadable adt
     pure (RoleHasNoProperty adt' pt start end)
 
   -- Default: leave unchanged.
@@ -106,13 +106,13 @@ humanizePerspectivesError e = case e of
 
 swapRoleType :: RoleType -> MonadPerspectives RoleType
 swapRoleType rt = case rt of
-  ENR ert -> ENR <$> swapDisplayName ert
-  CR crt -> CR <$> swapDisplayName crt
+  ENR ert -> ENR <$> toReadable ert
+  CR crt -> CR <$> toReadable crt
 
 swapPropertyType :: PropertyType -> MonadPerspectives PropertyType
 swapPropertyType pt = case pt of
-  ENP ept -> ENP <$> swapDisplayName ept
-  CP cpt -> CP <$> swapDisplayName cpt
+  ENP ept -> ENP <$> toReadable ept
+  CP cpt -> CP <$> toReadable cpt
 
 -- If the string looks like a type URI, return the local name; otherwise unchanged.
 humanizeString :: String -> MonadPerspectives String

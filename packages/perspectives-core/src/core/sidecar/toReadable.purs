@@ -16,12 +16,14 @@ import Perspectives.Query.QueryTypes (Domain(..), RoleInContext(..))
 import Perspectives.Representation.ADT (ADT)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
-import Perspectives.Representation.Class.PersistentType (getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole, getState)
+import Perspectives.Representation.Class.Cacheable (ViewType)
+import Perspectives.Representation.Class.PersistentType (getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole, getState, getView)
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.State (State(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType, CalculatedRoleType, ContextType, EnumeratedPropertyType, EnumeratedRoleType, IndexedContext(..), PropertyType(..), RoleType(..), StateIdentifier)
+import Perspectives.Representation.View (View(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 
 -- Also see module Perspectives.HumanReadableType, where we convert from Stable to Readable based on the displayName property of the type.
@@ -85,3 +87,6 @@ instance ToReadable Domain where
       Nothing -> pure Nothing
     pure $ VDOM r mproptype'
   toReadable x = pure x
+
+instance ToReadable ViewType where
+  toReadable vt = getView vt >>= \(View { readableName }) -> pure readableName

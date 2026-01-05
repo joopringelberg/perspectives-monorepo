@@ -59,6 +59,7 @@ import Perspectives.DependencyTracking.Dependency (registerSupportedEffect, unre
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Fuzzysort (matchIndexedContextNames)
+import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, isTypeUri, typeUri2ModelUri_, typeUri2couchdbFilename)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
@@ -67,7 +68,6 @@ import Perspectives.Instances.Me (getAllMyRoleTypes, getMeInRoleAndContext, getM
 import Perspectives.Instances.ObjectGetters (binding, context, contextType, contextType_, externalRole, getAllFilledRoles, getContextActions, getFilledRoles, getMe, getProperty, roleType, roleType_, siblings)
 import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.ModelDependencies (actualSharedFileServer, allSettings, fileShareCredentials, identifiableFirstName, identifiableLastName, itemOnClipboardClipboardData, itemsOnClipboard, mySharedFileServices, selectedClipboardItem, sharedFileServices, sysUser)
-import Perspectives.ModelTranslation (translateType)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, getUserIdentifier, lookupIndexedContext)
 import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -341,7 +341,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
         allUserRoleTypes
       -- Add translations for the filtered list only
       result <- fromFoldable <$> for filteredUserRoleTypes \roleType -> do
-        translation <- translateType (roletype2string roleType)
+        translation <- translateType roleType
         pure $ Tuple (roletype2string roleType) translation
       sendResponse (Result corrId [ (writeJSON result) ]) setter
     -- { request: "GetLocalRoleSpecialisation", subject: contextInstance, predicate: localAspectName}
@@ -381,7 +381,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     Api.GetRoleName -> registerSupportedEffect
       corrId
       setter
-      (roleType >=> lift <<< lift <<< translateType <<< unwrap >=> pure <<< Value)
+      (roleType >=> lift <<< lift <<< translateType >=> pure <<< Value)
       (RoleInstance object)
       onlyOnce
     Api.GetSystemIdentifier -> do

@@ -48,13 +48,13 @@ import Perspectives.ContextRolAccessors (getContextMember, getRolMember)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MonadPerspectives, runMonadPerspectivesQuery)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Error.Boundaries (handlePerspectContextError', handlePerspectRolError')
+import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (LocalName, deconstructBuitenRol, typeUri2LocalName, typeUri2ModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..), externalRole, states) as IP
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.InstanceRepresentation.PublicUrl (PublicUrl)
 import Perspectives.Instances.Combinators (orElse)
 import Perspectives.ModelDependencies (perspectivesUsers)
-import Perspectives.ModelTranslation (translateType)
 import Perspectives.Persistence.API (Keys(..))
 import Perspectives.Persistent (entitiesDatabaseName, getPerspectContext, getPerspectRol)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase, getSafeViewOnDatabase_)
@@ -68,7 +68,7 @@ import Perspectives.Representation.Context (Context(..)) as CONTEXT
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser(..), RoleInstance(..), Value(..), roleInstance2PerspectivesUser)
 import Perspectives.Representation.Perspective (StateSpec(..)) as SP
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleKind(..), RoleType, StateIdentifier)
+import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleKind(..), RoleType, StateIdentifier)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, isInPublicScheme, takeGuid)
 import Perspectives.SetupCouchdb (FillerInfo, context2RoleFilter, filled2FillerInfo, filled2fillerFilter, filler2filledFilter, role2ContextFilter, roleFromContextFilter)
 import Prelude (class Show, Unit, append, bind, discard, eq, flip, identity, join, map, pure, show, ($), (&&), (*>), (<#>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>))
@@ -165,7 +165,7 @@ getContextActions userRoleType userRoleInstance cid = ArrayT do
     ( \(cumulatedActions :: Array (Tuple String String)) (nextState :: SP.StateSpec) -> case Map.lookup nextState stateActionMap of
         Nothing -> pure cumulatedActions
         Just (actions :: Object Action) -> do
-          moreActions <- for (keys actions) \actionName -> Tuple actionName <$> (lift $ translateType actionName)
+          moreActions <- for (keys actions) \actionName -> Tuple actionName <$> (lift $ translateType (ActionIdentifier actionName))
           pure (cumulatedActions <> moreActions)
     )
     []

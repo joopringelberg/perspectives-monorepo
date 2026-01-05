@@ -53,7 +53,7 @@ import Perspectives.Data.EncodableMap (EncodableMap, empty, insert, lookup, keys
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (modifyEnumeratedRoleInDomeinFile, removeDomeinFileFromCache, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, UpstreamAutomaticEffect(..), UpstreamStateNotification(..), addUpstreamAutomaticEffect, addUpstreamNotification)
-import Perspectives.HumanReadableType (lookupDisplayName)
+import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (Namespace, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2LocalName_, typeUri2ModelUri_, typeUri2typeNameSpace)
 import Perspectives.Instances.ObjectGetters (contextType_, roleType_)
 import Perspectives.InvertedQuery (RelevantProperties(..))
@@ -702,7 +702,7 @@ handlePostponedStateQualifiedParts = do
             Just sp | isTypeUri sp -> sp
             Just sp -> (unwrap one) <> "$" <> sp
         many -> do
-          names <- lift2 $ traverse lookupDisplayName many
+          names <- lift2 $ traverse translateType many
           throwError (Custom ("State specification resolves to multiple roles: " <> show names <> ". Specify exactly one."))
 
     f :: RoleType ~~~> ADT EnumeratedRoleType

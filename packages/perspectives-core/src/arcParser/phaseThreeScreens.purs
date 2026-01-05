@@ -38,7 +38,6 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Data.EncodableMap (empty, insert, singleton) as EM
 import Perspectives.DomeinFile (DomeinFile(..))
-import Perspectives.HumanReadableType (swapDisplayName)
 import Perspectives.Identifiers (areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_)
 import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), PropertyVerbE(..), PropsOrView, RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..))
@@ -324,21 +323,21 @@ handleScreens screenEs = do
       Nothing -> do
         -- Swap to readable role types in the error payload
         subjectRoleType' <- lift2 $ case subjectRoleType of
-          ENR ert -> ENR <$> swapDisplayName ert
-          CR crt -> CR <$> swapDisplayName crt
+          ENR ert -> ENR <$> toReadable ert
+          CR crt -> CR <$> toReadable crt
         objectRoleType' <- lift2 $ case objectRoleType of
-          ENR ert -> ENR <$> swapDisplayName ert
-          CR crt -> CR <$> swapDisplayName crt
+          ENR ert -> ENR <$> toReadable ert
+          CR crt -> CR <$> toReadable crt
         throwError (UserHasNoPerspective subjectRoleType' objectRoleType' start' end')
       Just pspve@(Perspective { id: perspectiveId }) -> do
         if perspectiveSupportsRoleVerbs pspve (maybe [] roleVerbList2Verbs roleVerbs) then pure unit
         else do
           subjectRoleType' <- lift2 $ case subjectRoleType of
-            ENR ert -> ENR <$> swapDisplayName ert
-            CR crt -> CR <$> swapDisplayName crt
+            ENR ert -> ENR <$> toReadable ert
+            CR crt -> CR <$> toReadable crt
           objectRoleType' <- lift2 $ case objectRoleType of
-            ENR ert -> ENR <$> swapDisplayName ert
-            CR crt -> CR <$> swapDisplayName crt
+            ENR ert -> ENR <$> toReadable ert
+            CR crt -> CR <$> toReadable crt
           throwError (UnauthorizedForRole "Auteur" subjectRoleType' objectRoleType' (maybe [] roleVerbList2Verbs roleVerbs) (Just start') (Just end'))
         -- Compute the excluded properties from either withProps (inclusion) or withoutProps (exclusion).
         (withoutProperties :: Maybe (Array PropertyType)) <- case withProps, withoutProps of

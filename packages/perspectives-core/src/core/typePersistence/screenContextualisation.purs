@@ -11,15 +11,16 @@ import Data.Traversable (for, traverse)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesQuery, (###=))
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
+import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Instances.ObjectGetters (getActiveRoleStates, getActiveStates)
-import Perspectives.ModelTranslation (translateType, translationOf)
+import Perspectives.ModelTranslation (translationOf)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
-import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..), roletype2string)
+import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..))
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
 import Perspectives.Types.ObjectGetters (allEnumeratedRoles, aspectsOfRole)
@@ -139,7 +140,7 @@ contextualiseMarkDownDef md = case md of
 contextualiseChatDef :: ChatDef -> InContext (Maybe ChatDef)
 contextualiseChatDef (ChatDef r@{ chatRole, title }) = do
   { contextInstance } <- ask
-  title' <- lift $ lift $ lift $ translateType $ roletype2string chatRole
+  title' <- lift $ lift $ lift $ translateType chatRole
   chatRoleInstance <- lift $ getRoleInstances chatRole contextInstance
   pure $ Just $ ChatDef r { chatInstance = Just chatRoleInstance, title = Just title' }
 

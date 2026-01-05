@@ -911,21 +911,18 @@ translationOf :: String -> String -> MonadPerspectives String
 translationOf domain text = do
   language <- getCurrentLanguage
   mtable <- getTranslationTable domain
-  defaultTranslation <-
-    if isJust $ typeUri2ModelUri text then pure $ typeUri2LocalName_ text
-    else pure text
   case mtable of
-    Nothing -> pure defaultTranslation
+    Nothing -> pure text
     Just (TranslationTable table) -> case lookup text table of
-      Nothing -> pure defaultTranslation
+      Nothing -> pure text
       Just (Translations translations) -> case lookup language translations of
-        Nothing -> pure defaultTranslation
+        Nothing -> pure text
         Just translation -> case match (unsafeRegex "MISSING" noFlags) translation of
-          Just _ -> pure defaultTranslation
+          Just _ -> pure text
           Nothing -> pure translation
 
-translateType :: String -> MonadPerspectives String
-translateType typeName = case typeUri2ModelUri typeName of
+translateTypeString :: String -> MonadPerspectives String
+translateTypeString typeName = case typeUri2ModelUri typeName of
   Nothing ->
     if isExternalRole typeName then pure "External"
     else pure typeName

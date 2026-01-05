@@ -43,12 +43,12 @@ import Perspectives.CoreTypes (type (~~>), AssumptionTracking, MonadPerspectives
 import Perspectives.Data.EncodableMap (fromFoldable, lookup) as EM
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Extern.Utilities (formatDateTime)
+import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isExternalRole, qualifyWith)
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextType, getActiveRoleStates, getActiveStates, roleType_)
 import Perspectives.Instances.Values (parseNumber)
 import Perspectives.ModelDependencies (roleWithId)
-import Perspectives.ModelTranslation (translateType)
 import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), domain, domain2roleType, functional, isContextDomain, makeComposition, mandatory, queryFunction, range, roleInContext2Context, roleInContext2Role, roleRange)
 import Perspectives.Query.UnsafeCompiler (context2context, context2role, getDynamicPropertyGetter, getPropertyValues, getPublicUrl)
@@ -65,7 +65,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ScreenDefinition (WidgetCommonFieldsDef, PropertyRestrictions)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), PropertyType(..), RoleKind(..), RoleType(..), propertytype2string, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), ContextType(..), PropertyType(..), RoleKind(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..)) as Verbs
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..), roleVerbList2Verbs)
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, guid)
@@ -224,17 +224,17 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyRestri
       >>= pure <<< map (_.context <<< unwrap)
       >>= \as -> lift $ ((append as) <<< concat <$> (for as (runArrayT <<< getContextAspectSpecialisations)))
         >>= (\as' -> pure $ nub as')
-        >>= (traverse \(ContextType cType) -> Tuple cType <$> translateType cType)
+        >>= (traverse \t@(ContextType cType) -> Tuple cType <$> translateType t)
         >>= pure <<< fromFoldable
   cType <- lift (cid ##>> contextType)
   contextIdToAddRoleInstanceTo <- (unsafePartial computeContextFromPerspectiveObject object) >>= (lift <<< context2context) >>= \f -> lift (cid ##> f)
   -- NOTE: there can be more than one roleType.
   (roleType :: String) <- pure (roletype2string <$> unsafePartial fromJust $ head roleTypes)
-  (displayName :: String) <- lift $ translateType roleType
+  (displayName :: String) <- lift $ translateType (unsafePartial fromJust $ head roleTypes)
   translatedActions <- lift
     ( fromFoldable <$> for (nub $ concat (keys <$> (catMaybes $ (flip EM.lookup actions) <$> (contextStates <> subjectStates))))
         \actionName -> do
-          translatedActionName <- translateType actionName
+          translatedActionName <- translateType (ActionIdentifier actionName)
           pure $ Tuple actionName translatedActionName
     )
   pure
@@ -374,7 +374,7 @@ makeSerialisedProperty pt = do
     isMandatory <- PROP.mandatory propType
     isCalculated <- PROP.isCalculated propType
     range <- PROP.range propType
-    displayName <- translateType (propertytype2string pt)
+    displayName <- translateType pt
     pure
       { id: unwrap $ identifier propType
       , displayName
@@ -518,7 +518,7 @@ roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContex
     translatedActions <- lift $ lift
       ( fromFoldable <$> for (nub $ concat (keys <$> (catMaybes $ (flip EM.lookup actions) <$> roleStates)))
           \actionName -> do
-            translatedActionName <- translateType (qualifyWith (unwrap cType) actionName)
+            translatedActionName <- translateType (ActionIdentifier (qualifyWith (unwrap cType) actionName))
             pure $ Tuple actionName translatedActionName
       )
     readableName <- computeReadableName valuesAndVerbs

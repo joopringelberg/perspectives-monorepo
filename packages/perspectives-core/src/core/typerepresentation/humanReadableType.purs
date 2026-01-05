@@ -2,53 +2,117 @@ module Perspectives.HumanReadableType where
 
 import Prelude
 
-import Control.Monad.Error.Class (catchError)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Perspectives.CoreTypes (MonadPerspectives)
-import Perspectives.Representation.CalculatedProperty (CalculatedProperty)
-import Perspectives.Representation.CalculatedRole (CalculatedRole)
-import Perspectives.Representation.Class.Identifiable (class Identifiable)
+import Perspectives.Identifiers (typeUri2LocalName)
+import Perspectives.ModelTranslation (translateTypeString)
 import Perspectives.Representation.Class.PersistentType (getPerspectType)
-import Perspectives.Representation.Context (Context)
-import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty)
-import Perspectives.Representation.EnumeratedRole (EnumeratedRole)
 import Perspectives.Representation.State (State(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), StateIdentifier(..), ViewType(..))
-import Perspectives.Representation.View (View)
+import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier, ViewType)
+import Perspectives.Representation.View (View(..))
+import Perspectives.Sidecar.ToReadable (toReadable)
 
-class Identifiable e i <= HumanReadableType e i | i -> e where
-  lookupDisplayName :: i -> MonadPerspectives String
-  swapDisplayName :: i -> MonadPerspectives i
+class HumanReadableType i where
+  translateType :: i -> MonadPerspectives String
 
-instance HumanReadableType EnumeratedRole EnumeratedRoleType where
-  lookupDisplayName er = getPerspectType er >>= pure <<< _.displayName <<< unwrap
-  swapDisplayName x = catchError (lookupDisplayName x >>= pure <<< EnumeratedRoleType) \_ -> pure x
+instance HumanReadableType EnumeratedRoleType where
+  translateType r@(EnumeratedRoleType er) = do
+    translation <- translateTypeString er
+    if translation == er then do
+      EnumeratedRoleType readable <- toReadable r
+      case typeUri2LocalName readable of
+        Just ln -> pure ln
+        Nothing -> case typeUri2LocalName er of
+          Just ln2 -> pure ln2
+          Nothing -> pure er
+    else
+      pure translation
 
-instance HumanReadableType EnumeratedProperty EnumeratedPropertyType where
-  lookupDisplayName ep = getPerspectType ep >>= pure <<< _.displayName <<< unwrap
-  swapDisplayName x = catchError (lookupDisplayName x >>= pure <<< EnumeratedPropertyType) \_ -> pure x
+instance HumanReadableType EnumeratedPropertyType where
+  translateType p@(EnumeratedPropertyType ep) = do
+    translation <- translateTypeString ep
+    if translation == ep then do
+      EnumeratedPropertyType readable <- toReadable p
+      case typeUri2LocalName readable of
+        Just ln -> pure ln
+        Nothing -> case typeUri2LocalName ep of
+          Just ln2 -> pure ln2
+          Nothing -> pure ep
+    else
+      pure translation
 
-instance HumanReadableType CalculatedRole CalculatedRoleType where
-  lookupDisplayName cr = getPerspectType cr >>= pure <<< _.displayName <<< unwrap
-  swapDisplayName x = catchError (lookupDisplayName x >>= pure <<< CalculatedRoleType) \_ -> pure x
+instance HumanReadableType CalculatedRoleType where
+  translateType r@(CalculatedRoleType cr) = do
+    translation <- translateTypeString cr
+    if translation == cr then do
+      CalculatedRoleType readable <- toReadable r
+      case typeUri2LocalName readable of
+        Just ln -> pure ln
+        Nothing -> case typeUri2LocalName cr of
+          Just ln2 -> pure ln2
+          Nothing -> pure cr
+    else
+      pure translation
 
-instance HumanReadableType CalculatedProperty CalculatedPropertyType where
-  lookupDisplayName cp = getPerspectType cp >>= pure <<< _.displayName <<< unwrap
-  swapDisplayName x = catchError (lookupDisplayName x >>= pure <<< CalculatedPropertyType) \_ -> pure x
+instance HumanReadableType CalculatedPropertyType where
+  translateType p@(CalculatedPropertyType cp) = do
+    translation <- translateTypeString cp
+    if translation == cp then do
+      CalculatedPropertyType readable <- toReadable p
+      case typeUri2LocalName readable of
+        Just ln -> pure ln
+        Nothing -> case typeUri2LocalName cp of
+          Just ln2 -> pure ln2
+          Nothing -> pure cp
+    else
+      pure translation
 
-instance HumanReadableType Context ContextType where
-  lookupDisplayName ct = getPerspectType ct >>= pure <<< _.displayName <<< unwrap
-  swapDisplayName x = catchError (lookupDisplayName x >>= pure <<< ContextType) \_ -> pure x
+instance HumanReadableType ContextType where
+  translateType ct@(ContextType c) = do
+    translation <- translateTypeString c
+    if translation == c then do
+      ContextType readable <- toReadable ct
+      case typeUri2LocalName readable of
+        Just ln -> pure ln
+        Nothing -> case typeUri2LocalName c of
+          Just ln2 -> pure ln2
+          Nothing -> pure c
+    else
+      pure translation
 
-instance HumanReadableType View ViewType where
-  lookupDisplayName vt = getPerspectType vt >>= pure <<< _.displayName <<< unwrap
-  swapDisplayName x = catchError (lookupDisplayName x >>= pure <<< ViewType) \_ -> pure x
-
-instance HumanReadableType State StateIdentifier where
-  lookupDisplayName st = getPerspectType st >>= \(State r) -> pure
-    ( case r.displayName of
+-- As we have no views in the translation yaml file yet, we directly use the readableName property.
+instance HumanReadableType ViewType where
+  translateType vt = getPerspectType vt >>= \(View { readableName }) -> pure
+    ( case typeUri2LocalName (unwrap readableName) of
         Just dn -> dn
-        Nothing -> unwrap $ r.id
+        Nothing -> unwrap vt
     )
-  swapDisplayName x = catchError (lookupDisplayName x >>= pure <<< StateIdentifier) \_ -> pure x
+
+-- As we have no states in the translation yaml file yet, we directly use the readableName property.
+instance HumanReadableType StateIdentifier where
+  translateType st = getPerspectType st >>= \(State r) -> pure
+    ( case typeUri2LocalName (unwrap r.readableName) of
+        Just dn -> dn
+        Nothing -> unwrap st
+    )
+
+instance HumanReadableType ActionIdentifier where
+  translateType (ActionIdentifier a) = do
+    translation <- translateTypeString a
+    if translation == a then do
+      case typeUri2LocalName a of
+        Just ln -> pure ln
+        Nothing -> case typeUri2LocalName a of
+          Just ln2 -> pure ln2
+          Nothing -> pure a
+    else
+      pure translation
+
+instance HumanReadableType PropertyType where
+  translateType (ENP p) = translateType p
+  translateType (CP p) = translateType p
+
+instance HumanReadableType RoleType where
+  translateType (ENR r) = translateType r
+  translateType (CR r) = translateType r
