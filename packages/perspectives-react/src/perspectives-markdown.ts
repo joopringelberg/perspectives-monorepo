@@ -77,7 +77,7 @@ function render (s : string) : string | undefined
   if (matchResult) {
     const action = matchResult[1];
     const readableText = matchResult[2];
-    return `<button type="button" class="btn btn-primary btn-sm" onclick="$perspectives_entry_point_for_markdown$.runaction(event, '${action}', '__contextid__', '__myroletype__')">${readableText}</Button>`
+    return `<button type="button" class="btn btn-primary btn-sm" onclick="$perspectives_entry_point_for_markdown$.runaction(event, '${action}', '${readableText}', '__contextid__', '__myroletype__')">${readableText}</Button>`
   }
 
 }

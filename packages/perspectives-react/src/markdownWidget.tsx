@@ -49,7 +49,7 @@ md.use(mila, {
 
 interface PerspectivesEntryPoint {
   opencontext: (event: Event, roleIdentifier: RoleInstanceT) => void;
-  runaction: (event: Event, actionName: string, contextid: ContextInstanceT, myroletype: RoleType) => void;
+  runaction: (event: Event, actionName: string, readableActionName: string, contextid: ContextInstanceT, myroletype: RoleType) => void;
 }
 
 declare global {
@@ -66,10 +66,9 @@ if (!window.$perspectives_entry_point_for_markdown$)
       event.preventDefault();
       event.stopPropagation();
       // NOTICE dependency on MyContexts App.js! Instead, put handlers in the screen component.
-      // @ts-ignore
       (document.getElementById(__MyContextsContainer__) as HTMLElement).dispatchEvent(new CustomEvent('OpenContext', { detail: roleIdentifier, bubbles: true }));
     },
-    runaction: function(event: Event, actionName: string, contextid: ContextInstanceT, myroletype: RoleType) {
+    runaction: function(event: Event, actionName: string, readableActionName: string, contextid: ContextInstanceT, myroletype: RoleType) {
       event.preventDefault();
       event.stopPropagation();
 
@@ -78,7 +77,7 @@ if (!window.$perspectives_entry_point_for_markdown$)
           UserMessagingPromise .then(um =>
             um.addMessageForEndUser({
               title: i18next.t("action_title", { ns: 'preact' }),
-              message: i18next.t("action_message", { ns: 'preact', action: actionName }),
+              message: i18next.t("action_message", { ns: 'preact', action: readableActionName }),
               error: e.toString()
             })
           )

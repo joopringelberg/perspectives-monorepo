@@ -124,24 +124,24 @@ export default class FormControls extends PerspectivesComponent<FormControlsProp
     });
   }
 
-  runAction( actionName : string | null )
+  runAction( actionKey : string | null )
   {
     const component = this;
     PDRproxy.then(
       function (pproxy)
       {
-        if (component.props.roleinstance && actionName)
+        if (component.props.roleinstance && actionKey)
           {
             pproxy.action(
               component.props.roleinstance
               , component.props.contextinstance
               , component.props.perspective.id
-              , actionName
+              , actionKey
               , component.props.myroletype) // authoringRole
             .catch(e => UserMessagingPromise.then( um => 
               um.addMessageForEndUser(
                 { title: i18next.t("action_title", { ns: 'preact' }) 
-                , message: i18next.t("action_message", {ns: 'preact', action: actionName})
+                , message: i18next.t("action_message", {ns: 'preact', action: component.state.actions[actionKey]})
                 , error: e.toString()
                 })));              
           }

@@ -522,7 +522,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           .catch(e => UserMessagingPromise.then( um => 
             um.addMessageForEndUser(
               { title: i18next.t("action_title", { ns: 'preact' }) 
-              , message: i18next.t("action_message", {ns: 'preact', action: actionName})
+              , message: i18next.t("action_message", {ns: 'preact', action: component.state.actions![actionName]})
               , error: e.toString()
               })));  
         });

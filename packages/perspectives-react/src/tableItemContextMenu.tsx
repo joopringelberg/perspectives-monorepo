@@ -46,12 +46,15 @@ interface TableItemContextMenuState {
 
 export default class TableItemContextMenu extends Component<TableItemContextMenuProps, TableItemContextMenuState>
 {
+
   ref: React.RefObject<HTMLTableRowElement| null>;
+  actionsMap: { [key: string]: string };
   constructor( props : TableItemContextMenuProps )
   {
     super(props);
     this.state = {actions: []};
     this.ref = React.createRef();
+    this.actionsMap = {}
   }
 
   static defaultProps = { isOpen: true };
@@ -85,42 +88,42 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
 
   computeActionItems(): JSX.Element[] 
   {
-  if (!this.props.isOpen) return [];
-      // Computes the actions available based on context- and subject state, combined with those
-    // available based on object state.
-    const component = this;
-    const props = this.props;
-    const perspective = this.props.perspective;
-    let objectStateActions = {};
-    // It happens that the perspective is not always yet updated when we compute actions.
-    // It also happens that the selectedroleinstance is not updated while the perspectives are?
-    if (props.roleinstance && perspective.roleInstances[ props.roleinstance])
-    {
-      objectStateActions = perspective.roleInstances[ props.roleinstance ].actions;
-    }
-    const actionsMap = Object.assign( {}, perspective.actions, objectStateActions );
+    if (!this.props.isOpen) return [];
+        // Computes the actions available based on context- and subject state, combined with those
+      // available based on object state.
+      const component = this;
+      const props = this.props;
+      const perspective = this.props.perspective;
+      let objectStateActions = {};
+      // It happens that the perspective is not always yet updated when we compute actions.
+      // It also happens that the selectedroleinstance is not updated while the perspectives are?
+      if (props.roleinstance && perspective.roleInstances[ props.roleinstance])
+      {
+        objectStateActions = perspective.roleInstances[ props.roleinstance ].actions;
+      }
+      this.actionsMap = Object.assign( {}, perspective.actions, objectStateActions );
 
-    const actions = Object.keys(actionsMap).map(
-                          function(actionName)
-                          {
-                            return    <Dropdown.Item
-                                        key={actionName}
-                                        eventKey={actionName}
-                                        onClick={ () => component.runAction( actionName )}
-                                      >{
-                                        actionsMap[actionName]
-                                      }</Dropdown.Item>;
-                          }
-                        )
-    if (actions.length > 0)
-    {
-      actions.push(<Dropdown.Divider key="BeforeActions"/>)
-      return actions
-    }
-    else
-    {
-      return [];
-    }
+      const actions = Object.keys(component.actionsMap).map(
+                            function(actionName)
+                            {
+                              return    <Dropdown.Item
+                                          key={actionName}
+                                          eventKey={actionName}
+                                          onClick={ () => component.runAction( actionName )}
+                                        >{
+                                          component.actionsMap[actionName]
+                                        }</Dropdown.Item>;
+                            }
+                          )
+      if (actions.length > 0)
+      {
+        actions.push(<Dropdown.Divider key="BeforeActions"/>)
+        return actions
+      }
+      else
+      {
+        return [];
+      }
   }
 
   runAction( actionName : string)
@@ -138,7 +141,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
           .catch(e => UserMessagingPromise.then( um => 
             um.addMessageForEndUser(
               { title: i18next.t("action_title", { ns: 'preact' }) 
-              , message: i18next.t("action_message", {ns: 'preact', action: actionName})
+              , message: i18next.t("action_message", {ns: 'preact', action: component.actionsMap[actionName]})
               , error: e.toString()
               })));  
       });

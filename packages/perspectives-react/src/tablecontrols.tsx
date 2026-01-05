@@ -133,7 +133,7 @@ export default class TableControls extends PerspectivesComponent<TableControlsPr
           .catch(e => UserMessagingPromise.then( um => 
             um.addMessageForEndUser(
               { title: i18next.t("action_title", { ns: 'preact' }) 
-              , message: i18next.t("action_message", {ns: 'preact', action: actionName})
+              , message: i18next.t("action_message", {ns: 'preact', action: component.state.actions[actionName]})
               , error: e.toString()
               })));  
       });
