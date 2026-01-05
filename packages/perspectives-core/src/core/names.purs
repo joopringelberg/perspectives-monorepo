@@ -29,6 +29,7 @@ import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Effect.Exception (error)
 import Foreign.Object (Object, delete, filter, fromFoldable, keys, lookup) as OBJ
+import Foreign.Object (values)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Data.EncodableMap (lookup) as MAP
 import Perspectives.DomeinCache (lookupStableModelUri_)
@@ -115,6 +116,9 @@ defaultReadableNamespaces = OBJ.fromFoldable
   , Tuple "hypercontext" "model://perspectives.domains#HyperContext"
   , Tuple "introduction" "model://perspectives.domains#Introduction"
   ]
+
+defaultModelReadableNames :: Array String
+defaultModelReadableNames = values defaultReadableNamespaces
 
 defaultIndexedNames :: MonadPerspectives (OBJ.Object String)
 defaultIndexedNames = do

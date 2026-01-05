@@ -38,8 +38,8 @@ module Perspectives.Sidecar.NormalizeTypeNames
 import Prelude
 
 import Control.Monad.Reader (Reader, ask, runReaderT)
-import Data.Array (catMaybes, foldM)
-import Data.Map (Map, empty, fromFoldable, insert, lookup, toUnfoldable) as Map
+import Data.Array (catMaybes, elem, foldM)
+import Data.Map (Map, empty, fromFoldable, insert, lookup, toUnfoldable, union) as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
@@ -57,7 +57,7 @@ import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..))
 import Perspectives.InvertedQuery.Storable (StoredQueries, StorableInvertedQuery)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey(..), deserializeInvertedQueryKey, serializeInvertedQueryKey)
 import Perspectives.ModelDependencies (modelURIReadable, modelsInUse, versionedModelURI)
-import Perspectives.Names (getMySystem)
+import Perspectives.Names (defaultModelReadableNames, getMySystem)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (toStableDomeinFile)
 import Perspectives.Persistence.API (Keys(..), getViewOnDatabase)
 import Perspectives.Persistent (modelDatabaseName)
@@ -128,7 +128,8 @@ getSideCars :: DomeinFile Readable -> Boolean -> MonadPerspectives (Map.Map (Mod
 getSideCars df@(DomeinFile { referredModels }) versioned = do
   -- Notice that referredModels from a freshly parsed Arc source will be FQNs with names given by the modeller, rather than underlying cuids.
   cuidMap <- getinstalledModelCuids versioned
-  foldM
+  standardModelSideCars <- getStandardModelSidecars versioned
+  importedModelSideCars <- foldM
     ( \sidecars (ModelUri referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
         Nothing -> pure sidecars
         Just (domeinFileName :: ModelUri Stable) -> do
@@ -139,6 +140,23 @@ getSideCars df@(DomeinFile { referredModels }) versioned = do
     )
     Map.empty
     referredModels
+  pure $ Map.union importedModelSideCars standardModelSideCars
+
+getStandardModelSidecars :: Boolean -> MonadPerspectives (Map.Map (ModelUri Readable) StableIdMapping)
+getStandardModelSidecars versioned = do
+  cuidMap <- getinstalledModelCuids versioned
+  foldM
+    ( \sidecars (Tuple (ModelUri readableModelUri) stableModelUri) -> do
+        if readableModelUri `elem` defaultModelReadableNames then do
+          mmapping <- loadStableMapping stableModelUri versioned
+          case mmapping of
+            Nothing -> pure sidecars
+            Just submapping -> pure $ Map.insert (ModelUri readableModelUri) submapping sidecars
+        else
+          pure sidecars
+    )
+    Map.empty
+    (Map.toUnfoldable cuidMap)
 
 -- | A map from ModelUri Readable to ModelUri Stable, for all installed models (registered in the role PerspectivesSystem$ModelsInUse).
 -- | Not every installed model need have cuid, as long as we have not completely moved to stable identifiers!
