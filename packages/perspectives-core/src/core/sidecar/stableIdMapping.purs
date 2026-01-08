@@ -37,6 +37,7 @@ module Perspectives.Sidecar.StableIdMapping
   , module Perspectives.SideCar.PhantomTypedNewtypes
   ) where
 
+import Data.Tuple (Tuple(..))
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -47,7 +48,7 @@ import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.ErrorLogging (logPerspectivesError)
-import Perspectives.Identifiers (modelUri2ModelUrl, typeUri2typeNameSpace_)
+import Perspectives.Identifiers (modelUri2ModelUrl, typeUri2LocalName_, typeUri2typeNameSpace_)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (fromBlob, getAttachment)
 import Perspectives.Persistent (modelDatabaseName)
@@ -98,7 +99,16 @@ type StateKeySnapshot =
 
 -- Actions live under a role and state; we snapshot only the FQN for now.
 -- If needed, we can extend with effect hashes later.
+-- New v5 action snapshot: actions live under a role; store local name and QFD hash
 type ActionKeySnapshot =
+  { fqn :: String
+  , declaringRoleFqn :: String
+  , localName :: String
+  , qfdHash :: String
+  }
+
+-- Legacy v4 action snapshot (state-based). Used for upgrade on load.
+type ActionKeySnapshotV4 =
   { fqn :: String
   , declaringRoleFqn :: String
   , declaringStateFqn :: String
@@ -148,7 +158,7 @@ type StableIdMapping =
 
 emptyStableIdMapping :: StableIdMapping
 emptyStableIdMapping =
-  { version: 4
+  { version: 5
   , contexts: empty
   , roles: empty
   , properties: empty
@@ -227,6 +237,79 @@ upgradeWithoutIndividuals m =
   , modelIdentifier: m.modelIdentifier
   }
 
+-- Strict v4 (pre-localName/qfdHash) mapping used for upgrade
+type StableIdMappingV4 =
+  { version :: Int
+  , contexts :: Object String
+  , roles :: Object String
+  , properties :: Object String
+  , views :: Object String
+  , states :: Object String
+  , actions :: Object String
+  , contextKeys :: Object ContextKeySnapshot
+  , roleKeys :: Object RoleKeySnapshot
+  , propertyKeys :: Object PropertyKeySnapshot
+  , viewKeys :: Object ViewKeySnapshot
+  , stateKeys :: Object StateKeySnapshot
+  , actionKeys :: Object ActionKeySnapshotV4
+  , contextIndividualKeys :: Object ContextIndividualKeySnapshot
+  , roleIndividualKeys :: Object RoleIndividualKeySnapshot
+  , contextCuids :: Object String
+  , roleCuids :: Object String
+  , propertyCuids :: Object String
+  , viewCuids :: Object String
+  , stateCuids :: Object String
+  , actionCuids :: Object String
+  , contextIndividuals :: Object String
+  , roleIndividuals :: Object String
+  , modelIdentifier :: ModelUri Stable
+  }
+
+upgradeV4 :: StableIdMappingV4 -> StableIdMapping
+upgradeV4 m =
+  let
+    -- convert legacy action snapshots to v5
+    toV5 :: ActionKeySnapshotV4 -> ActionKeySnapshot
+    toV5 s =
+      let
+        ln = typeUri2LocalName_ s.fqn
+      in
+        { fqn: s.fqn
+        , declaringRoleFqn: s.declaringRoleFqn
+        , localName: ln
+        , qfdHash: "" -- unknown from legacy sidecar
+        }
+  in
+    { version: 5
+    , contexts: m.contexts
+    , roles: m.roles
+    , properties: m.properties
+    , views: m.views
+    , states: m.states
+    , actions: m.actions
+    , contextKeys: m.contextKeys
+    , roleKeys: m.roleKeys
+    , propertyKeys: m.propertyKeys
+    , viewKeys: m.viewKeys
+    , stateKeys: m.stateKeys
+    , actionKeys: OBJ.fromFoldable do
+        k <- OBJ.keys m.actionKeys
+        case OBJ.lookup k m.actionKeys of
+          Nothing -> []
+          Just s -> [ Tuple k (toV5 s) ]
+    , contextIndividualKeys: m.contextIndividualKeys
+    , roleIndividualKeys: m.roleIndividualKeys
+    , contextCuids: m.contextCuids
+    , roleCuids: m.roleCuids
+    , propertyCuids: m.propertyCuids
+    , viewCuids: m.viewCuids
+    , stateCuids: m.stateCuids
+    , actionCuids: m.actionCuids
+    , contextIndividuals: m.contextIndividuals
+    , roleIndividuals: m.roleIndividuals
+    , modelIdentifier: m.modelIdentifier
+    }
+
 -- Resolve a CUID for an FQN:
 -- 1) Try direct (legacy keys can still exist in *Cuids).
 -- 2) Resolve via alias map to canonical, then lookup in *Cuids.
@@ -299,7 +382,9 @@ loadStableMapping (ModelUri domeinFileName) fromRepo = do
         Right (m :: StableIdMapping) -> Just m
         _ -> case readJSON txt of
           Right (m0 :: StableIdMappingWithoutIndividuals) -> Just (upgradeWithoutIndividuals m0)
-          _ -> Nothing
+          _ -> case readJSON txt of
+            Right (mv4 :: StableIdMappingV4) -> Just (upgradeV4 mv4)
+            _ -> Nothing
 
 loadStableMapping_ :: String -> String -> MonadPerspectives (Maybe StableIdMapping)
 loadStableMapping_ database documentName = do
@@ -380,16 +465,15 @@ idUriForState m (StateUri stateFqn) =
         nameSpaceTid <- idUriForState m (StateUri nsFqn)
         pure (nameSpaceTid <> "$" <> stTid)
 
--- Actions are declared under a role, partitioned by a state. Build ID by role tid + state cuid + action cuid.
--- The readable FQN uses $ separators: <roleFqn>$<stateLocal>$<actionLocal> (or nested state path). We rely on cuid lookups.
+-- Actions are declared under a role. Build ID by role tid + action cuid.
+-- The readable FQN uses $ separators: <roleFqn>$<actionLocal>. We rely on cuid lookups.
 idUriForAction :: StableIdMapping -> ActionUri Readable -> Maybe String
 idUriForAction m (ActionUri actionFqn) = do
-  -- The namespace of an action is the parent state FQN; its namespace is the role FQN.
-  -- We'll derive role tid via the parent role FQN, then append state cuid and action cuid.
-  let stateFqn = typeUri2typeNameSpace_ actionFqn
-  stateTid <- idUriForState m (StateUri stateFqn)
+  -- The namespace of an action is the parent role FQN in v5.
+  let roleFqn = typeUri2typeNameSpace_ actionFqn
+  rolTid <- idUriForRole m (RoleUri roleFqn)
   actTid <- lookupActionCuid m (ActionUri actionFqn)
-  pure (stateTid <> "$" <> actTid)
+  pure (rolTid <> "$" <> actTid)
 
 -- Lookup helpers for indexed individuals
 lookupContextIndividualId :: StableIdMapping -> String -> Maybe String

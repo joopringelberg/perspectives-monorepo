@@ -74,7 +74,7 @@ import Perspectives.Representation.Perspective (StateSpec, stateSpec2StateIdenti
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), PropertyType(..), RoleType(..), roletype2string)
-import Perspectives.SideCar.PhantomTypedNewtypes (Stable)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
 import Purescript.YAML (load)
 import Simple.JSON (read_)
@@ -600,12 +600,17 @@ instance Translation ActionsTranslation where
       Just ts -> ts
 
 instance Translation ActionsPerStateTranslation where
+  -- qualify namespace (ActionsPerStateTranslation obj) =
+  --   ActionsPerStateTranslation $ singleton namespace
+  --     ( ActionsTranslation $ fromFoldable $ join
+  --         ( ((toUnfoldable obj) :: Array (Tuple String ActionsTranslation)) <#>
+  --             \(Tuple key val) -> toUnfoldable (unwrap (qualify namespace val))
+  --         )
+  --     )
   qualify namespace (ActionsPerStateTranslation obj) =
-    ActionsPerStateTranslation $ singleton namespace
-      ( ActionsTranslation $ fromFoldable $ join
-          ( ((toUnfoldable obj) :: Array (Tuple String ActionsTranslation)) <#>
-              \(Tuple key val) -> toUnfoldable (unwrap (qualify namespace val))
-          )
+    ActionsPerStateTranslation $ fromFoldable
+      ( ((toUnfoldable obj) :: Array (Tuple String ActionsTranslation)) <#>
+          \(Tuple state val) -> Tuple state (qualify namespace val)
       )
 
   -- ActionsPerStateTranslation $ fromFoldable 
@@ -842,12 +847,10 @@ writeTranslationYaml modeltranslation = execWriter (writeYaml "" modeltranslatio
 -- | Pass the same StableIdMapping that was used to normalize (readable -> stable)
 -- | so we can invert back (stable -> readable) deterministically. If a reverse
 -- | lookup fails for a key, the stable id key is left as-is.
-writeReadableTranslationYaml :: StableIdMapping -> ModelTranslation -> String
-writeReadableTranslationYaml mapping mt =
-  let
-    readable = toReadableModelTranslation mapping mt
-  in
-    execWriter (writeYaml "" readable)
+writeReadableTranslationYaml :: StableIdMapping -> ModelTranslation -> MonadPerspectives String
+writeReadableTranslationYaml mapping mt = do
+  readable <- toReadableModelTranslation mt
+  pure $ execWriter (writeYaml "" readable)
 
 -------------------------------------------------------------------------------
 ---- QUALIFY NAMES IN TRANSLATION
@@ -860,7 +863,7 @@ qualifyModelTranslation m@(ModelTranslation { namespace }) = qualify namespace m
 -------------------------------------------------------------------------------
 -- Each key is the string representation of a type (ContextType, EnumeratedRoleType,
 -- CalculatedRoleType, EnumeratedPropertyType, CalculatedPropertyType) or of the combination 
--- of a StateIdentifier and an Action name (separated by '$').
+-- of a (user) EnumeratedRoleType or CalculatedRoleType and an Action name (separated by '$').
 
 generateTranslationTable :: ModelTranslation -> TranslationTable
 generateTranslationTable modeltranslation = TranslationTable $ execState (writeKeys modeltranslation) empty
@@ -888,12 +891,9 @@ parseTranslation_pass1 source = do
         ModelTranslation_ { namespace: NULL.notNull namespace, version: version, contexts, roles }
     Nothing -> ModelTranslation_ { namespace: NULL.notNull "IllegalYaml", version: NULL.null, contexts: NULL.null, roles: NULL.null }
 
-parseTranslation_pass2 :: ModelTranslation -> StableIdMapping -> Effect ModelTranslation
-parseTranslation_pass2 m@(ModelTranslation modelTranslation) mapping = do
-  -- If there is a context CUID in the mapping, we use its namespace to qualify all names in the translation.
-  case head $ keys mapping.contextCuids of
-    Nothing -> pure $ qualifyModelTranslation m
-    Just someFqn -> pure $ fromReadableModelTranslation mapping (qualifyModelTranslation (ModelTranslation modelTranslation { namespace = typeUri2typeNameSpace_ someFqn }))
+parseTranslation_pass2 :: ModelTranslation -> ModelUri Readable -> MonadPerspectives ModelTranslation
+parseTranslation_pass2 m@(ModelTranslation modelTranslation) (ModelUri someFqn) =
+  fromReadableModelTranslation (qualifyModelTranslation (ModelTranslation modelTranslation { namespace = typeUri2typeNameSpace_ someFqn }))
 
 type ParsedYaml = Object { contexts :: NULL.Nullable ContextsTranslation_, roles :: NULL.Nullable RolesTranslation_, version :: NULL.Nullable String }
 

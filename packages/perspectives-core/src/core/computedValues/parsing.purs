@@ -37,6 +37,7 @@ import Data.MediaType (MediaType(..))
 import Data.Traversable (traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
+import Decacheable (decache)
 import Effect.Aff (error)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -66,12 +67,12 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, addDocument, deleteDocument, fromBlob, getAttachment, getDocument, retrieveDocumentVersion, toFile, tryGetDocument_)
 import Perspectives.PerspectivesState (addWarning, getWarnings, resetWarnings, setWarnings)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
+import Perspectives.Representation.Class.Cacheable (cacheEntity, tryReadEntiteitFromCache)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
-import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
-import Perspectives.Sidecar.StableIdMapping (ModelUri(..), StableIdMapping, loadStableMapping) as Sidecar
+import Perspectives.Sidecar.StableIdMapping (ModelUri(..), StableIdMapping, loadStableMapping, Stable) as Sidecar
 import Perspectives.Sidecar.StableIdMapping (fromLocalModels, fromRepository)
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFileWithSidecar_, loadAndCompileArcFile_)
 import Simple.JSON (readJSON, readJSON_, writeJSON)
@@ -144,7 +145,7 @@ uploadToRepository modelUri_ arcSource_ versionedModelManifest =
   try
     ( case head modelUri_, head arcSource_ of
         Just modelUri, Just arcSource -> do
-          -- Retrieve existing sidecar (if any) from repository. modelUri should be Stable.
+          -- Retrieve existing sidecar (if any) from repository. modelUri should be Sidecar.Stable.
           mMapping <- do
             m <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri modelUri) fromRepository
             case m of
@@ -155,7 +156,7 @@ uploadToRepository modelUri_ arcSource_ versionedModelManifest =
           case mmodelCuid of
             Nothing -> lift $ addWarning "Parsing$applyImmediately: no model CUID given!"
             Just (Value modelCuid) -> do
-              r <- loadAndCompileArcFileWithSidecar_ ((Sidecar.ModelUri $ unversionedModelUri modelUri) :: ModelUri Stable) arcSource false mMapping modelCuid
+              r <- loadAndCompileArcFileWithSidecar_ ((Sidecar.ModelUri $ unversionedModelUri modelUri) :: Sidecar.ModelUri Sidecar.Stable) arcSource false mMapping modelCuid
               case r of
                 Left m -> logPerspectivesError $ Custom ("uploadToRepository: " <> show m)
                 -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries plus the updated mapping.
@@ -170,7 +171,7 @@ type URL = String
 -- | As uploadToRepository, but provide the DomeinFile as argument.
 -- | Adds an empty TranslationTable if the DomeinFile did not yet exist in the Repository.
 -- TODO: retrieve the mapping sidecar from the repository in this function, save its updated value to the repository here too.
-uploadToRepository_ :: { repositoryUrl :: String, documentName :: String } -> DomeinFile Stable -> StoredQueries -> Sidecar.StableIdMapping -> MonadPerspectives Unit
+uploadToRepository_ :: { repositoryUrl :: String, documentName :: String } -> DomeinFile Sidecar.Stable -> StoredQueries -> Sidecar.StableIdMapping -> MonadPerspectives Unit
 uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping = do
   -- Get the attachment info
   (mremoteDf :: Maybe DocWithAttachmentInfo) <- tryGetDocument_ splitName.repositoryUrl splitName.documentName
@@ -353,11 +354,16 @@ getTranslationYaml modelTranslation_ _ = case head modelTranslation_ of
     Left e -> handleExternalFunctionError "model://perspectives.domains#Parsing$GetTranslationYaml"
       (Left $ error (show e))
     Right m@(ModelTranslation translation) -> do
-      mMapping <- lift $ lift $ Sidecar.loadStableMapping (Sidecar.ModelUri (translation.namespace <> "@" <> translation.version)) fromRepository
+      let versionedModelUri = Sidecar.ModelUri (translation.namespace <> "@" <> translation.version)
+      mMapping <- lift $ lift $ Sidecar.loadStableMapping versionedModelUri fromRepository
       case mMapping of
         Nothing -> pure $ Value $ MT.writeTranslationYaml m
         Just mapping -> do
-          pure $ Value $ MT.writeReadableTranslationYaml mapping m
+          result <- lift $ lift $ withRepositoryModel versionedModelUri (\_ -> MT.writeReadableTranslationYaml mapping m)
+          pure $ Value result
+
+-- Just mapping -> do
+--   lift $ lift (Value <$> MT.writeReadableTranslationYaml mapping m)
 
 -- | From a YAML string, generate a (serialised) ModelTranslation.
 parseYamlTranslation :: Array String -> (RoleInstance ~~> Value)
@@ -372,12 +378,25 @@ parseYamlTranslation pfile_ _ = ArrayT case head pfile_ of
         case translation' of
           Left e -> throwError e
           Right (ModelTranslation translation) -> do
-            mMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri (translation.namespace <> "@" <> translation.version)) fromRepository
-            case mMapping of
-              Nothing -> pure $ [ Value $ writeJSON translation ]
-              Just mapping -> do
-                translation'' <- liftEffect $ MT.parseTranslation_pass2 (ModelTranslation translation) mapping
-                pure $ [ Value $ writeJSON translation'' ]
+            let (versionedModelUri :: Sidecar.ModelUri Sidecar.Stable) = Sidecar.ModelUri (translation.namespace <> "@" <> translation.version)
+            -- Notice we need to provide the Readable ModelUri to pass2.
+            translation'' <- lift $ withRepositoryModel versionedModelUri (\(DomeinFile { namespace }) -> MT.parseTranslation_pass2 (ModelTranslation translation) namespace)
+            pure $ [ Value $ writeJSON translation'' ]
+
+withRepositoryModel :: forall a. Sidecar.ModelUri Sidecar.Stable -> (DomeinFile Sidecar.Stable -> MonadPerspectives a) -> MonadPerspectives a
+withRepositoryModel (Sidecar.ModelUri versionedModelName) thunk = do
+  { repositoryUrl, documentName } <- pure $ unsafePartial modelUri2ModelUrl versionedModelName
+  dfile@(DomeinFile { id, namespace }) <- getDocument repositoryUrl documentName
+  mcurrentVersionOfDomeinFile :: Maybe (DomeinFile Sidecar.Stable) <- tryReadEntiteitFromCache id
+  -- Store the Repository version in cache.
+  void $ cacheEntity id dfile
+  result <- thunk dfile
+  case mcurrentVersionOfDomeinFile of
+    -- We had nothing in cache, so remove from cache again.
+    Nothing -> decache id
+    -- Restore the original cached version.
+    Just currentVersionOfDomeinFile -> void $ cacheEntity id currentVersionOfDomeinFile
+  pure result
 
 -- | From a PString that holds a ModelTranslation, generate the table and upload to the repository.
 -- | The ModelUriString should be versioned (e.g. model://perspectives.domains#System@1.0).

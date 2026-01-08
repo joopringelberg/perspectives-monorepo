@@ -63,29 +63,29 @@ import Data.String.CodeUnits (drop, toCharArray)
 import Data.String.CodeUnits as SCU
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
+import Effect.Class (class MonadEffect, liftEffect)
 import Foreign.Object (Object)
 import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
+import Perspectives.Cuid2 (cuid2)
+import Perspectives.Data.EncodableMap (toUnfoldable) as EM
 import Perspectives.DomeinFile (DomeinFileRecord)
 import Perspectives.ExecuteInTopologicalOrder (sortTopologicallyEither)
 import Perspectives.Identifiers (isModelUri, typeUri2LocalName_, typeUri2typeNameSpace_, modelUri2SchemeAndAuthority)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), range)
+import Perspectives.Representation.Action (Action(..))
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Context (enumeratedRoles)
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
-import Perspectives.Representation.Action (Action)
+import Perspectives.Representation.Perspective (Perspective(..), StateSpec)
 import Perspectives.Representation.State (State(..)) as ST
 import Perspectives.Representation.TypeIdentifiers (propertytype2string, roletype2string)
 import Perspectives.Representation.View (View(..)) as VW
 import Perspectives.Sidecar.HashQFD (qfdSignature)
 import Perspectives.Sidecar.StableIdMapping (ActionKeySnapshot, ContextIndividualKeySnapshot, ContextKeySnapshot, PropertyKeySnapshot, RoleIndividualKeySnapshot, RoleKeySnapshot, Stable, StableIdMapping, StateKeySnapshot, ViewKeySnapshot, emptyStableIdMapping, idUriForContext, idUriForRole, ContextUri(..), RoleUri(..), ModelUri(..))
-import Perspectives.Cuid2 (cuid2)
-import Effect.Class (class MonadEffect, liftEffect)
-import Perspectives.Representation.Perspective (Perspective(..), StateSpec, stateSpec2StateIdentifier)
-import Perspectives.Data.EncodableMap (toUnfoldable) as EM
 
 -- | We match three kinds for now (omit state types): Context, Role, Property
 newtype ContextKey = ContextKey
@@ -631,15 +631,14 @@ extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: cro
                       r.perspectives
                   accumulate a (Tuple ss objActs) =
                     let
-                      stFqn = unwrap (stateSpec2StateIdentifier ss)
-                      ks = OBJ.keys objActs
-                      inserts = ks <#>
-                        ( \nm -> Tuple (stFqn <> "$" <> nm)
-                            { fqn: stFqn <> "$" <> nm
-                            , declaringRoleFqn: roleFqn
-                            , declaringStateFqn: stFqn
-                            }
-                        )
+                      entries = OBJ.toUnfoldable objActs :: Array (Tuple String Action)
+                      inserts = entries <#> \(Tuple nm (Action act)) ->
+                        let
+                          local = typeUri2LocalName_ nm
+                          fqn = roleFqn <> "$" <> local
+                          qh = qfdSignature act.qfd
+                        in
+                          Tuple fqn { fqn, declaringRoleFqn: roleFqn, localName: local, qfdHash: qh }
                     in
                       OBJ.union a (OBJ.fromFoldable inserts)
                 in
@@ -669,15 +668,14 @@ extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: cro
                     r.perspectives
                   accumulate a (Tuple ss objActs) =
                     let
-                      stFqn = unwrap (stateSpec2StateIdentifier ss)
-                      ks = OBJ.keys objActs
-                      inserts = ks <#>
-                        ( \nm -> Tuple (stFqn <> "$" <> nm)
-                            { fqn: stFqn <> "$" <> nm
-                            , declaringRoleFqn: roleFqn
-                            , declaringStateFqn: stFqn
-                            }
-                        )
+                      entries = OBJ.toUnfoldable objActs :: Array (Tuple String Action)
+                      inserts = entries <#> \(Tuple nm (Action act)) ->
+                        let
+                          local = typeUri2LocalName_ nm
+                          fqn = roleFqn <> "$" <> local
+                          qh = qfdSignature act.qfd
+                        in
+                          Tuple fqn { fqn, declaringRoleFqn: roleFqn, localName: local, qfdHash: qh }
                     in
                       OBJ.union a (OBJ.fromFoldable inserts)
                 in
@@ -958,14 +956,16 @@ mergeStableIdMapping cur mapping0 =
       let
         toSnap fqn =
           let
-            stFqn = typeUri2typeNameSpace_ fqn
-            rolFqn = typeUri2typeNameSpace_ stFqn
+            -- For legacy keys possibly containing a state segment, derive role by stripping once or twice
+            stOrLocal = typeUri2typeNameSpace_ fqn
+            rolFqn = typeUri2typeNameSpace_ stOrLocal
+            nm = lastSegment fqn
           in
-            Tuple fqn { fqn, declaringRoleFqn: rolFqn, declaringStateFqn: stFqn }
+            Tuple fqn { fqn, declaringRoleFqn: rolFqn, localName: nm, qfdHash: "" }
       in
         OBJ.fromFoldable (OBJ.keys mapping0.actionCuids <#> toSnap)
     oldActionsForAliasing = OBJ.union mapping0.actionKeys letOldActionsFromCuids
-    actionAliases' = buildActionAliases oldActionsForAliasing mapping0.actions (OBJ.fromFoldable (OBJ.keys cur.actions <#> (\k -> Tuple k true))) stateAliases'
+    actionAliases' = buildActionAliases oldActionsForAliasing mapping0.actions cur.actions rolAliases'
     actionCuids' = assignCuids actionAliases' mapping0.actionCuids (OBJ.keys cur.actions)
   in
     mapping0
@@ -1139,110 +1139,77 @@ buildStateAliasesTopologically oldStates ctxAliases acc0 curIndex =
 buildActionAliases
   :: OBJ.Object ActionKeySnapshot -- old action snapshots
   -> OBJ.Object String -- existing alias map (oldFqn -> newFqn)
-  -> OBJ.Object Boolean -- current index of canonical action FQNs
-  -> OBJ.Object String -- state alias map (oldStateFqn -> newStateFqn)
+  -> OBJ.Object ActionKeySnapshot -- current canonical action snapshots
+  -> OBJ.Object String -- role alias map (oldRoleFqn -> newRoleFqn)
   -> OBJ.Object String
-buildActionAliases oldActions acc0 curIndex stateAliases =
+buildActionAliases oldActions acc0 curActions roleAliases =
   let
-    -- Group current canonical actions by parent state FQN, with a map of localName -> full FQN
-    currentByParentLocal :: OBJ.Object (OBJ.Object String)
-    currentByParentLocal =
+    -- Index current actions by (roleFqn, qfdHash) and (roleFqn, localName)
+    byRoleHash :: OBJ.Object (OBJ.Object String)
+    byRoleHash =
       let
-        addOne acc fqn =
+        add acc fqn snap =
           let
-            parent = typeUri2typeNameSpace_ fqn
-            local = lastSegment fqn
-            inner = case OBJ.lookup parent acc of
-              Nothing -> OBJ.singleton local fqn
-              Just mp -> OBJ.insert local fqn mp
+            rf = snap.declaringRoleFqn
+            bucket = case OBJ.lookup rf acc of
+              Nothing -> OBJ.empty
+              Just mp -> mp
+            bucket' = OBJ.insert snap.qfdHash fqn bucket
           in
-            OBJ.insert parent inner acc
+            OBJ.insert rf bucket' acc
       in
-        foldl addOne OBJ.empty (OBJ.keys curIndex)
+        foldl
+          ( \acc fqn -> case OBJ.lookup fqn curActions of
+              Nothing -> acc
+              Just s -> add acc fqn s
+          )
+          OBJ.empty
+          (OBJ.keys curActions)
 
-    -- Local accumulator type for pass 1
-    -- We avoid a local type alias (not allowed in this scope) by describing the record inline where used.
-
-    -- Pass 1: exact same-name under aliased parent state
-    pass1 =
+    byRoleLocal :: OBJ.Object (OBJ.Object String)
+    byRoleLocal =
       let
-        step a oldFqn = case OBJ.lookup oldFqn oldActions of
-          Nothing -> a
-          Just sOld ->
-            if OBJ.lookup oldFqn curIndex /= Nothing then a -- old still canonical; no alias needed
-            else
-              let
-                st0 = sOld.declaringStateFqn
-                stN = case OBJ.lookup st0 stateAliases of
-                  Just ns -> ns
-                  Nothing -> st0
-                local = lastSegment oldFqn
-                cand = stN <> "$" <> local
-              in
-                case Tuple (OBJ.lookup cand curIndex) (OBJ.lookup cand a.matchedNew) of
-                  Tuple (Just _) Nothing ->
-                    { aliases: OBJ.insert oldFqn cand a.aliases
-                    , matchedNew: OBJ.insert cand true a.matchedNew
-                    }
-                  _ -> a
+        add acc fqn snap =
+          let
+            rf = snap.declaringRoleFqn
+            bucket = case OBJ.lookup rf acc of
+              Nothing -> OBJ.empty
+              Just mp -> mp
+            bucket' = OBJ.insert snap.localName fqn bucket
+          in
+            OBJ.insert rf bucket' acc
       in
-        foldl step { aliases: acc0, matchedNew: OBJ.empty } (OBJ.keys oldActions)
+        foldl
+          ( \acc fqn -> case OBJ.lookup fqn curActions of
+              Nothing -> acc
+              Just s -> add acc fqn s
+          )
+          OBJ.empty
+          (OBJ.keys curActions)
 
-    -- Build unmatched sets per parent for pass 2 (rename within same parent)
-    oldUnmatchedByParent :: OBJ.Object (Array String)
-    oldUnmatchedByParent =
+    -- Try match by qfdHash first; fallback to localName for legacy data (empty hash)
+    resolve rfOld sOld =
       let
-        addOld acc oldFqn = case OBJ.lookup oldFqn oldActions of
-          Nothing -> acc
-          Just sOld ->
-            if OBJ.lookup oldFqn curIndex /= Nothing then acc
-            else if OBJ.lookup oldFqn pass1.aliases /= Nothing then acc
-            else
-              let
-                st0 = sOld.declaringStateFqn
-                stN = case OBJ.lookup st0 stateAliases of
-                  Just ns -> ns
-                  Nothing -> st0
-                arr = case OBJ.lookup stN acc of
-                  Nothing -> [ oldFqn ]
-                  Just xs -> xs <> [ oldFqn ]
-              in
-                OBJ.insert stN arr acc
+        rfNorm = case OBJ.lookup rfOld roleAliases of
+          Just r -> r
+          Nothing -> rfOld
       in
-        foldl addOld OBJ.empty (OBJ.keys oldActions)
+        if sOld.qfdHash /= "" then
+          case OBJ.lookup rfNorm byRoleHash >>= (\mp -> OBJ.lookup sOld.qfdHash mp) of
+            Just fqn -> Just fqn
+            Nothing -> Nothing
+        else
+          case OBJ.lookup rfNorm byRoleLocal >>= (\mp -> OBJ.lookup sOld.localName mp) of
+            Just fqn -> Just fqn
+            Nothing -> Nothing
 
-    newUnmatchedByParent :: OBJ.Object (Array String)
-    newUnmatchedByParent =
-      let
-        toArr mp = OBJ.values mp
-        addParent acc parent =
-          case OBJ.lookup parent currentByParentLocal of
-            Nothing -> acc
-            Just mp ->
-              let
-                allFqns = toArr mp
-                rem = allFqns # filter (\f -> OBJ.lookup f pass1.matchedNew == Nothing)
-              in
-                if rem == [] then acc else OBJ.insert parent rem acc
-      in
-        foldl addParent OBJ.empty (OBJ.keys currentByParentLocal)
-
-    -- Pass 2: for each parent state, if exactly one old unmatched and one new unmatched, alias them
-    pass2Aliases =
-      let
-        parents = OBJ.keys oldUnmatchedByParent
-        go acc parent =
-          case Tuple (OBJ.lookup parent oldUnmatchedByParent) (OBJ.lookup parent newUnmatchedByParent) of
-            Tuple (Just [ oldOnly ]) (Just [ newOnly ]) ->
-              -- only alias if not already set (defensive)
-              case OBJ.lookup oldOnly pass1.aliases of
-                Just _ -> acc
-                Nothing -> OBJ.insert oldOnly newOnly acc
-            _ -> acc
-      in
-        foldl go pass1.aliases parents
+    step acc oldFqn = case OBJ.lookup oldFqn oldActions of
+      Nothing -> acc
+      Just sOld -> case resolve sOld.declaringRoleFqn sOld of
+        Just newFqn -> OBJ.insert oldFqn newFqn acc
+        Nothing -> acc
   in
-    pass2Aliases
+    foldl step acc0 (OBJ.keys oldActions)
 
 lastSegment :: String -> String
 lastSegment s =
@@ -1430,20 +1397,21 @@ planCuidAssignments cur mapping0 =
 
     stateAliases' = buildStateAliasesTopologically mapping0.stateKeys ctxAliases' mapping0.states candStatesIndex
 
-    -- action aliases: normalize via state alias map and keep local action name
-    candActionsIndex = OBJ.fromFoldable (OBJ.keys cur.actions <#> (\k -> Tuple k true))
+    -- action aliases: match by (normalized role, qfdHash) with fallback to localName for legacy
     letOldActionsFromCuids =
       let
         toSnap fqn =
           let
-            stFqn = typeUri2typeNameSpace_ fqn
-            rolFqn = typeUri2typeNameSpace_ stFqn
+            -- For legacy keys possibly containing a state segment, derive role by stripping once or twice
+            stOrLocal = typeUri2typeNameSpace_ fqn
+            rolFqn = typeUri2typeNameSpace_ stOrLocal
+            nm = lastSegment fqn
           in
-            Tuple fqn { fqn, declaringRoleFqn: rolFqn, declaringStateFqn: stFqn }
+            Tuple fqn { fqn, declaringRoleFqn: rolFqn, localName: nm, qfdHash: "" }
       in
         OBJ.fromFoldable (OBJ.keys mapping0.actionCuids <#> toSnap)
     oldActionsForAliasing = OBJ.union mapping0.actionKeys letOldActionsFromCuids
-    actionAliases' = buildActionAliases oldActionsForAliasing mapping0.actions candActionsIndex stateAliases'
+    actionAliases' = buildActionAliases oldActionsForAliasing mapping0.actions cur.actions rolAliases'
 
     mappingWithAliases = mapping0
       { contexts = ctxAliases'

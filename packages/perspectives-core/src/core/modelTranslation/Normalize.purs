@@ -11,180 +11,110 @@ module Perspectives.ModelTranslation.Normalize
 
 import Prelude
 
-import Control.Monad.Reader (Reader, ask, runReader)
-import Data.Array (mapMaybe, uncons)
-import Data.Maybe (fromMaybe, Maybe(..))
-import Data.String as S
-import Data.String.CodeUnits as CU
+import Data.Array (foldl)
+import Data.List (foldl) as LIST
+import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object)
 import Foreign.Object as OBJ
-import Perspectives.Identifiers (deconstructBuitenRol, isExternalRole)
+import Perspectives.CoreTypes (MonadPerspectives)
+import Perspectives.Data.EncodableMap (values)
+import Perspectives.Identifiers (typeUri2typeNameSpace)
 import Perspectives.ModelTranslation.Representation (ModelTranslation(..), ContextsTranslation(..), ContextTranslation(..), RolesTranslation(..), RoleTranslation(..), PropertiesTranslation(..), ActionsPerStateTranslation(..), ActionsTranslation(..))
-import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), PropertyUri(..), RoleUri(..), StableIdMapping, StateUri(..), idUriForAction, idUriForContext, idUriForProperty, idUriForRole, idUriForState)
+import Perspectives.Representation.Action (Action(..))
+import Perspectives.Representation.Class.Cacheable (ContextType(..), EnumeratedRoleType(..))
+import Perspectives.Representation.Class.PersistentType (tryGetPerspectType)
+import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
+import Perspectives.Representation.Perspective (Perspective(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), EnumeratedPropertyType(..), StateIdentifier(..))
+import Perspectives.Sidecar.ToStable (toStable)
+import Perspectives.Sidecar.ToReadable (toReadable)
 
 -- | Transform a ModelTranslation whose keys are readable FQNs into one keyed by
 -- | stable identifiers (cuid-composed) using a StableIdMapping.
 -- | This mirrors the intent of normalizeTypes for DomeinFile structures.
-fromReadableModelTranslation :: StableIdMapping -> ModelTranslation -> ModelTranslation
-fromReadableModelTranslation mapping mt = runReader (normalizeModelTranslation mt) mapping
+fromReadableModelTranslation :: ModelTranslation -> MonadPerspectives ModelTranslation
+fromReadableModelTranslation mt = normalizeModelTranslation mt
 
--- | Attempt to invert the normalization, turning stable ids back into readable FQNs using the StableIdMapping.
--- | If a stable id cannot be resolved, it is left unchanged. External roles are reconstructed by
--- | resolving their context id and appending $External.
-toReadableModelTranslation :: StableIdMapping -> ModelTranslation -> ModelTranslation
-toReadableModelTranslation mapping (ModelTranslation rec) =
-  let
-    rev = buildReverse mapping
-    contexts' = toReadableContexts rev <$> rec.contexts
-    roles' = toReadableRoles rev <$> rec.roles
-    namespace' = deriveReadableNamespace mapping rec.namespace
-  in
-    ModelTranslation rec { contexts = contexts', roles = roles', namespace = namespace' }
+-- | Transform a ModelTranslation whose keys are Stable identifiers into one keyed by
+-- | readable FQNs using ToReadable.
+toReadableModelTranslation :: ModelTranslation -> MonadPerspectives ModelTranslation
+toReadableModelTranslation mt = toReadableModel mt
 
 -- Derive a readable namespace. If the existing namespace already looks readable (contains ':#'), keep it.
 -- Otherwise, attempt to find any context FQN in the mapping and take its namespace part (segments before last '$').
-deriveReadableNamespace :: StableIdMapping -> String -> String
-deriveReadableNamespace m current =
-  if looksReadable current then current
-  else
-    case uncons (OBJ.toUnfoldable m.contextCuids :: Array (Tuple String String)) of
-      Just { head: Tuple fqn _ } -> takeNamespace fqn
-      Nothing -> current
-  where
-  looksReadable s = S.contains (S.Pattern ":") s && S.contains (S.Pattern "#") s
-  takeNamespace f =
-    case lastDollar f of
-      Nothing -> f
-      Just ix -> S.take ix f
-  lastDollar s =
-    let len = S.length s in go (len - 1)
-    where
-    go i | i < 0 = Nothing
-    go i = case CU.charAt i s of
-      Just '$' -> Just i
-      _ -> go (i - 1)
+-- Convert a ModelTranslation whose keys are Stable identifiers into one keyed by
+-- readable FQNs using ToReadable. Keeps namespace as-is.
+toReadableModel :: ModelTranslation -> MonadPerspectives ModelTranslation
+toReadableModel (ModelTranslation rec) = do
+  contexts' <- traverse toReadableContexts rec.contexts
+  roles' <- traverse toReadableRoles rec.roles
+  pure $ ModelTranslation rec { contexts = contexts', roles = roles' }
 
 -- Reverse maps built by applying forward idUri* functions to every known FQN.
-type ReverseMaps =
-  { contexts :: Object String
-  , roles :: Object String
-  , properties :: Object String
-  , states :: Object String
-  , actions :: Object String
-  }
+toReadableContexts :: ContextsTranslation -> MonadPerspectives ContextsTranslation
+toReadableContexts (ContextsTranslation obj) = do
+  obj' <- remapKeys toReadableContextKey (traverseOBJ toReadableContext obj)
+  pure $ ContextsTranslation obj'
 
-buildReverse :: StableIdMapping -> ReverseMaps
-buildReverse m =
-  { contexts: mk ContextUri idUriForContext m.contextCuids
-  , roles: mk RoleUri idUriForRole m.roleCuids
-  , properties: mk PropertyUri idUriForProperty m.propertyCuids
-  , states: mk StateUri idUriForState m.stateCuids
-  , actions: mk ActionUri idUriForAction m.actionCuids
-  }
-  where
-  mk :: forall a. (String -> a) -> (StableIdMapping -> a -> Maybe String) -> Object String -> Object String
-  mk wrap forward obj =
-    OBJ.fromFoldable $ mapMaybe
-      ( \(Tuple fqn _cuid) -> case forward m (wrap fqn) of
-          Just sid -> Just (Tuple sid fqn)
-          Nothing -> Nothing
-      )
-      (OBJ.toUnfoldable obj :: Array (Tuple String String))
+toReadableContext :: ContextTranslation -> MonadPerspectives ContextTranslation
+toReadableContext (ContextTranslation rec) = do
+  external' <- toReadableRole rec.external
+  users' <- toReadableRoles rec.users
+  things' <- toReadableRoles rec.things
+  contextroles' <- toReadableRoles rec.contextroles
+  contexts' <- toReadableContexts rec.contexts
+  pure $ ContextTranslation rec { external = external', users = users', things = things', contextroles = contextroles', contexts = contexts' }
 
-toReadableContexts :: ReverseMaps -> ContextsTranslation -> ContextsTranslation
-toReadableContexts rev (ContextsTranslation obj) =
-  ContextsTranslation $ remapKeysPure (lookupContext rev) (map (toReadableContext rev) obj)
+toReadableRoles :: RolesTranslation -> MonadPerspectives RolesTranslation
+toReadableRoles (RolesTranslation obj) = do
+  obj' <- remapKeys toReadableRoleKey (traverseOBJ toReadableRole obj)
+  pure $ RolesTranslation obj'
 
-toReadableContext :: ReverseMaps -> ContextTranslation -> ContextTranslation
-toReadableContext rev (ContextTranslation rec) =
-  let
-    external' = toReadableRole rev rec.external
-    users' = toReadableRoles rev rec.users
-    things' = toReadableRoles rev rec.things
-    contextroles' = toReadableRoles rev rec.contextroles
-    contexts' = toReadableContexts rev rec.contexts
-  in
-    ContextTranslation rec { external = external', users = users', things = things', contextroles = contextroles', contexts = contexts' }
+toReadableRole :: RoleTranslation -> MonadPerspectives RoleTranslation
+toReadableRole (RoleTranslation rec) = do
+  properties' <- toReadableProperties rec.properties
+  actions' <- toReadableActionsPerState rec.actions
+  pure $ RoleTranslation rec { properties = properties', actions = actions' }
 
-toReadableRoles :: ReverseMaps -> RolesTranslation -> RolesTranslation
-toReadableRoles rev (RolesTranslation obj) =
-  RolesTranslation $ remapKeysPure (lookupRole rev) (map (toReadableRole rev) obj)
+toReadableProperties :: PropertiesTranslation -> MonadPerspectives PropertiesTranslation
+toReadableProperties (PropertiesTranslation obj) = do
+  obj' <- remapKeys toReadablePropertyKey (pure obj)
+  pure $ PropertiesTranslation obj'
 
-toReadableRole :: ReverseMaps -> RoleTranslation -> RoleTranslation
-toReadableRole rev (RoleTranslation rec) =
-  let
-    properties' = toReadableProperties rev rec.properties
-    actions' = toReadableActionsPerState rev rec.actions
-  in
-    RoleTranslation rec { properties = properties', actions = actions' }
+toReadableActionsPerState :: ActionsPerStateTranslation -> MonadPerspectives ActionsPerStateTranslation
+toReadableActionsPerState (ActionsPerStateTranslation obj) = do
+  -- Remap nested action tables first, then state keys
+  obj' <- traverseOBJ toReadableActions obj
+  obj'' <- remapKeys toReadableStateKey (pure obj')
+  pure $ ActionsPerStateTranslation obj''
 
-toReadableProperties :: ReverseMaps -> PropertiesTranslation -> PropertiesTranslation
-toReadableProperties rev (PropertiesTranslation obj) =
-  PropertiesTranslation $ remapKeysPure (lookupProperty rev) obj
+toReadableActions :: ActionsTranslation -> MonadPerspectives ActionsTranslation
+toReadableActions (ActionsTranslation at) = do
+  at' <- remapKeys toReadableActionKey (pure at)
+  pure $ ActionsTranslation at'
 
-toReadableActionsPerState :: ReverseMaps -> ActionsPerStateTranslation -> ActionsPerStateTranslation
-toReadableActionsPerState rev (ActionsPerStateTranslation obj) =
-  let
-    -- First, make nested action tables readable
-    obj' = map (toReadableActions rev) obj
-  in
-    -- Then, remap the state keys from stable IDs back to readable FQNs
-    ActionsPerStateTranslation $ remapKeysPure (lookupState rev) obj'
+-- (no longer needed) remapKeysPure was used by the old sidecar-based approach.
 
-toReadableActions :: ReverseMaps -> ActionsTranslation -> ActionsTranslation
-toReadableActions rev (ActionsTranslation at) =
-  ActionsTranslation $ remapKeysPure (lookupAction rev) at
+-- Reader environment no longer required for readable conversion.
 
-lookupContext :: ReverseMaps -> String -> String
-lookupContext rev key = fromMaybe key (OBJ.lookup key rev.contexts)
-
-lookupRole :: ReverseMaps -> String -> String
-lookupRole rev key =
-  case OBJ.lookup key rev.roles of
-    Just v -> v
-    Nothing ->
-      if isExternalRole key then
-        let
-          ctxStable = deconstructBuitenRol key
-        in
-          case OBJ.lookup ctxStable rev.contexts of
-            Just ctxFqn -> ctxFqn <> "$External"
-            Nothing -> key
-      else key
-
-lookupProperty :: ReverseMaps -> String -> String
-lookupProperty rev key = fromMaybe key (OBJ.lookup key rev.properties)
-
-lookupState :: ReverseMaps -> String -> String
-lookupState rev key = fromMaybe key (OBJ.lookup key rev.states)
-
-lookupAction :: ReverseMaps -> String -> String
-lookupAction rev key = fromMaybe key (OBJ.lookup key rev.actions)
-
-remapKeysPure :: forall a. (String -> String) -> Object a -> Object a
-remapKeysPure fk obj =
-  OBJ.fromFoldable ((OBJ.toUnfoldable obj :: Array (Tuple String a)) <#> \(Tuple k v) -> Tuple (fk k) v)
-
--- Reader environment is the StableIdMapping we resolve against.
-type Env = StableIdMapping
-
-normalizeModelTranslation :: ModelTranslation -> Reader Env ModelTranslation
+normalizeModelTranslation :: ModelTranslation -> MonadPerspectives ModelTranslation
 normalizeModelTranslation mt@(ModelTranslation rec) = do
   contexts' <- traverse normalizeContexts rec.contexts
   roles' <- traverse normalizeRoles rec.roles
   pure $ ModelTranslation rec { contexts = contexts', roles = roles' }
 
-normalizeContexts :: ContextsTranslation -> Reader Env ContextsTranslation
+normalizeContexts :: ContextsTranslation -> MonadPerspectives ContextsTranslation
 normalizeContexts (ContextsTranslation obj) = do
   obj' <- remapKeys normalizeContextKey (normalizeContextTranslation obj)
   pure $ ContextsTranslation obj'
   where
-  normalizeContextTranslation :: Object ContextTranslation -> Reader Env (Object ContextTranslation)
+  normalizeContextTranslation :: Object ContextTranslation -> MonadPerspectives (Object ContextTranslation)
   normalizeContextTranslation = traverseOBJ normalizeContext
 
-normalizeContext :: ContextTranslation -> Reader Env ContextTranslation
+normalizeContext :: ContextTranslation -> MonadPerspectives ContextTranslation
 normalizeContext (ContextTranslation rec) = do
   external' <- normalizeRole rec.external
   users' <- normalizeRoles rec.users
@@ -193,78 +123,208 @@ normalizeContext (ContextTranslation rec) = do
   contexts' <- normalizeContexts rec.contexts
   pure $ ContextTranslation rec { external = external', users = users', things = things', contextroles = contextroles', contexts = contexts' }
 
-normalizeRoles :: RolesTranslation -> Reader Env RolesTranslation
+normalizeRoles :: RolesTranslation -> MonadPerspectives RolesTranslation
 normalizeRoles (RolesTranslation obj) = do
   obj' <- remapKeys normalizeRoleKey (traverseOBJ normalizeRole obj)
   pure $ RolesTranslation obj'
 
-normalizeRole :: RoleTranslation -> Reader Env RoleTranslation
+normalizeRole :: RoleTranslation -> MonadPerspectives RoleTranslation
 normalizeRole (RoleTranslation rec) = do
   properties' <- normalizeProperties rec.properties
   actions' <- normalizeActionsPerState rec.actions
   pure $ RoleTranslation rec { properties = properties', actions = actions' }
 
-normalizeProperties :: PropertiesTranslation -> Reader Env PropertiesTranslation
+normalizeProperties :: PropertiesTranslation -> MonadPerspectives PropertiesTranslation
 normalizeProperties (PropertiesTranslation obj) = do
   obj' <- remapKeys normalizePropertyKey (pure obj)
   pure $ PropertiesTranslation obj'
 
-normalizeActionsPerState :: ActionsPerStateTranslation -> Reader Env ActionsPerStateTranslation
+normalizeActionsPerState :: ActionsPerStateTranslation -> MonadPerspectives ActionsPerStateTranslation
 normalizeActionsPerState (ActionsPerStateTranslation obj) = do
   -- Each key is a state identifier in readable form. We attempt to normalize state part before the '$'
   obj' <- remapKeys normalizeStateKey (traverseOBJ normalizeActions obj)
   pure $ ActionsPerStateTranslation obj'
 
-normalizeActions :: ActionsTranslation -> Reader Env ActionsTranslation
+normalizeActions :: ActionsTranslation -> MonadPerspectives ActionsTranslation
 normalizeActions (ActionsTranslation at) = do
   at' <- remapKeys normalizeActionKey (pure at)
   pure $ ActionsTranslation at'
 
 -- Key normalization helpers --------------------------------------------------
 
-normalizeContextKey :: String -> Reader Env String
-normalizeContextKey k = do
-  env <- ask
-  pure $ fromMaybe k (idUriForContext env (ContextUri k))
+normalizeContextKey :: String -> MonadPerspectives String
+normalizeContextKey k = toStable (ContextType k) >>= \(ContextType stableK) -> pure stableK
 
-normalizeRoleKey :: String -> Reader Env String
+-- Readable key conversion helpers ------------------------------------------
+
+toReadableContextKey :: String -> MonadPerspectives String
+toReadableContextKey k = toReadable (ContextType k) >>= \(ContextType readableK) -> pure readableK
+
+toReadableRoleKey :: String -> MonadPerspectives String
+toReadableRoleKey k = do
+  -- Try enumerated, then calculated
+  EnumeratedRoleType k' <- toReadable (EnumeratedRoleType k)
+  if k == k' then do
+    CalculatedRoleType k'' <- toReadable (CalculatedRoleType k)
+    pure k''
+  else pure k'
+
+toReadablePropertyKey :: String -> MonadPerspectives String
+toReadablePropertyKey k = do
+  -- Try enumerated, then calculated
+  EnumeratedPropertyType k' <- toReadable (EnumeratedPropertyType k)
+  if k == k' then do
+    CalculatedPropertyType k'' <- toReadable (CalculatedPropertyType k)
+    pure k''
+  else pure k'
+
+toReadableStateKey :: String -> MonadPerspectives String
+toReadableStateKey k = toReadable (StateIdentifier k) >>= \(StateIdentifier readableK) -> pure readableK
+
+toReadableActionKey :: String -> MonadPerspectives String
+toReadableActionKey k = do
+  -- Given a stable action id, attempt to find its readable name by scanning
+  -- the role and its perspectives’ actions.
+  case typeUri2typeNameSpace k of
+    Nothing -> pure k
+    Just roleTid -> do
+      mErole <- tryGetPerspectType (EnumeratedRoleType roleTid)
+      case mErole of
+        Just (EnumeratedRole { actions, perspectives }) -> do
+          mReadable <- pure $ LIST.foldl
+            ( \m accObj -> case m of
+                Just r -> Just r
+                Nothing -> findReadableInActions accObj
+            )
+            Nothing
+            (values actions)
+          case mReadable of
+            Just readK -> pure readK
+            Nothing -> do
+              mReadable' <- pure $ findReadableInPerspectives perspectives
+              case mReadable' of
+                Just readK -> pure readK
+                Nothing -> pure k
+        Nothing -> pure k
+  where
+  findReadableInPerspectives :: Array Perspective -> Maybe String
+  findReadableInPerspectives perspectives = LIST.foldl
+    ( \m (Perspective { actions: pActions }) ->
+        case m of
+          Just r -> Just r
+          Nothing -> LIST.foldl
+            ( \m' actionObj -> case m' of
+                Just r -> Just r
+                Nothing -> findReadableInActions actionObj
+            )
+            m
+            (values pActions)
+    )
+    Nothing
+    perspectives
+
+  findReadableInActions :: OBJ.Object Action -> Maybe String
+  findReadableInActions actionsObj =
+    foldl
+      ( \m (Action { id, readable }) ->
+          case m of
+            Just r -> Just r
+            Nothing -> if unwrap id == k then Just readable else Nothing
+      )
+      Nothing
+      (OBJ.values actionsObj :: Array Action)
+
+normalizeRoleKey :: String -> MonadPerspectives String
 normalizeRoleKey k = do
-  env <- ask
-  if isExternalRole k then do
-    -- External role identifiers are derived from their context; map context then append suffix.
-    let ctxFqn = deconstructBuitenRol k
-    let externalSuffix = "$External"
-    let base = fromMaybe ctxFqn (idUriForContext env (ContextUri ctxFqn))
-    pure (base <> externalSuffix)
-  else
-    pure $ fromMaybe k (idUriForRole env (RoleUri k))
+  EnumeratedRoleType stableK <- toStable (EnumeratedRoleType k)
+  if k == stableK then do
+    -- Try calculated role
+    CalculatedRoleType stableK' <- toStable (CalculatedRoleType k)
+    pure stableK'
+  else pure stableK
 
-normalizePropertyKey :: String -> Reader Env String
+normalizePropertyKey :: String -> MonadPerspectives String
 normalizePropertyKey k = do
-  env <- ask
-  pure $ fromMaybe k (idUriForProperty env (PropertyUri k))
+  -- We have either an enumerated or calculated property.
+  EnumeratedPropertyType k' <- toStable (EnumeratedPropertyType k)
+  if k == k' then do
+    CalculatedPropertyType stableK <- toStable (CalculatedPropertyType k)
+    pure stableK
+  else pure k'
 
-normalizeStateKey :: String -> Reader Env String
-normalizeStateKey k = do
-  env <- ask
-  -- Keys for ActionsPerStateTranslation are state identifiers; normalize fully.
-  pure $ fromMaybe k (idUriForState env (StateUri k))
+normalizeStateKey :: String -> MonadPerspectives String
+normalizeStateKey k = toStable (StateIdentifier k) >>= \(StateIdentifier stableK) -> pure stableK
 
-normalizeActionKey :: String -> Reader Env String
+normalizeActionKey :: String -> MonadPerspectives String
 normalizeActionKey k = do
-  env <- ask
-  pure $ fromMaybe k (idUriForAction env (ActionUri k))
+  -- An action is either part of a perspective, or part of a role.
+  -- Its identifier is built from the user role identifier and local name that is unique within the set of actions for that role
+  -- Retrieve the role, check the context actions and then the actions in the perspectives.
+  -- Actions are collected in a Foreign Object. Collect the values (Action objects) and compare their readable 
+  -- members with k.
+  -- The actual action structure contains its Stable identifier.
+  case typeUri2typeNameSpace k of
+    Nothing -> pure k
+    Just roleFqn -> do
+      mErole <- tryGetPerspectType (EnumeratedRoleType roleFqn)
+      case mErole of
+        Just (EnumeratedRole { actions, perspectives }) -> do
+          mStable <- pure $ LIST.foldl
+            ( \mStableId' actionObj ->
+                case mStableId' of
+                  Just sid -> Just sid
+                  Nothing -> findInActions actionObj
+            )
+            Nothing
+            (values actions)
+          case mStable of
+            Just stableK -> pure stableK
+            Nothing -> do
+              mStable' <- pure $ findInPerspectives perspectives
+              case mStable' of
+                Just stableK -> pure stableK
+                Nothing -> pure k
+        Nothing -> pure k
+  where
+  findInPerspectives :: Array Perspective -> (Maybe String)
+  findInPerspectives perspectives = foldl
+    ( \mStableId (Perspective { actions: pActions }) ->
+        case mStableId of
+          Just sid -> Just sid
+          Nothing -> LIST.foldl
+            ( \mStableId' actionObj ->
+                case mStableId' of
+                  Just sid -> Just sid
+                  Nothing -> findInActions actionObj
+            )
+            mStableId
+            (values pActions)
+    )
+    Nothing
+    perspectives
+
+  findInActions :: OBJ.Object Action -> (Maybe String)
+  findInActions actionsObj = do
+    foldl
+      ( \mStableId (Action { id, readable }) ->
+          if readable == k then
+            Just $ unwrap id
+          else
+            Nothing
+      )
+      Nothing
+      (OBJ.values actionsObj :: Array Action)
 
 -- Generic object traversal & remapping ---------------------------------------
 
 -- Traverse all values in an Object
-traverseOBJ :: forall a b. (a -> Reader Env b) -> Object a -> Reader Env (Object b)
+traverseOBJ :: forall a b. (a -> MonadPerspectives b) -> Object a -> MonadPerspectives (Object b)
 traverseOBJ f obj = do
   pairs <- traverse (\(Tuple k v) -> Tuple k <$> f v) (OBJ.toUnfoldable obj :: Array (Tuple String a))
   pure (OBJ.fromFoldable pairs)
 
 -- Remap keys of an object using key normalization; then apply value transformation.
-remapKeys :: forall a. (String -> Reader Env String) -> Reader Env (Object a) -> Reader Env (Object a)
+remapKeys :: forall a. (String -> MonadPerspectives String) -> MonadPerspectives (Object a) -> MonadPerspectives (Object a)
 remapKeys fk mvObj = do
   obj <- mvObj
   pairs <- traverse
