@@ -454,8 +454,8 @@ model://perspectives.domains#zjuzxbqpgc:
             model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$External$ayh7cizuqe:
               CreateInvitation:
                 translations:
-                  nl: Maak uiknodiging aan
                   en: Create invitation
+                  nl: Maak uitnodiging
           titles:
             0:
               translations:

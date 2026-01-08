@@ -148,6 +148,11 @@ model://perspectives.domains#tiodn6tcyc:
                 translations:
                   en: Reattach model
                   nl: Koppel opnieuw met model
+            model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled:
+              Detach:
+                translations:
+                  nl: Ontkoppel van model
+                  en: Detach from model
             model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild:
               UpdateBuild:
                 translations:
