@@ -385,13 +385,14 @@ translateRole (E (EnumeratedRole rec)) = do
     , titles
     }
 translateRole (C (CalculatedRole rec)) = do
-  actions <- translateActions rec.context rec.actions
+  contextactions <- translateActions rec.context rec.actions
+  (roleActions :: Array ActionsPerStateTranslation) <- for rec.perspectives (translateActions rec.context <<< _.actions <<< unwrap)
   markdowns <- markDownsInScreen (ScreenKey rec.context (CR rec.id))
   titles <- titlesInScreen (ScreenKey rec.context (CR rec.id))
   pure $ RoleTranslation
     { translations: Translations empty
     , properties: PropertiesTranslation empty
-    , actions
+    , actions: contextactions <> (fold roleActions)
     , notifications: NotificationsTranslation empty
     , markdowns
     , titles

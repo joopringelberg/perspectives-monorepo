@@ -26,8 +26,8 @@ import Control.Alt (map, void, (<|>))
 import Control.Lazy (defer)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (fromFoldable, snoc)
-import Data.Foldable (foldl)
 import Data.Either (Either(..))
+import Data.Foldable (foldl)
 import Data.Int (toNumber)
 import Data.JSDate (toISOString)
 import Data.List (List(..), concat, filter, find, intercalate, many, null, singleton, some, (:))
@@ -48,7 +48,7 @@ import Parsing.Indent.Monadic (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -1515,13 +1515,33 @@ actionE = do
         else Statements <$> fromFoldable <$> entireBlock1 assignment
       end <- getPosition
       pure $ singleton $ CA $ ContextActionE { id, subject: s, object: currentContext, state, effect, start, end }
-    Just s, Just o -> do
-      kw <- option "" (lookAhead reservedIdentifier)
-      effect <-
-        if kw == "letA" then Let <$> letWithAssignment
-        else Statements <$> fromFoldable <$> entireBlock1 assignment
-      end <- getPosition
-      pure $ singleton $ AC $ ActionE { id, subject: s, object: o, state, effect, start, end }
+    Just s, Just o ->
+      if subjectIsCalculated s && stateIsSubjectState state then do
+        -- For a Calculated User role, we can not use SubjectState. Hence we use ContextState.
+        let effectiveState = ContextState currentContext Nothing
+        kw <- option "" (lookAhead reservedIdentifier)
+        effect <-
+          if kw == "letA" then Let <$> letWithAssignment
+          else Statements <$> fromFoldable <$> entireBlock1 assignment
+        end <- getPosition
+        pure $ singleton $ AC $ ActionE { id, subject: s, object: o, state: effectiveState, effect, start, end }
+      else do
+        kw <- option "" (lookAhead reservedIdentifier)
+        effect <-
+          if kw == "letA" then Let <$> letWithAssignment
+          else Statements <$> fromFoldable <$> entireBlock1 assignment
+        end <- getPosition
+        pure $ singleton $ AC $ ActionE { id, subject: s, object: o, state, effect, start, end }
+  where
+  subjectIsCalculated :: RoleIdentification -> Boolean
+  subjectIsCalculated r = case unsafePartial roleIdentification2subject r of
+    CR _ -> true
+    _ -> false
+
+  stateIsSubjectState :: StateSpecification -> Boolean
+  stateIsSubjectState s = case s of
+    SubjectState _ _ -> true
+    _ -> false
 
 sentenceE :: IP SentenceE
 sentenceE = do

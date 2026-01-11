@@ -2,7 +2,7 @@ module Perspectives.Sidecar.ToReadable where
 
 import Prelude
 
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.Traversable (traverse)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
@@ -17,7 +17,7 @@ import Perspectives.Representation.ADT (ADT)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Cacheable (ViewType)
-import Perspectives.Representation.Class.PersistentType (getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole, getState, getView)
+import Perspectives.Representation.Class.PersistentType (tryGetPerspectType)
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
@@ -40,13 +40,13 @@ instance ToReadable IndexedContext where
         pure (IndexedContext stableId)
 
 instance ToReadable ContextType where
-  toReadable ct = getContext ct >>= \(Context { readableName }) -> pure readableName
+  toReadable ct = tryGetPerspectType ct >>= maybe (pure ct) \(Context { readableName }) -> pure readableName
 
 instance ToReadable EnumeratedRoleType where
-  toReadable er = getEnumeratedRole er >>= \(EnumeratedRole { readableName }) -> pure readableName
+  toReadable er = tryGetPerspectType er >>= maybe (pure er) \(EnumeratedRole { readableName }) -> pure readableName
 
 instance ToReadable CalculatedRoleType where
-  toReadable er = getCalculatedRole er >>= \(CalculatedRole { readableName }) -> pure readableName
+  toReadable er = tryGetPerspectType er >>= maybe (pure er) \(CalculatedRole { readableName }) -> pure readableName
 
 instance ToReadable RoleType where
   toReadable (ENR r) = ENR <$> toReadable r
@@ -58,13 +58,13 @@ instance ToReadable PropertyType where
   toReadable (CP p) = CP <$> toReadable p
 
 instance ToReadable EnumeratedPropertyType where
-  toReadable er = getEnumeratedProperty er >>= \(EnumeratedProperty { readableName }) -> pure readableName
+  toReadable er = tryGetPerspectType er >>= maybe (pure er) \(EnumeratedProperty { readableName }) -> pure readableName
 
 instance ToReadable CalculatedPropertyType where
-  toReadable er = getCalculatedProperty er >>= \(CalculatedProperty { readableName }) -> pure readableName
+  toReadable er = tryGetPerspectType er >>= maybe (pure er) \(CalculatedProperty { readableName }) -> pure readableName
 
 instance ToReadable StateIdentifier where
-  toReadable sid = getState sid >>= \(State { readableName }) -> pure readableName
+  toReadable sid = tryGetPerspectType sid >>= maybe (pure sid) \(State { readableName }) -> pure readableName
 
 instance ToReadable RoleInContext where
   toReadable (RoleInContext { role, context }) = do
@@ -89,4 +89,4 @@ instance ToReadable Domain where
   toReadable x = pure x
 
 instance ToReadable ViewType where
-  toReadable vt = getView vt >>= \(View { readableName }) -> pure readableName
+  toReadable vt = tryGetPerspectType vt >>= maybe (pure vt) \(View { readableName }) -> pure readableName

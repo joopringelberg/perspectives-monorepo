@@ -20,17 +20,18 @@ import Data.Tuple (Tuple(..))
 import Foreign.Object (Object)
 import Foreign.Object as OBJ
 import Perspectives.CoreTypes (MonadPerspectives)
-import Perspectives.Data.EncodableMap (values)
+import Perspectives.Data.EncodableMap (EncodableMap, values)
 import Perspectives.Identifiers (typeUri2typeNameSpace)
 import Perspectives.ModelTranslation.Representation (ModelTranslation(..), ContextsTranslation(..), ContextTranslation(..), RolesTranslation(..), RoleTranslation(..), PropertiesTranslation(..), ActionsPerStateTranslation(..), ActionsTranslation(..))
 import Perspectives.Representation.Action (Action(..))
+import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Cacheable (ContextType(..), EnumeratedRoleType(..))
 import Perspectives.Representation.Class.PersistentType (tryGetPerspectType)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
-import Perspectives.Representation.Perspective (Perspective(..))
+import Perspectives.Representation.Perspective (Perspective(..), StateSpec)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), EnumeratedPropertyType(..), StateIdentifier(..))
-import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sidecar.ToReadable (toReadable)
+import Perspectives.Sidecar.ToStable (toStable)
 
 -- | Transform a ModelTranslation whose keys are readable FQNs into one keyed by
 -- | stable identifiers (cuid-composed) using a StableIdMapping.
@@ -190,23 +191,30 @@ toReadableActionKey k = do
     Just roleTid -> do
       mErole <- tryGetPerspectType (EnumeratedRoleType roleTid)
       case mErole of
-        Just (EnumeratedRole { actions, perspectives }) -> do
-          mReadable <- pure $ LIST.foldl
-            ( \m accObj -> case m of
-                Just r -> Just r
-                Nothing -> findReadableInActions accObj
-            )
-            Nothing
-            (values actions)
-          case mReadable of
-            Just readK -> pure readK
-            Nothing -> do
-              mReadable' <- pure $ findReadableInPerspectives perspectives
-              case mReadable' of
-                Just readK -> pure readK
-                Nothing -> pure k
-        Nothing -> pure k
+        Just (EnumeratedRole rec) -> findInRole rec
+        Nothing -> do
+          mCrole <- tryGetPerspectType (CalculatedRoleType roleTid)
+          case mCrole of
+            Just (CalculatedRole rec) -> findInRole rec
+            Nothing -> pure k
   where
+  findInRole :: forall l. { actions :: EncodableMap StateSpec (OBJ.Object Action), perspectives :: Array Perspective | l } -> MonadPerspectives String
+  findInRole { actions, perspectives } = do
+    mReadable <- pure $ LIST.foldl
+      ( \m accObj -> case m of
+          Just r -> Just r
+          Nothing -> findReadableInActions accObj
+      )
+      Nothing
+      (values actions)
+    case mReadable of
+      Just readK -> pure readK
+      Nothing -> do
+        mReadable' <- pure $ findReadableInPerspectives perspectives
+        case mReadable' of
+          Just readK -> pure readK
+          Nothing -> pure k
+
   findReadableInPerspectives :: Array Perspective -> Maybe String
   findReadableInPerspectives perspectives = LIST.foldl
     ( \m (Perspective { actions: pActions }) ->
@@ -268,24 +276,31 @@ normalizeActionKey k = do
     Just roleFqn -> do
       mErole <- tryGetPerspectType (EnumeratedRoleType roleFqn)
       case mErole of
-        Just (EnumeratedRole { actions, perspectives }) -> do
-          mStable <- pure $ LIST.foldl
-            ( \mStableId' actionObj ->
-                case mStableId' of
-                  Just sid -> Just sid
-                  Nothing -> findInActions actionObj
-            )
-            Nothing
-            (values actions)
-          case mStable of
-            Just stableK -> pure stableK
-            Nothing -> do
-              mStable' <- pure $ findInPerspectives perspectives
-              case mStable' of
-                Just stableK -> pure stableK
-                Nothing -> pure k
-        Nothing -> pure k
+        Just (EnumeratedRole { actions, perspectives }) -> findInRole { actions, perspectives }
+        Nothing -> do
+          mCrole <- tryGetPerspectType (CalculatedRoleType roleFqn)
+          case mCrole of
+            Just (CalculatedRole { actions, perspectives }) -> findInRole { actions, perspectives }
+            Nothing -> pure k
   where
+  findInRole :: { actions :: EncodableMap StateSpec (OBJ.Object Action), perspectives :: Array Perspective } -> MonadPerspectives String
+  findInRole { actions, perspectives } = do
+    mStable <- pure $ LIST.foldl
+      ( \mStableId' actionObj ->
+          case mStableId' of
+            Just sid -> Just sid
+            Nothing -> findInActions actionObj
+      )
+      Nothing
+      (values actions)
+    case mStable of
+      Just stableK -> pure stableK
+      Nothing -> do
+        mStable' <- pure $ findInPerspectives perspectives
+        case mStable' of
+          Just stableK -> pure stableK
+          Nothing -> pure k
+
   findInPerspectives :: Array Perspective -> (Maybe String)
   findInPerspectives perspectives = foldl
     ( \mStableId (Perspective { actions: pActions }) ->
@@ -307,10 +322,13 @@ normalizeActionKey k = do
   findInActions actionsObj = do
     foldl
       ( \mStableId (Action { id, readable }) ->
-          if readable == k then
-            Just $ unwrap id
-          else
-            Nothing
+          case mStableId of
+            Just sid -> Just sid
+            Nothing ->
+              if readable == k then
+                Just $ unwrap id
+              else
+                Nothing
       )
       Nothing
       (OBJ.values actionsObj :: Array Action)

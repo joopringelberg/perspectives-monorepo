@@ -409,7 +409,6 @@ normalizeActionsForState stateSpec obj = do
   env <- ask
   let sidecars = env.sidecars
   let
-    stateFqn = unwrap (stateSpec2StateIdentifier stateSpec)
     pairs = OBJ.toUnfoldable obj :: Array (Tuple String Action)
   folded <- for pairs \(Tuple localName (Action { qfd, readable, id })) -> do
     id'@(ActionIdentifier actionName) <- normalize id

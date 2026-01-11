@@ -36,6 +36,25 @@ model://perspectives.domains#tiodn6tcyc:
           translations:
             en: System user
             nl: Systeemgebruiker
+          actions:
+            model://perspectives.domains#System$SocialEnvironment:
+              ExportForAnotherInstallation:
+                translations:
+                  nl: Exporteer voor een andere installatie
+                  en: Export for another installation
+              Cancel:
+                translations:
+                  nl: Annuleren
+                  en: Cancel
+            model://perspectives.domains#System$RootContext:
+              ExportForAnotherInstallation:
+                translations:
+                  nl: Exporteer voor een andere installatie
+                  en: Export for another installation
+              Cancel:
+                translations:
+                  nl: Annuleren
+                  en: Cancel
         Me:
           translations:
             en: Me

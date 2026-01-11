@@ -37,11 +37,11 @@ module Perspectives.Sidecar.StableIdMapping
   , module Perspectives.SideCar.PhantomTypedNewtypes
   ) where
 
-import Data.Tuple (Tuple(..))
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Show (show)
+import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (liftAff)
 import Foreign.Object (Object, empty)
 import Foreign.Object as OBJ
@@ -53,7 +53,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (fromBlob, getAttachment)
 import Perspectives.Persistent (modelDatabaseName)
 import Perspectives.SideCar.PhantomTypedNewtypes (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StateUri(..), ViewUri(..))
-import Prelude (bind, pure, ($), (<>), (==), (>>=), (*>))
+import Prelude (bind, pure, ($), (*>), (<>), (==), (>>=))
 import Simple.JSON (readJSON)
 
 -- A compact, forward-compatible skeleton mapping sidecar.
