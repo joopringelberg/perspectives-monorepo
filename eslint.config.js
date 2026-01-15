@@ -4,9 +4,17 @@ import tseslint from 'typescript-eslint';
 export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  // Global ignore patterns (apply to all files)
+  {
+    ignores:
+      [ '**/node_modules/**'
+      , '**/dist/**'
+      , 'packages/mycontexts/dist/**'
+      , 'packages/mycontexts/public/**'
+      ],
+  },
   {
     files: ['**/*.js', '**/*.mjs', '.lintstagedrc.js', 'commitlint.config.js'],
-    ignores: ['**/node_modules/**', '**/dist/**'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -27,7 +35,14 @@ export default [
   },
   // Service Worker specific configuration, generateWebManifest.js.
   {
-    files: ['**/perspectives-serviceworker.js', '**/service-worker.js', '**/*serviceworker*.js', '**/generateManifest.js'],
+    files: 
+      [ '**/perspectives-serviceworker.js'
+      , '**/perspectives-serviceworker-loader.js'
+      , '**/service-worker.js'
+      , '**/*serviceworker*.js'
+      , '**/generateManifest.js'
+      , '**/perspectives-sharedworker.js'
+    ],
     languageOptions: {
       globals: {
         self: 'readonly',
@@ -38,7 +53,10 @@ export default [
         BroadcastChannel: 'readonly',
         URL: 'readonly',
         clients: 'readonly',
-        Promise: 'readonly'
+        Promise: 'readonly',
+        navigator: 'readonly',
+        window: 'readonly',
+        setInterval: 'readonly',
       }
     },
     rules: {

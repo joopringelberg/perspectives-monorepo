@@ -18,6 +18,9 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference path="./globals.d.ts" />
+
 import type {
   RoleInstanceT,
   RoleReceiver,
@@ -47,6 +50,7 @@ import type {
 } from "./perspectivesshape.d.ts";
 
 export type * from "./perspectivesshape.d.ts";
+
 /*
 This module is imported both by the core and by clients and bridges the gap between the two. It supports several architectures:
   1 with core and client in the same javascript process;
@@ -98,7 +102,11 @@ export function configurePDRproxy(channeltype: "internalChannel" | "sharedWorker
   let sharedWorkerChannel, sharedWorker;
   switch (channeltype) {
     case "sharedWorkerChannel": {
-      sharedWorker = new SharedWorker(new URL('perspectives-sharedworker', import.meta.url), { type: 'module' });
+      // Force a new instance per app version; keep Vite’s worker URL untouched
+      sharedWorker = new SharedWorker( new URL('perspectives-sharedworker', import.meta.url), {
+        type: 'module',
+        name: `pdr-${__MYCONTEXTS_VERSION__}-${__BUILD__}`
+      });
       sharedWorkerChannel = new SharedWorkerChannel(sharedWorker.port);
       sharedWorkerChannelResolver(sharedWorkerChannel);
       const instance = new PerspectivesProxy(sharedWorkerChannel);

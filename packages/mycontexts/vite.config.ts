@@ -44,6 +44,7 @@ export default defineConfig(({ mode }) => {
       }
       swContent = swContent.replace(/__MYCONTEXTS_VERSION__/g, JSON.stringify(thepackage.version))
       swContent = swContent.replace(/__BUILD__/g, JSON.stringify(build))
+      swContent = swContent.replace(/__IS_DEV__/g, 'true')
       fs.writeFileSync('./public/perspectives-serviceworker.js', swContent)
       console.log('Development service worker generated at ./public/perspectives-serviceworker.js')
     },
@@ -63,6 +64,7 @@ export default defineConfig(({ mode }) => {
       }
       swContent = swContent.replace(/__MYCONTEXTS_VERSION__/g, JSON.stringify(thepackage.version))
       swContent = swContent.replace(/__BUILD__/g, JSON.stringify(build))
+      swContent = swContent.replace(/__IS_DEV__/g, 'false')
       fs.writeFileSync('./dist/perspectives-serviceworker.js', swContent)
       console.log('Service worker generated with', files.length, 'files in cache list')
     },

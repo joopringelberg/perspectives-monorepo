@@ -22,7 +22,11 @@
 //// SERVICE WORKER
 ////////////////////////////////////////////////////////////////////////////////
 
-const currentVersion = "3.0.0" + 460;
+/* eslint-env serviceworker */
+/* global "3.0.0", 542, true */
+
+const currentVersion = "3.0.0" + 542;
+const IS_DEV = true;
 let previousVersion = '';
 
 const cacheName = "mycontexts" + currentVersion;
@@ -59,58 +63,43 @@ self.addEventListener("install", (e) => {
 
       console.log(`[perspectives-serviceworker ${currentVersion}] Previous version: ${previousVersion}, Current version: ${currentVersion}`);
 
-      // If there was a previous version and it's different, notify the app
-      if (previousVersion && previousVersion !== currentVersion) {
-        try {
-          // Notify all active clients directly
-          const clients = await self.clients.matchAll();
-          clients.forEach(client => {
-            client.postMessage('NEW_VERSION_AVAILABLE');
-            console.log(`[perspectives-serviceworker ${currentVersion}] Sent update notification to client`);
-          });
-          
-          // Also broadcast the update
-          const bc = new BroadcastChannel('app-update-channel');
-          bc.postMessage('NEW_VERSION_AVAILABLE');
-          console.log(`[perspectives-serviceworker ${currentVersion}] Broadcast update notification`);
-          bc.close();
-        } catch (error) {
-          console.error(`[perspectives-serviceworker ${currentVersion}] Error notifying clients:`, error);
-        }
-      }
+      const isUpgrade = !!previousVersion && previousVersion !== currentVersion;
 
-      const cache = await caches.open(cacheName);
-      console.log("[perspectives-serviceworker ${currentVersion}] Caching all mycontext sources in cache: " + cacheName);
-      
-      // Cache files individually to better handle errors
-      const cachePromises = toBeCached.map(async (url) => {
-        try {
-          // Check if URL is absolute or needs the base
-          const resourceUrl = url.startsWith('http') ? url : baseUrl + url;
-          console.log(`[perspectives-serviceworker ${currentVersion}] Attempting to cache: ${resourceUrl}`);
-          
-          // First check if resource exists before caching
-          const checkResponse = await fetch(resourceUrl, { method: 'HEAD' })
-            .catch(err => {
-              console.log(`[perspectives-serviceworker ${currentVersion}] Resource not available: ${resourceUrl}`, err);
-              return null;
-            });
+      if (IS_DEV || isUpgrade || !previousVersion) {
+
+        const cache = await caches.open(cacheName);
+        console.log(`[perspectives-serviceworker ${currentVersion}] Caching all mycontext sources in cache: ${cacheName}`);
+        
+        // Cache files individually to better handle errors
+        const cachePromises = toBeCached.map(async (url) => {
+          try {
+            // Check if URL is absolute or needs the base
+            const resourceUrl = url.startsWith('http') ? url : baseUrl + url;
+            // console.log(`[perspectives-serviceworker ${currentVersion}] Attempting to cache: ${resourceUrl}`);
             
-          if (checkResponse && checkResponse.ok) {
-            await cache.add(resourceUrl);
-            console.log(`[perspectives-serviceworker ${currentVersion}] Successfully cached: ${resourceUrl}`);
-          } else {
-            console.log(`[perspectives-serviceworker ${currentVersion}] Skipping unavailable resource: ${resourceUrl}`);
+            // First check if resource exists before caching
+            const checkResponse = await fetch(resourceUrl, { method: 'HEAD' })
+              .catch(() => {
+                // console.log(`[perspectives-serviceworker ${currentVersion}] Resource not available: ${resourceUrl}`);
+                return null;
+              });
+              
+            if (checkResponse && checkResponse.ok) {
+              await cache.add(resourceUrl);
+              console.log(`[perspectives-serviceworker ${currentVersion}] Successfully cached: ${resourceUrl}`);
+            } else {
+              console.log(`[perspectives-serviceworker ${currentVersion}] Skipping unavailable resource: ${resourceUrl}`);
+            }
+          } catch (error) {
+            console.error(`[perspectives-serviceworker ${currentVersion}] Error caching ${url}:`, error);
+            // Continue despite errors - don't block installation
           }
-        } catch (error) {
-          console.error(`[perspectives-serviceworker ${currentVersion}] Error caching ${url}:`, error);
-          // Continue despite errors - don't block installation
-        }
-      });
-      
-      // Wait for all cache operations to complete
-      await Promise.allSettled(cachePromises);
-      console.log("[perspectives-serviceworker ${currentVersion}] Caching complete");
+        });
+        
+        // Wait for all cache operations to complete
+        await Promise.allSettled(cachePromises);
+        console.log(`[perspectives-serviceworker ${currentVersion}] Caching complete`);
+    }
     })()
   );
 });
@@ -123,10 +112,10 @@ self.addEventListener("fetch", (e) => {
       {
         const r = await caches.match(e.request);
         if (r) {
-          console.log(`[perspectives-serviceworker ${currentVersion}] Taking resource ${e.request.url} from cache: ${cacheName}.`);
+          // console.log(`[perspectives-serviceworker ${currentVersion}] Taking resource ${e.request.url} from cache: ${cacheName}.`);
           return r;
         }
-        console.log( `[perspectives-serviceworker ${currentVersion}] ${e.request.url} should have been cached but is not. Fetching and caching it in cache ${cacheName}.`);
+        // console.log( `[perspectives-serviceworker ${currentVersion}] ${e.request.url} should have been cached but is not. Fetching and caching it in cache ${cacheName}.`);
         const response = await fetch(e.request);
         const cache = await caches.open(cacheName);
         cache.put(e.request, response.clone());
@@ -145,17 +134,24 @@ self.addEventListener("fetch", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(clients.claim());
   e.waitUntil(
-    caches.keys().then((keyList) => {
-      return Promise.all(
-        keyList.map((key) => {
-          if (key === cacheName) {
-            return;
-          }
-          console.log( "Deleting cache for key " + key);
-          return caches.delete(key);
-        }),
-      );
-    }),
+    (async () => {
+      // Clean old caches
+      console.log(`[perspectives-serviceworker ${currentVersion}] Activating new service worker and cleaning old caches.`);
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => (k === cacheName ? undefined : caches.delete(k))));
+
+      // Reload all controlled clients to pick up the new app and spawn a new SharedWorker
+      const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: false });
+      // Prefer messaging; pages decide how to reload
+      console.log(`[perspectives-serviceworker ${currentVersion}] Activating new service worker and notifying ${clientList.length} clients to reload.`);
+      // clientList.forEach(c => c.postMessage('RELOAD_NOW'));
+      const channel = new BroadcastChannel('app-update-channel');
+      channel.postMessage('RELOAD_NOW');
+      channel.close();
+
+      // Optional hard reload fallback (works when same-origin):
+      // await Promise.all(clientList.map(c => c.navigate(c.url)));
+    })()
   );
 });
 
@@ -196,7 +192,7 @@ self.addEventListener('notificationclick', function(event) {
 self.addEventListener('message', function(event) {
   // Check what type of message we're receiving
   if (event.data === 'SKIP_WAITING') {
-    // Your existing skipWaiting logic
+    console.log(`[perspectives-serviceworker ${currentVersion}] Received SKIP_WAITING message, activating new service worker immediately.`);
     self.skipWaiting();
     return;
   }

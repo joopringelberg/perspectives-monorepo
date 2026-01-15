@@ -2,21 +2,6 @@ if ("serviceWorker" in navigator) {
   let refreshing = false;
   let registration;
   
-  // FIRST: Unregister any existing pagedispatcher worker
-  // IMPLEMENTATIOPN NOTE: This is a cleanup step to ensure no old service workers interfere.
-  // WE CAN REMOVE THIS ON THE NEXT RELEASE.
-  navigator.serviceWorker.getRegistrations().then(registrations => {
-    for(let reg of registrations) {
-      const scriptURL = reg.active?.scriptURL || reg.waiting?.scriptURL || reg.installing?.scriptURL || '';
-      if (scriptURL.includes('pagedispatcher') || scriptURL.includes('notification-worker')) {
-        console.log('Unregistering old worker:', reg);
-        reg.unregister();
-      }
-    }
-  }).catch(error => {
-    console.error('Error checking for old service workers:', error);
-  });
-
   // Register service worker and set up update checking
   navigator.serviceWorker.register('perspectives-serviceworker.js')
     .then(reg => {
@@ -57,17 +42,6 @@ if ("serviceWorker" in navigator) {
     .catch(error => {
       console.error(`Perspectives-service worker registration failed:`, error);
     });
-
-  // Listen for direct messages from service worker
-  navigator.serviceWorker.addEventListener('message', (event) => {
-    console.log('Message received from service worker:', event.data);
-    if (event.data === 'NEW_VERSION_AVAILABLE') {
-      // Notify the app about the update
-      const channel = new BroadcastChannel('app-update-channel');
-      channel.postMessage('NEW_VERSION_AVAILABLE');
-      channel.close();
-    }
-  });
 } else {
   console.error("Service workers are not supported.");
 }

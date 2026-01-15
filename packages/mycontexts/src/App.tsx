@@ -70,9 +70,34 @@ export default class App extends Component<Record<string, never>, AppState>
           } else {
             this.setState({ phase: 'prepareInstallation' });
         }})
-  }
+    }
+    this.reloadClientOnNewUpdate();
   }
 
+  reloadClientOnNewUpdate(): void {
+    // Listen for SW-triggered reload
+    if ('serviceWorker' in navigator) {
+      const channel = new BroadcastChannel('app-update-channel');
+      channel.addEventListener('message', (evt) => {
+        if (evt.data === 'RELOAD_NOW') {
+          console.log("Received RELOAD_NOW message from service worker.");
+          // Avoid multiple reloads
+          if (!sessionStorage.getItem('reloadedOnce')) {
+            sessionStorage.setItem('reloadedOnce', '1');
+            console.log("Reloading page to activate new version.");
+            window.location.reload();
+          }
+        }
+      });
+      // Also reload this page when the new SW takes control
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!sessionStorage.getItem('reloadedOnce')) {
+          sessionStorage.setItem('reloadedOnce', '1');
+          window.location.reload();
+        }
+      });
+    }
+  }
   componentDidUpdate(_prevProps: Readonly<Record<string, never>>, _prevState: Readonly<AppState>, _snapshot?: unknown): void {    
     if (this.state.phase === 'installing') {
       this.createAccount();
@@ -171,14 +196,20 @@ export default class App extends Component<Record<string, never>, AppState>
   }
 
   handleUpdate() {
-    console.log("User chose to update");
-    // Tell service worker to skipWaiting
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage('SKIP_WAITING');
-      console.log("Sent SKIP_WAITING message to service worker");
-    }
-    this.setState({updateAvailable: false});
+  console.log("User chose to update");
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistration('perspectives-serviceworker.js')
+      .then(reg => {
+        if (reg && reg.waiting) {
+          console.log("Sending SKIP_WAITING to waiting service worker");
+          reg.waiting.postMessage('SKIP_WAITING');
+        } else {
+          console.log("No waiting service worker found when trying to update");
+        }
+      });
   }
+  this.setState({ updateAvailable: false });
+}
   
   handleDismiss () {
     this.setState({updateAvailable: false});
