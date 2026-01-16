@@ -559,6 +559,7 @@ extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: cro
                   , valueType: unsafePartial case p.calculation of
                       Q calc -> case range calc of
                         (VDOM rn _) -> show rn
+                        _ -> "Unknown"
                   , facets: []
                   , aspects: []
                   , declaringRoleFqn: declaring

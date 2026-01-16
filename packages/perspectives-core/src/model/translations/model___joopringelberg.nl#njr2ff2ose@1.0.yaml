@@ -1,0 +1,30 @@
+model://joopringelberg.nl#njr2ff2ose:
+  version: "1.0"
+  contexts:
+    TestTypeName:
+      translations:
+        nl: Test typenaam
+        en: Test type name
+      users:
+        Tester:
+          translations:
+            nl: Tester
+            en: Tester
+      things:
+        ThingWithTypeNameProperty:
+          translations:
+            nl: Ding met typenaam eigenschap
+            en: Thing with type name property
+          properties:
+            TypeName:
+              translations:
+                nl: Typenaam
+                en: Type name
+            TypeNameViaRoleType:
+              translations:
+                nl: Typenaam via roltype
+                en: Type name via role type
+            Name:
+              translations:
+                nl: Naam
+                en: Name

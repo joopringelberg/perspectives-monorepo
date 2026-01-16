@@ -80,6 +80,7 @@ data FunctionName
   | RoleIndividualF
 
   | TypeOfContextF
+  | TypeOfRoleF
   | RoleTypesF
   | SpecialisesRoleTypeF
   | IsInStateF
@@ -126,6 +127,7 @@ instance eqFunctionName :: Eq FunctionName where
   eq RoleIndividualF RoleIndividualF = true
 
   eq TypeOfContextF TypeOfContextF = true
+  eq TypeOfRoleF TypeOfRoleF = true
   eq RoleTypesF RoleTypesF = true
   eq SpecialisesRoleTypeF SpecialisesRoleTypeF = true
   eq IsInStateF IsInStateF = true
@@ -176,6 +178,7 @@ instance showFunctionName :: Show FunctionName where
   show RoleIndividualF = "roleindividualf"
   show ContextIndividualF = "contextindividualf"
   show TypeOfContextF = "TypeOfContextF"
+  show TypeOfRoleF = "TypeOfRoleF"
   show RoleTypesF = "RoleTypesF"
   show SpecialisesRoleTypeF = "SpecialisesRoleTypeF"
   show IsInStateF = "IsInStateF"
@@ -226,6 +229,7 @@ instance readForeignFunctionName :: ReadForeign FunctionName where
       "roleindividualf" -> pure RoleIndividualF
       "contextindividualf" -> pure ContextIndividualF
       "TypeOfContextF" -> pure TypeOfContextF
+      "TypeOfRoleF" -> pure TypeOfRoleF
       "RoleTypesF" -> pure RoleTypesF
       "SpecialisesRoleTypeF" -> pure SpecialisesRoleTypeF
       "IsInStateF" -> pure IsInStateF
@@ -272,6 +276,7 @@ isFunctionalFunction fn = case fn of
   RoleIndividualF -> True
   ContextIndividualF -> True
   TypeOfContextF -> True
+  TypeOfRoleF -> True
   RoleTypesF -> False
   SpecialisesRoleTypeF -> True
   IsInStateF -> True
@@ -318,6 +323,7 @@ isMandatoryFunction fn = case fn of
   ContextIndividualF -> False
   RoleIndividualF -> False
   TypeOfContextF -> True
+  TypeOfRoleF -> True
   RoleTypesF -> True
   SpecialisesRoleTypeF -> True
   IsInStateF -> False
@@ -391,6 +397,9 @@ data QueryFunction
 
   | FilledF EnumeratedRoleType ContextType
 
+  | TranslateContextType
+  | TranslateRoleType
+
 instance showQueryFunction :: Show QueryFunction where
   show (DataTypeGetter functionName) = "DataTypeGetter " <> show functionName
   show (DataTypeGetterWithParameter functionName string) = "DataTypeGetterWithParameter " <> show functionName <> " " <> show string
@@ -455,6 +464,8 @@ instance showQueryFunction :: Show QueryFunction where
   show (TypeTimeOnlyCalculatedRoleF string) = "TypeTimeOnlyCalculatedRoleF " <> show string
 
   show (FilledF enumeratedRoleType contextType) = "FilledF " <> show enumeratedRoleType <> " " <> show contextType
+  show TranslateContextType = "TranslateContextType"
+  show TranslateRoleType = "TranslateRoleType"
 
 instance eqQueryFunction :: Eq QueryFunction where
   -- eq x = genericEq x
@@ -521,6 +532,8 @@ instance eqQueryFunction :: Eq QueryFunction where
   eq (TypeTimeOnlyCalculatedRoleF a) (TypeTimeOnlyCalculatedRoleF b) = eq a b
 
   eq (FilledF a p) (FilledF b q) = eq a b && eq p q
+  eq TranslateContextType TranslateContextType = true
+  eq TranslateRoleType TranslateRoleType = true
   eq _ _ = false
 
 -- We don't need encode and decode instances of QueryFunction.
@@ -591,6 +604,8 @@ instance writeForeignQueryFunction :: WriteForeign QueryFunction where
   writeImpl (TypeTimeOnlyCalculatedRoleF string) = writeImpl { constructor: "TypeTimeOnlyCalculatedRoleF", arg1: string, arg2: "" }
 
   writeImpl (FilledF enumeratedRoleType contextType) = writeImpl { constructor: "FilledF", arg1: writeJSON enumeratedRoleType, arg2: writeJSON contextType }
+  writeImpl TranslateContextType = writeImpl { constructor: "TranslateContextType", arg1: "", arg2: "" }
+  writeImpl TranslateRoleType = writeImpl { constructor: "TranslateRoleType", arg1: "", arg2: "" }
 
 type QueryFunctionSerialised =
   { constructor :: String
@@ -657,6 +672,8 @@ instance readForeignQueryFunction :: ReadForeign QueryFunction where
       "TypeTimeOnlyEnumeratedRoleF", string, _ -> pure $ TypeTimeOnlyEnumeratedRoleF string
       "TypeTimeOnlyCalculatedRoleF", string, _ -> pure $ TypeTimeOnlyCalculatedRoleF string
       "FilledF", enumeratedRoleType, contextType -> FilledF <$> readJSON' enumeratedRoleType <*> readJSON' contextType
+      "TranslateContextType", _, _ -> pure $ TranslateContextType
+      "TranslateRoleType", _, _ -> pure $ TranslateRoleType
       c, a1, a2 -> throwError (singleton $ ForeignError ("Unknown case in ReadForeign QueryFunction " <> c <> " " <> a1 <> " " <> a2))
 
 instance ordQueryFunction :: Ord QueryFunction where

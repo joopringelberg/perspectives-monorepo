@@ -56,6 +56,7 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Error.Boundaries (handlePerspectRolError')
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionNArgs)
 import Perspectives.HiddenFunction (HiddenFunction)
+import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isExternalRole)
 import Perspectives.InstanceRepresentation (PerspectRol)
 import Perspectives.Instances.Combinators (available', not_)
@@ -585,6 +586,7 @@ interpretSQD qfd a = case a.head of
       (cp :: CalculatedProperty) <- lift2MPQ $ getPerspectType pt
       (lift2MPQ $ PC.calculation cp) >>= flip interpret a
     (SQD _ (DataTypeGetter ContextF) _ _ _) -> (flip consOnMainPath a) <<< C <$> context rid
+    (SQD _ (DataTypeGetter TypeOfRoleF) _ _ _) -> (flip consOnMainPath a) <<< RT <<< ENR <$> roleType rid
     (SQD _ (DataTypeGetter FillerF) ran _ _) -> composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
     (SQD _ (DataTypeGetterWithParameter FillerF _) ran _ _) -> composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
     (SQD _ (FilledF roleType contextType) _ _ _) -> composePaths a <$> getRecursivelyFilledRoles contextType roleType rid
@@ -606,6 +608,7 @@ interpretSQD qfd a = case a.head of
   -----------------------------------------------------------
   (CT contextType) -> case qfd of
     (SQD _ (TypeGetter RoleTypesF) _ _ _) -> (flip consOnMainPath a) <<< RT <$> (liftToInstanceLevel allRoleTypesInContext) contextType
+    (SQD _ TranslateContextType _ _ _) -> (flip consOnMainPath a) <<< V "translation" <<< Value <$> (lift $ lift $ translateType contextType)
 
     otherwise -> throwError (error $ "(head is ContextKind) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show contextType)
   -----------------------------------------------------------
@@ -614,6 +617,7 @@ interpretSQD qfd a = case a.head of
   (RT roleType) -> case qfd of
 
     (SQD _ (DataTypeGetterWithParameter SpecialisesRoleTypeF parameter) _ _ _) -> (flip consOnMainPath a) <<< V "SpecialisesRoleType" <$> (liftToInstanceLevel ((flip generalisesRoleType) (ENR $ EnumeratedRoleType parameter)) roleType)
+    (SQD _ TranslateRoleType _ _ _) -> (flip consOnMainPath a) <<< V "translation" <<< Value <$> (lift $ lift $ translateType roleType)
 
     otherwise -> throwError (error $ "(head is RoleKind) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show roleType)
 

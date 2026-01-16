@@ -215,8 +215,10 @@ perspectDef = LanguageDef
       , "specialisesRoleType"
       , "roleTypes"
       , "contextType"
+      , "roleType"
       , "modelname"
       , "returns"
+      , "translate"
 
       -- Operators in expressions
       , "union"

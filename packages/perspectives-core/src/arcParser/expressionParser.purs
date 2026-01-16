@@ -191,17 +191,21 @@ simpleStep' =
       <|>
         Simple <$> (TypeOfContext <$> (getPosition <* reserved "contextType"))
       <|>
+        Simple <$> (TypeOfRole <$> (getPosition <* reserved "roleType"))
+      <|>
         Simple <$> (RoleTypes <$> (getPosition <* reserved "roleTypes"))
       <|>
         Simple <$> (SpecialisesRoleType <$> (getPosition <* reserved "specialisesRoleType") <*> arcIdentifier)
       <|>
         Simple <$> (IsInState <$> (getPosition <* reserved "isInState") <*> arcIdentifier)
       <|>
+        Simple <$> (Translate <$> (getPosition <* reserved "translate"))
+      <|>
         Simple <$> (RegEx <$> (getPosition <* reserved "regexp") <*> regexExpression)
       -- VARIABLE MUST BE LAST!
       <|>
         Simple <$> (Variable <$> getPosition <*> lowerCaseName)
-  ) <?> "binding, binder, context, extern, this, modelname, contextType, roleTypes, specialisesRoleType, a valid variablename (lowercase only) or a number, boolean, string (between double quotes), date (between single quotes), email address or a monoid function (sum, product, minimum, maximum) or count, "
+  ) <?> "binding, binder, context, extern, this, modelname, contextType, roleType, roleTypes, specialisesRoleType, a valid variablename (lowercase only) or a number, boolean, string (between double quotes), date (between single quotes), email address or a monoid function (sum, product, minimum, maximum) or count, "
 
 -- | Parses just the regular expression; not "matches", which is interpreted like ">>".
 -- | We expect an expression like this: "..."gimyu
@@ -440,9 +444,11 @@ startOf stp = case stp of
   startOfSimple (Variable p _) = p
 
   startOfSimple (TypeOfContext p) = p
+  startOfSimple (TypeOfRole p) = p
   startOfSimple (RoleTypes p) = p
   startOfSimple (SpecialisesRoleType p _) = p
   startOfSimple (IsInState p _) = p
+  startOfSimple (Translate p) = p
 
   startOfSimple (TypeTimeOnlyContext p _) = p
   startOfSimple (TypeTimeOnlyEnumeratedRole p _ _) = p
@@ -484,9 +490,11 @@ endOf stp = case stp of
   endOfSimple (Variable (ArcPosition { line, column }) v) = ArcPosition { line, column: column + length v }
 
   endOfSimple (TypeOfContext (ArcPosition { line, column })) = ArcPosition { line, column: column + 11 }
+  endOfSimple (TypeOfRole (ArcPosition { line, column })) = ArcPosition { line, column: column + 8 }
   endOfSimple (RoleTypes (ArcPosition { line, column })) = ArcPosition { line, column: column + 9 }
   endOfSimple (SpecialisesRoleType (ArcPosition { line, column }) ident) = ArcPosition { line, column: column + 19 + length ident }
   endOfSimple (IsInState (ArcPosition { line, column }) ident) = ArcPosition { line, column: column + 9 + length ident }
+  endOfSimple (Translate (ArcPosition { line, column })) = ArcPosition { line, column: column + 9 }
 
   endOfSimple (TypeTimeOnlyContext p _) = p
   endOfSimple (TypeTimeOnlyEnumeratedRole p _ _) = p

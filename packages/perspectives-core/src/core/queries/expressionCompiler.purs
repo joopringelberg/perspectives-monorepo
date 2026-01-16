@@ -401,6 +401,7 @@ compileSimpleStep currentDomain s@(Filler pos membeddingContext) = do
                 Nothing -> throwError $ UnknownContext pos (ContextType context)
                 (Just qn) | length qnames == 1 -> pure $ SQD currentDomain (QF.DataTypeGetterWithParameter FillerF (unwrap qn)) (RDOM $ replaceContext adtOfBinding qn) True False
                 _ -> throwError $ NotUniquelyIdentifyingContext pos (ContextType context) qnames
+        -- Instead we want to represent that any role type is the result of this step, when no restrictions have been given.
         Nothing -> throwError $ RoleHasNoBinding pos (roleInContext2Role <$> r)
     otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)
 
@@ -451,6 +452,18 @@ compileSimpleStep currentDomain s@(TypeOfContext pos) = do
     (CDOM (r :: ADT ContextType)) -> do
       pure $ SQD currentDomain (QF.TypeGetter TypeOfContextF) ContextKind True True
     otherwise -> throwError $ DomainTypeRequired "context" currentDomain pos (endOf $ Simple s)
+
+compileSimpleStep currentDomain s@(TypeOfRole pos) = do
+  case currentDomain of
+    (RDOM (r :: ADT RoleInContext)) -> do
+      pure $ SQD currentDomain (QF.TypeGetter TypeOfRoleF) RoleKind True True
+    otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)
+
+compileSimpleStep currentDomain s@(Translate pos) = do
+  case currentDomain of
+    ContextKind -> pure $ SQD currentDomain QF.TranslateContextType (VDOM PString Nothing) True True
+    RoleKind -> pure $ SQD currentDomain QF.TranslateRoleType (VDOM PString Nothing) True True
+    otherwise -> throwError $ DomainTypeRequired "context or role" currentDomain pos (endOf $ Simple s)
 
 compileSimpleStep currentDomain s@(RoleTypeIndividual pos typeName) = do
   nameSpace <- getsDF _.id

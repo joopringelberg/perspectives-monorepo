@@ -51,12 +51,13 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), firstOfSequence,
 import Perspectives.Error.Boundaries (handlePerspectRolError')
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionNArgs)
 import Perspectives.HiddenFunction (HiddenFunction)
+import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isExternalRole)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Combinators (available_, exists, logicalAnd, logicalOr, not)
 import Perspectives.Instances.Combinators (conjunction, intersection, orElse) as Combinators
 import Perspectives.Instances.Environment (_pushFrame)
-import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextModelName, contextType, contextType_, externalRole, filledByCombinator, filledByOperator, fillsCombinator, fillsOperator, getActiveRoleStates_, getActiveStates_, getEnumeratedRoleInstances, getProperty, getRecursivelyFilledRoles', getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType_)
+import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextModelName, contextType, contextType_, externalRole, filledByCombinator, filledByOperator, fillsCombinator, fillsOperator, getActiveRoleStates_, getActiveStates_, getEnumeratedRoleInstances, getProperty, getRecursivelyFilledRoles', getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
 import Perspectives.Instances.Values (parseBool, parseNumber)
 import Perspectives.ModelDependencies (roleWithId)
 import Perspectives.Names (expandDefaultNamespaces, lookupIndexedContext, lookupIndexedRole)
@@ -138,6 +139,12 @@ compileFunction (SQD dom (DataTypeGetter ModelNameF) _ _ _) = case dom of
   _ -> throwError (error $ "UnsaveCompiler: cannot retrieve modelname from " <> show dom)
 
 compileFunction (SQD _ (TypeGetter TypeOfContextF) _ _ _) = pure $ unsafeCoerce contextType
+
+compileFunction (SQD _ (TypeGetter TypeOfRoleF) _ _ _) = pure $ unsafeCoerce roleType
+
+compileFunction (SQD _ TranslateContextType _ _ _) = pure $ lift <<< lift <<< translateType <<< ContextType
+
+compileFunction (SQD _ TranslateRoleType _ _ _) = pure $ lift <<< lift <<< translateType <<< EnumeratedRoleType
 
 compileFunction (SQD _ (RoleTypeConstant qname) RoleKind _ _) = pure ((\_ -> pure $ roletype2string qname))
 
