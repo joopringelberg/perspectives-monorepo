@@ -65,7 +65,7 @@ import Perspectives.ModelTranslation (augmentModelTranslation, emptyTranslationT
 import Perspectives.ModelTranslation.Representation (ModelTranslation(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, addDocument, deleteDocument, fromBlob, getAttachment, getDocument, retrieveDocumentVersion, toFile, tryGetDocument_)
-import Perspectives.PerspectivesState (addWarning, getWarnings, resetWarnings, setWarnings)
+import Perspectives.PerspectivesState (addWarning, getModelUris, getWarnings, resetWarnings, setModelUri, setModelUris, setWarnings)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.Class.Cacheable (cacheEntity, tryReadEntiteitFromCache)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
@@ -390,7 +390,12 @@ withRepositoryModel (Sidecar.ModelUri versionedModelName) thunk = do
   mcurrentVersionOfDomeinFile :: Maybe (DomeinFile Sidecar.Stable) <- tryReadEntiteitFromCache id
   -- Store the Repository version in cache.
   void $ cacheEntity id dfile
+  -- Add the pair ModelUri Readable - ModelUri Stable to the mapping in PerspectivesState.
+  currentMapping <- getModelUris
+  setModelUri namespace id
   result <- thunk dfile
+  -- Restore the original cache state.
+  setModelUris currentMapping
   case mcurrentVersionOfDomeinFile of
     -- We had nothing in cache, so remove from cache again.
     Nothing -> decache id
