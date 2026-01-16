@@ -24,6 +24,8 @@ module Main where
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Cont (lift)
 import Data.Array (cons, foldM)
+import Data.Date (Date)
+import Data.DateTime (DateTime, date)
 import Data.DateTime.Instant (Instant, instant, unInstant)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
@@ -38,10 +40,11 @@ import Effect.Aff.AVar (AVar, empty, new, put, take, read)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
-import Effect.Now (now)
+import Effect.Now (now, nowDate, nowDateTime)
 import Foreign (Foreign)
 import Foreign.Object (fromFoldable, singleton)
-import IDBKeyVal (clear, idbSet)
+import IDBKeyVal (clear, idbGet, idbSet)
+import Main.RecompileBasicModels (addIndexedNames)
 import Perspectives.AMQP.IncomingPost (retrieveBrokerService, incomingPost)
 import Perspectives.Api (resumeApi, setupApi) as API
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
@@ -59,7 +62,6 @@ import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (context, externalRole)
-import Main.RecompileBasicModels (addIndexedNames)
 import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, onStartUp, sysUser, userWithCredentialsAuthorizedDomain, userWithCredentialsPassword, userWithCredentialsUsername)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem)
@@ -86,9 +88,11 @@ import Perspectives.SetupUser (reSetupUser, setupUser)
 import Perspectives.Sidecar.NormalizeTypeNames (getinstalledModelCuids)
 import Perspectives.Sidecar.StableIdMapping (fromLocalModels)
 import Perspectives.Sync.Channel (endChannelReplication)
+import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.Transaction (UninterpretedTransactionForPeer(..))
 import Perspectives.SystemClocks (forkedSystemClocks)
 import Prelude (Unit, bind, discard, pure, show, unit, void, ($), (+), (-), (<), (<$>), (<<<), (<>), (>), (>=>), (>>=))
+import Simple.JSON (read, write) as JSON
 import Unsafe.Coerce (unsafeCoerce)
 
 -- | Don't do anything. runPDR will actually start the core.
@@ -199,22 +203,36 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
       -- Compact the entities database 5 seconds after the PDR has started.
       void $ forkAff $ runPerspectivesWithState
         ( do
-            lift $ delay (Milliseconds 5000.0)
-            entities <- entitiesDatabaseName
-            models <- modelsDatabaseName
-            inverted <- invertedQueryDatabaseName
-            post <- postDatabaseName
-            pushMessage "Minimizing databases"
-            for_ [ entities, models, inverted, post ]
-              ( \dbName -> do
-                  log $ "Compacting the database " <> dbName
-                  compactDatabase dbName
-              )
-            void $ removeMessage "Minimizing databases"
+            mraw :: Maybe Foreign <- lift $ idbGet "minimizeDatabasesOnStartup"
+            case mraw of
+              Nothing -> compactDatabases
+              Just raw -> case JSON.read raw of
+                Left _ -> compactDatabases
+                Right (SerializableDateTime lastCompactionDateTime) -> do
+                  currentDate :: Date <- liftEffect nowDate
+                  if currentDate > date lastCompactionDateTime then compactDatabases else pure unit
         )
         state
 
   where
+
+  compactDatabases :: MonadPerspectives Unit
+  compactDatabases = do
+    currentDateTime :: DateTime <- liftEffect nowDateTime
+    lift $ idbSet "minimizeDatabasesOnStartup" (JSON.write (SerializableDateTime currentDateTime))
+    lift $ delay (Milliseconds 5000.0)
+    entities <- entitiesDatabaseName
+    models <- modelsDatabaseName
+    inverted <- invertedQueryDatabaseName
+    post <- postDatabaseName
+    pushMessage "Minimizing databases"
+    for_ [ entities, models, inverted, post ]
+      ( \dbName -> do
+          log $ "Compacting the database " <> dbName
+          compactDatabase dbName
+      )
+    void $ removeMessage "Minimizing databases"
+
   run :: AVar PerspectivesState -> Aff Unit
   run state = catchError
     ( do
