@@ -76,6 +76,7 @@ import Perspectives.Data.EncodableMap as EM
 import Perspectives.DataUpgrade.PatchModels (patchModels)
 import Perspectives.DataUpgrade.PatchModels.PDR3061 as PDR3061
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
+import Perspectives.DataUpgrade.UpdateLocalModels (updateLocalModels)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (storeDomeinFileInCache, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..))
@@ -267,6 +268,11 @@ runDataUpgrades = do
     ( \_ -> do
         patchModels PDR3061.replacements
         void recompileLocalModels
+    )
+
+  runUpgrade installedVersion "3.0.64"
+    ( \_ -> do
+        void $ updateLocalModels
     )
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)

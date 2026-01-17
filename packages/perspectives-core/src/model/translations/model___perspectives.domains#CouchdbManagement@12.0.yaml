@@ -376,15 +376,15 @@ model://perspectives.domains#xyfxpg3lzq:
                   Add this repository to your PerspectivesSystem by choosing *Add this repository* from the menu,\n
                   or just click [[action: AddThisRepository|Add this repository]]."
                 nl: "### Repository\n
-                  Deze repository is een verzameling van manifesten die modellen en versies van die manifesten beschrijven.\n
-                  Bezoek een manifestcontext om een nieuwe app te installeren of een bestaande app bij te werken.\n
-                  Voeg deze repository toe aan je PerspectivesSystem door *Voeg deze repository toe* te kiezen in het menu,\n
-                  of klik gewoon op [[action: AddThisRepository|Voeg deze repository toe]]."
+                   Deze repository is een verzameling van manifesten die modellen en versies van die manifesten beschrijven.\n
+                   Bezoek een manifestcontext om een nieuwe app te installeren of een bestaande app bij te werken.\n
+                   Voeg deze repository toe aan je PerspectivesSystem door *Voeg deze repository toe* te kiezen in het menu,\n
+                   of klik gewoon op [[action: AddThisRepository|Voeg deze repository toe]]."
                 en: "### Repository\n
-                  This repository is a collection of manifests describing models and versions of those manifests.\n
-                  Visit a manifest context to install a new app or to update an existing app.\n
-                  Add this repository to your PerspectivesSystem by choosing *Add this repository* from the menu,\n
-                  or just click [[action: AddThisRepository|Add this repository]]."
+                   This repository is a collection of manifests describing models and versions of those manifests.\n
+                   Visit a manifest context to install a new app or to update an existing app.\n
+                   Add this repository to your PerspectivesSystem by choosing *Add this repository* from the menu,\n
+                   or just click [[action: AddThisRepository|Add this repository]]."
             1:
               translations:
                 orig: "## Manifests\n
@@ -555,6 +555,46 @@ model://perspectives.domains#xyfxpg3lzq:
           translations:
             en: Visitor
             nl: Bezoeker
+          actions:
+            model://perspectives.domains#System$ModelManifest:
+              StartUsing:
+                translations:
+                  nl: Neem in gebruik
+                  en: Start using
+              UpdateModel:
+                translations:
+                  nl: Actualiseer app
+                  en: Update app
+              UpdateModelWithDependencies:
+                translations:
+                  nl: Actualiseer app en de apps die erop voortbouwen
+                  en: Update app and its dependencies
+            model://perspectives.domains#System$RootContext:
+              StartUsing:
+                translations:
+                  nl: Neem in gebruik
+                  en: Start using
+              UpdateModel:
+                translations:
+                  nl: Actualiseer app
+                  en: Update app
+              UpdateModelWithDependencies:
+                translations:
+                  nl: Actualiseer app en de apps die erop voortbouwen
+                  en: Update app and its dependencies
+            model://perspectives.domains#CouchdbManagement$ModelManifest:
+              StartUsing:
+                translations:
+                  nl: Neem in gebruik
+                  en: Start using
+              UpdateModel:
+                translations:
+                  nl: Actualiseer app
+                  en: Update app
+              UpdateModelWithDependencies:
+                translations:
+                  nl: Actualiseer app en de apps die erop voortbouwen
+                  en: Update app and its dependencies
           markdowns:
             0:
               translations:
@@ -613,7 +653,7 @@ model://perspectives.domains#xyfxpg3lzq:
             nl: Visitor Proxy
             en: Visitor Proxy
           actions:
-            model://perspectives.domains#tiodn6tcyc$huw4rt0uj8:
+            model://perspectives.domains#System$ModelManifest:
               StartUsing:
                 translations:
                   en: Start using
@@ -626,7 +666,7 @@ model://perspectives.domains#xyfxpg3lzq:
                 translations:
                   en: Update app and its dependencies
                   nl: Actualiseer app en de apps die erop voortbouwen
-            model://perspectives.domains#tiodn6tcyc$z7jzcnhx0j:
+            model://perspectives.domains#System$RootContext:
               StartUsing:
                 translations:
                   en: Start using

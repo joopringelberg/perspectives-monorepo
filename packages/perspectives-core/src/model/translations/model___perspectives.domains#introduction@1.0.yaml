@@ -10,7 +10,7 @@ model://perspectives.domains#vwx1yglbsu:
           translations:
             en: Manager
             nl: Beheerder
-          titles:
+          markdowns:
             0:
               translations:
                 orig: "### Introducing acquiantances\n
@@ -44,8 +44,8 @@ model://perspectives.domains#vwx1yglbsu:
       contextroles:
         IncomingIntroductions:
           translations:
-            nl: "Inkomende introducties"
-            en: "Incoming introductions"
+            nl: Inkomende introducties
+            en: Incoming introductions
         Introductions:
           translations:
             nl: Introducties
@@ -77,9 +77,9 @@ model://perspectives.domains#vwx1yglbsu:
                 orig: "### Introducees\n
                   These are the persons that have been introduced to you."
                 nl: "### Introducees\n
-                  Dit zijn de personen die aan u zijn geïntroduceerd."
+                   Dit zijn de personen die aan u zijn geïntroduceerd."
                 en: "### Introducees\n
-                  These are the persons that have been introduced to you."
+                   These are the persons that have been introduced to you."
             1:
               translations:
                 orig: "### Introduction\n
@@ -87,13 +87,13 @@ model://perspectives.domains#vwx1yglbsu:
                   You can chat with the others under *Who*.\n
                   The introducees have been added to your contacts."
                 nl: "### Introductie\n
-                  U bent door de introduceerder van deze context aan anderen geïntroduceerd.\n
-                  U kunt met de anderen chatten onder *Wie*.\n
-                  De introducees zijn aan uw contacten toegevoegd."
+                   U bent door de introduceerder van deze context aan anderen geïntroduceerd.\n
+                   U kunt met de anderen chatten onder *Wie*.\n
+                   De introducees zijn aan uw contacten toegevoegd."
                 en: "### Introduction\n
-                  You have been introduced to others by the introducer of this context.\n
-                  You can chat with the others under *Who*.\n
-                  The introducees have been added to your contacts."
+                   You have been introduced to others by the introducer of this context.\n
+                   You can chat with the others under *Who*.\n
+                   The introducees have been added to your contacts."
         Introducer:
           translations:
             en: Introducer
@@ -110,20 +110,20 @@ model://perspectives.domains#vwx1yglbsu:
                 orig: "### Introducees\n
                   These are the persons that have been introduced to each other by you."
                 nl: "### Introducties\n
-                  Dit zijn de personen die door u aan elkaar zijn geïntroduceerd."
+                   Dit zijn de personen die door u aan elkaar zijn geïntroduceerd."
                 en: "### Introductions\n
-                  These are the persons that have been introduced to each other by you."
+                   These are the persons that have been introduced to each other by you."
             1:
               translations:
                 orig: "### Introduction\n
                   The purpose of this context is to introduce people to each other.\n
                   You can chat with the others under *Who*."
                 nl: "### Introductie\n
-                  Het doel van deze context is om mensen aan elkaar te introduceren.\n
-                  U kunt met de anderen chatten onder *Wie*."
+                   Het doel van deze context is om mensen aan elkaar te introduceren.\n
+                   U kunt met de anderen chatten onder *Wie*."
                 en: "### Introduction\n
-                  The purpose of this context is to introduce people to each other.\n
-                  You can chat with the others under *Who*."
+                   The purpose of this context is to introduce people to each other.\n
+                   You can chat with the others under *Who*."
         Guest:
           translations:
             en: Guest

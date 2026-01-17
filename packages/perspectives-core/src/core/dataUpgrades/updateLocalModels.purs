@@ -20,20 +20,23 @@
 
 -- END LICENSE
 
-module Perspectives.DataUpgrade.RecompileLocalModels where
+module Perspectives.DataUpgrade.UpdateLocalModels where
 
 import Control.Alt (void)
-import Control.Monad.Except (runExceptT)
+import Control.Monad.Cont (lift)
+import Control.Monad.Except (ExceptT, runExceptT)
 import Data.Array (catMaybes)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Traversable (for)
-import Main.RecompileBasicModels (UninterpretedDomeinFile, executeInTopologicalOrder, recompileModel)
-import Perspectives.CoreTypes (MonadPerspectives)
+import Effect.Class.Console (log)
+import Main.RecompileBasicModels (UninterpretedDomeinFile(..), executeInTopologicalOrder)
+import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
 import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Extern.Couchdb (updateModel')
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.ModelDependencies (sysUser)
-import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
 import Perspectives.Persistence.API (databaseInfo, deleteDatabase, documentsInDatabase, includeDocs)
 import Perspectives.Persistent (invertedQueryDatabaseName, saveMarkedResources)
 import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage)
@@ -43,8 +46,8 @@ import Perspectives.SetupUser (setupInvertedQueryDatabase)
 import Prelude (Unit, bind, discard, pure, show, ($), (*>), (<$>), (<>))
 import Simple.JSON (read) as JSON
 
-recompileLocalModels :: MonadPerspectives Boolean
-recompileLocalModels =
+updateLocalModels :: MonadPerspectives Boolean
+updateLocalModels =
   do
     addAllExternalFunctions
     modelsDb <- modelsDatabaseName
@@ -60,10 +63,10 @@ recompileLocalModels =
     r <- runMonadPerspectivesTransaction'
       false
       (ENR $ EnumeratedRoleType sysUser)
-      (runExceptT (executeInTopologicalOrder (catMaybes uninterpretedDomeinFiles) recompileModel))
+      (runExceptT (executeInTopologicalOrder (catMaybes uninterpretedDomeinFiles) updateLocalModel))
     void $ removeMessage "Updating local models..."
     case r of
-      Left errors -> logPerspectivesError (Custom ("recompileLocalModels: " <> show errors)) *> pure false
+      Left errors -> logPerspectivesError (Custom ("updateLocalModels: " <> show errors)) *> pure false
       Right success -> do
         saveMarkedResources
         pure success
@@ -75,3 +78,9 @@ recompileLocalModels =
     deleteDatabase db
     void $ databaseInfo db
     setupInvertedQueryDatabase
+
+  updateLocalModel :: UninterpretedDomeinFile -> ExceptT MultiplePerspectivesErrors MonadPerspectivesTransaction UninterpretedDomeinFile
+  updateLocalModel df@(UninterpretedDomeinFile { id, namespace }) = do
+    lift $ updateModel' id false false
+    log ("Model updated: " <> show namespace)
+    pure df

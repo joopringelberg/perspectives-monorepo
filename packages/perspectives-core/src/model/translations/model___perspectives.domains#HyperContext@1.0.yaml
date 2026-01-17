@@ -101,6 +101,10 @@ model://perspectives.domains#zs6x290shy:
               translations:
                 nl: Ongeinterpreteerd voorwaarderesultaat
                 en: Raw condition result
+            OldCondition:
+              translations:
+                nl: Oude voorwaarde
+                en: Old condition
             CompiledCondition:
               translations:
                 nl: Gecompileerde voorwaarde
