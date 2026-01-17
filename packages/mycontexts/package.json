@@ -9,8 +9,8 @@
     "build": "pnpm exec tsc -b && node ../../node_modules/.pnpm/vite@6.3.5*/node_modules/vite/bin/vite.js build",
     "lint": "eslint .",
     "preview": "node ../../node_modules/.pnpm/vite@6.3.5*/node_modules/vite/bin/vite.js preview",
-    "publish:www": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com/www",
-    "publish:root": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com"
+    "publish:www": "rsync -avz --delete ./dist/ joop@inplace.works:/var/www/mycontexts.com/www/",
+    "publish:root": "rsync -avz --delete ./dist/ joop@inplace.works:/var/www/mycontexts.com/"
   },
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
