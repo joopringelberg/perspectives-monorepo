@@ -402,24 +402,26 @@ compileSimpleStep currentDomain s@(Filler pos membeddingContext) = do
                 (Just qn) | length qnames == 1 -> pure $ SQD currentDomain (QF.DataTypeGetterWithParameter FillerF (unwrap qn)) (RDOM $ replaceContext adtOfBinding qn) True False
                 _ -> throwError $ NotUniquelyIdentifyingContext pos (ContextType context) qnames
         -- Instead we want to represent that any role type is the result of this step, when no restrictions have been given.
-        Nothing -> throwError $ RoleHasNoBinding pos (roleInContext2Role <$> r)
+        -- Nothing -> throwError $ RoleHasNoBinding pos (roleInContext2Role <$> r)
+        Nothing -> pure $ SQD currentDomain (QF.DataTypeGetterWithParameter FillerF "direct") AnyRoleType True False
+    AnyRoleType -> pure $ SQD currentDomain (QF.DataTypeGetterWithParameter FillerF "direct") AnyRoleType True False
     otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)
 
 compileSimpleStep currentDomain s@(Filled pos binderName membeddingContext) = do
+  (qBinderType :: EnumeratedRoleType) <-
+    if isTypeUri binderName then pure $ EnumeratedRoleType binderName
+    -- Try to qualify the name within the Domain.
+    else do
+      { id } <- lift $ gets _.dfr
+      -- The namespace is Readable here, but we can safely pretend it is Stable, because we have the DomeinFile in cache in Readable form.
+      -- As typeName is Readable, too, it can be looked up in it.
+      (qnames :: Array EnumeratedRoleType) <- lift2 $ runArrayT $ qualifyEnumeratedRoleInDomain binderName (ModelUri $ unwrap id)
+      case head qnames of
+        Nothing -> throwError $ UnknownRole pos binderName
+        (Just qn) | length qnames == 1 -> pure qn
+        otherwise -> throwError $ NotUniquelyIdentifyingRoleType pos (ENR $ EnumeratedRoleType binderName) (map ENR qnames)
   case currentDomain of
     (RDOM (adtOfBinder :: ADT RoleInContext)) -> do
-      (qBinderType :: EnumeratedRoleType) <-
-        if isTypeUri binderName then pure $ EnumeratedRoleType binderName
-        -- Try to qualify the name within the Domain.
-        else do
-          { id } <- lift $ gets _.dfr
-          -- The namespace is Readable here, but we can safely pretend it is Stable, because we have the DomeinFile in cache in Readable form.
-          -- As typeName is Readable, too, it can be looked up in it.
-          (qnames :: Array EnumeratedRoleType) <- lift2 $ runArrayT $ qualifyEnumeratedRoleInDomain binderName (ModelUri $ unwrap id)
-          case head qnames of
-            Nothing -> throwError $ UnknownRole pos binderName
-            (Just qn) | length qnames == 1 -> pure qn
-            otherwise -> throwError $ NotUniquelyIdentifyingRoleType pos (ENR $ EnumeratedRoleType binderName) (map ENR qnames)
       case membeddingContext of
         -- <origin> fills R in <optional context>. Clearly, <optional context> is the context that holds the filled
         -- role (binder).
@@ -438,6 +440,9 @@ compileSimpleStep currentDomain s@(Filled pos binderName membeddingContext) = do
               Nothing -> throwError $ UnknownContext pos (ContextType context)
               (Just qn) | length qnames == 1 -> pure $ SQD currentDomain (QF.FilledF qBinderType (ContextType context)) (RDOM $ replaceContext adtOfBinder qn) False False
               otherwise -> throwError $ NotUniquelyIdentifyingContext pos (ContextType context) qnames
+    AnyRoleType -> do
+      EnumeratedRole { context } <- lift2 $ getEnumeratedRole qBinderType
+      pure $ SQD currentDomain (QF.FilledF qBinderType context) (RDOM (UET $ RoleInContext { context, role: qBinderType })) False False
     otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)
 
 compileSimpleStep currentDomain s@(Context pos) = do
@@ -445,6 +450,7 @@ compileSimpleStep currentDomain s@(Context pos) = do
     (RDOM (r :: ADT RoleInContext)) -> do
       (typeOfContext :: ADT ContextType) <- pure $ contextOfADT r
       pure $ SQD currentDomain (QF.DataTypeGetter ContextF) (CDOM typeOfContext) True True
+    -- NOTE: if we want to allow AnyRoleType here, we must also create AnyRoleType as a Domain.
     otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)
 
 compileSimpleStep currentDomain s@(TypeOfContext pos) = do
@@ -457,12 +463,14 @@ compileSimpleStep currentDomain s@(TypeOfRole pos) = do
   case currentDomain of
     (RDOM (r :: ADT RoleInContext)) -> do
       pure $ SQD currentDomain (QF.TypeGetter TypeOfRoleF) RoleKind True True
+    AnyRoleType -> pure $ SQD currentDomain (QF.TypeGetter TypeOfRoleF) RoleKind True True
     otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)
 
 compileSimpleStep currentDomain s@(Translate pos) = do
   case currentDomain of
     ContextKind -> pure $ SQD currentDomain QF.TranslateContextType (VDOM PString Nothing) True True
     RoleKind -> pure $ SQD currentDomain QF.TranslateRoleType (VDOM PString Nothing) True True
+    AnyRoleType -> pure $ SQD currentDomain QF.TranslateRoleType (VDOM PString Nothing) True True
     otherwise -> throwError $ DomainTypeRequired "context or role" currentDomain pos (endOf $ Simple s)
 
 compileSimpleStep currentDomain s@(RoleTypeIndividual pos typeName) = do
@@ -579,6 +587,7 @@ compileSimpleStep currentDomain s@(IndexedName pos) = do
   case currentDomain of
     (CDOM c) -> pure $ SQD currentDomain (QF.DataTypeGetter IndexedContextName) (VDOM PString Nothing) True False
     (RDOM r) -> pure $ SQD currentDomain (QF.DataTypeGetter IndexedRoleName) (VDOM PString Nothing) True False
+    AnyRoleType -> pure $ SQD currentDomain (QF.DataTypeGetter IndexedRoleName) (VDOM PString Nothing) True False
     otherwise -> throwError $ DomainTypeRequired "role or context" currentDomain pos (endOf $ Simple s)
 
 -- This is the result of parsing 'this'. It is a reference to the current object, so always functional.

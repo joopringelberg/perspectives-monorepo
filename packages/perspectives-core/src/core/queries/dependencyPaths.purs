@@ -35,7 +35,7 @@ import Perspectives.Query.QueryTypes (Domain(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), RoleType(..), propertytype2string)
 
-data Dependency = C ContextInstance | R RoleInstance | V String Value | CT ContextType | RT RoleType
+data Dependency = C ContextInstance | R RoleInstance | V String Value | CT ContextType | RT RoleType | AnyRoleTypeDependency
 
 derive instance genericDependency :: Generic Dependency _
 instance eqDependency :: Eq Dependency where
@@ -47,6 +47,7 @@ instance showDependency :: Show Dependency where
   show (V ptype val) = "V " <> show ptype <> " " <> show val
   show (CT ctype) = "CT " <> show ctype
   show (RT rtype) = "RT " <> show rtype
+  show AnyRoleTypeDependency = "AnyRoleTypeDependency"
 
 -- | Given information on a Domain, turn a string value into a Dependency.
 -- | Caveats: Role types are construed to be Enumerated.
@@ -57,6 +58,7 @@ domain2Dependency (VDOM _ (Just pr)) s = V (propertytype2string pr) $ Value s
 domain2Dependency (VDOM _ Nothing) s = V "" $ Value s
 domain2Dependency ContextKind s = CT (ContextType s)
 domain2Dependency RoleKind s = RT (ENR $ EnumeratedRoleType s)
+domain2Dependency AnyRoleType s = AnyRoleTypeDependency
 
 -- | The head of a DependencyPath is the result of a query interpretation.
 -- | The mainPath is the ordered sequence of dependencies whose leftmost element is the head (= the query result)

@@ -323,6 +323,7 @@ data Domain
   | VDOM RAN.Range (Maybe PropertyType)
   | ContextKind
   | RoleKind
+  | AnyRoleType
 
 type Range = Domain
 
@@ -342,6 +343,7 @@ instance writeForeignDomain :: WriteForeign Domain where
   writeImpl (VDOM ran mprop) = writeImpl { range: write ran, maybeproperty: write mprop }
   writeImpl ContextKind = writeImpl "ContextKind"
   writeImpl RoleKind = writeImpl "RoleKind"
+  writeImpl AnyRoleType = writeImpl "AnyRoleType"
 
 instance readForeignDomain :: ReadForeign Domain where
   readImpl f =
@@ -356,6 +358,7 @@ instance readForeignDomain :: ReadForeign Domain where
           Right k -> case k of
             "ContextKind" -> pure ContextKind
             "RoleKind" -> pure RoleKind
+            "AnyRoleType" -> pure AnyRoleType
             otherwise -> fail $ TypeMismatch "ContextKind, RoleKind" otherwise
 
 instance ordDomain :: Ord Domain where
@@ -449,6 +452,8 @@ domain2PropertyRange d = case d of
 sumOfDomains :: Domain -> Domain -> Maybe Domain
 -- sumOfDomains (RDOM a ec1) (RDOM b ec2) | ec1 == ec2 = Just (RDOM (SUM [a, b]) ec1)
 sumOfDomains (RDOM a) (RDOM b) = Just (RDOM (SUM [ a, b ]))
+sumOfDomains AnyRoleType (RDOM _) = Just AnyRoleType
+sumOfDomains (RDOM _) AnyRoleType = Just AnyRoleType
 -- sumOfDomains (RDOM a _) (RDOM b _) = Just (RDOM (SUM [a, b]) Nothing)
 sumOfDomains (CDOM a) (CDOM b) = Just (CDOM (SUM [ a, b ]))
 sumOfDomains (VDOM r1 _) (VDOM r2 _) = if r1 == r2 then Just $ VDOM r1 Nothing else Nothing
@@ -460,6 +465,8 @@ productOfDomains :: Domain -> Domain -> Maybe Domain
 -- productOfDomains (RDOM a ec1) (RDOM b ec2) | ec1 == ec2 = Just (RDOM (PROD [a, b]) ec1)
 -- productOfDomains (RDOM a _) (RDOM b _) = Just (RDOM (PROD [a, b]) Nothing)
 productOfDomains (RDOM a) (RDOM b) = Just (RDOM (PROD [ a, b ]))
+productOfDomains AnyRoleType (RDOM _) = Just AnyRoleType
+productOfDomains (RDOM _) AnyRoleType = Just AnyRoleType
 productOfDomains (CDOM a) (CDOM b) = Just (CDOM (PROD [ a, b ]))
 productOfDomains (VDOM r1 _) (VDOM r2 _) = if r1 == r2 then Just $ VDOM r1 Nothing else Nothing
 productOfDomains _ _ = Nothing

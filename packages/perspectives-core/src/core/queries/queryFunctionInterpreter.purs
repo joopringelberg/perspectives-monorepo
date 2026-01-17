@@ -61,7 +61,7 @@ import Perspectives.Identifiers (isExternalRole)
 import Perspectives.InstanceRepresentation (PerspectRol)
 import Perspectives.Instances.Combinators (available', not_)
 import Perspectives.Instances.Environment (_pushFrame)
-import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding_, context, contextModelName, contextType, externalRole, filledBy, fills, getAllFilledRoles_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, roleModelName, roleType)
+import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding, binding_, context, contextModelName, contextType, contextType_, externalRole, filledBy, fills, getAllFilledRoles_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
 import Perspectives.Instances.Values (bool2Value, parseNumber, value2Date, value2Number)
 import Perspectives.ModelDependencies (roleWithId)
 import Perspectives.Names (lookupIndexedRole)
@@ -555,6 +555,8 @@ interpretSQD qfd a = case a.head of
       (lift $ lift $ calculation ct) >>= flip interpret a
     (SQD _ (DataTypeGetter ExternalRoleF) _ _ _) -> (flip consOnMainPath a) <<< R <$> externalRole cid
     (SQD _ (TypeGetter TypeOfContextF) _ _ _) -> (flip consOnMainPath a) <<< CT <$> contextType cid
+    (SQD _ (DataTypeGetter IndexedContextName) _ _ _) -> (flip consOnMainPath a) <<< V "IndexedContextName" <$> (indexedContextName cid)
+    (SQD _ TranslateContextType _ _ _) -> (flip consOnMainPath a) <<< V "translation" <<< Value <$> (lift $ lift $ (contextType_ cid >>= translateType))
     (SQD _ (DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeName) _ _ _) -> (flip consOnMainPath a) <<< R <$> getUnlinkedRoleInstances (EnumeratedRoleType roleTypeName) cid
 
     otherwise -> throwError (error $ "(head=ContextInstance) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show cid)
@@ -587,8 +589,12 @@ interpretSQD qfd a = case a.head of
       (lift2MPQ $ PC.calculation cp) >>= flip interpret a
     (SQD _ (DataTypeGetter ContextF) _ _ _) -> (flip consOnMainPath a) <<< C <$> context rid
     (SQD _ (DataTypeGetter TypeOfRoleF) _ _ _) -> (flip consOnMainPath a) <<< RT <<< ENR <$> roleType rid
+    (SQD _ TranslateRoleType _ _ _) -> (flip consOnMainPath a) <<< V "translation" <<< Value <$> (lift $ lift $ (roleType_ rid >>= translateType))
+    (SQD _ (DataTypeGetter IndexedRoleName) _ _ _) -> (flip consOnMainPath a) <<< V "IndexedRoleName" <$> (indexedRoleName rid)
     (SQD _ (DataTypeGetter FillerF) ran _ _) -> composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
-    (SQD _ (DataTypeGetterWithParameter FillerF _) ran _ _) -> composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
+    (SQD _ (DataTypeGetterWithParameter FillerF parameter) ran _ _) ->
+      if parameter == "direct" then composePaths a <$> getDirectFillerType rid
+      else composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
     (SQD _ (FilledF roleType contextType) _ _ _) -> composePaths a <$> getRecursivelyFilledRoles contextType roleType rid
 
     otherwise -> throwError (error $ "(head=RoleInstance) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show rid)
@@ -647,6 +653,9 @@ pushAssumptionsForDependencyPath dp = for_ (allPaths dp)
       )
   )
 
+getDirectFillerType :: RoleInstance ~~> DependencyPath
+getDirectFillerType rid = binding rid >>= \b -> pure $ snocOnMainPath (singletonPath (R b)) (R rid)
+
 getFillerTypeRecursively :: ADT RoleInContext -> RoleInstance ~~> DependencyPath
 getFillerTypeRecursively adt r = do
   adtCnf <- lift $ lift $ toConjunctiveNormalForm_ adt
@@ -675,6 +684,7 @@ toString { head } = case head of
   (CT (ContextType r)) -> r
   (RT (ENR (EnumeratedRoleType r))) -> r
   (RT (CR (CalculatedRoleType r))) -> r
+  AnyRoleTypeDependency -> "AnyRoleTypeDependency"
 
 -- | From a string that represents either a Calculated or an Enumerated property,
 -- | for a given abstract datatype of roles, retrieve the values from a role instance.
