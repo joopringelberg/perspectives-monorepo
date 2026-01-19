@@ -159,13 +159,6 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
 
       void $ forkAff $ forkCreateIndexedResources indexedResourceToCreate state
 
-      runPerspectivesWithState
-        ( do
-            addAllExternalFunctions
-            addIndexedNames
-        )
-        state
-
       -- Start by running data upgrades. We need the private key now if we want to make changes to data!
       runPerspectivesWithState
         ( do

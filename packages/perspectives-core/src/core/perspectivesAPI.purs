@@ -908,7 +908,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
       )
       \e -> sendResponse (Error corrId (show e)) setter
 
-    -- The callback that comes with this request is stored in X.
+    -- The callback that comes with this request is stored in PerspectivesState.
     -- Whenever the PDR wants to communicate its status to the client, it will call this callback.
     -- Status is displayed in the UI.
     Api.GetPDRStatusMessage -> catchError

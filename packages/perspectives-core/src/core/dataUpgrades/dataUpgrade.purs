@@ -275,6 +275,8 @@ runDataUpgrades = do
         void $ updateLocalModels
     )
 
+  void updateLocalModels
+
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 

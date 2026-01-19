@@ -958,7 +958,7 @@ export class PerspectivesProxy
   getPDRStatus()
   {
     const component = this;
-    // We don't unsubscribe this call.
+    // We don't unsubscribe this call. The callback is registered in PerspectivesState and used whenever the PDR wants to update its status.
     this.send(
       {request: "GetPDRStatusMessage", onlyOnce: false},
       status => component.cursor.setPDRStatus( status[0] ? JSON.parse( status[0] ) : {} ) );
@@ -1761,6 +1761,7 @@ type Message = {
 
 class Cursor {
   private static loadingOverlayElement: HTMLDivElement | null = null;
+  private static readonly STATUS_ID = "PDR_STATUS";
   private PDRStatus: string = "Processing...";
   private messages: Message[] = [];
   private queuePromise = Promise.resolve();
@@ -1857,7 +1858,7 @@ class Cursor {
 
   // PDR status messages become active immediately, use a fixed id so remove matches reliably.
   setPDRStatus({ action, message }: { action: "push" | "remove"; message: string }) {
-    const STATUS_ID = "PDR_STATUS";
+    const STATUS_ID = Cursor.STATUS_ID;
     if (action === "push") {
       this.pushMessage(STATUS_ID, message);
     } else if (action === "remove") {
@@ -1908,10 +1909,20 @@ class Cursor {
         const index = component.messages.findIndex(msg => msg.identifier === identifier);
         if (index >= 0) {
           const message = component.messages[index];
-          component.messages.splice(index, 1);
-          component.messages.unshift(message);
-          component.setOverlayText(message.text);
-          component.setOverlayVisibility(true);
+          const statusIndex = component.messages.findIndex(m => m.identifier === Cursor.STATUS_ID);
+
+          if (statusIndex >= 0) {
+            // Keep status on top; place this message right after it
+            component.messages.splice(index, 1);
+            component.messages.splice(statusIndex + 1, 0, message);
+            component.setOverlayVisibility(true); // do not change text
+          } else {
+            // No status message; show the request message
+            component.messages.splice(index, 1);
+            component.messages.unshift(message);
+            component.setOverlayText(message.text);
+            component.setOverlayVisibility(true);
+          }
         }
       });
     }, 400);
