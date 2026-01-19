@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "preview": "node ../../node_modules/.pnpm/vite@6.3.5*/node_modules/vite/bin/vite.js preview",
     "publish:www": "rsync -avz --delete ./dist/ joop@inplace.works:/var/www/mycontexts.com/www/",
-    "publish:root": "rsync -avz --delete ./dist/ joop@inplace.works:/var/www/mycontexts.com/"
+    "publish:root": "rsync -avz --exclude='/assets/' --exclude='/AppImages/' ./dist/ joop@inplace.works:/var/www/mycontexts.com/ && rsync -avz --delete --itemize-changes ./dist/assets/ joop@inplace.works:/var/www/mycontexts.com/assets/ && rsync -avz --delete --itemize-changes ./dist/AppImages/ joop@inplace.works:/var/www/mycontexts.com/AppImages/"
   },
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
