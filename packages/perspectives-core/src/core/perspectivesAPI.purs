@@ -27,7 +27,7 @@ module Perspectives.Api where
 import Control.Alternative (guard)
 import Control.Coroutine (Consumer, Producer, await, runProcess, transform, ($$), ($~))
 import Control.Coroutine.Aff (produce')
-import Control.Monad.AvarMonadAsk (gets, modify)
+import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Rec.Class (forever)
 import Control.Monad.Trans.Class (lift)
@@ -905,17 +905,6 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
             _ -> do
               void $ runMonadPerspectivesTransaction authoringRole (serialisedAsDeltasFor_ (ContextInstance subject) (RoleInstance predicate) roleType)
               sendResponse (Result corrId []) setter
-      )
-      \e -> sendResponse (Error corrId (show e)) setter
-
-    -- The callback that comes with this request is stored in PerspectivesState.
-    -- Whenever the PDR wants to communicate its status to the client, it will call this callback.
-    -- Status is displayed in the UI.
-    Api.GetPDRStatusMessage -> catchError
-      ( do
-          -- Register the callback in Perspective State.
-          -- We'll use the setter to send the status message.
-          modify \s -> s { setPDRStatus = \status -> setter (ResultWithWarnings corrId [ status ] []) }
       )
       \e -> sendResponse (Error corrId (show e)) setter
 

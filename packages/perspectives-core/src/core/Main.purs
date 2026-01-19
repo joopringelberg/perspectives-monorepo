@@ -23,12 +23,14 @@ module Main where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Cont (lift)
+import Control.Promise (toAff)
 import Data.Array (cons, foldM)
 import Data.Date (Date)
 import Data.DateTime (DateTime, date)
 import Data.DateTime.Instant (Instant, instant, unInstant)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
+import Data.Function.Uncurried (Fn2, runFn2)
 import Data.Map (insert)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -74,7 +76,7 @@ import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Persistent (entitiesDatabaseName, invertedQueryDatabaseName, postDatabaseName, saveMarkedResources)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, modelsDatabaseName, newPerspectivesState, pushMessage, removeMessage, resetCaches, setModelUris)
-import Perspectives.Proxy (handleClientRequest) as Proxy
+import Perspectives.Proxy (handleClientRequest, receivePDRStatusMessageChannel, pdrStatusMessageChannel) as Proxy
 import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope, getPropertyFunction, getRoleFunction, getterFromPropertyType)
 import Perspectives.ReferentialIntegrity (fixReferences)
 import Perspectives.Repetition (Duration, fromDuration)
@@ -134,16 +136,27 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
       indexedResourceToCreate <- empty
       missingResource <- empty
       typeToBeFixed <- empty
-      state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
-        pouchdbUser
-        transactionFlag
-        transactionWithTiming
-        modelToLoad
-        options
-        brokerService
-        indexedResourceToCreate
-        missingResource
-        typeToBeFixed
+      -- Here we retrieve a Promise for a function in the SharedWorker that will send status messages to all clients.
+      statusMessageChannel :: Fn2 String String Unit <- toAff Proxy.pdrStatusMessageChannel
+
+      state <- do
+        lang <- getCurrentLanguageFromIDB
+        let
+          state' =
+            ( newPerspectivesState
+                pouchdbUser
+                transactionFlag
+                transactionWithTiming
+                modelToLoad
+                options
+                brokerService
+                indexedResourceToCreate
+                missingResource
+                typeToBeFixed
+                lang
+            )
+        -- The status message sending function is stored in PerspectivesState. It is accessed by pushMessage and removeMessage.
+        new (state' { setPDRStatus = ((runFn2 statusMessageChannel) :: String -> String -> Unit) })
 
       -- Fork aff to capture transactions to run.
       void $ forkAff $ forkTimedTransactions transactionWithTiming state
@@ -815,8 +828,12 @@ retrieveAllCredentials = do
     roleInstances
   modify \s@{ couchdbCredentials } -> s { couchdbCredentials = couchdbCredentials <> fromFoldable rows }
 
+-- We just pass on these two proxy functions so they becomes available to the SharedWorker.
 handleClientRequest :: Foreign
 handleClientRequest = Proxy.handleClientRequest
+
+receivePDRStatusMessageChannel :: Foreign
+receivePDRStatusMessageChannel = Proxy.receivePDRStatusMessageChannel
 
 recoverFromRecoveryPoint :: Foreign -> (Boolean -> Effect Unit) -> Effect Unit
 recoverFromRecoveryPoint rawPouchdbUser callback = void $ runAff handler

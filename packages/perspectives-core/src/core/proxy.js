@@ -286,3 +286,19 @@ export function handleClientRequest( pdr, channels, request )
     internalChannelPromise.then( ic => ic.send( req ) );
   }
 }
+
+// This rather complicated setup makes it possible for the SharedWorker to pass on function sendPDRStatusMessage.
+// It becomes available as a Promise in the PDR, where it is picked up by runPDR and stored in PerspectivesState.
+let receivePDRStatusMessageChannelResolver;
+
+// Use this promise in runPDR to get the channel for PDR status messages.
+export const pdrStatusMessageChannel = new Promise(function( resolver, rejecter)
+  {
+    receivePDRStatusMessageChannelResolver = resolver;
+  }
+)
+// This function will be called from the SharedWorker to set up the channel for PDR status messages.
+export function receivePDRStatusMessageChannel( channel )
+{
+  receivePDRStatusMessageChannelResolver( channel );
+}

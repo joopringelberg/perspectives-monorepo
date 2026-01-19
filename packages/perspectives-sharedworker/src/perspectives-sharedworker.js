@@ -46,4 +46,15 @@ self.onconnect = function(e)
   connectionToAPage.onmessage = requestFromPage => pdr.handleClientRequest( pdr, subscribingPages, requestFromPage, 1000000 * pageIndex);
   // increment the index so we're ready for the next page that connects.
   pageIndex = pageIndex + 1;
+  // Set up the message channel from the PDR to the pages. This function is passed through the main module from the (server side) proxy.
+  pdr.receivePDRStatusMessageChannel( sendPDRStatusMessage );
 };
+
+// Send the message through all channels: each client must be informed.
+function sendPDRStatusMessage( action, message )
+{
+  Object.values(subscribingPages).forEach( function( channel ){
+    channel.postMessage( {responseType: "PDRMessage", action: action, message: message} );
+  });
+}
+

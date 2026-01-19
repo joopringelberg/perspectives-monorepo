@@ -100,6 +100,7 @@ type Options = { pageHostingPDRPort?: (pdr: any) => MessagePort };
 export function configurePDRproxy(channeltype: "internalChannel" | "sharedWorkerChannel" | "hostPageChannel", options: Options): void 
 {
   let sharedWorkerChannel, sharedWorker;
+  const cursor = new Cursor();
   switch (channeltype) {
     case "sharedWorkerChannel": {
       // Force a new instance per app version; keep Vite’s worker URL untouched
@@ -107,9 +108,9 @@ export function configurePDRproxy(channeltype: "internalChannel" | "sharedWorker
         type: 'module',
         name: `pdr-${__MYCONTEXTS_VERSION__}-${__BUILD__}`
       });
-      sharedWorkerChannel = new SharedWorkerChannel(sharedWorker.port);
+      sharedWorkerChannel = new SharedWorkerChannel(sharedWorker.port, cursor);
       sharedWorkerChannelResolver(sharedWorkerChannel);
-      const instance = new PerspectivesProxy(sharedWorkerChannel);
+      const instance = new PerspectivesProxy(sharedWorkerChannel, cursor);
       // Dev-only global hook for console debugging
       if (typeof window !== "undefined") {
         (window as any).pdr = instance;
@@ -119,9 +120,9 @@ export function configurePDRproxy(channeltype: "internalChannel" | "sharedWorker
     }
     case "hostPageChannel": {
       import("perspectives-core").then(core => {
-        sharedWorkerChannel = new SharedWorkerChannel(options.pageHostingPDRPort!(core));
+        sharedWorkerChannel = new SharedWorkerChannel(options.pageHostingPDRPort!(core), cursor);
         sharedWorkerChannelResolver(sharedWorkerChannel);
-        const instance = new PerspectivesProxy(sharedWorkerChannel);
+        const instance = new PerspectivesProxy(sharedWorkerChannel, cursor);
         if (typeof window !== "undefined") {
           (window as any).pdr = instance;
         }
@@ -166,7 +167,7 @@ const defaultRequest =
 // PDRTYPES
 /////////////////////////////////////////////////////////////////////////////////////////
 
-type Response = ErrorResponse | ResultResponse | WorkerResponse;
+type Response = ErrorResponse | ResultResponse | WorkerResponse | PDRMessage;
 
 type ErrorResponse = {
   responseType: "APIerror";
@@ -184,7 +185,7 @@ type ResultResponse = {
 
 type WorkerResponse = {
   responseType: "WorkerResponse";
-  serviceWorkerMessage: "channelId" | "pdrStarted" | "isUserLoggedIn" | "runPDR" | "createAccount" | "resetAccount" | "reCreateInstances" | "recompileLocalModels" | "removeAccount" | "recoverFromRecoveryPoint";
+  serviceWorkerMessage: "channelId" | "pdrStarted" | "isUserLoggedIn" | "runPDR" | "createAccount" | "resetAccount" | "reCreateInstances" | "recompileLocalModels" | "removeAccount" | "recoverFromRecoveryPoint" | "pdrStatusMessage";
   channelId: number;
   pdrStarted: boolean;  // true if the PDR has started.
   isUserLoggedIn: boolean;  // true if the user has logged in before.
@@ -196,6 +197,12 @@ type WorkerResponse = {
   recoverSuccesful: boolean;  // true if the recovery point has been recovered.
 };
 
+type PDRMessage = {
+  responseType: "PDRMessage";
+  action: "push" | "remove", 
+  message: string
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 //// SHARED WORKER CHANNEL
 //// This code will be executed by the client!
@@ -205,6 +212,7 @@ type WorkerResponse = {
 class SharedWorkerChannel
 {
   port: MessagePort;
+  cursor: Cursor;
   requestId: number;
   valueReceivers: { [key: string]: ((data: any) => void) | undefined };
   channelIdResolver: ((value: number | PromiseLike<number>) => void) | undefined;
@@ -222,7 +230,7 @@ class SharedWorkerChannel
   // Refining the above: some requests are actually handled by the proxy itself.
   // It will call several PDR functions (like createAccount).
   // Most requests will be passed to the PDR API, though.
-  constructor( port: MessagePort )
+  constructor( port: MessagePort, cursor: Cursor )
   {
     const serviceWorkerChannel = this;
     this.requestId = -1;
@@ -237,6 +245,7 @@ class SharedWorkerChannel
 
     this.handleWorkerResponse = this.handleWorkerResponse.bind(this);
     this.port.onmessage = this.handleWorkerResponse;
+    this.cursor = cursor;
   }
 
   // The sharedworker or pageworker sends messages of various types.
@@ -244,6 +253,7 @@ class SharedWorkerChannel
   //
   handleWorkerResponse (e : MessageEvent<Response>)
   {
+    const proxy = this;
     if (e.data.responseType === "APIerror")
     {
       // {corrId: i, error: s} where s is is a String, i an int.
@@ -306,6 +316,10 @@ class SharedWorkerChannel
           this.valueReceivers.createAccount!( e.data.createSuccesful );
           break;
       }
+    }
+    else if ( e.data.responseType === "PDRMessage" )
+    {
+      proxy.cursor.setPDRStatus( e.data );
     }
   }
 
@@ -569,11 +583,11 @@ export class PerspectivesProxy
   cursor: Cursor;
   userMessageChannel?: UserMessageChannel;
 
-  constructor (channel : SharedWorkerChannel)
+  constructor (channel : SharedWorkerChannel, cursor: Cursor)
   {
     this.channel = channel;
-    this.cursor = new Cursor();
-    this.getPDRStatus();
+    this.cursor = cursor;
+    // this.getPDRStatus();
   }
 
   // Inform the server that this client shuts down.
@@ -633,7 +647,7 @@ export class PerspectivesProxy
     // }
 
     // Set cursor shape
-    if ( !(req.request == "Unsubscribe") && !(req.request == "GetPDRStatusMessage") )
+    if ( !(req.request == "Unsubscribe") )
       {
         cursor.wait(req);
       }
@@ -955,15 +969,6 @@ export class PerspectivesProxy
     );
   }
   
-  getPDRStatus()
-  {
-    const component = this;
-    // We don't unsubscribe this call. The callback is registered in PerspectivesState and used whenever the PDR wants to update its status.
-    this.send(
-      {request: "GetPDRStatusMessage", onlyOnce: false},
-      status => component.cursor.setPDRStatus( status[0] ? JSON.parse( status[0] ) : {} ) );
-  }
-
   ///////////////////////////////////////////////////////////////////////////////////////
   //// PROMISE RETURNING GETTERS.
   //// These getters, by their nature, return a result only once.

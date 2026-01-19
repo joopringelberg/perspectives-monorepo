@@ -29,7 +29,6 @@ import Data.Map (Map, empty, insert, lookup) as Map
 import Data.Maybe (Maybe(..))
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
-import Effect (Effect)
 import Effect.Aff.AVar (AVar, put, read)
 import Effect.Class (liftEffect)
 import Foreign.Object (empty, singleton)
@@ -46,7 +45,6 @@ import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), Ro
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
 import Prelude (Unit, bind, discard, pure, unit, void, ($), (+), (<<<), (>>=), (<>))
-import Simple.JSON (writeJSON)
 
 newPerspectivesState
   :: PouchdbUser
@@ -95,7 +93,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , missingResource
   , currentLanguage
   , translations: empty
-  , setPDRStatus: \_ -> pure unit
+  , setPDRStatus: \_ _ -> unit
   , typeToBeFixed
   , modelUnderCompilation: Nothing
   , modelUris: Map.empty
@@ -225,7 +223,7 @@ setCurrentLanguage lang = modify \s -> s { currentLanguage = lang }
 modelsDatabaseName :: MonadPerspectives String
 modelsDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_models")
 
-getPDRStatusSetter :: MonadPerspectives (String -> Effect Unit)
+getPDRStatusSetter :: MonadPerspectives (String -> String -> Unit)
 getPDRStatusSetter = gets _.setPDRStatus
 
 type PDRStatusMessage = { action :: String, message :: String }
@@ -233,12 +231,12 @@ type PDRStatusMessage = { action :: String, message :: String }
 pushMessage :: String -> MonadPerspectives Unit
 pushMessage msg = do
   setPDRStatus <- getPDRStatusSetter
-  liftEffect $ setPDRStatus $ writeJSON { action: "push", message: msg }
+  pure $ setPDRStatus "push" msg
 
 removeMessage :: String -> MonadPerspectives Unit
 removeMessage msg = do
   setPDRStatus <- getPDRStatusSetter
-  liftEffect $ setPDRStatus $ writeJSON { action: "remove", message: msg }
+  pure $ setPDRStatus "remove" msg
 
 getTypeToBeFixed :: MonadPerspectives (AVar TypeFix)
 getTypeToBeFixed = gets _.typeToBeFixed

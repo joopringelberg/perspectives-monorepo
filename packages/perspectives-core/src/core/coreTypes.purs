@@ -124,7 +124,6 @@ import Data.Nullable (Nullable)
 import Data.Ord.Generic (genericCompare)
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple(..))
-import Effect (Effect)
 import Effect.Aff (Aff, Fiber, throwError)
 import Effect.Aff.AVar (AVar, empty)
 import Effect.Aff.Class (liftAff)
@@ -232,7 +231,7 @@ type PerspectivesExtraState =
 
   , translations :: Object TranslationTable
 
-  , setPDRStatus :: String -> Effect Unit
+  , setPDRStatus :: String -> String -> Unit
 
   , typeToBeFixed :: AVar TypeFix
 

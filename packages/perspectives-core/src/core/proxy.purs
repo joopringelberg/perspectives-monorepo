@@ -1,10 +1,14 @@
 module Perspectives.Proxy
-  ( handleClientRequest
-  , createRequestEmitter
+  ( createRequestEmitter
+  , handleClientRequest
+  , pdrStatusMessageChannel
+  , receivePDRStatusMessageChannel
   , retrieveRequestEmitter
   ) where
 
 import Control.Coroutine.Aff (Emitter, Step(..))
+import Control.Promise (Promise)
+import Data.Function.Uncurried (Fn2)
 import Effect (Effect)
 import Effect.Uncurried (EffectFn1, EffectFn3, runEffectFn1, runEffectFn3)
 import Foreign (Foreign)
@@ -15,6 +19,7 @@ import Prelude (Unit)
 -----------------------------------------------------------
 foreign import handleClientRequest :: Foreign
 
+foreign import receivePDRStatusMessageChannel :: Foreign
 -----------------------------------------------------------
 -- REQUEST, RESPONSE AND CHANNEL
 -----------------------------------------------------------
@@ -37,3 +42,5 @@ foreign import retrieveRequestEmitterImpl
 -- createRequestEmitter :: Emitter Foreign Unit
 retrieveRequestEmitter :: Emitter Effect Foreign Unit -> Effect Unit
 retrieveRequestEmitter = runEffectFn1 retrieveRequestEmitterImpl
+
+foreign import pdrStatusMessageChannel :: Promise (Fn2 String String Unit)
