@@ -1,4 +1,6 @@
--- Stadskamers - Copyright Joop Ringelberg and Cor Baars 2025, 2026
+// Copyright (C) 2025, 2026 Joop Ringelberg
+// All rights reserved.
+// Unauthorized copying, redistribution, or commercial use is prohibited without written permission.
 
 domain model://joopringelberg.nl#Stadskamers
   use sys for model://perspectives.domains#System

@@ -18,9 +18,9 @@ model://joopringelberg.nl#yxnsmx3fr4:
                   Onder *Waar*, hoofdje *Stadskamers* zie je de Stadskamer waar je werkt.\n
                   Onder *Wat*, hoofdje *Mijn caseload* zie je de routes die je begeleidt."
                 nl: "### Dit is de Stadskamer App\n
-                  Je bent medewerker van een Stadskamer-organisatie.\n
-                  Onder *Waar*, hoofdje *Stadskamers* zie je de Stadskamer waar je werkt.\n
-                  Onder *Wat*, hoofdje *Mijn caseload* zie je de routes die je begeleidt."
+                   Je bent medewerker van een Stadskamer-organisatie.\n
+                   Onder *Waar*, hoofdje *Stadskamers* zie je de Stadskamer waar je werkt.\n
+                   Onder *Wat*, hoofdje *Mijn caseload* zie je de routes die je begeleidt."
                 en: "MISSING en"
         Deelnemer:
           translations:
@@ -32,7 +32,7 @@ model://joopringelberg.nl#yxnsmx3fr4:
                 orig: "### Dit is de Stadskamer App\n
                   Dit is jouw Stadskamer app. Onder *Waar*, hoofdje *Routes* zie je jouw route."
                 nl: "### Dit is de Stadskamer App\n
-                  Dit is jouw Stadskamer app. Onder *Waar*, hoofdje *Routes* zie je jouw route."
+                   Dit is jouw Stadskamer app. Onder *Waar*, hoofdje *Routes* zie je jouw route."
                 en: "MISSING en"
         Manager:
           translations:
@@ -49,7 +49,14 @@ model://joopringelberg.nl#yxnsmx3fr4:
                   * **Medewerker**: als je in dienst bent bij een Stadskamer.\n
                   * **Beheerder**: als je de app inricht voor een specifieke Stadskamer.\n
                   Kies in het menu linksboven de rol die je wilt spelen. Het scherm past zich aan de rol aan."
-                nl: "MISSING nl"
+                nl: "### Dit is de Stadskamer App\n
+                  Hier kun je Stadskamer-organisaties aanmaken en beheren.\n
+                  Je kunt vier rollen spelen:\n
+                  * **Deelnemer**: als je een Stadskamer bezoekt voor zijn activiteiten.\n
+                  * *Ervaringsdeskundige* (deze rol is er nog niet in de app): als je een Stadskamer bezoekt om te helpen bij de activiteiten.\n
+                  * **Medewerker**: als je in dienst bent bij een Stadskamer.\n
+                  * **Beheerder**: als je de app inricht voor een specifieke Stadskamer.\n
+                  Kies in het menu linksboven de rol die je wilt spelen. Het scherm past zich aan de rol aan."
                 en: "MISSING en"
       contextroles:
         MyCases:
@@ -80,11 +87,11 @@ model://joopringelberg.nl#yxnsmx3fr4:
             nl: Ambassadeurs
             en: Ambassadors
           actions:
-            model://perspectives.domains#Stadskamers$Stadskamer$Ambassadeurs:
+            model://joopringelberg.nl#Stadskamers$Stadskamer$Ambassadeurs:
               CreateRoute:
                 translations:
-                  nl: Maak een routenl
-                  en: Make a route
+                  nl: Maak een route
+                  en: MISSING en
           markdowns:
             0:
               translations:
@@ -125,7 +132,15 @@ model://joopringelberg.nl#yxnsmx3fr4:
                   * open de Locatie die je hebt aangemaakt\n
                   * maak een lege rol aan onder 'Wie' - LocatieManager\n
                   * vul de rol met de Medewerker-rol op het clipboard"
-                nl: "MISSING nl"
+                nl: "### Stadskamer: de organisatie\n
+                  Hier kun je medewerkers en locaties beheren.\n
+                  Er zijn twee soorte locaties: grote, met meerder activiteitencentra, en kleine, met één activiteitencentrum.\n
+                  Zo maak je een Locatie:\n
+                  * maak een Locatie of een Kleine Locatie aan onder 'Waar' - Locaties\n
+                  * zorg dat de Medewerker die de locatie gaat beheren, op het clipboard staat\n
+                  * open de Locatie die je hebt aangemaakt\n
+                  * maak een lege rol aan onder 'Wie' - LocatieManager\n
+                  * vul de rol met de Medewerker-rol op het clipboard"
                 en: "MISSING en"
       contextroles:
         MyRoutes:
@@ -161,33 +176,35 @@ model://joopringelberg.nl#yxnsmx3fr4:
                 orig: "### Route van deelnemer\n
                   * Vul een deelnemer in en wijs een begeleider toe.\n
                   * Doe een intake."
-                nl: "MISSING nl"
+                nl: "### Route van deelnemer\n
+                  * Vul een deelnemer in en wijs een begeleider toe.\n
+                  * Doe een intake."
                 en: "MISSING en"
           titles:
             0:
               translations:
                 orig: Basisgegevens
-                nl: MISSING nl
-                en: MISSING en
+                nl: Basisgegevens
+                en: Basic information
             1:
               translations:
                 orig: Route
-                nl: MISSING nl
-                en: MISSING en
+                nl: Route
+                en: Route
             2:
               translations:
                 orig: Financiering
-                nl: MISSING nl
-                en: MISSING en
+                nl: Financiering
+                en: Financing
             3:
               translations:
                 orig: Risico-inventarisatie
-                nl: MISSING nl
+                nl: Risico-inventarisatie
                 en: MISSING en
             4:
               translations:
                 orig: Persoonsbeeld
-                nl: MISSING nl
+                nl: Persoonsbeeld
                 en: MISSING en
         Begeleider:
           translations:
@@ -198,28 +215,29 @@ model://joopringelberg.nl#yxnsmx3fr4:
               translations:
                 orig: "### Een deelnemer die je begeleidt\n
                   Hier zie je de vraag die de deelnemer heeft gesteld bij het intakegesprek."
-                nl: "MISSING nl"
+                nl: "### Een deelnemer die je begeleidt\n
+                  Hier zie je de vraag die de deelnemer heeft gesteld bij het intakegesprek."
                 en: "MISSING en"
           titles:
             0:
               translations:
                 orig: Basisgegevens
-                nl: MISSING nl
-                en: MISSING en
+                nl: Basisgegevens
+                en: Basic information
             1:
               translations:
                 orig: Route
-                nl: MISSING nl
+                nl: Route
                 en: MISSING en
             2:
               translations:
                 orig: Risico-inventarisatie
-                nl: MISSING nl
+                nl: Risico-inventarisatie
                 en: MISSING en
             3:
               translations:
                 orig: Persoonsbeeld
-                nl: MISSING nl
+                nl: Persoonsbeeld
                 en: MISSING en
         Deelnemer:
           translations:
@@ -228,7 +246,7 @@ model://joopringelberg.nl#yxnsmx3fr4:
           properties:
             Bijzonderheden:
               translations:
-                nl: MISSING nl
+                nl: Bijzonderheden
                 en: MISSING en
             ReceiveAllEmails:
               translations:
@@ -240,80 +258,81 @@ model://joopringelberg.nl#yxnsmx3fr4:
                 en: Emergency phone
             Geboortedatum:
               translations:
-                nl: MISSING nl
+                nl: Geboortedatum
                 en: MISSING en
             Geslacht:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Geslacht
+                en: Gender
             BSN:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Burger Service Nummer
+                en: Social Security Number
             Verheldering:
               translations:
-                nl: MISSING nl
+                nl: Verheldering
                 en: MISSING en
             Vraag:
               translations:
-                nl: MISSING nl
+                nl: Vraag
                 en: MISSING en
           markdowns:
             0:
               translations:
                 orig: "### Dit is je route\n
                   Hier zie je de vraag die je hebt gesteld bij het intakegesprek."
-                nl: "MISSING nl"
+                nl: "### Dit is je route\n
+                  Hier zie je de vraag die je hebt gesteld bij het intakegesprek."
                 en: "MISSING en"
           titles:
             0:
               translations:
                 orig: Route
-                nl: MISSING nl
-                en: MISSING en
+                nl: Route
+                en: Route
             1:
               translations:
                 orig: Risico-inventarisatie
-                nl: MISSING nl
-                en: MISSING en
+                nl: Risico-inventarisatie
+                en: Risk inventory
       things:
         Persoonsbeeld:
           translations:
-            nl: MISSING nl
-            en: MISSING en
+            nl: Persoonsbeeld
+            en: Personal image
           properties:
             Overige:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Overige
+                en: Other
             Omgevingsvoorwaarden:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Omgevingsvoorwaarden
+                en: Environmental conditions
             Houdingswaarden:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Houdingswaarden
+                en: Attitudinal values
             SociaalEmotioneel:
               translations:
                 nl: Sociaal-emotioneel
                 en: Social-emotional
             Cognitief:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Cognitief
+                en: Cognitive
             Lichamelijk:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Lichamelijk
+                en: Physical
             Levensgeschiedenis:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Levensgeschiedenis
+                en: Life history
             Diagnose:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Diagnose
+                en: Diagnosis
             Name:
               translations:
                 nl: Naam
@@ -325,56 +344,60 @@ model://joopringelberg.nl#yxnsmx3fr4:
           properties:
             Gehoor:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Gehoor
+                en: Hearing
             Zicht:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Zicht
+                en: Sight
             Epilepsie:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Epilepsie
+                en: Epilepsy
             Diabetes:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Diabetes
+                en: Diabetes
             Vallen:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Vallen
+                en: Falling
             Agressie:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Agressie
+                en: Aggression
             SignaleringsPlan:
               translations:
                 nl: Signaleringsplan
-                en: MISSING en
+                en: Signaling plan
             Medicatie:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Medicatie
+                en: Medication
+            Allergieen:
+              translations:
+                nl: Allergieën
+                en: Allergies
             Name:
               translations:
                 nl: Naam
                 en: Name
         Financiering:
           translations:
-            nl: MISSING nl
-            en: MISSING en
+            nl: Financiering
+            en: Financing
           properties:
             Overig:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Overig
+                en: Other
             WLZ:
               translations:
-                nl: MISSING nl
+                nl: WLZ
                 en: MISSING en
             PGB:
               translations:
-                nl: MISSING nl
+                nl: PGB
                 en: MISSING en
             WMOOverigeGemeenten:
               translations:
@@ -382,12 +405,16 @@ model://joopringelberg.nl#yxnsmx3fr4:
                 en: MISSING en
             Gemeente:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Gemeente
+                en: Municipality
             BSN:
               translations:
-                nl: MISSING nl
-                en: MISSING en
+                nl: Burger Service Nummer
+                en: Social Security Number
+            Naam:
+              translations:
+                nl: Naam
+                en: Name
       contextroles:
         Location:
           translations:
@@ -410,15 +437,17 @@ model://joopringelberg.nl#yxnsmx3fr4:
       users:
         Bezoeker:
           translations:
-            nl: MISSING nl
-            en: MISSING en
+            nl: Bezoeker
+            en: Visitor
           markdowns:
             0:
               translations:
                 orig: "### Locatie: activiteitencentra\n
                   Hier zie je wat je op deze locatie kunt doen (kijk onder *Waar*, hoofdje *Activiteitencentra*)."
-                nl: "MISSING nl"
-                en: "MISSING en"
+                nl: "### Locatie: activiteitencentra\n
+                  Hier zie je wat je op deze locatie kunt doen (kijk onder *Waar*, hoofdje *Activiteitencentra*)."
+                en: "### Location: activity centers\n
+                  Here you can see what you can do at this location (look under *Where*, heading *Activity centers*)."
         AllEmployees:
           translations:
             nl: Alle medewerkers
@@ -433,8 +462,12 @@ model://joopringelberg.nl#yxnsmx3fr4:
                 orig: "### Locatie\n
                   Je werkt op deze locatie.\n
                   Je bent betrokken bij (één of meerdere van) de activiteitencentra die hier zijn."
-                nl: "MISSING nl"
-                en: "MISSING en"
+                nl: "### Locatie\n
+                  Je werkt op deze locatie.\n
+                  Je bent betrokken bij (één of meerdere van) de activiteitencentra die hier zijn."
+                en: "### Location\n
+                  You work at this location.\n
+                  You are involved in (one or more of) the activity centers here."
         LocationManager:
           translations:
             nl: Lokatiebeheerder
@@ -455,12 +488,36 @@ model://joopringelberg.nl#yxnsmx3fr4:
                   * open het centrum dat je hebt aangemaakt\n
                   * maak een lege rol aan onder 'Wie' - Regisseur\n
                   * vul de rol met de Medewerker-rol op het clipboard"
-                nl: "MISSING nl"
-                en: "MISSING en"
+                nl: "### Locatie: activiteitencentra\n
+                  Hier kun je medewerkers en activiteitencentra beheren.\n
+                  Zo voeg je een medewerker toe aan deze locatie:\n
+                  * Kopieer een medewerker uit de lijst onder *Alle medewerkers* naar het clipboard.\n
+                  * Maak onder *Wie*, *collegas op deze lokatie* een nieuwe rol aan en vul die met de medewerker op het clipboard.\n
+                  Voorbeelden van activiteitcentra zijn: sport, kunst, muziek, koken, etc.\n
+                  Een locatie kan meerdere activiteitencentra hebben.\n
+                  Zo maak je een Activiteitencentrum aan:\n
+                  * maak een Activiteitencentrum aan onder 'Waar' - Activiteitencentrum\n
+                  * zorg dat de Medewerker die de Regisseur van het centrum wordt, op het clipboard staat\n
+                  * open het centrum dat je hebt aangemaakt\n
+                  * maak een lege rol aan onder 'Wie' - Regisseur\n
+                  * vul de rol met de Medewerker-rol op het clipboard"
+                en: "### Location: activity centers\n
+                  Here you can manage employees and activity centers.\n
+                  To add an employee to this location:\n
+                  * Copy an employee from the list under *All employees* to the clipboard.\n
+                  * Create a new role under *Who*, *coworkers at this location* and fill it with the employee on the clipboard.\n
+                  Examples of activity centers are: sports, art, music, cooking, etc.\n
+                  A location can have multiple activity centers.\n
+                  To create an Activity Center:\n
+                  * create an Activity Center under 'Where' - Activity Center\n
+                  * make sure the Employee who becomes the Director of the center is on the clipboard\n
+                  * open the center you created\n
+                  * create an empty role under 'Who' - Director\n
+                  * fill the role with the Employee role on the clipboard"
         Initializer:
           translations:
-            nl: MISSING nl
-            en: MISSING en
+            nl: Initiatiefnemer
+            en: Initiator
           markdowns:
             0:
               translations:
@@ -469,7 +526,11 @@ model://joopringelberg.nl#yxnsmx3fr4:
                   De manager kan dan activiteitencentra beheren.\n
                   * maak een lege rol aan onder 'Wie' - LocatieManager\n
                   * vul met een Medewerker-rol op het clipboard."
-                nl: "MISSING nl"
+                nl: "### Deze locatie heeft een manager nodig\n
+                  Hier kun je een manager aanstellen voor deze locatie.\n
+                  De manager kan dan activiteitencentra beheren.\n
+                  * maak een lege rol aan onder 'Wie' - LocatieManager\n
+                  * vul met een Medewerker-rol op het clipboard."
                 en: "MISSING en"
       contextroles:
         AllRoutesOnLocation:
@@ -497,15 +558,17 @@ model://joopringelberg.nl#yxnsmx3fr4:
             en: Participants in this center
         Bezoeker:
           translations:
-            nl: MISSING nl
-            en: MISSING en
+            nl: Bezoeker
+            en: Visitor
           markdowns:
             0:
               translations:
                 orig: "### Activiteitencentrum: activiteiten\n
                   Hier zie je wat je in dit activiteitencentrum kunt doen (kijk onder *Waar*, hoofdje *Activiteiten*)."
-                nl: MISSING nl
-                en: MISSING en
+                nl: "### Activiteitencentrum: activiteiten\n
+                  Hier zie je wat je in dit activiteitencentrum kunt doen (kijk onder *Waar*, hoofdje *Activiteiten*)."
+                en: "### Activity center: activities\n
+                  Here you see what you can do in this activity center (look under *Where*, heading *Activities*)."
         Coworkers:
           translations:
             nl: Directe collegas
@@ -515,8 +578,10 @@ model://joopringelberg.nl#yxnsmx3fr4:
               translations:
                 orig: "### Activiteitencentrum: activiteiten\n
                   Je werkt in dit activiteitencentrum."
-                nl: "MISSING nl"
-                en: "MISSING en"
+                nl: "### Activiteitencentrum: activiteiten\n
+                  Je werkt in dit activiteitencentrum."
+                en: "### Activity center: activities\n
+                  You work in this activity center."
         Regisseur:
           translations:
             nl: Regisseur
@@ -533,12 +598,20 @@ model://joopringelberg.nl#yxnsmx3fr4:
                   * open de activiteit die je hebt aangemaakt\n
                   * maak een lege rol aan onder 'Wie' - Organisator\n
                   * vul de rol met de Medewerker-rol op het clipboard"
-                nl: "MISSING nl"
+                nl: "### Activiteitencentrum: activiteiten\n
+                  Hier kun je activiteiten beheren.\n
+                  Een activiteitencentrum kan meerdere activiteiten hebben.\n
+                  Zo maak je een Activiteit aan:\n
+                  * maak een Activiteit aan onder 'Wat' - Activiteiten\n
+                  * zorg dat de Medewerker die de Organisator van de activiteit wordt, op het clipboard staat\n
+                  * open de activiteit die je hebt aangemaakt\n
+                  * maak een lege rol aan onder 'Wie' - Organisator\n
+                  * vul de rol met de Medewerker-rol op het clipboard"
                 en: "MISSING en"
         Initializer:
           translations:
-            nl: MISSING nl
-            en: MISSING en
+            nl: Initiatiefnemer
+            en: Initiator
           markdowns:
             0:
               translations:
@@ -547,19 +620,24 @@ model://joopringelberg.nl#yxnsmx3fr4:
                   De Regisseur organiseert de activiteiten.\n
                   * maak een lege rol aan onder 'Wie' - Regisseur\n
                   * vul met een Medewerker-rol op het clipboard."
-                nl: "MISSING nl"
+                nl: "### Deze locatie heeft nog geen Regisseur\n
+                  Hier kun je de Regisseur benoemen.\n
+                  De Regisseur organiseert de activiteiten.\n
+                  * maak een lege rol aan onder 'Wie' - Regisseur\n
+                  * vul met een Medewerker-rol op het clipboard."
                 en: "MISSING en"
             1:
               translations:
                 orig: "### Deze locatie heeft al een Regisseur\n
                   Je hebt eerder een Regisseur benoemd."
-                nl: "MISSING nl"
+                nl: "### Deze locatie heeft al een Regisseur\n
+                  Je hebt eerder een Regisseur benoemd."
                 en: "MISSING en"
       contextroles:
         ActivityCases:
           translations:
-            nl: MISSING nl
-            en: MISSING en
+            nl: Routes met activiteiten in dit centrum
+            en: Activity routes in this center
         Activities:
           translations:
             nl: Activiteiten
@@ -593,27 +671,47 @@ model://joopringelberg.nl#yxnsmx3fr4:
       users:
         Bezoeker:
           translations:
-            nl: MISSING nl
-            en: MISSING en
+            nl: Bezoeker
+            en: Visitor
           markdowns:
             0:
               translations:
                 orig: "### Activiteit\n
                   Hier zie je wat je kunt doen in deze activiteit."
-                nl: MISSING nl
-                en: MISSING en
+                nl: "### Activiteit\n
+                  Hier zie je wat je kunt doen in deze activiteit."
+                en: "MISSING en"
         Organizer:
           translations:
             nl: Organisator
             en: Organizer
+          actions:
+            model://joopringelberg.nl#Stadskamers$Activity$Organizer:
+              MaakBijeenkomst:
+                translations:
+                  nl: Maak bijeenkomst
+                  en: Create a meeting
           markdowns:
             0:
               translations:
                 orig: "### Activiteit\n
                   Jij bent verantwoordelijk voor deze activiteit.\n
                   Beschrijf je activiteit"
-                nl: "MISSING nl"
+                nl: "### Activiteit\n
+                  Jij bent verantwoordelijk voor deze activiteit.\n
+                  Beschrijf je activiteit"
                 en: "MISSING en"
+            1:
+              translations:
+                orig: "### Activiteit: bijeenkomsten\n
+                  Hier kun je bijeenkomsten aanmaken om aanwezigheid te registreren [[action:MaakBijeenkomst|Maak bijeenkomst]].\n
+                  Een activiteit kan meerdere bijeenkomsten hebben.\n
+                  Vul de datum van de bijeenkomst in!"
+                nl: "### Activiteit: bijeenkomsten\n
+                  Hier kun je bijeenkomsten aanmaken om aanwezigheid te registreren [[action:MaakBijeenkomst|Maak bijeenkomst]].\n
+                  Een activiteit kan meerdere bijeenkomsten hebben.\n
+                  Vul de datum van de bijeenkomst in!"
+                en: MISSING en
         ActivititeitDeelnemer:
           translations:
             nl: Deelnemers
@@ -623,20 +721,64 @@ model://joopringelberg.nl#yxnsmx3fr4:
               translations:
                 orig: "### Activiteit: deelname\n
                   Je bent deelnemer aan deze activiteit."
-                nl: "MISSING nl"
+                nl: "### Activiteit: deelname\n
+                  Je bent deelnemer aan deze activiteit."
                 en: "MISSING en"
         Initializer:
           translations:
-            nl: MISSING nl
-            en: MISSING en
+            nl: Initiatiefnemer
+            en: Initiator
           markdowns:
             0:
               translations:
                 orig: "### Deze activiteit heeft een Organisator nodig\n
                   * maak een lege rol aan onder 'Wie' - Organisator\n
                   * vul met een Medewerker-rol op het clipboard."
-                nl: "MISSING nl"
+                nl: "### Deze activiteit heeft een Organisator nodig\n
+                  * maak een lege rol aan onder 'Wie' - Organisator\n
+                  * vul met een Medewerker-rol op het clipboard."
                 en: "MISSING en"
+      contextroles:
+        Bijeenkomsten:
+          translations:
+            nl: Bijeenkomsten
+            en: Meetings
+    Bijeenkomst:
+      translations:
+        nl: Bijeenkomst
+        en: Meeting
+      external:
+        properties:
+          Datum:
+            translations:
+              nl: Datum
+              en: Date
+      users:
+        Aanwezigen:
+          translations:
+            nl: Aanwezigen
+            en: Participants
+          properties:
+            Aanwezig:
+              translations:
+                nl: Aanwezig
+                en: Present
+        Organizer:
+          translations:
+            nl: Organisator
+            en: Organizer
+          markdowns:
+            0:
+              translations:
+                orig: "### Bijeenkomst: deelnemers\n
+                  * Vink deelnemers aan die aanwezig zijn.\n
+                  * Je kunt zo nodig deelnemers toevoegen.\n
+                  * Je mag afwezige deelnemers verwijderen, maar dat is niet nodig."
+                nl: "### Bijeenkomst: deelnemers\n
+                  * Vink deelnemers aan die aanwezig zijn.\n
+                  * Je kunt zo nodig deelnemers toevoegen.\n
+                  * Je mag afwezige deelnemers verwijderen, maar dat is niet nodig."
+                en: MISSING en
     SmallLocation:
       translations:
         nl: Kleine lokatie

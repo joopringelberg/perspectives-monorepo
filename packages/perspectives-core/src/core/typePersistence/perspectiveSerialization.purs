@@ -518,7 +518,7 @@ roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContex
     translatedActions <- lift $ lift
       ( fromFoldable <$> for (nub $ concat (keys <$> (catMaybes $ (flip EM.lookup actions) <$> roleStates)))
           \actionName -> do
-            translatedActionName <- translateType (ActionIdentifier (qualifyWith (unwrap cType) actionName))
+            translatedActionName <- translateType (ActionIdentifier actionName)
             pure $ Tuple actionName translatedActionName
       )
     readableName <- computeReadableName valuesAndVerbs

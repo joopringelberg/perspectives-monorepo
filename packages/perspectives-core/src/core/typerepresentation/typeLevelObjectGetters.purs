@@ -45,7 +45,7 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleDomeinFileError', handlePerspectRolError')
-import Perspectives.Identifiers (areLastSegmentsOf, typeUri2ModelUri, endsWithSegments, isExternalRole, startsWithSegments)
+import Perspectives.Identifiers (areLastSegmentsOf, endsWithSegments, isExternalRole, startsWithSegments, typeUri2LocalName, typeUri2ModelUri)
 import Perspectives.Instances.Combinators (closure_, conjunction, filter')
 import Perspectives.Instances.Combinators (filter', filter) as COMB
 import Perspectives.ModelDependencies (rootUser)
@@ -882,8 +882,12 @@ getContextActionFromUnqualifiedName actionName userRoleType = do
           foldl
             ( \(foundAction :: Maybe Action) act@(Action { readable }) ->
                 if isJust foundAction then foundAction
-                else if readable == actionName then Just act
-                else Nothing
+                -- Check whether the fully qualified name ends with the unqualified name.
+                else case typeUri2LocalName readable of
+                  Nothing -> Nothing
+                  Just localName ->
+                    if localName == actionName then Just act
+                    else Nothing
             )
             Nothing
             (values stateDepActions)

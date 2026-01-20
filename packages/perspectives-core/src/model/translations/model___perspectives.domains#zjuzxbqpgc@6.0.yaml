@@ -11,6 +11,11 @@ model://perspectives.domains#zjuzxbqpgc:
             en: Manager
             nl: Beheerder
           actions:
+            model://perspectives.domains#BrokerServices$BrokerServices$PublicBrokers$NoContract:
+              SignUp:
+                translations:
+                  nl: Schrijf me in
+                  en: Sign me up
             model://perspectives.domains#BrokerServices$BrokerServices:
               AddNewBroker:
                 translations:
@@ -298,17 +303,17 @@ model://perspectives.domains#zjuzxbqpgc:
                   This key should be manually added to the state file of the shared file storage relay service.\n
                   See [perspectives-sharedfilestorage](https://github.com/joopringelberg/perspectives-sharedfilestorage) for more information."
                 nl: "### Beheerder\n
-                  Als je de beheerder bent van deze BrokerService, is het belangrijk dat je een sleutel hebt voor de gedeelde bestandsopslagservice (indien van toepassing).\n
-                  Deze sleutel stelt je in staat om sleutels uit te geven aan mensen die met je verbinden om een account op je Broker Service te krijgen.\n
-                  Het stelt je ook in staat om bestanden naar de gedeelde bestandsopslag te uploaden die je verbonden peers kunnen downloaden.\n
-                  Deze sleutel moet handmatig worden toegevoegd aan het staatsbestand van de gedeelde bestandsopslagrelay-service.\n
-                  Zie [perspectives-sharedfilestorage](https://github.com/joopringelberg/perspectives-sharedfilestorage) voor meer informatie."
+                   Als je de beheerder bent van deze BrokerService, is het belangrijk dat je een sleutel hebt voor de gedeelde bestandsopslagservice (indien van toepassing).\n
+                   Deze sleutel stelt je in staat om sleutels uit te geven aan mensen die met je verbinden om een account op je Broker Service te krijgen.\n
+                   Het stelt je ook in staat om bestanden naar de gedeelde bestandsopslag te uploaden die je verbonden peers kunnen downloaden.\n
+                   Deze sleutel moet handmatig worden toegevoegd aan het staatsbestand van de gedeelde bestandsopslagrelay-service.\n
+                   Zie [perspectives-sharedfilestorage](https://github.com/joopringelberg/perspectives-sharedfilestorage) voor meer informatie."
                 en: "### Administrator\n
-                  As you are the manager of this BrokerService, it is important that you have a key for the shared file storage service (if any).\n
-                  This key allows you to hand out keys to people who connect to you to get an account on your Broker Service.\n
-                  It also allows you to upload files to the shared file storage that your connected peers can download.\n
-                  This key should be manually added to the state file of the shared file storage relay service.\n
-                  See [perspectives-sharedfilestorage](https://github.com/joopringelberg/perspectives-sharedfilestorage) for more information."
+                   As you are the manager of this BrokerService, it is important that you have a key for the shared file storage service (if any).\n
+                   This key allows you to hand out keys to people who connect to you to get an account on your Broker Service.\n
+                   It also allows you to upload files to the shared file storage that your connected peers can download.\n
+                   This key should be manually added to the state file of the shared file storage relay service.\n
+                   See [perspectives-sharedfilestorage](https://github.com/joopringelberg/perspectives-sharedfilestorage) for more information."
             1:
               translations:
                 orig: "### Broker service\n
@@ -461,7 +466,7 @@ model://perspectives.domains#zjuzxbqpgc:
             en: Administrator
             nl: Beheerder
           actions:
-            model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$External$ayh7cizuqe:
+            model://perspectives.domains#System$Invitation$External$Message:
               CreateInvitation:
                 translations:
                   en: Create invitation
