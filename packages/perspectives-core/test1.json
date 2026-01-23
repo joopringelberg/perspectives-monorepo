@@ -1,226 +1,36 @@
 {
-	"rg1ba7bgts": {
-		"nrOfUploadedFiles": 2,
-		"nrOfRequestedKeys": 16
+	"_id": "aai3ke1gai",
+	"_rev": "2-3d76a1a87e58982d9c5ee41a099baf51",
+	"universeContextDelta": {
+		"signature": "data:application/octet-stream;base64,GA5B/QSMHkyBgTMlkRyp4MkHR7kFkG4tsFrnJQmuJuKjV6TO3BLVtZPkpNG6nrvwbdlnDS9tp28PToQ6tE6S7iS0jWZM/ivnQOesgI6KJ4o4KQVlskXyUh4J1AI5daws",
+		"encryptedDelta": "{\"subject\":{\"value\":\"model://perspectives.domains#zjuzxbqpgc$me48uhv82h$gsq6u8ihji\",\"type\":\"CR\"},\"id\":\"aai3ke1gai\",\"deltaType\":\"ConstructEmptyContext\",\"contextType\":\"model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0\"}",
+		"author": "cg9vhwu38p"
 	},
-	"fckjw1vwlk": {
-		"nrOfUploadedFiles": 10,
-		"nrOfRequestedKeys": 1
+	"states": [
+		"model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0",
+		"model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$pd0vyxwjrb",
+		"model://perspectives.domains#tiodn6tcyc$w5l42i0gk4",
+		"model://perspectives.domains#tiodn6tcyc$nkllrx0n2x"
+	],
+	"rolInContext": {
+		"model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$bmtbj82w7r": [
+			"def:#nbfz91skyi"
+		],
+		"model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$rcu2nweeb1": [
+			"def:#xfb5rrklcf"
+		],
+		"model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$gpwpevx4e5": [
+			"def:#mgpf1jpf6b"
+		]
 	},
-	"q0aqtnflic": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"ymy1gmaupc": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 1
-	},
-	"md95p0v7z4": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"hc8rdhvddr": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"sxbcco85o4": {
-		"nrOfUploadedFiles": 1,
-		"nrOfRequestedKeys": 0
-	},
-	"f9rsopdndb": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"zenx4sqthn": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"mjph038nad": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"qnjto9o73l": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 2
-	},
-	"kzno4tm50j": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"mm737iq8wy": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"d5ycd6hhd1": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 5
-	},
-	"fhkjmqn2bg": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"tqnq4pcic8": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"kcubw5sec6": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"t8ee1wjbtr": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"fmc8obddrl": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 3
-	},
-	"dgeabju7iw": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"v475okkczu": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"rkmk70kjfw": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"fbhijbwjgz": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 3
-	},
-	"owerymnimz": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"cyb9c5sfie": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"kcbgezvbfm": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"fyjyo6uk7e": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 4
-	},
-	"rveut9qmfr": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"znmliyadcr": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"gf7xf663l4": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"tc14fhwfch": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"wf752qhxta": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 2
-	},
-	"ub4y3i2t8h": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"izzmcx6q7n": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"li7o0c5qa6": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 17
-	},
-	"r01gndci00": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"vnr1x09lrf": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"c8eg3ybcuw": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"alx4yda8v5": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"x4x89u9cat": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"se9e1fmpcf": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"wqqas9roaz": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"lgkyme9obm": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"awp4zcd4ow": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"zny8cm4zvd": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"nr6ckhwd1j": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"oho0j25j90": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"fun29s974y": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 1
-	},
-	"uixpnfcy0g": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"bvnsbnszig": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"e8cibaeb3i": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"sr60g3xrvd": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"z24i0uzoix": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"nra2dndd7p": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"awgx4w5x09": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	},
-	"b36xefyt9e": {
-		"nrOfUploadedFiles": 0,
-		"nrOfRequestedKeys": 0
-	}
+	"pspType": "model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0",
+	"me": "def:#nbfz91skyi",
+	"id": "def:#aai3ke1gai",
+	"displayName": "def:#aai3ke1gai",
+	"buitenRol": "def:#aai3ke1gai$External",
+	"allTypes": [
+		"model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0",
+		"model://perspectives.domains#tiodn6tcyc$w5l42i0gk4",
+		"model://perspectives.domains#tiodn6tcyc$nkllrx0n2x"
+	]
 }

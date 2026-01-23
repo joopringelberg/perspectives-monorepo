@@ -78,6 +78,9 @@ data RequestType
   | GetSelectedRoleFromClipboard
   | GetSettings
   | GetWiderContexts
+  | GetInspectableContext
+  | GetInspectableRole
+
   | RemoveRoleFromClipboard
   | AddRoleToClipboard
 
@@ -139,6 +142,8 @@ instance decodeRequestType :: ReadForeign RequestType where
     "GetSelectedRoleFromClipboard" -> GetSelectedRoleFromClipboard
     "GetSettings" -> GetSettings
     "GetWiderContexts" -> GetWiderContexts
+    "GetInspectableContext" -> GetInspectableContext
+    "GetInspectableRole" -> GetInspectableRole
     "RemoveRoleFromClipboard" -> RemoveRoleFromClipboard
     "AddRoleToClipboard" -> AddRoleToClipboard
 

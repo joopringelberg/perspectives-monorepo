@@ -111,7 +111,8 @@ type RolRecord = PouchbdDocumentFields
   , binding :: Filler
   -- The index is the propertytype.
   , properties :: F.Object (Array Value)
-  -- The first index is the String representation of the type of the context of the filled role, the second is the string representation of the type of the flled role.
+  -- The first index is the String representation of the type of the context of the filled role, 
+  -- the second is the string representation of the type of the filled role.
   , filledRoles :: F.Object (F.Object (Array RoleInstance))
   , occurrence :: Int
   , isMe :: Boolean

@@ -22,6 +22,7 @@ domain model://joopringelberg.nl#MinimalModel
   on exit
     do for sys:PerspectivesSystem$Installer
       letA
+        indexedcontext <- filter sys:MySystem >> IndexedContexts with filledBy (mm:MinimalApp >> extern)
         startcontext <- filter sys:MySystem >> StartContexts with filledBy (mm:MyMinimalApp >> extern)
       in
         remove role startcontext

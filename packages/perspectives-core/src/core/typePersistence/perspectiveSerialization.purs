@@ -44,7 +44,7 @@ import Perspectives.Data.EncodableMap (fromFoldable, lookup) as EM
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Extern.Utilities (formatDateTime)
 import Perspectives.HumanReadableType (translateType)
-import Perspectives.Identifiers (isExternalRole, qualifyWith)
+import Perspectives.Identifiers (isExternalRole)
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextType, getActiveRoleStates, getActiveStates, roleType_)
 import Perspectives.Instances.Values (parseNumber)

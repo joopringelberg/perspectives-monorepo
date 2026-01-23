@@ -200,6 +200,9 @@ domain model://perspectives.domains#System
     user Persons (relational, unlinked) filledBy (PerspectivesUsers, NonPerspectivesUsers)
       perspective on Me
         props (Cancelled, LastName, FirstName, PublicKey) verbs (Consult)
+      state Unfilled = not exists binding
+      state NonUser = binding >> roleType == [ roleType sys:TheWorld$NonPerspectivesUsers ]
+      state User = binding >> roleType == [ roleType sys:TheWorld$PerspectivesUsers ]
 
     user Me filledBy PerspectivesUsers
       aspect sys:RoleWithId

@@ -61,6 +61,7 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Fuzzysort (matchIndexedContextNames)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, isTypeUri, typeUri2ModelUri_, typeUri2couchdbFilename)
+import Perspectives.Inspector.Factories (makeInspectableContext, makeInspectableRole)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
 import Perspectives.Instances.Combinators (filter)
@@ -73,7 +74,7 @@ import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment, toFile)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistent (getPerspectRol, saveMarkedResources)
+import Perspectives.Persistent (getPerspectContext, getPerspectRol, saveMarkedResources)
 import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getWarnings, pushFrame, resetWarnings, restoreFrame)
 import Perspectives.Proxy (createRequestEmitter, retrieveRequestEmitter)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter, getDynamicPropertyGetterFromLocalName, getPropertyFromTelescope, getPropertyValues, getPublicUrl, getRoleFunction, getRoleInstances)
@@ -537,6 +538,24 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
             widerContextRoleType <- roleType widerContextExternalRole
             readableName <- lift $ (getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST widerContextRoleType) widerContextExternalRole)
             pure $ Value $ writeJSON { externalRole: widerContextExternalRole, readableName }
+        )
+        (RoleInstance subject)
+        onlyOnce
+
+    Api.GetInspectableContext ->
+      registerSupportedEffect corrId setter
+        ( \contextInstance -> do
+            inspectable <- lift $ lift (getPerspectContext contextInstance >>= makeInspectableContext)
+            pure $ Value $ writeJSON inspectable
+        )
+        (ContextInstance subject)
+        onlyOnce
+
+    Api.GetInspectableRole ->
+      registerSupportedEffect corrId setter
+        ( \roleInstance -> do
+            inspectable <- lift $ lift (getPerspectRol roleInstance >>= makeInspectableRole)
+            pure $ Value $ writeJSON inspectable
         )
         (RoleInstance subject)
         onlyOnce

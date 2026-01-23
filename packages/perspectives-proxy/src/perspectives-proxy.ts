@@ -46,7 +46,9 @@ import type {
   PRange,
   InputType,
   RoleOnClipboard,
-  ContextAndNameReceiver
+  ContextAndNameReceiver,
+  InspectableContextReceiver,
+  InspectableRoleReceiver
 } from "./perspectivesshape.d.ts";
 
 export type * from "./perspectivesshape.d.ts";
@@ -1316,6 +1318,38 @@ export class PerspectivesProxy
       })
     }
 
+
+  getInspectableContext( contextInstance : ContextInstanceT)
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        return proxy.send(
+          {request: "GetInspectableContext", subject: contextInstance, onlyOnce: true},
+          function (inspectableContextStrings)
+          {
+            resolver(inspectableContextStrings.map( JSON.parse ));
+          },
+          rejecter
+        );
+      });
+  }
+
+  getInspectableRole( roleInstance : RoleInstanceT)
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        return proxy.send(
+          {request: "GetInspectableRole", subject: roleInstance, onlyOnce: true},
+          function (inspectableRoleStrings)
+          {
+            resolver(inspectableRoleStrings.map( JSON.parse ));
+          },
+          rejecter
+        );
+      });
+  }
 
 ///////////////////////////////////////////////////////////////////////////////////////
   //// SETTERS.

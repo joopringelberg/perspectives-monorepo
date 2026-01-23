@@ -44,6 +44,8 @@ export * from "./freeformscreen";
 export { mapRoleVerbsToBehaviourNames, mapRoleVerbsToBehaviours } from "./maproleverbstobehaviours";
 export {ChoiceMessage, UserChoice} from "./userChoice";
 export {ChatComponent} from "./chatcomponent";
+export { default as InspectableContextView } from "./inspectableContext";
+export { default as InspectableRoleInstanceView } from "./inspectableRoleInstance";
 
 export {getPreact} from "./getLanguage";
 

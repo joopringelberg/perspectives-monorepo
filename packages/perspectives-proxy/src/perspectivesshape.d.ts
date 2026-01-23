@@ -14,6 +14,8 @@ export type UserRoleType = RoleType
 export type RoleTypeReceiver = (roleType: RoleType[]) => void;
 export type PerspectivesReceiver = (perspectives: Perspective[]) => void;
 export type ContextAndNameReceiver = (contextAndName: ContextAndName[]) => void;
+export type InspectableContextReceiver = (inspectableContext: InspectableContext[]) => void;
+export type InspectableRoleReceiver = (inspectableRole: InspectableRole[]) => void;
 export type ScreenReceiver = (screen: ScreenDefinition[]) => void;
 export type TableFormReceiver = (tableForm: TableFormDef[]) => void;
 export type PropertyType = string & { readonly brand: unique symbol };
@@ -309,3 +311,119 @@ export type RoleOnClipboard =
 export type ContextAndName =
 	{ externalRole : RoleInstanceT
 	  readableName : string }
+
+////////////////////////////////////////////
+//// INSPECTABLE CONTEXT
+////////////////////////////////////////////
+// An InspectableContext shows up on screen as a React Bootstrap form with just readonly fields.
+export type InspectableContext =
+  { // The identifier of the context instance. It will not be shown on screen.
+    id: ContextInstanceT
+    // The title shows up as a title on screen. It identifies the instance in a human readable way.
+  , title: ReadableContextInstance
+  // The fully qualified context type identifier. It is a readable identifier. It is shown when we hover the title of the screen.
+  , ctype: ReadableContextFQN
+  // A table of properties. The first column gives the translated property name (TranslatedPropertyTypeName), the second column the value.
+  // Hovering over the first column gives the fully qualified readable property identifier (ReadablePropertyFQN).
+  // keys are readable property identifiers, fully qualified.
+  // translatedProperty is the translated name of the property.
+  // We will display translatedProperty as label and value as value.
+  // Property Readable will be available in hover.
+  , properties: Record<ReadablePropertyFQN, { translatedProperty: TranslatedPropertyTypeName, value: string }>
+  // Next we have a separator, followed by a number of accordions, one for each role type (ReadableRoleFQN).
+  // The Accordion title is the translatedRole. If possible, hovering over the title shows the readable fully qualified role type identifier (ReadableRoleFQN).
+  // Inside the accordion we have a list of role instances (RoleInstance) of that type.
+  // Each role instance shows its title (the value of the readable property of the instance: ReadableRoleInstance).
+  // The role instance is a link or button and clicking it calls a function showRole with argument the RoleInstanceT. 
+  , roles: Record<ReadableRoleFQN, { translatedRole: TranslatedRoleTypeName, instances: Array<RoleInstance> }>
+  // Then follows a field (readonly, as are all other fields) with label "Me". The value will be the ReadableRoleInstance.
+  // Right below we have a field with label "My type". The value will be the ReadableRoleFQN.
+  // title is the value of the readable property of the instance.
+  // roleType is the readable fully qualified role type identifier.
+  , me?:  { _id: RoleInstanceT, title: ReadableRoleInstance, roleType: ReadableRoleFQN }
+  // Then we have a simple list of types.
+  // Each entry shows the translated name of the context type.
+  // Hovering it displays the ReadableContextFQN.
+  // keys are fully qualified context type identifiers.
+  // values are the translated names of the context types.
+  , types: Record<ReadableContextFQN, TranslatedContextTypeName>
+  // Following item is a button called ExternalRole. Clicking it calls a function showRole with argument the RoleInstanceT.
+  // The identifier of the external role.
+  , externalRole: RoleInstanceT
+  // Finally, we have a simple list of states.
+  // Each entry shows the TranslatedStateTypeName; hovering it shows the ReadableStateFQN.
+  // keys are fully qualified state identifiers.
+  // values are the translated names of the states.
+  , states: Record<ReadableStateFQN, TranslatedStateTypeName>
+  }
+
+export type ReadableContextInstance = string & { readonly brand: unique symbol };
+export type ReadableContextFQN = string & { readonly brand: unique symbol };
+export type ReadablePropertyFQN = string & { readonly brand: unique symbol };
+export type TranslatedPropertyTypeName = string & { readonly brand: unique symbol };
+export type ReadableRoleFQN = string & { readonly brand: unique symbol };
+export type TranslatedRoleTypeName = string & { readonly brand: unique symbol };
+export type ReadableRoleInstance = string & { readonly brand: unique symbol };
+export type ReadableStateFQN = string & { readonly brand: unique symbol };
+export type TranslatedContextTypeName = string & { readonly brand: unique symbol };
+export type TranslatedStateTypeName = string & { readonly brand: unique symbol };
+
+// An InspectableRole shows up on screen as a React Bootstrap form with just readonly fields.
+export type InspectableRole =
+  { _id: RoleInstanceT
+  // The title shows up as a title on screen. It identifies the instance in a human readable way.
+  // title is the value of the readable property of the instance.
+  , title: ReadableRoleInstance
+  // The ReadableRoleFQN is the readable fully qualified role type identifier. It is shown when we hover the title of the screen.
+  // rtype is the readable fully qualified role type identifier.
+  , rtype: ReadableRoleFQN
+  // occurrence is the occurrence number of the role instance in the context.
+  // A simple label-field combination where label is "Position in list of instances" and field is the occurrence number.
+  , index: number
+  // A simple label-field combination where label is "Is me" and field is a boolean value
+  , isMe: boolean
+  // A button with ReadableContextInstance as title. Clicking it calls a function showContext with argument the ContextInstanceT.
+  , context: { _id: ContextInstance, title: ReadableContextInstance }
+  // A table of properties. The first column gives the translated property name (TranslatedPropertyTypeName), the second column the value.
+  // Hovering over the first column gives the fully qualified readable property identifier (ReadablePropertyFQN).
+  // keys are readable property identifiers, fully qualified.
+  // translatedProperty is the translated name of the property.
+  // We will display translatedProperty as label and value as value.
+  // Property Readable will be available in hover.
+  , properties: Record<ReadablePropertyFQN, { translatedProperty: TranslatedPropertyTypeName, value: string }>
+  // A label - button combination. The label says "Filler", the button has as text the title (ReadableRoleInstance). On clicking it, calls function showRole with 
+  // the _id (RoleInstanceT) argument.
+  , filler: RoleInstance
+  // Next follows a separator.
+  // We then have an accordion for each ContextInstance. The title of the accordion is the ReadableContextInstance.
+  // Inside the accordion we have a list of role instances (RoleInstance) that this role instance fills in that context.
+  // For each RoleInstance we show two columns: 
+  // * the TranslatedRoleTypeName of the role type (the value of the translatedRole property)
+  // * its title (the value of the readable property of the instance: ReadableRoleInstance, that is: instances[i].title).
+  // * The latter column contains buttons; clicking it calls function showRole with argument the RoleInstanceT.
+  // keys of the outer object are the identifiers of contexts.
+  // contextTitle is the readable external role property value of the context.
+  // Keys of the nested object are readable role type identifiers, fully qualified.
+  // translatedRole is the translated name of the role type.
+  , filledRoles:
+      Record<ReadableContextFQN, 
+        { contextTitle: TranslatedContextTypeName
+        , roleInstances: Record<ReadableRoleFQN, { translatedRole: TranslatedRoleTypeName, instances: Array<RoleInstance> }>
+        }>
+  // Then we have a simple list of types.
+  // Each entry shows the translated name of the context type.
+  // Hovering it displays the ReadableRoleFQN.
+  // keys are fully qualified role type identifiers.
+  // values are the translated names of the role types.
+  , types: Record<ReadableRoleFQN, TranslatedRoleTypeName>
+  // Finally, we have a simple list of states.
+  // Each entry shows the TranslatedStateTypeName; hovering it shows the ReadableStateFQN.
+  // values are the translated names of the states.
+  , states: Record<ReadableStateFQN, TranslatedStateTypeName>
+  }
+
+  type RoleInstance =
+  { _id: RoleInstanceT
+  // title is the value of the readable property of the instance.
+  , title: ReadableRoleInstance
+  }

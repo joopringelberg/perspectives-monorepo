@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider } from 'react-bootstrap';
+import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider, Modal } from 'react-bootstrap';
 
 // Add axe to the Window interface for TypeScript
 declare global {
@@ -10,8 +10,8 @@ declare global {
 import './styles/www.css';
 import './styles/accessibility.css'
 import {addRoleToClipboard, externalRoleType, i18next} from 'perspectives-react';
-import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective } from 'perspectives-proxy';
-import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice} from 'perspectives-react';
+import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective, InspectableContext, InspectableRole } from 'perspectives-proxy';
+import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice, InspectableContextView, InspectableRoleInstanceView} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
 import { Me } from './me';
 import { Apps } from './apps';
@@ -58,6 +58,11 @@ interface WWWComponentState {
   actions?: Record<string, string>;
   roleOnClipboard?: RoleOnClipboard;
   isOnline: boolean;
+  // Inspector modal state
+  showInspector: boolean;
+  inspectorMode?: 'context' | 'role';
+  inspectableContext?: InspectableContext;
+  inspectableRole?: InspectableRole;
 }
 
 class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponentState> {
@@ -82,6 +87,10 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       , choiceMessage: {title: '', choices: {}, chosen: () => {}}
       , isOnline: false
       , openContext: mycontextStartPage
+      , showInspector: false
+      , inspectorMode: undefined
+      , inspectableContext: undefined
+      , inspectableRole: undefined
     };
     this.checkScreenSize = this.checkScreenSize.bind(this);
     this.getScreenUnsubscriber = undefined;
@@ -272,6 +281,25 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     window.removeEventListener('resize', this.checkScreenSize);
     document.removeEventListener('keydown', this.handleKeyboardNavigation);
   }
+
+  // Inspector helpers
+  openInspectorForContext = (contextId: ContextInstanceT) => {
+    const component = this;
+    this.setState({ showInspector: true, inspectorMode: 'context', inspectableRole: undefined, inspectableContext: undefined });
+    PDRproxy.then(pproxy =>
+      pproxy.getInspectableContext( contextId ).then( (values) => component.setState({ inspectableContext: values[0] })));
+  };
+
+  openInspectorForRole = (roleId: RoleInstanceT) => {
+    const component = this;
+    this.setState({ showInspector: true, inspectorMode: 'role', inspectableContext: undefined, inspectableRole: undefined });
+    PDRproxy.then(pproxy =>
+      pproxy.getInspectableRole( roleId ).then( (values) => component.setState({ inspectableRole: values[0] })));
+  };
+
+  closeInspector = () => {
+    this.setState({ showInspector: false, inspectorMode: undefined, inspectableContext: undefined, inspectableRole: undefined });
+  };
 
   tryToOpenContext( s : string)
   {
@@ -694,6 +722,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           </main>
           { component.renderBottomNavBar() }
         <EndUserNotifier message={component.state.endUserMessage}/>
+        { component.renderInspector() }
         <UserChoice message={component.state.choiceMessage}/>
       </Container>
       </PSContext.Provider>
@@ -740,6 +769,37 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       {component.state.systemIdentifier ? <ConnectedToAMQP roleinstance={ externalRole( component.state.systemIdentifier )} isOnline={component.state.isOnline} /> : null}
     </Navbar>
     </header>);
+  }
+
+  renderInspector() {
+    const component = this;
+    const { showInspector, inspectorMode, inspectableContext, inspectableRole } = this.state;
+    return (
+      <Modal show={showInspector} onHide={this.closeInspector} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{i18next.t("inspector_title", { ns: 'mycontexts', defaultValue: 'Inspector' })}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {inspectorMode === 'context' ? (
+            inspectableContext ? (
+              <InspectableContextView data={inspectableContext} showRole={component.openInspectorForRole} />
+            ) : (
+              <div>Loading…</div>
+            )
+          ) : inspectorMode === 'role' ? (
+            inspectableRole ? (
+              <InspectableRoleInstanceView
+                data={inspectableRole}
+                showRole={component.openInspectorForRole}
+                showContext={component.openInspectorForContext}
+              />
+            ) : (
+              <div>Loading…</div>
+            )
+          ) : null}
+        </Modal.Body>
+      </Modal>
+    );
   }
 
   // For the bottom navigation
@@ -901,6 +961,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           </main>
           { component.renderBottomNavBar() }
           <EndUserNotifier message={component.state.endUserMessage}/>
+          { component.renderInspector() }
           <UserChoice message={component.state.choiceMessage}/>
         </Container>
       </PSContext.Provider>);
@@ -908,6 +969,15 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
   // Add to WWWComponent class
   handleKeyboardNavigation = (e: KeyboardEvent) => {    
+    // Open inspector with Ctrl+I
+    if (e.ctrlKey && (e.key === 'i' || e.key === 'I')) {
+      if (this.state.openContext) {
+        const contextId = deconstructContext(this.state.openContext) as ContextInstanceT;
+        this.openInspectorForContext(contextId);
+        e.preventDefault();
+        return;
+      }
+    }
     if (e.altKey && e.key === '¡') {
       // Focus Who section
       this.setState({'doubleSection': "who"});
