@@ -94,6 +94,38 @@ export function InspectableContextView({ data, showRole }: InspectableContextPro
 					</Card.Body>
 				</Card>
 
+				{/* Unlinked roles accordion */}
+        { data.unlinkedRoles && Object.keys(data.unlinkedRoles).length > 0 && (
+          <Card className="mb-3">
+            <Card.Header className="py-2">Unlinked Roles</Card.Header>
+            <Card.Body className="py-2">
+              <Accordion alwaysOpen>
+                {Object.entries(data.unlinkedRoles).map(([readableRoleFqn, roleGroup], idx) => (
+                  <Accordion.Item eventKey={String(idx)} key={readableRoleFqn}>
+                    <Accordion.Header>
+                      <OverlayTrigger placement="right" overlay={<Tooltip>{readableRoleFqn}</Tooltip>}>
+                        <span>{roleGroup.translatedRole}</span>
+                      </OverlayTrigger>
+                    </Accordion.Header>
+                    <Accordion.Body>
+                      <ListGroup>
+                        {roleGroup.instances.map((ri) => (
+                          <ListGroup.Item key={`${ri._id}-${ri.title}`} className="d-flex justify-content-between align-items-center">
+                            <span>{ri.title}</span>
+                            <Button size="sm" variant="outline-primary" onClick={() => showRole(ri._id)}>
+                              Show
+                            </Button>
+                          </ListGroup.Item>
+                        ))}
+                      </ListGroup>
+                    </Accordion.Body>
+                  </Accordion.Item>
+                ))}
+              </Accordion>
+            </Card.Body>
+          </Card>
+        ) }
+
 				{/* Types list */}
 				<Card className="mb-3">
 					<Card.Header>Types</Card.Header>

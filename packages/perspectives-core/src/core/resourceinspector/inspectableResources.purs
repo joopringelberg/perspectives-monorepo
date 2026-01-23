@@ -27,6 +27,9 @@ type InspectableContext =
   -- keys are readable role identifiers, fully qualified.
   -- translatedRole is the translated name of the role.
   , roles :: SimpleMap ReadableRoleFQN { translatedRole :: TranslatedRoleTypeName, instances :: Array RoleInstance }
+  -- keys are readable role identifiers, fully qualified.
+  -- translatedRole is the translated name of the role.
+  , unlinkedRoles :: SimpleMap ReadableRoleFQN { translatedRole :: TranslatedRoleTypeName, instances :: Array RoleInstance }
   -- title is the value of the readable property of the instance.
   -- roleType is the readable fully qualified role type identifier.
   , me :: Maybe { _id :: II.RoleInstance, title :: ReadableRoleInstance, roleType :: ReadableRoleFQN }

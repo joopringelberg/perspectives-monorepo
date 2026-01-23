@@ -9,10 +9,11 @@ import Data.Maybe (Maybe(..))
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (empty, fromFoldable, insert, lookup)
-import Perspectives.CoreTypes (MonadPerspectives)
+import Perspectives.CoreTypes (MonadPerspectives, (###=), (##=))
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Inspector.InspectableResources as IC
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
+import Perspectives.Instances.ObjectGetters (getUnlinkedRoleInstances)
 import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Persistent (getPerspectRol)
 import Perspectives.Representation.ADT (ADT(..))
@@ -21,6 +22,7 @@ import Perspectives.Representation.InstanceIdentifiers (Value(..), externalRole)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), PropertyType(..), StateIdentifier(..), EnumeratedPropertyType(..), EnumeratedRoleType(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableNameFromTelescope)
+import Perspectives.Types.ObjectGetters (allUnlinkedRoles)
 
 makeInspectableContext :: PerspectContext -> MonadPerspectives IC.InspectableContext
 makeInspectableContext (PerspectContext ctxt) = do
@@ -43,6 +45,23 @@ makeInspectableContext (PerspectContext ctxt) = do
     )
     empty
     ctxt.rolInContext
+  -- Reflect on the type of the context to find role types that are unlinked in this context.
+  -- Then fetch those unlinked instances and treat them just like the linked ones above.
+  unlinkedRoleTypes <- ctxt.pspType ###= allUnlinkedRoles
+  unlinkedRoles <- fromFoldable <$> for unlinkedRoleTypes
+    \unlinkedRoleType -> do
+      EnumeratedRoleType readableRoleFQN <- toReadable unlinkedRoleType
+      translatedRoleTypeName <- translateType unlinkedRoleType
+      unlinkedInstances <- ctxt.id ##= getUnlinkedRoleInstances unlinkedRoleType
+      instances <- foldM
+        ( \acc roleInstanceId -> do
+            roleInstance <- getPerspectRol roleInstanceId
+            roleInst <- makeRoleInstance roleInstance
+            pure $ cons roleInst acc
+        )
+        []
+        unlinkedInstances
+      pure $ Tuple readableRoleFQN { translatedRole: translatedRoleTypeName, instances }
   me <- case ctxt.me of
     Nothing -> pure Nothing
     Just meRoleInstanceId -> do
@@ -62,12 +81,13 @@ makeInspectableContext (PerspectContext ctxt) = do
     StateIdentifier readableStateFQN <- toReadable stId
     translatedStateTypeName <- translateType stId
     pure $ Tuple readableStateFQN translatedStateTypeName
-  pure
+  pure 
     { id: ctxt.id
     , title: ctitle
     , ctype: ctype
     , properties
     , roles
+    , unlinkedRoles
     , me
     , types
     , externalRole: ctxt.buitenRol

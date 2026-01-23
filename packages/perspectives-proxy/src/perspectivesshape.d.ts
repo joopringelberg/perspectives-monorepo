@@ -334,6 +334,9 @@ export type InspectableContext =
   // Each role instance shows its title (the value of the readable property of the instance: ReadableRoleInstance).
   // The role instance is a link or button and clicking it calls a function showRole with argument the RoleInstanceT. 
   , roles: Record<ReadableRoleFQN, { translatedRole: TranslatedRoleTypeName, instances: Array<RoleInstance> }>
+  // Each role instance shows its title (the value of the readable property of the instance: ReadableRoleInstance).
+  // The role instance is a link or button and clicking it calls a function showRole with argument the RoleInstanceT. 
+  , unlinkedRoles: Record<ReadableRoleFQN, { translatedRole: TranslatedRoleTypeName, instances: Array<RoleInstance> }>
   // Then follows a field (readonly, as are all other fields) with label "Me". The value will be the ReadableRoleInstance.
   // Right below we have a field with label "My type". The value will be the ReadableRoleFQN.
   // title is the value of the readable property of the instance.
