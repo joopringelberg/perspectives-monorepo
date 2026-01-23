@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider, Modal } from 'react-bootstrap';
+import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider, Modal, OverlayTrigger, Tooltip } from 'react-bootstrap';
 
 // Add axe to the Window interface for TypeScript
 declare global {
@@ -63,6 +63,7 @@ interface WWWComponentState {
   inspectorMode?: 'context' | 'role';
   inspectableContext?: InspectableContext;
   inspectableRole?: InspectableRole;
+  // No subscription handle needed; we fetch on-demand.
 }
 
 class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponentState> {
@@ -287,14 +288,16 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     const component = this;
     this.setState({ showInspector: true, inspectorMode: 'context', inspectableRole: undefined, inspectableContext: undefined });
     PDRproxy.then(pproxy =>
-      pproxy.getInspectableContext( contextId ).then( (values) => component.setState({ inspectableContext: values[0] })));
+      pproxy.getInspectableContext(contextId).then(inspectableContext => component.setState({ inspectableContext: inspectableContext }))
+    );
   };
 
   openInspectorForRole = (roleId: RoleInstanceT) => {
     const component = this;
     this.setState({ showInspector: true, inspectorMode: 'role', inspectableContext: undefined, inspectableRole: undefined });
     PDRproxy.then(pproxy =>
-      pproxy.getInspectableRole( roleId ).then( (values) => component.setState({ inspectableRole: values[0] })));
+      pproxy.getInspectableRole(roleId).then(inspectableRole => component.setState({ inspectableRole: inspectableRole }))
+    );
   };
 
   closeInspector = () => {
@@ -774,10 +777,34 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   renderInspector() {
     const component = this;
     const { showInspector, inspectorMode, inspectableContext, inspectableRole } = this.state;
+    const headerTitle = inspectorMode === 'context' && inspectableContext
+      ? { mainLabel: `Context: ${inspectableContext.title}`, idSuffix: `(${inspectableContext.id})`, tooltip: inspectableContext.ctype }
+      : inspectorMode === 'role' && inspectableRole
+      ? { mainLabel: `Role: ${inspectableRole.title}`, idSuffix: `(${inspectableRole._id})`, tooltip: inspectableRole.rtype }
+      : { mainLabel: i18next.t("inspector_title", { ns: 'mycontexts', defaultValue: 'Inspector' }), idSuffix: undefined, tooltip: undefined };
+
     return (
       <Modal show={showInspector} onHide={this.closeInspector} size="lg" centered>
         <Modal.Header closeButton>
-          <Modal.Title>{i18next.t("inspector_title", { ns: 'mycontexts', defaultValue: 'Inspector' })}</Modal.Title>
+          <Modal.Title>
+            {headerTitle.tooltip ? (
+              <OverlayTrigger placement="right" overlay={<Tooltip>{headerTitle.tooltip}</Tooltip>}>
+                <span>
+                  <span>{headerTitle.mainLabel}</span>
+                  {headerTitle.idSuffix ? (
+                    <span style={{ fontSize: '16px', marginLeft: '0.5rem' }}>{headerTitle.idSuffix}</span>
+                  ) : null}
+                </span>
+              </OverlayTrigger>
+            ) : (
+              <span>
+                <span>{headerTitle.mainLabel}</span>
+                {headerTitle.idSuffix ? (
+                  <span style={{ fontSize: '16px', marginLeft: '0.5rem' }}>{headerTitle.idSuffix}</span>
+                ) : null}
+              </span>
+            )}
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {inspectorMode === 'context' ? (

@@ -55,7 +55,7 @@ type InspectableRole =
   -- We will display translatedProperty as label and value as value.
   -- Property Readable will be available in hover.
   , properties :: SimpleMap ReadablePropertyFQN { translatedProperty :: TranslatedPropertyTypeName, value :: String }
-  , filler :: RoleInstance
+  , filler :: Maybe RoleInstance
   -- keys of the outer object are the readable identifiers of context types.
   -- contextTitle is the translated context type name.
   -- Keys of the nested object are readable role type identifiers, fully qualified.

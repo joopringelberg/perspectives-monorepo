@@ -14,8 +14,6 @@ export type UserRoleType = RoleType
 export type RoleTypeReceiver = (roleType: RoleType[]) => void;
 export type PerspectivesReceiver = (perspectives: Perspective[]) => void;
 export type ContextAndNameReceiver = (contextAndName: ContextAndName[]) => void;
-export type InspectableContextReceiver = (inspectableContext: InspectableContext[]) => void;
-export type InspectableRoleReceiver = (inspectableRole: InspectableRole[]) => void;
 export type ScreenReceiver = (screen: ScreenDefinition[]) => void;
 export type TableFormReceiver = (tableForm: TableFormDef[]) => void;
 export type PropertyType = string & { readonly brand: unique symbol };
@@ -393,7 +391,7 @@ export type InspectableRole =
   , properties: Record<ReadablePropertyFQN, { translatedProperty: TranslatedPropertyTypeName, value: string }>
   // A label - button combination. The label says "Filler", the button has as text the title (ReadableRoleInstance). On clicking it, calls function showRole with 
   // the _id (RoleInstanceT) argument.
-  , filler: RoleInstance
+  , filler?: RoleInstance
   // Next follows a separator.
   // We then have an accordion for each ContextInstance. The title of the accordion is the ReadableContextInstance.
   // Inside the accordion we have a list of role instances (RoleInstance) that this role instance fills in that context.

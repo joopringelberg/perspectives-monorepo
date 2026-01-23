@@ -7,6 +7,8 @@ import {
 	ListGroup,
 	OverlayTrigger,
 	Tooltip,
+	Row,
+	Col,
 } from "react-bootstrap";
 import { InspectableContext, RoleInstanceT } from "perspectives-proxy";
 
@@ -22,64 +24,75 @@ export function InspectableContextView({ data, showRole }: InspectableContextPro
 	return (
 		<Card>
 			<Card.Body>
-				<Card.Title as="h3">
-					<OverlayTrigger placement="right" overlay={<Tooltip>{ctype}</Tooltip>}>
-						<span>{title}</span>
-					</OverlayTrigger>
-				</Card.Title>
 
 				{/* Properties */}
 				<Form>
-					{Object.entries(data.properties).map(([readablePropFqn, prop]) => (
-						<Form.Group className="mb-3" key={readablePropFqn} controlId={`prop-${readablePropFqn}`}>
-							<Form.Label>
-								<OverlayTrigger placement="right" overlay={<Tooltip>{readablePropFqn}</Tooltip>}>
-									<span>{prop.translatedProperty}</span>
-								</OverlayTrigger>
-							</Form.Label>
-							<Form.Control readOnly value={String(prop.value ?? "")} />
-						</Form.Group>
-					))}
+					<Card className="mb-3">
+						<Card.Header className="py-2">Properties</Card.Header>
+						<Card.Body className="py-2">
+							{Object.entries(data.properties).map(([readablePropFqn, prop]) => (
+								<Form.Group as={Row} className="mb-2 align-items-center" key={readablePropFqn} controlId={`prop-${readablePropFqn}`}>
+									<Form.Label column sm={4}>
+										<OverlayTrigger placement="right" overlay={<Tooltip>{readablePropFqn}</Tooltip>}>
+											<span>{prop.translatedProperty}</span>
+										</OverlayTrigger>
+									</Form.Label>
+									<Col sm={8}>
+										<Form.Control readOnly value={String(prop.value ?? "")} />
+									</Col>
+								</Form.Group>
+							))}
+						</Card.Body>
+					</Card>
 
 					{/* Me + My type */}
 					{data.me && (
 						<>
-							<Form.Group className="mb-3" controlId="me">
-								<Form.Label>Me</Form.Label>
-								<Form.Control readOnly value={data.me.title} />
+							<Form.Group as={Row} className="mb-2 align-items-center" controlId="me">
+								<Form.Label column sm={4}>Me</Form.Label>
+								<Col sm={8}>
+									<Form.Control readOnly value={data.me.title} />
+								</Col>
 							</Form.Group>
-							<Form.Group className="mb-3" controlId="my-type">
-								<Form.Label>My type</Form.Label>
-								<Form.Control readOnly value={data.me.roleType} />
+							<Form.Group as={Row} className="mb-2 align-items-center" controlId="my-type">
+								<Form.Label column sm={4}>My type</Form.Label>
+								<Col sm={8}>
+									<Form.Control readOnly value={data.me.roleType} />
+								</Col>
 							</Form.Group>
 						</>
 					)}
 				</Form>
 
 				{/* Roles accordion */}
-				<Accordion alwaysOpen className="mb-3">
-					{Object.entries(data.roles).map(([readableRoleFqn, roleGroup], idx) => (
-						<Accordion.Item eventKey={String(idx)} key={readableRoleFqn}>
-							<Accordion.Header>
-								<OverlayTrigger placement="right" overlay={<Tooltip>{readableRoleFqn}</Tooltip>}>
-									<span>{roleGroup.translatedRole}</span>
-								</OverlayTrigger>
-							</Accordion.Header>
-							<Accordion.Body>
-								<ListGroup>
-									{roleGroup.instances.map((ri) => (
-										<ListGroup.Item key={`${ri._id}-${ri.title}`} className="d-flex justify-content-between align-items-center">
-											<span>{ri.title}</span>
-											<Button size="sm" variant="outline-primary" onClick={() => showRole(ri._id)}>
-												Show
-											</Button>
-										</ListGroup.Item>
-									))}
-								</ListGroup>
-							</Accordion.Body>
-						</Accordion.Item>
-					))}
-				</Accordion>
+				<Card className="mb-3">
+					<Card.Header className="py-2">Roles</Card.Header>
+					<Card.Body className="py-2">
+						<Accordion alwaysOpen>
+							{Object.entries(data.roles).map(([readableRoleFqn, roleGroup], idx) => (
+								<Accordion.Item eventKey={String(idx)} key={readableRoleFqn}>
+									<Accordion.Header>
+										<OverlayTrigger placement="right" overlay={<Tooltip>{readableRoleFqn}</Tooltip>}>
+											<span>{roleGroup.translatedRole}</span>
+										</OverlayTrigger>
+									</Accordion.Header>
+									<Accordion.Body>
+										<ListGroup>
+											{roleGroup.instances.map((ri) => (
+												<ListGroup.Item key={`${ri._id}-${ri.title}`} className="d-flex justify-content-between align-items-center">
+													<span>{ri.title}</span>
+													<Button size="sm" variant="outline-primary" onClick={() => showRole(ri._id)}>
+														Show
+													</Button>
+												</ListGroup.Item>
+											))}
+										</ListGroup>
+									</Accordion.Body>
+								</Accordion.Item>
+							))}
+						</Accordion>
+					</Card.Body>
+				</Card>
 
 				{/* Types list */}
 				<Card className="mb-3">
@@ -93,15 +106,8 @@ export function InspectableContextView({ data, showRole }: InspectableContextPro
 					</ListGroup>
 				</Card>
 
-				{/* External role button */}
-				<div className="mb-3">
-					<Button variant="primary" onClick={() => showRole(data.externalRole)}>
-						ExternalRole
-					</Button>
-				</div>
-
 				{/* States list */}
-				<Card>
+				<Card className="mb-3">
 					<Card.Header>States</Card.Header>
 					<ListGroup variant="flush">
 						{Object.entries(data.states).map(([readableStateFqn, translatedState]) => (
@@ -111,6 +117,18 @@ export function InspectableContextView({ data, showRole }: InspectableContextPro
 						))}
 					</ListGroup>
 				</Card>
+
+				{/* External role button at bottom */}
+				<Form>
+					<Form.Group as={Row} className="align-items-center" controlId="external-role">
+						<Form.Label column sm={4}>ExternalRole</Form.Label>
+						<Col sm={8}>
+							<Button variant="primary" onClick={() => showRole(data.externalRole)}>
+								ExternalRole
+							</Button>
+						</Col>
+					</Form.Group>
+				</Form>
 			</Card.Body>
 		</Card>
 	);

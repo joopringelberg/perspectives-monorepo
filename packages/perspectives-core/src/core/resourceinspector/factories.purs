@@ -2,10 +2,11 @@ module Perspectives.Inspector.Factories where
 
 import Prelude
 
+import Control.Monad.Writer (runWriterT)
 import Data.Array (cons, foldM, head)
 import Data.FoldableWithIndex (foldWithIndexM)
 import Data.Maybe (Maybe(..))
-import Data.Traversable (for)
+import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (empty, fromFoldable, insert, lookup)
 import Perspectives.CoreTypes (MonadPerspectives)
@@ -14,14 +15,16 @@ import Perspectives.Inspector.InspectableResources as IC
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Persistent (getPerspectRol)
+import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.Property (hasFacet)
 import Perspectives.Representation.InstanceIdentifiers (Value(..), externalRole)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), PropertyType(..), StateIdentifier(..), EnumeratedPropertyType(..), EnumeratedRoleType(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
+import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableNameFromTelescope)
 
 makeInspectableContext :: PerspectContext -> MonadPerspectives IC.InspectableContext
 makeInspectableContext (PerspectContext ctxt) = do
-  mctitle :: Maybe Value <- getPerspectRol ctxt.buitenRol >>= readablePropertyValue
+  ctitle :: String <- getPerspectRol ctxt.buitenRol >>= readablePropertyValue
   ContextType ctype <- toReadable ctxt.pspType
   properties <- getPerspectRol ctxt.buitenRol >>= makeInspectableProperties
   roles <- foldWithIndexM
@@ -44,13 +47,11 @@ makeInspectableContext (PerspectContext ctxt) = do
     Nothing -> pure Nothing
     Just meRoleInstanceId -> do
       meRoleInstance@(PerspectRol { pspType }) <- getPerspectRol meRoleInstanceId
-      mtitle <- readablePropertyValue meRoleInstance
+      title <- readablePropertyValue meRoleInstance
       EnumeratedRoleType readableRoleFQN <- toReadable pspType
       pure $ Just
         { _id: meRoleInstanceId
-        , title: case mtitle of
-            Nothing -> ""
-            Just (Value t) -> t
+        , title
         , roleType: readableRoleFQN
         }
   types <- fromFoldable <$> for ctxt.allTypes \cty -> do
@@ -63,9 +64,7 @@ makeInspectableContext (PerspectContext ctxt) = do
     pure $ Tuple readableStateFQN translatedStateTypeName
   pure
     { id: ctxt.id
-    , title: case mctitle of
-        Nothing -> ""
-        Just (Value t) -> t
+    , title: ctitle
     , ctype: ctype
     , properties
     , roles
@@ -75,21 +74,27 @@ makeInspectableContext (PerspectContext ctxt) = do
     , states
     }
 
-readablePropertyValue :: PerspectRol -> MonadPerspectives (Maybe Value)
-readablePropertyValue (PerspectRol { properties }) = foldWithIndexM
-  ( \propName found prop ->
-      case found of
-        Just val -> pure (Just val)
-        Nothing -> do
-          isReadable <- hasFacet (ENP $ EnumeratedPropertyType propName) ReadableNameProperty
-          if isReadable then
-            pure $ case head <$> lookup propName properties of
-              Just val -> val
-              Nothing -> Nothing
-          else pure Nothing
-  )
-  Nothing
-  properties
+readablePropertyValue :: PerspectRol -> MonadPerspectives String
+readablePropertyValue (PerspectRol { id, pspType, properties }) = do
+  mlocalTitle <- foldWithIndexM
+    ( \propName found prop ->
+        case found of
+          Just val -> pure (Just val)
+          Nothing -> do
+            isReadable <- hasFacet (ENP $ EnumeratedPropertyType propName) ReadableNameProperty
+            if isReadable then
+              pure $ case head <$> lookup propName properties of
+                Just val -> val
+                Nothing -> Nothing
+            else pure Nothing
+    )
+    Nothing
+    properties
+  case mlocalTitle of
+    Nothing -> do
+      Tuple mNonLocalTitle _ <- runWriterT $ getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST pspType) id
+      pure mNonLocalTitle
+    Just (Value t) -> pure t
 
 makeInspectableProperties
   :: PerspectRol
@@ -109,30 +114,26 @@ makeInspectableProperties (PerspectRol { properties }) = do
 
 makeRoleInstance :: PerspectRol -> MonadPerspectives IC.RoleInstance
 makeRoleInstance r@(PerspectRol rol) = do
-  mtitle :: Maybe Value <- readablePropertyValue r
+  title <- readablePropertyValue r
   pure
     { _id: rol.id
     -- title is the value of the readable property of the instance.
-    , title: case mtitle of
-        Nothing -> ""
-        Just (Value t) -> t
+    , title
     }
 
 makeInspectableRole :: PerspectRol -> MonadPerspectives IC.InspectableRole
 makeInspectableRole r@(PerspectRol rol) = do
-  mtitle :: Maybe Value <- readablePropertyValue r
+  title <- readablePropertyValue r
   EnumeratedRoleType rtype <- toReadable rol.pspType
   context <- do
-    mctitle <- getPerspectRol (externalRole rol.context) >>= readablePropertyValue
+    ctitle <- getPerspectRol (externalRole rol.context) >>= readablePropertyValue
     pure
       { _id: rol.context
       -- title is the value of the readable property of the external role instance.
-      , title: case mctitle of
-          Nothing -> ""
-          Just (Value t) -> t
+      , title: ctitle
       }
   properties <- makeInspectableProperties r
-  filler <- makeRoleInstance r
+  filler <- traverse (getPerspectRol >=> makeRoleInstance) rol.binding
   filledRoles <- foldWithIndexM
     ( \ctxTypeId acc roleInstances -> do
         ContextType readableContextFQN <- toReadable (ContextType ctxTypeId)
@@ -169,9 +170,7 @@ makeInspectableRole r@(PerspectRol rol) = do
   pure
     { _id: rol.id
     -- title is the value of the readable property of the instance.
-    , title: case mtitle of
-        Nothing -> ""
-        Just (Value t) -> t
+    , title
     -- rtype is the readable fully qualified role type identifier.
     , rtype
     -- occurrence is the occurrence number of the role instance in the context.

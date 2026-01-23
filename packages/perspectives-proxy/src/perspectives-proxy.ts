@@ -47,8 +47,8 @@ import type {
   InputType,
   RoleOnClipboard,
   ContextAndNameReceiver,
-  InspectableContextReceiver,
-  InspectableRoleReceiver
+  InspectableContext,
+  InspectableRole
 } from "./perspectivesshape.d.ts";
 
 export type * from "./perspectivesshape.d.ts";
@@ -1319,7 +1319,7 @@ export class PerspectivesProxy
     }
 
 
-  getInspectableContext( contextInstance : ContextInstanceT)
+  getInspectableContext( contextInstance : ContextInstanceT) : Promise<InspectableContext>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)
@@ -1328,14 +1328,14 @@ export class PerspectivesProxy
           {request: "GetInspectableContext", subject: contextInstance, onlyOnce: true},
           function (inspectableContextStrings)
           {
-            resolver(inspectableContextStrings.map( JSON.parse ));
+            resolver( JSON.parse( inspectableContextStrings[0]? inspectableContextStrings[0] : "{}"));
           },
           rejecter
         );
       });
   }
 
-  getInspectableRole( roleInstance : RoleInstanceT)
+  getInspectableRole( roleInstance : RoleInstanceT) : Promise<InspectableRole>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)
@@ -1344,7 +1344,7 @@ export class PerspectivesProxy
           {request: "GetInspectableRole", subject: roleInstance, onlyOnce: true},
           function (inspectableRoleStrings)
           {
-            resolver(inspectableRoleStrings.map( JSON.parse ));
+            resolver( JSON.parse( inspectableRoleStrings[0]? inspectableRoleStrings[0] : "{}"));
           },
           rejecter
         );
