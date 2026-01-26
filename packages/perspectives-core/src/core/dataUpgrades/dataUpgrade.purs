@@ -275,6 +275,22 @@ runDataUpgrades = do
         void $ updateLocalModels
     )
 
+  runUpgrade installedVersion "3.0.68"
+    ( \_ -> do
+        runMonadPerspectivesTransaction'
+          false
+          (ENR $ EnumeratedRoleType sysUser)
+          do
+            updateModel_ [ "model://perspectives.domains#System@6.1" ] [ "false" ] (RoleInstance "")
+    )
+
+  do
+    runMonadPerspectivesTransaction'
+      false
+      (ENR $ EnumeratedRoleType sysUser)
+      do
+        updateModel_ [ "model://perspectives.domains#System@6.1" ] [ "false" ] (RoleInstance "")
+
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 

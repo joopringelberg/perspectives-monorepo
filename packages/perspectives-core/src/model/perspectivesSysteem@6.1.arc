@@ -9,7 +9,7 @@ domain model://perspectives.domains#System
   use util for model://perspectives.domains#Utilities
 
   -- model:System (short for model://perspectives.domains#System) is booted in a unique way.
-  -- Other models rely on there being an instance of sys:PerspectivesSystem and a Installer role in it.
+  -- Other models rely on there being an instance of sys:PerspectivesSystem and an Installer role in it.
   -- That precondition obviously fails for this model.
   -- Consequently, we create both in code. 
   -- We also create their indexed names, so we can refer to them below.
@@ -75,13 +75,23 @@ domain model://perspectives.domains#System
     property LastHandledUpgrade (String)
     -- OnStartup is guaranteed to change to false and then to true every time the system is started.
     state CheckUpgrades = sys:MySystem >> extern >> OnStartup
-      state Upgrade3_0_9 = callExternal util:IsLowerVersion( sys:UpgradeHook >> LastHandledUpgrade, "3.0.9" ) returns Boolean and 
-        (callExternal util:IsLowerVersion( "3.0.9", callExternal util:SystemParameter( "PDRVersion" ) returns String) returns Boolean or
-          ("3.0.9" == callExternal util:SystemParameter( "PDRVersion" ) returns String))
+      -- LastHandledUpgrade < "3.0.68" and ("3.0.68" < PDRVersion  or PDRVersion == "3.0.68")
+      state Upgrade3_0_68 = callExternal util:IsLowerVersion( sys:UpgradeHook >> LastHandledUpgrade, "3.0.68" ) returns Boolean and 
+        (callExternal util:IsLowerVersion( "3.0.68", callExternal util:SystemParameter( "PDRVersion" ) returns String) returns Boolean or
+          ("3.0.68" == callExternal util:SystemParameter( "PDRVersion" ) returns String))
+        perspective of Upgrader
+          perspective on sys:MySocialEnvironment >> Persons
+            only (Remove)
+          perspective on sys:MySystem >> User
+            only (RemoveFiller, Fill)
         on entry
           do for Upgrader
             LastHandledUpgrade = callExternal util:SystemParameter( "PDRVersion" ) returns String
-        state NoRecoveryPoint = not exists sys:MySystem >> RecoveryPoint
+            -- Remove all Persons instances from sys:MySocialEnvironment that are filled with a public instance of PerspectivesUsers.
+            remove role (filter sys:MySocialEnvironment >> Persons with (callExternal util:RoleIdentifier() returns String matches regexp "^pub:.*"))
+            -- Fill sys:Me with the PerspectivesUsers instance that fills SocialEnvironment$Me.
+            unbind_ sys:SocialMe >> binding from sys:Me
+            bind_ sys:SocialMe >> binding >> binder Persons >>= first to sys:Me
 
   -- Used as model://perspectives.domains#System$RoleWithId$Id in the PDR code.
   thing RoleWithId
@@ -148,6 +158,7 @@ domain model://perspectives.domains#System
     user PerspectivesUsers (relational)
       aspect sys:Identifiable
       aspect sys:Addressable
+
       -- The unique key provided to each new participant in the Perspectives Trusted Network by one of his peers.
       -- It can be used to store a limited number of media files in the perspectives sharedfile storage.
       -- We don't want to hand out keys to users as seen by public users.
@@ -189,17 +200,20 @@ domain model://perspectives.domains#System
       on entry
         do for SystemUser
           bind sys:TheWorld >> PerspectivesUsers >>= first to Me
+          -- This could be the only place where we create a Person.
           bind sys:TheWorld >> PerspectivesUsers >>= first to Persons
     -- To fill other user roles: require Persons as user role filler if there is no need to consider a natural person
     -- to be a peer with whom one wants to synchronize. Require PerspectivesSystem$Users otherwise.
     -- Using Persons rather than TheWorld$PerspectivesUsers or TheWorld$NonPerspectivesUsers creates a layer of indirection
     -- that allows us to switch rather painlessly from NonPerspectivesuser to PerspectivesUsers.
-    -- Persons will be synchronized between peers because they will have a perspective on SocialEnvironment$Me with the properties of sys:Identifiable
-    -- We also make sure that each Persons instance we know about has access to all our System$User identities, so he/she can synchronize to us.
+
     -- PDRDEPENDENCY
     user Persons (relational, unlinked) filledBy (PerspectivesUsers, NonPerspectivesUsers)
-      perspective on Me
-        props (Cancelled, LastName, FirstName, PublicKey) verbs (Consult)
+      -- perspective on Me
+      --   props (Cancelled, LastName, FirstName, PublicKey) verbs (Consult)
+      state Unfilled = not exists binding
+      state NonUser = binding >> roleType == [ role sys:TheWorld$NonPerspectivesUsers ]
+      state User = binding >> roleType == [ role sys:TheWorld$PerspectivesUsers ]
 
     user Me filledBy PerspectivesUsers
       aspect sys:RoleWithId
@@ -208,7 +222,7 @@ domain model://perspectives.domains#System
 
     user SystemUser = sys:Me
       perspective on Me
-        only (Create, Fill)
+        only (Create, Fill, Remove)
         props (FirstName, LastName, PublicKey, MyIdentity) verbs (Consult)
         props (MyIdentity, Cancelled) verbs (SetPropertyValue, Consult)
         action ExportForAnotherInstallation
@@ -305,14 +319,6 @@ domain model://perspectives.domains#System
     -- TODO. WHAT ABOUT SOCIALENVIRONMENT$ME?
     user User (mandatory) filledBy PerspectivesUsers
       aspect sys:ContextWithNotification$NotifiedUser
-      -- This will happen on importing SocialEnvironment and Me from another installation.
-      -- If we import a peer's data, we will get a User instance that is already filled.
-      state FillWithPerspectivesUser = (not exists binding) and exists sys:MySocialEnvironment >> Me
-        on entry
-          do for User
-            -- User has a sufficient perspective on itself to do this. 
-            -- It will be filled with the Persons instance that is filled by the same PerspectivesUsers instance as SocialEnvironment$Me.
-            bind_ sys:MySocialEnvironment >> Me >> binding >> binder Persons >>= first to origin
 
       -- PDRDEPENDENCY
       property Channel = (binder Initiator union binder ConnectedPartner) >> context >> extern >> ChannelDatabaseName
@@ -666,6 +672,7 @@ domain model://perspectives.domains#System
               callExternal sensor:ReadSensor( "models", "identifier" ) returns String,
               ModelsLastSeq) returns String
 
+    -- Used to upgrade roles and properties of the PerspectivesSystem context.
     thing SystemDataUpgrade
       aspect sys:SystemDataUpgrade
       on entry of object state model://perspectives.domains#System$SystemDataUpgrade$CheckUpgrades$Upgrade3_0_9$NoRecoveryPoint

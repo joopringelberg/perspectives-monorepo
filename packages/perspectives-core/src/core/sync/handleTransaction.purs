@@ -457,6 +457,7 @@ executeTransaction' t@(TransactionForPeer { deltas, publicKeys }) = do
 -- | However, if the resource isn't present in the database, we don't delete it from the cache.
 -- | All deltas in this transaction have either been sent to this installation and thus have been verified before, or
 -- | they are created by this installation so verification is meaningless.
+-- | We ignore a delta if its subject is public.
 expandDeltas :: TransactionForPeer -> String -> MonadPerspectivesTransaction (Array Delta)
 expandDeltas t@(TransactionForPeer { deltas, publicKeys }) storageUrl = do
   contentDeltas :: Array Delta <- catMaybes <$> (for deltas expandDelta)

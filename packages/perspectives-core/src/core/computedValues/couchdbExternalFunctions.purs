@@ -65,7 +65,7 @@ import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.Deltas (addCreatedContextToTransaction)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
-import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
+import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, lookupStableModelUri, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError, handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.ErrorLogging (logPerspectivesError)
@@ -222,7 +222,20 @@ updateModel_ arrWithModelName arrWithDependencies _ =
         Nothing -> pure unit
         -- TODO: add a check on the form of the modelName.
         Just modelName ->
-          if isModelUri modelName then updateModel' (ModelUri modelName) (maybe false (eq "true") (head arrWithDependencies)) true
+          if isModelUri modelName then do
+            -- Make sure it is the Stable identifier that is used here.
+            -- Split the modelName into unversioned and versioned part.
+            let unversionedModelName = unversionedModelUri modelName
+            let version = modelUriVersion modelName
+            -- Lookup the modelUri based on the unversioned part.
+            ModelUri stableModelUri <- lift $ lookupStableModelUri (ModelUri unversionedModelName)
+            -- Combine with the versioned part to get the full stable modelUri.
+            let
+              stableModelUriWithVersion =
+                case version of
+                  Nothing -> ModelUri stableModelUri
+                  Just v -> ModelUri (stableModelUri <> "@" <> v)
+            updateModel' stableModelUriWithVersion (maybe false (eq "true") (head arrWithDependencies)) true
           else throwError (error $ "This is not a well-formed domain name: " <> modelName)
     )
     >>= handleExternalStatementError "model://perspectives.domains#UpdateModel"

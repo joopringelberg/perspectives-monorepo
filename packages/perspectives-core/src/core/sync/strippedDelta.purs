@@ -29,6 +29,7 @@ import Data.Newtype (over, unwrap)
 import Data.Traversable (for_, traverse)
 import Decacheable (decache)
 import Partial.Unsafe (unsafePartial)
+import Perspectives.ContextAndRole (change_context_publicUrl)
 import Perspectives.CoreTypes (MonadPerspectives, StorageScheme(..))
 import Perspectives.Identifiers (isUrl)
 import Perspectives.InstanceRepresentation.PublicUrl (PublicUrl(..))
@@ -206,7 +207,8 @@ getUrlForPublishing defaultUrl cid = publicUrl cid >>= case _ of
   setPublicUrl :: (Maybe PublicUrl) -> MonadPerspectives Unit
   setPublicUrl murl = do
     ctxt <- getPerspectContext cid
-    void $ cacheEntity cid ctxt
+    let ctxt' = change_context_publicUrl ctxt murl
+    void $ cacheEntity cid ctxt'
     void $ saveEntiteit cid
 
 addOwnStorageScheme :: ResourceType -> String -> MonadPerspectives ResourceIdentifier
@@ -218,6 +220,8 @@ addOwnStorageScheme rtype s = do
 -- ADD SCHEME TO IDENTIFIER
 -----------------------------------------------------------
 -- | Add a storage scheme to an identifier based on the users own preferences.
+-- | If a resource with a Public scheme is already available under its locally preferred storage scheme, use that one; 
+-- | otherwise use the public scheme.
 -- | If no preference is available, use the Public scheme if the given identifier has the form of 
 -- | an URL; make it a Default scheme otherwise
 -- | This function will never create a resource identifier with the model: scheme.
