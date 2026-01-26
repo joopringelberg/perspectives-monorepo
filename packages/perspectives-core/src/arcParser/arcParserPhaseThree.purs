@@ -180,7 +180,7 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
                 ctype <- roleType_ individual
                 -- We need readable types, in Phase Three!
                 ctype' <- toReadable ctype
-                pure $ Just $ Tuple readableString ctype
+                pure $ Just $ Tuple readableString ctype'
     )
   let
     dfMapped = case mMapping of
