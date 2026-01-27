@@ -81,7 +81,7 @@ makeInspectableContext (PerspectContext ctxt) = do
     StateIdentifier readableStateFQN <- toReadable stId
     translatedStateTypeName <- translateType stId
     pure $ Tuple readableStateFQN translatedStateTypeName
-  pure 
+  pure
     { id: ctxt.id
     , title: ctitle
     , ctype: ctype

@@ -64,6 +64,7 @@ data PerspectivesError
   | RoleMissingInContext ArcPosition String String
   | UnknownContext ArcPosition ContextType
   | UnknownRole ArcPosition String
+  | CannotModifyRole ArcPosition ArcPosition String
   | UnknownState ArcPosition String
   | UnknownProperty ArcPosition PropertyType (ADT RoleType)
   | UnknownView ArcPosition String
@@ -168,6 +169,7 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (NotWellFormedName pos name) = "(NotWellFormedName) The name '" <> name <> "' is not well-formed (it cannot be expanded to a fully qualified name): " <> show pos
   show (RoleMissingInContext pos localRoleName ctxt) = "(RoleMissingInContext) The local role name '" <> localRoleName <> "' cannot be found in the context: '" <> ctxt <> "', at: " <> show pos
   show (UnknownRole pos qname) = "(UnknownRole) The role '" <> qname <> "' is not defined, at: " <> show pos
+  show (CannotModifyRole start end r) = "(CannotModifyRole) The role '" <> r <> "' cannot be modified, between " <> show start <> " and " <> show end <> ". Is it an aspect role from another model? If not, check whether you have defined this role in the current model."
   show (UnknownState pos qname) = "(UnknownState) The state '" <> qname <> "' is not defined, at: " <> show pos
   show (UnknownProperty pos qname roleType) = "(UnknownProperty) The property '" <> propertytype2string qname <> "' is not defined for role '" <> show roleType <> "', at: " <> show pos
   show (UnknownContext pos qname) = "(UnknownContext) The context '" <> show qname <> "' is not defined, at: " <> show pos
@@ -198,7 +200,7 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (RoleHasNoBinding pos rtype) = "(RoleHasNoBinding) The role '" <> show rtype <> "' has no binding. If it is a Sum-type, one of its members may have no binding " <> show pos
   show (RoleCannotHaveBinding start end roletype) = "(RoleCannotHaveBinding) External Roles cannot have a binding. " <> roletype <> ", from " <> show start <> " to " <> show end
   show (IncompatibleDomainsForJunction dom1 dom2) = "(IncompatibleDomainsForJunction) These two domains cannot be joined in a disjunction of conjunction: '" <> show dom1 <> "', '" <> show dom2 <> "'."
-  show (RoleDoesNotBind pos rtype adt) = "(RoleDoesNotBind) The role '" <> show rtype <> "' does not bind roles of type '" <> show adt <> "' (it may have an aspect that is stricter than its own filler restricion!), at: " <> show pos
+  show (RoleDoesNotBind pos rtype adt) = "(RoleDoesNotBind) The role '" <> show rtype <> "' does not bind roles of type '" <> show adt <> "' (it may have an aspect that is stricter than its own filler restriction!), at: " <> show pos
   show (LocalRoleDoesNotBind start end lname adt) = "(LocalRoleDoesNotBind) The roles that name '" <> lname <> "' (from " <> show start <> " to " <> show end <> ") can be matched to, do not bind '" <> show adt <> "'."
   show (IncompatibleComposition pos left right) = "(IncompatibleComposition) The result of the left operand (" <> show left <> ") and the argument of the right operand (" <> show right <> ") are incompatible."
   show (IncompatibleDomains pos1 pos2) = "(IncompatibleDomains) The result of the expression at " <> show pos1 <> " and " <> show pos2 <> " have incompatible domains (both must be contexts, roles or values)."

@@ -352,6 +352,7 @@ qualifyBindings = (lift $ State.gets _.dfr) >>= qualifyBindings'
                   -- an EnumeratedRole. But we've not yet compiled the CalculatedRoles so we leave it for now.
                   ContextType contextName -> throwError $ NoCalculatedAspect pos qualifiedRoleType
             e -> throwError e
+          -- Here we can be sure that the role is defined in the current domain.
           Right (ST qualifiedRoleType) -> case context of
             ContextType empty | empty == "" -> unsafePartial case lookup (unwrap qualifiedRoleType) eroles of
               Just r -> lift2 $ roleADT r
@@ -783,7 +784,7 @@ handlePostponedStateQualifiedParts = do
       objectQfd
     case object, objectQfd of
       Just object', Just objectQfd' -> for_ qualifiedUsers
-        ( modifyPerspective objectQfd' object' start
+        ( modifyPerspective objectQfd' object' start end
             \(Perspective r) -> Perspective r { automaticStates = union r.automaticStates states }
         )
       _, _ -> pure unit
@@ -897,7 +898,7 @@ handlePostponedStateQualifiedParts = do
       objectQfd
     case object, objectQfd of
       Just object', Just objectQfd' -> for_ qualifiedUsers
-        ( modifyPerspective objectQfd' object' start
+        ( modifyPerspective objectQfd' object' start end
             \(Perspective r) -> Perspective r { automaticStates = union r.automaticStates states }
         )
       _, _ -> pure unit
@@ -1027,6 +1028,7 @@ handlePostponedStateQualifiedParts = do
           objectQfd
           syntacticObject
           start
+          end
           \(Perspective pr@{ actions }) -> Perspective $ pr
             { actions =
                 ( foldr
@@ -1055,7 +1057,7 @@ handlePostponedStateQualifiedParts = do
     -- | Modifies the DomeinFile in PhaseTwoState.
     modifyAllSubjectPerspectives :: Array RoleType -> QueryFunctionDescription -> Array StateSpec -> PhaseThree Unit
     modifyAllSubjectPerspectives qualifiedUsers objectQfd stateSpecs = for_ qualifiedUsers
-      ( modifyPerspective objectQfd object start
+      ( modifyPerspective objectQfd object start end
           -- Add the roleverbs from the RoleVerbE to the map of roleverbs in the perspective, for each of the states (the keys in the map).
           -- Note that the states can apply to the object of the perspective, or to its subject, or to the current context of the lexical position.
           (\(Perspective pr@{ roleVerbs }) -> Perspective pr { roleVerbs = EM.addAll rv roleVerbs stateSpecs })
@@ -1117,6 +1119,7 @@ handlePostponedStateQualifiedParts = do
           objectQfd
           object
           start
+          end
           -- Add the propertyVerbs from the PropertyVerbE to the propertyVerbs of the perspective, for each of the states (the keys in the map).
           -- Note that the states can apply to the object of the perspective, or to its subject, or to the current context of the lexical position.
           \(Perspective pr@{ propertyVerbs: pverbs }) -> Perspective $ pr
@@ -1165,7 +1168,7 @@ handlePostponedStateQualifiedParts = do
       -- If this is not a selfPerspective, generate an error.
       \qualifiedUser -> do
         isSelfPerspective <- unsafePartial isPerspectiveOnSelf objectQfd qualifiedUser
-        if isSelfPerspective then modifyPerspective objectQfd object start (\(Perspective pr) -> Perspective pr { selfOnly = true }) qualifiedUser
+        if isSelfPerspective then modifyPerspective objectQfd object start end (\(Perspective pr) -> Perspective pr { selfOnly = true }) qualifiedUser
         else throwError $ NotASelfPerspective start end
 
   -- | Modifies the DomeinFile in PhaseTwoState.
@@ -1198,7 +1201,7 @@ handlePostponedStateQualifiedParts = do
     -- | Modifies the DomeinFile in PhaseTwoState.
     modifyAllSubjectPerspectives :: Array RoleType -> QueryFunctionDescription -> PhaseThree Unit
     modifyAllSubjectPerspectives qualifiedUsers objectQfd = for_ qualifiedUsers
-      ( modifyPerspective objectQfd object start
+      ( modifyPerspective objectQfd object start end
           (\(Perspective pr) -> Perspective pr { authorOnly = true })
       )
 
@@ -1255,6 +1258,8 @@ handlePostponedStateQualifiedParts = do
     modifyAllSubjectRoles qualifiedUsers actionId theAction stateSpecs = for_ qualifiedUsers
       \(userRole :: RoleType) -> case userRole of
         ENR (EnumeratedRoleType r) -> do
+          -- We look up a subject role for which an action is being defined.
+          -- That cannot be an aspect role. Hence, we can safely use fromJust here.
           EnumeratedRole er <- getsDF (unsafePartial fromJust <<< lookup r <<< _.enumeratedRoles)
           modifyDF \dfr@{ enumeratedRoles } -> dfr
             { enumeratedRoles = insert
@@ -1264,6 +1269,8 @@ handlePostponedStateQualifiedParts = do
             }
 
         CR (CalculatedRoleType r) -> do
+          -- We look up a subject role for which an action is being defined.
+          -- That cannot be an aspect role. Hence, we can safely use fromJust here.
           CalculatedRole cr <- getsDF (unsafePartial fromJust <<< lookup r <<< _.calculatedRoles)
           modifyDF \dfr@{ calculatedRoles } -> dfr
             { calculatedRoles = insert
@@ -1353,75 +1360,83 @@ handlePostponedStateQualifiedParts = do
 
   -- Apply, for this user, the modifier to his perspective on the object (and create a perspective if necessary).
   -- | Modifies the DomeinFile in PhaseTwoState.
-  modifyPerspective :: QueryFunctionDescription -> RoleIdentification -> ArcPosition -> (Perspective -> Perspective) -> RoleType -> PhaseThree Unit
-  modifyPerspective objectQfd roleSpec start modifier userRole = do
+  modifyPerspective :: QueryFunctionDescription -> RoleIdentification -> ArcPosition -> ArcPosition -> (Perspective -> Perspective) -> RoleType -> PhaseThree Unit
+  modifyPerspective objectQfd roleSpec start end modifier userRole = do
     (roleTypes :: Array RoleType) <- collectRoles roleSpec
     displayName <- lift2 $ intercalate ", " <$> traverse displayNameOfRoleType roleTypes
     isSelfPerspective <- unsafePartial isPerspectiveOnSelf objectQfd userRole
+    -- `userRole` might be an aspect role, because we can specify an automatic action for an aspect user role.
+    -- Hence, we cannot just look it up in the domainfile we're compiling.
     case userRole of
       ENR (EnumeratedRoleType r) -> do
-        EnumeratedRole er@{ perspectives } <- getsDF (unsafePartial fromJust <<< lookup r <<< _.enumeratedRoles)
-        mi <- pure $ findIndex (\(Perspective { object }) -> object == objectQfd) perspectives
-        perspective <- case mi of
-          Nothing -> do
-            pure $ Perspective
-              { id: (roletype2string userRole) <> "_" <> show (length perspectives)
-              , object: objectQfd
-              , isEnumerated: (isQFDofEnumeratedRole objectQfd)
-              , displayName
-              , roleTypes
-              , roleVerbs: EM.empty
-              , propertyVerbs: EM.empty
-              , actions: EM.empty
-              , selfOnly: false
-              , authorOnly: false
-              , isSelfPerspective
-              , automaticStates: []
-              }
-          Just i -> pure (unsafePartial $ fromJust $ index perspectives i)
-        modifyDF \dfr@{ enumeratedRoles } -> dfr
-          { enumeratedRoles = insert
-              r
-              ( EnumeratedRole $ er
-                  { perspectives = case mi of
-                      Nothing -> cons (modifier perspective) perspectives
-                      Just i -> unsafePartial $ fromJust $ updateAt i (modifier perspective) perspectives
+        mErole <- getsDF (lookup r <<< _.enumeratedRoles)
+        case mErole of
+          Nothing -> throwError $ CannotModifyRole start end r
+          Just (EnumeratedRole er@{ perspectives }) -> do
+            mi <- pure $ findIndex (\(Perspective { object }) -> object == objectQfd) perspectives
+            perspective <- case mi of
+              Nothing -> do
+                pure $ Perspective
+                  { id: (roletype2string userRole) <> "_" <> show (length perspectives)
+                  , object: objectQfd
+                  , isEnumerated: (isQFDofEnumeratedRole objectQfd)
+                  , displayName
+                  , roleTypes
+                  , roleVerbs: EM.empty
+                  , propertyVerbs: EM.empty
+                  , actions: EM.empty
+                  , selfOnly: false
+                  , authorOnly: false
+                  , isSelfPerspective
+                  , automaticStates: []
                   }
-              )
-              enumeratedRoles
-          }
+              Just i -> pure (unsafePartial $ fromJust $ index perspectives i)
+            modifyDF \dfr@{ enumeratedRoles } -> dfr
+              { enumeratedRoles = insert
+                  r
+                  ( EnumeratedRole $ er
+                      { perspectives = case mi of
+                          Nothing -> cons (modifier perspective) perspectives
+                          Just i -> unsafePartial $ fromJust $ updateAt i (modifier perspective) perspectives
+                      }
+                  )
+                  enumeratedRoles
+              }
       CR (CalculatedRoleType r) -> do
-        CalculatedRole er@{ perspectives } <- getsDF (unsafePartial fromJust <<< lookup r <<< _.calculatedRoles)
-        mi <- pure $ findIndex (\(Perspective { object }) -> object == objectQfd) perspectives
-        perspective <- case mi of
-          Nothing -> do
-            -- mroleName <- lift2 $ roleIdentification2displayName roleSpec
-            pure $ Perspective
-              { id: (roletype2string userRole) <> "_" <> show (length perspectives)
-              , object: objectQfd
-              , isEnumerated: (isQFDofEnumeratedRole objectQfd)
-              , displayName
-              , roleTypes
-              , roleVerbs: EM.empty
-              , propertyVerbs: EM.empty
-              , actions: EM.empty
-              , selfOnly: false
-              , authorOnly: false
-              , isSelfPerspective
-              , automaticStates: []
-              }
-          Just i -> pure (unsafePartial $ fromJust $ index perspectives i)
-        modifyDF \dfr@{ calculatedRoles } -> dfr
-          { calculatedRoles = insert
-              r
-              ( CalculatedRole $ er
-                  { perspectives = case mi of
-                      Nothing -> cons (modifier perspective) perspectives
-                      Just i -> unsafePartial $ fromJust $ updateAt i (modifier perspective) perspectives
+        mCrole <- getsDF (lookup r <<< _.calculatedRoles)
+        case mCrole of
+          Nothing -> throwError $ CannotModifyRole start end r
+          Just (CalculatedRole er@{ perspectives }) -> do
+            mi <- pure $ findIndex (\(Perspective { object }) -> object == objectQfd) perspectives
+            perspective <- case mi of
+              Nothing -> do
+                -- mroleName <- lift2 $ roleIdentification2displayName roleSpec
+                pure $ Perspective
+                  { id: (roletype2string userRole) <> "_" <> show (length perspectives)
+                  , object: objectQfd
+                  , isEnumerated: (isQFDofEnumeratedRole objectQfd)
+                  , displayName
+                  , roleTypes
+                  , roleVerbs: EM.empty
+                  , propertyVerbs: EM.empty
+                  , actions: EM.empty
+                  , selfOnly: false
+                  , authorOnly: false
+                  , isSelfPerspective
+                  , automaticStates: []
                   }
-              )
-              calculatedRoles
-          }
+              Just i -> pure (unsafePartial $ fromJust $ index perspectives i)
+            modifyDF \dfr@{ calculatedRoles } -> dfr
+              { calculatedRoles = insert
+                  r
+                  ( CalculatedRole $ er
+                      { perspectives = case mi of
+                          Nothing -> cons (modifier perspective) perspectives
+                          Just i -> unsafePartial $ fromJust $ updateAt i (modifier perspective) perspectives
+                      }
+                  )
+                  calculatedRoles
+              }
 
   -- | Modifies the DomeinFile in PhaseTwoState.
   -- | If the state is not in the Domain, adds a modification for an upstream DomeinFiloe.

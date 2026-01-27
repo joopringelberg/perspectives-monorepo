@@ -49,6 +49,7 @@ import Perspectives.External.CoreModuleList (isExternalCoreModule)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunctionCardinality, lookupHiddenFunctionIsEffect, lookupHiddenFunctionNArgs)
 import Perspectives.Identifiers (endsWithSegments, isExternalRole, isTypeUri, qualifyWith, typeUri2ModelUri)
 import Perspectives.Instances.ObjectGetters (contextType_, roleType_)
+import Perspectives.ModelDependencies.Readable (socialEnvironment, socialEnvironmentPersons, theWorld, perspectivesUsers)
 import Perspectives.Names (lookupReadableIndexedContext, lookupReadableIndexedRole)
 import Perspectives.Parsing.Arc.ContextualVariables (addContextualBindingsToExpression, makeContextStep, makeIdentityStep, stepContainsVariableReference)
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
@@ -78,7 +79,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), Cont
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as RTI
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
-import Perspectives.Types.ObjectGetters (allTypesInContextADT, allTypesInRoleADT, enumeratedRoleContextType, equals, isUnlinked_, qualifyContextInDomain, qualifyEnumeratedRoleInDomain, qualifyRoleInDomain)
+import Perspectives.Types.ObjectGetters (allTypesInContextADT, allTypesInRoleADT, enumeratedRoleContextType, equalsOrGeneralisesRoleInContext, equalsOrSpecialisesRoleInContext, isUnlinked_, qualifyContextInDomain, qualifyEnumeratedRoleInDomain, qualifyRoleInDomain)
 import Prelude (bind, discard, eq, map, pure, show, unit, void, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>>=), (||))
 
 ------------------------------------------------------------------------------------
@@ -170,7 +171,7 @@ qualifyLocalRoleName pos ident = do
     Just _ -> pure $ ENR $ EnumeratedRoleType ident
     Nothing -> case lookup ident calculatedRoles of
       Just _ -> pure $ CR $ CalculatedRoleType ident
-      Nothing -> lift $ lift $ getRoleType ident
+      Nothing -> lift $ lift (getRoleType ident >>= toReadable)
   else (try (ENR <$> qualifyLocalEnumeratedRoleName pos ident (keys enumeratedRoles))) >>= case _ of
     Left _ -> (CR <$> qualifyLocalCalculatedRoleName pos ident (keys calculatedRoles))
     Right r -> pure r
@@ -610,6 +611,15 @@ compileSimpleStep currentDomain (Variable pos varName) = do
         else pure $ functional fdesc
       pure $ SQD currentDomain (QF.VariableLookup varName) (range fdesc) isF (mandatory fdesc)
 
+compileSimpleStep currentDomain (Me _) = pure $ SQD currentDomain (QF.DataTypeGetter MeF)
+  ( RDOM $ PROD
+      [ ST $ RoleInContext { context: ContextType socialEnvironment, role: EnumeratedRoleType socialEnvironmentPersons }
+      , ST $ RoleInContext { context: ContextType theWorld, role: EnumeratedRoleType perspectivesUsers }
+      ]
+  )
+  True
+  True
+
 compileUnaryStep :: Domain -> UnaryStep -> FD
 compileUnaryStep currentDomain (LogicalNot pos s) = do
   -- First compile s. Then check that the resulting QueryFunctionDescription is a (VDOM PBool _) range value.
@@ -848,17 +858,20 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
     areEqual <- lift $ lift do
       leftRange <- toReadable (range left')
       rightRange <- toReadable (range right')
-      -- Both ranges must be equal, both sides must be functional.
-      (leftRange `equalDomains` rightRange)
+      comparableDomains leftRange rightRange
     if areEqual then
       if (pessimistic $ functional left') && (pessimistic $ functional right') then pure $ BQD currentDomain (QF.BinaryCombinator functionName) left' right' (VDOM PBool Nothing) (isFunctionalFunction functionName) True
       else throwError $ ExpressionsShouldBeFunctional (pessimistic $ functional left') (pessimistic $ functional right') pos
     else throwError $ TypesCannotBeCompared pos (range left') (range right')
     where
-    equalDomains :: Domain -> Domain -> MonadPerspectives Boolean
+    comparableDomains :: Domain -> Domain -> MonadPerspectives Boolean
     -- special case for RDOM
-    equalDomains (RDOM r1) (RDOM r2) = equals r1 r2
-    equalDomains d1 d2 = pure $ eq d1 d2
+    comparableDomains (RDOM r1) (RDOM r2) = do
+      -- We can compare two resources if their types are equal, or if one subsumes the other.
+      a <- (r1 `equalsOrGeneralisesRoleInContext` r2)
+      b <- (r1 `equalsOrSpecialisesRoleInContext` r2)
+      pure (a || b)
+    comparableDomains d1 d2 = pure $ eq d1 d2
 
   binOp :: ArcPosition -> QueryFunctionDescription -> QueryFunctionDescription -> Array Range -> FunctionName -> PhaseThree QueryFunctionDescription
   binOp pos left' right' allowedRangeConstructors functionName =
