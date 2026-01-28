@@ -139,33 +139,34 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               const resolvedSystemUser = (systemIdentifier + "$User") as RoleInstanceT
               component.setState({ systemIdentifier, systemUser: resolvedSystemUser })
 
-              pproxy.subscribeSelectedRoleFromClipboard(
-                function (clipBoardContents : RoleOnClipboard[])
-                {
-                  const roleOnClipboard = clipBoardContents[0];
-                  if (roleOnClipboard && roleOnClipboard !== component.state.roleOnClipboard)
+              component.addUnsubscriber(
+                pproxy.subscribeSelectedRoleFromClipboard(
+                  function (clipBoardContents : RoleOnClipboard[])
                   {
-                    // A new role on the clipboard. Add it to the state.
-                    component.setState(
-                      { systemIdentifier
-                      , roleOnClipboard: roleOnClipboard
-                      , systemUser: resolvedSystemUser
-                      });
+                    const roleOnClipboard = clipBoardContents[0];
+                    if (roleOnClipboard && roleOnClipboard !== component.state.roleOnClipboard)
+                    {
+                      // A new role on the clipboard. Add it to the state.
+                      component.setState(
+                        { systemIdentifier
+                        , roleOnClipboard: roleOnClipboard
+                        , systemUser: resolvedSystemUser
+                        });
+                    }
+                    else if (!roleOnClipboard)
+                    {
+                      // The clipboard is empty. Remove the role from the state.
+                      component.setState(
+                        { systemIdentifier
+                        , systemUser: resolvedSystemUser
+                        , roleOnClipboard: undefined
+                        });
+                    }
+                    else {
+                      component.setState({ systemUser: resolvedSystemUser });
+                    }
                   }
-                  else if (!roleOnClipboard)
-                  {
-                    // The clipboard is empty. Remove the role from the state.
-                    component.setState(
-                      { systemIdentifier
-                      , systemUser: resolvedSystemUser
-                      , roleOnClipboard: undefined
-                      });
-                  }
-                  else {
-                    component.setState({ systemUser: resolvedSystemUser });
-                  }
-                }
-              )
+              ))
               // Only sync with CouchDB in development mode
               if (import.meta.env.DEV) {
                 console.log('Development mode: Syncing with CouchDB');
@@ -286,17 +287,15 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   // Inspector helpers
   openInspectorForContext = (contextId: ContextInstanceT) => {
     const component = this;
-    this.setState({ showInspector: true, inspectorMode: 'context', inspectableRole: undefined, inspectableContext: undefined });
     PDRproxy.then(pproxy =>
-      pproxy.getInspectableContext(contextId).then(inspectableContext => component.setState({ inspectableContext: inspectableContext }))
+      pproxy.getInspectableContext(contextId).then(inspectableContext => component.setState({ inspectableContext: inspectableContext, showInspector: true, inspectorMode: 'context', inspectableRole: undefined }))
     );
   };
 
   openInspectorForRole = (roleId: RoleInstanceT) => {
     const component = this;
-    this.setState({ showInspector: true, inspectorMode: 'role', inspectableContext: undefined, inspectableRole: undefined });
     PDRproxy.then(pproxy =>
-      pproxy.getInspectableRole(roleId).then(inspectableRole => component.setState({ inspectableRole: inspectableRole }))
+      pproxy.getInspectableRole(roleId).then(inspectableRole => component.setState({ inspectableRole: inspectableRole, showInspector: true, inspectorMode: 'role', inspectableContext: undefined }))
     );
   };
 
