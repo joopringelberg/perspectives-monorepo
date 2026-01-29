@@ -72,6 +72,7 @@ class (Show r, Identifiable r i, PersistentType r i) <= RoleClass r i | r -> i, 
   contextActions :: r -> Map StateSpec (Object Action)
   displayName :: r -> String
   pos :: r -> ArcPosition
+  isUnlinked :: r -> MonadPerspectives Boolean
 
 -----------------------------------------------------------
 -- CALCULATED ROLE INSTANCE
@@ -93,6 +94,7 @@ instance calculatedRoleRoleClass :: RoleClass CalculatedRole CalculatedRoleType 
   contextActions r = unwrap (unwrap r).actions
   displayName r = (unwrap r).displayName
   pos r = (unwrap r).pos
+  isUnlinked r = pure false
 
 -----------------------------------------------------------
 -- ENUMERATED ROLE INSTANCE
@@ -123,7 +125,7 @@ instance enumeratedRoleRoleClass :: RoleClass EnumeratedRole EnumeratedRoleType 
   contextActions r = unwrap (unwrap r).actions
   displayName r = (unwrap r).displayName
   pos r = (unwrap r).pos
-
+  isUnlinked r = pure (unwrap r).unlinked
 -----------------------------------------------------------
 -- VARIOUS DECLARED TYPES OF ENUMERATEDROLE
 -----------------------------------------------------------

@@ -36,7 +36,7 @@ import Perspectives.Instances.ObjectGetters (contextType)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
-import Perspectives.Representation.Class.Role (kindOfRole)
+import Perspectives.Representation.Class.Role (isUnlinked, kindOfRole)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..))
 import Prelude (Unit, bind, discard, pure, unit, ($), (>>=), (==), (||))
@@ -66,7 +66,7 @@ roleIsNotMe roleId = (lift $ try $ getPerspectRol roleId) >>=
       lift $ cacheAndSave roleId (changeRol_isMe role false)
 
 -- | Set isMe of the roleInstance to true, but only if the role is a user role.
--- | Set me of the context to the roleInstance.
+-- | Set me of the context to the roleInstance, but NOT if the role type is unlinked.
 roleIsMe :: RoleInstance -> ContextInstance -> MonadPerspectivesTransaction Unit
 roleIsMe roleId contextId = (lift $ try $ getPerspectContext contextId) >>=
   handlePerspectContextError "roleIsMe"
@@ -77,7 +77,9 @@ roleIsMe roleId contextId = (lift $ try $ getPerspectContext contextId) >>=
           if kindOfRole rt == UserRole || kindOfRole rt == Public || kindOfRole rt == PublicProxy then do
             (lift $ findMeRequests contextId) >>= addCorrelationIdentifiersToTransactie
             lift $ cacheAndSave roleId (changeRol_isMe role true)
-            lift $ cacheAndSave contextId (changeContext_me ctxt (Just roleId))
+            roleTypeIsUnlinked <- lift $ isUnlinked rt
+            if roleTypeIsUnlinked then pure unit
+            else lift $ cacheAndSave contextId (changeContext_me ctxt (Just roleId))
           else pure unit
 
 -- | <fillerId> `fillerNoLongerPointsTo` <filledId>

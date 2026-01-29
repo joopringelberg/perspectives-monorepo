@@ -154,7 +154,12 @@ addRoleInstanceToContext contextId rolName (Tuple roleId receivedDelta) = do
     if isMe then do
       (lift $ findMeRequests contextId) >>= addCorrelationIdentifiersToTransactie
       -- CURRENTUSER
-      lift $ cacheAndSave contextId (changeContext_me changedContext (Just roleId))
+      -- If the role type is unlinked, don't save the instance in `me` in the context.
+      roleTypeIsUnlinked <- lift $ isUnlinked_ rolName
+      -- We won't be able to fix this reference if the instance gets lost.
+      if roleTypeIsUnlinked then pure unit
+      else
+        lift $ cacheAndSave contextId (changeContext_me changedContext (Just roleId))
     else lift $ cacheAndSave contextId changedContext
 
     subject <- getSubject
