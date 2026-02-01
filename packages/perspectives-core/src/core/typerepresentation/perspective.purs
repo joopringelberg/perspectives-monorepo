@@ -34,7 +34,7 @@ import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.Data.EncodableMap (EncodableMap)
+import Perspectives.Data.EncodableMap (EncodableMap, isEmpty)
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription, RoleInContext(..), range)
 import Perspectives.Representation.ADT (ADT, commonLeavesInADT)
 import Perspectives.Representation.Action (Action)
@@ -146,6 +146,9 @@ perspectiveSupportsProperty (Perspective { propertyVerbs }) property = find $ MA
     )
     pvs
 
+perspectivesSupportsAProperty :: Perspective -> Boolean
+perspectivesSupportsAProperty (Perspective { propertyVerbs }) = not $ isEmpty propertyVerbs
+
 perspectiveSupportsPropertyVerb :: Perspective -> PropertyVerb -> Boolean
 perspectiveSupportsPropertyVerb (Perspective { propertyVerbs }) propertyVerb = find $ MAP.values $ unwrap propertyVerbs
   where
@@ -191,7 +194,7 @@ perspectiveMustBeSynchronized :: Perspective -> Boolean
 perspectiveMustBeSynchronized p@(Perspective { roleVerbs, propertyVerbs, authorOnly }) =
   not authorOnly &&
     perspectiveSupportsOneOfRoleVerbs p [ Remove, Delete, RemoveContext, DeleteContext ] ||
-    perspectiveSupportsPropertyVerb p Consult
+    perspectivesSupportsAProperty p
 
 -----------------------------------------------------------
 -- PROPERTYVERBS

@@ -1074,6 +1074,7 @@ handlePostponedStateQualifiedParts = do
     -- We must expand the propertyTypes.
     allProps <- lift2 $ allProperties (roleInContext2Role <$> (domain2roleInContext (range objectQfd)))
     expandedProps <- pure $ expandPropSet allProps propertyTypes
+    -- Check if we're trying to modify a calcalated property (forbidden).
     if isMutatingVerbSet propertyVerbs then
       case
         filter
@@ -1089,7 +1090,7 @@ handlePostponedStateQualifiedParts = do
     (propertyVerbs' :: PropertyVerbs) <- pure $ PropertyVerbs propertyTypes propertyVerbs
     -- ... for these states only...
     stateSpecs <- stateSpecificationToStateSpec state
-    -- ... the action.
+    -- ... the propertyverbs.
     modifyAllSubjectPerspectives qualifiedUsers objectQfd propertyVerbs' stateSpecs
     -- Add StateDependentPerspectives to the states.
     -- We cannot modify states of Calculated Roles, as these do not exist.

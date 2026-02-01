@@ -28,6 +28,7 @@ module Perspectives.Data.EncodableMap
   , filterKeys
   , fromFoldable
   , insert
+  , isEmpty
   , keys
   , lookup
   , removeAll
@@ -43,7 +44,7 @@ import Data.Array (foldr)
 import Data.Array.Partial (head, tail)
 import Data.Foldable (class Foldable)
 import Data.List (List)
-import Data.Map (Map, fromFoldable, showTree, toUnfoldable, insert, delete, lookup, values, empty, keys, union, filterKeys, unionWith, singleton) as Map
+import Data.Map (Map, fromFoldable, showTree, toUnfoldable, insert, delete, lookup, values, empty, keys, union, filterKeys, unionWith, singleton, isEmpty) as Map
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype, over, unwrap)
 import Data.Set (Set)
@@ -133,3 +134,6 @@ fromFoldable fd = EncodableMap $ Map.fromFoldable fd
 
 toUnfoldable :: forall k v. EncodableMap k v -> Array (Tuple k v)
 toUnfoldable (EncodableMap mp) = Map.toUnfoldable mp
+
+isEmpty :: forall k v. EncodableMap k v -> Boolean
+isEmpty (EncodableMap mp) = Map.isEmpty mp
