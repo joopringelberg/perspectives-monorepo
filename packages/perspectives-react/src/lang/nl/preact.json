@@ -86,6 +86,7 @@
 , "tableContextMenu_opendetails": "Details"
 , "tableContextMenu_new": "Maak een nieuw(e):"
 , "tableContextMenu_fill": "Vul met de rol op het clipboard"
+, "tableContextMenu_replacefiller": "Vervang de vuller met de rol op het klembord"
 , "tableContextMenu_takeonthisrole": "Neem deze rol aan"
 , "tableContextMenu_restorecontextforuser": "Herstel de context voor deze gebruiker"
 , "tableContextMenu_removerole": "Verwijder deze rol"

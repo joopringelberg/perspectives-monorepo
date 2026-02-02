@@ -248,6 +248,27 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
       return [];
     }
   }
+  
+  computeReplaceFillerItem(): JSX.Element[] 
+  {
+  if (!this.props.isOpen) return [];
+    const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance];
+    if ((this.mayCreateContext() || this.mayCreateInstance()) && roleInstanceWithProps && roleInstanceWithProps.filler && this.state.compatibleRole)
+    {
+      return [<Dropdown.Item
+                key="ReplaceFiller"
+                eventKey="ReplaceFiller"
+                onClick={ () => this.fillRole()} 
+              >{
+                i18next.t("tableContextMenu_replacefiller", { ns: 'preact' }) 
+              }</Dropdown.Item>];
+    }
+    else
+    {
+      return [];
+    }
+  }
+  
   // Notice that fillRole can only be called from the menu and the fill option is only 
   // available when the roleOnClipboard is compatible with the roleType of the perspective.
   fillRole()
@@ -611,6 +632,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
       ...this.computeOpenDetailsItem(),
       ...this.computeCopyItem(),
       ...this.computeFillItem(),
+      ...this.computeReplaceFillerItem(),
       ...this.computeAddItems(),
       ...this.computeRemovalItems(),
       ...this.computeOpenContextOfFillerItem(),
