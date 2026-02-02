@@ -54,12 +54,12 @@ import Perspectives.Assignment.StateCache (CompiledAutomaticAction, CompiledNoti
 import Perspectives.Assignment.Update (ConditionResult(..), isUndetermined, setActiveRoleState, setInActiveRoleState)
 import Perspectives.CompileRoleAssignment (compileAssignmentFromRole, withAuthoringRole)
 import Perspectives.CompileTimeFacets (addTimeFacets)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), MP, MonadPerspectives, MonadPerspectivesTransaction, Updater, WithAssumptions, liftToInstanceLevel, runMonadPerspectivesQuery, (##=), (##>>))
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), MP, MonadPerspectives, MonadPerspectivesTransaction, Updater, WithAssumptions, liftToInstanceLevel, runMonadPerspectivesQuery, (##=), (##>>), (###>>))
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter, not') as COMB
 import Perspectives.Instances.Me (isMe)
-import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), contextType, filledBy, getActiveRoleStates_)
+import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), contextType, filledBy, getActiveRoleStates_, roleType_)
 import Perspectives.ModelDependencies (contextWithNotification, notificationMessage, notifications)
 import Perspectives.Names (getMySystem)
 import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, pushFrame, restoreFrame, transactionLevel)
@@ -76,7 +76,7 @@ import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedR
 import Perspectives.ScheduledAssignment (StateEvaluation(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.Transaction (Transaction(..))
-import Perspectives.Types.ObjectGetters (hasContextAspect, subStates_)
+import Perspectives.Types.ObjectGetters (hasContextAspect, roleRootState, subStates_)
 
 -- | This function has a Partial constraint because it only handles the AutomaticRoleAction case of AutomaticAction,
 -- | and idem of Notification and StateDependentPerspective.
@@ -125,6 +125,12 @@ compileState stateId = do
     updater' <- pure $ notify compiledSentence contextGetter
     updater <- addTimeFacets updater' r subject stateId
     pure { updater, contextGetter }
+
+evaluateRootRoleState :: RoleInstance -> MonadPerspectivesTransaction Unit
+evaluateRootRoleState roleId = do
+  rtype <- lift $ roleType_ roleId
+  rootstate <- lift $ rtype ###>> roleRootState
+  void $ evaluateRoleState roleId rootstate
 
 -- | This function is applied without knowing whether state condition is valid.
 -- | Put an error boundary around this function.

@@ -86,6 +86,7 @@ data FunctionName
   | IsInStateF
 
   | FirstF
+  | MeF
 
 instance eqFunctionName :: Eq FunctionName where
   eq ContextF ContextF = true
@@ -133,6 +134,7 @@ instance eqFunctionName :: Eq FunctionName where
   eq IsInStateF IsInStateF = true
 
   eq FirstF FirstF = true
+  eq MeF MeF = true
   eq _ _ = false
 
 instance Ord FunctionName where
@@ -183,6 +185,7 @@ instance showFunctionName :: Show FunctionName where
   show SpecialisesRoleTypeF = "SpecialisesRoleTypeF"
   show IsInStateF = "IsInStateF"
   show FirstF = "first"
+  show MeF = "me"
 
 instance writeForeignFunctionName :: WriteForeign FunctionName where
   writeImpl a = writeImpl (show a)
@@ -234,6 +237,7 @@ instance readForeignFunctionName :: ReadForeign FunctionName where
       "SpecialisesRoleTypeF" -> pure SpecialisesRoleTypeF
       "IsInStateF" -> pure IsInStateF
       "first" -> pure FirstF
+      "me" -> pure MeF
       f' -> throwError $ singleton (ForeignError $ "readForeign FunctionName: Unknown FunctionName: " <> f')
 
 isFunctionalFunction :: FunctionName -> ThreeValuedLogic
@@ -281,6 +285,7 @@ isFunctionalFunction fn = case fn of
   SpecialisesRoleTypeF -> True
   IsInStateF -> True
   FirstF -> True
+  MeF -> True
 
 -- | False if the function can return an empty result.
 isMandatoryFunction :: FunctionName -> ThreeValuedLogic
@@ -328,6 +333,7 @@ isMandatoryFunction fn = case fn of
   SpecialisesRoleTypeF -> True
   IsInStateF -> False
   FirstF -> False
+  MeF -> True
 
 ---------------------------------------------------------------------------------------
 ---- QUERYFUNCTION

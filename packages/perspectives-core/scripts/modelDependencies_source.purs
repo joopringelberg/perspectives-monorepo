@@ -32,6 +32,9 @@ perspectivesUsersCancelled = "model://perspectives.domains#System$Identifiable$C
 perspectivesUsersPublicKey :: String
 perspectivesUsersPublicKey = "model://perspectives.domains#System$Identifiable$PublicKey"
 
+modelDataUpgrade :: String
+modelDataUpgrade = "model://perspectives.domains#System$ModelDataUpgrade"
+
 socialEnvironment :: String
 socialEnvironment = "model://perspectives.domains#System$SocialEnvironment"
 

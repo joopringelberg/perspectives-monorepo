@@ -57,14 +57,14 @@ import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Combinators (available_, exists, logicalAnd, logicalOr, not)
 import Perspectives.Instances.Combinators (conjunction, intersection, orElse) as Combinators
 import Perspectives.Instances.Environment (_pushFrame)
-import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextModelName, contextType, contextType_, externalRole, filledByCombinator, filledByOperator, fillsCombinator, fillsOperator, getActiveRoleStates_, getActiveStates_, getEnumeratedRoleInstances, getProperty, getRecursivelyFilledRoles', getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
+import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextModelName, contextType, contextType_, externalRole, filledByCombinator, filledByOperator, fillsCombinator, fillsOperator, getActiveRoleStates_, getActiveStates_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getRecursivelyFilledRoles', getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
 import Perspectives.Instances.Values (parseBool, parseNumber)
-import Perspectives.ModelDependencies (roleWithId)
+import Perspectives.ModelDependencies (roleWithId, socialEnvironment, socialEnvironmentPersons)
 import Perspectives.Names (expandDefaultNamespaces, lookupIndexedContext, lookupIndexedRole)
 import Perspectives.ObjectGetterLookup (lookupPropertyValueGetterByName, lookupRoleGetterByName, propertyGetterCacheInsert)
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Persistent (getPerspectRol)
-import Perspectives.PerspectivesState (addBinding, getVariableBindings, lookupVariableBinding)
+import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getVariableBindings, lookupVariableBinding)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), Range, RoleInContext, domain, domain2PropertyRange, domain2contextType, domain2roleType, range, roleInContext2Role)
 import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
@@ -75,7 +75,7 @@ import Perspectives.Representation.Class.Property (getPropertyType)
 import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, toConjunctiveNormalForm_)
 import Perspectives.Representation.Class.Role (calculation) as RC
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Duration_(..), isDateOrTime, isPDuration)
 import Perspectives.Representation.Range (Range(..)) as RAN
@@ -137,6 +137,10 @@ compileFunction (SQD dom (DataTypeGetter ModelNameF) _ _ _) = case dom of
   ContextKind -> pure $ unsafeCoerce contextTypeModelName'
   RoleKind -> pure $ unsafeCoerce roleTypeModelName'
   _ -> throwError (error $ "UnsaveCompiler: cannot retrieve modelname from " <> show dom)
+
+compileFunction (SQD _ (DataTypeGetter MeF) _ _ _) = pure $ \_ -> do
+  PerspectivesUser pUser <- lift $ lift getPerspectivesUser
+  unwrap <$> getFilledRoles (ContextType socialEnvironment) (EnumeratedRoleType socialEnvironmentPersons) (RoleInstance pUser)
 
 compileFunction (SQD _ (TypeGetter TypeOfContextF) _ _ _) = pure $ unsafeCoerce contextType
 

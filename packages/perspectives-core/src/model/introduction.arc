@@ -44,7 +44,7 @@ domain model://perspectives.domains#Introduction
 
     context Introductions (relational) filledBy Introduction
     context IncomingIntroductions = sys:SocialMe >> binding >> binder Introducee >> context >> extern
-    user Manager = sys:Me
+    user Manager = me
       perspective on Introductions
         only (CreateAndFill, Remove, RemoveContext)
         props (Title) verbs (Consult, SetPropertyValue)
@@ -87,15 +87,15 @@ domain model://perspectives.domains#Introduction
     state NoIntroducer = not exists Introducer
       on entry
         do for Guest
-          bind sys:SocialMe >> binding to Introducer
+          bind me to Introducer
     external
       property Title (String)
         readableName
-    user Guest = sys:SocialMe
+    user Guest = me
       perspective on Introducer
         only (Create, Fill)
 
-    user Introducer filledBy sys:TheWorld$PerspectivesUsers
+    user Introducer filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
       state ActionsCanBeTaken = exists binding
         on entry
           do
@@ -132,7 +132,7 @@ domain model://perspectives.domains#Introduction
             detail
         where
 
-    user Introducee (relational) filledBy sys:TheWorld$PerspectivesUsers
+    user Introducee (relational) filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
       perspective on extern
         props (Title) verbs (Consult)
         action StartConversation

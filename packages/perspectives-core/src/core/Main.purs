@@ -66,6 +66,7 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (context, externalRole)
 import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, onStartUp, sysUser, userWithCredentialsAuthorizedDomain, userWithCredentialsPassword, userWithCredentialsUsername)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
+import Perspectives.ModelUpgrade (runModelUpgrades)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (DatabaseName, Keys(..), PouchdbUser, UserName, compactDatabase, databaseInfo, decodePouchdbUser', deleteDatabase)
@@ -261,6 +262,7 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
                     mysystem <- lift getMySystem
                     setProperty [ RoleInstance $ buitenRol mysystem ] (EnumeratedPropertyType onStartUp) Nothing [ (Value "true") ]
                 )
+              runModelUpgrades
               API.setupApi
           )
           state

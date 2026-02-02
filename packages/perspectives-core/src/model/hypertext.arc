@@ -40,13 +40,13 @@ domain model://perspectives.domains#HyperContext
     state NoManager = not exists Manager
       on entry 
         do for Initializer
-          bind sys:SocialMe >> binding to Manager
+          bind me to Manager
 
-    user Initializer = sys:Me
+    user Initializer = me
       perspective on Manager
         all roleverbs
 
-    user Manager filledBy sys:TheWorld$PerspectivesUsers
+    user Manager filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
       perspective on Manager
         props (FirstName, LastName) verbs (Consult)
       perspective on Pages
@@ -88,7 +88,7 @@ domain model://perspectives.domains#HyperContext
         readableName
       property ShowAllBlocks (Boolean)
 
-    user Author filledBy sys:TheWorld$PerspectivesUsers
+    user Author filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
       perspective on extern
         props (Title, ShowAllBlocks) verbs (Consult, SetPropertyValue)
       perspective on TextBlocks
@@ -168,7 +168,7 @@ domain model://perspectives.domains#HyperContext
             props (MD) verbs (Consult)
             when ShowBlock
     
-    user TestReader = sys:SocialMe
+    user TestReader = me
       perspective on TextBlocks
         props (MD, Condition, RawConditionResult, ConditionResult, ShowBlock) verbs (Consult)
       screen
@@ -185,7 +185,7 @@ domain model://perspectives.domains#HyperContext
       property Name (String)
         readableName
     
-    user Creator = sys:SocialMe
+    user Creator = me
       perspective on Author
         only (Create, Fill)
         props (FirstName, LastName) verbs (Consult)
@@ -239,7 +239,7 @@ domain model://perspectives.domains#HyperContext
     context LinkedPages (relational) filledBy PublicPage
       aspect hypercontext:Page$LinkedPages
 
-    public Visitor at extern >> binder PublicPages >> context >> Author >> BespokeDatabaseUrl = sys:SocialMe
+    public Visitor at extern >> binder PublicPages >> context >> Author >> BespokeDatabaseUrl = me
       perspective on hypercontext:Page$TextBlocks
         props (MD, Condition, RawConditionResult, ConditionResult, ShowBlock, CompiledCondition) verbs (Consult)
       perspective on LinkedPages

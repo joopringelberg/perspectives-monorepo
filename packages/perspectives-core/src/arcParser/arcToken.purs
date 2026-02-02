@@ -210,6 +210,7 @@ perspectDef = LanguageDef
       , "isInState"
       , "contextinstance"
       , "roleinstance"
+      , "me"
 
       -- Functions in expressions
       , "specialisesRoleType"

@@ -926,14 +926,14 @@ export class PerspectivesProxy
    *
    * @returns {Promise<RoleInstanceT>} A promise that resolves with the selected role instance.
    */
-    subscribeSelectedRoleFromClipboard( receiver: (roleOnClipboard : RoleOnClipboard[]) => void) : Promise<Unsubscriber>
-    {
-      const proxy = this;
-      return proxy.send(
-          { request: "GetSelectedRoleFromClipboard", onlyOnce: false },
-          values => receiver( values.map( JSON.parse ) )
-        );
-    }
+  subscribeSelectedRoleFromClipboard( receiver: (roleOnClipboard : RoleOnClipboard[]) => void) : Promise<Unsubscriber>
+  {
+    const proxy = this;
+    return proxy.send(
+        { request: "GetSelectedRoleFromClipboard", onlyOnce: false },
+        values => receiver( values.map( JSON.parse ) )
+      );
+  }
   
 
   /**

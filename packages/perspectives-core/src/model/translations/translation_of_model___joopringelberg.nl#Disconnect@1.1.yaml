@@ -1,5 +1,5 @@
 model://perspectives.domains#kxrm2cilp9:
-  version: "1.0"
+  version: "1.1"
   contexts:
     Disconnect:
       translations:
@@ -120,7 +120,7 @@ model://perspectives.domains#kxrm2cilp9:
                 en: Reconnect
                 nl: Verbind opnieuw
           actions:
-            model://joopringelberg.nl#Disconnect$DisconnectedPeer$Disconnected:
+            model://perspectives.domains#Disconnect$DisconnectedPeer$Disconnected:
               Reconnect:
                 translations:
                   en: Reconnect
@@ -178,7 +178,7 @@ model://perspectives.domains#kxrm2cilp9:
                 translations:
                   en: Delete notifications
                   nl: Verwijder meldingen
-            model://joopringelberg.nl#Disconnect$DisconnectedPeer$Disconnecter:
+            model://perspectives.domains#Disconnect$DisconnectedPeer$Disconnecter:
               Disconnect:
                 translations:
                   en: Disconnect

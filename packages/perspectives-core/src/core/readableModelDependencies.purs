@@ -11,3 +11,14 @@ rootContext = "model://perspectives.domains#System$RootContext$External"
 contextWithNotification :: String
 contextWithNotification = "model://perspectives.domains#System$ContextWithNotification"
 
+socialEnvironment :: String
+socialEnvironment = "model://perspectives.domains#System$SocialEnvironment"
+
+socialEnvironmentPersons :: String
+socialEnvironmentPersons = "model://perspectives.domains#System$SocialEnvironment$Persons"
+
+theWorld :: String
+theWorld = "model://perspectives.domains#System$TheWorld"
+
+perspectivesUsers :: String
+perspectivesUsers = "model://perspectives.domains#System$TheWorld$PerspectivesUsers"

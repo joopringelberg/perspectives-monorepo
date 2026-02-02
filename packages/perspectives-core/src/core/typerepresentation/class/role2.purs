@@ -126,6 +126,7 @@ instance enumeratedRoleRoleClass :: RoleClass EnumeratedRole EnumeratedRoleType 
   displayName r = (unwrap r).displayName
   pos r = (unwrap r).pos
   isUnlinked r = pure (unwrap r).unlinked
+
 -----------------------------------------------------------
 -- VARIOUS DECLARED TYPES OF ENUMERATEDROLE
 -----------------------------------------------------------

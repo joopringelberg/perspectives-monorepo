@@ -54,6 +54,7 @@ data SimpleStep
   | Identity ArcPosition
   | Modelname ArcPosition
   | Variable ArcPosition String
+  | Me ArcPosition
 
   | TypeOfContext ArcPosition
   | TypeOfRole ArcPosition
@@ -183,6 +184,7 @@ instance prettyPrintSimpleStep :: PrettyPrint SimpleStep where
   prettyPrint' t (Identity _) = "Identity"
   prettyPrint' t (Modelname _) = "Modelname"
   prettyPrint' t (Variable _ s) = "Variable " <> s
+  prettyPrint' t (Me _) = "Me"
   prettyPrint' t (Value _ range s) = "Value " <> show range <> " " <> s
   prettyPrint' t (RoleTypes _) = "RoleTypes"
   prettyPrint' t (TypeOfContext _) = "TypeOfContext"

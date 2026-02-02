@@ -201,6 +201,8 @@ simpleStep' =
       <|>
         Simple <$> (Translate <$> (getPosition <* reserved "translate"))
       <|>
+        Simple <$> (Me <$> (getPosition <* reserved "me"))
+      <|>
         Simple <$> (RegEx <$> (getPosition <* reserved "regexp") <*> regexExpression)
       -- VARIABLE MUST BE LAST!
       <|>
@@ -442,6 +444,7 @@ startOf stp = case stp of
   startOfSimple (Identity p) = p
   startOfSimple (Modelname p) = p
   startOfSimple (Variable p _) = p
+  startOfSimple (Me p) = p
 
   startOfSimple (TypeOfContext p) = p
   startOfSimple (TypeOfRole p) = p
@@ -488,6 +491,7 @@ endOf stp = case stp of
   endOfSimple (Identity (ArcPosition { line, column })) = ArcPosition { line, column: column + 4 }
   endOfSimple (Modelname (ArcPosition { line, column })) = ArcPosition { line, column: column + 9 }
   endOfSimple (Variable (ArcPosition { line, column }) v) = ArcPosition { line, column: column + length v }
+  endOfSimple (Me (ArcPosition { line, column })) = ArcPosition { line, column: column + 2 }
 
   endOfSimple (TypeOfContext (ArcPosition { line, column })) = ArcPosition { line, column: column + 11 }
   endOfSimple (TypeOfRole (ArcPosition { line, column })) = ArcPosition { line, column: column + 8 }

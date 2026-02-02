@@ -165,6 +165,8 @@ makeTypeTimeOnlyRoleStep varName (ST (RoleInContext { context, role })) pos = Va
 makeTypeTimeOnlyRoleStep varName (UET (RoleInContext { context, role })) pos = VarBinding varName (Simple $ TypeTimeOnlyEnumeratedRole pos (unwrap context) (unwrap role))
 makeTypeTimeOnlyRoleStep varName (SUM alternatives) pos = case head alternatives of
   Just r -> makeTypeTimeOnlyRoleStep varName r pos
+makeTypeTimeOnlyRoleStep varName (PROD alternatives) pos = case head alternatives of
+  Just r -> makeTypeTimeOnlyRoleStep varName r pos
 
 -- | Produces a step that takes the context of its origin.
 makeContextStep :: VarName -> ArcPosition -> VarBinding

@@ -1,5 +1,5 @@
 model://perspectives.domains#zjuzxbqpgc:
-  version: "6.0"
+  version: "6.1"
   contexts:
     BrokerServices:
       translations:
@@ -11,6 +11,11 @@ model://perspectives.domains#zjuzxbqpgc:
             en: Manager
             nl: Beheerder
           actions:
+            model://perspectives.domains#BrokerServices$BrokerContract$External$Terminated:
+              DeleteMyContract:
+                translations:
+                  nl: Verwijder mijn contract
+                  en: Delete my contract
             model://perspectives.domains#BrokerServices$BrokerServices$PublicBrokers$NoContract:
               SignUp:
                 translations:
@@ -77,13 +82,16 @@ model://perspectives.domains#zjuzxbqpgc:
               translations:
                 orig: "## You can connect to peers\n
                   This installation is subscribed to a Broker Service and is able to exchange information\n
-                  automatically with peers you are in contact with (including the manager of this service)."
+                  automatically with peers you are in contact with (including the manager of this service).\n
+                  To stop using this service, open the Contract and terminate it. Then execute action \"Delete my contract\" in the toolbar below (the bolt icon)."
                 nl: "## Je kunt verbinding maken met andere gebruikers\n
                    Deze installatie is geabonneerd op een Broker Service en kan automatisch informatie uitwisselen\n
-                   met andere gebruikers waarmee je in contact staat (inclusief de beheerder van deze service)."
+                   met andere gebruikers waarmee je in contact staat (inclusief de beheerder van deze service).\n
+                   Om te stoppen met het gebruik van deze service, open je het Contract en beëindig je het. Voer vervolgens actie \"Verwijder mijn contract\" uit in de werkbalk hieronder (het bliksemschichtpictogram)."
                 en: "## You can connect to peers\n
                    This installation is subscribed to a Broker Service and is able to exchange information\n
-                   automatically with peers you are in contact with (including the manager of this service)."
+                   automatically with peers you are in contact with (including the manager of this service).\n
+                   To stop using this service, open the Contract and terminate it. Then execute action \"Delete my contract\" in the toolbar below (the bolt icon)."
             3:
               translations:
                 orig: "### Public broker service(s)\n
@@ -372,6 +380,10 @@ model://perspectives.domains#zjuzxbqpgc:
                 orig: Broker Service
                 nl: Broker Service
                 en: Broker Service
+        Upgrader:
+          translations:
+            nl: Upgrader
+            en: Upgrader
         VisitorProxy:
           translations:
             en: Visitor proxy
@@ -382,6 +394,11 @@ model://perspectives.domains#zjuzxbqpgc:
                 translations:
                   en: Add this server
                   nl: Voeg deze server toe
+      things:
+        SystemDataUpgrade:
+          translations:
+            nl: Systeemgegevens upgrade
+            en: System data upgrade
       contextroles:
         MyPublicBrokers:
           translations:
@@ -413,9 +430,13 @@ model://perspectives.domains#zjuzxbqpgc:
             translations:
               en: Usage ends on
               nl: Gebruik eindigt op
+          IsInUse:
+            translations:
+              nl: In gebruik
+              en: In use
           Registered:
             translations:
-              en: Registerd
+              en: Registered
               nl: Geregistreerd
           CurrentQueueName:
             translations:
@@ -512,24 +533,13 @@ model://perspectives.domains#zjuzxbqpgc:
               translations:
                 orig: "### Account holder\n
                   This is your account at the Broker Service.\n
-                  You can see when it expires, and you can cancel it."
-                nl: "### Account houder\n
-                   Dit is je account bij de Broker Service.\n
-                   Je kunt zien wanneer het verloopt en je kunt het opzeggen."
+                  See below when it expires. To cancel it, first click the bolt icon in the toolbar below."
+                nl: "### Deelnemer\n
+                   Dit is jouw account bij de Broker Service.\n
+                   Zie hieronder wanneer het verloopt. Om het te annuleren, klik eerst op het bliksemschichtpictogram in de werkbalk hieronder."
                 en: "### Account holder\n
                    This is your account at the Broker Service.\n
-                   You can see when it expires, and you can cancel it."
-            2:
-              translations:
-                orig: "### Broker service account\n
-                  This is your account at the Broker Service.\n
-                  You can see when it expires, and you can cancel it."
-                nl: "### Broker service account\n
-                   Dit is je account bij de Broker Service.\n
-                   Je kunt zien wanneer het verloopt en je kunt het opzeggen."
-                en: "### Broker service account\n
-                   This is your account at the Broker Service.\n
-                   You can see when it expires, and you can cancel it."
+                   See below when it expires. To cancel it, first click the bolt icon in the toolbar below."
           titles:
             0:
               translations:
@@ -541,6 +551,15 @@ model://perspectives.domains#zjuzxbqpgc:
                 orig: Queues
                 en: Queues
                 nl: Queues
+        Upgrader:
+          translations:
+            nl: Upgrader
+            en: Upgrader
+      things:
+        SystemDataUpgrade:
+          translations:
+            nl: Systeemgegevens upgrade
+            en: System data upgrade
       contextroles:
         Service:
           translations:

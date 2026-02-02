@@ -83,7 +83,7 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.ResourceIdentifiers (createCuid)
 import Perspectives.Sidecar.NormalizeTypeNames (normalize)
 import Perspectives.Sidecar.StableIdMapping (fromLocalModels, loadStableMapping)
-import Prelude (class Show, bind, discard, pure, show, void, ($), (<<<), (<>), (>=>), (>>=), (*>), (<), (<$>))
+import Prelude (class Show, bind, discard, pure, show, void, ($), (<<<), (<>), (>=>), (>>=), (*>), (<), (<$>), (&&), (==), (||))
 import Simple.JSON (readJSON, write, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -381,6 +381,17 @@ isLowerVersion_ v1s v2s _ =
     )
     >>= handleExternalFunctionError "model://perspectives.domains#Utilities$IsLowerVersion"
 
+-- | lastHandledVersion < targetVersion and (targetVersion <= PDRVersion)
+isUpgradeTo_ :: Array String -> Array String -> RoleInstance -> MonadPerspectivesQuery Value
+isUpgradeTo_ targetVersions lastHandledVersions _ =
+  try
+    ( case head targetVersions, head lastHandledVersions of
+        Just targetVersion, Just lastHandledVersion -> pure $ Value $ show $
+          (isLowerVersion lastHandledVersion targetVersion) && ((isLowerVersion targetVersion pdrVersion) || (targetVersion == pdrVersion))
+        _, _ -> pure $ Value "false"
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$IsUpgradeTo"
+
 -- | An Array of External functions. Each External function is inserted into the ExternalFunctionCache and can be retrieved
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
@@ -404,4 +415,5 @@ externalFunctions =
   , Tuple "model://perspectives.domains#Utilities$IdbSet" { func: unsafeCoerce idbSet, nArgs: 2, isFunctional: True, isEffect: true }
   , Tuple "model://perspectives.domains#Utilities$SetCurrentLanguage" { func: unsafeCoerce setCurrentLanguage, nArgs: 2, isFunctional: True, isEffect: true }
   , mkLibFunc2 "model://perspectives.domains#Utilities$IsLowerVersion" True isLowerVersion_
+  , mkLibFunc2 "model://perspectives.domains#Utilities$IsUpgradeTo" True isUpgradeTo_
   ]

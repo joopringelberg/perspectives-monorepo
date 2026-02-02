@@ -1,3 +1,4 @@
+-- model://perspectives.domains#Disconnect@1.1
 domain model://perspectives.domains#Disconnect
   use sys for model://perspectives.domains#System
   use disconnect for model://perspectives.domains#Disconnect
@@ -35,11 +36,11 @@ domain model://perspectives.domains#Disconnect
         do for Initializer
           bind me to Manager
 
-    user Initializer = me
+    user Initializer = sys:Me
       perspective on Manager
         only (Create, Fill)
 
-    user Manager filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+    user Manager filledBy (sys:SocialEnvironment$Persons + sys:TheWorld$PerspectivesUsers)
       perspective on DisconnectedPeers
         all roleverbs
         props (Peer, Disconnected) verbs (Consult)
@@ -117,7 +118,7 @@ domain model://perspectives.domains#Disconnect
 
     aspect thing sys:Chat
 
-    user Disconnecter filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+    user Disconnecter filledBy (sys:SocialEnvironment$Persons + sys:TheWorld$PerspectivesUsers)
       aspect sys:ContextWithNotification$NotifiedUser
       -- aspect acc:Body$Admin
       state ActionsCanBeTaken = exists binding
@@ -167,7 +168,7 @@ domain model://perspectives.domains#Disconnect
                     There are no subcontexts to visit from here.
                     >
     
-    user Disconnected filledBy ( sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons )
+    user Disconnected filledBy (sys:SocialEnvironment$Persons + sys:TheWorld$PerspectivesUsers)
       -- aspect acc:Body$Admin
       property Reconnect (Boolean)
 

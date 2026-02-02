@@ -275,21 +275,22 @@ runDataUpgrades = do
         void $ updateLocalModels
     )
 
-  runUpgrade installedVersion "3.0.68"
+  runUpgrade installedVersion "3.0.74"
     ( \_ -> do
         runMonadPerspectivesTransaction'
           false
           (ENR $ EnumeratedRoleType sysUser)
           do
+            -- "false" means: do not update dependencies.
             updateModel_ [ "model://perspectives.domains#System@6.1" ] [ "false" ] (RoleInstance "")
+            updateModel_ [ "model://perspectives.domains#BodiesWithAccounts@5.0" ] [ "false" ] (RoleInstance "")
+            updateModel_ [ "model://perspectives.domains#CouchdbManagement@12.1" ] [ "false" ] (RoleInstance "")
+            updateModel_ [ "model://perspectives.domains#BrokerServices@6.1" ] [ "false" ] (RoleInstance "")
+            updateModel_ [ "model://perspectives.domains#Introduction@1.0" ] [ "false" ] (RoleInstance "")
+            updateModel_ [ "model://perspectives.domains#Disconnect@1.1" ] [ "false" ] (RoleInstance "")
+            updateModel_ [ "model://perspectives.domains#SharedFileServices@4.0" ] [ "false" ] (RoleInstance "")
+            updateModel_ [ "model://perspectives.domains#HyperContext@1.0" ] [ "false" ] (RoleInstance "")
     )
-
-  do
-    runMonadPerspectivesTransaction'
-      false
-      (ENR $ EnumeratedRoleType sysUser)
-      do
-        updateModel_ [ "model://perspectives.domains#System@6.1" ] [ "false" ] (RoleInstance "")
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.

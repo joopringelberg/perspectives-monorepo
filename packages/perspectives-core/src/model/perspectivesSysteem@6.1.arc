@@ -63,6 +63,7 @@ domain model://perspectives.domains#System
   --    * include Upgrader as an aspect role;
   --    * initialise LastHandledUpgrade to the version to be distributed but one!
   -- Then model your update using whatever state you need, by using "in state Upgrade<Major>_<Minor>_<Patch>"".
+  thing ModelDataUpgrade
   thing SystemDataUpgrade
     indexed sys:UpgradeHook
     on entry
@@ -75,10 +76,10 @@ domain model://perspectives.domains#System
     property LastHandledUpgrade (String)
     -- OnStartup is guaranteed to change to false and then to true every time the system is started.
     state CheckUpgrades = sys:MySystem >> extern >> OnStartup
-      -- LastHandledUpgrade < "3.0.68" and ("3.0.68" < PDRVersion  or PDRVersion == "3.0.68")
-      state Upgrade3_0_68 = callExternal util:IsLowerVersion( sys:UpgradeHook >> LastHandledUpgrade, "3.0.68" ) returns Boolean and 
-        (callExternal util:IsLowerVersion( "3.0.68", callExternal util:SystemParameter( "PDRVersion" ) returns String) returns Boolean or
-          ("3.0.68" == callExternal util:SystemParameter( "PDRVersion" ) returns String))
+      -- LastHandledUpgrade < "3.0.71" and ("3.0.71" < PDRVersion  or PDRVersion == "3.0.71")
+      state Upgrade3_0_71 = callExternal util:IsLowerVersion( sys:UpgradeHook >> LastHandledUpgrade, "3.0.71" ) returns Boolean and 
+        (callExternal util:IsLowerVersion( "3.0.71", callExternal util:SystemParameter( "PDRVersion" ) returns String) returns Boolean or
+          ("3.0.71" == callExternal util:SystemParameter( "PDRVersion" ) returns String))
         perspective of Upgrader
           perspective on sys:MySocialEnvironment >> Persons
             only (Remove)
@@ -88,10 +89,9 @@ domain model://perspectives.domains#System
           do for Upgrader
             LastHandledUpgrade = callExternal util:SystemParameter( "PDRVersion" ) returns String
             -- Remove all Persons instances from sys:MySocialEnvironment that are filled with a public instance of PerspectivesUsers.
-            remove role (filter sys:MySocialEnvironment >> Persons with (callExternal util:RoleIdentifier() returns String matches regexp "^pub:.*"))
-            -- Fill sys:Me with the PerspectivesUsers instance that fills SocialEnvironment$Me.
-            unbind_ sys:SocialMe >> binding from sys:Me
-            bind_ sys:SocialMe >> binding >> binder Persons >>= first to sys:Me
+            remove role (filter sys:MySocialEnvironment >> Persons with (binding >> callExternal util:RoleIdentifier() returns String matches regexp "^pub:.*"))
+            -- Fill sys:Me with the Persons instance that is filled by me.
+            bind_ me to sys:Me
 
   -- Used as model://perspectives.domains#System$RoleWithId$Id in the PDR code.
   thing RoleWithId
@@ -317,7 +317,7 @@ domain model://perspectives.domains#System
     -- If User is not filled with Persons, we can never fill a role that requires Persons with User. That may be inconvenient.
     -- OF WE MOETEN ME VULLEN MET PERSONS.
     -- TODO. WHAT ABOUT SOCIALENVIRONMENT$ME?
-    user User (mandatory) filledBy PerspectivesUsers
+    user User (mandatory) filledBy (Persons + PerspectivesUsers)
       aspect sys:ContextWithNotification$NotifiedUser
 
       -- PDRDEPENDENCY
@@ -362,8 +362,8 @@ domain model://perspectives.domains#System
       -- Notice that these roles are filled with the public version of VersionedModelManifest$External.
       -- We can actually only show properties that are in that perspective.
       perspective on ModelsInUse
-        only (Remove, Create, CreateAndFill, Fill, RemoveFiller)
-        props (ModelName, Description, Version, Patch, Build) verbs (Consult)
+        only (Create, CreateAndFill, Fill, RemoveFiller)
+        props (ModelName, Description, Version, Patch, Build, ShouldNotBeRemoved) verbs (Consult)
         props (InstalledPatch, InstalledBuild, UpdateOnBuild, DetachedFiller) verbs (SetPropertyValue)
         in object state Filled
           action Detach
@@ -372,6 +372,9 @@ domain model://perspectives.domains#System
         in object state UnFilled
           action Reattach
             bind_ (roleinstance (sys:VersionedModelManifest$External) DetachedFiller) to origin
+        in object state CanBeRemoved
+          all roleverbs
+          props (ModelName, Description, Version, Patch, Build, ShouldNotBeRemoved) verbs (Consult)
 
       perspective on ModelsToUpdate
         props (ModelName, Description, Version) verbs (Consult)
@@ -423,7 +426,8 @@ domain model://perspectives.domains#System
           callEffect cdb:RecoverFromRecoveryPoint( 
             callExternal sensor:ReadSensor( "models", "identifier" ) returns String)
           Restart = true for context >> extern
-
+      perspective on GlobalUpgradeHook
+        props (LastHandledUpgrade) verbs (Consult, SetPropertyValue)
       screen
         who 
           ActiveContacts
@@ -445,6 +449,8 @@ domain model://perspectives.domains#System
               without props (ShowLibraries, CurrentLanguage, PreviousLanguage, MaxHistoryLength)
           row
             form RecoveryPoint
+          row 
+            form GlobalUpgradeHook
         where
           OutgoingInvitations
             master
@@ -455,9 +461,9 @@ domain model://perspectives.domains#System
             detail
           ModelsInUse
             master
-              without props (ModelName, Description, Version, Patch, Build, InstalledPatch, InstalledBuild, UpdateOnBuild, DetachedFiller)
+              without props (ModelName, Description, Version, Patch, Build, InstalledPatch, InstalledBuild, UpdateOnBuild, DetachedFiller, ShouldNotBeRemoved)
             detail
-              without props (DetachedFiller)
+              without props (DetachedFiller, ShouldNotBeRemoved)
           ModelsToUpdate
             master
               without props (ModelName, Description, Version)
@@ -484,7 +490,7 @@ domain model://perspectives.domains#System
     context SocialEnvironment filledBy SocialEnvironment
 
     -- In effect, this will filter out the Serialization persona.
-    user Contacts = filter (callExternal cdb:RoleInstances( "model://perspectives.domains#System$TheWorld$PerspectivesUsers" ) returns sys:TheWorld$PerspectivesUsers) with (exists PublicKey) and (not this == sys:SocialMe >> binding)
+    user Contacts = filter (callExternal cdb:RoleInstances( "model://perspectives.domains#System$SocialEnvironment$Persons" ) returns sys:SocialEnvironment$Persons) with (exists PublicKey) and (not this == me)
     
     user ActiveContacts = filter Contacts with not Cancelled
 
@@ -559,6 +565,7 @@ domain model://perspectives.domains#System
             InstalledPatch = Patch
       state Filled = exists binding
       state UnFilled = (not exists binding) and exists DetachedFiller
+      state CanBeRemoved = not ShouldNotBeRemoved
           
       on exit
         -- notify User
@@ -675,9 +682,11 @@ domain model://perspectives.domains#System
     -- Used to upgrade roles and properties of the PerspectivesSystem context.
     thing SystemDataUpgrade
       aspect sys:SystemDataUpgrade
-      on entry of object state model://perspectives.domains#System$SystemDataUpgrade$CheckUpgrades$Upgrade3_0_9$NoRecoveryPoint
-        do for User
-          create role RecoveryPoint in context
+      -- on entry of object state model://perspectives.domains#System$SystemDataUpgrade$CheckUpgrades$Upgrade3_0_9$NoRecoveryPoint
+      --   do for User
+      --     create role RecoveryPoint in context
+    
+    thing GlobalUpgradeHook = sys:UpgradeHook
 
   -- A Collection of System Caches.
   case Caches
@@ -822,7 +831,7 @@ domain model://perspectives.domains#System
               create file ("invitation_of_" + InviterLastName + ".json") as "text/json" in SerialisedInvitation for origin
                 invitation
 
-    user Inviter (mandatory) filledBy sys:TheWorld$PerspectivesUsers
+    user Inviter (mandatory) filledBy (Persons + PerspectivesUsers)
       perspective on Invitee
         props (FirstName, LastName, HasKey) verbs (Consult)
       perspective on External
@@ -865,7 +874,7 @@ domain model://perspectives.domains#System
               without props (Message)
         where 
 
-    user Invitee (mandatory) filledBy Guest
+    user Invitee (mandatory) filledBy (Persons + PerspectivesUsers)
       perspective on Inviter
         props (FirstName, LastName, HasKey) verbs (Consult)
       perspective on extern
@@ -890,8 +899,8 @@ domain model://perspectives.domains#System
           -- The Guest will not be able to fill the Inviter role.
 
     -- Without the filter, the Inviter will count as Guest and its bot will fire for the Inviter, too.
-    -- user Guest = (filter sys:SocialMe >> binding with not fills (currentcontext >> Inviter))
-    user Guest = sys:SocialMe >> binding
+    -- user Guest = (filter me with not fills (currentcontext >> Inviter))
+    user Guest = me
       perspective on extern
         props (InviterLastName, Message, EnteredCode) verbs (Consult)
         props (EnteredCode) verbs (SetPropertyValue)
@@ -905,7 +914,7 @@ domain model://perspectives.domains#System
         props (FirstName, LastName) verbs (Consult)
       in context state UnlockInvitation
         action AcceptInvitation
-          bind sys:SocialMe >> binding to Invitee
+          bind me to Invitee
       screen
         who 
           Inviter
@@ -980,6 +989,7 @@ domain model://perspectives.domains#System
   case VersionedModelManifest
     external
       property ModelName (functional) = binder Versions >> context >> extern >> binder Manifests >> LocalModelName
+      property ShouldNotBeRemoved (functional) = binder Versions >> context >> extern >> ModelManifest$External$IsSystemModel
       property Description (mandatory, String)
         minLength = 81
       -- Notice that we have to register the DomeinFileName on the context role in the collection (ModelManifest$Versions),

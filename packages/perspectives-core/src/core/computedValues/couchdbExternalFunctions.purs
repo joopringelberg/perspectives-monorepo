@@ -50,6 +50,7 @@ import Decacheable (decache)
 import Effect.Aff.AVar (tryRead)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
+import Effect.Class.Console (log)
 import Effect.Exception (error)
 import Foreign.Object (empty, fromFoldable, singleton)
 import JS.Iterable (toArray)
@@ -65,7 +66,7 @@ import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.Deltas (addCreatedContextToTransaction)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
-import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, lookupStableModelUri, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
+import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, lookupStableModelUri_, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError, handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.ErrorLogging (logPerspectivesError)
@@ -214,6 +215,7 @@ ensureLatestModel_ arrWithModelName arrWithDependencies _ =
 -- | The third argument is an array with an instance of the role ModelsInuse.
 -- | If no SemVer is given, will try to load the unversioned model (if any).
 -- | Also saves the attachments.
+-- | Does NOT install the model if it is not yet present in the local store.
 updateModel_ :: Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
 updateModel_ arrWithModelName arrWithDependencies _ =
   try
@@ -228,14 +230,18 @@ updateModel_ arrWithModelName arrWithDependencies _ =
             let unversionedModelName = unversionedModelUri modelName
             let version = modelUriVersion modelName
             -- Lookup the modelUri based on the unversioned part.
-            ModelUri stableModelUri <- lift $ lookupStableModelUri (ModelUri unversionedModelName)
-            -- Combine with the versioned part to get the full stable modelUri.
-            let
-              stableModelUriWithVersion =
-                case version of
-                  Nothing -> ModelUri stableModelUri
-                  Just v -> ModelUri (stableModelUri <> "@" <> v)
-            updateModel' stableModelUriWithVersion (maybe false (eq "true") (head arrWithDependencies)) true
+            mstableModelUri <- lift $ lookupStableModelUri_ (ModelUri unversionedModelName)
+            case mstableModelUri of
+              -- We take this as a proxy for not having installed this model before.
+              Nothing -> pure unit
+              Just (ModelUri stableModelUri) -> do
+                -- Combine with the versioned part to get the full stable modelUri.
+                let
+                  stableModelUriWithVersion =
+                    case version of
+                      Nothing -> ModelUri stableModelUri
+                      Just v -> ModelUri (stableModelUri <> "@" <> v)
+                updateModel' stableModelUriWithVersion (maybe false (eq "true") (head arrWithDependencies)) false
           else throwError (error $ "This is not a well-formed domain name: " <> modelName)
     )
     >>= handleExternalStatementError "model://perspectives.domains#UpdateModel"
@@ -262,7 +268,7 @@ updateModel withDependencies install dfid@(ModelUri modelName) domeinFileAndAtta
       then installModelLocally domeinFileAndAttachents isInitialLoad storedQueries
       -- Not installed, and do not want to install: do nothing.
       else pure unit
-    Just (DomeinFile { upstreamStateNotifications, upstreamAutomaticEffects, referredModels }) -> do
+    Just (DomeinFile { upstreamStateNotifications, upstreamAutomaticEffects, referredModels, namespace }) -> do
       -- Remove the inverted queries, upstream notifications and automatic effects of the OLD version of the model!
       if withDependencies then for_ referredModels \dependency -> updateModel' dependency withDependencies false
       else pure unit
@@ -291,6 +297,7 @@ updateModel withDependencies install dfid@(ModelUri modelName) domeinFileAndAtta
       -- It will be loaded when a new type lookup is performed.
       lift $ removeTranslationTable unversionedModelname
       lift $ fetchTranslations dfid
+      log $ "Model updated: " <> show namespace
 
 -- | Retrieve the model(s) from the modelName(s) and add them to the local couchdb installation.
 -- | The modelName(s) may be UNVERSIONED or VERSIONED.

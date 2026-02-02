@@ -44,15 +44,15 @@ domain model://joopringelberg.nl#Addressbook
     user Manager = sys:Me
       perspective on AllPersons
         props (FirstName, LastName) verbs (Consult)
-        in object state Unfilled
-          only (Create, Fill)
-        in object state NonUser
-          only (Remove)
       perspective on OtherPersons
-        only (Create)
         props (FirstName, LastName) verbs (Consult, SetPropertyValue)
       perspective on Peers
         props (FirstName, LastName) verbs (Consult)
+      
+      perspective on sys:MySocialEnvironment >> Persons
+        only (Create, Fill, Remove)
+      perspective on sys:TheWorld >> NonPerspectivesUsers
+        only (Create)
         
       action AddOtherPerson
         letA 
@@ -75,7 +75,7 @@ domain model://joopringelberg.nl#Addressbook
             markdown <## Andere personen
                       Deze mensen maken geen gebruik van MyContexts.
                       Je kunt geen gegevens met hen delen.
-                      Voeg een nieuwe persoon toe met de actie [[action: AddAnotherUser| Voeg persoon toe]].
+                      Voeg een nieuwe persoon toe met de actie [[action: AddOtherPerson| Voeg persoon toe]].
                      >
           row
             table OtherPersons
