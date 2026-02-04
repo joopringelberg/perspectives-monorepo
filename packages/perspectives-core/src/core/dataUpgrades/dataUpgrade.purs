@@ -292,6 +292,16 @@ runDataUpgrades = do
             updateModel_ [ "model://perspectives.domains#HyperContext@1.0" ] [ "false" ] (RoleInstance "")
     )
 
+  runUpgrade installedVersion "3.0.75"
+    ( \_ -> do
+        runMonadPerspectivesTransaction'
+          false
+          (ENR $ EnumeratedRoleType sysUser)
+          do
+            -- "false" means: do not update dependencies.
+            updateModel_ [ "model://perspectives.domains#CouchdbManagement@12.2" ] [ "false" ] (RoleInstance "")
+    )
+
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 

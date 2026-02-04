@@ -149,6 +149,10 @@ domain model://perspectives.domains#System
     property Phone (String)
       -- pattern = "^(\\+|00)?[0-9]{1,3}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,9}$"
 
+  thing Named
+    property Name (String)
+      readableName
+
   -- TheWorld is shared by everyone. It is identified by def:#TheWorld.
   case TheWorld
     indexed sys:TheWorld

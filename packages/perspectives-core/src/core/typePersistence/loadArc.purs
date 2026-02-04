@@ -31,7 +31,7 @@ import Data.Foldable (for_)
 import Data.List (List(..))
 import Data.Map (lookup)
 import Data.Maybe (Maybe(..))
-import Data.Newtype (unwrap)
+import Data.Newtype (over, unwrap)
 import Data.Tuple (Tuple(..))
 import Data.Unit (unit)
 import Foreign.Object (empty)
@@ -40,6 +40,7 @@ import Perspectives.Checking.PerspectivesTypeChecker (checkDomeinFile)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
 import Perspectives.DomeinCache (retrieveDomeinFile, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
+import Perspectives.Identifiers (unversionedModelUri)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE(..))
@@ -70,25 +71,27 @@ type Source = String
 -- | Parses and compiles the ARC file to a DomeinFile. 
 -- | Parameter `saveInCache` determines whether to cache the DomeinFIle. Does not store the DomeinFile.
 -- | However, will load, cache and store dependencies of the model.
-loadAndCompileArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) StoredQueries))
-loadAndCompileArcFile_ dfid text saveInCache modelCuid = do
+-- | ModelUri should be Stable and versioned.
+loadAndCompileArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> Maybe String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
+loadAndCompileArcFile_ dfid text saveInCache modelCuid mbasedOnVersion = do
   -- Retrieve existing sidecar (if any) from repository. domeinFilename should be Stable.
   mMapping <- lift $ loadStableMapping dfid fromRepository
-  -- TODO: when the universe is fully on Stable, we can remove this fallback to local models.
   case mMapping of
+    -- The case below is when we compile a version that hasn't been compiled before.
     Nothing -> do
-      mlocalMapping <- lift $ loadStableMapping dfid fromLocalModels
-      x <- loadAndCompileArcFileWithSidecar_ dfid text saveInCache mlocalMapping modelCuid
-      pure case x of
-        Left errs -> Left errs
-        Right (Tuple df (Tuple iqs _m)) -> Right (Tuple df iqs)
-    Just _ -> do
-      x <- loadAndCompileArcFileWithSidecar_ dfid text saveInCache mMapping modelCuid
-      pure case x of
-        Left errs -> Left errs
-        Right (Tuple df (Tuple iqs _m)) -> Right (Tuple df iqs)
+      mmapping <- case mbasedOnVersion of
+        -- In this case, we take the mapping from the indicated version, from the Repository.
+        Just basedOnVersion -> lift $ loadStableMapping (ModelUri basedOnVersion) fromRepository
+        -- In this case, we take the mapping from the local models.
+        Nothing -> lift $ loadStableMapping dfid fromLocalModels
+      -- In this case, we generate new CUIDs. Most likely this is the first version ever for this model.
+      -- Nothing -> pure Nothing
+      loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mmapping modelCuid
+    -- The case below is when we've compiled this version before.
+    Just _ -> loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mMapping modelCuid
 
 -- New: sidecar-aware API that returns the updated mapping with results.
+-- | ModelUri should be Stable and unversioned.
 loadAndCompileArcFileWithSidecar_ :: ModelUri Stable -> Source -> Boolean -> Maybe StableIdMapping -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
 loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCache mMapping modelCuid =
   catchError

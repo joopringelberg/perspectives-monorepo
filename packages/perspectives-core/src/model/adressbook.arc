@@ -62,31 +62,34 @@ domain model://joopringelberg.nl#Addressbook
           bind nuser to Persons in sys:MySocialEnvironment
       
       screen
-        column
-          row
-            markdown <## Medegebruikers
-                      Deze mensen zitten ook op MyContexts.
-                      Kopieer iemand uit deze tabel als je gegevens met hem of haar
-                      wilt delen.
-                     >
-          row
-            table Peers
-          row 
-            markdown <## Andere personen
-                      Deze mensen maken geen gebruik van MyContexts.
-                      Je kunt geen gegevens met hen delen.
-                      Voeg een nieuwe persoon toe met de actie [[action: AddOtherPerson| Voeg persoon toe]].
-                     >
-          row
-            table OtherPersons
-        column
-          row 
-            markdown <## Alle personen
-                      Kopieer iemand uit deze tabel als het niet uitmaakt of 
-                      iemand wel of geen Perspectives gebruikt.
-                     >
-          row
-            table AllPersons
+        who
+        what
+          column
+            row
+              markdown <## Medegebruikers
+                        Deze mensen zitten ook op MyContexts.
+                        Kopieer iemand uit deze tabel als je gegevens met hem of haar
+                        wilt delen.
+                      >
+            row
+              table Peers
+            row 
+              markdown <## Andere personen
+                        Deze mensen maken geen gebruik van MyContexts.
+                        Je kunt geen gegevens met hen delen.
+                        Voeg een nieuwe persoon toe met de actie [[action: AddOtherPerson| Voeg persoon toe]].
+                      >
+            row
+              table OtherPersons
+          column
+            row 
+              markdown <## Alle personen
+                        Kopieer iemand uit deze tabel als het niet uitmaakt of 
+                        iemand wel of geen Perspectives gebruikt.
+                      >
+            row
+              table AllPersons
+        where
 
           
 

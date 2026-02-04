@@ -46,7 +46,7 @@ import Foreign (Foreign, unsafeToForeign)
 import Foreign.Object (Object, empty, insert)
 import Main.RecompileBasicModels (recompileModelsAtUrl)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibFunc1, mkLibFunc2, (##>))
+import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc1, mkLibFunc2, mkLibFunc3, (##>))
 import Perspectives.Couchdb (DeleteCouchdbDocument(..), DocWithAttachmentInfo(..))
 import Perspectives.Couchdb.Revision (Revision_, changeRevision)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
@@ -58,7 +58,7 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Extern.Couchdb (retrieveModelFromLocalStore, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
-import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2ModelUrl, unversionedModelUri)
+import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2ModelUrl)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.ModelDependencies (sysUser, versionedModelManifestModelCuid) as MD
 import Perspectives.ModelTranslation (augmentModelTranslation, emptyTranslationTable, generateFirstTranslation, generateTranslationTable, parseTranslation_pass1, parseTranslation_pass2, writeReadableTranslationYaml, writeTranslationYaml) as MT
@@ -73,28 +73,28 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), StableIdMapping, loadStableMapping, Stable) as Sidecar
-import Perspectives.Sidecar.StableIdMapping (fromLocalModels, fromRepository)
-import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFileWithSidecar_, loadAndCompileArcFile_)
+import Perspectives.Sidecar.StableIdMapping (fromRepository)
+import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_)
 import Simple.JSON (readJSON, readJSON_, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
 -- | Read the .arc file, parse it and try to compile it. Does neither cache nor store.
 -- | However, will load, cache and store dependencies of the model.
--- | The ModelUriString should be unversioned.
+-- | The ModelUriString should be versioned.
 -- | Warnings are returned as a result value; they are not sent to the client.
-parseAndCompileArc :: Array ModelUriString -> Array ArcSource -> (RoleInstance ~~> Value)
-parseAndCompileArc modelUri_ arcSource_ versionedModelManifest =
+parseAndCompileArc :: Array ModelUriString -> Array ArcSource -> Array ModelUriString -> (RoleInstance ~~> Value)
+parseAndCompileArc modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
   try
-    ( case head modelUri_, head arcSource_ of
-        Nothing, _ -> pure $ Value "No model name given!"
-        _, Nothing -> pure $ Value "No arc source given!"
-        Just modelUri, Just arcSource -> catchError
+    ( case head modelUri_, head arcSource_, head basedOnVersion_ of
+        Nothing, _, _ -> pure $ Value "No model name given!"
+        _, Nothing, _ -> pure $ Value "No arc source given!"
+        Just modelUri, Just arcSource, mbasedOnVersion -> catchError
           do
             previousWarnings <- lift $ lift $ getWarnings
             lift $ lift $ resetWarnings
             Value modelCuid <- getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid) versionedModelManifest
             r <- lift $ lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType MD.sysUser)
-              (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource false modelCuid)
+              (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource false modelCuid mbasedOnVersion)
             case r of
               Left errs -> ArrayT do
                 rendered <- lift $ traverse renderPerspectivesError errs
@@ -109,24 +109,24 @@ parseAndCompileArc modelUri_ arcSource_ versionedModelManifest =
     >>= handleExternalFunctionError "model://perspectives.domains#Parsing$ParseAndCompileArc"
 
 -- | Parse and compile the Arc file, saves in cache. Warnings are sent to the client.
-applyImmediately :: Array ModelUriString -> Array ArcSource -> RoleInstance -> MonadPerspectivesTransaction Unit
-applyImmediately modelUri_ arcSource_ versionedModelManifest =
+applyImmediately :: Array ModelUriString -> Array ArcSource -> Array ModelUriString -> RoleInstance -> MonadPerspectivesTransaction Unit
+applyImmediately modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
   try
-    ( case head modelUri_, head arcSource_ of
-        Nothing, _ -> lift $ addWarning "Parsing$applyImmediately: no model name given!"
-        _, Nothing -> lift $ addWarning "Parsing$applyImmediately: no arc source given!"
-        Just modelUri, Just arcSource -> catchError
+    ( case head modelUri_, head arcSource_, head basedOnVersion_ of
+        Nothing, _, _ -> lift $ addWarning "Parsing$ApplyImmediately: no model name given!"
+        _, Nothing, _ -> lift $ addWarning "Parsing$ApplyImmediately: no arc source given!"
+        Just modelUri, Just arcSource, mbasedOnVersion -> catchError
           do
             mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
             case mmodelCuid of
-              Nothing -> lift $ addWarning "Parsing$applyImmediately: no model CUID given!"
+              Nothing -> lift $ addWarning "Parsing$ApplyImmediately: no model CUID given!"
               Just (Value modelCuid) -> do
                 r <- lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType MD.sysUser)
-                  (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource true modelCuid)
+                  (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource true modelCuid mbasedOnVersion)
                 case r of
-                  Left errs -> lift $ addWarning ("Error in Parsing$applyImmediately: " <> show errs)
+                  Left errs -> lift $ addWarning ("Error in Parsing$ApplyImmediately: " <> show errs)
                   Right _ -> pure unit
-          \e -> lift $ addWarning ("Error in Parsing$applyImmediately: " <> show e)
+          \e -> lift $ addWarning ("Error in Parsing$ApplyImmediately: " <> show e)
     )
     >>= handleExternalStatementError "model://perspectives.domains#Parsing$ApplyImmediately"
 
@@ -139,30 +139,25 @@ type Url = String
 uploadToRepository
   :: Array ModelUriString
   -> Array ArcSource
+  -> Array ModelUriString
   -> RoleInstance
   -> MonadPerspectivesTransaction Unit
-uploadToRepository modelUri_ arcSource_ versionedModelManifest =
+uploadToRepository modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
   try
-    ( case head modelUri_, head arcSource_ of
-        Just modelUri, Just arcSource -> do
-          -- Retrieve existing sidecar (if any) from repository. modelUri should be Sidecar.Stable.
-          mMapping <- do
-            m <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri modelUri) fromRepository
-            case m of
-              Nothing -> lift $ Sidecar.loadStableMapping (Sidecar.ModelUri $ unversionedModelUri modelUri) fromLocalModels
-              Just mapping -> pure (Just mapping)
+    ( case head modelUri_, head arcSource_, head basedOnVersion_ of
+        Just modelUri, Just arcSource, mbasedOnVersion -> do
           let split = unsafePartial modelUri2ModelUrl modelUri
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           case mmodelCuid of
-            Nothing -> lift $ addWarning "Parsing$applyImmediately: no model CUID given!"
+            Nothing -> lift $ addWarning "Parsing$UploadToRepository: no model CUID given!"
             Just (Value modelCuid) -> do
-              r <- loadAndCompileArcFileWithSidecar_ ((Sidecar.ModelUri $ unversionedModelUri modelUri) :: Sidecar.ModelUri Sidecar.Stable) arcSource false mMapping modelCuid
+              r <- loadAndCompileArcFile_ ((Sidecar.ModelUri modelUri) :: Sidecar.ModelUri Sidecar.Stable) arcSource false modelCuid mbasedOnVersion
               case r of
                 Left m -> logPerspectivesError $ Custom ("uploadToRepository: " <> show m)
                 -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries plus the updated mapping.
                 Right (Tuple df@(DomeinFile { id, namespace }) (Tuple invertedQueries mapping')) -> do
                   lift $ void $ uploadToRepository_ split df invertedQueries mapping'
-        _, _ -> logPerspectivesError $ Custom ("uploadToRepository lacks arguments")
+        _, _, _ -> logPerspectivesError $ Custom ("uploadToRepository lacks arguments")
     )
     >>= handleExternalStatementError "model://perspectives.domains#Parsing$UploadToRepository"
 
@@ -292,19 +287,18 @@ compileRepositoryModels modelsurl_ manifestsurl_ _ =
 storeModelLocally_
   :: Array ModelUriString
   -> Array ArcSource
+  -> Array ModelUriString
   -> RoleInstance
   -> MonadPerspectivesTransaction Unit
-storeModelLocally_ modelUri_ arcSource_ versionedModelManifest =
+storeModelLocally_ modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
   try
-    ( case head modelUri_, head arcSource_ of
-        Just modelUri, Just arcSource -> do
-          -- Load mapping from the Repository.
-          mLocalMapping <- lift $ Sidecar.loadStableMapping (Sidecar.ModelUri modelUri) fromRepository
+    ( case head modelUri_, head arcSource_, head basedOnVersion_ of
+        Just modelUri, Just arcSource, mbasedOnVersion -> do
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           case mmodelCuid of
             Nothing -> lift $ addWarning "StoreModelLocally: no model CUID given!"
             Just (Value modelCuid) -> do
-              r <- loadAndCompileArcFileWithSidecar_ (Sidecar.ModelUri $ unversionedModelUri modelUri) arcSource false mLocalMapping modelCuid
+              r <- loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource false modelCuid mbasedOnVersion
               case r of
                 Left m -> logPerspectivesError $ Custom ("StoreModelLocally: " <> show m)
                 -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries.
@@ -323,7 +317,7 @@ storeModelLocally_ modelUri_ arcSource_ versionedModelManifest =
                   -- Also saves the inverted queries in the inverted query database.
                   updateModel false {-with dependencies-}  true {-install for first time if necessary-}  id (Tuple dfr attachments') invertedQueries
 
-        _, _ -> logPerspectivesError $ Custom ("StoreModelLocally lacks arguments")
+        _, _, _ -> logPerspectivesError $ Custom ("StoreModelLocally lacks arguments")
     )
     >>= handleExternalStatementError "model://perspectives.domains#Parsing$StoreModelLocally"
 
@@ -460,10 +454,10 @@ augmentModelTranslation translation_ modelUri_ _ = case head translation_, head 
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
 externalFunctions =
-  [ mkLibFunc2 "model://perspectives.domains#Parsing$ParseAndCompileArc" True parseAndCompileArc
-  , mkLibEffect2 "model://perspectives.domains#Parsing$ApplyImmediately" True applyImmediately
-  , mkLibEffect2 "model://perspectives.domains#Parsing$UploadToRepository" True uploadToRepository
-  , mkLibEffect2 "model://perspectives.domains#Parsing$StoreModelLocally" True storeModelLocally_
+  [ mkLibFunc3 "model://perspectives.domains#Parsing$ParseAndCompileArc" True parseAndCompileArc
+  , mkLibEffect3 "model://perspectives.domains#Parsing$ApplyImmediately" True applyImmediately
+  , mkLibEffect3 "model://perspectives.domains#Parsing$UploadToRepository" True uploadToRepository
+  , mkLibEffect3 "model://perspectives.domains#Parsing$StoreModelLocally" True storeModelLocally_
   , mkLibEffect1 "model://perspectives.domains#Parsing$RemoveFromRepository" True removeFromRepository
   , mkLibEffect2 "model://perspectives.domains#Parsing$CompileRepositoryModels" True compileRepositoryModels
   , mkLibEffect2 "model://perspectives.domains#Parsing$CompileRepositoryModels" True compileRepositoryModels

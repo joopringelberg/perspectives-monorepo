@@ -1127,6 +1127,7 @@ domain model://perspectives.domains#CouchdbManagement
       aspect sys:VersionedModelManifest$External
       -- VersionedModelManifest$External$Description
       -- VersionedModelManifest$External$DomeinFileName
+      -- VersionedModelManifest$External$VersionName
       -- VersionedModelManifest$External$Version
       -- VersionedModelManifest$External$Patch
       -- VersionedModelManifest$External$Build
@@ -1181,7 +1182,8 @@ domain model://perspectives.domains#CouchdbManagement
       state ProcessArc = AutoUpload and (exists ArcSource) and ((callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime > LastChangeDT + 10 seconds) or not exists LastChangeDT)
         on entry
           do for Author
-            ArcFeedback = callExternal p:ParseAndCompileArc( ModelURI, ArcSource ) returns String
+            -- If BasedOnVersion is not set, the PDR will generate new CUIDs.
+            ArcFeedback = callExternal p:ParseAndCompileArc( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI ) returns String
             -- Even though we set LastChangeDT, state ProcessArc is not exited.
             LastChangeDT = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime
             MustUpload = true
@@ -1194,7 +1196,7 @@ domain model://perspectives.domains#CouchdbManagement
             do for Author
               -- This will upload an empty Translations table, too. VersionedModelURI should be Stable.
               callEffect p:UploadToRepository( VersionedModelURI, 
-                callExternal util:ReplaceR( "bind publicrole.*in sys:MySystem", "", ArcSource ) returns String)
+                callExternal util:ReplaceR( "bind publicrole.*in sys:MySystem", "", ArcSource ) returns String, context >> BasedOnVersion >> VersionedModelURI)
               Build = Build + 1
               MustUpload = false
               GenerateYaml = true for context >> Translation
@@ -1204,7 +1206,7 @@ domain model://perspectives.domains#CouchdbManagement
         state StoreInLocalDatabase = Store == "Locally"
           on entry
             do for Author
-              callEffect p:StoreModelLocally( VersionedModelURI, ArcSource )
+              callEffect p:StoreModelLocally( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI )
               Build = Build + 1
               MustUpload = false
             notify Author
@@ -1213,7 +1215,7 @@ domain model://perspectives.domains#CouchdbManagement
         state ApplyImmediately = ApplyInSession
           on entry
             do for Author
-              callEffect p:ApplyImmediately( ModelURI, ArcSource )
+              callEffect p:ApplyImmediately( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI )
               MustUpload = false
             notify Author
               "Version {External$Version} (build {Build}) has been applied to the current session."
@@ -1287,6 +1289,9 @@ domain model://perspectives.domains#CouchdbManagement
       perspective on Author
         all roleverbs
         props (FirstName, LastName) verbs (Consult)
+      perspective on BasedOnVersion
+        only (Create, Fill, Remove, CreateAndFill)
+        props (VersionName, ModelURI) verbs (Consult)
       screen
         who
           Author
@@ -1295,8 +1300,12 @@ domain model://perspectives.domains#CouchdbManagement
             detail
         what
           tab "Manifest"
-            form External
-              without props (ArcFile, ArcFeedback, LastChangeDT, MustUpload, AutoUpload, Store, ApplyInSession, ArcSource)
+            row
+              form External
+                without props (ArcFile, ArcFeedback, LastChangeDT, MustUpload, AutoUpload, Store, ApplyInSession, ArcSource)
+            row 
+              form BasedOnVersion
+                -- with props (VersionName, ModelURI) verbs (Consult)
           tab "Compile"
             row
               markdown <### Compile your model
@@ -1365,3 +1374,5 @@ domain model://perspectives.domains#CouchdbManagement
 
     context Manifest (functional) = extern >> binder Versions >> context >> extern
     aspect thing sys:ContextWithNotification$Notifications
+    -- We need this in order to fetch the sidecar file with mappings from readable to stable identifiers.
+    context BasedOnVersion filledBy VersionedModelManifest

@@ -66,7 +66,7 @@ import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.Deltas (addCreatedContextToTransaction)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
-import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, lookupStableModelUri_, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
+import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError, handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.ErrorLogging (logPerspectivesError)
@@ -89,7 +89,7 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (UserName, Password)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (clearQueryCache, contextCache, getCurrentLanguage, getPerspectivesUser, modelsDatabaseName, removeTranslationTable, roleCache, setModelUri)
+import Perspectives.PerspectivesState (clearQueryCache, contextCache, getCurrentLanguage, getPerspectivesUser, lookupModelUri, modelsDatabaseName, removeTranslationTable, roleCache, setModelUri)
 import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, Value(..), perspectivesUser2RoleInstance)
@@ -103,7 +103,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer(..))
-import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>>=))
+import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>>=), (*>))
 import Simple.JSON (read_)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -210,7 +210,7 @@ ensureLatestModel_ arrWithModelName arrWithDependencies _ =
 -- | Takes care of inverted queries in Couchdb.
 -- | Clears the query cache in PerspectivesState.
 -- | Clears compiled states from cache.
--- | The first argument should contain the model name ("model://some.domain#Something@<SemVer>"), 
+-- | The first argument should contain the Readable model name ("model://some.domain#Something@<SemVer>"), 
 -- | The second argument should contain the string representation of a boolean value.
 -- | The third argument is an array with an instance of the role ModelsInuse.
 -- | If no SemVer is given, will try to load the unversioned model (if any).
@@ -222,26 +222,21 @@ updateModel_ arrWithModelName arrWithDependencies _ =
     ( case head arrWithModelName of
         -- fail silently
         Nothing -> pure unit
-        -- TODO: add a check on the form of the modelName.
         Just modelName ->
           if isModelUri modelName then do
-            -- Make sure it is the Stable identifier that is used here.
-            -- Split the modelName into unversioned and versioned part.
+            -- Split the Readable modelName into unversioned and versioned part.
             let unversionedModelName = unversionedModelUri modelName
             let version = modelUriVersion modelName
-            -- Lookup the modelUri based on the unversioned part.
-            mstableModelUri <- lift $ lookupStableModelUri_ (ModelUri unversionedModelName)
-            case mstableModelUri of
-              -- We take this as a proxy for not having installed this model before.
-              Nothing -> pure unit
+            -- This lookup is based on the Readable ModelUri.
+            mStableModelUri <- lift $ lookupModelUri (ModelUri unversionedModelName)
+            case mStableModelUri of
               Just (ModelUri stableModelUri) -> do
                 -- Combine with the versioned part to get the full stable modelUri.
-                let
-                  stableModelUriWithVersion =
-                    case version of
-                      Nothing -> ModelUri stableModelUri
-                      Just v -> ModelUri (stableModelUri <> "@" <> v)
+                stableModelUriWithVersion <- pure $ case version of
+                  Nothing -> ModelUri stableModelUri
+                  Just v -> ModelUri (stableModelUri <> "@" <> v)
                 updateModel' stableModelUriWithVersion (maybe false (eq "true") (head arrWithDependencies)) false
+              Nothing -> log ("This model isn't available locally: " <> unversionedModelName <> ". No update performed.")
           else throwError (error $ "This is not a well-formed domain name: " <> modelName)
     )
     >>= handleExternalStatementError "model://perspectives.domains#UpdateModel"
@@ -265,9 +260,9 @@ updateModel withDependencies install dfid@(ModelUri modelName) domeinFileAndAtta
     Nothing ->
       if install
       -- Not installed, but want to install: install it.
-      then installModelLocally domeinFileAndAttachents isInitialLoad storedQueries
+      then installModelLocally domeinFileAndAttachents isInitialLoad storedQueries *> log ("Installed new model " <> modelName)
       -- Not installed, and do not want to install: do nothing.
-      else pure unit
+      else log ("Model " <> modelName <> " is not installed locally, and 'install' flag is false. No action taken.")
     Just (DomeinFile { upstreamStateNotifications, upstreamAutomaticEffects, referredModels, namespace }) -> do
       -- Remove the inverted queries, upstream notifications and automatic effects of the OLD version of the model!
       if withDependencies then for_ referredModels \dependency -> updateModel' dependency withDependencies false

@@ -25,7 +25,8 @@ module Perspectives.PerspectivesState where
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (cons)
-import Data.Map (Map, empty, insert, lookup) as Map
+import Data.List (elem)
+import Data.Map (Map, empty, insert, lookup, values) as Map
 import Data.Maybe (Maybe(..))
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
@@ -260,6 +261,11 @@ lookupModelUri :: ModelUri Readable -> MonadPerspectives (Maybe (ModelUri Stable
 lookupModelUri muReadable = do
   muMap <- getModelUris
   pure $ Map.lookup muReadable muMap
+
+isInstalledModel :: ModelUri Stable -> MonadPerspectives Boolean
+isInstalledModel muStable = do
+  muMap <- getModelUris
+  pure $ elem muStable (Map.values muMap)
 
 -----------------------------------------------------------
 -- PERSPECTIVESUSER
