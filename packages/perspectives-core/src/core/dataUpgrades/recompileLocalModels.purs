@@ -29,17 +29,21 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Traversable (for)
 import Main.RecompileBasicModels (UninterpretedDomeinFile, executeInTopologicalOrder, recompileModel)
+import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
+import Perspectives.DomeinCache (lookupStableModelUri_)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
+import Perspectives.Identifiers (modelUri2ModelUrl)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (databaseInfo, deleteDatabase, documentsInDatabase, includeDocs)
+import Perspectives.Persistence.API (databaseInfo, deleteDatabase, documentsInDatabase, getDocument_, includeDocs)
 import Perspectives.Persistent (invertedQueryDatabaseName, saveMarkedResources)
 import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
 import Perspectives.SetupUser (setupInvertedQueryDatabase)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Prelude (Unit, bind, discard, pure, show, ($), (*>), (<$>), (<>))
 import Simple.JSON (read) as JSON
 
@@ -75,3 +79,23 @@ recompileLocalModels =
     deleteDatabase db
     void $ databaseInfo db
     setupInvertedQueryDatabase
+
+recompileLocalModel :: ModelUri Readable -> MonadPerspectives Boolean
+recompileLocalModel modelUri = do
+  mstableModelUri <- lookupStableModelUri_ modelUri
+  case mstableModelUri of
+    Nothing -> logPerspectivesError (Custom ("Cannot find stable model URI for model URI: " <> show modelUri)) *> pure false
+    Just (ModelUri stableModelUri) -> do
+      { repositoryUrl, documentName } <- pure $ unsafePartial modelUri2ModelUrl stableModelUri
+      modelsdb <- modelsDatabaseName
+      udf :: UninterpretedDomeinFile <- getDocument_ modelsdb documentName
+      r <- runMonadPerspectivesTransaction'
+        false
+        (ENR $ EnumeratedRoleType sysUser)
+        (runExceptT (recompileModel udf))
+      case r of
+        Left errors -> logPerspectivesError (Custom ("recompileLocalModel: " <> show errors)) *> pure false
+        Right success -> do
+          saveMarkedResources
+          pure true
+
