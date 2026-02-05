@@ -81,7 +81,7 @@ import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (storeDomeinFileInCache, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ErrorLogging (logPerspectivesError)
-import Perspectives.Extern.Couchdb (roleInstancesFromCouchdb, updateModel', updateModel_)
+import Perspectives.Extern.Couchdb (roleInstancesFromCouchdb, updateModel', updateModelForUpgrade, updateModel_)
 import Perspectives.Extern.Utilities (isLowerVersion, pdrVersion)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol, splitTypeUri, unversionedModelUri)
@@ -198,7 +198,7 @@ runDataUpgrades = do
           false
           (ENR $ EnumeratedRoleType sysUser)
           do
-            updateModel_ [ "model://perspectives.domains#System@3.0" ] [ "false" ] (RoleInstance "")
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@3.0"
         addSettingsType unit
     )
 
@@ -212,8 +212,8 @@ runDataUpgrades = do
           false
           (ENR $ EnumeratedRoleType sysUser)
           do
-            updateModel_ [ "model://perspectives.domains#System@3.0" ] [ "false" ] (RoleInstance "")
-            updateModel_ [ "model://perspectives.domains#CouchdbManagement@8.0" ] [ "false" ] (RoleInstance "")
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@3.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#CouchdbManagement@8.0"
     )
 
   runUpgrade installedVersion "3.0.9"
@@ -223,7 +223,7 @@ runDataUpgrades = do
           false
           (ENR $ EnumeratedRoleType sysUser)
           do
-            updateModel_ [ "model://perspectives.domains#System@3.0" ] [ "false" ] (RoleInstance "")
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@3.0"
             void $ createAndAddRoleInstance
               (EnumeratedRoleType $ systemModelName <> "$SystemDataUpgrade")
               "def:#perspectives_domains-System_modelRootContext"
@@ -242,7 +242,7 @@ runDataUpgrades = do
           false
           (ENR $ EnumeratedRoleType sysUser)
           do
-            updateModel_ [ "model://perspectives.domains#System@3.0" ] [ "false" ] (RoleInstance "")
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@3.0"
     )
 
   runUpgrade installedVersion "3.0.39"
@@ -282,14 +282,14 @@ runDataUpgrades = do
           (ENR $ EnumeratedRoleType sysUser)
           do
             -- "false" means: do not update dependencies.
-            updateModel_ [ "model://perspectives.domains#System@6.1" ] [ "false" ] (RoleInstance "")
-            updateModel_ [ "model://perspectives.domains#BodiesWithAccounts@5.0" ] [ "false" ] (RoleInstance "")
-            updateModel_ [ "model://perspectives.domains#CouchdbManagement@12.1" ] [ "false" ] (RoleInstance "")
-            updateModel_ [ "model://perspectives.domains#BrokerServices@6.1" ] [ "false" ] (RoleInstance "")
-            updateModel_ [ "model://perspectives.domains#Introduction@1.0" ] [ "false" ] (RoleInstance "")
-            updateModel_ [ "model://perspectives.domains#Disconnect@1.1" ] [ "false" ] (RoleInstance "")
-            updateModel_ [ "model://perspectives.domains#SharedFileServices@4.0" ] [ "false" ] (RoleInstance "")
-            updateModel_ [ "model://perspectives.domains#HyperContext@1.0" ] [ "false" ] (RoleInstance "")
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.1"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#BodiesWithAccounts@5.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#CouchdbManagement@12.1"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#BrokerServices@6.1"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Introduction@1.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Disconnect@1.1"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#SharedFileServices@4.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#HyperContext@1.0"
     )
 
   runUpgrade installedVersion "3.0.75"
@@ -299,7 +299,7 @@ runDataUpgrades = do
           (ENR $ EnumeratedRoleType sysUser)
           do
             -- "false" means: do not update dependencies.
-            updateModel_ [ "model://perspectives.domains#CouchdbManagement@12.2" ] [ "false" ] (RoleInstance "")
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#CouchdbManagement@12.2"
     )
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)

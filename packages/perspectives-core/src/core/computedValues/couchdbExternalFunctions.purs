@@ -89,7 +89,7 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (UserName, Password)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (clearQueryCache, contextCache, getCurrentLanguage, getPerspectivesUser, lookupModelUri, modelsDatabaseName, removeTranslationTable, roleCache, setModelUri)
+import Perspectives.PerspectivesState (clearQueryCache, contextCache, getCurrentLanguage, getPerspectivesUser, isInstalledModel, lookupModelUri, modelsDatabaseName, removeTranslationTable, roleCache, setModelUri)
 import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, Value(..), perspectivesUser2RoleInstance)
@@ -99,7 +99,7 @@ import Perspectives.ResourceIdentifiers (createDefaultIdentifier, resourceIdenti
 import Perspectives.RoleAssignment (roleIsMe)
 import Perspectives.SaveUserData (scheduleContextRemoval, setFirstBinding)
 import Perspectives.SetupCouchdb (contextViewFilter, roleViewFilter, setContext2RoleView, setContextView, setCredentialsView, setFiller2FilledView, setFilled2FillerView, setPendingInvitationView, setRoleFromContextView, setRoleView, setRole2ContextView)
-import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer(..))
@@ -207,10 +207,28 @@ ensureLatestModel_ arrWithModelName arrWithDependencies _ =
     )
     >>= handleExternalStatementError "model://perspectives.domains#EnsureLatestModel"
 
+updateModelForUpgrade :: ModelUri Readable -> MonadPerspectivesTransaction Unit
+updateModelForUpgrade modelUri@(ModelUri modelName) = do
+  if isModelUri modelName then do
+    -- Split the Readable modelName into unversioned and versioned part.
+    let unversionedModelName = unversionedModelUri modelName
+    let version = modelUriVersion modelName
+    -- This lookup is based on the Readable ModelUri (when called from upgrade). However, when called from ARC, it will be a Stable ModelUri.
+    mStableModelUri <- lift $ lookupModelUri (ModelUri unversionedModelName)
+    case mStableModelUri of
+      Just (ModelUri stableModelUri) -> do
+        -- Combine with the versioned part to get the full stable modelUri.
+        stableModelUriWithVersion <- pure $ case version of
+          Nothing -> ModelUri stableModelUri
+          Just v -> ModelUri (stableModelUri <> "@" <> v)
+        updateModel' stableModelUriWithVersion false false
+      Nothing -> log ("This model isn't available locally: " <> unversionedModelName <> ". No update performed.")
+  else throwError (error $ "This is not a well-formed domain name: " <> modelName)
+
 -- | Takes care of inverted queries in Couchdb.
 -- | Clears the query cache in PerspectivesState.
 -- | Clears compiled states from cache.
--- | The first argument should contain the Readable model name ("model://some.domain#Something@<SemVer>"), 
+-- | The first argument should contain the Stable model name ("model://some.domain#Something@<SemVer>"), 
 -- | The second argument should contain the string representation of a boolean value.
 -- | The third argument is an array with an instance of the role ModelsInuse.
 -- | If no SemVer is given, will try to load the unversioned model (if any).
@@ -224,19 +242,13 @@ updateModel_ arrWithModelName arrWithDependencies _ =
         Nothing -> pure unit
         Just modelName ->
           if isModelUri modelName then do
-            -- Split the Readable modelName into unversioned and versioned part.
+            -- Split the Stable modelName into unversioned and versioned part.
             let unversionedModelName = unversionedModelUri modelName
             let version = modelUriVersion modelName
-            -- This lookup is based on the Readable ModelUri.
-            mStableModelUri <- lift $ lookupModelUri (ModelUri unversionedModelName)
-            case mStableModelUri of
-              Just (ModelUri stableModelUri) -> do
-                -- Combine with the versioned part to get the full stable modelUri.
-                stableModelUriWithVersion <- pure $ case version of
-                  Nothing -> ModelUri stableModelUri
-                  Just v -> ModelUri (stableModelUri <> "@" <> v)
-                updateModel' stableModelUriWithVersion (maybe false (eq "true") (head arrWithDependencies)) false
-              Nothing -> log ("This model isn't available locally: " <> unversionedModelName <> ". No update performed.")
+            -- This lookup is based on the Readable ModelUri (when called from upgrade). However, when called from ARC, it will be a Stable ModelUri.
+            isInstalled <- lift $ isInstalledModel (ModelUri unversionedModelName)
+            if isInstalled then updateModel' (ModelUri modelName) (maybe false (eq "true") (head arrWithDependencies)) false
+            else log ("This model isn't available locally: " <> unversionedModelName <> ". No update performed.")
           else throwError (error $ "This is not a well-formed domain name: " <> modelName)
     )
     >>= handleExternalStatementError "model://perspectives.domains#UpdateModel"
