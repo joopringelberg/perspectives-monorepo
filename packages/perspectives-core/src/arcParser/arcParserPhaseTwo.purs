@@ -40,7 +40,7 @@ import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, fromFoldable, insert, union)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
-import Perspectives.Identifiers (Namespace, isTypeUri, newModelRegex, qualifyWith, typeUri2typeNameSpace_)
+import Perspectives.Identifiers (Namespace, isExternalRole, isTypeUri, newModelRegex, qualifyWith, typeUri2typeNameSpace_)
 import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), FreeFormScreenE(..), PropertyE(..), PropertyMapping(..), PropertyPart(..), RoleE(..), RoleIdentification(..), RolePart(..), ScreenE(..), StateE(..), StateSpecification(..), ViewE(..), WhoWhatWhereScreenE(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.ExpandPrefix (expandPrefix)
@@ -289,17 +289,17 @@ traverseEnumeratedRoleE_ role@(EnumeratedRole { id: rn, kindOfRole }) roleParts 
   -- FILLEDBYATTRIBUTE
   handleParts roleName (EnumeratedRole roleUnderConstruction@{ id, binding }) (FilledBySpecifications spec) = case spec of
     Alternatives attrs -> case LNE.head attrs of
-      FilledByAttribute "None" context -> pure (EnumeratedRole $ roleUnderConstruction { binding = Just $ ST $ RoleInContext { role: id, context } })
+      FilledByAttribute "None" context -> pure (EnumeratedRole $ roleUnderConstruction { binding = Just $ UET $ RoleInContext { role: id, context } })
       _ -> do
         restrictions <- for attrs \(FilledByAttribute bnd context) -> do
           ebnd <- expandBinding bnd
-          pure $ ST $ RoleInContext { role: EnumeratedRoleType ebnd, context }
+          pure $ UET $ RoleInContext { role: EnumeratedRoleType ebnd, context }
         pure $ EnumeratedRole $ roleUnderConstruction { binding = Just $ SUM (ARR.fromFoldable restrictions) }
 
     Combination attrs -> do
       restrictions <- for attrs \(FilledByAttribute bnd context) -> do
         ebnd <- expandBinding bnd
-        pure $ ST $ RoleInContext { role: EnumeratedRoleType ebnd, context }
+        pure $ UET $ RoleInContext { role: EnumeratedRoleType ebnd, context }
       pure $ EnumeratedRole $ roleUnderConstruction { binding = Just $ PROD (ARR.fromFoldable restrictions) }
     -- We assume the result of expandBinding refers to an EnumeratedRoleType. This need not be so;
     -- it will be repaired in PhaseThree.
@@ -319,28 +319,32 @@ traverseEnumeratedRoleE_ role@(EnumeratedRole { id: rn, kindOfRole }) roleParts 
 
   -- ROLEASPECT
   handleParts roleName (EnumeratedRole roleUnderConstruction@{ context, roleAspects, propertyAliases }) (RoleAspect a pos' mPropertyMapping) = do
-    expandedAspect <- expandNamespace a
-    if isTypeUri expandedAspect then do
-      (mPropertyMapping' :: Maybe (Object EnumeratedPropertyType)) <- case mPropertyMapping of
-        Nothing -> pure Nothing
-        Just (PropertyMapping propertyMapping) -> Just <<< fromFoldable <$> for propertyMapping
-          ( \(Tuple origin destination) -> do
-              destination' <- expandNamespace destination
-              pure $ Tuple (qualifyWith expandedAspect origin) (EnumeratedPropertyType destination')
+    if kindOfRole == TI.ExternalRole && isExternalRole a
+    -- If the aspect is an External role, flag it down.
+    then throwError (AspectForExternalRole pos' a)
+    else do
+      expandedAspect <- expandNamespace a
+      if isTypeUri expandedAspect then do
+        (mPropertyMapping' :: Maybe (Object EnumeratedPropertyType)) <- case mPropertyMapping of
+          Nothing -> pure Nothing
+          Just (PropertyMapping propertyMapping) -> Just <<< fromFoldable <$> for propertyMapping
+            ( \(Tuple origin destination) -> do
+                destination' <- expandNamespace destination
+                pure $ Tuple (qualifyWith expandedAspect origin) (EnumeratedPropertyType destination')
+            )
+        pure
+          ( EnumeratedRole $ roleUnderConstruction
+              { roleAspects = cons
+                  (RoleInContext { context: ContextType (typeUri2typeNameSpace_ expandedAspect), role: (EnumeratedRoleType expandedAspect) })
+                  roleAspects
+              -- There may be a mapping already, as each Aspect can contribute to the mapping.
+              -- The properties-to-be-mapped (the origins) are qualified by the aspect and so are guaranteed to be unique.
+              -- Therefore we can just construct the union.
+              -- NOTICE that the destinations may be underqualified. We will fix that in PhaseThree.
+              , propertyAliases = maybe propertyAliases (union propertyAliases) mPropertyMapping'
+              }
           )
-      pure
-        ( EnumeratedRole $ roleUnderConstruction
-            { roleAspects = cons
-                (RoleInContext { context: ContextType (typeUri2typeNameSpace_ expandedAspect), role: (EnumeratedRoleType expandedAspect) })
-                roleAspects
-            -- There may be a mapping already, as each Aspect can contribute to the mapping.
-            -- The properties-to-be-mapped (the origins) are qualified by the aspect and so are guaranteed to be unique.
-            -- Therefore we can just construct the union.
-            -- NOTICE that the destinations may be underqualified. We will fix that in PhaseThree.
-            , propertyAliases = maybe propertyAliases (union propertyAliases) mPropertyMapping'
-            }
-        )
-    else throwError $ NotWellFormedName pos' a
+      else throwError $ NotWellFormedName pos' a
 
   -- INDEXEDROLE
   handleParts roleName (EnumeratedRole roleUnderConstruction) (IndexedRole indexedName pos') = do

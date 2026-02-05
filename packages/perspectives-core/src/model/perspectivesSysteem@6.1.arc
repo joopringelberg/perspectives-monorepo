@@ -1,7 +1,7 @@
 -- Copyright Joop Ringelberg and Cor Baars 2019, 2020, 2021, 2022, 2023, 2024
 
 -- PDRDEPENDENCY
-domain model://perspectives.domains#System
+domain model://perspectives.domains#System@6.1
   use sys for model://perspectives.domains#System
   use cdb for model://perspectives.domains#Couchdb
   use ser for model://perspectives.domains#Serialise
@@ -148,10 +148,6 @@ domain model://perspectives.domains#System
     property EmailAddress (Email)
     property Phone (String)
       -- pattern = "^(\\+|00)?[0-9]{1,3}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,9}$"
-
-  thing Named
-    property Name (String)
-      readableName
 
   -- TheWorld is shared by everyone. It is identified by def:#TheWorld.
   case TheWorld
@@ -771,6 +767,14 @@ domain model://perspectives.domains#System
       property RelayPort (String)
 
   case RecentContext
+  case ContextWithName
+    external
+      property Name (mandatory, String)
+        readableName
+    thing ThingWithName
+      property Name (mandatory, String)
+        readableName
+
   -- A Channel is shared by just two users.
   -- PDRDEPENDENCY
   case Channel

@@ -61,6 +61,7 @@ data PerspectivesError
   -- | MissingForUser ArcPosition String
   | MissingRoleForPropertyAssignment ArcPosition ArcPosition
   | NotWellFormedName ArcPosition String
+  | AspectForExternalRole ArcPosition String
   | RoleMissingInContext ArcPosition String String
   | UnknownContext ArcPosition ContextType
   | UnknownRole ArcPosition String
@@ -167,6 +168,7 @@ instance showPerspectivesError :: Show PerspectivesError where
   -- show (MissingForUser pos localBotName) = "(MissingForUser) The BotRole '" <> localBotName <> "' should have a 'ForUser' clause: " <> show pos
   show (MissingRoleForPropertyAssignment start end) = "(MissingRoleForPropertyAssignment) The role for this property assignment is not specified (between " <> show start <> "and " <> show end <> ")."
   show (NotWellFormedName pos name) = "(NotWellFormedName) The name '" <> name <> "' is not well-formed (it cannot be expanded to a fully qualified name): " <> show pos
+  show (AspectForExternalRole pos name) = "(AspectForExternalRole) The external role should not have an external role as named aspect (it will automatically acquire the external role of any context aspects specified for its context): '" <> name <> "', at: " <> show pos
   show (RoleMissingInContext pos localRoleName ctxt) = "(RoleMissingInContext) The local role name '" <> localRoleName <> "' cannot be found in the context: '" <> ctxt <> "', at: " <> show pos
   show (UnknownRole pos qname) = "(UnknownRole) The role '" <> qname <> "' is not defined, at: " <> show pos
   show (CannotModifyRole start end r) = "(CannotModifyRole) The role '" <> r <> "' cannot be modified, between " <> show start <> " and " <> show end <> ". Is it an aspect role from another model? If not, check whether you have defined this role in the current model."

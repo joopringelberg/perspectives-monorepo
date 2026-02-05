@@ -171,7 +171,7 @@ declaredTypeWithoutFiller role@(EnumeratedRole r) = do
   aspectTypes <- declaredAspects role
   pure $ PROD [ (declaredType role), aspectTypes ]
 
--- | The sum of the declared aspect types, the complete declared filler restriction and the aspect types.
+-- | The sum of the type itself, the declared aspect types and the declared filler restriction.
 completeDeclaredType :: EnumeratedRole -> MP (ADT RoleInContext)
 completeDeclaredType role@(EnumeratedRole r) = do
   -- Will be a PROD.

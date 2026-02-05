@@ -306,6 +306,6 @@ addAspectsToExternalRoles = do
     if isExternalRole (unwrap id) then case OBJ.lookup (deconstructBuitenRol (unwrap id)) ctxts of
       -- we can safely ignore this case: it is not going to happen.
       Nothing -> erole
-      Just (CONTEXT.Context { contextAspects }) -> EnumeratedRole $ erecord { roleAspects = (\context@(ContextType aspect) -> QT.RoleInContext { context, role: EnumeratedRoleType $ buitenRol aspect }) <$> contextAspects }
+      Just (CONTEXT.Context { contextAspects }) -> EnumeratedRole $ erecord { roleAspects = erecord.roleAspects <> ((\context@(ContextType aspect) -> QT.RoleInContext { context, role: EnumeratedRoleType $ buitenRol aspect }) <$> contextAspects) }
     else erole
 
