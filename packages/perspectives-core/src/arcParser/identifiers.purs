@@ -31,14 +31,14 @@ import Data.String.CodeUnits (fromCharArray)
 import Data.String.Regex (Regex, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
+import Parsing (fail)
+import Parsing.Combinators (option, optionMaybe, try, (<?>))
+import Parsing.String (string, satisfy)
+import Parsing.String.Basic (whiteSpace)
 import Perspectives.Parsing.Arc.IndentParser (IP)
 import Perspectives.Parsing.Arc.Token (token)
 import Perspectives.ResourceIdentifiers (hasPublicResourceShape)
 import Prelude (Unit, bind, discard, not, pure, ($), (*>), (/=), (<<<), (<>))
-import Parsing (fail)
-import Parsing.Combinators (try, (<?>))
-import Parsing.String (string, satisfy)
-import Parsing.String.Basic (whiteSpace)
 
 reserved :: String -> IP Unit
 reserved = token.reserved
@@ -56,7 +56,18 @@ qualifiedName = try do
   authority <- dottedName
   hash <- string "#"
   segments <- segmentedName
-  pure $ m <> authority <> "#" <> segments
+  version <- option "" semver
+  pure $ m <> authority <> "#" <> segments <> version
+
+semver :: IP String
+semver = try do
+  chars <- many (satisfy (not <<< isSpace <<< codePointFromChar))
+  if (test semverRegExp (fromCharArray chars)) then whiteSpace *> pure (fromCharArray chars)
+  else fail "Not a valid semantic number. Use format X.Y where X and Y are integers. "
+  where
+  -- See: https://regexlib.com/REDetails.aspx?regexp_id=26.
+  semverRegExp :: Regex
+  semverRegExp = unsafeRegex "^@[0-9]+\\.[0-9]+$" noFlags
 
 dottedName :: IP String
 dottedName = try do

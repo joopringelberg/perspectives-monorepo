@@ -34,7 +34,7 @@ import Data.List (List(..), concat, filter, find, intercalate, many, null, singl
 import Data.List.NonEmpty (NonEmptyList, toList, singleton) as LNE
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
-import Data.String (trim)
+import Data.String (indexOf, splitAt, trim, Pattern(..)) as STRING
 import Data.String.CodeUnits (fromCharArray)
 import Data.String.Regex (Regex)
 import Data.String.Regex.Flags (noFlags)
@@ -80,7 +80,7 @@ contextE = withPos do
   isNextLine' <- isNextLine
   isEndOfFile <- isEof
   contextParts <-
-    if isIndented' && isNextLine' && not isEndOfFile then inSubContext uname
+    if isIndented' && isNextLine' && not isEndOfFile then inSubContext (unversionedIdentifier uname)
       ( getCurrentContext >>= \subContext ->
           withArcParserState (ContextState subContext Nothing)
             -- | The state identifier is fully qualified.
@@ -143,7 +143,7 @@ contextE = withPos do
                   )
             )
       )
-    else inSubContext uname
+    else inSubContext (unversionedIdentifier uname)
       ( getCurrentContext >>= \subContext ->
           pure $ singleton $ STATE $ StateE
             { id: (ContextState subContext Nothing)
@@ -156,6 +156,13 @@ contextE = withPos do
   pure $ CE $ ContextE { id: uname, kindOfContext: knd, contextParts, pos: pos, public: mpublicStore }
 
   where
+
+  -- | Remove the version from a model URI. E.g. "model://joopringelberg.nl#TestQueries@1.0" becomes "model://joopringelberg.nl#TestQueries"
+  unversionedIdentifier :: String -> String
+  unversionedIdentifier s = case STRING.indexOf (STRING.Pattern "@") s of
+    Nothing -> s
+    Just u -> case STRING.splitAt u s of
+      { before } -> before
 
   -- Remove the Calculation, a Screen (if any)
   enumeratedPublicDuplicate :: ContextPart -> ContextPart
@@ -1574,7 +1581,7 @@ sentenceE = do
   sentencePart :: IP SentencePartE
   sentencePart = do
     chars <- some (satisfy (\c -> not (c == '{') && not (c == '"')))
-    pure $ HRpart $ trim $ fromCharArray $ fromFoldable chars
+    pure $ HRpart $ STRING.trim $ fromCharArray $ fromFoldable chars
 
   exprPart :: IP SentencePartE
   exprPart = CPpart <$> (between (token.symbol "{") (token.symbol "}") step)

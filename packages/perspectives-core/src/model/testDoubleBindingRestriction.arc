@@ -1,4 +1,4 @@
-domain model://joopringelberg.nl#TestDoubleBindingRestriction
+domain model://joopringelberg.nl#TestDoubleBindingRestriction@3.0
   use sys for model://perspectives.domains#System
   use mm for model://joopringelberg.nl#TestDoubleBindingRestriction
 

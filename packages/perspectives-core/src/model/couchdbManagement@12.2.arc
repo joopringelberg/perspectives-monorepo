@@ -1161,6 +1161,7 @@ domain model://perspectives.domains#CouchdbManagement
         enumeration = ("Not", "Locally", "Repository")
       -- Whether the model is loaded internally immediately. 
       property ApplyInSession (Boolean)
+      property IsTheOnlyVersion = (binder Versions >> context >> Versions >>= count) == 1
 
       on exit
         do for Author
@@ -1179,7 +1180,10 @@ domain model://perspectives.domains#CouchdbManagement
               VersionToInstall = Version for binder Versions >> context >> extern
       
       -- This state triggers UploadToRepository.
-      state ProcessArc = AutoUpload and (exists ArcSource) and ((callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime > LastChangeDT + 10 seconds) or not exists LastChangeDT)
+      state ProcessArc = AutoUpload 
+              and (exists ArcSource) 
+              and ((callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime > LastChangeDT + 10 seconds) or not exists LastChangeDT)
+              and (IsTheOnlyVersion or (exists context >> BasedOnVersion))
         on entry
           do for Author
             -- If BasedOnVersion is not set, the PDR will generate new CUIDs.
@@ -1188,7 +1192,7 @@ domain model://perspectives.domains#CouchdbManagement
             LastChangeDT = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime
             MustUpload = true
 
-      state AfterSuccesfulParse = (ArcFeedback matches regexp "^OK") and MustUpload
+      state AfterSuccesfulParse = (ArcFeedback matches regexp "^OK") and MustUpload and (IsTheOnlyVersion or (exists context >> BasedOnVersion))
         -- NOTE. This state triggers GenerateYaml.
         -- Why not roll up both states into one? I hope this design ensures that the required files are available.!
         state UploadToRepository = Store == "Repository"

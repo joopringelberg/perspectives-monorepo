@@ -23,7 +23,7 @@
 module Perspectives.TypePersistence.LoadArc where
 
 import Control.Alt (void)
-import Control.Monad.Error.Class (catchError)
+import Control.Monad.Error.Class (catchError, throwError)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (delete, null)
 import Data.Either (Either(..))
@@ -34,13 +34,14 @@ import Data.Maybe (Maybe(..))
 import Data.Newtype (over, unwrap)
 import Data.Tuple (Tuple(..))
 import Data.Unit (unit)
+import Effect.Exception (error)
 import Foreign.Object (empty)
 import Parsing (ParseError(..))
 import Perspectives.Checking.PerspectivesTypeChecker (checkDomeinFile)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
 import Perspectives.DomeinCache (retrieveDomeinFile, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
-import Perspectives.Identifiers (unversionedModelUri)
+import Perspectives.Identifiers (modelUriVersion, unversionedModelUri)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE(..))
@@ -54,7 +55,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (StableIdMappingForModel, getinstalledModelCuids, normalizeInvertedQueries, normalizeTypes)
 import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, fromLocalModels, fromRepository, idUriForContext, loadStableMapping)
 import Perspectives.Sidecar.UniqueTypeNames as UTN
-import Prelude (bind, discard, pure, show, ($), (<<<), (==), (>=>))
+import Prelude (bind, discard, pure, show, ($), (/=), (<<<), (<>), (==), (>=>))
 
 -- | The functions in this module load Arc files and parse and compile them to DomeinFiles.
 -- | Some functions expect a CRL file with the same name and add the instances found in them
@@ -76,6 +77,9 @@ loadAndCompileArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> Mayb
 loadAndCompileArcFile_ dfid text saveInCache modelCuid mbasedOnVersion = do
   -- Retrieve existing sidecar (if any) from repository. domeinFilename should be Stable.
   mMapping <- lift $ loadStableMapping dfid fromRepository
+  version <- case modelUriVersion (unwrap dfid) of
+    Nothing -> throwError $ error ("ModelUri " <> show dfid <> " is expected to be versioned.")
+    Just v -> pure v
   case mMapping of
     -- The case below is when we compile a version that hasn't been compiled before.
     Nothing -> do
@@ -86,62 +90,70 @@ loadAndCompileArcFile_ dfid text saveInCache modelCuid mbasedOnVersion = do
         Nothing -> lift $ loadStableMapping dfid fromLocalModels
       -- In this case, we generate new CUIDs. Most likely this is the first version ever for this model.
       -- Nothing -> pure Nothing
-      loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mmapping modelCuid
+      loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mmapping modelCuid version
     -- The case below is when we've compiled this version before.
-    Just _ -> loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mMapping modelCuid
+    Just _ -> loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mMapping modelCuid version
 
 -- New: sidecar-aware API that returns the updated mapping with results.
 -- | ModelUri should be Stable and unversioned.
-loadAndCompileArcFileWithSidecar_ :: ModelUri Stable -> Source -> Boolean -> Maybe StableIdMapping -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
-loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCache mMapping modelCuid =
+-- | Version should equal the version of the domain declaration in the ARC file.
+loadAndCompileArcFileWithSidecar_ :: ModelUri Stable -> Source -> Boolean -> Maybe StableIdMapping -> String -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
+loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCache mMapping modelCuid version =
   catchError
     ( do
         (r :: Either ParseError ContextE) <- lift $ lift $ runIndentParser text domain
         case r of
           Left e -> pure $ Left [ parseError2PerspectivesError e ]
-          Right ctxt@(ContextE { id: sourceIdReadable, pos }) ->
+          Right (ContextE rec@{ id: sourceIdReadable, pos }) -> do
+            -- sourceIdReadable should be versioned.
             -- If we have a mapping, it is sure to have the enclosing Domein context, so then we can map ModelUri Readable to ModelUri Stable.
-            if testModelName sourceIdReadable then do
-              (Tuple result state :: Tuple (Either MultiplePerspectivesErrors (DomeinFile Readable)) PhaseTwoState) <-
-                lift $ lift $ runPhaseTwo_' (traverseDomain ctxt) defaultDomeinFileRecord empty empty Nil
-              case result of
-                Left e -> pure $ Left e
-                Right (DomeinFile dr'@{ id }) -> do
-                  dr''@{ referredModels } <- pure dr' { referredModels = (delete id state.referredModels) }
-                  -- We should load referred models if they are missing (but not the model we're compiling!).
-                  -- Throw an error if a referred model is not installed. It will show up in the arc feedback.
-                  installedModelCuids <- lift $ getinstalledModelCuids false -- unversioned.
-                  for_ referredModels (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
-
-                  (x' :: Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries)) <-
-                    lift $ phaseThree dr'' state.postponedStateQualifiedParts state.screens
-                  case x' of
+            mversionOfSourceIdReadable <- pure $ modelUriVersion sourceIdReadable
+            case mversionOfSourceIdReadable of
+              Nothing -> throwError $ error ("The domain declaration in the ARC file should be versioned. Found: " <> show sourceIdReadable)
+              Just versionInArc ->
+                if versionInArc /= version then throwError $ error ("The version in the domain declaration in the ARC file should match the version in the function argument. Found version " <> show versionInArc <> " but expected " <> show version)
+                else if testModelName (unversionedModelUri sourceIdReadable) then do
+                  unversionedCtxt <- pure $ ContextE rec { id = unversionedModelUri sourceIdReadable }
+                  (Tuple result state :: Tuple (Either MultiplePerspectivesErrors (DomeinFile Readable)) PhaseTwoState) <-
+                    lift $ lift $ runPhaseTwo_' (traverseDomain unversionedCtxt) defaultDomeinFileRecord empty empty Nil
+                  case result of
                     Left e -> pure $ Left e
-                    Right (Tuple correctedDFR invertedQueries) -> do
-                      -- Compute updated StableIdMapping (with cuids and individuals) in one call
-                      mapping2 <- UTN.updateStableMappingForModel dfid modelCuid correctedDFR mMapping
+                    Right (DomeinFile dr'@{ id }) -> do
+                      dr''@{ referredModels } <- pure dr' { referredModels = (delete id state.referredModels) }
+                      -- We should load referred models if they are missing (but not the model we're compiling!).
+                      -- Throw an error if a referred model is not installed. It will show up in the arc feedback.
+                      installedModelCuids <- lift $ getinstalledModelCuids false -- unversioned.
+                      for_ referredModels (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
 
-                      -- Run the type checker (NOTE: but a stub, right now).
-                      typeCheckErrors <- lift $ checkDomeinFile (DomeinFile correctedDFR)
-                      if null typeCheckErrors then do
-                        -- Add the source and _id.
-                        df <- pure $ DomeinFile correctedDFR
-                          { arc = text
-                          -- Notice that this is the UNVERSIONED id. It will be overwritten with the versioned id when uploading to the repository.
-                          , _id = takeGuid $ unwrap id
-                          }
-                        -- Now replace the readable name given by the modeller with a cuid, in FQNs:
-                        normalizedDf <- lift $ normalizeTypes df mapping2
+                      (x' :: Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries)) <-
+                        lift $ phaseThree dr'' state.postponedStateQualifiedParts state.screens
+                      case x' of
+                        Left e -> pure $ Left e
+                        Right (Tuple correctedDFR invertedQueries) -> do
+                          -- Compute updated StableIdMapping (with cuids and individuals) in one call
+                          mapping2 <- UTN.updateStableMappingForModel dfid modelCuid correctedDFR mMapping
 
-                        if saveInCache then void $ lift $ storeDomeinFileInCache (toStableModelUri id) normalizedDf else pure unit
+                          -- Run the type checker (NOTE: but a stub, right now).
+                          typeCheckErrors <- lift $ checkDomeinFile (DomeinFile correctedDFR)
+                          if null typeCheckErrors then do
+                            -- Add the source and _id.
+                            df <- pure $ DomeinFile correctedDFR
+                              { arc = text
+                              -- Notice that this is the UNVERSIONED id. It will be overwritten with the versioned id when uploading to the repository.
+                              , _id = takeGuid $ unwrap id
+                              }
+                            -- Now replace the readable name given by the modeller with a cuid, in FQNs:
+                            normalizedDf <- lift $ normalizeTypes df mapping2
 
-                        normalizedInvertedQueries <- lift $ normalizeInvertedQueries df mapping2 invertedQueries
+                            if saveInCache then void $ lift $ storeDomeinFileInCache (toStableModelUri id) normalizedDf else pure unit
 
-                        pure $ Right $ Tuple normalizedDf (Tuple normalizedInvertedQueries mapping2)
-                      else
-                        pure $ Left typeCheckErrors
-            else
-              pure $ Left [ (DomeinFileIdIncompatible stableModelUri (ModelUri sourceIdReadable) pos) ]
+                            normalizedInvertedQueries <- lift $ normalizeInvertedQueries df mapping2 invertedQueries
+
+                            pure $ Right $ Tuple normalizedDf (Tuple normalizedInvertedQueries mapping2)
+                          else
+                            pure $ Left typeCheckErrors
+                else
+                  pure $ Left [ (DomeinFileIdIncompatible stableModelUri (ModelUri sourceIdReadable) pos) ]
     )
     (\e -> pure $ Left [ Custom (show e) ])
 
