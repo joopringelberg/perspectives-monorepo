@@ -39,7 +39,7 @@ import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Foreign.Object (Object, empty, fromFoldable, insert, isEmpty, keys, lookup)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (type (~~>), AssumptionTracking, MonadPerspectives, (##>), (##>>))
+import Perspectives.CoreTypes (type (~~>), AssumptionTracking, MonadPerspectives, (##>), (##>>), (##=))
 import Perspectives.Data.EncodableMap (fromFoldable, lookup) as EM
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Extern.Utilities (formatDateTime)
@@ -51,7 +51,7 @@ import Perspectives.Instances.Values (parseNumber)
 import Perspectives.ModelDependencies (roleWithId)
 import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), domain, domain2roleType, functional, isContextDomain, makeComposition, mandatory, queryFunction, range, roleInContext2Context, roleInContext2Role, roleRange)
-import Perspectives.Query.UnsafeCompiler (context2context, context2role, getDynamicPropertyGetter, getPropertyValues, getPublicUrl)
+import Perspectives.Query.UnsafeCompiler (context2context, context2role, getDynamicPropertyGetter, getDynamicPropertyGetter_, getPropertyValues, getPublicUrl, roleFunctionFromQfd)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.Class.PersistentType (EnumeratedRoleType, getEnumeratedRole)
@@ -100,7 +100,7 @@ perspectiveForContextAndUser' subject userRoleType objectRoleType cid = ArrayT d
   subjectStates <- map SubjectState <$> (runArrayT $ getActiveRoleStates subject)
   allPerspectives <- lift $ perspectivesOfRoleType userRoleType
   traverse
-    ((serialisePerspective contextStates subjectStates cid userRoleType Nothing Nothing Nothing))
+    ((serialisePerspective contextStates subjectStates cid userRoleType Nothing Nothing Nothing Nothing))
     ( filter
         (isJust <<< elemIndex objectRoleType <<< _.roleTypes <<< unwrap)
         allPerspectives
@@ -114,7 +114,7 @@ perspectiveForContextAndUserFromId
   WidgetCommonFieldsDef
   -> ContextInstance
   -> AssumptionTracking SerialisedPerspective'
-perspectiveForContextAndUserFromId subject { perspectiveId, propertyRestrictions, withoutProperties, roleVerbs, userRole } cid = do
+perspectiveForContextAndUserFromId subject { perspectiveId, fillFrom, propertyRestrictions, withoutProperties, roleVerbs, userRole } cid = do
   contextStates <- map ContextState <$> (runArrayT $ getActiveStates cid)
   subjectStates <- map SubjectState <$> (runArrayT $ getActiveRoleStates subject)
   allPerspectives <- lift $ perspectivesOfRoleType userRole
@@ -123,7 +123,8 @@ perspectiveForContextAndUserFromId subject { perspectiveId, propertyRestrictions
         (\(Perspective { id }) -> id == perspectiveId)
         allPerspectives
     )
-  serialisePerspective contextStates subjectStates cid userRole propertyRestrictions withoutProperties roleVerbs perspective
+
+  serialisePerspective contextStates subjectStates cid userRole propertyRestrictions withoutProperties roleVerbs fillFrom perspective
 
 perspectivesForContextAndUser :: RoleInstance -> RoleType -> (ContextInstance ~~> SerialisedPerspective)
 perspectivesForContextAndUser subject userRoleType cid = ArrayT do
@@ -137,7 +138,7 @@ perspectivesForContextAndUser' subject userRoleType cid = ArrayT do
   -- NOTE that we ignore perspectives that the user role's aspects may have!
   -- These have been added in compile time.
   perspectives <- lift $ perspectivesOfRoleType userRoleType
-  (traverse (serialisePerspective contextStates subjectStates cid userRoleType Nothing Nothing Nothing) perspectives) >>=
+  (traverse (serialisePerspective contextStates subjectStates cid userRoleType Nothing Nothing Nothing Nothing) perspectives) >>=
     (filterA sendToClient)
   where
   sendToClient :: SerialisedPerspective' -> AssumptionTracking Boolean
@@ -156,7 +157,7 @@ settingsPerspective subject userRoleType objectRoleType cid = ArrayT do
           (allProps :: Array PropertyType) <- lift $ allProperties (roleInContext2Role <$> (unsafePartial domain2roleType $ range object))
           settingsProperties <- lift $ filterA (flip hasFacet SettingProperty) allProps
           propertyRestrictions <- pure $ EM.fromFoldable (flip Tuple [ Consult, Verbs.SetPropertyValue ] <$> settingsProperties)
-          serialisePerspective contextStates subjectStates cid userRoleType (Just propertyRestrictions) (Just $ difference allProps settingsProperties) Nothing p
+          serialisePerspective contextStates subjectStates cid userRoleType (Just propertyRestrictions) (Just $ difference allProps settingsProperties) Nothing Nothing p
       )
         >=> pure <<< SerialisedPerspective <<< writeJSON
     )
@@ -173,9 +174,10 @@ serialisePerspective
   -> Maybe PropertyRestrictions
   -> Maybe (Array PropertyType)
   -> Maybe (Array RoleVerb)
+  -> Maybe QueryFunctionDescription
   -> Perspective
   -> AssumptionTracking SerialisedPerspective'
-serialisePerspective contextStates subjectStates cid userRoleType propertyRestrictions withoutProperties roleVerbs' p@(Perspective { id, object, isEnumerated, roleTypes, roleVerbs, propertyVerbs, actions }) = do
+serialisePerspective contextStates subjectStates cid userRoleType propertyRestrictions withoutProperties roleVerbs' fillFrom p@(Perspective { id, object, isEnumerated, roleTypes, roleVerbs, propertyVerbs, actions }) = do
   -- All properties available on the object of the perspective.
   (allProps :: Array PropertyType) <- lift $ allProperties (roleInContext2Role <$> (unsafePartial domain2roleType $ range object))
   -- All PropertyVerbs (PropertyVerbs (ExplicitSet PropertyType) (ExplicitSet PropertyVerb) available on the object of the perspective, given context- and subject state.
@@ -237,6 +239,17 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyRestri
           translatedActionName <- translateType (ActionIdentifier actionName)
           pure $ Tuple actionName translatedActionName
     )
+  readableNameFunction :: RoleInstance ~~> Value <- lift $ getDynamicPropertyGetter_ identifyingProperty (roleInContext2Role <$> unsafePartial roleRange object)
+  possibleFillingRoleInstances <- case fillFrom of
+    Nothing -> pure []
+    Just fillFromQfd -> lift $ do
+      -- Compile the queryfunction description
+      f <- roleFunctionFromQfd fillFromQfd
+      cid ##= f
+  possibleFillers <- lift $ for possibleFillingRoleInstances $ \roleInstance -> do
+    Value identifyingPropertyValue <- roleInstance ##>> readableNameFunction
+    pure { readableName: identifyingPropertyValue, instance: roleInstance }
+  -- Apply it to the context instance to get the possible fillers.
   pure
     { id
     , displayName
@@ -259,6 +272,7 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyRestri
     , contextType: cType
     , contextIdToAddRoleInstanceTo
     , identifyingProperty: propertytype2string identifyingProperty
+    , possibleFillers
     }
   where
 

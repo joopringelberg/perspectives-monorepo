@@ -74,6 +74,7 @@ type SerialisedPerspective' =
   -- the keys are the action names as they occur in the model.
   -- the values are the translations in the currentLanguage.
   , actions :: Object String
+  , possibleFillers :: Array { readableName :: String, instance :: RoleInstance }
   }
 
 -- | SerialisedProperty is state-independent.

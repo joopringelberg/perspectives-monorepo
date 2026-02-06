@@ -40,7 +40,7 @@ import Perspectives.Data.EncodableMap (empty, insert, singleton) as EM
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_)
 import Perspectives.ModelDependencies.Readable as READABLE
-import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), PropertyVerbE(..), PropsOrView, RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..))
+import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), PropertyVerbE(..), PropsOrView, RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..), roleIdentification2context)
 import Perspectives.Parsing.Arc.AST (ColumnE(..), FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), WhatE(..), WidgetCommonFields) as AST
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -286,7 +286,7 @@ handleScreens screenEs = do
             otherwise -> throwError $ NotUniquelyIdentifyingPropertyType start' (ENP $ EnumeratedPropertyType prop) candidates
 
   widgetCommonFields :: RoleType -> AST.WidgetCommonFields -> ThreeValuedLogic -> PhaseThree WidgetCommonFieldsDef
-  widgetCommonFields subjectRoleType { title: title', perspective, withProps, withoutProps, withoutVerbs, roleVerbs, start: start', end: end' } isFunctionalWidget = do
+  widgetCommonFields subjectRoleType { title: title', perspective, fillFrom, withProps, withoutProps, withoutVerbs, roleVerbs, start: start', end: end' } isFunctionalWidget = do
     -- From a RoleIdentification that represents the object,
     -- find the relevant Perspective.
     -- A ScreenElement can only be defined for a named Enumerated or Calculated Role. This means that `perspective` is constructed with the
@@ -316,6 +316,7 @@ handleScreens screenEs = do
     -- in its member roleTypes.
     -- So we fetch the user role, get its Perspectives, and find the one that refers to the objectRoleType.
     perspectives <- lift2 $ perspectivesOfRoleType subjectRoleType
+    fillFrom' <- traverse (compileStep (CDOM $ ST (roleIdentification2context perspective))) fillFrom
     stableObjectRoleType <- lift2 $ toReadable objectRoleType
     case find (\(Perspective { roleTypes }) -> isJust $ elemIndex stableObjectRoleType roleTypes) perspectives of
       -- This case is probably that the object and user exist, but the latter
@@ -366,6 +367,7 @@ handleScreens screenEs = do
           { title: title'
           , perspectiveId
           , perspective: Nothing
+          , fillFrom: fillFrom'
           , propertyRestrictions
           , withoutProperties
           , roleVerbs: maybe Nothing (Just <<< roleVerbList2Verbs) roleVerbs

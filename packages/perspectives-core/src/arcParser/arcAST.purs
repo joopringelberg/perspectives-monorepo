@@ -498,6 +498,7 @@ type WidgetCommonFields =
   { title :: Maybe String
   -- Only the ExplicitRole constructor is allowed!
   , perspective :: RoleIdentification
+  , fillFrom :: Maybe Step
   -- Alternative to withoutProps: explicitly include properties/views
   , withProps :: Maybe PropsOrView
   , withoutProps :: Maybe PropsOrView

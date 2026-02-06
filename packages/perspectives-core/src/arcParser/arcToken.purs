@@ -246,6 +246,7 @@ perspectDef = LanguageDef
       , "master"
       , "detail"
       , "without"
+      , "fillfrom"
 
       ]
   , caseSensitive: true

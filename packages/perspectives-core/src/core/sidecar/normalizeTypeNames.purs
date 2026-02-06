@@ -959,7 +959,8 @@ normalizeWidgetCommonFields w = do
     perspectiveId' = case OBJ.lookup w.perspectiveId perspMap of
       Nothing -> w.perspectiveId
       Just stable -> stable
-  pure $ w { propertyRestrictions = propertyRestrictions', withoutProperties = withoutProperties', userRole = userRole', perspectiveId = perspectiveId' }
+  fillFrom' <- traverse normalize w.fillFrom
+  pure $ w { propertyRestrictions = propertyRestrictions', withoutProperties = withoutProperties', userRole = userRole', perspectiveId = perspectiveId', fillFrom = fillFrom' }
 
 -- Build a mapping from old perspective ids to stable ones for all roles in the DomeinFile
 buildPerspectiveIdMap :: DomeinFile Readable -> Env -> OBJ.Object String

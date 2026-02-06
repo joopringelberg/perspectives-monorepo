@@ -97,6 +97,10 @@ domain model://perspectives.domains#System@6.1
   thing RoleWithId
     -- PDRDEPENDENCY
     property Id = callExternal util:RoleIdentifier() returns String
+  
+  thing RoleWithName
+    property Name (mandatory, String)
+      readableName
 
   -- PDRDEPENDENCY
   -- Used to add chat to a context.  
@@ -195,7 +199,7 @@ domain model://perspectives.domains#System@6.1
     -- SocialEnvironment is created on condition of there being an instance of PerspectivesUsers.
     aspect sys:RootContext
     external 
-      aspect sys:RootContext$External
+      
     state InitMe = (callExternal util:SystemParameter( "IsFirstInstallation" ) returns Boolean) and not exists Me 
       on entry
         do for SystemUser
@@ -268,8 +272,6 @@ domain model://perspectives.domains#System@6.1
         MaxHistoryLength = 7 for extern
 
     external
-      aspect sys:RootContext$External
-      aspect sys:ContextWithSettings$External
       -- PDRDEPENDENCY
       property ConnectedToAMQPBroker (Boolean)
       -- PDRDEPENDENCY
@@ -707,8 +709,7 @@ domain model://perspectives.domains#System@6.1
             Name = "querycache" for querycache
 
     external
-      aspect sys:ContextWithScreenState$External
-
+    
     user Manager = sys:Me
       perspective on Cache
         defaults
@@ -767,13 +768,6 @@ domain model://perspectives.domains#System@6.1
       property RelayPort (String)
 
   case RecentContext
-  case ContextWithName
-    external
-      property Name (mandatory, String)
-        readableName
-    thing ThingWithName
-      property Name (mandatory, String)
-        readableName
 
   -- A Channel is shared by just two users.
   -- PDRDEPENDENCY
@@ -973,7 +967,7 @@ domain model://perspectives.domains#System@6.1
     aspect sys:RootContext
     -- PDRDEPENDENCY
     external
-      aspect sys:RootContext$External
+      
       property Name = binder Manifests >> LocalModelName >>= first
         readableName
       property Description (mandatory, String)

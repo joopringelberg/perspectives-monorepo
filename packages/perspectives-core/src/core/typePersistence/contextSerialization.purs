@@ -186,6 +186,7 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
         , withoutProperties: Nothing
         , roleVerbs: Nothing
         , userRole: userRoleType
+        , fillFrom: Nothing
         }
       element =
         if isFunctional then FormElementD $ FormDef { markdown: [], widgetCommonFields }
@@ -210,6 +211,7 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
         , withoutProperties: Nothing
         , roleVerbs: Nothing
         , userRole: userRoleType
+        , fillFrom: Nothing
         }
     in
       if isFunctional then FormElementD $ FormDef { markdown: [], widgetCommonFields }
@@ -249,6 +251,7 @@ makeTableFormDef userRoleType p@{ id, displayName } =
       , withoutProperties: Nothing
       , roleVerbs: Nothing
       , userRole: userRoleType
+      , fillFrom: Nothing
       }
   in
     TableFormDef
@@ -525,6 +528,7 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               , withoutProperties: Nothing
               , roleVerbs: Nothing
               , userRole: userRoleType
+              , fillFrom: Nothing
               }
           }
       , form: FormDef
@@ -537,6 +541,7 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               , withoutProperties: Nothing
               , roleVerbs: Nothing
               , userRole: userRoleType
+              , fillFrom: Nothing
               }
           }
       }

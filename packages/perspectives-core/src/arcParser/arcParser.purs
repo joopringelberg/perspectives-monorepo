@@ -1728,6 +1728,7 @@ widgetCommonFields = do
   protectObject do
     setObject perspective
     if isIndented' then withPos do
+      mFillFrom <- optionMaybe (reserved "fillfrom" *> step)
       -- Parse at most one selector: either `with …` or `without …`.
       keyword <- scanIdentifier
       case keyword of
@@ -1740,6 +1741,7 @@ widgetCommonFields = do
           pure
             { title
             , perspective
+            , fillFrom: mFillFrom
             , withProps: Just withProps
             , withoutProps: Nothing
             , withoutVerbs
@@ -1756,6 +1758,7 @@ widgetCommonFields = do
           pure
             { title
             , perspective
+            , fillFrom: mFillFrom
             , withProps: Nothing
             , withoutProps: Just withoutProps
             , withoutVerbs
@@ -1770,6 +1773,7 @@ widgetCommonFields = do
           pure
             { title
             , perspective
+            , fillFrom: mFillFrom
             , withProps: Nothing
             , withoutProps: Nothing
             , withoutVerbs
@@ -1782,6 +1786,7 @@ widgetCommonFields = do
       pure
         { title
         , perspective
+        , fillFrom: Nothing
         , withProps: Nothing
         , withoutProps: Nothing
         , withoutVerbs: Nil
@@ -1800,6 +1805,7 @@ tableFormFields perspective = do
     if isIndented'
     -- Set the reference position to the indented position following 'master' or 'detail'.
     then withPos do
+      mFillFrom <- optionMaybe (reserved "fillfrom" *> step)
       -- Parse at most one selector: either `with …` or `without …`.
       mSelection <- optionMaybe
         ( (Right <$> (reserved "with" *> withProperties))
@@ -1823,6 +1829,7 @@ tableFormFields perspective = do
       pure
         { title
         , perspective
+        , fillFrom: mFillFrom
         , withProps
         , withoutProps
         , withoutVerbs
@@ -1835,6 +1842,7 @@ tableFormFields perspective = do
       pure
         { title
         , perspective
+        , fillFrom: Nothing
         , withProps: Nothing
         , withoutProps: Nothing
         , withoutVerbs: Nil

@@ -106,6 +106,7 @@ type WidgetCommonFieldsDefWithoutPerspective f =
   -- `perspectiveId` replaces the RoleIdentification from the WidgetCommonFields.
   -- By construction, a screen can only be specified for Perspectives that have a Just value for RoleType.
   , perspectiveId :: PerspectiveId
+  , fillFrom :: Maybe QueryFunctionDescription
   -- The runtime  has a perspective serialisation.
   -- These three fields are not serialised runtime; they are used to
   -- create the restricted serialised perspective.
