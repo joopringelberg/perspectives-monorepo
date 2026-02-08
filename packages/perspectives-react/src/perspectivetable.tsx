@@ -217,6 +217,16 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
   handleKeyDown (event : React.KeyboardEvent)
   {
     const component = this;
+
+    // When focus is inside a dropdown (e.g. the fillers dropdown in a card
+    // cell), let react-bootstrap handle arrow keys and ESC, and do not
+    // perform table-level row/column navigation.
+    const target = event.target as HTMLElement | null;
+    if (target && target.closest('.dropdown'))
+    {
+      return;
+    }
+
     const columnIndex = component.propertyNames.indexOf( component.state.column );
     const roleIds = Object.keys( component.props.perspective.roleInstances ) as RoleInstanceT[];
     const rowIndex = roleIds.indexOf( component.state.row );
@@ -285,7 +295,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
       perspective = component.props.perspective;
     return <Table
             key={perspective.id}
-            responsive
+            responsive={!component.props.showAsAccordionItem}
             striped
             bordered
             hover
