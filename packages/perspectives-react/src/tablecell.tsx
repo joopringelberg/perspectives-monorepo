@@ -89,7 +89,6 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
 {
   inputRef: React.RefObject<HTMLElement | null>;
   private inputType: InputType;
-  private selectionByKeyboard: boolean;
   constructor (props : TableCellProps)
   {
     super(props);
@@ -104,7 +103,6 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     // It also receives focus.
     this.inputRef = createRef();
   this.inputType = mapRange( this.props.serialisedProperty.range )
-  this.selectionByKeyboard = false;
   }
 
   componentDidMount()
@@ -123,7 +121,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
   // When selected, the cell should have focus.
   // When the value changes, we stop editing.
   // When we start editing, we should re-establish the focus.
-  componentDidUpdate(prevProps : TableCellProps)
+  componentDidUpdate(prevProps : TableCellProps, prevState : TableCellState)
   {
     const component = this;
 
@@ -136,6 +134,18 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     if (prevProps.isselected && !component.props.isselected && component.state.editable)
     {
       component.setState({editable: false});
+    }
+
+    // When we just entered editable mode for a dropdown-capable card cell,
+    // move focus to the dropdown toggle so keyboard navigation (ESC, arrows)
+    // is handled by react-bootstrap.
+    if (!prevState.editable && component.state.editable && component.fillFromDropdownAllowed())
+    {
+      const toggle = component.inputRef.current as any;
+      if (toggle && typeof toggle.focus === 'function')
+      {
+        try { toggle.focus(); } catch (_) { /* ignore */ }
+      }
     }
   }
 
@@ -170,8 +180,14 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
   handleClick ()
   {
     this.inputRef.current?.dispatchEvent( new CustomEvent('SetColumn', { detail: this.props.propertyname, bubbles: true }) );
-    // If we have possibleFillers in the Perspective, we want to enter edit mode immediately on click, so the user can select a filler from the dropdown.
-    if (this.props.isselected && ((!this.state.editable && !this.props.iscard) || this.fillFromDropdownAllowed())) {
+    // For non-card cells, a click on the selected cell starts editing.
+    // For cards we keep single-click behaviour for selection only, so that
+    // double-click behaviours (like opening a context) keep working.
+    if (this.props.isselected
+        && !this.state.editable
+        && !this.props.iscard
+        && !this.propertyOnlyConsultable())
+    {
       this.setState({editable: true});
     }
   }
@@ -194,14 +210,10 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
             break;
         }
       }
-      else if ((!event.shiftKey
-                && !component.props.serialisedProperty.isCalculated
-                && !component.propertyOnlyConsultable()
-              ) || component.fillFromDropdownAllowed())
+      else if (!event.shiftKey && (!component.propertyOnlyConsultable()) || component.fillFromDropdownAllowed())
       {
         switch(event.code){
           case "Enter":
-            component.selectionByKeyboard = true;
             component.setState({editable:true});
             event.preventDefault();
             event.stopPropagation();
@@ -216,11 +228,11 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     if (this.props.propertyValues)
     {
       const propertyVerbs = this.props.propertyValues.propertyVerbs;
-      return propertyVerbs.indexOf("Consult") > -1 && propertyVerbs.length == 1;
+      return propertyVerbs.indexOf("Consult") > -1 && propertyVerbs.length == 1 && !this.props.serialisedProperty.isCalculated;
     }
     else
     {
-      return false;
+      return !this.props.serialisedProperty.isCalculated;
     }
   }
 
@@ -325,12 +337,24 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                 style={{ padding: '0.25rem' }}
               >
                 <div style={{ height: '100%', width: '100%' }}>
-                  <Dropdown className="w-100 h-100">
+                  <Dropdown
+                    className="w-100 h-100"
+                    show={component.state.editable}
+                    onToggle={(isOpen: boolean) => {
+                      // When the dropdown closes (ESC, outside click, toggle), leave edit mode.
+                      if (!isOpen)
+                      {
+                        component.setState({ editable: false });
+                      }
+                    }}
+                  >
                     <Dropdown.Toggle
                       id={`tablecell-filler-${String(component.props.roleinstance)}`}
                       ref={component.inputRef as React.RefObject<any>}
                       aria-label={ariaLabel}
                       as="div"
+                      role="button"
+                      tabIndex={0}
                       className="dropdown-item w-100 h-100 text-start"
                     >
                       {i18next.t("tablecell_select_filler", { ns: 'preact', defaultValue: 'Select a filler' })}
