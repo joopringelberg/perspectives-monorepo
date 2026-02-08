@@ -247,8 +247,8 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyRestri
       f <- roleFunctionFromQfd fillFromQfd
       cid ##= f
   possibleFillers <- lift $ for possibleFillingRoleInstances $ \roleInstance -> do
-    Value identifyingPropertyValue <- roleInstance ##>> readableNameFunction
-    pure { readableName: identifyingPropertyValue, instance: roleInstance }
+    midentifyingPropertyValue <- roleInstance ##> readableNameFunction
+    pure { readableName: maybe "" unwrap midentifyingPropertyValue, instance: roleInstance }
   -- Apply it to the context instance to get the possible fillers.
   pure
     { id

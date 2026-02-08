@@ -53,6 +53,9 @@ indexedSocialMe = "model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$robf7hy8p0
 systemModelName :: String
 systemModelName = "model://perspectives.domains#tiodn6tcyc" -- System
 
+addressBookModelName :: String
+addressBookModelName = "model://perspectives.domains#ofhpcy5a0x" -- AddressBook
+
 sysMe :: String
 sysMe = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$auftu9ldl2$smvtnanqq6"
 

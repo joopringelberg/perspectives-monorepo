@@ -25,10 +25,12 @@ import SmartFieldControl from "./smartfieldcontrol.js";
 import RoleInstance from "./roleinstance.js";
 
 import "././styles/components.css";
-import { PropertyType, RoleInstanceT, RoleType, Perspective, PropertyValues, SerialisedProperty, mapRange, InputType } from "perspectives-proxy";
+import { Dropdown } from "react-bootstrap";
+import { PropertyType, RoleInstanceT, RoleType, Perspective, PropertyValues, SerialisedProperty, mapRange, InputType, PDRproxy } from "perspectives-proxy";
 import { WithOutBehavioursProps } from "./adorningComponentWrapper";
 import ModelDependencies from "./modelDependencies";
-import { t } from "i18next";
+import {UserMessagingPromise} from "./userMessaging.js";
+import i18next from "i18next";
 import { formatPropertyValue } from "./utilities";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -96,6 +98,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     this.state = { editable: false };
     this.handleClick = this.handleClick.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
+    this.handleFillerSelect = this.handleFillerSelect.bind(this);
     // A reference to the Form.Control that handles input.
     // It is used to dispatch the custom SetRow and SetColumn events.
     // It also receives focus.
@@ -167,7 +170,8 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
   handleClick ()
   {
     this.inputRef.current?.dispatchEvent( new CustomEvent('SetColumn', { detail: this.props.propertyname, bubbles: true }) );
-    if (this.props.isselected && !this.state.editable && !this.props.iscard) {
+    // If we have possibleFillers in the Perspective, we want to enter edit mode immediately on click, so the user can select a filler from the dropdown.
+    if (this.props.isselected && ((!this.state.editable && !this.props.iscard) || this.fillFromDropdownAllowed())) {
       this.setState({editable: true});
     }
   }
@@ -190,10 +194,10 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
             break;
         }
       }
-      else if (!event.shiftKey
+      else if ((!event.shiftKey
                 && !component.props.serialisedProperty.isCalculated
                 && !component.propertyOnlyConsultable()
-              )
+              ) || component.fillFromDropdownAllowed())
       {
         switch(event.code){
           case "Enter":
@@ -239,6 +243,62 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     }
   }
 
+  handleFillerSelect(selected : RoleInstanceT | string)
+  {
+    const component = this;
+
+    if (!selected)
+    {
+      return;
+    }
+
+    // Extra safety: only allow filling when the perspective supports the Fill verb.
+    if (!component.props.perspective.verbs.includes("Fill"))
+    {
+      return;
+    }
+
+    // (binder, binding, myroletype)
+    PDRproxy.then(
+      function (pproxy)
+      {
+        pproxy
+          .bind_(
+            component.props.roleinstance,
+            selected as any,
+            component.props.perspective.userRoleType)
+          .then( uniqueFiller => {
+            if (!uniqueFiller)
+            {
+              UserMessagingPromise.then( um =>
+                um.addMessageForEndUser(
+                  { title: i18next.t("fillRole_title", { ns: 'preact' })
+                  , message: i18next.t("fillRole_filler_has_been_used", {ns: 'preact'})
+                  , error: i18next.t("fillRole_error", {ns: 'preact'})
+                  }));
+            }
+          })
+          .catch(e => UserMessagingPromise.then( um =>
+            {
+              um.addMessageForEndUser(
+                { title: i18next.t("fillRole_title", { ns: 'preact' })
+                , message: i18next.t("fillRole_message", {ns: 'preact' })
+                , error: e.toString()
+              });
+            }));
+      });
+
+    // Leave edit mode after a selection.
+    component.setState({editable: false});
+  }
+
+  fillFromDropdownAllowed() : boolean
+  {
+    return this.props.perspective.possibleFillers
+      && this.props.perspective.possibleFillers.length > 0
+      && this.props.perspective.verbs.includes("Fill");
+  }
+
   render ()
   {
     const component = this;
@@ -252,23 +312,64 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
       {
         if (component.state.editable)
         {
-          return (
-            <td 
-              onKeyDown={component.handleKeyDown}
-              onClick={ component.handleClick }
-            >
-              <SmartFieldControl
-                inputRef={component.inputRef as React.RefObject<HTMLElement>}
-                aria-label={ariaLabel}
-                serialisedProperty={component.props.serialisedProperty}
-                propertyValues={component.props.propertyValues}
-                roleId={component.props.roleinstance}
-                myroletype={component.props.myroletype}
-                disabled={false}
-                isselected={component.props.isselected}
-                contextinstance={component.props.perspective.contextInstance}
-              />
-            </td>);
+          // If we have possibleFillers in the Perspective, instead show a dropdown to select from. 
+          // This is because cards often represent RoleInstances, and for RoleInstances we want to be able 
+          // to set the RoleInstance by selecting one that fits in the same RoleType.
+          if (component.fillFromDropdownAllowed())
+          {
+            const fillers = component.props.perspective.possibleFillers;
+
+            return (
+              <td 
+                role="gridcell"
+                style={{ padding: '0.25rem' }}
+              >
+                <div style={{ height: '100%', width: '100%' }}>
+                  <Dropdown className="w-100 h-100">
+                    <Dropdown.Toggle
+                      id={`tablecell-filler-${String(component.props.roleinstance)}`}
+                      ref={component.inputRef as React.RefObject<any>}
+                      aria-label={ariaLabel}
+                      as="div"
+                      className="dropdown-item w-100 h-100 text-start"
+                    >
+                      {i18next.t("tablecell_select_filler", { ns: 'preact', defaultValue: 'Select a filler' })}
+                    </Dropdown.Toggle>
+                    <Dropdown.Menu className="w-100">
+                      {fillers.map(({readableName, instance}) =>
+                        <Dropdown.Item
+                          key={String(instance)}
+                          onClick={() => component.handleFillerSelect(instance)}
+                        >
+                          {readableName}
+                        </Dropdown.Item>)
+                      }
+                    </Dropdown.Menu>
+                  </Dropdown>
+                </div>
+              </td>
+            );
+          }
+          else 
+          {
+            return (
+              <td 
+                onKeyDown={component.handleKeyDown}
+                onClick={ component.handleClick }
+              >
+                <SmartFieldControl
+                  inputRef={component.inputRef as React.RefObject<HTMLElement>}
+                  aria-label={ariaLabel}
+                  serialisedProperty={component.props.serialisedProperty}
+                  propertyValues={component.props.propertyValues}
+                  roleId={component.props.roleinstance}
+                  myroletype={component.props.myroletype}
+                  disabled={false}
+                  isselected={component.props.isselected}
+                  contextinstance={component.props.perspective.contextInstance}
+                />
+              </td>);
+            }
         }
         else
         {
