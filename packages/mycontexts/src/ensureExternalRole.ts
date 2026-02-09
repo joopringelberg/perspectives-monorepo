@@ -64,7 +64,7 @@ export default function ensureExternalRole(s : string) : Promise<ExternalRoleMat
                           {
 
                             proxy.getRolContext( bindingIds[0] ).then(
-                              contextArr => resolve( {tag: "RoleInstance", value: externalRole( contextArr[0] )} ),
+                              contextId => resolve( {tag: "RoleInstance", value: externalRole( contextId )} ),
                             )
                           }
                         }

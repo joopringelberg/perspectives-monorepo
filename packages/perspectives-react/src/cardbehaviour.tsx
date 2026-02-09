@@ -87,13 +87,11 @@ export const addOpenContextOrRoleForm : BehaviourAdder = (domEl, component) => {
   function handle(onNewTab: boolean) {
     const roleKind = component.context.roleKind;
     const appLocation = location.origin + location.pathname;
-    if (roleKind == "ContextRole" || roleKind == "ExternalRole") {
-      if (onNewTab) {
-        window.open(appLocation + "?opencontext=" + encodeURIComponent(component.context.rolinstance!), "mycontexts", "left=100,top=100,width=800,height=600");
-      } else {
-        domEl.dispatchEvent(new CustomEvent('OpenContext', { detail: component.context.rolinstance, bubbles: true }));
-      }
-    } 
+    if (onNewTab) {
+      window.open(appLocation + "?opencontext=" + encodeURIComponent(component.context.rolinstance!), "mycontexts", "left=100,top=100,width=800,height=600");
+    } else {
+      domEl.dispatchEvent(new CustomEvent('OpenContext', { detail: component.context.rolinstance, bubbles: true }));
+    }
   }
 
   function handleDoubleClick(e: MouseEvent) {
