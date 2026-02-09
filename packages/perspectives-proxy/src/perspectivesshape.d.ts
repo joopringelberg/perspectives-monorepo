@@ -334,10 +334,10 @@ export type InspectableContext =
   // Inside the accordion we have a list of role instances (RoleInstance) of that type.
   // Each role instance shows its title (the value of the readable property of the instance: ReadableRoleInstance).
   // The role instance is a link or button and clicking it calls a function showRole with argument the RoleInstanceT. 
-  , roles: Record<ReadableRoleFQN, { translatedRole: TranslatedRoleTypeName, instances: Array<RoleInstanceT> }>
+  , roles: Record<ReadableRoleFQN, { translatedRole: TranslatedRoleTypeName, instances: Array<RoleInstance> }>
   // Each role instance shows its title (the value of the readable property of the instance: ReadableRoleInstance).
   // The role instance is a link or button and clicking it calls a function showRole with argument the RoleInstanceT. 
-  , unlinkedRoles: Record<ReadableRoleFQN, { translatedRole: TranslatedRoleTypeName, instances: Array<RoleInstanceT> }>
+  , unlinkedRoles: Record<ReadableRoleFQN, { translatedRole: TranslatedRoleTypeName, instances: Array<RoleInstance> }>
   // Then follows a field (readonly, as are all other fields) with label "Me". The value will be the ReadableRoleInstance.
   // Right below we have a field with label "My type". The value will be the ReadableRoleFQN.
   // title is the value of the readable property of the instance.
@@ -395,7 +395,7 @@ export type InspectableRole =
   , properties: Record<ReadablePropertyFQN, { translatedProperty: TranslatedPropertyTypeName, value: string }>
   // A label - button combination. The label says "Filler", the button has as text the title (ReadableRoleInstance). On clicking it, calls function showRole with 
   // the _id (RoleInstanceT) argument.
-  , filler?: RoleInstanceT
+  , filler?: RoleInstance
   // Next follows a separator.
   // We then have an accordion for each ContextInstance. The title of the accordion is the ReadableContextInstance.
   // Inside the accordion we have a list of role instances (RoleInstance) that this role instance fills in that context.
@@ -410,7 +410,7 @@ export type InspectableRole =
   , filledRoles:
       Record<ReadableContextFQN, 
         { contextTitle: TranslatedContextTypeName
-        , roleInstances: Record<ReadableRoleFQN, { translatedRole: TranslatedRoleTypeName, instances: Array<RoleInstanceT> }>
+        , roleInstances: Record<ReadableRoleFQN, { translatedRole: TranslatedRoleTypeName, instances: Array<RoleInstance> }>
         }>
   // Then we have a simple list of types.
   // Each entry shows the translated name of the context type.

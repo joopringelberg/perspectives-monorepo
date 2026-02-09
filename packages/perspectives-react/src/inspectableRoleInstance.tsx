@@ -54,7 +54,7 @@ export function InspectableRoleInstanceView({ data, showRole, showContext }: Ins
 						<Form.Label column sm={4}>Filler</Form.Label>
 						<Col sm={8}>
 							{data.filler ? (
-								<Button variant="outline-primary" onClick={() => showRole(data.filler._id)}>
+								<Button variant="outline-primary" onClick={() => showRole(data.filler!._id)}>
 									{data.filler.title}
 								</Button>
 							) : (
