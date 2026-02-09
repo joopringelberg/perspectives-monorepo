@@ -97,7 +97,7 @@ allPropertyVerbs = [ Consult, RemovePropertyValue, DeleteProperty, AddPropertyVa
 -----------------------------------------------------------
 -- ROLEVERBLIST
 -----------------------------------------------------------
-data RoleVerbList = All | Including (Array RoleVerb) | Excluding (Array RoleVerb)
+data RoleVerbList = All | None | Including (Array RoleVerb) | Excluding (Array RoleVerb)
 
 derive instance genericRoleVerbList :: Generic RoleVerbList _
 
@@ -110,6 +110,7 @@ type RoleVerbList_ = { constructor :: String, roleVerbs :: Array RoleVerb }
 
 instance WriteForeign RoleVerbList where
   writeImpl All = writeImpl ({ constructor: "All", roleVerbs: [] } :: RoleVerbList_)
+  writeImpl None = writeImpl ({ constructor: "None", roleVerbs: [] } :: RoleVerbList_)
   writeImpl (Including roleVerbs) = writeImpl { constructor: "Including", roleVerbs }
   writeImpl (Excluding roleVerbs) = writeImpl { constructor: "Excluding", roleVerbs }
 
@@ -118,6 +119,7 @@ instance ReadForeign RoleVerbList where
     ({ constructor, roleVerbs } :: RoleVerbList_) <- read' f
     case constructor of
       "All" -> pure All
+      "None" -> pure None
       "Including" -> pure $ Including roleVerbs
       "Excluding" -> pure $ Excluding roleVerbs
       _ -> pure All
@@ -141,16 +143,19 @@ instance semigroupRoleVerbList :: Semigroup RoleVerbList where
 
 hasVerb :: RoleVerb -> RoleVerbList -> Boolean
 hasVerb v All = true
+hasVerb v None = false
 hasVerb v (Including vl) = isJust $ elemIndex v vl
 hasVerb v (Excluding vl) = isNothing $ elemIndex v vl
 
 hasAllVerbs :: Array RoleVerb -> RoleVerbList -> Boolean
 hasAllVerbs vs All = true
+hasAllVerbs vs None = false
 hasAllVerbs vs (Including vl) = null $ difference vs vl
 hasAllVerbs vs (Excluding vl) = null $ intersect vs vl
 
 roleVerbList2Verbs :: RoleVerbList -> Array RoleVerb
 roleVerbList2Verbs All = allVerbs
+roleVerbList2Verbs None = []
 roleVerbList2Verbs (Excluding excluded) = difference allVerbs excluded
 roleVerbList2Verbs (Including v) = v
 
@@ -159,5 +164,6 @@ allVerbs = [ Remove, Delete, Create, CreateAndFill, Fill, Unbind, RemoveFiller, 
 
 hasOneOfTheVerbs :: Array RoleVerb -> RoleVerbList -> Boolean
 hasOneOfTheVerbs vs All = true
+hasOneOfTheVerbs vs None = false
 hasOneOfTheVerbs vs (Including vl) = not $ null $ intersect vs vl
 hasOneOfTheVerbs vs (Excluding vl) = not $ null $ difference vs vl

@@ -1299,7 +1299,7 @@ roleVerbs = do
     (Just _), Nothing -> fail "Object of perspective must be given, "
   where
   roleVerbList :: IP RoleVerbList
-  roleVerbList = inclusive <|> exclusive <|> (reserved "all" *> reserved "roleverbs" *> pure All) <?> "only, except, all roleverbs, "
+  roleVerbList = inclusive <|> exclusive <|> (reserved "all" *> reserved "roleverbs" *> pure All) <|> (reserved "no" *> reserved "roleverbs" *> pure None) <?> "only, except, all roleverbs, no roleverbs, "
     where
     inclusive :: IP RoleVerbList
     inclusive = do

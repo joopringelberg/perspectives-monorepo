@@ -276,7 +276,7 @@ domain model://perspectives.domains#System@6.2
                       >
             row
               table Persons
-              only ()
+                no roleverbs
         where
 
 
