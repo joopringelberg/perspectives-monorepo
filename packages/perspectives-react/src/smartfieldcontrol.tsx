@@ -58,6 +58,9 @@ interface SmartFieldControlProps
 interface SmartFieldControlState
 {
   value: string;
+  // True while the user has made local edits that have not
+  // been cancelled (undo/Escape) or finished (blur).
+  hasLocalEdits: boolean;
 }
 
 export default class SmartFieldControl extends Component<SmartFieldControlProps, SmartFieldControlState>
@@ -65,6 +68,12 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
   private inputType: InputType;
   private controlType: string | undefined;
   private ref = React.createRef<HTMLElement>();
+  // Tracks whether the default text/date/time control is in an
+  // editing session, without involving React state.
+  private defaultEditingActive: boolean = false;
+  // Undo button for the default control path; controlled via DOM
+  // to avoid React re-renders while editing.
+  private undoRef = React.createRef<HTMLButtonElement>();
 
   constructor(props : SmartFieldControlProps)
   {
@@ -72,13 +81,48 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     this.inputType = mapRange( this.props.serialisedProperty.range );
     // If the range is PDateTime, `value` is a string that represents an Epoch. We convert it to a DateTime format that the input control accepts.
     // before storing it, we convert it back to an Epoch.
-    this.state = { value: this.valueOnProps() };
+    this.state = { value: this.valueOnProps(), hasLocalEdits: false };
     this.leaveControl = this.leaveControl.bind(this);
     this.controlType = this.htmlControlType();
     this.ref = props.inputRef ? props.inputRef : React.createRef<HTMLElement>();
   }
 
+  // True when the user has local edits pending for this control.
+  private isDirty(): boolean {
+    return this.state.hasLocalEdits;
+  }
+
+  // Only text and date/time-like input types get an inline undo button.
+  private isUndoRelevantType(): boolean {
+    return ["text", "datetime-local", "date", "time"].indexOf(this.inputType) >= 0;
+  }
+
+  private dispatchEditingStarted() {
+    if (this.ref.current instanceof HTMLElement) {
+      this.ref.current.dispatchEvent(
+        new CustomEvent("FormFieldEditStarted", { bubbles: true })
+      );
+    }
+  }
+
+  private dispatchEditingEnded() {
+    if (this.ref.current instanceof HTMLElement) {
+      this.ref.current.dispatchEvent(
+        new CustomEvent("FormFieldEditEnded", { bubbles: true })
+      );
+    }
+  }
+
   componentDidMount(): void {
+    if (this.ref.current instanceof HTMLInputElement || this.ref.current instanceof HTMLTextAreaElement)
+    {
+      this.ref.current.value = this.state.value;
+    }
+    if (this.undoRef.current)
+    {
+      this.undoRef.current.disabled = true;
+      this.undoRef.current.classList.remove("bg-danger-subtle", "text-danger-emphasis", "border-0");
+    }
     if (this.props.isselected && this.ref.current)
     {
       this.ref.current.focus();
@@ -91,7 +135,17 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
         (this.props.propertyValues
         && prevProps.propertyValues.values[0] != this.props.propertyValues.values[0]))
     {
-      this.setState({ value: this.valueOnProps()});
+      // Only sync from props when there are no local edits in progress,
+      // to avoid fighting the user's typing and avoid flicker.
+      if (!this.state.hasLocalEdits)
+      {
+        const newValue = this.valueOnProps();
+        this.setState({ value: newValue });
+        if (this.ref.current instanceof HTMLInputElement || this.ref.current instanceof HTMLTextAreaElement)
+        {
+          this.ref.current.value = newValue;
+        }
+      }
     }
     if (this.props.isselected && this.ref.current)
     {
@@ -244,7 +298,41 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
           break;
         case "Escape": // Escape
           // Discard changes, allow event to bubble.
-          component.setState( {value: component.valueOnProps()});
+          {
+            if (component.controlType === "input" || component.controlType === "textarea")
+            {
+              // Default text-like control: reset DOM value and end
+              // the editing session without touching React state.
+              if (component.ref.current instanceof HTMLInputElement || component.ref.current instanceof HTMLTextAreaElement)
+              {
+                component.ref.current.value = component.valueOnProps();
+              }
+              if (component.defaultEditingActive)
+              {
+                component.defaultEditingActive = false;
+                component.dispatchEditingEnded();
+                if (component.undoRef.current)
+                {
+                  component.undoRef.current.disabled = true;
+                  component.undoRef.current.classList.remove("bg-danger-subtle", "text-danger-emphasis", "border-0");
+                }
+              }
+            }
+            else
+            {
+              // Other controls still use state-based tracking.
+              const hadLocalEdits = component.state.hasLocalEdits;
+              if (component.ref.current instanceof HTMLInputElement || component.ref.current instanceof HTMLTextAreaElement)
+              {
+                component.ref.current.value = component.valueOnProps();
+              }
+              component.setState({ hasLocalEdits: false });
+              if (hadLocalEdits)
+              {
+                component.dispatchEditingEnded();
+              }
+            }
+          }
           event.preventDefault();
           break;
       }
@@ -256,8 +344,58 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
   // Event target is the input control.
   leaveControl(e : React.FocusEvent ) : boolean
   {
+    const hadLocalEdits = this.state.hasLocalEdits;
     this.changeValue((e.target as HTMLInputElement).value);
+    if (hadLocalEdits)
+    {
+      this.setState({ hasLocalEdits: false });
+      this.dispatchEditingEnded();
+    }
     return this.reportValidity(e);
+  }
+
+  // Handle blur at the wrapper level: only when focus actually leaves
+  // the form control + undo button group do we trigger leaveControl.
+  handleGroupBlur(e: React.FocusEvent<HTMLElement>) {
+    const currentTarget = e.currentTarget;
+    const relatedTarget = e.relatedTarget as (HTMLElement | null);
+    const target = e.target as (HTMLElement | null);
+
+    // We only care about blur events where the input itself loses
+    // focus. Blurs from other descendants (e.g. the undo button)
+    // are ignored.
+    if (target !== this.ref.current)
+    {
+      return;
+    }
+
+    // If focus moves to another element inside the same wrapper
+    // (e.g. from the input to the undo button), do not treat this
+    // as leaving the control.
+    if (relatedTarget && currentTarget.contains(relatedTarget))
+    {
+      return;
+    }
+
+    // Now the input lost focus to an element outside the group:
+    // perform the normal leaveControl logic.
+    this.leaveControl(e as unknown as React.FocusEvent);
+
+    // For the default text-like control, also end the editing
+    // session here without relying on React state.
+    if (this.controlType === "input" || this.controlType === "textarea")
+    {
+      if (this.defaultEditingActive)
+      {
+        this.defaultEditingActive = false;
+        this.dispatchEditingEnded();
+        if (this.undoRef.current)
+        {
+          this.undoRef.current.disabled = true;
+          this.undoRef.current.classList.remove("bg-danger-subtle", "text-danger-emphasis", "border-0");
+        }
+      }
+    }
   }
 
   // The event should have the input element as target. Returns true iff no constraints are violated.
@@ -372,6 +510,8 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     const mandatory = component.props.serialisedProperty.isMandatory;
     const pattern = component.pattern();
     const maxLength = component.maxLength(component.inputType);
+    let showUndo: boolean, selectedClass: string, combinedClassName: string, handleUndoClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+
     switch ( this.controlType ){
       case "checkbox":
         return (
@@ -400,7 +540,15 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               readOnly={ component.props.disabled }
               disabled={ component.props.disabled }
               value={ component.state.value }
-              onChange={e => component.setState({value: e.target.value}) }
+              onChange={e => {
+                const wasEditing = component.state.hasLocalEdits;
+                const newVal = e.target.value;
+                component.setState({ value: newVal, hasLocalEdits: true });
+                if (!wasEditing)
+                {
+                  component.dispatchEditingStarted();
+                }
+              }}
               onBlur={component.leaveControl}
               required={mandatory}
             >
@@ -438,7 +586,15 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
                   aria-label={ pattern? pattern.label : component.state.value }
                   readOnly={ component.props.disabled }
                   value={ component.state.value }
-                  onChange={e => component.setState({value: e.target.value}) }
+                  onChange={e => {
+                    const wasEditing = component.state.hasLocalEdits;
+                    const newVal = e.target.value;
+                    component.setState({ value: newVal, hasLocalEdits: true });
+                    if (!wasEditing)
+                    {
+                      component.dispatchEditingStarted();
+                    }
+                  }}
                   onBlur={component.leaveControl}
                   type="text"
                   required={mandatory}
@@ -451,8 +607,47 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               </div>);
               }
       default:
+        // For the default text/date/time-like control we avoid using
+        // React state in onChange. The undo button is always shown
+        // for relevant types; its handler restores the previous
+        // value both in the DOM and in the PDR.
+        showUndo = component.isUndoRelevantType() && component.props.disabled === false;
+        selectedClass = component.props.isselected ? "text-light bg-secondary" : "";
+        combinedClassName = (selectedClass ? selectedClass + " " : "") + "flex-grow-1";
+        handleUndoClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!showUndo) {
+            return;
+          }
+          if (component.ref.current instanceof HTMLInputElement)
+          {
+            const originalValue = component.valueOnProps();
+            component.ref.current.value = originalValue;
+            component.changeValue(originalValue);
+          }
+          // For the default control path, end the editing session
+          // when undo is pressed, without involving React state.
+          if (component.controlType === "input" || component.controlType === "textarea")
+          {
+            if (component.defaultEditingActive)
+            {
+              component.defaultEditingActive = false;
+              component.dispatchEditingEnded();
+              if (component.undoRef.current)
+              {
+                component.undoRef.current.disabled = true;
+                component.undoRef.current.classList.remove("bg-danger-subtle", "text-danger-emphasis", "border-0");
+              }
+            }
+          }
+        };
         return (
-          <div onKeyDown={e => component.handleKeyDown(e, (e.target as HTMLInputElement).value)}>
+          <div
+            className="d-flex align-items-center"
+            onBlur={e => component.handleGroupBlur(e)}
+            onKeyDown={e => component.handleKeyDown(e, (e.target as HTMLInputElement).value)}
+          >
             <Form.Control
               id={component.props.serialisedProperty.id + "_" + component.props.roleId}
               as={ (component.controlType as React.ElementType) || "input" }
@@ -460,9 +655,21 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}
               aria-label={ pattern? pattern.label : component.state.value }
               readOnly={ component.props.disabled }
-              value={ component.state.value }
-              onChange={e => component.setState({value: e.target.value}) }
-              onBlur={component.leaveControl}
+              onChange={e => {
+                // Start an editing session the first time the user
+                // changes the value. We avoid setState here to keep
+                // the input from re-rendering on each keypress.
+                if (!component.defaultEditingActive)
+                {
+                  component.defaultEditingActive = true;
+                  component.dispatchEditingStarted();
+                  if (component.undoRef.current)
+                  {
+                    component.undoRef.current.disabled = false;
+                    component.undoRef.current.classList.add("bg-danger-subtle", "text-danger-emphasis", "border-0");
+                  }
+                }
+              }}
               type={component.inputType}
               required={mandatory}
               minLength={component.minLength(component.inputType)}
@@ -470,8 +677,20 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               min={component.minInclusive()}
               max={component.maxInclusive()}
               {...(pattern ? { pattern: patternToSource(pattern) } : {})}
-              {... component.props.isselected ? {className: "text-light bg-secondary"} : {}}
+              className={combinedClassName}
             />
+            {showUndo && (
+              <button
+                type="button"
+                className="btn btn-sm ms-2 px-2 py-0 d-flex align-items-center justify-content-center"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleUndoClick}
+                ref={component.undoRef}
+                aria-label={i18next.t("smartfield_undo", { ns: "preact" })}
+              >
+                ↺
+              </button>
+            )}
           </div>);
     }
   }

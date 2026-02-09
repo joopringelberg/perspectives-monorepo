@@ -48,6 +48,9 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
   private containerRef: React.RefObject<HTMLDivElement | null>;
   private slidingPanelRef: React.RefObject<HTMLDivElement | null>;
   private mainPanelRef: React.RefObject<HTMLDivElement | null>;
+  // Tracks whether a form field is being edited, without going
+  // through React state to avoid re-rendering the sliding panel.
+  private isEditingDom: boolean = false;
 
   constructor(props: MSComponentProps) {
     super(props);
@@ -58,6 +61,30 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
     this.slidingPanelRef = React.createRef();
     this.mainPanelRef = React.createRef();
   }
+
+  private handleFieldEditStarted = (_event: Event) => {
+    this.isEditingDom = true;
+    // Hide or disable the navigation button directly in the DOM to
+    // avoid triggering a React re-render of the sliding panel.
+    if (this.slidingPanelRef.current) {
+      const closeButton = this.slidingPanelRef.current.querySelector('button[aria-label="Sluit formulier"]') as HTMLButtonElement | null;
+      if (closeButton) {
+        closeButton.disabled = true;
+        closeButton.style.visibility = "hidden";
+      }
+    }
+  };
+
+  private handleFieldEditEnded = (_event: Event) => {
+    this.isEditingDom = false;
+    if (this.slidingPanelRef.current) {
+      const closeButton = this.slidingPanelRef.current.querySelector('button[aria-label="Sluit formulier"]') as HTMLButtonElement | null;
+      if (closeButton) {
+        closeButton.disabled = false;
+        closeButton.style.visibility = "";
+      }
+    }
+  };
 
   showDetails = (event: RoleInstanceSelectionEvent) => {
     // First set isFormVisible to true to render the panel (but it's still off-screen)
@@ -90,6 +117,8 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
     if (component.containerRef.current) { 
       component.containerRef.current.addEventListener('OpenDetails', this.conditionallyShowDetails, true );
       component.containerRef.current.addEventListener('OpenWhereDetails', this.showDetails, true );
+      component.containerRef.current.addEventListener('FormFieldEditStarted', this.handleFieldEditStarted as EventListener, true);
+      component.containerRef.current.addEventListener('FormFieldEditEnded', this.handleFieldEditEnded as EventListener, true);
     }
     component.mainPanelRef.current?.focus();
   }
@@ -99,8 +128,12 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
       // We have to do this because the reference to the containerRef changes when the component is re-rendered for mobile (and vv).
       this.containerRef.current.removeEventListener('OpenWhereDetails', this.showDetails as EventListener, true);
       this.containerRef.current.removeEventListener('OpenDetails', this.conditionallyShowDetails, true );
+      this.containerRef.current.removeEventListener('FormFieldEditStarted', this.handleFieldEditStarted as EventListener, true);
+      this.containerRef.current.removeEventListener('FormFieldEditEnded', this.handleFieldEditEnded as EventListener, true);
       this.containerRef.current.addEventListener('OpenDetails', this.conditionallyShowDetails as EventListener, true);
       this.containerRef.current.addEventListener('OpenWhereDetails', this.showDetails, true );
+      this.containerRef.current.addEventListener('FormFieldEditStarted', this.handleFieldEditStarted as EventListener, true);
+      this.containerRef.current.addEventListener('FormFieldEditEnded', this.handleFieldEditEnded as EventListener, true);
     }
     if (this.props.isMobile && this.state.isFormVisible && this.slidingPanelRef.current) {
       this.slidingPanelRef.current.focus();
@@ -112,10 +145,15 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
     if (component.containerRef.current) {
       component.containerRef.current.removeEventListener('OpenDetails', this.conditionallyShowDetails as EventListener, true);
       component.containerRef.current.removeEventListener('OpenWhereDetails', this.showDetails as EventListener, true);
+      component.containerRef.current.removeEventListener('FormFieldEditStarted', this.handleFieldEditStarted as EventListener, true);
+      component.containerRef.current.removeEventListener('FormFieldEditEnded', this.handleFieldEditEnded as EventListener, true);
     }
   }
 
   handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (this.isEditingDom) {
+      return;
+    }
     if (event.key === "Escape") {
       this.handleClose();
     }
@@ -162,7 +200,19 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
             tabIndex={this.state.isTabbable ? 0 : undefined}
             style={{ display: this.state.isFormVisible ? 'flex' : 'none' }} // Control display separately
           >
-            <CloseButton onClick={this.handleClose} />
+            {/* The visibility/enabled state of this button is adjusted
+                directly in the DOM by the field edit handlers to
+                avoid rerendering this panel while editing. */}
+            {(
+              <button
+                type="button"
+                className="btn btn-link p-0 me-2"
+                onClick={this.handleClose}
+                aria-label="Sluit formulier"
+              >
+                <i className="bi bi-arrow-right" aria-hidden="true" />
+              </button>
+            )}
             <div className="sliding-panel-content">
               {React.cloneElement(slidingContent as React.ReactElement<SlidingPanelContentProps>, {
                 className: this.props.className,
