@@ -35,6 +35,7 @@ import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Extern.Couchdb (updateModel')
 import Perspectives.External.CoreModules (addAllExternalFunctions)
+import Perspectives.Identifiers (modelUriVersion)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
 import Perspectives.Persistence.API (databaseInfo, deleteDatabase, documentsInDatabase, includeDocs)
@@ -80,7 +81,12 @@ updateLocalModels =
     setupInvertedQueryDatabase
 
   updateLocalModel :: UninterpretedDomeinFile -> ExceptT MultiplePerspectivesErrors MonadPerspectivesTransaction UninterpretedDomeinFile
-  updateLocalModel df@(UninterpretedDomeinFile { id, namespace }) = do
+  updateLocalModel df@(UninterpretedDomeinFile { _id, id, namespace }) = do
     lift $ updateModel' id false false
-    log ("Model updated: " <> show namespace)
+    version <- pure
+      ( case modelUriVersion _id of
+          Just v -> v
+          Nothing -> "unknown"
+      )
+    log ("Model updated: " <> show namespace <> " at version " <> show version)
     pure df

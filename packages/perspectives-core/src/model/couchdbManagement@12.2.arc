@@ -1,6 +1,6 @@
 -- CouchdbManagement - Copyright Joop Ringelberg and Cor Baars 2021 - 2024
 
-domain model://perspectives.domains#CouchdbManagement
+domain model://perspectives.domains#CouchdbManagement@12.2
   use sys for model://perspectives.domains#System
   use cm for model://perspectives.domains#CouchdbManagement
   use acc for model://perspectives.domains#BodiesWithAccounts
@@ -52,7 +52,6 @@ domain model://perspectives.domains#CouchdbManagement
     indexed cm:MyCouchdbApp
     aspect sys:RootContext
     external
-      aspect sys:RootContext$External
     
     -- the exit is triggered on removing a role instance of StartContexts
     on exit
@@ -189,7 +188,7 @@ domain model://perspectives.domains#CouchdbManagement
       -- This covers the case we get a CouchdbServer that we did not create ourselves.
       -- If we do not refer to my indexed version of the CouchdbApp, this condition will fail because another user
       -- will have shared his App, too!
-      state AdminReceivesServer = (not exists filter cm:MyCouchdbApp >> CouchdbServers with filledBy origin) and exists (filter context >> Admin with filledBy sys:SocialMe >> binding)
+      state AdminReceivesServer = (not exists filter cm:MyCouchdbApp >> CouchdbServers with filledBy origin) and exists (filter context >> Admin with filledBy me)
         perspective of Admin 
           perspective on extern >> binder CouchdbServers
             -- selfonly
@@ -210,7 +209,7 @@ domain model://perspectives.domains#CouchdbManagement
           notify Admin
             "You now have an account with CouchdbServer {Name}"
 
-      state AccountsReceivesServer = (not exists filter cm:MyCouchdbApp >> CouchdbServers with filledBy origin) and exists (filter context >> Accounts with filledBy sys:SocialMe >> binding)
+      state AccountsReceivesServer = (not exists filter cm:MyCouchdbApp >> CouchdbServers with filledBy origin) and exists (filter context >> Accounts with filledBy me)
         perspective of Accounts 
           perspective on extern >> binder CouchdbServers
             only (Create, Fill)
@@ -359,7 +358,7 @@ domain model://perspectives.domains#CouchdbManagement
               callEffect cdb:MakeWritingMemberOf( serverurl, "cw_servers_and_repositories", UserName ) -- UserName is the ID of the PerspectivesSystem$User.
           do for Accounts
               callEffect cdb:AddCredentials( AuthorizedDomain, UserName, Password)
-        state ThisIsMe = origin filledBy sys:SocialMe >> binding
+        state ThisIsMe = origin filledBy me
           -- Accounts needs this perspective to be able to add the CouchdbServer to his cm:MyCouchdbApp!
           perspective of Accounts 
             perspective on extern >> binder CouchdbServers
@@ -628,7 +627,6 @@ domain model://perspectives.domains#CouchdbManagement
         delete context bound to Manifests
 
     external
-      aspect sys:ManifestCollection$External
         -- NameSpace_
         -- Domain
       -- Only public repositories will be visible to Accounts of CouchdbServers.
@@ -938,7 +936,6 @@ domain model://perspectives.domains#CouchdbManagement
           VersionToInstall = extern >> HighestVersion for External
 
     external
-      aspect sys:ModelManifest$External
       -- Description
       -- IsLibrary
       -- DomeinFileName
@@ -1124,7 +1121,6 @@ domain model://perspectives.domains#CouchdbManagement
           create role Translation
 
     external
-      aspect sys:VersionedModelManifest$External
       -- VersionedModelManifest$External$Description
       -- VersionedModelManifest$External$DomeinFileName
       -- VersionedModelManifest$External$VersionName

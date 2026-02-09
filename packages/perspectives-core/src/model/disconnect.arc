@@ -103,7 +103,6 @@ domain model://perspectives.domains#Disconnect
     -- All DisconnectedPeers that do not fill an instance of DisconnectedPeers in this context.
     context IncomingDisconnections = filter callExternal cdb:RoleInstances( "model://perspectives.domains#Disconnect$DisconnectedPeer$External" ) returns disconnect:DisconnectedPeer$External
       with not (binder DisconnectedPeers >> context >>= first) == disconnect:DisconnectApp
-    -- context IncomingDisconnections = sys:SocialMe >> binder Disconnected >> context >> extern
 
     context ActualDisconnectedPeers = DisconnectedPeers >> binding
 

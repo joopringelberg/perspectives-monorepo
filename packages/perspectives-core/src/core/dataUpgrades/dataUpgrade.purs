@@ -292,7 +292,7 @@ runDataUpgrades = do
             updateModelForUpgrade $ ModelUri "model://perspectives.domains#HyperContext@1.0"
     )
 
-  runUpgrade installedVersion "3.0.75"
+  runUpgrade installedVersion "3.0.77"
     ( \_ -> do
         runMonadPerspectivesTransaction'
           false
@@ -300,6 +300,8 @@ runDataUpgrades = do
           do
             -- "false" means: do not update dependencies.
             updateModelForUpgrade $ ModelUri "model://perspectives.domains#CouchdbManagement@12.2"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Introduction@1.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.2"
     )
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)

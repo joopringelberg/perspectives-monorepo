@@ -1,5 +1,5 @@
 -- Copyright Joop Ringelberg and Cor Baars 2019, 2020, 2021, 2023, 2025
-domain model://perspectives.domains#Introduction
+domain model://perspectives.domains#Introduction@1.0
   use sys for model://perspectives.domains#System
   use intro for model://perspectives.domains#Introduction
 
@@ -40,10 +40,9 @@ domain model://perspectives.domains#Introduction
     aspect sys:RootContext
     aspect sys:ContextWithNotification
     external
-      aspect sys:RootContext$External
 
     context Introductions (relational) filledBy Introduction
-    context IncomingIntroductions = sys:SocialMe >> binding >> binder Introducee >> context >> extern
+    context IncomingIntroductions = me >> binder Introducee >> context >> extern
     user Manager = me
       perspective on Introductions
         only (CreateAndFill, Remove, RemoveContext)
