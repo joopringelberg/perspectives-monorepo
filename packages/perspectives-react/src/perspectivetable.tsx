@@ -1,4 +1,4 @@
-import React, { createRef, useContext } from "react";
+import React, { createRef, useContext, useEffect, useRef } from "react";
 import PerspectivesComponent from "./perspectivesComponent";
 import {mapRoleVerbsToBehaviourNames} from "./maproleverbstobehaviours.js";
 import TableRow from "./tablerow.js";
@@ -26,11 +26,94 @@ const TableItemContextMenuWithOpen: React.FC<{
   roleOnClipboard?: any;
   systemExternalRole: RoleInstanceT;
   showDetails?: boolean;
+  mode?: "all" | "addOnly" | "rowOnly";
 }> = ({ eventKey, ...rest }) => {
   const ctx = useContext(AccordionContext);
   const active = ctx?.activeEventKey;
   const isOpen = Array.isArray(active) ? active.includes(eventKey) : active === eventKey;
   return <TableItemContextMenu {...rest} isOpen={isOpen} />;
+};
+
+// Floating row context menu, shown at a screen position (right-click / long-press).
+const RowContextMenu: React.FC<{
+  visible?: boolean;
+  position?: { x: number; y: number };
+  perspective: Perspective;
+  roleId?: RoleInstanceT;
+  showDetails?: boolean;
+  onRequestClose?: () => void;
+}> = ({ visible, position, perspective, roleId, showDetails, onRequestClose }) => {
+  const { roleOnClipboard, systemExternalRole } = useContext(AppContext);
+
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const isActive = !!(visible && position && roleId);
+
+  const style: React.CSSProperties = isActive && position
+    ? {
+        position: "fixed",
+        top: position.y,
+        left: position.x,
+        zIndex: 2000
+      }
+    : {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        zIndex: 2000,
+        display: "none"
+      };
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (onRequestClose) onRequestClose();
+      }
+    };
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (!menuRef.current) {
+        return;
+      }
+      if (!menuRef.current.contains(event.target as Node)) {
+        if (onRequestClose) onRequestClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("mousedown", handleMouseDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("mousedown", handleMouseDown);
+    };
+  }, [visible, onRequestClose]);
+
+  if (!isActive) {
+    return null;
+  }
+
+  return (
+    <div
+      ref={menuRef}
+      className="dropdown-menu show"
+      style={style}
+    >
+      <TableItemContextMenu
+        perspective={perspective}
+        roleinstance={roleId}
+        roleOnClipboard={roleOnClipboard}
+        systemExternalRole={systemExternalRole}
+        showDetails={showDetails}
+        isOpen={true}
+        mode="rowOnly"
+        renderAsInlineMenu={true}
+      />
+    </div>
+  );
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -82,6 +165,9 @@ interface PerspectiveTableProps
 interface PerspectiveTableState
   { column: string
   , row: RoleInstanceT
+  , contextMenuRole?: RoleInstanceT
+  , contextMenuPosition?: { x: number; y: number }
+  , contextMenuVisible?: boolean
   }
 
 export default class PerspectiveTable extends PerspectivesComponent<PerspectiveTableProps, PerspectiveTableState>
@@ -108,6 +194,9 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
     component.state =
       { column: this.propertyNames[0]
       , row: Object.keys( component.props.perspective.roleInstances )[0] as RoleInstanceT
+      , contextMenuRole: undefined
+      , contextMenuPosition: undefined
+      , contextMenuVisible: false
       };
   }
 
@@ -164,6 +253,19 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
         {
           // By definition of row selection, the card column now becomes the current column.
           component.setState( { column: component.props.cardcolumn || component.props.perspective.identifyingProperty } );
+          e.stopPropagation();
+        },
+        false);
+      component.eventDiv.current.addEventListener('RowContextMenu',
+        function (e: Event)
+        {
+          const customEvent = e as CustomEvent;
+          const detail = customEvent.detail as { roleInstance: RoleInstanceT; x: number; y: number };
+          component.setState({
+            contextMenuRole: detail.roleInstance,
+            contextMenuPosition: { x: detail.x, y: detail.y },
+            contextMenuVisible: true
+          });
           e.stopPropagation();
         },
         false);
@@ -337,7 +439,11 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
   {
     const component = this,
       perspective = component.props.perspective;
-    if (component.stateIsComplete(["row"])) {    
+    if (component.stateIsComplete(["row", "contextMenuRole", "contextMenuPosition", "contextMenuVisible"])) {    
+      const canAdd = !perspective.isCalculated &&
+        (perspective.verbs.includes("Create") ||
+         (perspective.roleKind == "ContextRole" && perspective.verbs.includes("CreateAndFill")));
+
       return (
         component.props.showAsAccordionItem ?
           <Accordion.Item eventKey={perspective.roleType} key={perspective.id}>
@@ -355,30 +461,47 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
                 >
                   {perspective.displayName}
                 </span>
-                <div
-                  className="d-flex align-items-center ms-2 accordion-actions" /* reuse class for potential styling */
-                  onClick={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  <AppContext.Consumer>
-                    {({ roleOnClipboard, systemExternalRole }) =>
-                      <TableItemContextMenuWithOpen
-                        eventKey={perspective.roleType}
-                        perspective={perspective}
-                        roleinstance={component.state.row}
-                        roleOnClipboard={roleOnClipboard}
-                        systemExternalRole={systemExternalRole}
-                        showDetails={component.props.showDetails}
-                      />
-                    }
-                  </AppContext.Consumer>
-                </div>
+                {canAdd && (
+                  <div
+                    className="d-flex align-items-center ms-2 accordion-actions" /* reuse class for potential styling */
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <AppContext.Consumer>
+                      {({ roleOnClipboard, systemExternalRole }) =>
+                        <TableItemContextMenuWithOpen
+                          eventKey={perspective.roleType}
+                          perspective={perspective}
+                          roleinstance={component.state.row}
+                          roleOnClipboard={roleOnClipboard}
+                          systemExternalRole={systemExternalRole}
+                          showDetails={component.props.showDetails}
+                          mode="addOnly"
+                        />
+                      }
+                    </AppContext.Consumer>
+                  </div>
+                )}
               </div>
             </Accordion.Header>
 
             <Accordion.Body>
               {component.constructTable()}
             </Accordion.Body>
+            <RowContextMenu
+              visible={component.state.contextMenuVisible}
+              position={component.state.contextMenuPosition}
+              perspective={perspective}
+              roleId={component.state.contextMenuRole}
+              showDetails={component.props.showDetails}
+                onRequestClose={() => {
+                  component.setState({
+                    contextMenuVisible: false,
+                    contextMenuRole: undefined,
+                    contextMenuPosition: undefined
+                  });
+                }}
+            />
           </Accordion.Item>
           :
           // Rest of your existing code for non-accordion view
@@ -391,6 +514,20 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
               /> 
               : 
               null}
+            <RowContextMenu
+              visible={component.state.contextMenuVisible}
+              position={component.state.contextMenuPosition}
+              perspective={perspective}
+              roleId={component.state.contextMenuRole}
+              showDetails={component.props.showDetails}
+              onRequestClose={() => {
+                component.setState({
+                  contextMenuVisible: false,
+                  contextMenuRole: undefined,
+                  contextMenuPosition: undefined
+                });
+              }}
+            />
           </>))
       } else {
         return null;

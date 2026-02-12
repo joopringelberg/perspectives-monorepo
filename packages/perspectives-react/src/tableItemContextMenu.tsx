@@ -28,6 +28,8 @@ import { externalRole } from "./urifunctions";
 import _ from "lodash";
 import { addRoleToClipboard } from "./cardbehaviour";
 
+type TableItemContextMenuMode = "all" | "addOnly" | "rowOnly";
+
 interface TableItemContextMenuProps {
   perspective: Perspective;
   roleinstance: RoleInstanceT;
@@ -37,6 +39,14 @@ interface TableItemContextMenuProps {
   // When false, the accordion item containing this menu is collapsed.
   // We still render the trigger (empty menu) but skip computing menu content & async work.
   isOpen?: boolean;
+  // Controls which group of menu items is rendered:
+  // - "all" (default): both add/new items and row-specific items.
+  // - "addOnly": only the items that create new roles/contexts.
+  // - "rowOnly": only items that operate on the current row/role.
+  mode?: TableItemContextMenuMode;
+  // When true, render only the menu items without an outer NavDropdown.
+  // This is used for floating context menus that supply their own container.
+  renderAsInlineMenu?: boolean;
 }
 
 interface TableItemContextMenuState {
@@ -57,7 +67,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     this.actionsMap = {}
   }
 
-  static defaultProps = { isOpen: true };
+  static defaultProps = { isOpen: true, mode: "all" as TableItemContextMenuMode };
 
   componentDidMount(): void {
     const component = this;
@@ -628,35 +638,84 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   render()
   {
     const component = this;
-    const items = this.props.isOpen ? [
-      ...this.computeOpenDetailsItem(),
-      ...this.computeCopyItem(),
-      ...this.computeFillItem(),
-      ...this.computeReplaceFillerItem(),
-      ...this.computeAddItems(),
-      ...this.computeRemovalItems(),
-      ...this.computeOpenContextOfFillerItem(),
-      ...this.computeActionItems(),
-      ...this.computeTakeOnThisRoleItem(),
-      ...this.computeRestoreContextForUserItem(),
-      ...this.computePublicUrl()
-    ] : [];
-    {
-      return <NavDropdown 
-              ref={component.ref}
-              title={
-                <>
-                  <i className="bi bi-three-dots-vertical" aria-hidden="true"></i>
-                  <span className="visually-hidden">Actions menu</span>
-                </>
-              } 
-              className="hide-caret accordion-menu"
-              onClick={e => e.stopPropagation()}
-              align="end"
-            >
-              {items}
-            </NavDropdown>
+    const isOpen = this.props.isOpen;
+    const mode: TableItemContextMenuMode = this.props.mode || "all";
 
+    // Build item groups once so we can reuse them for different modes.
+    const openDetailsItems = this.computeOpenDetailsItem();
+    const copyItems = this.computeCopyItem();
+    const fillItems = this.computeFillItem();
+    const replaceFillerItems = this.computeReplaceFillerItem();
+    const addItems = this.computeAddItems();
+    const removalItems = this.computeRemovalItems();
+    const openContextOfFillerItems = this.computeOpenContextOfFillerItem();
+    const actionItems = this.computeActionItems();
+    const takeOnThisRoleItems = this.computeTakeOnThisRoleItem();
+    const restoreContextForUserItems = this.computeRestoreContextForUserItem();
+    const publicUrlItems = this.computePublicUrl();
+
+    let items: JSX.Element[] = [];
+    if (isOpen) {
+      const nonAddItems = [
+        ...openDetailsItems,
+        ...copyItems,
+        ...fillItems,
+        ...replaceFillerItems,
+        ...removalItems,
+        ...openContextOfFillerItems,
+        ...actionItems,
+        ...takeOnThisRoleItems,
+        ...restoreContextForUserItems,
+        ...publicUrlItems
+      ];
+
+      if (mode === "addOnly") {
+        items = addItems;
+      } else if (mode === "rowOnly") {
+        items = nonAddItems;
+      } else {
+        // "all" (default): preserve the existing ordering with add items in the middle.
+        items = [
+          ...openDetailsItems,
+          ...copyItems,
+          ...fillItems,
+          ...replaceFillerItems,
+          ...addItems,
+          ...removalItems,
+          ...openContextOfFillerItems,
+          ...actionItems,
+          ...takeOnThisRoleItems,
+          ...restoreContextForUserItems,
+          ...publicUrlItems
+        ];
+      }
     }
+
+    if (this.props.renderAsInlineMenu) {
+      return <>{items}</>;
+    }
+
+    const isAddOnly = mode === "addOnly";
+
+    return <NavDropdown 
+            ref={component.ref}
+            title={
+              <>
+                {isAddOnly
+                  ? <i className="bi bi-plus-lg" aria-hidden="true"></i>
+                  : <i className="bi bi-three-dots-vertical" aria-hidden="true"></i>}
+                <span className="visually-hidden">
+                  {isAddOnly
+                    ? i18next.t("tableContextMenu_new", { ns: 'preact' })
+                    : "Actions menu"}
+                </span>
+              </>
+            } 
+            className="hide-caret accordion-menu"
+            onClick={e => e.stopPropagation()}
+            align="end"
+          >
+            {items}
+          </NavDropdown>;
     }
 }

@@ -43,13 +43,20 @@ interface TableRowProps
 export default class TableRow extends PerspectivesComponent<TableRowProps>
 {
   private ref : React.RefObject<HTMLTableRowElement>;
+  private longPressTimeout: number | null;
+  private touchStartPoint?: { x: number; y: number };
   constructor (props : TableRowProps)
   {
     super(props);
     this.handleClick = this.handleClick.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.handleDoubleClick = this.handleDoubleClick.bind(this);
+    this.handleContextMenu = this.handleContextMenu.bind(this);
+    this.handleTouchStart = this.handleTouchStart.bind(this);
+    this.handleTouchEnd = this.handleTouchEnd.bind(this);
+    this.handleTouchCancel = this.handleTouchCancel.bind(this);
     this.ref = createRef() as React.RefObject<HTMLTableRowElement>;
+    this.longPressTimeout = null;
   }
 
   handleClick (event : React.MouseEvent)
@@ -99,6 +106,48 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
     }
   }
 
+  handleContextMenu(event: React.MouseEvent)
+  {
+    event.preventDefault();
+    event.stopPropagation();
+    const x = event.clientX;
+    const y = event.clientY;
+    this.ref.current?.dispatchEvent(new CustomEvent('RowContextMenu', {
+      detail: { roleInstance: this.props.roleinstance, x, y },
+      bubbles: true
+    }));
+  }
+
+  handleTouchStart(event: React.TouchEvent)
+  {
+    if (event.touches.length === 1) {
+      const touch = event.touches[0];
+      this.touchStartPoint = { x: touch.clientX, y: touch.clientY };
+      this.longPressTimeout = window.setTimeout(() => {
+        this.ref.current?.dispatchEvent(new CustomEvent('RowContextMenu', {
+          detail: { roleInstance: this.props.roleinstance, x: touch.clientX, y: touch.clientY },
+          bubbles: true
+        }));
+      }, 600) as unknown as number;
+    }
+  }
+
+  handleTouchEnd(event: React.TouchEvent)
+  {
+    if (this.longPressTimeout !== null) {
+      window.clearTimeout(this.longPressTimeout);
+      this.longPressTimeout = null;
+    }
+  }
+
+  handleTouchCancel(event: React.TouchEvent)
+  {
+    if (this.longPressTimeout !== null) {
+      window.clearTimeout(this.longPressTimeout);
+      this.longPressTimeout = null;
+    }
+  }
+
   render()
   {
     const component = this;
@@ -107,6 +156,10 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
               onClick={component.handleClick}
               onDoubleClick={component.handleDoubleClick}
               onKeyDown={component.handleKeyDown}
+              onContextMenu={component.handleContextMenu}
+              onTouchStart={component.handleTouchStart}
+              onTouchEnd={component.handleTouchEnd}
+              onTouchCancel={component.handleTouchCancel}
               ref={component.ref}
               key={ roleInstanceWithProps.roleId }
             >{

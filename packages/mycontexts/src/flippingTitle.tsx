@@ -67,8 +67,7 @@ const FlippingTitle: React.FC<FlippingTitleProps> = ({
       const availableWidth = Math.max(rightRect.left - leftRect.right - horizontalPadding, 0);
 
       const combinedWidth = measureRef.current.offsetWidth;
-      console.log(`FlippingTitle: availableWidth=${availableWidth}, combinedWidth=${combinedWidth}`);
-
+      
       setCanShowBoth(prev => {
         const next = combinedWidth <= availableWidth;
         return prev === next ? prev : next;
