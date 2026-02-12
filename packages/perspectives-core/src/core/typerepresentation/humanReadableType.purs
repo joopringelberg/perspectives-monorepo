@@ -9,7 +9,7 @@ import Perspectives.Identifiers (typeUri2LocalName)
 import Perspectives.ModelTranslation (translateTypeString)
 import Perspectives.Representation.Class.PersistentType (getPerspectType)
 import Perspectives.Representation.State (State(..))
-import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier, ViewType)
+import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..), StateIdentifier, ViewType)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 
@@ -80,6 +80,9 @@ instance HumanReadableType ContextType where
           Nothing -> pure c
     else
       pure translation
+
+instance HumanReadableType IndexedContext where
+  translateType ic@(IndexedContext stableId) = translateTypeString stableId
 
 -- As we have no views in the translation yaml file yet, we directly use the readableName property.
 instance HumanReadableType ViewType where

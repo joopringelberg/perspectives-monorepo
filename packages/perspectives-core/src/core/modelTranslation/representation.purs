@@ -32,6 +32,7 @@ import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype)
 import Foreign.Object (Object, empty, union)
 import Perspectives.CoreTypes (Translations)
+import Perspectives.Representation.TypeIdentifiers (IndexedContext)
 import Simple.JSON (class ReadForeign, class WriteForeign, readImpl, write)
 
 -------------------------------------------------------------------------------
@@ -112,6 +113,7 @@ newtype ContextTranslation = ContextTranslation
   , notifications :: NotificationsTranslation
   -- The keys are the local context names
   , contexts :: ContextsTranslation
+  , indexedName :: Maybe IndexedContextNameTranslation
   }
 
 instance WriteForeign ContextTranslation where
@@ -128,6 +130,14 @@ instance ReadForeign ContextsTranslation where
   readImpl f = do
     (ct :: Object ContextTranslation) <- readImpl f
     pure $ ContextsTranslation ct
+
+newtype IndexedContextNameTranslation = IndexedContextNameTranslation
+  { name :: IndexedContext
+  , translations :: Translations
+  }
+
+derive newtype instance WriteForeign IndexedContextNameTranslation
+derive newtype instance ReadForeign IndexedContextNameTranslation
 
 -- A singleton object. The key is the model name.
 newtype ModelTranslation = ModelTranslation

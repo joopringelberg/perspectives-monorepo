@@ -46,9 +46,10 @@ import Perspectives.Extern.Utilities (formatDateTime)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isExternalRole)
 import Perspectives.Instances.Me (isMe)
-import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextType, getActiveRoleStates, getActiveStates, roleType_)
+import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextType, contextType_, getActiveRoleStates, getActiveStates, roleType_)
 import Perspectives.Instances.Values (parseNumber)
 import Perspectives.ModelDependencies (roleWithId)
+import Perspectives.Names (findIndexedContextName)
 import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), domain, domain2roleType, functional, isContextDomain, makeComposition, mandatory, queryFunction, range, roleInContext2Context, roleInContext2Role, roleRange)
 import Perspectives.Query.UnsafeCompiler (context2context, context2role, getDynamicPropertyGetter, getDynamicPropertyGetter_, getPropertyValues, getPublicUrl, roleFunctionFromQfd)
@@ -59,18 +60,18 @@ import Perspectives.Representation.Class.Property (class PropertyClass, hasFacet
 import Perspectives.Representation.Class.Property (getProperty, isCalculated, functional, mandatory, range, Property(..), constrainingFacets) as PROP
 import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, allProperties, bindingOfADT, perspectivesOfRoleType, roleKindOfRoleType)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance, Value(..), externalRole)
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec(..), expandPropSet, expandPropertyVerbs, expandVerbs)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ScreenDefinition (WidgetCommonFieldsDef, PropertyRestrictions)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
-import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), ContextType(..), PropertyType(..), RoleKind(..), RoleType(..), propertytype2string, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), ContextType(..), IndexedContext(..), PropertyType(..), RoleKind(..), RoleType(..), externalRoleType, propertytype2string, roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..)) as Verbs
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..), roleVerbList2Verbs)
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, guid)
 import Perspectives.TypePersistence.PerspectiveSerialisation.Data (PropertyFacets, RoleInstanceWithProperties, SerialisedPerspective(..), SerialisedPerspective', SerialisedProperty, ValuesWithVerbs)
-import Perspectives.Types.ObjectGetters (getContextAspectSpecialisations)
+import Perspectives.Types.ObjectGetters (getContextAspectSpecialisations, indexedContextName)
 import Perspectives.Utilities (findM)
 import Prelude (append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
 import Simple.JSON (writeJSON)
@@ -565,7 +566,22 @@ roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContex
           Nothing -> pure $ unwrap roleId
           Just bnd -> do
             bndType <- lift $ lift $ roleType_ bnd
-            lift $ getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST bndType) bnd
+            lift $ getReadableName bndType bnd
+
+getReadableName :: EnumeratedRoleType -> RoleInstance -> AssumptionTracking String
+getReadableName art rid = do
+  -- If contextInstance is an indexed individual, use the translation of that indexed name as title. Otherwise, get the name from the role telescope.
+  contextInstance <- lift $ (rid ##>> context)
+  contextType <- lift $ contextType_ contextInstance
+  mIndexedName <- lift $ findIndexedContextName contextInstance
+  case mIndexedName of
+    -- If we have an indexed name, look up its generic indexed name in the type of the context and translate that.
+    Just indexedName -> do
+      mcanonicalIndexedName <- lift $ indexedContextName contextType
+      case mcanonicalIndexedName of
+        Just (ContextInstance canonicalIndexedName) -> lift $ translateType (IndexedContext canonicalIndexedName)
+        Nothing -> getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST $ externalRoleType contextType) (externalRole contextInstance)
+    Nothing -> getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST $ externalRoleType contextType) (externalRole contextInstance)
 
 getReadableNameFromTelescope :: (PropertyType -> MonadPerspectives Boolean) -> ADT EnumeratedRoleType -> RoleInstance -> AssumptionTracking String
 getReadableNameFromTelescope predicate adt rid = do
@@ -592,6 +608,7 @@ getReadableNameFromTelescope predicate adt rid = do
     Nothing -> do
       bnds <- runArrayT $ binding rid
       case head bnds of
+        -- If rid is an indexed individual, use its indexed name and translate it.
         Nothing -> pure $ unwrap rid
         Just bnd -> do
           bndType <- lift $ roleType_ bnd

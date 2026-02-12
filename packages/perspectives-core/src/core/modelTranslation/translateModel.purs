@@ -63,17 +63,18 @@ import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
 import Perspectives.Fuzzysort (fuzzyLookup)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, domeinFileVersion, isExternalRole, startsWithSegments, typeUri2LocalName_, typeUri2ModelUri, typeUri2typeNameSpace_)
 import Perspectives.ModelTranslation.Normalize (fromReadableModelTranslation, toReadableModelTranslation)
-import Perspectives.ModelTranslation.Representation (ActionsPerStateTranslation(..), ActionsTranslation(..), ContextTranslation(..), ContextsTranslation(..), MarkdownsTranslation(..), ModelTranslation(..), NotificationsTranslation(..), PropertiesTranslation(..), RoleTranslation(..), RolesTranslation(..), TitlesTranslation(..))
+import Perspectives.ModelTranslation.Representation (ActionsPerStateTranslation(..), ActionsTranslation(..), ContextTranslation(..), ContextsTranslation(..), IndexedContextNameTranslation(..), MarkdownsTranslation(..), ModelTranslation(..), NotificationsTranslation(..), PropertiesTranslation(..), RoleTranslation(..), RolesTranslation(..), TitlesTranslation(..))
 import Perspectives.PerspectivesState (getCurrentLanguage, getTranslationTable)
 import Perspectives.Representation.Action (Action)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Role (Role(..))
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..))
 import Perspectives.Representation.Perspective (StateSpec, stateSpec2StateIdentifier)
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateFulObject(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), PropertyType(..), RoleType(..), roletype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), IndexedContext(..), PropertyType(..), RoleType(..), roletype2string)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
 import Purescript.YAML (load)
@@ -103,6 +104,12 @@ newtype ContextTranslation_ = ContextTranslation_
   -- The original texts are stored under the key 'orig'.
   -- These notifications are lexically embedded in context state transitions.
   , notifications :: NULL.Nullable Notifications_
+  , indexedName :: NULL.Nullable IndexedContextNameTranslation_
+  }
+
+newtype IndexedContextNameTranslation_ = IndexedContextNameTranslation_
+  { name :: String
+  , translations :: Translations_
   }
 
 newtype ContextsTranslation_ = ContextsTranslation_ (Object ContextTranslation_)
@@ -217,7 +224,7 @@ instance Rehydrate RoleTranslation_ RoleTranslation where
       Just t@(Titles_ _) -> hydrate t
 
 instance Rehydrate ContextTranslation_ ContextTranslation where
-  hydrate (ContextTranslation_ { translations, external, users, things, contextroles, contexts, notifications }) =
+  hydrate (ContextTranslation_ { translations, external, users, things, contextroles, contexts, notifications, indexedName }) =
     let
       translations' = hydrate translations
       external' = case NULL.toMaybe external of
@@ -245,6 +252,9 @@ instance Rehydrate ContextTranslation_ ContextTranslation where
       notifications' = case NULL.toMaybe notifications of
         Nothing -> NotificationsTranslation empty
         Just n@(Notifications_ _) -> hydrate n
+      indexedName' = case NULL.toMaybe indexedName of
+        Nothing -> Nothing
+        Just (IndexedContextNameTranslation_ i) -> Just $ IndexedContextNameTranslation { name: IndexedContext i.name, translations: hydrate i.translations }
     in
       ContextTranslation
         { translations: translations'
@@ -254,6 +264,7 @@ instance Rehydrate ContextTranslation_ ContextTranslation where
         , things: things'
         , contextroles: contextroles'
         , contexts: contexts'
+        , indexedName: indexedName'
         }
 
 instance Rehydrate ModelTranslation_ ModelTranslation where
@@ -300,7 +311,7 @@ generateFirstTranslation (DomeinFile dr) = flip runReader dr do
   isDefinedAtTopLevel s = unwrap dr.id == typeUri2typeNameSpace_ s && (isNothing $ Regex.match (unsafeRegex "External$" noFlags) s)
 
 translateContext :: Context -> Reader (DomeinFileRecord Stable) ContextTranslation
-translateContext (Context { id: contextId, gebruikerRol, contextRol, rolInContext, nestedContexts }) = do
+translateContext (Context { id: contextId, gebruikerRol, contextRol, rolInContext, nestedContexts, indexedContext }) = do
   { enumeratedRoles } <- ask
   external <- unsafePartial case lookup (buitenRol $ unwrap contextId) enumeratedRoles of
     Just e -> translateRole (E e)
@@ -319,6 +330,7 @@ translateContext (Context { id: contextId, gebruikerRol, contextRol, rolInContex
               _ -> pure unit
           )
       )
+  -- If this context type is indexed, add the indexed name to the ContextTranslation.
   pure $ ContextTranslation
     { translations: Translations empty
     , external
@@ -327,6 +339,7 @@ translateContext (Context { id: contextId, gebruikerRol, contextRol, rolInContex
     , things
     , contextroles
     , contexts
+    , indexedName: (\(ContextInstance s) -> IndexedContextNameTranslation { name: IndexedContext s, translations: Translations empty }) <$> indexedContext
     }
   where
   -- Writes singletons with the original sentence and empty translations
@@ -688,18 +701,22 @@ instance Translation RoleTranslation where
     }
 
 instance Translation ContextTranslation where
-  qualify namespace (ContextTranslation { translations, external: ext, users, things, contextroles, contexts, notifications }) =
+  qualify namespace (ContextTranslation { translations, external: ext, users, things, contextroles, contexts, notifications, indexedName }) =
     let
       external = qualify (namespace <> "$External") ext
       users' = qualify namespace users
       things' = qualify namespace things
       contextroles' = qualify namespace contextroles
       contexts' = qualify namespace contexts
+      indexedName' = qualify namespace <$> indexedName
     in
-      ContextTranslation { translations, external, users: users', things: things', contextroles: contextroles', contexts: contexts', notifications }
+      ContextTranslation { translations, external, users: users', things: things', contextroles: contextroles', contexts: contexts', notifications, indexedName: indexedName' }
   writeKeys _ = pure unit
-  writeYaml indent (ContextTranslation { translations, external, users, things, contextroles, contexts: ctxts, notifications }) = do
+  writeYaml indent (ContextTranslation { translations, external, users, things, contextroles, contexts: ctxts, notifications, indexedName }) = do
     writeYaml indent translations
+    case indexedName of
+      Nothing -> pure unit
+      Just i -> writeYaml indent i
     case external of
       RoleTranslation { properties, actions, notifications: enotes, markdowns } -> case properties, actions, enotes of
         PropertiesTranslation properties', ActionsPerStateTranslation actions', NotificationsTranslation notifications' ->
@@ -735,7 +752,7 @@ instance Translation ContextTranslation where
         else do
           tell (i indent "contexts" colonNl)
           writeYaml (indent <> tab) ctxts
-  addTranslations table (ContextTranslation { translations, external, users, things, contextroles, contexts: ctxts, notifications }) = ContextTranslation
+  addTranslations table (ContextTranslation { translations, external, users, things, contextroles, contexts: ctxts, notifications, indexedName }) = ContextTranslation
     { translations
     , external: addTranslations table external
     , users: addTranslations table users
@@ -743,6 +760,21 @@ instance Translation ContextTranslation where
     , contextroles: addTranslations table contextroles
     , contexts: addTranslations table ctxts
     , notifications: addTranslations table notifications
+    , indexedName: addTranslations table <$> indexedName
+    }
+
+instance Translation IndexedContextNameTranslation where
+  qualify namespace i = i
+  writeKeys (IndexedContextNameTranslation { name, translations }) = void $ modify \allTranslations -> allTranslations `union` singleton (unwrap name) translations
+  writeYaml indent (IndexedContextNameTranslation { name, translations }) = do
+    tell (i indent "indexedName" colonNl)
+    tell (i (indent <> tab) "name" colonSpace (unwrap name) nl)
+    writeYaml (indent <> tab) translations
+  addTranslations (TranslationTable table) (IndexedContextNameTranslation { name, translations }) = IndexedContextNameTranslation
+    { name
+    , translations: case lookup (unwrap name) table of
+        Nothing -> translations
+        Just ts -> ts
     }
 
 instance Translation ContextsTranslation where
@@ -756,7 +788,7 @@ instance Translation ContextsTranslation where
         ) :: Array (Tuple String ContextTranslation)
       )
   writeKeys (ContextsTranslation contextTranslations) = forWithIndex_ contextTranslations
-    \contextName (ContextTranslation { translations, external, users, things, contextroles, contexts, notifications }) -> do
+    \contextName (ContextTranslation { translations, external, users, things, contextroles, contexts, notifications, indexedName }) -> do
       void $ modify \allTranslations -> insert contextName translations allTranslations
 
       -- We have to handle the external role here, because we must construct its name from the contextName.
@@ -773,6 +805,7 @@ instance Translation ContextsTranslation where
       writeKeys contextroles
       writeKeys contexts
       writeKeys notifications
+      for indexedName writeKeys
   writeYaml indent (ContextsTranslation ctxts) = void $ for (object2array ctxts)
     \(Tuple contextName contextTranslation) -> do
       tell (i indent (typeUri2LocalName_ contextName) colonNl)

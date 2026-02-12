@@ -12,13 +12,20 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Representation.Class.Cacheable (ViewType(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), StateIdentifier(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), StateIdentifier(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 
 -- Also see module Perspectives.HumanReadableType, where we convert from Stable to Readable based on the displayName property of the type.
 
 class ToStable i where
   toStable :: i -> MonadPerspectives i
+
+instance ToStable IndexedContext where
+  toStable ct@(IndexedContext stableId) = lookupStableModelUri (ModelUri $ unsafePartial typeUri2ModelUri_ stableId) >>= retrieveDomeinFile >>= \(DomeinFile { toStableContextIndividuals }) -> case EM.lookup ct toStableContextIndividuals of
+    Just stableCt -> pure stableCt
+    Nothing -> do
+      logPerspectivesError (Custom $ "Failed to convert IndexedContext from readable to stable: no mapping found for readable id " <> stableId)
+      pure ct
 
 instance ToStable ContextType where
   toStable ct@(ContextType stableId) = lookupStableModelUri (ModelUri $ unsafePartial typeUri2ModelUri_ stableId) >>= retrieveDomeinFile >>= \(DomeinFile { toStableContextType }) -> case EM.lookup ct toStableContextType of

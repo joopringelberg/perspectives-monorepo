@@ -70,7 +70,6 @@ import Perspectives.Instances.ObjectGetters (binding, context, contextType, cont
 import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.ModelDependencies (actualSharedFileServer, allSettings, fileShareCredentials, identifiableFirstName, identifiableLastName, itemOnClipboardClipboardData, itemsOnClipboard, mySharedFileServices, selectedClipboardItem, sharedFileServices, sysUser)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, getUserIdentifier, lookupIndexedContext)
-import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment, toFile)
 import Perspectives.Persistence.State (getSystemIdentifier)
@@ -78,10 +77,9 @@ import Perspectives.Persistent (getPerspectContext, getPerspectRol, saveMarkedRe
 import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getWarnings, pushFrame, resetWarnings, restoreFrame)
 import Perspectives.Proxy (createRequestEmitter, retrieveRequestEmitter)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter, getDynamicPropertyGetterFromLocalName, getPropertyFromTelescope, getPropertyValues, getPublicUrl, getRoleFunction, getRoleInstances)
-import Perspectives.Representation.ADT (ADT(..))
+import Perspectives.Representation.ADT (ADT)
 import Perspectives.Representation.Action (Action(..)) as ACTION
 import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getContext, getEnumeratedRole, getPerspectType)
-import Perspectives.Representation.Class.Property (hasFacet)
 import Perspectives.Representation.Class.Role (getRoleType, kindOfRole, perspectivesOfRoleType, rangeOfRoleCalculation, roleKindOfRoleType)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
@@ -96,9 +94,9 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUser, serialisedTableFormForContextAndUser)
-import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableNameFromTelescope, perspectiveForContextAndUser, perspectivesForContextAndUser, settingsPerspective)
+import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableName, perspectiveForContextAndUser, perspectivesForContextAndUser, settingsPerspective)
 import Perspectives.Types.ObjectGetters (findPerspective, getAction, getContextAction, getContextActionFromUnqualifiedName, isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
-import Prelude (Unit, bind, discard, eq, flip, identity, map, negate, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (/=), (&&))
+import Prelude (Unit, bind, discard, eq, identity, map, negate, pure, show, unit, void, ($), (&&), (/=), (<$>), (<<<), (<>), (==), (>=>), (>>=))
 import Simple.JSON (read, readJSON_, unsafeStringify, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -536,7 +534,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
             widerContextExternalRole <- ((getAllFilledRoles) >=> context >=> externalRole) erole
             guard ((widerContextExternalRole /= RoleInstance (buitenRol system)) && (widerContextExternalRole /= erole))
             widerContextRoleType <- roleType widerContextExternalRole
-            readableName <- lift $ (getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST widerContextRoleType) widerContextExternalRole)
+            readableName <- lift $ getReadableName widerContextRoleType widerContextExternalRole
             pure $ Value $ writeJSON { externalRole: widerContextExternalRole, readableName }
         )
         (RoleInstance subject)

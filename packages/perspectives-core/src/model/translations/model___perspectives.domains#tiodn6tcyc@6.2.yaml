@@ -1,0 +1,995 @@
+model://perspectives.domains#tiodn6tcyc:
+  version: "6.2"
+  contexts:
+    TheWorld:
+      translations:
+        en: The World
+        nl: De Wereld
+      indexedName:
+        name: model://perspectives.domains#System$TheWorld
+        translations:
+          nl: De wereld
+          en: The World
+      users:
+        Initializer:
+          translations:
+            en: Initializer
+            nl: Initialiseerder
+        NonPerspectivesUsers:
+          translations:
+            en: Non - Perspectives users
+            nl: Niet - Perspectives gebruikers
+        PerspectivesUsers:
+          translations:
+            en: Perspectives users
+            nl: Perspectives gebruikers
+          properties:
+            HasKey:
+              translations:
+                en: Has key
+                nl: Heeft sleutel
+            SharedFileServerKey:
+              translations:
+                en: Shared file server key
+                nl: Shared file server sleutel
+    SocialEnvironment:
+      translations:
+        en: Social Environment
+        nl: Sociale Omgeving
+      indexedName:
+        name: model://perspectives.domains#System$MySocialEnvironment
+        translations:
+          nl: Adresboek
+          en: Address Book
+      external:
+        properties:
+          MyIdentity:
+            translations:
+              nl: MISSING nl
+              en: MISSING en
+      users:
+        SystemUser:
+          translations:
+            en: System user
+            nl: Systeemgebruiker
+        Peers:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
+        OtherPersons:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
+        Me:
+          translations:
+            en: Me
+            nl: Mijzelf
+          actions:
+            model://perspectives.domains#System$SocialEnvironment:
+              AddOtherPerson:
+                translations:
+                  nl: MISSING nl
+                  en: MISSING en
+            model://perspectives.domains#System$RootContext:
+              Cancel:
+                translations:
+                  nl: MISSING nl
+                  en: MISSING en
+          markdowns:
+            0:
+              translations:
+                orig: "## Medegebruikers\n
+                  Deze mensen zitten ook op MyContexts.\n
+                  Kopieer iemand uit deze tabel als je gegevens met hem of haar\n
+                  wilt delen."
+                nl: "MISSING nl"
+                en: "MISSING en"
+            1:
+              translations:
+                orig: "## Andere personen\n
+                  Deze mensen maken geen gebruik van MyContexts.\n
+                  Je kunt geen gegevens met hen delen.\n
+                  Voeg een nieuwe persoon toe met de actie [[action: AddOtherPerson| Voeg persoon toe]]."
+                nl: "MISSING nl"
+                en: "MISSING en"
+            2:
+              translations:
+                orig: "## Alle personen\n
+                  Kopieer iemand uit deze tabel als het niet uitmaakt of\n
+                  iemand wel of geen Perspectives gebruikt."
+                nl: "MISSING nl"
+                en: "MISSING en"
+        Persons:
+          translations:
+            en: Persons
+            nl: Personen
+    PerspectivesSystem:
+      translations:
+        en: Perspectives System
+        nl: Perspectivessysteem
+      indexedName:
+        name: model://perspectives.domains#System$MySystem
+        translations:
+          nl: Mijn systeem
+          en: My system
+      external:
+        properties:
+          MaxHistoryLength:
+            translations:
+              nl: Maximale geschiedenis lengte
+              en: Maximum history length
+          Restart:
+            translations:
+              nl: Herstart
+              en: Restart
+          OnStartup:
+            translations:
+              nl: Bij opstarten
+              en: On startup
+          ShowSystemApps:
+            translations:
+              nl: Toon systeem apps
+              en: Show system apps
+          PreviousLanguage:
+            translations:
+              en: Previous language
+              nl: Vorige taalkeuze
+          CurrentLanguage:
+            translations:
+              en: Current language
+              nl: Huidige taalkeuze
+          CurrentHour:
+            translations:
+              en: Current hour
+              nl: Huidige uur
+          CurrentDate:
+            translations:
+              en: Current date
+              nl: Huidige datum
+          PDRVersion:
+            translations:
+              en: PDR version
+              nl: PDR versie
+          MyContextsVersion:
+            translations:
+              en: MyContexts version
+              nl: MyContexts versie
+          ShowLibraries:
+            translations:
+              en: Show libraries
+              nl: Toon bibliotheken
+          CardClipBoard:
+            translations:
+              en: Card clipboard
+              nl: Kaartjes klembord
+          ConnectedToAMQPBroker:
+            translations:
+              en: Connected to AMQP broker
+              nl: Verbonden met AMQP broker
+      users:
+        WWWUser:
+          translations:
+            nl: WWW Gebruiker
+            en: WWW User
+        Installer:
+          translations:
+            en: Installer
+            nl: Installateur
+        ActiveContacts:
+          translations:
+            nl: Actieve Contacten
+            en: Active Contacts
+        Contacts:
+          translations:
+            en: Contacts
+            nl: Contacten
+        User:
+          translations:
+            en: User
+            nl: Gebruiker
+          properties:
+            Id:
+              translations:
+                en: Identity
+                nl: Identiteit
+            Channel:
+              translations:
+                en: Channel
+                nl: Kanaal
+          actions:
+            model://perspectives.domains#System$ContextWithNotification$NotifiedUser:
+              DeleteNotifications:
+                translations:
+                  en: Delete notifications
+                  nl: Verwijder meldingen
+            model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled:
+              Reattach:
+                translations:
+                  en: Reattach model
+                  nl: Koppel opnieuw met model
+            model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled:
+              Detach:
+                translations:
+                  nl: Ontkoppel van model
+                  en: Detach from model
+            model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild:
+              UpdateBuild:
+                translations:
+                  en: Update build
+                  nl: Actualiseer build
+            model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate:
+              InstallPatch:
+                translations:
+                  en: Install patch
+                  nl: Installeer patch
+            model://perspectives.domains#System$PerspectivesSystem$User:
+              CreateInvitation:
+                translations:
+                  en: Create invitation
+                  nl: Maak uitnodiging
+              ResetInvertedQueryDatabase:
+                translations:
+                  nl: Herstel omgekeerde query database
+                  en: Reset inverted query database
+          markdowns:
+            0:
+              translations:
+                orig: "### Perspectives system\n
+                  This is the Perspectives system, representing your installation.\n
+                  * Create and accept invitations to connect with other users.\n
+                  * Go to an App store to install a new App.\n
+                  * On the left, under **Who** you see your contacts."
+                nl: "### Perspectieven systeem\n
+                   Dit is het Perspectieven systeem, dat je installatie vertegenwoordigt.\n
+                   * Maak en accepteer uitnodigingen om verbinding te maken met andere gebruikers.\n
+                   * Ga naar een App store om een nieuwe App te installeren.\n
+                   * Aan de linkerkant, onder **Wie** zie je je contacten."
+                en: "### Perspectives system\n
+                   This is the Perspectives system, representing your installation.\n
+                   * Create and accept invitations to connect with other users.\n
+                   * Go to an App store to install a new App.\n
+                   * On the left, under **Who** you see your contacts."
+            1:
+              translations:
+                orig: "#### Outgoing invitations\n
+                  These are the invitations you have sent to other users.\n
+                  Create a new invitation either in the main menu on the left, or by [[action: CreateInvitation|clicking here]]."
+                nl: "#### Uitgaande uitnodigingen\n
+                   Dit zijn de uitnodigingen die je naar andere gebruikers hebt verstuurd.\n
+                   Maak een nieuwe uitnodiging via het hoofdmenu aan de linkerkant, of door [[action: CreateInvitation|hier te klikken]]."
+                en: "#### Outgoing invitations\n
+                   These are the invitations you have sent to other users.\n
+                   Create a new invitation either in the main menu on the left, or by [[action: CreateInvitation|clicking here]]."
+            2:
+              translations:
+                orig: "#### Base Repository\n
+                  This is the base repository of Perspectives.\n
+                  It contains the models that are used to run Perspectives."
+                nl: "#### Basis Repository\n
+                   Dit is de basis repository van Perspectieven.\n
+                   Het bevat de modellen die worden gebruikt om Perspectieven te laten draaien."
+                en: "#### Base Repository\n
+                   This is the base repository of Perspectives.\n
+                   It contains the models that are used to run Perspectives."
+            3:
+              translations:
+                orig: "#### Repositories\n
+                  These are the repositories that you have access to.\n
+                  Open a repository to see the models it contains."
+                nl: "#### Repositories\n
+                   Dit zijn de repositories waartoe je toegang hebt.\n
+                   Open een repository om de modellen te zien die het bevat."
+                en: "#### Repositories\n
+                   These are the repositories that you have access to.\n
+                   Open a repository to see the models it contains."
+      things:
+        GlobalUpgradeHook:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
+        SystemDataUpgrade:
+          translations:
+            nl: Systeem data upgrade
+            en: System data upgrade
+        RecoveryPoint:
+          translations:
+            nl: Herstelpunt
+            en: Recovery point
+          properties:
+            ModelsLastSeq:
+              translations:
+                nl: Laatste modelvolgnummer
+                en: Last model sequence number
+            InstancesLastSeq:
+              translations:
+                nl: Laatste instantievolgnummer
+                en: Last instance sequence number
+        SelectedClipboardItem:
+          translations:
+            en: Selected clipboard item
+            nl: Geselecteerde clipboard item
+        ItemsOnClipboard:
+          translations:
+            en: Items on clipboard
+            nl: Items op clipboard
+          properties:
+            TypeName:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
+            Name:
+              translations:
+                en: Item
+                nl: Item
+            ClipboardData:
+              translations:
+                en: Role data
+                nl: Roldata
+            Selected:
+              translations:
+                en: Selected
+                nl: Geselecteerd
+        Databases:
+          translations:
+            en: Databases
+            nl: Databases
+          properties:
+            Identifier:
+              translations:
+                en: Identifier
+                nl: Identifier
+            Name:
+              translations:
+                en: Name
+                nl: Naam
+        IndexedRoles:
+          translations:
+            en: Indexed roles
+            nl: Geïndexeerde rollen
+          properties:
+            Name:
+              translations:
+                en: Name
+                nl: Naam
+      contextroles:
+        SystemCaches:
+          translations:
+            en: System caches
+            nl: Systeem caches
+        ActualRecentContexts:
+          translations:
+            en: Actual Recent Contexts
+            nl: Actuele Recente Contexten
+        RecentContexts:
+          translations:
+            en: History
+            nl: Geschiedenis
+          properties:
+            LastShownOnScreen:
+              translations:
+                en: Last shown on screen
+                nl: Laatst getoond op scherm
+        PinnedContexts:
+          translations:
+            en: Bookmarks
+            nl: Bladwijzers
+        AllSettings:
+          translations:
+            en: All Settings
+            nl: Alle Instellingen
+        AllNotifications:
+          translations:
+            en: All notifications
+            nl: Alle berichten
+        PendingInvitations:
+          translations:
+            en: Pending invitations
+            nl: Te beantwoorden uitnodigingen
+        Apps:
+          translations:
+            nl: Apps
+            en: Apps
+        StartContexts:
+          translations:
+            en: Start contexts
+            nl: Begincontexten
+        Channels:
+          translations:
+            en: Channels
+            nl: Kanalen
+        IndexedContexts:
+          translations:
+            en: Indexed contexts
+            nl: Geïndexeerde contexten
+          properties:
+            Name:
+              translations:
+                en: Name
+                nl: Naam
+        ModelsToUpdate:
+          translations:
+            en: Models to update
+            nl: Modellen om te actualiseren
+        ModelsInUse:
+          translations:
+            en: Models in use
+            nl: Modellen in gebruik
+          notifications:
+            0:
+              translations:
+                orig: Installing a new patch for $0 .
+                nl: Installeer een nieuwe patch voor $0 .
+                en: Installing a new patch for $0 .
+            1:
+              translations:
+                orig: Installing build $0 of $1 (replacing $2 ).
+                nl: Bezig met installeren van build $0 van $1 (ter vervanging van $2 ).
+                en: Installing build $0 of $1 (replacing $2 ).
+          properties:
+            DetachedFiller:
+              translations:
+                en: Detached filler
+                nl: Verwijderde vuller
+            UpdateOnBuild:
+              translations:
+                en: Update on build
+                nl: Actualiseer bij nieuwe build
+            InstalledBuild:
+              translations:
+                en: Installed build
+                nl: Geïnstalleerde build
+            InstalledPatch:
+              translations:
+                en: Installed patch
+                nl: Geïnstalleerde patch
+            ModelToRemove:
+              translations:
+                en: Model to remove
+                nl: Model om te verwijderen
+        AllRepositories:
+          translations:
+            en: All app stores
+            nl: Alle ap stores
+        Repositories:
+          translations:
+            en: App stores
+            nl: App stores
+        BaseRepository:
+          translations:
+            en: Basic app store
+            nl: Basis app store
+        OutgoingInvitations:
+          translations:
+            en: Outgoing invitations
+            nl: Verstuurde uitnodigingen
+        SocialEnvironment:
+          translations:
+            en: Social Environment
+            nl: Sociale Omgeving
+    Caches:
+      translations:
+        en: Caches
+        nl: Caches
+      users:
+        Manager:
+          translations:
+            en: Manager
+            nl: Beheerder
+      things:
+        Cache:
+          translations:
+            en: Cache
+            nl: Cache
+          properties:
+            Size:
+              translations:
+                en: Size
+                nl: Afmeting
+            Name:
+              translations:
+                en: Name
+                nl: Naam
+    ContextWithNotification:
+      translations:
+        en: Context with notifications
+        nl: Context met meldingen
+      users:
+        NotifiedUser:
+          translations:
+            en: Notified user
+            nl: Vergewittigde gebruiker
+          actions:
+            model://perspectives.domains#System$ContextWithNotification$NotifiedUser:
+              DeleteNotifications:
+                translations:
+                  en: Delete notifications
+                  nl: Verwijder meldingen
+      contextroles:
+        Notifications:
+          translations:
+            en: Notifications
+            nl: Meldingen
+          properties:
+            Message:
+              translations:
+                en: Message
+                nl: Boodschap
+    ContextWithScreenState:
+      translations:
+        en: Context with screen state
+        nl: Context met scherm toestand
+      external:
+        properties:
+          IsOnScreen:
+            translations:
+              en: Is on screen
+              nl: Staat op scherm
+    PhysicalContext:
+      translations:
+        en: Physical context
+        nl: Fysieke context
+      users:
+        UserWithAddress:
+          translations:
+            en: User with address
+            nl: Gebruiker met adres
+          properties:
+            RelayPort:
+              translations:
+                en: Relay port
+                nl: Relay port
+            RelayHost:
+              translations:
+                en: Relay host
+                nl: Relay host
+            Port:
+              translations:
+                en: Port
+                nl: Poort
+            Host:
+              translations:
+                en: Host
+                nl: Host
+    RecentContext:
+      translations:
+        en: Recent Context
+        nl: Recente Context
+    Channel:
+      translations:
+        en: Channel
+        nl: Kanaal
+      external:
+        properties:
+          ChannelDatabaseName:
+            translations:
+              en: Channel database name
+              nl: Kanaaldatabasenaam
+      users:
+        You:
+          translations:
+            en: You
+            nl: Jij
+        Me:
+          translations:
+            en: Me
+            nl: Ik
+        ConnectedPartner:
+          translations:
+            en: Connected partner
+            nl: Verbonden partner
+        Initiator:
+          translations:
+            en: Initiator
+            nl: Initieerder
+    RootContext:
+      translations:
+        en: Root context
+        nl: Root context
+      external:
+        properties:
+          IsSystemModel:
+            translations:
+              nl: Is een systeem model
+              en: Is a system model
+          Name:
+            translations:
+              en: Name
+              nl: Naam
+      users:
+        RootUser:
+          translations:
+            en: Root user
+            nl: Root gebruiker
+    ContextWithSettings:
+      translations:
+        nl: Context met instellingen
+        en: Context with settings
+    Invitation:
+      translations:
+        en: Invitation
+        nl: Uitnodiging
+      external:
+        properties:
+          CorrectCodeEntered:
+            translations:
+              nl: Juiste code ingevoerd
+              en: Correct code entered
+          IWantToInviteAnUnconnectedUser:
+            translations:
+              en: I want to invite an unconnected user
+              nl: Ik wil een niet-verbonden gebruiker uitnodigen
+          InviterLastName:
+            translations:
+              en: Inviter's last name
+              nl: Achternaam van uitnodiger
+          EnteredCode:
+            translations:
+              nl: Ingevoerde code
+              en: Entered code
+          ConfirmationCode:
+            translations:
+              en: Confirmation code
+              nl: Bevestigingscode
+          CompleteMessage:
+            translations:
+              en: Complete message
+              nl: Volledige boodschap
+          Message:
+            translations:
+              en: Message
+              nl: Boodschap
+          Addressing:
+            translations:
+              en: Adressing
+              nl: Adressering
+          SerialisedInvitation:
+            translations:
+              en: Serialised invitation
+              nl: Geserialiseerde uitnodiging
+      users:
+        Guest:
+          translations:
+            en: Guest
+            nl: Gast
+          actions:
+            model://perspectives.domains#System$Invitation$UnlockInvitation:
+              AcceptInvitation:
+                translations:
+                  nl: Accepteer uitnodiging
+                  en: Accept invitation
+          markdowns:
+            0:
+              translations:
+                orig: "### Invitation to Perspectives\n
+                  You have received an invitation to Perspectives.\n
+                  To unlock the invitation, you must enter the security code that the Inviter has given you."
+                nl: "### Uitnodiging voor Perspectieven\n
+                   Je hebt een uitnodiging voor Perspectieven ontvangen.\n
+                   Om de uitnodiging te ontgrendelen moet je de beveiligingscode invoeren die de Uitnodiger je heeft gegeven."
+                en: "### Invitation to Perspectives\n
+                   You have received an invitation to Perspectives.\n
+                   To unlock the invitation, you must enter the security code that the Inviter has given you."
+            1:
+              translations:
+                orig: "### Invitation to Perspectives\n
+                  You have been invited to Perspectives.\n
+                  If you want to accept the invitation, you must fill the Invitee role with your own data.\n
+                  [[action: AcceptInvitation|Accept by clicking here]]."
+                nl: "### Uitnodiging voor Perspectieven\n
+                   Je bent uitgenodigd voor Perspectieven.\n
+                   Als je de uitnodiging wilt accepteren, moet je de rol van Uitgenodigde invullen met je eigen gegevens.\n
+                   [[action: AcceptInvitation|Accepteer door hier te klikken]]."
+                en: "### Invitation to Perspectives\n
+                   You have been invited to Perspectives.\n
+                   If you want to accept the invitation, you must fill the Invitee role with your own data.\n
+                   [[action: AcceptInvitation|Accept by clicking here]]."
+        Invitee:
+          translations:
+            en: Invitee
+            nl: Uitgenodigde
+          markdowns:
+            0:
+              translations:
+                orig: "### Invitation to Perspectives\n
+                  You have accepted this invitation to Perspectives."
+                nl: "### Uitnodiging voor Perspectieven\n
+                   Je hebt deze uitnodiging voor Perspectieven geaccepteerd."
+                en: "### Invitation to Perspectives\n
+                   You have accepted this invitation to Perspectives."
+        Inviter:
+          translations:
+            en: Inviter
+            nl: Uitnodiger
+          actions:
+            model://perspectives.domains#System$Invitation$External$Message:
+              CreateInvitation:
+                translations:
+                  en: Create invitation
+                  nl: Maak uitnodiging
+          markdowns:
+            0:
+              translations:
+                orig: "### Invite a new person to Perspectives\n
+                  You can invite a person to Perspectives by sending an **invitation file**.\n
+                  Enter a message. It will be appended to the standard message below.\n
+                  After entering the message, an action button will appear to create the invitation file.\n
+                  The button is shown with a lightning bolt icon.\n
+                  Excecute the action and then download the file.\n
+                  Send the file to the person you want to invite.\n
+                  The file contains a security code that the person must enter to unlock the invitation.\n
+                  After creating the file, the security code has apppeared, too.\n
+                  Wait for the Invitee to contact you for the security code.\n
+                  Only if you're sure the person who contacts you is the person you want to invite,\n
+                  give him/her the security code.\n
+                  After that, the person can fill the role of Invitee with his/her own data.\n
+                  These will become available to you, too.\n
+                  In this way you'll have established a connection in a safe way."
+                nl: "### Nodig een nieuwe persoon uit voor Perspectieven\n
+                   Je kunt iemand uitnodigen voor Perspectieven door een **uitnodigingsbestand** te sturen.\n
+                   Voer een bericht in. Het zal worden toegevoegd aan het standaardbericht hieronder.\n
+                   Na het invoeren van het bericht verschijnt er een actieknop om het uitnodigingsbestand aan te maken.\n
+                   De knop wordt getoond met een bliksemschicht-icoon.\n
+                   Voer de actie uit en download vervolgens het bestand.\n
+                   Stuur het bestand naar de persoon die je wilt uitnodigen.\n
+                   Het bestand bevat een beveiligingscode die de persoon moet invoeren om de uitnodiging te ontgrendelen.\n
+                   Na het aanmaken van het bestand is ook de beveiligingscode verschenen.\n
+                   Wacht tot de Uitgenodigde contact met je opneemt voor de beveiligingscode.\n
+                   Alleen als je zeker weet dat de persoon die contact met je opneemt de persoon is die je wilt uitnodigen,\n
+                   geef je hem/haar de beveiligingscode.\n
+                   Daarna kan de persoon de rol van Uitgenodigde invullen met zijn/haar eigen gegevens.\n
+                   Deze zullen ook voor jou beschikbaar worden.\n
+                   Op deze manier heb je op een veilige manier een verbinding tot stand gebracht."
+                en: "### Invite a new person to Perspectives\n
+                   You can invite a person to Perspectives by sending an **invitation file**.\n
+                   Enter a message. It will be appended to the standard message below.\n
+                   After entering the message, an action button will appear to create the invitation file.\n
+                   The button is shown with a lightning bolt icon.\n
+                   Excecute the action and then download the file.\n
+                   Send the file to the person you want to invite.\n
+                   The file contains a security code that the person must enter to unlock the invitation.\n
+                   After creating the file, the security code has apppeared, too.\n
+                   Wait for the Invitee to contact you for the security code.\n
+                   Only if you're sure the person who contacts you is the person you want to invite,\n
+                   give him/her the security code.\n
+                   After that, the person can fill the role of Invitee with his/her own data.\n
+                   These will become available to you, too.\n
+                   In this way you'll have established a connection in a safe way."
+    ManifestCollection:
+      translations:
+        en: Manifest collection
+        nl: Manifestencollectie
+      external:
+        properties:
+          Domain:
+            translations:
+              en: Domain
+              nl: Domein
+          NameSpace_:
+            translations:
+              en: Namespace
+              nl: Namespace
+      contextroles:
+        Manifests:
+          translations:
+            en: Manifests
+            nl: Manifesten
+          properties:
+            LocalModelName:
+              translations:
+                en: Local model name
+                nl: Lokale modelnaam
+    ModelManifest:
+      translations:
+        en: Model manifest
+        nl: Modelmanifest
+      external:
+        properties:
+          ModelCuid:
+            translations:
+              nl: Model CUID
+              en: Model CUID
+          DomeinFileName:
+            translations:
+              en: Domain filename
+              nl: Domein bestandsnaam
+          IsSystemModel:
+            translations:
+              nl: Is een systeem model
+              en: Is a system model
+          IsLibrary:
+            translations:
+              en: Is a library
+              nl: Is een bibliotheek
+          Description:
+            translations:
+              en: Description
+              nl: Beschrijving
+          Name:
+            translations:
+              nl: Naam
+              en: Name
+      contextroles:
+        Versions:
+          translations:
+            en: Versions
+            nl: Versies
+          properties:
+            VersionedLocalModelName:
+              translations:
+                en: Versioned local modelname
+                nl: Geversioneerde lokale modelnaam
+            Version:
+              translations:
+                en: Version
+                nl: Versie
+    VersionedModelManifest:
+      translations:
+        en: Versioned model manifest
+        nl: Geversioneerd modelmanifest
+      external:
+        properties:
+          Build:
+            translations:
+              en: Build
+              nl: Build
+          Patch:
+            translations:
+              en: Patch
+              nl: Patch
+          VersionName:
+            translations:
+              nl: Versienaam
+              en: Version name
+          VersionedDomeinFileName:
+            translations:
+              nl: Geversioneerde domein bestandsnaam
+              en: Versioned domain filename
+          Version:
+            translations:
+              en: Version
+              nl: Versie
+          DomeinFileName:
+            translations:
+              en: Domain filename
+              nl: Domein bestandsnaam
+          Description:
+            translations:
+              en: Description
+              nl: Beschrijving
+          ShouldNotBeRemoved:
+            translations:
+              nl: MISSING nl
+              en: MISSING en
+          ModelName:
+            translations:
+              en: Model name
+              nl: Modelnaam
+      users:
+        Visitor:
+          translations:
+            en: Visitor
+            nl: Bezoeker
+  roles:
+    ModelDataUpgrade:
+      translations:
+        nl: MISSING nl
+        en: MISSING en
+    SystemDataUpgrade:
+      translations:
+        nl: System data upgrade
+        en: System data upgrade
+      properties:
+        LastHandledUpgrade:
+          translations:
+            nl: Laatste upgrade verwerkt
+            en: Last handled upgrade
+    RoleWithId:
+      translations:
+        en: Role with identification
+        nl: Rol met identificatie
+      properties:
+        Id:
+          translations:
+            en: Identification
+            nl: Identificatie
+    RoleWithName:
+      translations:
+        nl: MISSING nl
+        en: MISSING en
+      properties:
+        Name:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
+    Chat:
+      translations:
+        nl: Chat
+        en: Chat
+      properties:
+        Media:
+          translations:
+            nl: Media
+            en: Media
+        Messages:
+          translations:
+            nl: Meldingen
+            en: Messages
+    WithCredentials:
+      translations:
+        en: With credentials
+        nl: Met credentials
+      properties:
+        AuthorizedDomain:
+          translations:
+            en: Authorized domain
+            nl: Geautoriseerd domein
+        Password:
+          translations:
+            en: Password
+            nl: Paswoord
+        SpecificUserName:
+          translations:
+            en: Specific username
+            nl: Specifieke gebruikersnaam
+        UserName:
+          translations:
+            en: Username
+            nl: Gebruikersnaam
+    Identifiable:
+      translations:
+        en: Identifiable
+        nl: Identificeerbaar
+      properties:
+        PublicKey:
+          translations:
+            en: Publick key
+            nl: Publieke sleutel
+        Cancelled:
+          translations:
+            en: Cancelled
+            nl: Geannuleerd
+        FirstName:
+          translations:
+            en: First name
+            nl: Voornaam
+        LastName:
+          translations:
+            en: Last name
+            nl: Achternaam
+    Addressable:
+      translations:
+        nl: Adresseerbaar
+        en: Adressable
+      properties:
+        Phone:
+          translations:
+            nl: Telefoon
+            en: Phone
+        EmailAddress:
+          translations:
+            nl: Email adres
+            en: Email address
+        Country:
+          translations:
+            nl: Land
+            en: Country
+        City:
+          translations:
+            nl: Woonplaats
+            en: City
+        PostalCode:
+          translations:
+            nl: Postcode
+            en: Postal code
+        HouseNumber:
+          translations:
+            nl: Huisnummer
+            en: Housenumber
+        Street:
+          translations:
+            nl: Straat
+            en: Street
+    Upgrader:
+      translations:
+        nl: Upgrader
+        en: Upgrader

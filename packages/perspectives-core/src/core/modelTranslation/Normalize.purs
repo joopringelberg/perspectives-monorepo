@@ -22,7 +22,7 @@ import Foreign.Object as OBJ
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Data.EncodableMap (EncodableMap, values)
 import Perspectives.Identifiers (typeUri2typeNameSpace)
-import Perspectives.ModelTranslation.Representation (ModelTranslation(..), ContextsTranslation(..), ContextTranslation(..), RolesTranslation(..), RoleTranslation(..), PropertiesTranslation(..), ActionsPerStateTranslation(..), ActionsTranslation(..))
+import Perspectives.ModelTranslation.Representation (ActionsPerStateTranslation(..), ActionsTranslation(..), ContextTranslation(..), ContextsTranslation(..), IndexedContextNameTranslation(..), ModelTranslation(..), PropertiesTranslation(..), RoleTranslation(..), RolesTranslation(..))
 import Perspectives.Representation.Action (Action(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Cacheable (ContextType(..), EnumeratedRoleType(..))
@@ -67,7 +67,14 @@ toReadableContext (ContextTranslation rec) = do
   things' <- toReadableRoles rec.things
   contextroles' <- toReadableRoles rec.contextroles
   contexts' <- toReadableContexts rec.contexts
-  pure $ ContextTranslation rec { external = external', users = users', things = things', contextroles = contextroles', contexts = contexts' }
+  indexedName' <- traverse toReadableIndexedContextName rec.indexedName
+  pure $ ContextTranslation rec { external = external', users = users', things = things', contextroles = contextroles', contexts = contexts', indexedName = indexedName' }
+
+toReadableIndexedContextName :: IndexedContextNameTranslation -> MonadPerspectives IndexedContextNameTranslation
+toReadableIndexedContextName (IndexedContextNameTranslation rec) = do
+  -- How do we map a Stable indexed context identifier to a readable one?
+  name' <- toReadable rec.name
+  pure $ IndexedContextNameTranslation rec { name = name' }
 
 toReadableRoles :: RolesTranslation -> MonadPerspectives RolesTranslation
 toReadableRoles (RolesTranslation obj) = do
@@ -122,7 +129,13 @@ normalizeContext (ContextTranslation rec) = do
   things' <- normalizeRoles rec.things
   contextroles' <- normalizeRoles rec.contextroles
   contexts' <- normalizeContexts rec.contexts
-  pure $ ContextTranslation rec { external = external', users = users', things = things', contextroles = contextroles', contexts = contexts' }
+  indexedName' <- traverse normalizeIndexedContextName rec.indexedName
+  pure $ ContextTranslation rec { external = external', users = users', things = things', contextroles = contextroles', contexts = contexts', indexedName = indexedName' }
+
+normalizeIndexedContextName :: IndexedContextNameTranslation -> MonadPerspectives IndexedContextNameTranslation
+normalizeIndexedContextName (IndexedContextNameTranslation rec) = do
+  name' <- toStable rec.name
+  pure $ IndexedContextNameTranslation rec { name = name' }
 
 normalizeRoles :: RolesTranslation -> MonadPerspectives RolesTranslation
 normalizeRoles (RolesTranslation obj) = do

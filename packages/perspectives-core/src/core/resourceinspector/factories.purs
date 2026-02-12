@@ -16,12 +16,11 @@ import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..)
 import Perspectives.Instances.ObjectGetters (getUnlinkedRoleInstances)
 import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Persistent (getPerspectRol)
-import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.Property (hasFacet)
 import Perspectives.Representation.InstanceIdentifiers (Value(..), externalRole)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), PropertyType(..), StateIdentifier(..), EnumeratedPropertyType(..), EnumeratedRoleType(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
-import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableNameFromTelescope)
+import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableName)
 import Perspectives.Types.ObjectGetters (allUnlinkedRoles)
 
 makeInspectableContext :: PerspectContext -> MonadPerspectives IC.InspectableContext
@@ -112,7 +111,7 @@ readablePropertyValue (PerspectRol { id, pspType, properties }) = do
     properties
   case mlocalTitle of
     Nothing -> do
-      Tuple mNonLocalTitle _ <- runWriterT $ getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST pspType) id
+      Tuple mNonLocalTitle _ <- runWriterT $ getReadableName pspType id
       pure mNonLocalTitle
     Just (Value t) -> pure t
 

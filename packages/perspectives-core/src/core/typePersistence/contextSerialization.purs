@@ -59,21 +59,19 @@ import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Instances.ObjectGetters (contextType_)
 import Perspectives.ModelDependencies (chatAspect)
 import Perspectives.ModelTranslation (translationOf)
-import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
+import Perspectives.Names (findIndexedContextName)
 import Perspectives.Query.Interpreter (lift2MPQ)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription)
 import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances)
-import Perspectives.Representation.ADT (ADT(..))
-import Perspectives.Representation.Class.Property (hasFacet)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..), Value(..), externalRole)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleKind(..), RoleType(..), externalRoleType, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), RoleKind(..), RoleType(..), externalRoleType, roletype2string)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
-import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableNameFromTelescope, perspectiveForContextAndUser', perspectiveForContextAndUserFromId, perspectivesForContextAndUser')
+import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableName, perspectiveForContextAndUser', perspectiveForContextAndUserFromId, perspectivesForContextAndUser')
 import Perspectives.TypePersistence.PerspectiveSerialisation.Data (SerialisedPerspective', SerialisedProperty)
 import Perspectives.TypePersistence.ScreenContextualisation (contextualiseScreen, contextualiseTableFormDef)
-import Perspectives.Types.ObjectGetters (contextAspectsClosure, generalisesRoleType_, string2RoleType)
+import Perspectives.Types.ObjectGetters (contextAspectsClosure, generalisesRoleType_, indexedContextName, string2RoleType)
 import Simple.JSON (writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -85,7 +83,16 @@ derive instance newTypeSerialisedScreen :: Newtype SerialisedScreen _
 screenForContextAndUser :: RoleInstance -> RoleType -> ContextType -> (ContextInstance ~~> SerialisedScreen)
 screenForContextAndUser userRoleInstance userRoleType contextType contextInstance = do
   DomeinFile df <- lift2MPQ $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ $ unwrap contextType)
-  title <- lift (getReadableNameFromTelescope (flip hasFacet ReadableNameProperty) (ST $ externalRoleType contextType) (externalRole contextInstance))
+  -- If contextInstance is an indexed individual, use the translation of that indexed name as title. Otherwise, get the name from the role telescope.
+  mIndexedName <- lift $ lift $ findIndexedContextName contextInstance
+  title <- case mIndexedName of
+    -- If we have an indexed name, look up its generic indexed name in the type of the context and translate that.
+    Just indexedName -> do
+      mcanonicalIndexedName <- lift $ lift $ indexedContextName contextType
+      case mcanonicalIndexedName of
+        Just (ContextInstance canonicalIndexedName) -> lift $ lift $ translateType (IndexedContext canonicalIndexedName)
+        Nothing -> lift (getReadableName (externalRoleType contextType) (externalRole contextInstance))
+    Nothing -> lift (getReadableName (externalRoleType contextType) (externalRole contextInstance))
   translatedUserRoleType <- lift $ lift $ translateType userRoleType
   case lookup (ScreenKey contextType userRoleType) df.screens of
     Just s -> populateScreen s title translatedUserRoleType
