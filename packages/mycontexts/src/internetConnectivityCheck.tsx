@@ -68,7 +68,11 @@ export function InternetConnectivityCheck({ reportBack }: { reportBack: (isOnlin
     </Tooltip>
   );
 
-  return <div className='ms-auto'/>;
+  // Lightweight spacer element used in the top navbar to
+  // reserve space for the connectivity indicator. The
+  // specific class name is also used for layout measurements
+  // (e.g. in FlippingTitle).
+  return <div className="internet-connectivity-check" />;
   return (
     <OverlayTrigger
       placement="left"

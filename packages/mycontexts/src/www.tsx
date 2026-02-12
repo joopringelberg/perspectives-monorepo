@@ -742,7 +742,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
             <span className="visually-hidden">{i18next.t("mainMenu", {ns: "mycontexts"})}</span>
           </>
         } 
-        className="me-auto hide-caret px-2 py-1" 
+        className="hide-caret px-2 py-1" 
         id="nav-dropdown"
         aria-label="Main menu navigation"
       >
@@ -760,7 +760,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.copyContext( component.state.openContext! ) }>{ i18next.t("www_copycontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
-      <Navbar.Brand href="#home" className='text-light navbar-title'>
+      <Navbar.Brand href="#home" className='me-auto text-light navbar-title'>
+        {/* TODO If the available width is large enough, display both context- and role name. */}
         <FlippingTitle
           title={this.state.title} 
           userRoleType={this.state.screen ? this.state.screen.userRole : (this.state.openContextUserType ? deconstructLocalName(this.state.openContextUserType) : '')} 
