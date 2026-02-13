@@ -21,7 +21,7 @@
 import React, { Component, forwardRef, JSX } from "react";
 import {Dropdown, NavDropdown} from 'react-bootstrap';
 import i18next from "i18next";
-import { ContextType, PDRproxy, Perspective, RoleInstanceT, RoleOnClipboard } from "perspectives-proxy";
+import { ContextType, PDRproxy, Perspective, RoleInstanceT, RoleOnClipboard, RoleType } from "perspectives-proxy";
 import { UserMessagingPromise } from "./userMessaging";
 import { PSContextType } from "./reactcontexts";
 import { externalRole } from "./urifunctions";
@@ -47,6 +47,11 @@ interface TableItemContextMenuProps {
   // When true, render only the menu items without an outer NavDropdown.
   // This is used for floating context menus that supply their own container.
   renderAsInlineMenu?: boolean;
+  // Optional callback used by inline/floating menus to dispatch the
+  // OpenWhereDetails event from a DOM node that is guaranteed to be
+  // inside the MSComponent tree. When absent, we fall back to the
+  // legacy behaviour of dispatching from this component's own ref.
+  onOpenDetails?: (roleInstance: RoleInstanceT, roleType: RoleType) => void;
 }
 
 interface TableItemContextMenuState {
@@ -487,12 +492,19 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
               key="OpenDetails"
               eventKey="OpenDetails"
               onClick={ () => {
-                component.ref.current?.dispatchEvent( new CustomEvent( 'OpenWhereDetails',
-                  { detail: 
-                    { roleInstance: component.props.roleinstance
-                    , roleType: component.props.perspective.roleType }
-                  ,  bubbles: true } 
-                ))
+                if (component.props.onOpenDetails) {
+                  component.props.onOpenDetails(
+                    component.props.roleinstance,
+                    component.props.perspective.roleType
+                  );
+                } else {
+                  component.ref.current?.dispatchEvent( new CustomEvent( 'OpenWhereDetails',
+                    { detail: 
+                      { roleInstance: component.props.roleinstance
+                      , roleType: component.props.perspective.roleType }
+                    ,  bubbles: true } 
+                  ));
+                }
               }}
             >{
               i18next.t("tableContextMenu_opendetails", { ns: 'preact' }) 

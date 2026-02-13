@@ -89,19 +89,48 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
 
   handleKeyDown (event : React.KeyboardEvent)
   {
-    switch(event.code){
-      case "Space": // Space
-        if (event.shiftKey)
-        {
+    switch (event.code) {
+      case "Space":
+        if (event.shiftKey) {
           event.preventDefault();
           event.stopPropagation();
           // Signal to Table that this row is selected
-          this.ref.current.dispatchEvent( new CustomEvent('SetRow', 
-            { detail: 
-              { roleInstance: this.props.roleinstance }
-            ,  bubbles: true }) );
-          this.ref.current?.dispatchEvent( new CustomEvent('SelectCardColumn', { bubbles: true } ) );
+          this.ref.current?.dispatchEvent(new CustomEvent('SetRow', {
+            detail: { roleInstance: this.props.roleinstance },
+            bubbles: true
+          }));
+          this.ref.current?.dispatchEvent(new CustomEvent('SelectCardColumn', { bubbles: true }));
+        }
+        break;
+      case "ContextMenu":
+        // Keyboard context menu key
+        event.preventDefault();
+        event.stopPropagation();
+        if (this.ref.current) {
+          const rect = this.ref.current.getBoundingClientRect();
+          const x = rect.left + rect.width / 2;
+          const y = rect.top + rect.height / 2;
+          this.ref.current.dispatchEvent(new CustomEvent('RowContextMenu', {
+            detail: { roleInstance: this.props.roleinstance, x, y },
+            bubbles: true
+          }));
+        }
+        break;
+      default:
+        // Also support Shift+F10 as a fallback shortcut
+        if (event.key === "F10" && event.shiftKey) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (this.ref.current) {
+            const rect = this.ref.current.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+            this.ref.current.dispatchEvent(new CustomEvent('RowContextMenu', {
+              detail: { roleInstance: this.props.roleinstance, x, y },
+              bubbles: true
+            }));
           }
+        }
         break;
     }
   }

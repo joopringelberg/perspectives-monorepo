@@ -101,6 +101,11 @@ const RowContextMenu: React.FC<{
       ref={menuRef}
       className="dropdown-menu show"
       style={style}
+      onClick={() => {
+        if (onRequestClose) {
+          onRequestClose();
+        }
+      }}
     >
       <TableItemContextMenu
         perspective={perspective}
@@ -111,6 +116,16 @@ const RowContextMenu: React.FC<{
         isOpen={true}
         mode="rowOnly"
         renderAsInlineMenu={true}
+        onOpenDetails={(roleInstance, roleType) => {
+          if (menuRef.current) {
+            menuRef.current.dispatchEvent(
+              new CustomEvent('OpenWhereDetails', {
+                detail: { roleInstance, roleType },
+                bubbles: true,
+              })
+            );
+          }
+        }}
       />
     </div>
   );
