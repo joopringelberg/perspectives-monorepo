@@ -50,6 +50,9 @@
 			"dataupgrade"
 		],
 		"purescript.buildCommand": "pnpm exec spago build --json-errors",
-		"git.openRepositoryInParentFolders": "always"
+		"git.openRepositoryInParentFolders": "always",
+		"chat.tools.terminal.autoApprove": {
+			"pnpm": true
+		}
 	}
 }

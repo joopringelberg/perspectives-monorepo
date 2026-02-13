@@ -38,7 +38,7 @@ import Data.String.Regex.Flags (global)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect.Unsafe (unsafePerformEffect)
 import Parsing (fail)
-import Parsing.Combinators (between, lookAhead, manyTill, option, optionMaybe, try, (<?>))
+import Parsing.Combinators (between, lookAhead, manyTill, notFollowedBy, option, optionMaybe, try, (<?>))
 import Parsing.String (char, satisfy)
 import Parsing.Token (alphaNum)
 import Partial.Unsafe (unsafePartial)
@@ -316,7 +316,10 @@ unaryStep = do
 
 operator :: Partial => IP Operator
 operator =
-  ( (Filter <$> (getPosition <* reserved "with"))
+  -- NOTE: `with` is also used as a screen keyword (`with props ...`, `with view ...`).
+  -- We use `try` so that if `with` is followed by `props` or `view`, the parser backtracks
+  -- and does not consume `with` as a Filter operator.
+  ( (Filter <$> try (getPosition <* reserved "with" <* notFollowedBy (reserved "props" <|> reserved "view")))
       <|>
         (Sequence <$> (getPosition <* token.reservedOp ">>="))
       <|>

@@ -77,6 +77,18 @@ domain model://joopringelberg.nl#TestDuration@1.0
           markdown <## This is the second user
                     When you see this, setting the default user role has worked!
                    >
+          Experiments
+            master
+              markdown <### Managed broker services
+                       >
+              with props (Today, Tomorrow, EndDate)
+            detail
         where
+          Experiments
+            master
+            detail
+              markdown <### Managed broker services
+                       >
+              without props (Today)
     
 
