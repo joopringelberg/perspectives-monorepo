@@ -36,8 +36,9 @@ data PerspectivesWarning
   | RoleBindingSynchronizationIncomplete EnumeratedRoleType RoleType (Array RoleType)
   | NotificationError StateIdentifier
   | AutomaticActionError StateIdentifier
-  | ExternalFunctionError String String
+  | ExternalFunctionError String
   | NoTranslations String
+  | NonCriticalError
 
 instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ModelLacksModelId dfid) = "(ModelLacksModelId) The model '" <> dfid <> "' lacks a value for the property ModelIdentification on its Model instance."
@@ -47,5 +48,6 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (RoleBindingSynchronizationIncomplete role source destinations) = "(RoleBindingSynchronizationIncomplete) Filling (and emptying) instances of role type:\n\t'" <> (unwrap role) <> "'\n by:\n\t'" <> roletype2string source <> "'\n cannot be communicated with:\n\t* " <> intercalate "\n\t* " (map roletype2string destinations) <> "."
   show (NotificationError stateId) = "(NotificationError) Error on notifying in state " <> unwrap stateId
   show (AutomaticActionError stateId) = "(AutomaticActionError) Error on executing automatic action in state " <> unwrap stateId
-  show (ExternalFunctionError fname errorstring) = "(ExternalFunctionError) External library function '" <> fname <> "' results in an error: " <> errorstring
+  show (ExternalFunctionError fname) = "(ExternalFunctionError) External library function '" <> fname <> "' resulted in an error."
   show (NoTranslations domain) = "(NoTranslations) No translations found for domain '" <> domain <> "'."
+  show (NonCriticalError) = "(NonCriticalError) An error occurred, but it was caught and handled, so the system can continue running. Check the error message for details."

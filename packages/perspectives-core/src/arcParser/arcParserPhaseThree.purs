@@ -873,7 +873,7 @@ handlePostponedStateQualifiedParts = do
     objectMustBeRole objectQfd start end
     hasNotificationAspect <- lift2 ((roleIdentification2context user) ###>> hasContextAspect (ContextType READABLE.contextWithNotification))
     if hasNotificationAspect then pure unit
-    else lift2 $ addWarning $ show $ NoNotificationAspect (roleIdentification2context user) start end
+    else lift2 $ addWarning $ { message: show $ NoNotificationAspect (roleIdentification2context user) start end, error: "" }
     modifyAllStates
       ( case spec of
           AST.ContextState _ _ -> ContextNotification

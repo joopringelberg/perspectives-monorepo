@@ -100,8 +100,8 @@
   
   , "mycontexts_version": "MyContexts versie"
   , "mycontexts_build": "MyContexts build"
-  , "userMessagingPanel_title": "Non-fatale fout"
-  , "userMessagingPanel_message": "Er heeft zich een fout voorgedaan die verder gebruik niet in de weg staat. De fout is: {{- error}}."
+  , "userMessagingPanel_title": "Waarschuwing"
+  , "userMessagingPanel_message": "Er heeft zich een fout voorgedaan die verder gebruik niet in de weg staat: {{- warning}}"
   , "www_who": "Wie"
   , "www_what": "Wat"
   , "www_where": "Waar"

@@ -575,7 +575,9 @@ export const SharedWorkerChannelPromise: Promise<SharedWorkerChannel> = new Prom
 ////////////////////////////////////////////////////////////////////////////////
 //// PERSPECTIVESPROXY
 ////////////////////////////////////////////////////////////////////////////////
-type UserMessageChannel = (message : string) => void;
+type UserMessageChannel = (warnings: Warning[]) => void;
+
+export type Warning = { message: string; error: string };
 
 export class PerspectivesProxy
 {
@@ -632,7 +634,7 @@ export class PerspectivesProxy
         {
           if (proxy.userMessageChannel)
           {
-            proxy.userMessageChannel( response.warnings.toString() );
+            proxy.userMessageChannel( response.warnings.map( stringifiedWarning => JSON.parse( stringifiedWarning)) );
           }
         }
         receiveValues(response.result);

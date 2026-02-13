@@ -1,4 +1,4 @@
-domain model://joopringelberg.nl#TestDuration
+domain model://joopringelberg.nl#TestDuration@1.0
   use sys for model://perspectives.domains#System
   use td for model://joopringelberg.nl#TestDuration
   use sensor for model://perspectives.domains#Sensor
@@ -17,16 +17,14 @@ domain model://joopringelberg.nl#TestDuration
           -- as they are the allowed binding of StartContexts.
           -- As a consequence, no context is created.
           app <- create context TestDurationApp
-          indexedcontext <- create role IndexedContexts in sys:MySystem
+          start <- create role StartContexts in sys:MySystem
         in
           -- Being a RootContext, too, Installer can fill a new instance
           -- of StartContexts with it.
-          bind app >> extern to StartContexts in sys:MySystem
-          Name = "Test Duration App" for app >> extern
-          bind_ app >> extern to indexedcontext
-          IndexedContexts$Name = app >> indexedName for indexedcontext
-
-  -- This does not compile.
+          bind_ app >> extern to start
+          Name = "Test Duration App" for start
+          IsSystemModel = true for start
+  
   on exit
     do for sys:PerspectivesSystem$Installer
       letA
@@ -47,22 +45,24 @@ domain model://joopringelberg.nl#TestDuration
     aspect sys:RootContext
     aspect sys:ContextWithNotification
     external
-      aspect sys:RootContext$External
+    
+    thing Experiments (relational)
       property ExtraDays (Day)
       property Today = callExternal sensor:ReadSensor("clock", "now") returns DateTime
       property Tomorrow = Today + 1 day
       property EndDate = Today + ExtraDays
       property EndTime (Time)
-      property SystemCurrentHour (functional) = binder sys:PerspectivesSystem$IndexedContexts >> context >> extern >> CurrentHour
+      property SystemCurrentHour (functional) = sys:MySystem >> extern >> CurrentHour
 
       state Expired = SystemCurrentHour >= EndTime
         on entry
           notify Manager
             "The time is now past { callExternal util:FormatDateTime( EndTime, "nl-NL", "{\"timeStyle\": \"short\"}" ) returns String }"
+            -- "The time is now past { callExternal util:FormatDateTime( EndTime, "nl-NL", "{\"timeStyle\": \"dit bestaat niet\"}" ) returns String }"
     
     user Manager = sys:Me
-      aspect sys:ContextWithNotification$NotifiedUser
-      perspective on extern
+      perspective on Experiments
+        only (Create, Remove)
         props (ExtraDays, EndTime) verbs (SetPropertyValue)
         props (Today, Tomorrow, EndDate) verbs (Consult)
 

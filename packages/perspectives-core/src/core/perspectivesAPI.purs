@@ -975,11 +975,11 @@ sendResponse :: Response -> Api.ApiEffect -> MonadPerspectives Unit
 sendResponse (Result correlationIdentifier values) ae = do
   warnings <- getWarnings
   resetWarnings
-  liftEffect $ ae (ResultWithWarnings correlationIdentifier values warnings)
+  liftEffect $ ae (ResultWithWarnings correlationIdentifier values (writeJSON <$> warnings))
 sendResponse (Error correlationIdentifier message) ae = do
   warnings <- getWarnings
   resetWarnings
-  liftEffect $ ae (ErrorWithWarnings correlationIdentifier message warnings)
+  liftEffect $ ae (ErrorWithWarnings correlationIdentifier message (writeJSON <$> warnings))
 
 newtype ChatParticipant = ChatParticipant String
 

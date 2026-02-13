@@ -68,6 +68,7 @@ import Perspectives.Sync.HandleTransaction (executeDeltas, expandDeltas)
 import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
 import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..), createTransaction)
 import Perspectives.Types.ObjectGetters (contextRootStates, publicUrl_, roleRootStates)
+import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, unless, void, ($), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||))
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -208,7 +209,7 @@ phase1 share authoringRole r = do
             -- Error boundary.
             catchError (void $ for states (exitingRoleState rid))
               \e -> do
-                lift $ addWarning (show e)
+                lift $ addWarning { message: show NonCriticalError, error: (show e) }
                 logPerspectivesError $ Custom ("Cannot exit role state for " <> show rid <> ", because " <> show e)
                 lift $ restoreFrame oldFrame
                 throwError e
@@ -445,7 +446,7 @@ exitContext (ContextRemoval ctxt authorizedRole) = do
     -- Error boundary.
     catchError (void $ for states (exitingState ctxt))
       \e -> do
-        lift $ addWarning (show e)
+        lift $ addWarning { message: show NonCriticalError, error: (show e) }
         logPerspectivesError $ Custom ("Cannot exit state, because " <> show e)
     lift $ restoreFrame oldFrame
     -- Remove executed keys for these context states

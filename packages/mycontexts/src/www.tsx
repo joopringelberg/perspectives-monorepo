@@ -10,7 +10,7 @@ declare global {
 import './styles/www.css';
 import './styles/accessibility.css'
 import {addRoleToClipboard, externalRoleType, i18next} from 'perspectives-react';
-import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective, InspectableContext, InspectableRole } from 'perspectives-proxy';
+import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective, InspectableContext, InspectableRole, Warning } from 'perspectives-proxy';
 import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice, InspectableContextView, InspectableRoleInstanceView} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
 import { Me } from './me';
@@ -110,12 +110,11 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           })
         });
         // Add a way for the proxy to inform the user of warnings that consist of caught errors that did not lead to a crash.
-    PDRproxy.then( pproxy => pproxy.setUserMessageChannel( (message : string) => UserMessagingPromise.then( um => 
-      um.addMessageForEndUser(
-        { title: i18next.t("userMessagingPanel_title", { ns: 'mycontexts' }) 
-        , message: i18next.t("userMessagingPanel_message", {error: message, ns: 'mycontexts'})
-        , error: undefined
-      }))));
+    PDRproxy.then( pproxy => pproxy.setUserMessageChannel( (warnings: Warning[]) => UserMessagingPromise.then( um => 
+      warnings.forEach( warning => um.addMessageForEndUser(
+        { title: i18next.t("userMessagingPanel_title", { ns: 'mycontexts' })
+        , message: i18next.t("userMessagingPanel_message", { ns: 'mycontexts', warning: warning.message }) 
+        , error: warning.error }) ) ) ) );
   }
 
   componentDidMount() {

@@ -29,7 +29,7 @@ import Prelude
 import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.State (StateT, execStateT, get, put)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (cons, head, intercalate)
+import Data.Array (head)
 import Data.Either (Either(..))
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Maybe (Maybe(..))
@@ -102,8 +102,9 @@ parseAndCompileArc modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
               -- Als er meldingen zijn, geef die dan terug.
               Right _ -> do
                 warnings <- lift $ lift $ getWarnings
-                lift $ lift $ setWarnings previousWarnings
-                pure $ Value $ intercalate "\n" (cons "OK" warnings)
+                lift $ lift $ setWarnings (warnings <> previousWarnings)
+                -- Can we send the warnings back here through the other communication channel?
+                pure $ Value "OK"
           \e -> ArrayT $ pure [ Value (show e) ]
     )
     >>= handleExternalFunctionError "model://perspectives.domains#Parsing$ParseAndCompileArc"
@@ -113,20 +114,20 @@ applyImmediately :: Array ModelUriString -> Array ArcSource -> Array ModelUriStr
 applyImmediately modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
   try
     ( case head modelUri_, head arcSource_, head basedOnVersion_ of
-        Nothing, _, _ -> lift $ addWarning "Parsing$ApplyImmediately: no model name given!"
-        _, Nothing, _ -> lift $ addWarning "Parsing$ApplyImmediately: no arc source given!"
+        Nothing, _, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model name given!", error: "" }
+        _, Nothing, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no arc source given!", error: "" }
         Just modelUri, Just arcSource, mbasedOnVersion -> catchError
           do
             mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
             case mmodelCuid of
-              Nothing -> lift $ addWarning "Parsing$ApplyImmediately: no model CUID given!"
+              Nothing -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model CUID given!", error: "" }
               Just (Value modelCuid) -> do
                 r <- lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType MD.sysUser)
                   (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource true modelCuid mbasedOnVersion)
                 case r of
-                  Left errs -> lift $ addWarning ("Error in Parsing$ApplyImmediately: " <> show errs)
+                  Left errs -> lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: show errs })
                   Right _ -> pure unit
-          \e -> lift $ addWarning ("Error in Parsing$ApplyImmediately: " <> show e)
+          \e -> lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: show e })
     )
     >>= handleExternalStatementError "model://perspectives.domains#Parsing$ApplyImmediately"
 
@@ -149,7 +150,7 @@ uploadToRepository modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
           let split = unsafePartial modelUri2ModelUrl modelUri
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           case mmodelCuid of
-            Nothing -> lift $ addWarning "Parsing$UploadToRepository: no model CUID given!"
+            Nothing -> lift $ addWarning { message: "Parsing$UploadToRepository: no model CUID given!", error: "" }
             Just (Value modelCuid) -> do
               r <- loadAndCompileArcFile_ ((Sidecar.ModelUri modelUri) :: Sidecar.ModelUri Sidecar.Stable) arcSource false modelCuid mbasedOnVersion
               case r of
@@ -296,7 +297,7 @@ storeModelLocally_ modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
         Just modelUri, Just arcSource, mbasedOnVersion -> do
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           case mmodelCuid of
-            Nothing -> lift $ addWarning "StoreModelLocally: no model CUID given!"
+            Nothing -> lift $ addWarning { message: "Parsing$StoreModelLocally: no model CUID given!", error: "" }
             Just (Value modelCuid) -> do
               r <- loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource false modelCuid mbasedOnVersion
               case r of

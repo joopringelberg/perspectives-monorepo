@@ -179,7 +179,7 @@ enteringState contextId stateId = do
       catchError
         (updater cid)
         ( \e -> do
-            lift $ addWarning (padding <> "Error in automatic action in state: " <> show stateId <> " of context instance " <> show contextId <> ": " <> show e)
+            lift $ addWarning ({ message: padding <> "Error in automatic action in state: " <> show stateId <> " of context instance " <> show contextId <> ".", error: show e })
         )
       lift $ restoreFrame oldFrame
 

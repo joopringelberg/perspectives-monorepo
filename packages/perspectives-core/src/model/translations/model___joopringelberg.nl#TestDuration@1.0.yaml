@@ -1,0 +1,49 @@
+model://joopringelberg.nl#ltoqwq4svg:
+  version: "1.0"
+  contexts:
+    TestDurationApp:
+      translations:
+        nl: Testing duur-operatoren
+        en: Testing duration operators
+      indexedName:
+        name: model://joopringelberg.nl#TestDuration$MyTestDurationApp
+        translations:
+          nl: Mijn testduurapp
+          en: My test duration app
+      external:
+        notifications:
+          0:
+            translations:
+              orig: The time is now past $0
+              nl: De tijd is nu voorbij $0
+              en: The time is now past $0
+        properties:
+          SystemCurrentHour:
+            translations:
+              nl: Huidig systeemuur
+              en: System current hour
+          EndTime:
+            translations:
+              nl: Eindtijd
+              en: End time
+          EndDate:
+            translations:
+              nl: Einddatum
+              en: End date
+          Tomorrow:
+            translations:
+              nl: Morgen
+              en: Tomorrow
+          Today:
+            translations:
+              nl: Vandaag
+              en: Today
+          ExtraDays:
+            translations:
+              nl: Extra dagen
+              en: Extra days
+      users:
+        Manager:
+          translations:
+            nl: Manager
+            en: Manager

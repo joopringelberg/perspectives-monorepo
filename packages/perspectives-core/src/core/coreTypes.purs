@@ -75,6 +75,7 @@ module Perspectives.CoreTypes
   , TypeToBeMapped(..)
   , Updater
   , Url
+  , Warning
   , WithAssumptions
   , addPublicResource
   , assumption
@@ -202,7 +203,7 @@ type PerspectivesExtraState =
 
   , stompClient :: Maybe StompClient
 
-  , warnings :: Array String
+  , warnings :: Array Warning
 
   -- Do not confuse with transactionNumber! This member is used in runMonadPerspectivesTransaction.
   , transactionFlag :: AVar Boolean
@@ -239,6 +240,8 @@ type PerspectivesExtraState =
 
   , modelUris :: Map (ModelUri Readable) (ModelUri Stable)
   )
+
+type Warning = { message :: String, error :: String }
 
 -- | These are options that can be provided to the PDR at startup.
 type RuntimeOptions =

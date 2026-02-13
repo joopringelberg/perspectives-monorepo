@@ -36,7 +36,7 @@ import Foreign.Object (empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
 import Perspectives.AMQP.Stomp (StompClient)
-import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, RolInstances, RuntimeOptions, TranslationTable, TypeFix)
+import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, RolInstances, RuntimeOptions, TranslationTable, TypeFix, Warning)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, empty, lookup) as ENV
 import Perspectives.Persistence.API (PouchdbUser)
@@ -187,7 +187,7 @@ stompClient = gets _.stompClient
 setStompClient :: StompClient -> MonadPerspectives Unit
 setStompClient bs = modify \s -> s { stompClient = Just bs }
 
-getWarnings :: MonadPerspectives (Array String)
+getWarnings :: MonadPerspectives (Array Warning)
 getWarnings = gets _.warnings
 
 getModelToLoad :: MonadPerspectives (AVar JustInTimeModelLoad)
@@ -298,10 +298,10 @@ resetCaches = do
 resetWarnings :: MonadPerspectives Unit
 resetWarnings = modify \s -> s { warnings = [] }
 
-setWarnings :: Array String -> MonadPerspectives Unit
+setWarnings :: Array Warning -> MonadPerspectives Unit
 setWarnings ws = modify \s -> s { warnings = ws }
 
-addWarning :: String -> MonadPerspectives Unit
+addWarning :: Warning -> MonadPerspectives Unit
 addWarning w = modify \s -> s { warnings = cons w s.warnings }
 
 -----------------------------------------------------------
