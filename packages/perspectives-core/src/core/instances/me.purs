@@ -3,14 +3,18 @@ module Perspectives.Instances.Me where
 import Control.Alt ((<|>))
 import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Writer (lift)
-import Data.Maybe (Maybe(..))
+import Data.Array (singleton)
+import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Perspectives.ContextAndRole (rol_binding, rol_isMe)
 import Perspectives.CoreTypes (type (~~>), MP, liftToInstanceLevel)
+import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.Instances.Combinators (filter, some) as Combinators
-import Perspectives.Instances.ObjectGetters (contextType, getMe, getPreferredUserRoleType, roleType, roleType_)
+import Perspectives.Instances.ObjectGetters (contextType, contextType_, getMe, getPreferredUserRoleType, roleType, roleType_)
 import Perspectives.Persistent (tryGetPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
+import Perspectives.Representation.Class.PersistentType (getContext)
+import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ResourceType(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (isInPublicScheme, takeGuid)
@@ -62,6 +66,9 @@ getMyType ctxt = getPreferredUserRoleType ctxt
   <|>
     (getMe >=> map ENR <<< roleType) ctxt
   <|>
+    -- If the model declares a default user role for this context type, use it.
+    getDefaultUserRoleFromModel ctxt
+  <|>
     -- NOTE: this is a safety measure that catches cases where the 'me' administration has gone wrong.
     findMeInEnumeratedRoles ctxt
   <|>
@@ -69,6 +76,13 @@ getMyType ctxt = getPreferredUserRoleType ctxt
   <|>
     findMeInCalculatedRoles ctxt
   where
+  -- | Look up the default user role from the context's type definition.
+  getDefaultUserRoleFromModel :: ContextInstance ~~> RoleType
+  getDefaultUserRoleFromModel ci = ArrayT do
+    cType <- lift $ contextType_ ci
+    (Context { defaultUserRole }) <- lift $ getContext cType
+    pure $ maybe [] singleton defaultUserRole
+
   findMeInEnumeratedRoles :: ContextInstance ~~> RoleType
   findMeInEnumeratedRoles = (contextType >=> Combinators.filter (liftToInstanceLevel $ contextAspectsClosure >=> enumeratedUserRole) (computesMe ctxt))
 

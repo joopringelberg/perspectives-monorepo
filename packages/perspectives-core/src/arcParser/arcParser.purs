@@ -419,8 +419,8 @@ thingRoleE = do
 isCalculated :: IP Boolean
 isCalculated = do
   hasIs <- option false (lookAhead (reserved "=") *> pure true)
-  hasFunctional <- option false (lookAhead (token.parens (reserved "functional")) *> pure true)
-  pure (hasIs || hasFunctional)
+  hasAttrs <- option false (lookAhead (token.parens (reserved "functional" <|> reserved "default")) *> pure true)
+  pure (hasIs || hasAttrs)
 
 contextRoleE :: IP ContextPart
 contextRoleE = do
@@ -483,14 +483,37 @@ calculatedRole_
   -> ArcPosition
   -> IP (Record (uname :: String, knd :: RoleKind, pos :: ArcPosition, parts :: List RolePart, isEnumerated :: Boolean))
 calculatedRole_ uname knd pos = do
-  isFunctional <- functionalCalculation
+  calcAttributes <- calculatedRoleAttributes
   token.reservedOp "="
   calculation <- step
-  pure { uname, knd, pos, parts: Cons (Calculation calculation isFunctional) Nil, isEnumerated: false }
+  let baseParts = Cons (Calculation calculation calcAttributes.isFunctional) Nil
+  let parts = if calcAttributes.isDefault then Cons DefaultUserRole baseParts else baseParts
+  pure { uname, knd, pos, parts, isEnumerated: false }
 
 -- | Calculated roles and properties are by default relational.
 functionalCalculation :: IP Boolean
 functionalCalculation = option false ((try $ token.parens (reserved "functional")) *> (pure true))
+
+-- | Parse optional attributes for calculated roles: (functional), (default), or (functional, default) etc.
+calculatedRoleAttributes :: IP { isFunctional :: Boolean, isDefault :: Boolean }
+calculatedRoleAttributes = option { isFunctional: false, isDefault: false } (try $ token.parens parseAttrs)
+  where
+  parseAttrs :: IP { isFunctional :: Boolean, isDefault :: Boolean }
+  parseAttrs = do
+    attrs <- (calcAttr `sepBy` token.symbol ",")
+    pure (foldAttrs attrs)
+
+  calcAttr :: IP String
+  calcAttr = (reserved "functional" *> pure "functional") <|> (reserved "default" *> pure "default")
+
+  foldAttrs :: List String -> { isFunctional :: Boolean, isDefault :: Boolean }
+  foldAttrs = foldl
+    ( \acc a -> case a of
+        "functional" -> acc { isFunctional = true }
+        "default" -> acc { isDefault = true }
+        _ -> acc
+    )
+    { isFunctional: false, isDefault: false }
 
 enumeratedRole_
   :: String

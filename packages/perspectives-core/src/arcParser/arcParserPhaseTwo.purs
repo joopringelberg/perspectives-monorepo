@@ -132,14 +132,26 @@ traverseContextE (ContextE { id, kindOfContext, public, contextParts, pos }) ns 
     pure (subContext `insertInto` contextUnderConstruction)
 
   -- Construct a Role
-  handleParts contextUnderConstruction (RE r) = do
+  handleParts contextUnderConstruction (RE r@(RoleE { kindOfRole, roleParts })) = do
     role <- traverseRoleE r (modelName id)
     context' <- pure (role `insertRoleInto` contextUnderConstruction)
+    -- If this calculated user role is marked as (default), set it as the context's default user role.
+    -- Throw an error if a default has already been set for this context.
+    -- Only calculated roles may be marked as default (enumerated roles have no (default) attribute).
+    context'' <- case kindOfRole of
+      TI.UserRole | hasDefaultUserRole roleParts -> case context' of
+        Context cr@{ id: ctxtId, defaultUserRole: Just _ } ->
+          throwError $ MultipleDefaultUserRoles ctxtId
+        Context cr -> case role of
+          C (CalculatedRole { id: roleId }) ->
+            pure $ Context $ cr { defaultUserRole = Just (CR roleId) }
+          _ -> pure context'
+      _ -> pure context'
     case role of
       E (EnumeratedRole { id: roleId, roleAspects }) -> do
-        case context' of
+        case context'' of
           Context cr@{ roleAliases } -> pure $ Context $ cr { roleAliases = foldl (\als (RoleInContext { role: role' }) -> insert (unwrap role') roleId als) roleAliases roleAspects }
-      _ -> pure context'
+      _ -> pure context''
 
   -- Prefixes are handled earlier, so this can be a no-op
   handleParts contextUnderConstruction (PREFIX pre model) = pure contextUnderConstruction
@@ -218,6 +230,14 @@ traverseContextE (ContextE { id, kindOfContext, public, contextParts, pos }) ns 
 
 addNamespace :: String -> String -> String
 addNamespace ns' ln = if ns' == "domain" then ln else (ns' <> "$" <> ln)
+
+-- | Check if a list of RoleParts contains the DefaultUserRole marker.
+hasDefaultUserRole :: List RolePart -> Boolean
+hasDefaultUserRole parts = isJust (findIndex isDefault parts)
+  where
+  isDefault :: RolePart -> Boolean
+  isDefault DefaultUserRole = true
+  isDefault _ = false
 
 -- | Traverse the members of the RoleE AST type to construct a new Role type
 -- | and insert it into a (DomeinFileRecord Readable).
@@ -381,6 +401,11 @@ traverseEnumeratedRoleE_ role@(EnumeratedRole { id: rn, kindOfRole }) roleParts 
     expandedCalc <- expandPrefix calc
     pure $ EnumeratedRole (roleUnderConstruction { publicUrl = Just $ S expandedCalc true })
 
+  -- DEFAULTUSERROLE
+  -- The DefaultUserRole marker is handled at the context level (in the RE handler of traverseContextE).
+  -- Here we simply ignore it.
+  handleParts _ erole DefaultUserRole = pure erole
+
   -- Insert a Property type into a Role type.
   insertPropertyInto :: Property.Property -> EnumeratedRole -> EnumeratedRole
   insertPropertyInto (Property.E (EnumeratedProperty { id })) (EnumeratedRole rr@{ properties }) = EnumeratedRole $ rr { properties = cons (ENP id) properties }
@@ -509,6 +534,11 @@ traverseCalculatedRoleE_ role@(CalculatedRole { id: roleName, kindOfRole }) role
   handleParts crole (PublicUrl _) = pure crole
 
   handleParts crole (ROLESTATE _) = pure crole
+
+  -- DEFAULTUSERROLE
+  -- The DefaultUserRole marker is handled at the context level (in the RE handler of traverseContextE).
+  -- Here we simply ignore it.
+  handleParts crole DefaultUserRole = pure crole
 
   handleParts crole p = throwError $ Custom ("Cannot handle part '" <> show p <> "' in PhaseTwo in a CalculatedRole: " <> show roleName)
 

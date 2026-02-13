@@ -100,6 +100,7 @@ data RolePart
   | ROLESTATE StateE
   | Screen ScreenE
   | PublicUrl Step
+  | DefaultUserRole
 
 data FilledBySpecification = Alternatives (NonEmptyList FilledByAttribute) | Combination (NonEmptyList FilledByAttribute)
 data FilledByAttribute = FilledByAttribute String ContextType

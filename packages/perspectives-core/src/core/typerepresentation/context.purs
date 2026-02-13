@@ -59,6 +59,8 @@ type ContextRecord =
   , contextRol :: Array RoleType
   , gebruikerRol :: Array RoleType
 
+  , defaultUserRole :: Maybe RoleType
+
   , nestedContexts :: Array ContextType
   , context :: Maybe ContextType
 
@@ -96,6 +98,8 @@ defaultContext id dname kind context pos public = Context
   , rolInContext: []
   , contextRol: []
   , gebruikerRol: []
+
+  , defaultUserRole: Nothing
 
   , nestedContexts: []
   , context: map ContextType context

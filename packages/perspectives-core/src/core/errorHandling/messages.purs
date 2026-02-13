@@ -157,6 +157,8 @@ data PerspectivesError
   | MarkDownExpressionMustBeFunctional ArcPosition ArcPosition
   | UnknownMarkDownConditionProperty ArcPosition ArcPosition String RoleType
 
+  | MultipleDefaultUserRoles ContextType
+
   | Custom String
 
 derive instance eqPerspectivesError :: Eq PerspectivesError
@@ -195,6 +197,7 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (WidgetCardinalityMismatch start end) = "(WidgetCardinalityMismatch) The cardinality of the Widget and the Role do not suit each other (between " <> show start <> " and " <> show end <> ")."
   show (MarkDownExpressionMustBeFunctional start end) = "(MarkDownExpressionMustBeFunctional) The expression used here to supply MarkDown must be functional! Between " <> show start <> " and " <> show end <> ")."
   show (UnknownMarkDownConditionProperty start end propname roletype) = "(UnknownMarkDownConditionProperty) The property " <> propname <> " is not a property of the role " <> show roletype <> "! Between " <> show start <> " and " <> show end <> ")."
+  show (MultipleDefaultUserRoles ctype) = "(MultipleDefaultUserRoles) The context '" <> unwrap ctype <> "' has more than one user role marked as default. At most one user role may be the default."
   show (ContextHasNoRole ctype qn start end) = "(ContextHasNoRole) The Context-type '" <> show ctype <> "' has no enumerated role with the name '" <> qn <> "' (it may have a calculated role but that cannot be used here). Between " <> show start <> " and " <> show end
   show (RoleHasNoProperty rtype qn start end) = "(RoleHasNoProperty) The Role-type '" <> show rtype <> "' has no property with the name '" <> qn <> "' (between " <> show start <> " and " <> show end <> ")."
   show (RoleHasNoEnumeratedProperty rtype qn start end) = "(RoleHasNoEnumeratedProperty) The Role-type '" <> show rtype <> "' has no enumerated property with the name '" <> qn <> "' (between " <> show start <> " and " <> show end <> "). It may have a calculated property, but we cannot use that in this situation."

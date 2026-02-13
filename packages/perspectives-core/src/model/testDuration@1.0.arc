@@ -67,3 +67,16 @@ domain model://joopringelberg.nl#TestDuration@1.0
         props (Today, Tomorrow, EndDate) verbs (Consult)
 
     aspect thing sys:ContextWithNotification$Notifications
+
+    user SecondUser (default) = sys:Me
+      perspective on Experiments
+        props (Today, Tomorrow, EndDate) verbs (Consult)
+      screen
+        who
+        what
+          markdown <## This is the second user
+                    When you see this, setting the default user role has worked!
+                   >
+        where
+    
+
