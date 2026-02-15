@@ -845,8 +845,21 @@ getterFromPropertyType (CP cp@(CalculatedPropertyType id)) = case lookupProperty
     pure (unsafeCoerce getter)
   Just g -> pure g
 
+-- | Retrieve property values from a role instance, searching through the filler chain if necessary.
+-- | For Calculated Properties: if the property is not defined locally on the role type of the instance,
+-- | follows the binding chain until a role type is found on which the property is defined.
+-- | For Enumerated Properties: delegates to getPropertyFromTelescope which searches the filler chain.
 getPropertyValues :: PropertyType -> (RoleInstance ~~> Value)
-getPropertyValues pt rid = (lift $ lift $ getterFromPropertyType pt) >>= \getter -> getter rid
+getPropertyValues pt@(CP _) rid = do
+  (roleType :: EnumeratedRoleType) <- lift $ lift $ roleType_ rid
+  allProps <- lift $ lift $ allLocallyRepresentedProperties (ST roleType)
+  if (isJust $ elemIndex pt allProps) || pt == (CP $ CalculatedPropertyType roleWithId) then do
+    getter <- lift $ lift $ getterFromPropertyType pt
+    getter rid
+  else do
+    bnd <- binding rid
+    getPropertyValues pt bnd
+getPropertyValues (ENP pt) rid = getPropertyFromTelescope pt rid
 
 getHiddenFunction :: QueryFunctionDescription -> MP HiddenFunction
 getHiddenFunction = unsafeCoerce $ compileFunction

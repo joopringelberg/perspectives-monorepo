@@ -105,7 +105,7 @@ import Perspectives.Representation.UserGraph.Build (buildUserGraph)
 import Perspectives.Representation.View (View(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (getSideCars)
-import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
+import Perspectives.Sidecar.StableIdMapping (StableIdMapping, fromLocalModels)
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sidecar.UniqueTypeNames (applyStableIdMappingWith)
@@ -148,7 +148,7 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
   -- Register that we are compiling this model.
   setModelUnderCompilation (Just id)
   -- SideCar files for all referred models (insofar as they have been compiled with Stable Identifiers yet).
-  (sideCars :: (Map.Map (ModelUri Readable) StableIdMapping)) <- getSideCars (DomeinFile df) false -- not versioned
+  (sideCars :: (Map.Map (ModelUri Readable) StableIdMapping)) <- getSideCars (DomeinFile df) fromLocalModels
   void $ storeDomeinFileInCache (toStableModelUri id) (toStableDomeinFile (DomeinFile df))
   -- The Readable identifier of all context individuals from all imported models, combined with their context type.
   -- The computation depends on these models being installed - which is indeed part of the contract for phase three.

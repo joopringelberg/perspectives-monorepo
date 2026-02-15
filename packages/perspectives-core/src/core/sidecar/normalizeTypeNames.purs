@@ -106,7 +106,7 @@ runInEnv sidecars_ action =
 
 normalizeTypes :: DomeinFile Readable -> StableIdMapping -> MonadPerspectives (DomeinFile Stable)
 normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
-  sidecars <- Map.insert namespace mapping <$> getSideCars df false
+  sidecars <- Map.insert namespace mapping <$> getSideCars df fromLocalModels
   -- Pre-compute a mapping from old perspective ids to stable ones using the sidecars only
   let env0 = { sidecars, perspMap: OBJ.fromFoldable [] }
   let perspMap = buildPerspectiveIdMap df env0
@@ -115,7 +115,7 @@ normalizeTypes df@(DomeinFile { namespace, referredModels }) mapping = do
 
 normalizeInvertedQueries :: DomeinFile Readable -> StableIdMapping -> StoredQueries -> MonadPerspectives StoredQueries
 normalizeInvertedQueries df@(DomeinFile { namespace, referredModels }) mapping invertedQueries = do
-  sidecars <- Map.insert namespace mapping <$> getSideCars df false
+  sidecars <- Map.insert namespace mapping <$> getSideCars df fromLocalModels
   -- Pre-compute a mapping from old perspective ids to stable ones using the sidecars only
   let env0 = { sidecars, perspMap: OBJ.fromFoldable [] }
   -- Run normalization with full environment
@@ -163,8 +163,8 @@ getStandardModelSidecars versioned = do
 -- | The Stable ModelUri will be versioned iff parameter versioned is true.
 -- | NOTE: The System model will not be included here when versioned==true, as it is not registered in ModelsInUse!
 getinstalledModelCuids :: Boolean -> MonadPerspectives StableIdMappingForModel
-getinstalledModelCuids versioned =
-  if versioned then
+getinstalledModelCuids fromRepository =
+  if fromRepository then
     getVersionedInstalledModelCuids
   else do
     modelsDb <- modelDatabaseName

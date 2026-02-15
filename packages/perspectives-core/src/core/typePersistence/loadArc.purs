@@ -122,7 +122,7 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                       dr''@{ referredModels } <- pure dr' { referredModels = (delete id state.referredModels) }
                       -- We should load referred models if they are missing (but not the model we're compiling!).
                       -- Throw an error if a referred model is not installed. It will show up in the arc feedback.
-                      installedModelCuids <- lift $ getinstalledModelCuids false -- unversioned.
+                      installedModelCuids <- lift $ getinstalledModelCuids fromLocalModels
                       for_ referredModels (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
 
                       (x' :: Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries)) <-
