@@ -1228,7 +1228,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
               "Version {External$Version} (build {Build}) has not been stored in the local store or applied to the current session."
       
     thing Translation
-      property FileName = context >> extern >> VersionedModelURI + ".yaml"
+      property FileName = context >> extern >> (ModelURIReadable + "@" + External$Version) + ".yaml"
         readableName
       -- Whether the Author wants to generate a new Yaml file for translation.
       property GenerateYaml (Boolean)
