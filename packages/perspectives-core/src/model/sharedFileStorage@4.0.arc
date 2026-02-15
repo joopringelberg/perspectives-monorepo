@@ -1,6 +1,6 @@
 -- Copyright Joop Ringelberg and Cor Baars, 2024
 -- A model to maintain a Shared Fileserver.
-domain model://perspectives.domains#SharedFileServices
+domain model://perspectives.domains#SharedFileServices@4.0
   use sys for model://perspectives.domains#System
   use sfs for model://perspectives.domains#SharedFileServices
 
@@ -56,7 +56,6 @@ domain model://perspectives.domains#SharedFileServices
     indexed sfs:MySharedFileServices
     aspect sys:RootContext
     external
-      aspect sys:RootContext$External
     
     on entry 
       do for Manager
@@ -111,7 +110,7 @@ domain model://perspectives.domains#SharedFileServices
                       >
           row
             form ActualSharedFileServer
-              without props (AccountName, Password, FileShareCredentials)
+              with props (Name, StorageType)
         where
 
     thing MySharedFileService 

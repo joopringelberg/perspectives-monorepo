@@ -118,7 +118,7 @@ domain model://perspectives.domains#Introduction@1.0
               markdown <### Introducees
                         These are the persons that have been introduced to each other by you.
                         >
-              without props (FirstName)
+              with props (LastName)
             detail
         what
           markdown <### Introduction

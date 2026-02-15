@@ -86,7 +86,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
         who
           Manager
             master
-              without props(FirstName)
+              with props (LastName)
             detail
         what
           markdown <### Managing Couchdb Servers for Perspectives
@@ -111,7 +111,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
                         After entering all required information, the server will be created in Couchdb.
                         After that, visit the CouchdbServer context and enter a name.
                         >
-              without props (Url, CouchdbServers$CouchdbPort, AdminUserName, AdminPassword)
+              with props (Name)
             detail
       
     -- A new CouchdbServers instance comes complete with a CouchdbServer$Admin role
@@ -309,7 +309,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
                         Then put a user role on the clipboard (or select the role you want if it is already on the clipboard).
                         Finally choose *Fill with the role on the clipboard* from the accordion menu
                         >
-              without props (FirstName, Password, AuthorizedDomain, UserName)
+              with props (LastName)
             detail
         what
           row
@@ -327,7 +327,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
               -- Domain is the readable name of ManifestCollection.
               without props (Repositories$NameSpace, AdminEndorses, AdminLastName, IsPublic, NameSpace_, HasDatabases)
             detail
-              without props (AdminLastName, IsPublic, NameSpace_, HasDatabases)
+              with props (Repositories$NameSpace, AdminEndorses)
           BespokeDatabases
             master
               markdown <### Bespoke databases
@@ -464,7 +464,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
         who
           Admin
             master
-              without props (FirstName)
+              with props (LastName)
             detail
         what
           row
@@ -826,11 +826,11 @@ domain model://perspectives.domains#CouchdbManagement@12.2
         who
           Admin
             master
-              without props (FirstName)
+              with props (LastName)
             detail
           Authors
             master
-              without props(FirstName, AuthorizedDomain)
+              with props (LastName)
             detail
         what
           row
@@ -851,7 +851,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
               -- Notice that we will have a table with both LocalModelName and Name. The latter is the ReadableName. 
               -- We cannot omit the readable name. It equals the LocalModelName, but we cannot edit it. 
               -- Hence we need both.
-              without props (Description, DomeinFileName)
+              with props (LocalModelName, ModelCuid)
             detail    
     
     user Accounts (relational, unlinked) filledBy (CouchdbServer$Accounts, CouchdbServer$Admin)
@@ -886,9 +886,9 @@ domain model://perspectives.domains#CouchdbManagement@12.2
               markdown <## Manifests
                         A manifest describes a model / App.
                       >
-              without props (Description, LocalModelName, ModelCuid)
+              with props (ModelManifest$External$Name)
             detail
-              without props (LocalModelName, ModelCuid)
+              with props (ModelManifest$External$Name, Description)
 
     -- This role is in the public Visitor perspective. These are all models that
     -- are stored in this Repository.
@@ -1016,7 +1016,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
         who
           Author
             master
-              without props (FirstName)
+              with props (LastName)
             detail
         what
           row
@@ -1024,7 +1024,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
                       A manifest describes a model and its versions.
                       >
             form External
-              without props (RecomputeVersionToInstall, IsLibrary)
+              with props (Description, VersionToInstall, ModelManifest$External$IsSystemModel)
               -- props (Description, VersionToInstall, DomeinFileName, ModelManifest$External$IsSystemModel) verbs (Consult, SetPropertyValue)
         where
           Versions
@@ -1077,7 +1077,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
                       A manifest describes a model and its versions.
                       >
             form External
-              without props (IsLibrary, DomeinFileName)
+              with props (Description, ModelManifest$External$IsSystemModel, VersionToInstall)
         where
           Versions
             master
@@ -1296,13 +1296,13 @@ domain model://perspectives.domains#CouchdbManagement@12.2
         who
           Author
             master
-              without props (FirstName)
+              with props (LastName)
             detail
         what
           tab "Manifest"
             row
               form External
-                without props (ArcFile, ArcFeedback, LastChangeDT, MustUpload, AutoUpload, Store, ApplyInSession, ArcSource)
+                with props (DomeinFileName, Version, LastUpload, Description, IsRecommended, Build, Patch)
             row 
               form BasedOnVersion
                 -- with props (VersionName, ModelURI) verbs (Consult)
@@ -1321,7 +1321,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
                       >
             row
               form External
-                without props (Description, IsRecommended, Version, Build, Patch, ArcSource, MustUpload, DomeinFileName, AutoUpload, Store, ApplyInSession)
+                with props (ArcFile, ArcFeedback, LastUpload, LastChangeDT)
             row 
               markdown <#### Where to store
                         Storage: choose from 
@@ -1335,7 +1335,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
                       >
             row
               form External
-                without props (DomeinFileName, Version, ArcSource, LastUpload, ArcFile, ArcFeedback, Description, IsRecommended, Build, Patch, LastChangeDT, MustUpload)
+                with props (AutoUpload, Store, ApplyInSession)
           tab "Translate"
             row
               markdown <## Translate your model

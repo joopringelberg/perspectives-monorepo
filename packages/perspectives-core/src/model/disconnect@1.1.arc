@@ -1,5 +1,5 @@
 -- model://perspectives.domains#Disconnect@1.1
-domain model://perspectives.domains#Disconnect
+domain model://perspectives.domains#Disconnect@1.1
   use sys for model://perspectives.domains#System
   use disconnect for model://perspectives.domains#Disconnect
   use cdb for model://perspectives.domains#Couchdb
@@ -62,7 +62,7 @@ domain model://perspectives.domains#Disconnect
               markdown <### Manager
                         This is the role of the person who decides which peers to disconnect from.
                         >
-              without props (FirstName)
+              with props (LastName)
             detail
         what
           row
@@ -79,7 +79,7 @@ domain model://perspectives.domains#Disconnect
               markdown <### Disconnected peers
                         This is a list of all peers you have disconnected from. Visit each for more possiblities.
                         >
-              without props (Disconnected)
+              with props (Peer)
             detail
               markdown <### Disconnected peer
                         These are the details of the peer you can disconnect from.
@@ -89,7 +89,7 @@ domain model://perspectives.domains#Disconnect
               markdown <### Peers that have disconnected from you
                         This is a list of all peers that have disconnected from you.
                         >
-              without props (Disconnected)
+              with props (Peer)
             detail
               markdown <### Disconnecting peer
                         These are the details of the peer that has disconnected from you.
@@ -143,11 +143,11 @@ domain model://perspectives.domains#Disconnect
         who
           Disconnecter
             master
-              without props (FirstName)
+              with props (LastName)
             detail
           Disconnected
             master
-              without props (FirstName, Cancelled, Reconnect)
+              with props (LastName)
             detail
               markdown <### Disconnect and reconnect
                         If the *Disconnected* property is set to *true*, you are disconnected from the peer.
@@ -200,11 +200,11 @@ domain model://perspectives.domains#Disconnect
               markdown <### Disconnected peer
                           This peer has disconnected from you.
                           >
-              without props (FirstName)
+              with props (LastName)
             detail
           Disconnected
             master
-              without props (FirstName, Reconnect)
+              with props (LastName)
             detail
         what
           markdown <### You have been disconnected

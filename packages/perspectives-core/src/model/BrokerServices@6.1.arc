@@ -1,6 +1,6 @@
 -- Copyright Joop Ringelberg and Cor Baars, 2020, 2021 -15
 -- A model to maintain AMQP Broker Services.
-domain model://perspectives.domains#BrokerServices
+domain model://perspectives.domains#BrokerServices@6.1
   use sys for model://perspectives.domains#System
   use bs for model://perspectives.domains#BrokerServices
   use util for model://perspectives.domains#Utilities
@@ -51,7 +51,6 @@ domain model://perspectives.domains#BrokerServices
     indexed bs:MyBrokers
     aspect sys:RootContext
     external
-      aspect sys:RootContext$External    
     -- The BrokerServices I manage.
     context ManagedBrokers (relational) filledBy BrokerService
       property StorageLocation (String)
@@ -162,7 +161,7 @@ domain model://perspectives.domains#BrokerServices
                         (identifying a Bespoke Database). Upon saving, the broker service context will be created.
                         **NOTE**: Most people will **not** manage broker services, but use the ones that are available.
                       >
-              --with props (Name, StorageLocation)
+              with props (Name, StorageLocation)
             detail
           
   -- A Managed service.
@@ -248,7 +247,7 @@ domain model://perspectives.domains#BrokerServices
                         This key should be manually added to the state file of the shared file storage relay service.
                         See [perspectives-sharedfilestorage](https://github.com/joopringelberg/perspectives-sharedfilestorage) for more information.
                       >
-              without props (FirstName, AdminUserName, AdminPassword, HasKey, SharedFileServerKey)
+              with props (LastName)
             detail
               without props (HasKey)
         what
@@ -307,9 +306,9 @@ domain model://perspectives.domains#BrokerServices
                         This is the administrator of the Broker Service. 
                         You can contact him or her if you have questions about the service.
                        >
-              without props (FirstName, HasKey)
+              with props (LastName)
             detail
-              without props (HasKey)
+              with props (FirstName, LastName)
         what
           row
             markdown <### Broker service
@@ -336,7 +335,7 @@ domain model://perspectives.domains#BrokerServices
               when (exists bs:MyBrokers >> PublicBrokers) and (not exists bs:MyBrokers >> Contracts)
           row
             form "This service" External
-              without props (SelfRegisterEndpoint, PublicUrl, Url, Exchange, ServiceDescription, ContractPeriod, GracePeriod, TerminationPeriod)
+              with props (Name)
         where
           MyPublicBrokers
             master
@@ -410,7 +409,6 @@ domain model://perspectives.domains#BrokerServices
     -- On exiting, both the queue and the account are deleted. See the exit states of AccountHolder and Queue respectively.
     
     external
-      aspect sys:Invitation$External
       -- PDRDEPENDENCY
       property Url = binder Accounts >> context >> extern >> Url
       property ManagementEndpoint = binder Accounts >> context >> extern >> ManagementEndpoint
@@ -536,7 +534,7 @@ domain model://perspectives.domains#BrokerServices
                         This is the administrator of the Broker Service. 
                         You can contact him or her if you have questions about the service.
                        >
-              without props (FirstName, HasKey)
+              with props (LastName)
             detail
               without props (HasKey)
           AccountHolder
@@ -588,13 +586,13 @@ domain model://perspectives.domains#BrokerServices
         who
           AccountHolder
             master
-              without props (FirstName, AccountName, AccountPassword, Cancelled, HasKey)
+              with props (LastName)
             detail
               without props (HasKey)
         what
           row
             form "Broker Service" External
-              without props (Name, ContractTerminated, ManagementEndpoint, TerminatesOn, Registered)
+              with props (IsInUse)
           row
             table Queues
         where
