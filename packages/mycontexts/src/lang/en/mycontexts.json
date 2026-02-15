@@ -100,6 +100,7 @@
   , "about_navigation_space": "Space: open accordion panels, select checkboxes, and activate buttons"
   , "mycontexts_version": "MyContexts version"
   , "mycontexts_build": "MyContexts build"
+  , "pdr_version": "PDR version"
   , "userMessagingPanel_title": "Warning"
   , "userMessagingPanel_message": "An error has occurred that does not prevent further use: {{- warning}}"
   , "www_who": "Who"

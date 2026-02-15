@@ -31,6 +31,16 @@ export class About extends PerspectivesComponent<object, object> {
           />
         </Form.Group>
         <Form.Group className="mb-3">
+          <Form.Label htmlFor="pdr-version-input">{ i18next.t("pdr_version", {ns: "mycontexts"})}</Form.Label>
+          <Form.Control 
+            id="pdr-version-input"
+            className="accessible-form-control" 
+            type="text" 
+            readOnly 
+            value={__PDR_VERSION__}
+          />
+        </Form.Group>
+        <Form.Group className="mb-3">
           <Form.Label htmlFor="keyboard-shortcuts">{i18next.t("about_shortcuts", {ns: "mycontexts"})}</Form.Label>
           <div id="keyboard-shortcuts" className="p-3 border rounded">
             <h2 className="column-heading">{i18next.t("about_navigation", {ns: "mycontexts"})}</h2>

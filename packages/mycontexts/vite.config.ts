@@ -7,6 +7,7 @@ import { resolve } from 'path'
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 
 import { default as thepackage } from './package.json'
+import { default as corepackage } from '../perspectives-core/package.json'
 
 // Get path to monorepo root
 const monorepoRoot = resolve(__dirname, '../..');
@@ -178,6 +179,7 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       __MYCONTEXTS_VERSION__: JSON.stringify(thepackage.version),
+      __PDR_VERSION__: JSON.stringify(corepackage.version),
       __STARTPAGE__: JSON.stringify("pub:https://perspectives.domains/cw_ro6a1vrf9y/#wxl4tmx54i$External"),
       __MyContextsContainer__: JSON.stringify("root"),
       __PAGEDISPATCHER_VERSION__: pageDispatcherVersion,
