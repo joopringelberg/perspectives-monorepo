@@ -138,8 +138,16 @@ traverseContextE (ContextE { id, kindOfContext, public, contextParts, pos }) ns 
     -- If this calculated user role is marked as (default), set it as the context's default user role.
     -- Throw an error if a default has already been set for this context.
     -- Only calculated roles may be marked as default (enumerated roles have no (default) attribute).
+    -- Both UserRole and Public roles can be marked as default.
     context'' <- case kindOfRole of
       TI.UserRole | hasDefaultUserRole roleParts -> case context' of
+        Context cr@{ id: ctxtId, defaultUserRole: Just _ } ->
+          throwError $ MultipleDefaultUserRoles ctxtId
+        Context cr -> case role of
+          C (CalculatedRole { id: roleId }) ->
+            pure $ Context $ cr { defaultUserRole = Just (CR roleId) }
+          _ -> pure context'
+      TI.Public | hasDefaultUserRole roleParts -> case context' of
         Context cr@{ id: ctxtId, defaultUserRole: Just _ } ->
           throwError $ MultipleDefaultUserRoles ctxtId
         Context cr -> case role of

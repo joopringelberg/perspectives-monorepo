@@ -1,0 +1,134 @@
+model://perspectives.domains#k1bnh6wqk9:
+  version: "1.0"
+  contexts:
+    RepositoryOverview:
+      translations:
+        nl: Overzicht van repositories
+        en: Repository Overview
+      indexedName:
+        name: model://perspectives.domains#RepositoryRegistry$MyRepositoryOverview
+        translations:
+          nl: Mijn Repository Overzicht
+          en: My Repository Overview
+      users:
+        OrdinaryUser:
+          translations:
+            nl: Eindgebruiker
+            en: End user
+          markdowns:
+            0:
+              translations:
+                orig: "### Repository Registry\n
+                  Under `where` you find the repositories that are registered in your installation.\n
+                  A repository is a collection of models (apps) that you can install.\n
+                  Visit the [[link:pub:PLACEHOLDER_URL|public repository overview]] to discover\n
+                  new repositories and add them to your installation."
+                nl: "### Repository Register\n
+                  Onder `where` vind je de repositories die in jouw installatie zijn geregistreerd.\n
+                  Een repository is een verzameling modellen (apps) die je kunt installeren.\n
+                  Bezoek het [[link:pub:PLACEHOLDER_URL|publieke repository overzicht]] om nieuwe repositories te ontdekken\n
+                  en deze aan je installatie toe te voegen."
+                en: "### Repository Registry\n
+                  Under `where` you find the repositories that are registered in your installation.\n
+                  A repository is a collection of models (apps) that you can install.\n
+                  Visit the [[link:pub:PLACEHOLDER_URL|public repository overview]] to discover\n
+                  new repositories and add them to your installation."
+        Manager:
+          translations:
+            nl: Beheerder
+            en: Manager
+          markdowns:
+            0:
+              translations:
+                orig: "### Repository Registry\n
+                  Maintain an overview of all known repositories.\n
+                  Initialize the registry under **where**: creat the it there.\n
+                  To use this app as an ordinary user, switch to the 'End User' role."
+                nl: "### Repository Register\n
+                  Onderhoud een overzicht van alle bekende repositories.\n
+                  Initialiseer het register onder **waar**: maak het daar aan.\n
+                  Om deze app als gewone gebruiker te gebruiken, schakel over naar de rol 'Eindgebruiker'."
+                en: "### Repository Registry\n
+                  Maintain an overview of all known repositories.\n
+                  Initialize the registry under **where**: create it there.\n
+                  To use this app as an ordinary user, switch to the 'End User' role."
+      contextroles:
+        MyRepositories:
+          translations:
+            nl: Mijn app stores
+            en: My app stores
+        TheRegistry:
+          translations:
+            nl: Het register van app stores
+            en: The registry of app stores
+    PublicRepositoryOverview:
+      translations:
+        nl: Publiek repository overzicht
+        en: Public repository overview
+      users:
+        Visitor:
+          translations:
+            nl: Bezoeker
+            en: Visitor
+          markdowns:
+            0:
+              translations:
+                orig: "### Repository Registry\n
+                  This is an overview of all known repositories.\n
+                  Visit a repository to browse its models and install apps."
+                nl: "### Repository Register\n
+                   Dit is een overzicht van alle bekende repositories.\n
+                   Bezoek een repository om de modellen te bekijken en apps te installeren."
+                en: "### Repository Registry\n
+                   This is an overview of all known repositories.\n
+                   Visit a repository to browse its models and install apps."
+        Manager:
+          translations:
+            nl: Beheerder
+            en: Manager
+          markdowns:
+            0:
+              translations:
+                orig: "### Repository Registry\n
+                  This is an overview of all known repositories.\n
+                  A repository is a collection of models (apps) that you can install.\n
+                  Add a repository by opening it in a browser and using its 'Add this repository' action,\n
+                  or by adding it here manually."
+                nl: "### Repository Register\n
+                  Dit is een overzicht van alle bekende repositories.\n
+                  Een repository is een verzameling modellen (apps) die je kunt installeren.\n
+                  Voeg een repository toe door deze in een browser te openen en de actie 'Voeg deze repository toe' te gebruiken,\n
+                  of door deze hier handmatig toe te voegen."
+                en: "### Repository Registry\n
+                  This is an overview of all known repositories.\n
+                  A repository is a collection of models (apps) that you can install.\n
+                  Add a repository by opening it in a browser and using its 'Add this repository' action,\n
+                  or by adding it here manually."
+        Initializer:
+          translations:
+            nl: Kwartiermaker
+            en: Initializer
+          markdowns:
+            0:
+              translations:
+                orig: "### Initialize Repository Registry\n
+                  Your task is to create an instance of the Manager role and then fill it with an instance of a BespokeDatabase owner.\n
+                  The database owned by the Manager will be used to store the public version of the registry.\n
+                  Then switch to the Manager role to add repositories to the registry."
+                nl: "### Initialiseer het Repository Register\n
+                  Je taak is om een instantie van de Manager-rol te creëren en deze vervolgens te vullen met een instantie van een BespokeDatabase-eigenaar.\n
+                  De database die eigendom is van de Manager zal worden gebruikt om de openbare versie van het register op te slaan.\n
+                  Schakel vervolgens over naar de Manager-rol om repositories aan het register toe te voegen."
+                en: "### Initialize Repository Registry\n
+                  Your task is to create an instance of the Manager role and then fill it with an instance of a BespokeDatabase owner.\n
+                  The database owned by the Manager will be used to store the public version of the registry.\n
+                  Then switch to the Manager role to add repositories to the registry."
+        VisitorProxy:
+          translations:
+            nl: Bezoekersproxy
+            en: Visitor Proxy
+      contextroles:
+        Repositories:
+          translations:
+            nl: Geregistreerde app stores
+            en: Registered app stores

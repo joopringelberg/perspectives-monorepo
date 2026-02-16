@@ -368,15 +368,17 @@ publicRoleE = do
     pos <- getPosition
     knd <- reserved "public" *> pure Public
     uname <- arcIdentifier
+    calcAttributes <- calculatedRoleAttributes
     -- at <expression>
     -- where <expression> should evaluate to a url.
     url <- PublicUrl <$> (reserved "at" *> step)
     ct@(ContextType ctxt) <- getCurrentContext
     setSubject (ExplicitRole ct (CR $ CalculatedRoleType (ctxt <> "$" <> uname)) pos)
-    isFunctional <- functionalCalculation
     token.reservedOp "="
     calculation <- step
-    pure { uname, knd, pos, parts: (url : (Calculation calculation isFunctional) : Nil), isEnumerated: false }
+    let baseParts = url : (Calculation calculation calcAttributes.isFunctional) : Nil
+    let parts = if calcAttributes.isDefault then Cons DefaultUserRole baseParts else baseParts
+    pure { uname, knd, pos, parts, isEnumerated: false }
 
   publicState :: IP StateSpecification
   publicState = do

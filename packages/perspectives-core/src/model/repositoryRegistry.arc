@@ -34,25 +34,89 @@ domain model://perspectives.domains#RepositoryRegistry@1.0
   case RepositoryOverview
     indexed rr:MyRepositoryOverview
     aspect sys:RootContext
+
+    user Manager = me
+      perspective on TheRegistry
+        only (CreateAndFill)
+        props (Id) verbs (Consult)
+
+      screen 
+        who
+        what
+          row
+            markdown <### Repository Registry
+                      Maintain an overview of all known repositories.
+                      Initialize the registry under **where**: creat the it there.
+                      Then move to the registry and assume the Initizalizer to fill its Manager role 
+                      with a Bespoke Database owner. The database owned by the Manager will be used to store the public version of the registry.
+                      To use this app as an ordinary user, switch to the 'End User' role.
+                      >
+        where
+          TheRegistry
+            master
+            detail
+
+    context TheRegistry filledBy PublicRepositoryOverview
+      aspect sys:RoleWithId
+
+    -- The ordinary user can see which repositories are already registered
+    -- and can visit the public overview to discover new ones.
+    user OrdinaryUser (default) = me
+      perspective on MyRepositories
+        props (Domain) verbs (Consult)
+
+      screen
+        who
+        what
+          row
+            markdown <### Repository Registry
+                      Under `where` you find the repositories that are registered in your installation.
+                      A repository is a collection of models (apps) that you can install.
+                      Visit the [[link:pub:https://perspectives.domains/cw_v74vfn21lx/#zqys0g055e$External|public repository overview]] to discover 
+                      new repositories and add them to your installation.
+                      >
+        where
+          MyRepositories
+            master
+              with props (Domain)
+            detail
+
+    -- Calculated role: the repositories the user has already registered in their system.
+    context MyRepositories = sys:MySystem >> Repositories
+
+  case PublicRepositoryOverview
     external
       
     user Initializer = me
       perspective on Manager
-        all roleverbs
+        only (Create, Fill, Remove)
+        props (FirstName, LastName, BespokeDatabaseUrl) verbs (Consult)
+      
+      screen
+        who
+          Manager
+            master
+              with props (FirstName, LastName)
+            detail
+              with props (BespokeDatabaseUrl)
+        what
+          row
+            markdown <### Initialize Repository Registry
+                      Your task is to create an instance of the Manager role and then fill it with an instance of a BespokeDatabase owner.
+                      The database owned by the Manager will be used to store the public version of the registry.
+                      Then switch to the Manager role to add repositories to the registry.
+                      >
+        where
 
     -- The Manager is the one who maintains the list of repositories.
     -- Must be filledBy a role that has access to a BespokeDatabase,
     -- following the pattern of PublicPageCollection$Author.
     user Manager filledBy (sys:TheWorld$PerspectivesUsers + cm:BespokeDatabase$Owner)
-      perspective on extern
-        defaults
       perspective on Manager
         props (FirstName, LastName) verbs (Consult)
       perspective on Repositories
-        all roleverbs
+        only (Create, Fill, Remove)
         props (NameSpace_, Domain, RepositoryUrl) verbs (Consult)
-      perspective on MyRegistries
-        props (Domain) verbs (Consult)
       screen
         who
           Manager
@@ -66,29 +130,9 @@ domain model://perspectives.domains#RepositoryRegistry@1.0
                       Add a repository by opening it in a browser and using its 'Add this repository' action,
                       or by adding it here manually.
                       >
+
         where
           Repositories
-            master
-              with props (Domain)
-            detail
-
-    -- The ordinary user can see which repositories are already registered
-    -- and can visit the public overview to discover new ones.
-    user OrdinaryUser = sys:Me
-      perspective on MyRegistries
-        props (Domain) verbs (Consult)
-      screen
-        who
-        what
-          row
-            markdown <### Repository Registry
-                      Below you find the repositories that are registered in your installation.
-                      A repository is a collection of models (apps) that you can install.
-                      Visit the [[link:pub:PLACEHOLDER_URL|public repository overview]] to discover 
-                      and add new repositories.
-                      >
-        where
-          MyRegistries
             master
               with props (Domain)
             detail
@@ -97,11 +141,8 @@ domain model://perspectives.domains#RepositoryRegistry@1.0
     -- The Manager fills these roles with the public address of a concrete Repository.
     context Repositories (relational) filledBy cm:Repository
 
-    -- Calculated role: the repositories the user has already registered in their system.
-    context MyRegistries = sys:MySystem >> Repositories
-
     -- A public role so visitors can see and open the repositories.
-    public Visitor at Manager >> BespokeDatabaseUrl = sys:Me
+    public Visitor (default) at Manager >> BespokeDatabaseUrl = me
       perspective on Repositories
         props (NameSpace_, Domain, RepositoryUrl) verbs (Consult)
       perspective on extern
