@@ -1,7 +1,7 @@
--- Copyright Joop Ringelberg and Cor Baars, 2021
+-- Copyright Joop Ringelberg and Cor Baars, 2021, 2026
 -- A model to test smart field controls.
 
-domain model://joopringelberg.nl#TestFields --@1.0.0
+domain model://joopringelberg.nl#TestFields@1.0
   use sys for model://perspectives.domains#System
   use tf for model://joopringelberg.nl#TestFields
 
@@ -9,19 +9,22 @@ domain model://joopringelberg.nl#TestFields --@1.0.0
     on entry
       do for sys:PerspectivesSystem$Installer
         letA
-          -- We must first create the context and then later bind it.
-          -- If we try to create and bind it in a single statement, 
-          -- we find that the Installer can just create RootContexts
-          -- as they are the allowed binding of StartContexts.
-          -- As a consequence, no context is created.
           app <- create context TestFieldsApp
+          start <- create role StartContexts in sys:MySystem
         in
-          -- Being a RootContext, too, Installer can fill a new instance
-          -- of StartContexts with it.
-          bind app >> extern to StartContexts in sys:MySystem
-          Name = "TestFields Management" for app >> extern
+          bind_ app >> extern to start
+          Name = "TestFields Management" for start
+
+  on exit
+    do for sys:PerspectivesSystem$Installer
+      letA
+        indexedcontext <- filter sys:MySystem >> IndexedContexts with filledBy (tf:TheTestFields >> extern)
+        startcontext <- filter sys:MySystem >> StartContexts with filledBy (tf:TheTestFields >> extern)
+      in
+        remove role startcontext
 
   aspect user sys:PerspectivesSystem$Installer
+  
 
   -- The entry point (the `application`), available as tf:TheTestFields.
   case TestFieldsApp
@@ -29,7 +32,6 @@ domain model://joopringelberg.nl#TestFields --@1.0.0
     aspect sys:RootContext
 
     external
-      aspect sys:RootContext$External
     
     user Tester = sys:Me
       perspective on TestRole
@@ -37,22 +39,33 @@ domain model://joopringelberg.nl#TestFields --@1.0.0
         only (Remove, Create)
       perspective on TestTable
         defaults
+      perspective on CopyOfTestTable
+        defaults
       screen "Test screen"
-        tab "Test"
+        who
+        what
           row
             form TestRole
-              props (Text, WeekDay, ADate) verbs (SetPropertyValue)
-              only (Create)
+              props (Text, WeekDay, ADate) verbs (Consult)
           row
-            table "MyTable" TestTable
-              view Limited verbs (Consult)
-              only (Remove)
-            --graph TestTable
-              --y = ANumber
-          --row
-            --masterSlave TestTable
-              --master = ViewX
-              --slave = ViewY
+            table "With props style" TestTable
+              with props (Text, ADate)
+          row
+            table "Without props style" TestTable
+              without props (Text, ADate)
+        where
+          TestTable
+            master
+              without props (Text, ADate)
+              props (Text, Bool, ADate, ANumber, AnEmail) verbs (Consult, SetPropertyValue)
+            detail
+              with props (Text, Bool)
+              props (Text, Bool, ADate, ANumber, AnEmail) verbs (Consult, SetPropertyValue)
+          CopyOfTestTable
+            master
+              props (Bool, ANumber, AnEmail) verbs (Consult, SetPropertyValue)
+            detail
+              props (Text, Bool) verbs (Consult, SetPropertyValue)
 
     thing TestRole
       property Text (mandatory, String)
@@ -77,4 +90,5 @@ domain model://joopringelberg.nl#TestFields --@1.0.0
       property ADate (DateTime)
       property ANumber (mandatory, Number)
       property AnEmail (Email)
-      view Limited (Text, ADate)
+    
+    thing CopyOfTestTable = TestTable

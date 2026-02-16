@@ -311,7 +311,11 @@ handleScreens screenEs = do
       -- but not with False
       else throwError (WidgetCardinalityMismatch start' end')
     -- All properties defined on this object role.
-    allProps <- lift2 ((roleADTOfRoleType objectRoleType >>= allProperties <<< map roleInContext2Role))
+    -- We must ensure that allProps are in Readable form, because propertiesInPropsOrView
+    -- (via lookForUnqualifiedPropertyType) returns Readable property types.
+    -- Without this conversion, aspect properties (which may carry Stable/CUID identifiers)
+    -- would not match in the elemIndex comparison when computing the excluded set for `with props`.
+    allProps <- lift2 ((roleADTOfRoleType objectRoleType >>= allProperties <<< map roleInContext2Role) >>= traverse toReadable)
     -- The user must have a perspective on it. This perspective must have that RoleType
     -- in its member roleTypes.
     -- So we fetch the user role, get its Perspectives, and find the one that refers to the objectRoleType.

@@ -770,7 +770,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
               -- Notice that we will have a table with both LocalModelName and Name. The latter is the ReadableName. 
               -- We cannot omit the readable name. It equals the LocalModelName, but we cannot edit it. 
               -- Hence we need both.
-              without props (DomeinFileName, LocalModelName, Description, ModelCuid)
+              with props (ModelManifest$External$Name)
             detail
       
     -- This role requires credentials for the ServerUrl. It 'inherits' them from its filler.
@@ -1024,7 +1024,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
                       A manifest describes a model and its versions.
                       >
             form External
-              with props (Description, VersionToInstall, ModelManifest$External$IsSystemModel)
+              with props (ModelManifest$External$Description, VersionToInstall, ModelManifest$External$IsSystemModel)
               -- props (Description, VersionToInstall, DomeinFileName, ModelManifest$External$IsSystemModel) verbs (Consult, SetPropertyValue)
         where
           Versions

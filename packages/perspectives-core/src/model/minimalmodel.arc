@@ -1,4 +1,4 @@
-domain model://joopringelberg.nl#MinimalModel
+domain model://joopringelberg.nl#MinimalModel@1.0
   use sys for model://perspectives.domains#System
   use mm for model://joopringelberg.nl#MinimalModel
 
