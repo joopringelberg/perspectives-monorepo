@@ -607,6 +607,7 @@ removeBinding_ filled mFillerId msignedDelta = (lift $ try $ getPerspectRol fill
 -- | If a filler is given as parameter, it will be inserted into the filled role.
 -- | PERSISTENCE of binding role and old binding.
 -- | CURRENTUSER for roleId and its context.
+-- | SYNCHRONISATION
 changeRoleBinding :: RoleInstance -> (Maybe RoleInstance) -> MonadPerspectivesTransaction Unit
 changeRoleBinding filledId mNewFiller = (lift $ try $ getPerspectRol filledId) >>=
   handlePerspectRolError' "changeRoleBinding" unit
@@ -636,6 +637,11 @@ changeRoleBinding filledId mNewFiller = (lift $ try $ getPerspectRol filledId) >
             -- lift (newFiller `fillerPointsTo` filledId)
             if isInPublicScheme (unwrap newFiller) && not isInPublicScheme (unwrap filledId) then pure unit
             else lift (newFiller `fillerPointsTo` filledId)
+            -- SYNCHRONISATION
+            -- Ensure that the new binding is published for public roles,
+            -- just as setFirstBinding does.
+            handleNewPeer filledId
+            void $ addDeltasForPerspectiveObjects filledId
 
       else pure unit
 
