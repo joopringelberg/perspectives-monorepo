@@ -457,7 +457,8 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
     if (component.stateIsComplete(["row", "contextMenuRole", "contextMenuPosition", "contextMenuVisible"])) {    
       const canAdd = !perspective.isCalculated &&
         (perspective.verbs.includes("Create") ||
-         (perspective.roleKind == "ContextRole" && perspective.verbs.includes("CreateAndFill")));
+         (perspective.roleKind == "ContextRole" && perspective.verbs.includes("CreateAndFill"))) &&
+        !(perspective.isFunctional && Object.keys(perspective.roleInstances).length > 0);
 
       return (
         component.props.showAsAccordionItem ?
