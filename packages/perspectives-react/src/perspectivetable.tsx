@@ -458,6 +458,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
       const canAdd = !perspective.isCalculated &&
         (perspective.verbs.includes("Create") ||
          (perspective.roleKind == "ContextRole" && perspective.verbs.includes("CreateAndFill"))) &&
+        // Hide plus button for functional roles (max one instance) when an instance already exists
         !(perspective.isFunctional && Object.keys(perspective.roleInstances).length > 0);
 
       return (
