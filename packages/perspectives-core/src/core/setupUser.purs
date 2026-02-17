@@ -28,7 +28,7 @@ import Data.Newtype (over)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Extern.Couchdb (addModelToLocalStore, createInitialInstances, isInitialLoad)
-import Perspectives.ModelDependencies (addressBookModelName, bodiesWithAccountsModelName, couchdbManagementModelName, sysUser, systemModelName)
+import Perspectives.ModelDependencies (bodiesWithAccountsModelName, couchdbManagementModelName, repositoryRegistryModelName, sysUser, systemModelName)
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, invertedQueryDatabaseName, modelDatabaseName)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction)
@@ -67,7 +67,7 @@ setupUser uninterpretedIdentityDoc = do
     ( do
         modify (over Transaction \t -> t { identityDocument = uninterpretedIdentityDoc })
         addModelToLocalStore (ModelUri systemModelName) isInitialLoad
-        addModelToLocalStore (ModelUri addressBookModelName) isInitialLoad
+        addModelToLocalStore (ModelUri repositoryRegistryModelName) isInitialLoad
     )
 
 setupInvertedQueryDatabase :: MonadPerspectives Unit

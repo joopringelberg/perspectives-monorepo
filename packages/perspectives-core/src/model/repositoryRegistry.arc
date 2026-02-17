@@ -38,7 +38,7 @@ domain model://perspectives.domains#RepositoryRegistry@1.0
     user Manager = me
       perspective on TheRegistry
         only (CreateAndFill)
-        props (Id) verbs (Consult)
+        props (Name) verbs (Consult)
 
       screen 
         who
@@ -54,7 +54,9 @@ domain model://perspectives.domains#RepositoryRegistry@1.0
         where
           TheRegistry
             master
+              with props (Name)
             detail
+              with props (Name)
 
     context TheRegistry filledBy PublicRepositoryOverview
       aspect sys:RoleWithId
@@ -86,11 +88,14 @@ domain model://perspectives.domains#RepositoryRegistry@1.0
 
   case PublicRepositoryOverview
     external
+      aspect sys:RoleWithName
       
     user Initializer = me
       perspective on Manager
         only (Create, Fill, Remove)
         props (FirstName, LastName, BespokeDatabaseUrl) verbs (Consult)
+      perspective on extern
+        props (Name) verbs (Consult, SetPropertyValue)
       
       screen
         who
@@ -106,6 +111,8 @@ domain model://perspectives.domains#RepositoryRegistry@1.0
                       The database owned by the Manager will be used to store the public version of the registry.
                       Then switch to the Manager role to add repositories to the registry.
                       >
+          row
+            form External
         where
 
     -- The Manager is the one who maintains the list of repositories.
@@ -146,7 +153,7 @@ domain model://perspectives.domains#RepositoryRegistry@1.0
       perspective on Repositories
         props (NameSpace_, Domain, RepositoryUrl) verbs (Consult)
       perspective on extern
-        defaults
+        props (Name) verbs (Consult)
 
       screen
         who

@@ -56,6 +56,9 @@ systemModelName = "model://perspectives.domains#tiodn6tcyc" -- System
 addressBookModelName :: String
 addressBookModelName = "model://perspectives.domains#ofhpcy5a0x" -- AddressBook
 
+repositoryRegistryModelName :: String
+repositoryRegistryModelName = "model://perspectives.domains#k1bnh6wqk9" -- RepositoryRegistry
+
 sysMe :: String
 sysMe = "model://perspectives.domains#System$Me"
 

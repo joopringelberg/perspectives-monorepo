@@ -81,7 +81,7 @@ import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (storeDomeinFileInCache, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ErrorLogging (logPerspectivesError)
-import Perspectives.Extern.Couchdb (roleInstancesFromCouchdb, updateModel', updateModelForUpgrade, updateModel_)
+import Perspectives.Extern.Couchdb (addModelToLocalStore, isInitialLoad, roleInstancesFromCouchdb, updateModel', updateModelForUpgrade, updateModel_)
 import Perspectives.Extern.Utilities (isLowerVersion, pdrVersion)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol, splitTypeUri, unversionedModelUri)
@@ -90,7 +90,7 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter)
 import Perspectives.Instances.ObjectGetters (binding, getProperty)
 import Perspectives.Instances.Values (PerspectivesFile, parsePerspectivesFile, writePerspectivesFile)
-import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, isSystemModel, rootName, settings, startContexts, sysUser, systemModelName, theSystem)
+import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, isSystemModel, repositoryRegistryModelName, rootName, settings, startContexts, sysUser, systemModelName, theSystem)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (toReadableDomeinFile, toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -292,16 +292,15 @@ runDataUpgrades = do
             updateModelForUpgrade $ ModelUri "model://perspectives.domains#HyperContext@1.0"
     )
 
-  runUpgrade installedVersion "3.0.77"
+  runUpgrade installedVersion "3.0.78"
     ( \_ -> do
         runMonadPerspectivesTransaction'
           false
           (ENR $ EnumeratedRoleType sysUser)
           do
-            -- "false" means: do not update dependencies.
-            updateModelForUpgrade $ ModelUri "model://perspectives.domains#CouchdbManagement@12.2"
-            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Introduction@1.0"
             updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.2"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#CouchdbManagement@12.2"
+            addModelToLocalStore (ModelUri repositoryRegistryModelName) isInitialLoad
     )
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)
