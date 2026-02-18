@@ -61,6 +61,12 @@
   overflow-x: hidden;
 }
 
+/* Allow overflow when sliding panel is open to prevent clipping */
+.tab-content,
+.tab-pane {
+  overflow: visible !important;
+}
+
 /* Override the text color of dropdown link text (a targeted change of the relevant CSS variable that is used in .dropdown-item) */
 html body .dropdown-menu .dropdown-item {
   --bs-dropdown-link-color: var(--bs-primary); /* Uses Bootstrap's primary color */
