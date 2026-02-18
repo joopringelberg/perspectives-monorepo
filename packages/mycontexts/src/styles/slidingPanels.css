@@ -3,6 +3,7 @@
   display: flex;
   position: relative;
   overflow-x: hidden; /* Add this to hide the panel before it slides in */
+  overflow-y: visible; /* Allow content to overflow vertically */
 }
 
 .main-panel {
@@ -17,7 +18,7 @@
   top: 0;
   right: -100%; /* Start off-screen to the right */
   width: 100%;
-  min-height: 100%;
+  min-height: 100vh; /* Use viewport height to ensure it covers the full screen */
   height: auto;
   display: flex;
   flex-direction: column;
@@ -28,9 +29,13 @@
   transition: right 0.4s ease-in-out; /* Apply transition to all states */
 }
 
-/* When open, move to position 0 */
+/* When open, move to position 0 and use fixed positioning to escape accordion constraints */
 .cover-panel.open {
+  position: fixed;
   right: 0;
+  top: 0;
+  bottom: 0;
+  height: 100vh;
 }
 
 /* Add this to prevent interaction with underlying content */

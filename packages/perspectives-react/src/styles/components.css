@@ -68,6 +68,21 @@ for a discussion about variables and sass. */
   --bs-accordion-active-bg: var(--bs-dark-bg-subtle) !important;
 }
 
+/* Allow the accordion body to overflow so sliding panels can extend beyond it */
+.accordion-body {
+  overflow: visible !important;
+}
+
+/* Ensure accordion items also allow overflow */
+.accordion-item {
+  overflow: visible !important;
+}
+
+/* Ensure the accordion wrapper allows overflow */
+.accordion {
+  overflow: visible !important;
+}
+
 /* STYLES RELATED TO SWIPE GESTURES */
 .swiping {
   transition: transform 0.1s ease, opacity 0.1s ease;
