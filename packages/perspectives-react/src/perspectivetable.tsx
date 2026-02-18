@@ -331,6 +331,21 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
     }
   }
 
+  // Dispatch OpenWhereDetails event when showDetails is enabled
+  // This notifies MSComponent to update the form with the selected role
+  private dispatchShowDetailsEvent(roleInstance: RoleInstanceT)
+  {
+    if (this.props.showDetails && this.eventDiv.current) {
+      this.eventDiv.current.dispatchEvent(new CustomEvent('OpenWhereDetails', {
+        detail: {
+          roleInstance,
+          roleType: this.props.perspective.roleType
+        },
+        bubbles: true
+      }));
+    }
+  }
+
   handleKeyDown (event : React.KeyboardEvent)
   {
     const component = this;
@@ -354,16 +369,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
         {
           const nextRoleId = roleIds[rowIndex + 1];
           component.setrow( nextRoleId );
-          // In showDetails mode, also dispatch OpenWhereDetails so MSComponent updates the form
-          if (component.props.showDetails && component.eventDiv.current) {
-            component.eventDiv.current.dispatchEvent(new CustomEvent('OpenWhereDetails', {
-              detail: {
-                roleInstance: nextRoleId,
-                roleType: component.props.perspective.roleType
-              },
-              bubbles: true
-            }));
-          }
+          component.dispatchShowDetailsEvent(nextRoleId);
         }
         event.preventDefault();
         break;
@@ -372,16 +378,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
         {
           const prevRoleId = roleIds[rowIndex - 1];
           component.setrow( prevRoleId );
-          // In showDetails mode, also dispatch OpenWhereDetails so MSComponent updates the form
-          if (component.props.showDetails && component.eventDiv.current) {
-            component.eventDiv.current.dispatchEvent(new CustomEvent('OpenWhereDetails', {
-              detail: {
-                roleInstance: prevRoleId,
-                roleType: component.props.perspective.roleType
-              },
-              bubbles: true
-            }));
-          }
+          component.dispatchShowDetailsEvent(prevRoleId);
         }
         event.preventDefault();
         break;
