@@ -60,7 +60,7 @@ import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2ModelUrl)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
-import Perspectives.ModelDependencies (sysUser, versionedModelManifestModelCuid) as MD
+import Perspectives.ModelDependencies (modelURIReadable, sysUser, versionedModelManifestModelCuid) as MD
 import Perspectives.ModelTranslation (augmentModelTranslation, emptyTranslationTable, generateFirstTranslation, generateTranslationTable, parseTranslation_pass1, parseTranslation_pass2, writeReadableTranslationYaml, writeTranslationYaml) as MT
 import Perspectives.ModelTranslation.Representation (ModelTranslation(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -93,8 +93,9 @@ parseAndCompileArc modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
             previousWarnings <- lift $ lift $ getWarnings
             lift $ lift $ resetWarnings
             Value modelCuid <- getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid) versionedModelManifest
+            Value modelUriReadable <- getPropertyValues (CP $ CalculatedPropertyType MD.modelURIReadable) versionedModelManifest
             r <- lift $ lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType MD.sysUser)
-              (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource false modelCuid mbasedOnVersion)
+              (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource false modelCuid modelUriReadable mbasedOnVersion)
             case r of
               Left errs -> ArrayT do
                 rendered <- lift $ traverse renderPerspectivesError errs
@@ -119,11 +120,13 @@ applyImmediately modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
         Just modelUri, Just arcSource, mbasedOnVersion -> catchError
           do
             mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
-            case mmodelCuid of
-              Nothing -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model CUID given!", error: "" }
-              Just (Value modelCuid) -> do
+            mmodelUriReadable <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.modelURIReadable))
+            case mmodelCuid, mmodelUriReadable of
+              Nothing, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model CUID given!", error: "" }
+              _, Nothing -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model URI Readable given!", error: "" }
+              Just (Value modelCuid), Just (Value modelUriReadable) -> do
                 r <- lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType MD.sysUser)
-                  (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource true modelCuid mbasedOnVersion)
+                  (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource true modelCuid modelUriReadable mbasedOnVersion)
                 case r of
                   Left errs -> lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: show errs })
                   Right _ -> pure unit
@@ -149,10 +152,12 @@ uploadToRepository modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
         Just modelUri, Just arcSource, mbasedOnVersion -> do
           let split = unsafePartial modelUri2ModelUrl modelUri
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
-          case mmodelCuid of
-            Nothing -> lift $ addWarning { message: "Parsing$UploadToRepository: no model CUID given!", error: "" }
-            Just (Value modelCuid) -> do
-              r <- loadAndCompileArcFile_ ((Sidecar.ModelUri modelUri) :: Sidecar.ModelUri Sidecar.Stable) arcSource false modelCuid mbasedOnVersion
+          mmodelUriReadable <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.modelURIReadable))
+          case mmodelCuid, mmodelUriReadable of
+            Nothing, _ -> lift $ addWarning { message: "Parsing$UploadToRepository: no model CUID given!", error: "" }
+            _, Nothing -> lift $ addWarning { message: "Parsing$UploadToRepository: no model URI Readable given!", error: "" }
+            Just (Value modelCuid), Just (Value modelUriReadable) -> do
+              r <- loadAndCompileArcFile_ ((Sidecar.ModelUri modelUri) :: Sidecar.ModelUri Sidecar.Stable) arcSource false modelCuid modelUriReadable mbasedOnVersion
               case r of
                 Left m -> logPerspectivesError $ Custom ("uploadToRepository: " <> show m)
                 -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries plus the updated mapping.
@@ -296,10 +301,12 @@ storeModelLocally_ modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
     ( case head modelUri_, head arcSource_, head basedOnVersion_ of
         Just modelUri, Just arcSource, mbasedOnVersion -> do
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
-          case mmodelCuid of
-            Nothing -> lift $ addWarning { message: "Parsing$StoreModelLocally: no model CUID given!", error: "" }
-            Just (Value modelCuid) -> do
-              r <- loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource false modelCuid mbasedOnVersion
+          mmodelUriReadable <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.modelURIReadable))
+          case mmodelCuid, mmodelUriReadable of
+            Nothing, _ -> lift $ addWarning { message: "Parsing$StoreModelLocally: no model CUID given!", error: "" }
+            _, Nothing -> lift $ addWarning { message: "Parsing$StoreModelLocally: no model URI Readable given!", error: "" }
+            Just (Value modelCuid), Just (Value modelUriReadable) -> do
+              r <- loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource false modelCuid modelUriReadable mbasedOnVersion
               case r of
                 Left m -> logPerspectivesError $ Custom ("StoreModelLocally: " <> show m)
                 -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries.

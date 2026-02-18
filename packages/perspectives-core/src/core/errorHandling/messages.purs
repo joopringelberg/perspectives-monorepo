@@ -148,7 +148,7 @@ data PerspectivesError
   | MissingObject ArcPosition ArcPosition
   | NoCalculatedAspect ArcPosition EnumeratedRoleType
 
-  | DomeinFileIdIncompatible String (ModelUri Stable) ArcPosition
+  | DomeinFileIdIncompatible String String ArcPosition
   | PerspectivesFileFormatError String String
 
   -- Screens

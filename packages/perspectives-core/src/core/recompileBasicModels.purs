@@ -106,7 +106,7 @@ recompileModelsAtUrl modelsDb manifestsDb = do
           -- Load sidecar from repository DB and compile with it. We need the version to take the right sidecar.
           mRepoMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id <> "@" <> version) fromRepository
           -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
-          r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id)) version
+          r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> "@" <> version) version
           case r of
             Left m -> logPerspectivesError $ Custom ("recompileModelsAtUrl: " <> show m)
             Right (Tuple df@(DomeinFile dfr@{ id: id' }) (Tuple invertedQueries mapping')) -> lift $ lift do
@@ -143,7 +143,7 @@ recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _
     mlocalMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id) fromLocalModels
     -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
     -- It should also be the local part of the id.
-    r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc true mlocalMapping (unsafePartial modelUri2LocalName (unwrap id)) (unsafePartial fromJust $ modelUriVersion _id)
+    r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc true mlocalMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> "@" <> (unsafePartial fromJust $ modelUriVersion _id)) (unsafePartial fromJust $ modelUriVersion _id)
     case r of
       Left m -> logPerspectivesError $ Custom ("recompileModel: " <> show m)
       Right (Tuple df@(DomeinFile drf@{ invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects }) (Tuple invertedQueries mapping')) -> lift $ lift do
