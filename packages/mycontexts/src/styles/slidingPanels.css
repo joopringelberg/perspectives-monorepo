@@ -18,7 +18,7 @@
   top: 0;
   right: -100%; /* Start off-screen to the right */
   width: 100%;
-  min-height: 100dvh; /* Use dynamic viewport height as minimum to handle short accordion items and mobile browsers */
+  min-height: 100dvh; /* Use dynamic viewport height to allow full screen height while staying in column */
   height: auto;
   display: flex;
   flex-direction: column;
@@ -29,12 +29,9 @@
   transition: right 0.4s ease-in-out; /* Apply transition to all states */
 }
 
-/* When open, move to position 0 and use fixed positioning to escape accordion constraints */
+/* When open, move to position 0 */
 .cover-panel.open {
-  position: fixed;
   right: 0;
-  top: 0;
-  bottom: 0;
 }
 
 /* Add this to prevent interaction with underlying content */
