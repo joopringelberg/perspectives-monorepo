@@ -18,7 +18,7 @@
   top: 0;
   right: -100%; /* Start off-screen to the right */
   width: 100%;
-  min-height: 100vh; /* Use viewport height to ensure it covers the full screen */
+  min-height: 100vh; /* Use viewport height as minimum to handle short accordion items */
   height: auto;
   display: flex;
   flex-direction: column;
@@ -35,7 +35,6 @@
   right: 0;
   top: 0;
   bottom: 0;
-  height: 100vh;
 }
 
 /* Add this to prevent interaction with underlying content */
