@@ -73,8 +73,9 @@ type Source = String
 -- | Parameter `saveInCache` determines whether to cache the DomeinFIle. Does not store the DomeinFile.
 -- | However, will load, cache and store dependencies of the model.
 -- | ModelUri should be Stable and versioned.
-loadAndCompileArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> Maybe String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
-loadAndCompileArcFile_ dfid text saveInCache modelCuid mbasedOnVersion = do
+-- | modelUriReadable should be the Readable ModelUri with version for error reporting.
+loadAndCompileArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> String -> Maybe String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
+loadAndCompileArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOnVersion = do
   -- Retrieve existing sidecar (if any) from repository. domeinFilename should be Stable.
   mMapping <- lift $ loadStableMapping dfid fromRepository
   version <- case modelUriVersion (unwrap dfid) of
@@ -90,15 +91,16 @@ loadAndCompileArcFile_ dfid text saveInCache modelCuid mbasedOnVersion = do
         Nothing -> lift $ loadStableMapping dfid fromLocalModels
       -- In this case, we generate new CUIDs. Most likely this is the first version ever for this model.
       -- Nothing -> pure Nothing
-      loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mmapping modelCuid version
+      loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mmapping modelCuid modelUriReadable version
     -- The case below is when we've compiled this version before.
-    Just _ -> loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mMapping modelCuid version
+    Just _ -> loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mMapping modelCuid modelUriReadable version
 
 -- New: sidecar-aware API that returns the updated mapping with results.
 -- | ModelUri should be Stable and unversioned.
 -- | Version should equal the version of the domain declaration in the ARC file.
-loadAndCompileArcFileWithSidecar_ :: ModelUri Stable -> Source -> Boolean -> Maybe StableIdMapping -> String -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
-loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCache mMapping modelCuid version =
+-- | modelUriReadable should be the Readable ModelUri with version for error reporting.
+loadAndCompileArcFileWithSidecar_ :: ModelUri Stable -> Source -> Boolean -> Maybe StableIdMapping -> String -> String -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
+loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCache mMapping modelCuid modelUriReadable version =
   catchError
     ( do
         (r :: Either ParseError ContextE) <- lift $ lift $ runIndentParser text domain
@@ -153,7 +155,7 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
                           else
                             pure $ Left typeCheckErrors
                 else
-                  pure $ Left [ (DomeinFileIdIncompatible stableModelUri (ModelUri sourceIdReadable) pos) ]
+                  pure $ Left [ (DomeinFileIdIncompatible modelUriReadable sourceIdReadable pos) ]
     )
     (\e -> pure $ Left [ Custom (show e) ])
 
