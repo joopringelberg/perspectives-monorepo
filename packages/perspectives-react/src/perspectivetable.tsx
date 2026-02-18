@@ -352,14 +352,36 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
       case "ArrowDown": // Down arrow
         if ( rowIndex < roleIds.length - 1 )
         {
-          component.setrow( roleIds[rowIndex + 1] );
+          const nextRoleId = roleIds[rowIndex + 1];
+          component.setrow( nextRoleId );
+          // In showDetails mode, also dispatch OpenWhereDetails so MSComponent updates the form
+          if (component.props.showDetails && component.eventDiv.current) {
+            component.eventDiv.current.dispatchEvent(new CustomEvent('OpenWhereDetails', {
+              detail: {
+                roleInstance: nextRoleId,
+                roleType: component.props.perspective.roleType
+              },
+              bubbles: true
+            }));
+          }
         }
         event.preventDefault();
         break;
       case "ArrowUp": // Up arrow
         if (rowIndex > 0)
         {
-          component.setrow( roleIds[rowIndex - 1] );
+          const prevRoleId = roleIds[rowIndex - 1];
+          component.setrow( prevRoleId );
+          // In showDetails mode, also dispatch OpenWhereDetails so MSComponent updates the form
+          if (component.props.showDetails && component.eventDiv.current) {
+            component.eventDiv.current.dispatchEvent(new CustomEvent('OpenWhereDetails', {
+              detail: {
+                roleInstance: prevRoleId,
+                roleType: component.props.perspective.roleType
+              },
+              bubbles: true
+            }));
+          }
         }
         event.preventDefault();
         break;
