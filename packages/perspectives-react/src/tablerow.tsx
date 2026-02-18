@@ -38,6 +38,7 @@ interface TableRowProps
   , roleinstancewithprops: Roleinstancewithprops
   , perspective: Perspective
   , orderedProperties: SerialisedProperty[]
+  , showDetails?: boolean
   }
 
 export default class TableRow extends PerspectivesComponent<TableRowProps>
@@ -73,6 +74,17 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
     if ( event.shiftKey )
     {
       this.ref.current?.dispatchEvent( new CustomEvent('SelectCardColumn', { bubbles: true }) );
+    }
+    // In non-mobile mode with showDetails enabled, also dispatch OpenWhereDetails
+    // so MSComponent can update the form
+    if (this.props.showDetails)
+    {
+      this.ref.current?.dispatchEvent( new CustomEvent('OpenWhereDetails',
+        { detail:
+          { roleInstance: this.props.roleinstance
+          , roleType: this.props.perspective.roleType }
+        ,  bubbles: true }
+        ) );
     }
   }
 

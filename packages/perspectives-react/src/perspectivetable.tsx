@@ -444,6 +444,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
                     roleinstancewithprops={perspective.roleInstances[roleId]}
                     perspective={component.props.perspective}
                     orderedProperties={component.orderedProperties}
+                    showDetails={component.props.showDetails}
                     />)
               }
             </tbody>
