@@ -29,11 +29,11 @@ export class TableForms extends Component<TableFormsProps> {
               const myroletype = table.widgetCommonFields.perspective.userRoleType;
               // No TableControls, show as Accordion item.
               // Only enable showDetails in desktop mode where sliding panel is side-by-side
-              const showDetails = this.props.showTablesAndForm;
+              const showDetailsOnSingleClick = this.props.showTablesAndForm;
               return (
                 <div key={index} className="markdown">
                   { markdown.map( (md, index) => <div key={index}>{ buildMarkDown( contextinstance, myroletype, md) }</div>) }
-                  { buildTable(table, false, true, showDetails) }
+                  { buildTable(table, false, true, showDetailsOnSingleClick) }
                 </div>);
               })
             }
