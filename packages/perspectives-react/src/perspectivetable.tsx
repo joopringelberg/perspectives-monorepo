@@ -331,6 +331,21 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
     }
   }
 
+  // Dispatch OpenWhereDetails event when showDetails is enabled
+  // This notifies MSComponent to update the form with the selected role
+  private dispatchShowDetailsEvent(roleInstance: RoleInstanceT)
+  {
+    if (this.props.showDetails && this.eventDiv.current) {
+      this.eventDiv.current.dispatchEvent(new CustomEvent('OpenWhereDetails', {
+        detail: {
+          roleInstance,
+          roleType: this.props.perspective.roleType
+        },
+        bubbles: true
+      }));
+    }
+  }
+
   handleKeyDown (event : React.KeyboardEvent)
   {
     const component = this;
@@ -352,14 +367,18 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
       case "ArrowDown": // Down arrow
         if ( rowIndex < roleIds.length - 1 )
         {
-          component.setrow( roleIds[rowIndex + 1] );
+          const nextRoleId = roleIds[rowIndex + 1];
+          component.setrow( nextRoleId );
+          component.dispatchShowDetailsEvent(nextRoleId);
         }
         event.preventDefault();
         break;
       case "ArrowUp": // Up arrow
         if (rowIndex > 0)
         {
-          component.setrow( roleIds[rowIndex - 1] );
+          const prevRoleId = roleIds[rowIndex - 1];
+          component.setrow( prevRoleId );
+          component.dispatchShowDetailsEvent(prevRoleId);
         }
         event.preventDefault();
         break;
@@ -444,6 +463,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
                     roleinstancewithprops={perspective.roleInstances[roleId]}
                     perspective={component.props.perspective}
                     orderedProperties={component.orderedProperties}
+                    showDetails={component.props.showDetails}
                     />)
               }
             </tbody>
