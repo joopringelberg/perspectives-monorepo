@@ -25,12 +25,13 @@ import Control.Monad.State (gets) as State
 import Control.Monad.State.Class (gets)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
-import Data.Array (catMaybes, cons, elemIndex, filter, filterA, find, findIndex, foldM, fromFoldable, head, length, nub, null)
+import Data.Array (catMaybes, cons, drop, elemIndex, filter, filterA, find, findIndex, foldM, fromFoldable, head, length, nub, null)
 import Data.Array.Partial (head) as ARRP
 import Data.Foldable (for_)
 import Data.List (List) as LIST
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
+import Data.String (Pattern(..), split, trim) as String
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..), fst, snd)
 import Foreign.Object (Object, keys, lookup)
@@ -62,8 +63,16 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), Cont
 import Perspectives.Representation.Verbs (allPropertyVerbs, roleVerbList2Verbs)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
-import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_)
+import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_, getContextActionFromUnqualifiedName)
 import Prelude (Unit, bind, discard, eq, flip, map, not, pure, unit, ($), (<#>), (<$>), (<*>), (<<<), (==), (>>=))
+
+-- | Extract action names from markdown text using the [[action: name| text]] syntax.
+extractMarkDownActionNames :: String -> Array String
+extractMarkDownActionNames mdText =
+  catMaybes $ map extractName (drop 1 (String.split (String.Pattern "[[action:") mdText))
+  where
+  extractName :: String -> Maybe String
+  extractName s = map String.trim (head (String.split (String.Pattern "|") s))
 
 handleScreens :: LIST.List AST.ScreenE -> PhaseThree Unit
 handleScreens screenEs = do
@@ -239,10 +248,17 @@ handleScreens screenEs = do
         pure $ FormDef { markdown: markdown', widgetCommonFields: widgetCommonFields' }
 
       markdown :: AST.MarkDownE -> PhaseThree MarkDownDef
-      markdown (MarkDownConstant { text, condition, context: ctxt }) = do
+      markdown (MarkDownConstant { text, condition, context: ctxt, start, end }) = do
         text' <- unsafePartial case text of
           Simple (Value _ _ t) -> pure t
         condition' <- traverse (compileStep (CDOM $ ST ctxt)) condition
+        -- Check that all action names referenced in the markdown text are defined for the subject role.
+        let actionNames = extractMarkDownActionNames text'
+        for_ actionNames \actionName -> do
+          maction <- lift2 $ getContextActionFromUnqualifiedName actionName subjectRoleType
+          case maction of
+            Nothing -> throwError (UnknownMarkDownAction start end actionName subjectRoleType)
+            Just _ -> pure unit
         pure $ MarkDownConstantDef { text: text', condition: condition', domain: unsafePartial typeUri2ModelUri_ $ unwrap ctxt }
       markdown (MarkDownPerspective { widgetFields, condition, start: s, end: e }) = do
         case condition of
