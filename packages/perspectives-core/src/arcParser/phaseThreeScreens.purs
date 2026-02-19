@@ -428,8 +428,7 @@ handleScreens screenEs = do
 
     compileFieldConstraints :: Array AST.FieldConstraintE -> RoleType -> PhaseThree (Maybe (Array FieldConstraintDef))
     compileFieldConstraints constraints objRoleType =
-      if null constraints
-      then pure Nothing
+      if null constraints then pure Nothing
       else Just <$> traverse (compileFieldConstraint objRoleType) constraints
 
     compileFieldConstraint :: RoleType -> AST.FieldConstraintE -> PhaseThree FieldConstraintDef
@@ -441,9 +440,8 @@ handleScreens screenEs = do
         _ -> throwError $ NotUniquelyIdentifyingPropertyType fcStart (ENP $ EnumeratedPropertyType propertyName) candidates
       -- Validate that the property has a String range.
       propRange <- lift2 $ rangeOfPropertyType propertyType
-      if propRange == PString
-        then pure { propertyType, minLines, maxLines }
-        else throwError $ FieldConstraintRequiresStringRange fcStart fcEnd propertyType
+      if propRange == PString then pure { propertyType, minLines, maxLines }
+      else throwError $ FieldConstraintRequiresStringRange fcStart fcEnd propertyType
 
 -- | Qualifies incomplete names and changes RoleType constructor to CalculatedRoleType if necessary.
 -- | The role type name (parameter `rt`) is always fully qualified, EXCEPT
