@@ -243,6 +243,10 @@ compileAndSaveProperty dom step (CalculatedProperty cp@{ id, role, pos }) consid
       compiledExpression' <-
         if considerFunctional then pure $ setCardinality compiledExpression True
         else pure compiledExpression
+      -- Verify that the range of the compiled expression is a Value type, not a Role or Context type.
+      case range compiledExpression' of
+        VDOM _ _ -> pure unit
+        r -> throwError (NotAValueRange (startOf step) (endOf step) r)
       -- Save the result in DomeinCache.
       lift2 $ void $ modifyCalculatedPropertyInDomeinFile (ModelUri $ unsafePartial fromJust $ typeUri2ModelUri (unwrap id)) (CalculatedProperty cp { calculation = Q compiledExpression' })
       pure $ range compiledExpression'

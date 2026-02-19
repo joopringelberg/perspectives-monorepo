@@ -1,4 +1,4 @@
-domain model://joopringelberg.nl#TestTypeName
+domain model://joopringelberg.nl#TestTypeName@1.0
   use ttn for model://joopringelberg.nl#TestTypeName
   use sys for model://perspectives.domains#System
   use util for model://perspectives.domains#Utilities
@@ -39,7 +39,6 @@ domain model://joopringelberg.nl#TestTypeName
     indexed ttn:TestTypeNameApp
     aspect sys:RootContext
     external
-      aspect sys:RootContext$External
     user Tester = sys:Me
       perspective on ThingWithTypeNameProperty
         only (Create, Remove)
