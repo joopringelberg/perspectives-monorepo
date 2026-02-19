@@ -75,11 +75,11 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
     {
       this.ref.current?.dispatchEvent( new CustomEvent('SelectCardColumn', { bubbles: true }) );
     }
-    // In non-mobile mode with showDetails enabled, also dispatch OpenWhereDetails
+    // In non-mobile mode with showDetails enabled, also dispatch ShowDetails
     // so MSComponent can update the form
     if (this.props.showDetails)
     {
-      this.ref.current?.dispatchEvent( new CustomEvent('OpenWhereDetails',
+      this.ref.current?.dispatchEvent( new CustomEvent('ShowDetails',
         { detail:
           { roleInstance: this.props.roleinstance
           , roleType: this.props.perspective.roleType }
@@ -91,11 +91,9 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
   handleDoubleClick (event : React.MouseEvent)
   {
     event.stopPropagation();
-    // Signal to Table that this row is selected.
-    this.ref.current?.dispatchEvent( new CustomEvent('OpenDetails', 
-      { detail: 
-        { roleInstance: this.props.roleinstance
-        , roleType: this.props.perspective.roleType }
+    // Double-click always opens the context of the filler of the role.
+    this.ref.current?.dispatchEvent( new CustomEvent('OpenContext', 
+      { detail: this.props.roleinstance
       ,  bubbles: true }) );
   }
 

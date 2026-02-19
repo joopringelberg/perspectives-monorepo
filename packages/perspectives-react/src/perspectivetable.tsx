@@ -25,7 +25,6 @@ const TableItemContextMenuWithOpen: React.FC<{
   roleinstance: RoleInstanceT;
   roleOnClipboard?: any;
   systemExternalRole: RoleInstanceT;
-  showDetails?: boolean;
   mode?: "all" | "addOnly" | "rowOnly";
 }> = ({ eventKey, ...rest }) => {
   const ctx = useContext(AccordionContext);
@@ -40,9 +39,8 @@ const RowContextMenu: React.FC<{
   position?: { x: number; y: number };
   perspective: Perspective;
   roleId?: RoleInstanceT;
-  showDetails?: boolean;
   onRequestClose?: () => void;
-}> = ({ visible, position, perspective, roleId, showDetails, onRequestClose }) => {
+}> = ({ visible, position, perspective, roleId, onRequestClose }) => {
   const { roleOnClipboard, systemExternalRole } = useContext(AppContext);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -112,14 +110,13 @@ const RowContextMenu: React.FC<{
         roleinstance={roleId}
         roleOnClipboard={roleOnClipboard}
         systemExternalRole={systemExternalRole}
-        showDetails={showDetails}
         isOpen={true}
         mode="rowOnly"
         renderAsInlineMenu={true}
         onOpenDetails={(roleInstance, roleType) => {
           if (menuRef.current) {
             menuRef.current.dispatchEvent(
-              new CustomEvent('OpenWhereDetails', {
+              new CustomEvent('ShowDetails', {
                 detail: { roleInstance, roleType },
                 bubbles: true,
               })
@@ -331,12 +328,12 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
     }
   }
 
-  // Dispatch OpenWhereDetails event when showDetails is enabled
+  // Dispatch ShowDetails event when showDetails is enabled
   // This notifies MSComponent to update the form with the selected role
   private dispatchShowDetailsEvent(roleInstance: RoleInstanceT)
   {
     if (this.props.showDetails && this.eventDiv.current) {
-      this.eventDiv.current.dispatchEvent(new CustomEvent('OpenWhereDetails', {
+      this.eventDiv.current.dispatchEvent(new CustomEvent('ShowDetails', {
         detail: {
           roleInstance,
           roleType: this.props.perspective.roleType
@@ -512,7 +509,6 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
                           roleinstance={component.state.row}
                           roleOnClipboard={roleOnClipboard}
                           systemExternalRole={systemExternalRole}
-                          showDetails={component.props.showDetails}
                           mode="addOnly"
                         />
                       }
@@ -530,7 +526,6 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
               position={component.state.contextMenuPosition}
               perspective={perspective}
               roleId={component.state.contextMenuRole}
-              showDetails={component.props.showDetails}
                 onRequestClose={() => {
                   component.setState({
                     contextMenuVisible: false,
@@ -556,7 +551,6 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
               position={component.state.contextMenuPosition}
               perspective={perspective}
               roleId={component.state.contextMenuRole}
-              showDetails={component.props.showDetails}
               onRequestClose={() => {
                 component.setState({
                   contextMenuVisible: false,

@@ -8,8 +8,6 @@ import MSComponent, { SlidingPanelContentProps } from "./mscomponent";
 interface TableFormsProps {
   screenelements: TableFormDef[];
   showTablesAndForm: boolean;
-  doubleclickOpensDetails: boolean;
-
 }
 
 export class TableForms extends Component<TableFormsProps> {
@@ -19,8 +17,7 @@ export class TableForms extends Component<TableFormsProps> {
       return (
         <MSComponent 
           isMobile={!this.props.showTablesAndForm} 
-          className='bg-light-subtle' 
-          doubleclickOpensDetails={this.props.doubleclickOpensDetails}
+          className='bg-light-subtle'
         >
           <Accordion defaultActiveKey="0" flush>
             {
@@ -31,7 +28,7 @@ export class TableForms extends Component<TableFormsProps> {
               return (
                 <div key={index} className="markdown">
                   { markdown.map( (md, index) => <div key={index}>{ buildMarkDown( contextinstance, myroletype, md) }</div>) }
-                  { buildTable(table, false, true, true) }
+                  { buildTable(table, false, true, this.props.showTablesAndForm) }
                 </div>);
               })
             }

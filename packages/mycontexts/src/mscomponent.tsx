@@ -39,7 +39,6 @@ export interface SlidingPanelContentProps {
 
 interface MSComponentProps {
   isMobile: boolean;
-  doubleclickOpensDetails: boolean;
   children: [React.ReactElement<MainContentProps>, React.ReactElement<SlidingPanelContentProps>];
   className?: string;
 }
@@ -56,7 +55,6 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
     super(props);
     this.state = { selectedRoleInstance: undefined, isFormVisible: false, isSliding: false, isTabbable: false };
     this.showDetails = this.showDetails.bind(this);
-    this.conditionallyShowDetails = this.conditionallyShowDetails.bind(this);
     this.containerRef = React.createRef();
     this.slidingPanelRef = React.createRef();
     this.mainPanelRef = React.createRef();
@@ -106,17 +104,10 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
     });
   };
 
-  conditionallyShowDetails (event: RoleInstanceSelectionEvent) {
-    if (this.props.doubleclickOpensDetails)
-      {
-        this.showDetails(event);
-      }
-  }
   componentDidMount(): void {
     const component = this;
     if (component.containerRef.current) { 
-      component.containerRef.current.addEventListener('OpenDetails', this.conditionallyShowDetails, true );
-      component.containerRef.current.addEventListener('OpenWhereDetails', this.showDetails, true );
+      component.containerRef.current.addEventListener('ShowDetails', this.showDetails, true );
       component.containerRef.current.addEventListener('FormFieldEditStarted', this.handleFieldEditStarted as EventListener, true);
       component.containerRef.current.addEventListener('FormFieldEditEnded', this.handleFieldEditEnded as EventListener, true);
     }
@@ -126,16 +117,18 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
   componentDidUpdate(prevProps: MSComponentProps): void {
     if (prevProps.isMobile !== this.props.isMobile && this.containerRef.current) {
       // We have to do this because the reference to the containerRef changes when the component is re-rendered for mobile (and vv).
-      this.containerRef.current.removeEventListener('OpenWhereDetails', this.showDetails as EventListener, true);
-      this.containerRef.current.removeEventListener('OpenDetails', this.conditionallyShowDetails, true );
+      this.containerRef.current.removeEventListener('ShowDetails', this.showDetails as EventListener, true);
       this.containerRef.current.removeEventListener('FormFieldEditStarted', this.handleFieldEditStarted as EventListener, true);
       this.containerRef.current.removeEventListener('FormFieldEditEnded', this.handleFieldEditEnded as EventListener, true);
-      this.containerRef.current.addEventListener('OpenDetails', this.conditionallyShowDetails as EventListener, true);
-      this.containerRef.current.addEventListener('OpenWhereDetails', this.showDetails, true );
+      this.containerRef.current.addEventListener('ShowDetails', this.showDetails as EventListener, true);
       this.containerRef.current.addEventListener('FormFieldEditStarted', this.handleFieldEditStarted as EventListener, true);
       this.containerRef.current.addEventListener('FormFieldEditEnded', this.handleFieldEditEnded as EventListener, true);
     }
-    if (this.props.isMobile && this.state.isFormVisible && this.slidingPanelRef.current) {
+    // When switching from side-by-side to mobile, close the form panel.
+    if (this.props.isMobile && !prevProps.isMobile && this.state.isFormVisible) {
+      this.setState({ isFormVisible: false, isSliding: false, isTabbable: false });
+    }
+    else if (this.props.isMobile && this.state.isFormVisible && this.slidingPanelRef.current) {
       this.slidingPanelRef.current.focus();
     }
   }
@@ -143,8 +136,7 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
   componentWillUnmount(): void {
     const component = this;
     if (component.containerRef.current) {
-      component.containerRef.current.removeEventListener('OpenDetails', this.conditionallyShowDetails as EventListener, true);
-      component.containerRef.current.removeEventListener('OpenWhereDetails', this.showDetails as EventListener, true);
+      component.containerRef.current.removeEventListener('ShowDetails', this.showDetails as EventListener, true);
       component.containerRef.current.removeEventListener('FormFieldEditStarted', this.handleFieldEditStarted as EventListener, true);
       component.containerRef.current.removeEventListener('FormFieldEditEnded', this.handleFieldEditEnded as EventListener, true);
     }

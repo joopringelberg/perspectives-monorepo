@@ -64,7 +64,7 @@ export class Where extends Component<WhereProps, WhereState> {
         this.props.screenelements.contextRoles.length > 0 ?
         <div>
           <h3 className="column-heading">{i18next.t("dive_in", {ns: 'mycontexts'})}</h3>
-          <TableForms screenelements={this.props.screenelements.contextRoles} showTablesAndForm={this.props.showTablesAndForm} doubleclickOpensDetails={false} />
+          <TableForms screenelements={this.props.screenelements.contextRoles} showTablesAndForm={this.props.showTablesAndForm} />
         </div>
         : null
       }

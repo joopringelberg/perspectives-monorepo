@@ -26,7 +26,7 @@ export class What extends PerspectivesComponent<WhatProps>{
                 {element.markdown.map((markdown, index) => 
                   <div key={index} className="markdown">{ buildMarkDown(context.contextinstance, context.myroletype, markdown) }</div>
                   )}
-                <TableForms screenelements={element.tableForms} showTablesAndForm={component.props.showTablesAndForm} doubleclickOpensDetails={false}/>
+                <TableForms screenelements={element.tableForms} showTablesAndForm={component.props.showTablesAndForm}/>
               </div>;
           case "FreeFormScreen":
             return  <div className="content-top-aligned">

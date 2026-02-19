@@ -35,7 +35,6 @@ interface TableItemContextMenuProps {
   roleinstance: RoleInstanceT;
   roleOnClipboard?: RoleOnClipboard;
   systemExternalRole: RoleInstanceT;
-  showDetails?: boolean;
   // When false, the accordion item containing this menu is collapsed.
   // We still render the trigger (empty menu) but skip computing menu content & async work.
   isOpen?: boolean;
@@ -48,7 +47,7 @@ interface TableItemContextMenuProps {
   // This is used for floating context menus that supply their own container.
   renderAsInlineMenu?: boolean;
   // Optional callback used by inline/floating menus to dispatch the
-  // OpenWhereDetails event from a DOM node that is guaranteed to be
+  // ShowDetails event from a DOM node that is guaranteed to be
   // inside the MSComponent tree. When absent, we fall back to the
   // legacy behaviour of dispatching from this component's own ref.
   onOpenDetails?: (roleInstance: RoleInstanceT, roleType: RoleType) => void;
@@ -486,34 +485,27 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   {
   if (!this.props.isOpen) return [];
     const component = this;
-    if ( component.props.showDetails)
-    {
-      return [<NavDropdown.Item
-              key="OpenDetails"
-              eventKey="OpenDetails"
-              onClick={ () => {
-                if (component.props.onOpenDetails) {
-                  component.props.onOpenDetails(
-                    component.props.roleinstance,
-                    component.props.perspective.roleType
-                  );
-                } else {
-                  component.ref.current?.dispatchEvent( new CustomEvent( 'OpenWhereDetails',
-                    { detail: 
-                      { roleInstance: component.props.roleinstance
-                      , roleType: component.props.perspective.roleType }
-                    ,  bubbles: true } 
-                  ));
-                }
-              }}
-            >{
-              i18next.t("tableContextMenu_opendetails", { ns: 'preact' }) 
-            }</NavDropdown.Item>];
-      }
-    else
-    {
-      return [];
-    }
+    return [<NavDropdown.Item
+            key="OpenDetails"
+            eventKey="OpenDetails"
+            onClick={ () => {
+              if (component.props.onOpenDetails) {
+                component.props.onOpenDetails(
+                  component.props.roleinstance,
+                  component.props.perspective.roleType
+                );
+              } else {
+                component.ref.current?.dispatchEvent( new CustomEvent( 'ShowDetails',
+                  { detail: 
+                    { roleInstance: component.props.roleinstance
+                    , roleType: component.props.perspective.roleType }
+                  ,  bubbles: true } 
+                ));
+              }
+            }}
+          >{
+            i18next.t("tableContextMenu_opendetails", { ns: 'preact' }) 
+          }</NavDropdown.Item>];
   }
 
   computeRestoreContextForUserItem() : JSX.Element[]
