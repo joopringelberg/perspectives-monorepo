@@ -380,6 +380,7 @@ export function buildForm(form : FormElementDef, showControls : boolean = true, 
         cardtitle={ perspective.identifyingProperty }
         showControls={showControls}
         roleinstance={roleInstance}
+        fieldConstraints={form.widgetCommonFields.fieldConstraints}
         />
     </>);
 }

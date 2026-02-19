@@ -42,7 +42,7 @@ import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_)
 import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), PropertyVerbE(..), PropsOrView, RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..), roleIdentification2context)
-import Perspectives.Parsing.Arc.AST (ColumnE(..), FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), WhatE(..), WidgetCommonFields) as AST
+import Perspectives.Parsing.Arc.AST (ColumnE(..), FieldConstraintE, FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), WhatE(..), WidgetCommonFields) as AST
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
@@ -53,11 +53,12 @@ import Perspectives.Query.ExpressionCompiler (compileExpression, compileStep, qu
 import Perspectives.Query.QueryTypes (Domain(..), domain2roleType, functional, range, roleInContext2Role)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getEnumeratedRole, tryGetPerspectType)
-import Perspectives.Representation.Class.Property (hasFacet)
+import Perspectives.Representation.Class.Property (hasFacet, rangeOfPropertyType)
+import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.Class.Role (allProperties, displayName, perspectivesOfRoleType, roleADTOfRoleType, roleTypeIsFunctional)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..), elements_)
 import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsRoleVerbs)
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyRestrictions)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyRestrictions)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optimistic, pessimistic)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), roletype2string)
 import Perspectives.Representation.Verbs (allPropertyVerbs, roleVerbList2Verbs)
@@ -302,7 +303,7 @@ handleScreens screenEs = do
             otherwise -> throwError $ NotUniquelyIdentifyingPropertyType start' (ENP $ EnumeratedPropertyType prop) candidates
 
   widgetCommonFields :: RoleType -> AST.WidgetCommonFields -> ThreeValuedLogic -> PhaseThree WidgetCommonFieldsDef
-  widgetCommonFields subjectRoleType { title: title', perspective, fillFrom, withProps, withoutProps, withoutVerbs, roleVerbs, start: start', end: end' } isFunctionalWidget = do
+  widgetCommonFields subjectRoleType { title: title', perspective, fillFrom, withProps, withoutProps, withoutVerbs, roleVerbs, fieldConstraints: fieldConstraints', start: start', end: end' } isFunctionalWidget = do
     -- From a RoleIdentification that represents the object,
     -- find the relevant Perspective.
     -- A ScreenElement can only be defined for a named Enumerated or Calculated Role. This means that `perspective` is constructed with the
@@ -383,6 +384,9 @@ handleScreens screenEs = do
         -- We can safely assume that the props per PropertyVerbE are disjunct.
         (propertyRestrictions :: Maybe PropertyRestrictions) <- Just <$> (execWriterT $ collectPropertyRestrictions withoutVerbs objectRoleType)
 
+        -- Compile field constraints: look up each property and validate it has String range.
+        compiledFieldConstraints <- compileFieldConstraints (fromFoldable fieldConstraints') objectRoleType
+
         pure
           { title: title'
           , perspectiveId
@@ -392,6 +396,7 @@ handleScreens screenEs = do
           , withoutProperties
           , roleVerbs: maybe Nothing (Just <<< roleVerbList2Verbs) roleVerbs
           , userRole: subjectRoleType
+          , fieldConstraints: compiledFieldConstraints
           }
 
     where
@@ -420,6 +425,25 @@ handleScreens screenEs = do
         verbs <- pure $ elements_ propertyVerbs allPropertyVerbs
         for_ props \prop -> tell (EM.singleton prop verbs)
         pure unit
+
+    compileFieldConstraints :: Array AST.FieldConstraintE -> RoleType -> PhaseThree (Maybe (Array FieldConstraintDef))
+    compileFieldConstraints constraints objRoleType =
+      if null constraints
+      then pure Nothing
+      else Just <$> traverse (compileFieldConstraint objRoleType) constraints
+
+    compileFieldConstraint :: RoleType -> AST.FieldConstraintE -> PhaseThree FieldConstraintDef
+    compileFieldConstraint objRoleType { propertyName, minLines, maxLines, start: fcStart, end: fcEnd } = do
+      candidates <- lookForUnqualifiedPropertyType_ propertyName objRoleType
+      propertyType <- case head candidates of
+        Nothing -> throwError $ UnknownProperty fcStart (ENP $ EnumeratedPropertyType propertyName) (ST objRoleType)
+        Just t | length candidates == 1 -> pure t
+        _ -> throwError $ NotUniquelyIdentifyingPropertyType fcStart (ENP $ EnumeratedPropertyType propertyName) candidates
+      -- Validate that the property has a String range.
+      propRange <- lift2 $ rangeOfPropertyType propertyType
+      if propRange == PString
+        then pure { propertyType, minLines, maxLines }
+        else throwError $ FieldConstraintRequiresStringRange fcStart fcEnd propertyType
 
 -- | Qualifies incomplete names and changes RoleType constructor to CalculatedRoleType if necessary.
 -- | The role type name (parameter `rt`) is always fully qualified, EXCEPT

@@ -222,6 +222,13 @@ export type ChatElementDef = {
 export type WidgetCommonFields = {
   title: string;
   perspective: Perspective;
+  fieldConstraints?: FieldDisplayConstraint[];
+};
+
+export type FieldDisplayConstraint = {
+  propertyType: EnumeratedOrCalculatedProperty;
+  minLines?: number;
+  maxLines?: number;
 };
 
 export type WhoWhatWhereScreenDef = {

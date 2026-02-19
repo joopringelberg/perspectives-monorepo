@@ -48,7 +48,7 @@ import Parsing.Indent.Monadic (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -1762,6 +1762,7 @@ widgetCommonFields = do
           -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
           (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
           mroleVerbs <- optionMaybe roleVerbs
+          fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
           end <- getPosition
           pure
             { title
@@ -1771,6 +1772,7 @@ widgetCommonFields = do
             , withoutProps: Nothing
             , withoutVerbs
             , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
+            , fieldConstraints
             , start
             , end
             }
@@ -1779,6 +1781,7 @@ widgetCommonFields = do
           -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
           (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
           mroleVerbs <- optionMaybe roleVerbs
+          fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
           end <- getPosition
           pure
             { title
@@ -1788,12 +1791,14 @@ widgetCommonFields = do
             , withoutProps: Just withoutProps
             , withoutVerbs
             , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
+            , fieldConstraints
             , start
             , end
             }
         _ -> do
           (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
           mroleVerbs <- optionMaybe roleVerbs
+          fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
           end <- getPosition
           pure
             { title
@@ -1803,6 +1808,7 @@ widgetCommonFields = do
             , withoutProps: Nothing
             , withoutVerbs
             , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
+            , fieldConstraints
             , start
             , end
             }
@@ -1816,9 +1822,32 @@ widgetCommonFields = do
         , withoutProps: Nothing
         , withoutVerbs: Nil
         , roleVerbs: Nothing
+        , fieldConstraints: Nil
         , start
         , end
         }
+
+-- | Parses a single field constraint entry: a property name followed by optional
+-- | minLines and maxLines sub-constraints.
+fieldConstraintE :: IP FieldConstraintE
+fieldConstraintE = do
+  start <- getPosition
+  propertyName <- arcIdentifier
+  subConstraints <- nestedBlock fieldSubConstraintItem
+  end <- getPosition
+  let minLines = findConstraintValue "minLines" subConstraints
+  let maxLines = findConstraintValue "maxLines" subConstraints
+  pure { propertyName, minLines, maxLines, start, end }
+  where
+  fieldSubConstraintItem :: IP (Tuple String Int)
+  fieldSubConstraintItem = do
+    kw <- reservedIdentifier
+    reserved "="
+    n <- token.integer
+    pure (Tuple kw n)
+
+  findConstraintValue :: String -> List (Tuple String Int) -> Maybe Int
+  findConstraintValue key = foldl (\acc (Tuple k v) -> if k == key then Just v else acc) Nothing
 
 tableFormFields :: RoleIdentification -> IP WidgetCommonFields
 tableFormFields perspective = do
@@ -1850,6 +1879,7 @@ tableFormFields perspective = do
       -- Because propertyVerbs always succeeds, we must explicitly check the indentation.
       (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
       mroleVerbs <- optionMaybe roleVerbs
+      fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
       end <- getPosition
       pure
         { title
@@ -1859,6 +1889,7 @@ tableFormFields perspective = do
         , withoutProps
         , withoutVerbs
         , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
+        , fieldConstraints
         , start
         , end
         }
@@ -1872,6 +1903,7 @@ tableFormFields perspective = do
         , withoutProps: Nothing
         , withoutVerbs: Nil
         , roleVerbs: Nothing
+        , fieldConstraints: Nil
         , start
         , end
         }

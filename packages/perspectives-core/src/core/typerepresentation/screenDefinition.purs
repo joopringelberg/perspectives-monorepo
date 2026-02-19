@@ -95,6 +95,13 @@ type ChatDefFields f =
   | f
   }
 
+-- | Per-property display constraints for widgets (minLines, maxLines for textarea).
+type FieldConstraintDef =
+  { propertyType :: PropertyType
+  , minLines :: Maybe Int
+  , maxLines :: Maybe Int
+  }
+
 -----------------------------------------------------------
 -- WIDGETS
 -----------------------------------------------------------
@@ -114,6 +121,8 @@ type WidgetCommonFieldsDefWithoutPerspective f =
   , withoutProperties :: Maybe (Array PropertyType)
   , roleVerbs :: Maybe (Array RoleVerb)
   , userRole :: RoleType
+  -- Per-property display constraints (minLines, maxLines for textareas)
+  , fieldConstraints :: Maybe (Array FieldConstraintDef)
   | f
   }
 
@@ -445,11 +454,12 @@ derive instance ordScreenKey :: Ord ScreenKey
 
 type ScreenMap = EncodableMap ScreenKey ScreenDefinition
 
--- | Serialise just the title and perspective field, for the client side.
+-- | Serialise just the title, perspective and fieldConstraints fields, for the client side.
 writeWidgetCommonFields :: WidgetCommonFieldsDef -> Foreign
-writeWidgetCommonFields { title, perspective } = write
+writeWidgetCommonFields { title, perspective, fieldConstraints } = write
   { title: write title
   , perspective: write perspective
+  , fieldConstraints: write fieldConstraints
   }
 
 -------------------------------------------------------------------------------

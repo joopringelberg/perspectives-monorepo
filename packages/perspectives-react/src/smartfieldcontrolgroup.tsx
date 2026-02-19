@@ -64,6 +64,8 @@ interface SmartFieldControlGroupProps
   myroletype: RoleType;
   contextinstance: ContextInstanceT;
   hasFocus?: boolean;
+  minLines?: number;
+  maxLines?: number;
 }
 
 interface SmartFieldControlGroupState
@@ -143,6 +145,8 @@ export default class SmartFieldControlGroup extends Component<SmartFieldControlG
               disabled={ component.propertyOnlyConsultable() || !component.props.roleId }
               isselected={!!component.props.hasFocus}
               contextinstance={component.props.contextinstance}
+              minLines={component.props.minLines}
+              maxLines={component.props.maxLines}
             />
           </div>
         </Form.Group>

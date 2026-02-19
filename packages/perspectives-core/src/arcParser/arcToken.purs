@@ -247,6 +247,9 @@ perspectDef = LanguageDef
       , "detail"
       , "without"
       , "fillfrom"
+      , "fields"
+      , "minLines"
+      , "maxLines"
 
       ]
   , caseSensitive: true

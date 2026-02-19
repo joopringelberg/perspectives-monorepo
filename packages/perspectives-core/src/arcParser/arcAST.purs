@@ -495,6 +495,14 @@ newtype ColumnE = ColumnE (List ScreenElement)
 --------------------------------------------------------------------------------
 data FormE = FormE (List MarkDownE) WidgetCommonFields
 
+type FieldConstraintE =
+  { propertyName :: String
+  , minLines :: Maybe Int
+  , maxLines :: Maybe Int
+  , start :: ArcPosition
+  , end :: ArcPosition
+  }
+
 type WidgetCommonFields =
   { title :: Maybe String
   -- Only the ExplicitRole constructor is allowed!
@@ -506,6 +514,8 @@ type WidgetCommonFields =
   , withoutVerbs :: List PropertyVerbE
   -- Must be a subset of the roleVerbs of the perspective
   , roleVerbs :: Maybe RoleVerbList
+  -- Per-property display constraints (minLines, maxLines for textareas)
+  , fieldConstraints :: List FieldConstraintE
   , start :: ArcPosition
   , end :: ArcPosition
   }
