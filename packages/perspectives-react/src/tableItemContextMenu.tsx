@@ -21,7 +21,7 @@
 import React, { Component, forwardRef, JSX } from "react";
 import {Dropdown, NavDropdown} from 'react-bootstrap';
 import i18next from "i18next";
-import { ContextType, PDRproxy, Perspective, RoleInstanceT, RoleOnClipboard, RoleType } from "perspectives-proxy";
+import { ContextType, FillerType, PDRproxy, Perspective, RoleInstanceT, RoleOnClipboard, RoleType } from "perspectives-proxy";
 import { UserMessagingPromise } from "./userMessaging";
 import { PSContextType } from "./reactcontexts";
 import { externalRole } from "./urifunctions";
@@ -56,6 +56,7 @@ interface TableItemContextMenuProps {
 interface TableItemContextMenuState {
   actions: string[];
   compatibleRole?: boolean;
+  fillerTypes?: FillerType[];
 }
 
 export default class TableItemContextMenu extends Component<TableItemContextMenuProps, TableItemContextMenuState>
@@ -76,11 +77,18 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   componentDidMount(): void {
     const component = this;
     // Skip expensive compatibility check if menu closed.
-    if (component.props.isOpen && component.props.roleOnClipboard !== undefined && !component.props.perspective.isCalculated)
+    if (component.props.isOpen && !component.props.perspective.isCalculated)
     {
-      PDRproxy.then( pproxy => pproxy.checkBindingP( component.props.perspective.roleType, component.props.roleOnClipboard!.roleData.rolinstance )
-      .then( compatibleRole => 
-        component.setState({compatibleRole})));
+      PDRproxy.then( pproxy => {
+        if (component.props.roleOnClipboard !== undefined) {
+          pproxy.checkBindingP( component.props.perspective.roleType, component.props.roleOnClipboard!.roleData.rolinstance )
+          .then( compatibleRole => 
+            component.setState({compatibleRole}));
+        }
+        pproxy.getBindingType( component.props.perspective.roleType,
+          (fillerTypes) => component.setState({fillerTypes}),
+          true );
+      });
     }
   }
 
@@ -91,12 +99,23 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     const dependenciesChanged = component.props.roleOnClipboard && (!_.isEqual(component.props.roleOnClipboard, prevProps.roleOnClipboard) || component.props.roleinstance !== prevProps.roleinstance);
     if (component.props.isOpen && !component.props.perspective.isCalculated && (openedNow || dependenciesChanged))
     {
-      if (component.props.roleOnClipboard)
-      {
-        PDRproxy.then( pproxy => pproxy.checkBindingP( component.props.perspective.roleType, component.props.roleOnClipboard!.roleData.rolinstance )
-        .then( compatibleRole => 
-          component.setState({compatibleRole})));
-      }
+      PDRproxy.then( pproxy => {
+        if (component.props.roleOnClipboard)
+        {
+          pproxy.checkBindingP( component.props.perspective.roleType, component.props.roleOnClipboard!.roleData.rolinstance )
+          .then( compatibleRole => 
+            component.setState({compatibleRole}));
+        }
+      });
+    }
+    // Fetch filler types once when the menu opens (role type doesn't change during session).
+    if (openedNow && !component.props.perspective.isCalculated)
+    {
+      PDRproxy.then( pproxy =>
+        pproxy.getBindingType( component.props.perspective.roleType,
+          (fillerTypes) => component.setState({fillerTypes}),
+          true )
+      );
     }
   }
 
@@ -257,9 +276,9 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
                 i18next.t("tableContextMenu_fill", { ns: 'preact' }) 
               }</Dropdown.Item>];
     }
-    else if ((this.mayCreateContext() || this.mayCreateInstance()) && roleInstanceWithProps && !roleInstanceWithProps.filler && !this.state.compatibleRole && this.props.perspective.possibleFillers?.length > 0)
+    else if ((this.mayCreateContext() || this.mayCreateInstance()) && roleInstanceWithProps && !roleInstanceWithProps.filler && !this.state.compatibleRole && this.state.fillerTypes && this.state.fillerTypes.length > 0)
     {
-      return this.props.perspective.possibleFillers.map(({readableName}, index) =>
+      return this.state.fillerTypes.map(({readableName}, index) =>
         <Dropdown.Item
           key={`PossibleFiller_${index}`}
           eventKey={`PossibleFiller_${index}`}

@@ -312,6 +312,11 @@ export type ContextAndName =
 	  readableName : string }
 
 ////////////////////////////////////////////
+//// FILLER TYPES
+////////////////////////////////////////////
+export type FillerType = { roleType: RoleType, readableName: string }
+
+////////////////////////////////////////////
 //// INSPECTABLE CONTEXT
 ////////////////////////////////////////////
 // An InspectableContext shows up on screen as a React Bootstrap form with just readonly fields.

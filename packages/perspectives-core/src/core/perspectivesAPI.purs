@@ -76,11 +76,12 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, saveMarkedResources)
 import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getWarnings, pushFrame, resetWarnings, restoreFrame)
 import Perspectives.Proxy (createRequestEmitter, retrieveRequestEmitter)
+import Perspectives.Query.QueryTypes (RoleInContext, roleInContext2Role)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter, getDynamicPropertyGetterFromLocalName, getPropertyFromTelescope, getPropertyValues, getPublicUrl, getRoleFunction, getRoleInstances)
-import Perspectives.Representation.ADT (ADT)
+import Perspectives.Representation.ADT (ADT, allLeavesInADT)
 import Perspectives.Representation.Action (Action(..)) as ACTION
 import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getContext, getEnumeratedRole, getPerspectType)
-import Perspectives.Representation.Class.Role (getRoleType, kindOfRole, perspectivesOfRoleType, rangeOfRoleCalculation, roleKindOfRoleType)
+import Perspectives.Representation.Class.Role (getRoleType, kindOfRole, perspectivesOfRoleType, rangeOfRoleCalculation, roleKindOfRoleType, completeDeclaredFillerRestriction, displayNameOfRoleType)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..))
@@ -174,7 +175,25 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     --   registerSupportedEffect corrId setter (f >=> binding) (ContextInstance subject)
     -- Given the rolinstance;
     Api.GetBinding -> registerSupportedEffect corrId setter binding (RoleInstance subject) onlyOnce
-    -- Api.GetBindingType -> registerSupportedEffect corrId setter (binding >=> roleType) (RoleInstance subject)
+    -- {request: "GetBindingType", subject: <EnumeratedRoleType>}
+    -- Returns an array of {roleType, readableName} for each allowed filler type of the role.
+    Api.GetBindingType -> catchError
+      ( do
+          roletype <- string2EnumeratedRoleType subject
+          role <- getEnumeratedRole roletype
+          mrestriction <- completeDeclaredFillerRestriction role
+          case mrestriction of
+            Nothing -> sendResponse (Result corrId []) setter
+            Just restriction -> do
+              let leaves = allLeavesInADT restriction
+              namesAndTypes <- traverse (\ric -> do
+                  let rt = ENR (roleInContext2Role ric)
+                  name <- displayNameOfRoleType rt
+                  pure $ writeJSON { roleType: roletype2string rt, readableName: name }
+                ) leaves
+              sendResponse (Result corrId namesAndTypes) setter
+      )
+      (\e -> sendResponse (Error corrId (show e)) setter)
 
     -- {request: "GetRoleBinders", subject: <RoleInstance>, predicate: <EnumeratedRoleType>, object: Maybe <ContextType>}
     -- The empty string represents Nothing when used as object.

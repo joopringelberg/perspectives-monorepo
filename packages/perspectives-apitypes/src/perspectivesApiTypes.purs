@@ -42,6 +42,7 @@ data RequestType
   =
     -- Consulting
     GetBinding
+  | GetBindingType
   | GetRoleBinders
   | GetRolContext
   | GetContextType
@@ -125,6 +126,7 @@ derive instance genericRequestType :: Generic RequestType _
 instance decodeRequestType :: ReadForeign RequestType where
   readImpl s = except $ Right $ case unsafeCoerce s of
     "GetBinding" -> GetBinding
+    "GetBindingType" -> GetBindingType
     "GetRoleBinders" -> GetRoleBinders
     "GetRol" -> GetRol
     "GetUnqualifiedRol" -> GetUnqualifiedRol
