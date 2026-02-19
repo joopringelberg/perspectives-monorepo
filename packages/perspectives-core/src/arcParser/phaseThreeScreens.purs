@@ -31,7 +31,7 @@ import Data.Foldable (for_)
 import Data.List (List) as LIST
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
-import Data.String (Pattern(..), split, trim)
+import Data.String (Pattern(..), split, trim) as String
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..), fst, snd)
 import Foreign.Object (Object, keys, lookup)
@@ -69,10 +69,10 @@ import Prelude (Unit, bind, discard, eq, flip, map, not, pure, unit, ($), (<#>),
 -- | Extract action names from markdown text using the [[action: name| text]] syntax.
 extractMarkDownActionNames :: String -> Array String
 extractMarkDownActionNames mdText =
-  catMaybes $ map extractName (drop 1 (split (Pattern "[[action:") mdText))
+  catMaybes $ map extractName (drop 1 (String.split (String.Pattern "[[action:") mdText))
   where
   extractName :: String -> Maybe String
-  extractName s = map trim (head (split (Pattern "|") s))
+  extractName s = map String.trim (head (String.split (String.Pattern "|") s))
 
 handleScreens :: LIST.List AST.ScreenE -> PhaseThree Unit
 handleScreens screenEs = do
