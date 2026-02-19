@@ -86,6 +86,7 @@
 , "tableContextMenu_opendetails": "Details"
 , "tableContextMenu_new": "Make a new:"
 , "tableContextMenu_fill": "Fill with the role on the clipboard"
+, "tableContextMenu_fillWith": "Fill with a {{roleName}}"
 , "tableContextMenu_replacefiller": "Replace the filler with the role on the clipboard"
 , "tableContextMenu_takeonthisrole": "Take on this role"
 , "tableContextMenu_restorecontextforuser": "Restore the context for this user"

@@ -257,6 +257,18 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
                 i18next.t("tableContextMenu_fill", { ns: 'preact' }) 
               }</Dropdown.Item>];
     }
+    else if ((this.mayCreateContext() || this.mayCreateInstance()) && roleInstanceWithProps && !roleInstanceWithProps.filler && !this.state.compatibleRole && this.props.perspective.possibleFillers?.length > 0)
+    {
+      return this.props.perspective.possibleFillers.map(({readableName}, index) =>
+        <Dropdown.Item
+          key={`PossibleFiller_${index}`}
+          eventKey={`PossibleFiller_${index}`}
+          disabled
+        >{
+          i18next.t("tableContextMenu_fillWith", { ns: 'preact', roleName: readableName })
+        }</Dropdown.Item>
+      );
+    }
     else
     {
       return [];
