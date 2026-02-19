@@ -22,7 +22,6 @@ import React from "react";
 import {PDRproxy, CONTINUOUS, RoleInstanceT, ContextInstanceT, RoleType} from "perspectives-proxy";
 import PerspectivesComponent from "./perspectivesComponent";
 import PerspectiveBasedForm from "./perspectivebasedform.js";
-import { mapRoleVerbsToBehaviourNames } from "./maproleverbstobehaviours.js";
 
 ////////////////////////////////////////////////////////////////////////////////
 // PERSPECTIVEFORM
@@ -88,7 +87,6 @@ export default class PerspectiveForm extends PerspectivesComponent<PerspectiveFo
       return  <PerspectiveBasedForm
                 perspective={perspective}
                 roleinstance={component.props.roleinstance}
-                behaviours={mapRoleVerbsToBehaviourNames( perspective )}
                 cardtitle={ perspective.identifyingProperty }
                 showControls={true}
               />;

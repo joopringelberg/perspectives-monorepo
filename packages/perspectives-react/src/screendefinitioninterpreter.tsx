@@ -35,7 +35,6 @@ import SmartFieldControl from './smartfieldcontrol.js';
 import {ChatComponent} from './chatcomponent.js';
 import { externalRole } from './urifunctions.js';
 import {  } from 'perspectives-proxy';
-import { mapRoleVerbsToBehaviourNames } from './maproleverbstobehaviours';
 
 interface ScreenDefinitionInterpreterProps
 {
@@ -304,7 +303,6 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
     return (
       <PerspectiveBasedForm
         perspective={perspective}
-        behaviours={mapRoleVerbsToBehaviourNames( perspective )}
         cardtitle={ perspective.identifyingProperty }
         showControls={true}
         />);

@@ -46,7 +46,6 @@ import { isInPublicScheme } from "./urifunctions.js";
 interface PerspectiveBasedFormProps {
   perspective: Perspective;
   roleinstance?: RoleInstanceT;
-  behaviours?: string[];
   cardtitle: PropertyType;
   showControls : boolean;
   suppressIdentifyingProperty?: boolean;
