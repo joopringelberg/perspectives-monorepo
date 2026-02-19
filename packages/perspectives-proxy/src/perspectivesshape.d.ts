@@ -93,7 +93,7 @@ export type RoleVerb =
 
 export type Roleinstancewithprops = {
   roleId: RoleInstanceT;
-  objectStateBasedRoleVerbs: string[];
+  objectStateBasedRoleVerbs: RoleVerb[];
   propertyValues: Record<string, PropertyValues>;
   actions: Record<string, string>;
   objectStateBasedProperties: { type: string; value: PropertyType }[];

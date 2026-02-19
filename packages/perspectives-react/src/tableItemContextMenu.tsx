@@ -169,8 +169,9 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   {
   if (!this.props.isOpen) return [];
     const component = this;
-    const allowedtoremovecontext = () => component.props.perspective.verbs.includes("RemoveContext") || component.props.perspective.verbs.includes("DeleteContext")
-    const allowedToRemoveRole = () => component.props.perspective.verbs.includes("Remove") || component.props.perspective.verbs.includes("Delete");
+    const allVerbs = component.props.perspective.verbs.concat(component.props.perspective.roleInstances[component.props.roleinstance]?.objectStateBasedRoleVerbs || []);
+    const allowedtoremovecontext = () => allVerbs.includes("RemoveContext") || allVerbs.includes("DeleteContext");
+    const allowedToRemoveRole = () => allVerbs.includes("Remove") || allVerbs.includes("Delete");
     const removalItems = [];
     if (allowedToRemoveRole())
     {
