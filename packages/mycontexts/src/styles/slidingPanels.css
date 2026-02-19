@@ -24,7 +24,6 @@
   z-index: 1030; /* Set high z-index from the start */
   background-color: #f8f9fa;
   box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
-  overflow-y: auto;
   transition: right 0.4s ease-in-out; /* Apply transition to all states */
 }
 
@@ -41,7 +40,6 @@
 /* Improve content area */
 .sliding-panel-content {
   flex: 1;
-  overflow-y: auto;
   padding-bottom: 20px;
 }
 

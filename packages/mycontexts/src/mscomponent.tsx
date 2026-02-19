@@ -50,6 +50,8 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
   // Tracks whether a form field is being edited, without going
   // through React state to avoid re-rendering the sliding panel.
   private isEditingDom: boolean = false;
+  // Observes the sliding panel's size so the container can grow to fit.
+  private panelResizeObserver: ResizeObserver | null = null;
 
   constructor(props: MSComponentProps) {
     super(props);
@@ -114,7 +116,7 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
     component.mainPanelRef.current?.focus();
   }
 
-  componentDidUpdate(prevProps: MSComponentProps): void {
+  componentDidUpdate(prevProps: MSComponentProps, prevState: MSComponentState): void {
     if (prevProps.isMobile !== this.props.isMobile && this.containerRef.current) {
       // We have to do this because the reference to the containerRef changes when the component is re-rendered for mobile (and vv).
       this.containerRef.current.removeEventListener('ShowDetails', this.showDetails as EventListener, true);
@@ -126,19 +128,52 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
     }
     // When switching from side-by-side to mobile, close the form panel.
     if (this.props.isMobile && !prevProps.isMobile && this.state.isFormVisible) {
+      this.stopObservingPanel();
       this.setState({ isFormVisible: false, isSliding: false, isTabbable: false });
     }
     else if (this.props.isMobile && this.state.isFormVisible && this.slidingPanelRef.current) {
+      // Start observing the panel if it just became visible.
+      if (!prevState.isFormVisible) {
+        this.startObservingPanel();
+      }
       this.slidingPanelRef.current.focus();
     }
   }
 
   componentWillUnmount(): void {
     const component = this;
+    this.stopObservingPanel();
     if (component.containerRef.current) {
       component.containerRef.current.removeEventListener('ShowDetails', this.showDetails as EventListener, true);
       component.containerRef.current.removeEventListener('FormFieldEditStarted', this.handleFieldEditStarted as EventListener, true);
       component.containerRef.current.removeEventListener('FormFieldEditEnded', this.handleFieldEditEnded as EventListener, true);
+    }
+  }
+
+  /** Start observing the sliding panel so the container grows to fit the form. */
+  private startObservingPanel() {
+    if (this.panelResizeObserver || !this.slidingPanelRef.current) return;
+    this.panelResizeObserver = new ResizeObserver(() => {
+      if (this.slidingPanelRef.current && this.containerRef.current) {
+        const panelHeight = this.slidingPanelRef.current.scrollHeight;
+        this.containerRef.current.style.minHeight = `${panelHeight}px`;
+      }
+    });
+    this.panelResizeObserver.observe(this.slidingPanelRef.current);
+    // Also set initial min-height immediately.
+    if (this.containerRef.current) {
+      this.containerRef.current.style.minHeight = `${this.slidingPanelRef.current.scrollHeight}px`;
+    }
+  }
+
+  /** Stop observing and reset container min-height. */
+  private stopObservingPanel() {
+    if (this.panelResizeObserver) {
+      this.panelResizeObserver.disconnect();
+      this.panelResizeObserver = null;
+    }
+    if (this.containerRef.current) {
+      this.containerRef.current.style.minHeight = '';
     }
   }
 
@@ -152,6 +187,8 @@ class MSComponent extends Component<MSComponentProps, MSComponentState> {
   };
 
   handleClose = () => {
+    // Stop observing the panel before closing.
+    this.stopObservingPanel();
     // First stop the sliding
     this.setState({ isSliding: false, isTabbable: false });
     
