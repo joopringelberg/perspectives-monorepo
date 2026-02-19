@@ -40,7 +40,7 @@ const l = lexeme;
 // CONTEXT KINDS (base0A)
 const contexts: Mode = {
     scope: base0A,
-    match: /\b(domain|case|party|activity)\b/,
+    match: /\b(domain|case|party|activity|public)\b/,
 };
 
 // ROLE KINDS (NOT USER) (base0B)
@@ -67,7 +67,7 @@ const property: Mode = {
 
 const propertyFacets: Mode = {
     scope: base08,
-    begin: /\b(mandatory|relational|unlinked|minLength|maxLength|enumeration|pattern|maxInclusive|minInclusive)\b/
+    begin: /\b(mandatory|relational|functional|unlinked|selfonly|authoronly|minLength|maxLength|enumeration|pattern|maxInclusive|minInclusive|maxExclusive|minExclusive|whiteSpace|totalDigits|fractionDigits|messageProperty|mediaProperty|readableName|regexp|setting)\b/
 };
 
 const perspective: Mode = {
@@ -77,7 +77,7 @@ const perspective: Mode = {
 
 const perspectiveParts: Mode = {
     scope: base0D,
-    begin: /\b(view(?=\s+[\w|:|\$]+\s+verbs)|verbs|props|only|except|defaults|all\s+roleverbs|action)\b/,
+    begin: /\b(view(?=\s+[\w|:$]+\s+verbs)|verbs|without|props|only|except|defaults|default|all\s+roleverbs|no\s+roleverbs|action)\b/,
 }
 
 const state: Mode = {
@@ -89,6 +89,12 @@ const state: Mode = {
 const stateTransition: Mode = {
     scope: base0E,
     begin: /\bon\s+(entry|exit)\b/
+};
+
+// IN STATE, SUBJECT/OBJECT/CONTEXT STATE
+const inState: Mode = {
+    scope: base0E,
+    begin: /\b(in\s+state|subject\s+state|object\s+state|context\s+state)\b/
 };
 
 // NOTIFICATION
@@ -143,6 +149,40 @@ const deleteStatement: Mode = {
     }
 };
 
+// BIND, UNBIND, MOVE, CALL ASSIGNMENTS
+const bindStatement: Mode = {
+    begin: [lexeme("bind"), whitespace, identifier],
+    beginScope: {
+        1: base0E
+    }
+};
+
+const unbindStatement: Mode = {
+    scope: base0E,
+    begin: /\b(unbind|unbind_|bind_)\b/
+};
+
+const moveStatement: Mode = {
+    begin: [lexeme("move"), whitespace, identifier],
+    beginScope: {
+        1: base0E
+    }
+};
+
+const createContext_: Mode = {
+    begin: [lexeme("create_"), whitespace, lexeme("context"), whitespace, identifier, whitespace, lexeme("bound")],
+    beginScope: {
+        1: base0E,
+        3: base0E,
+        7: base0E
+    }
+};
+
+const callStatements: Mode = {
+    scope: base0E,
+    begin: /\b(callEffect|callDestructiveEffect|callExternal)\b/
+};
+
 // SIMPLE VALUES
 const boolean: Mode = {
     begin: /true|false/,
@@ -150,7 +190,7 @@ const boolean: Mode = {
 };
 
 const date: Mode = {
-    begin: /\'[\d|\-]+\'/,
+    begin: /'[\d|-]+'/,
     scope: base09
 };
 
@@ -165,13 +205,13 @@ const regexp: Mode = {
 };
 
 const timeConstants: Mode = {
-    begin: /Milliseconds|Seconds|Minutes|Hours|Days/,
+    begin: /\b(Milliseconds|Seconds|Minutes|Hours|Days|MilliSecond|Millisecond|Year|Month|Week|Day|Hour|Minute|Second|milliseconds|seconds|minutes|hours|days|weeks|months|years|millisecond|second|minute|hour|day|week|month|year)\b/,
     scope: base09
 }
 
 // OPERATORS
 const alphabeticOperator: Mode = {
-    begin: /\b(either|both|binds|matches|and|or|not|exists|available|boundBy|binder|context|extern)\b/,
+    begin: /\b(either|both|binds|matches|and|or|not|exists|available|boundBy|binder|context|extern|fills|filledBy|letE|letA|union|intersection|orElse|binding|this|me|indexedName|publicrole|publiccontext|isInState|contextinstance|roleinstance|specialisesRoleType|roleTypes|contextType|roleType|modelname|returns|translate)\b/,
     scope: base0C
 };
 
@@ -184,7 +224,7 @@ const filter: Mode = {
 };
 
 const nonAlphabeticOperator: Mode = {
-    begin: /\>\>\=|\>\>|\*|\/|\+|\-|\=\=|\>\=|\<|>\=|>/,
+    begin: />>=|>>|\*|\/|\+|-|==|>=|<|>=|>/,
     scope: base0C
 };
 
@@ -196,7 +236,7 @@ const standardVariables: Mode = {
 
 // PROPERTY RANGE
 const propertyRange: Mode = {
-    begin: /\b(String|Number|Boolean|DateTime)\b/,
+    begin: /\b(String|Number|Boolean|DateTime|Date|Time|File|Email|MarkDown)\b/,
     scope: base09
 };
 
@@ -216,6 +256,12 @@ const propertyVerbs: Mode = {
 const meta: Mode = {
     begin: / \b(aspect|indexed)\b/,
     scope: base05
+};
+
+// SCREEN ELEMENTS (base04)
+const screenKeywords: Mode = {
+    scope: base04,
+    begin: /\b(screen|tab|row|column|form|markdown|table|chat|messages|media|who|what|where|master|detail|when|fillfrom)\b/
 };
 
 const use: Mode = {
@@ -253,12 +299,18 @@ const perspectivesArc: LanguageFn = function(hljs: HLJSApi): Language {
         , perspectiveParts 
         , state
         , stateTransition
+        , inState
         , notification
         , automaticAction
         , timing
         , remove
         , create
         , deleteStatement
+        , bindStatement
+        , unbindStatement
+        , moveStatement
+        , createContext_
+        , callStatements
         , boolean, date, number, regexp, timeConstants
         , alphabeticOperator
         , filter
@@ -269,6 +321,7 @@ const perspectivesArc: LanguageFn = function(hljs: HLJSApi): Language {
         , propertyVerbs
         , meta
         , use
+        , screenKeywords
         ]
     }
 };

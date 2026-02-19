@@ -103,13 +103,25 @@ Extension for timing facets of automatic actions and notifications:
 * The keywords after, until, every, maximally and times get the same color as the other keywords in automatic actions.
 * The time constants Milliseconds, Seconds, Minutes, Hours and Days get the same color as simple values.
 
+### 1.4.0
+Large extension to cover the many keywords added to the ARC language since version 1.3.0:
+
+* Added `public` to context kinds (base0A).
+* Extended property facets (base08) with: `functional`, `whiteSpace`, `maxExclusive`, `minExclusive`, `totalDigits`, `fractionDigits`, `messageProperty`, `mediaProperty`, `readableName`, `regexp`, `setting`, `selfonly`, `authoronly`.
+* Extended perspective parts (base0D) with: `default`, `without`, `no roleverbs`.
+* Added state reference keywords (base0E): `in state`, `subject state`, `object state`, `context state`.
+* Added assignment keywords (base0E): `bind`, `bind_`, `unbind`, `unbind_`, `create_`, `move`, `callEffect`, `callDestructiveEffect`, `callExternal`.
+* Extended property range types (base09) with: `Date`, `Time`, `File`, `Email`, `MarkDown`.
+* Extended time units (base09) with uppercase singular duration types (`Year`, `Month`, `Week`, `Day`, `Hour`, `Minute`, `Second`, `Millisecond`, `MilliSecond`) and lowercase duration values (`year(s)`, `month(s)`, `week(s)`, `day(s)`, `hour(s)`, `minute(s)`, `second(s)`, `millisecond(s)`).
+* Extended expression operators (base0C) with: `fills`, `filledBy`, `letE`, `letA`, `union`, `intersection`, `orElse`, `binding`, `this`, `me`, `indexedName`, `publicrole`, `publiccontext`, `isInState`, `contextinstance`, `roleinstance`, `specialisesRoleType`, `roleTypes`, `contextType`, `roleType`, `modelname`, `returns`, `translate`.
+* Added new **Screens** color group (base04) for screen layout keywords: `screen`, `tab`, `row`, `column`, `form`, `markdown`, `table`, `chat`, `messages`, `media`, `who`, `what`, `where`, `master`, `detail`, `when`, `fillfrom`.
+
 
 ## Requirements
 This package depends on [highlightjs](https://github.com/highlightjs/highlight.js).
 
 ## Known Issues
 
-* filledBy is not tokenized
 * Improvement: make `relational` etc the same color as Verbs; use the freed up color for User identifiers.
 
 # Syntax coloring for Perspectives
@@ -145,35 +157,40 @@ The table below gives a grouping of ARC keywords. The TOKENIZER RULE defines sem
 
 |COLOR GROUP|TOKENIZER RULE|ARC KEYWORDS|BASE64|
 |---|---|---|---|
-|Contexts|Context kinds|domain, case, party, activity|base0A|
+|Contexts|Context kinds|domain, case, party, activity, public|base0A|
 |Roles|Role kinds|external, thing, context|base0B|
-|||View||
-|||filledBy||
 |User role|User role|user|base03|
 |Property|Property|property|base08|
-||Property facet|mandatory, relational, unlinked, minLength, maxLength, enumeration, pattern, maxInclusive, minInclusive||
-|Perspective|Perspective|view, verbs, props, only, except, defaults, all roleverbs|base0D|
+||Property facet|mandatory, relational, functional, unlinked, selfonly, authoronly, minLength, maxLength, enumeration, pattern, maxInclusive, minInclusive, maxExclusive, minExclusive, whiteSpace, totalDigits, fractionDigits, messageProperty, mediaProperty, readableName, regexp, setting||
+|Perspective|Perspective|perspective on/of|base0D|
+||Perspective parts|view, verbs, without, props, only, except, defaults, default, all roleverbs, no roleverbs, action||
 |Control|State|state|base0E|
-||State transition|on entry [of <statekind>], on exit [of <statekind>]||
+||State transition|on entry, on exit||
+||State reference|in state, subject state, object state, context state||
 ||Notification|notify [user]||
 ||Automatic action|do [for <user>]||
-||Assignment|remove, delete, create, etc.||
-|||action||
+||Assignment|remove, create, delete, bind, bind_, unbind, unbind_, create_, move, callEffect, callDestructiveEffect, callExternal||
 ||Timing|after, until, every, maximally, times||
 |Simple values|Boolean|true, false|base09|
 ||date|||
 ||number|||
 ||regular expression|||
-||Property Range|String, Boolean, DateTime, Number||
+||Property Range|String, Number, Boolean, DateTime, Date, Time, File, Email, MarkDown||
 ||Time constants|Milliseconds, Seconds, Minutes, Hours, Days||
-|Expressions|Operators|either, both, binds, matches, and, or, not, exists, available, boundBy, binder, context, extern|base0C|
+||Time units|Year, Month, Week, Day, Hour, Minute, Second, Millisecond, MilliSecond||
+||Duration values|year(s), month(s), week(s), day(s), hour(s), minute(s), second(s), millisecond(s)||
+|Expressions|Operators|either, both, binds, matches, and, or, not, exists, available, boundBy, binder, context, extern, fills, filledBy|base0C|
 |||filter…with||
 |||>>=, >>, *, /, +, -, ==, >=, <, >=, >||
 ||Let|letA, letE||
+||Binary operators|union, intersection, orElse||
+||Expression atoms|binding, this, me, indexedName, publicrole, publiccontext, isInState, contextinstance, roleinstance||
+||Functions|specialisesRoleType, roleTypes, contextType, roleType, modelname, returns, translate||
 |Variables|Standard variables|currentcontext, nofifieduser, origin, currentactor|base06|
 |Verbs|Role verbs|Remove, Delete, Create, CreateAndFill, Fill, Unbind, RemoveFiller, Move|base0F|
 ||Property verbs|RemovePropertyValue, DeleteProperty, AddPropertyValue, SetPropertyValue, Consult||
 |Meta|Meta|aspect, use, indexed|base05|
+|Screens|Screen elements|screen, tab, row, column, form, markdown, table, chat, messages, media, who, what, where, master, detail, when, fillfrom|base04|
 
 ## Tokenizer scope names
 Instead of using the higlightjs scope names directly, we've defined variables in the (javascript) `perspectives-arc.js` file for each of the base16 colors. These variable names are used to bind colors to tokenizer rules, e.g.:
