@@ -22,7 +22,7 @@ domain model://joopringelberg.nl#MinimalModel@1.0
   on exit
     do for sys:PerspectivesSystem$Installer
       letA
-        indexedcontext <- filter sys:MySystem >> IndexedContexts with filledBy (mm:MinimalApp >> extern)
+        indexedcontext <- filter sys:MySystem >> IndexedContexts with filledBy (mm:MyMinimalApp >> extern)
         startcontext <- filter sys:MySystem >> StartContexts with filledBy (mm:MyMinimalApp >> extern)
       in
         remove role startcontext
@@ -36,6 +36,5 @@ domain model://joopringelberg.nl#MinimalModel@1.0
     indexed mm:MyMinimalApp
     aspect sys:RootContext
     external
-      aspect sys:RootContext$External
     
     user Manager = sys:Me
