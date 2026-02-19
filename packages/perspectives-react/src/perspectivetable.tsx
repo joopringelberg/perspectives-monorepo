@@ -184,7 +184,7 @@ interface PerspectiveTableState
 
 export default class PerspectiveTable extends PerspectivesComponent<PerspectiveTableProps, PerspectiveTableState>
 {
-  private roleRepresentation : React.ComponentType<WithOutBehavioursProps>;
+  private cardCache: Map<string, React.ComponentType<WithOutBehavioursProps>>;
   private eventDiv: React.RefObject<HTMLTableSectionElement>;
   private propertyNames: string[];
   private orderedProperties: SerialisedProperty[];
@@ -197,9 +197,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
     this.propertyNames = [];
 
     component.orderProperties();
-    // this.propertyNames = Object.keys( component.props.perspective.properties );
-    // Add behaviours to the card component.
-    this.roleRepresentation = CardWithFixedBehaviour(RoleCard, mapRoleVerbsToBehaviourNames( component.props.perspective ));
+    this.cardCache = new Map();
     this.eventDiv = createRef() as React.RefObject<HTMLTableSectionElement>;
     this.handleKeyDown = this.handleKeyDown.bind( this );
 
@@ -210,6 +208,20 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
       , contextMenuPosition: undefined
       , contextMenuVisible: false
       };
+  }
+
+  // Returns a cached card component for the given role instance.
+  // The cache key is determined by the merged set of behaviour names, so rows with the same
+  // effective verbs share the same component type (avoiding unnecessary React remounts).
+  private getCardRepresentation(roleinstancewithprops: Roleinstancewithprops): React.ComponentType<WithOutBehavioursProps>
+  {
+    const behaviourNames = mapRoleVerbsToBehaviourNames(this.props.perspective, roleinstancewithprops);
+    const cacheKey = [...behaviourNames].sort().join(',');
+    if (!this.cardCache.has(cacheKey))
+    {
+      this.cardCache.set(cacheKey, CardWithFixedBehaviour(RoleCard, behaviourNames));
+    }
+    return this.cardCache.get(cacheKey)!;
   }
 
   orderProperties()
@@ -456,7 +468,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
                     myroletype={component.props.perspective.userRoleType}
                     column={component.state.column}
                     cardcolumn = {perspective.identifyingProperty}
-                    roleRepresentation={component.roleRepresentation}
+                    roleRepresentation={component.getCardRepresentation(perspective.roleInstances[roleId])}
                     roleinstancewithprops={perspective.roleInstances[roleId]}
                     perspective={component.props.perspective}
                     orderedProperties={component.orderedProperties}

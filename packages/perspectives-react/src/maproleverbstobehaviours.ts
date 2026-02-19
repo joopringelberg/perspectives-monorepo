@@ -19,11 +19,12 @@
 // END LICENSE
 
 import * as Behaviours from "./cardbehaviour.js";
-import { Perspective } from "perspectives-proxy"
+import { Perspective, Roleinstancewithprops } from "perspectives-proxy"
 
 
 // Maps the role verbs in the perspective to an array of behaviours.
-export function mapRoleVerbsToBehaviours(perspective : Perspective) : Behaviours.BehaviourAdder[]
+// When a roleinstancewithprops is provided, its objectStateBasedRoleVerbs are merged in.
+export function mapRoleVerbsToBehaviours(perspective : Perspective, roleinstancewithprops?: Roleinstancewithprops) : Behaviours.BehaviourAdder[]
 {
   function prioritizeContextRemoval(verbs : string[])
   {
@@ -75,7 +76,10 @@ export function mapRoleVerbsToBehaviours(perspective : Perspective) : Behaviours
   }
   if (perspective)
   {
-    return [...new Set( prioritizeRoleRemoval( perspective.verbs! ).map( mapRoleVerb ) )].concat(
+    const combinedVerbs = roleinstancewithprops
+      ? [...new Set([...perspective.verbs!, ...(roleinstancewithprops.objectStateBasedRoleVerbs ?? [])])]
+      : perspective.verbs!;
+    return [...new Set( prioritizeRoleRemoval( combinedVerbs ).map( mapRoleVerb ) )].concat(
       [Behaviours.addOpenContextOrRoleForm, Behaviours.addFillARole]);
   }
   else
@@ -84,7 +88,9 @@ export function mapRoleVerbsToBehaviours(perspective : Perspective) : Behaviours
   }
 }
 
-export function mapRoleVerbsToBehaviourNames(perspective : Perspective) : string[]
+// Maps the role verbs in the perspective to an array of behaviour names.
+// When a roleinstancewithprops is provided, its objectStateBasedRoleVerbs are merged in.
+export function mapRoleVerbsToBehaviourNames(perspective : Perspective, roleinstancewithprops?: Roleinstancewithprops) : string[]
 {
   function prioritizeContextRemoval(verbs : string[])
   {
@@ -135,7 +141,10 @@ export function mapRoleVerbsToBehaviourNames(perspective : Perspective) : string
   }
   if (perspective)
   {
-    return [...new Set( prioritizeRoleRemoval( perspective.verbs! ).map( mapRoleVerb ) )].concat(
+    const combinedVerbs = roleinstancewithprops
+      ? [...new Set([...perspective.verbs!, ...(roleinstancewithprops.objectStateBasedRoleVerbs ?? [])])]
+      : perspective.verbs!;
+    return [...new Set( prioritizeRoleRemoval( combinedVerbs ).map( mapRoleVerb ) )].concat(
       ["addOpenContextOrRoleForm", "addFillARole"]);
   }
   else

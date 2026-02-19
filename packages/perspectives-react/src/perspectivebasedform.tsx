@@ -20,6 +20,7 @@
 
 import React, { PureComponent } from "react";
 import {PDRproxy, PropertyType, RoleInstanceT, Perspective, Roleinstancewithprops, RoleVerb} from "perspectives-proxy";
+import { mapRoleVerbsToBehaviourNames } from "./maproleverbstobehaviours.js";
 import RoleDropZone from "./roleDropzone.js";
 import PerspectivesComponent from "./perspectivesComponent";
 import RoleInstance from "./roleinstance.js";
@@ -45,7 +46,6 @@ import { isInPublicScheme } from "./urifunctions.js";
 interface PerspectiveBasedFormProps {
   perspective: Perspective;
   roleinstance?: RoleInstanceT;
-  behaviours?: string[];
   cardtitle: PropertyType;
   showControls : boolean;
   suppressIdentifyingProperty?: boolean;
@@ -187,6 +187,8 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
   {
     const component = this;
     const perspective = this.props.perspective;
+    // Compute behaviour names including any object-state-based role verbs for the current role instance.
+    const behaviourNames = mapRoleVerbsToBehaviourNames(perspective, component.state.roleInstanceWithProps);
 
     function Controls()
     {
@@ -210,7 +212,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
                   myroletype={component.props.perspective.userRoleType}
                   card={ <DraggableCard 
                       className={isPublic ? 'public-role' : ''}
-                      behaviourNames={component.props.behaviours || []}
+                      behaviourNames={behaviourNames}
                       aria-label={component.props.cardtitle} 
                       title={component.props.perspective.displayName}/> }
                   />
@@ -229,7 +231,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
                     card={ <DraggableCard 
                       tabIndex={0}
                       className={isPublic ? 'public-role' : ''}
-                      behaviourNames={component.props.behaviours || []}
+                      behaviourNames={behaviourNames}
                       aria-label={component.props.cardtitle} 
                       title={component.state.roleInstanceWithProps?.readableName || component.props.cardtitle}/> }
                   />
