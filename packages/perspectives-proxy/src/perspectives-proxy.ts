@@ -48,7 +48,8 @@ import type {
   RoleOnClipboard,
   ContextAndNameReceiver,
   InspectableContext,
-  InspectableRole
+  InspectableRole,
+  FillerType
 } from "./perspectivesshape.d.ts";
 
 export type * from "./perspectivesshape.d.ts";
@@ -883,11 +884,14 @@ export class PerspectivesProxy
   }
 
   // We haven't made this promisebased because the binding can change, even though its type cannot.
-  getBindingType (rolID : RoleInstanceT, receiveValues : RoleTypeReceiver, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
+  getBindingType (roleType : RoleType, receiveValues : (fillerTypes: FillerType[]) => void, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
   {
     return this.send(
-      {request: "GetBindingType", subject: rolID, predicate: "", onlyOnce: fireAndForget},
-      receiveValues,
+      {request: "GetBindingType", subject: roleType, predicate: "", onlyOnce: fireAndForget},
+      function (fillerTypeStrings)
+      {
+        return receiveValues(fillerTypeStrings.map(JSON.parse));
+      },
       errorHandler);
   }
 

@@ -34,7 +34,6 @@ import {MarkDownWidget} from './markdownWidget.js';
 import SmartFieldControl from './smartfieldcontrol.js';
 import {ChatComponent} from './chatcomponent.js';
 import { externalRole } from './urifunctions.js';
-import { mapRoleVerbsToBehaviourNames } from './maproleverbstobehaviours';
 import ModelDependencies from './modelDependencies';
 
 interface FreeFormProps
@@ -376,7 +375,6 @@ export function buildForm(form : FormElementDef, showControls : boolean = true, 
       )}
       <PerspectiveBasedForm
         perspective={perspective}
-        behaviours={mapRoleVerbsToBehaviourNames( perspective )}
         cardtitle={ perspective.identifyingProperty }
         showControls={showControls}
         roleinstance={roleInstance}

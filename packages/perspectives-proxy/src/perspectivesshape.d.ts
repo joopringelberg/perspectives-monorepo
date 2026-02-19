@@ -93,7 +93,7 @@ export type RoleVerb =
 
 export type Roleinstancewithprops = {
   roleId: RoleInstanceT;
-  objectStateBasedRoleVerbs: string[];
+  objectStateBasedRoleVerbs: RoleVerb[];
   propertyValues: Record<string, PropertyValues>;
   actions: Record<string, string>;
   objectStateBasedProperties: { type: string; value: PropertyType }[];
@@ -317,6 +317,11 @@ export type RoleOnClipboard =
 export type ContextAndName =
 	{ externalRole : RoleInstanceT
 	  readableName : string }
+
+////////////////////////////////////////////
+//// FILLER TYPES
+////////////////////////////////////////////
+export type FillerType = { roleType: RoleType, readableName: string }
 
 ////////////////////////////////////////////
 //// INSPECTABLE CONTEXT
