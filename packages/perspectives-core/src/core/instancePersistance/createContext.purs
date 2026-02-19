@@ -104,7 +104,7 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
         , binding = Nothing
         , universeRoleDelta = delta'
         , contextDelta = contextDelta
-        , states = [ StateIdentifier $ unwrap pspType ]
+        , states = [ StateIdentifier $ unwrap (externalRoleType pspType) ]
         }
     )
   lift $ addCreatedRoleToTransaction externalRole
