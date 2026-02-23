@@ -77,7 +77,7 @@ import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..), stateSpec2StateIdentifier, PropertyVerbs(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), IndexedRole(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
@@ -960,7 +960,13 @@ normalizeWidgetCommonFields w = do
       Nothing -> w.perspectiveId
       Just stable -> stable
   fillFrom' <- traverse normalize w.fillFrom
-  pure $ w { propertyRestrictions = propertyRestrictions', withoutProperties = withoutProperties', userRole = userRole', perspectiveId = perspectiveId', fillFrom = fillFrom' }
+  fieldConstraints' <- traverse (traverse normalizeFieldConstraintDef) w.fieldConstraints
+  pure $ w { propertyRestrictions = propertyRestrictions', withoutProperties = withoutProperties', userRole = userRole', perspectiveId = perspectiveId', fillFrom = fillFrom', fieldConstraints = fieldConstraints' }
+
+normalizeFieldConstraintDef :: FieldConstraintDef -> WithSideCars FieldConstraintDef
+normalizeFieldConstraintDef fc = do
+  propertyType' <- fqn2tid fc.propertyType
+  pure fc { propertyType = propertyType' }
 
 -- Build a mapping from old perspective ids to stable ones for all roles in the DomeinFile
 buildPerspectiveIdMap :: DomeinFile Readable -> Env -> OBJ.Object String

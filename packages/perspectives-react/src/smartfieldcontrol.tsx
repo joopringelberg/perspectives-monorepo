@@ -43,6 +43,9 @@ const focusable = -1;
 // but its relative order is defined by the platform convention;
 const receiveFocusByKeyboard = 0;
 
+// Assumed line height in em units, used for computing max-height of textareas from maxLines.
+const LINE_HEIGHT_EM = 1.5;
+
 interface SmartFieldControlProps
 {
   serialisedProperty: SerialisedProperty;
@@ -53,6 +56,8 @@ interface SmartFieldControlProps
   disabled: boolean;
   isselected: boolean;
   contextinstance: ContextInstanceT;
+  minLines?: number;
+  maxLines?: number;
 }
 
 interface SmartFieldControlState
@@ -163,7 +168,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     }
     if (controlType == "text")
     {
-      if (maxLength && maxLength > 80 || this.minLength(this.inputType) > 80 || this.state.value.length > 80)
+      if (this.props.minLines || (maxLength && maxLength > 80) || this.minLength(this.inputType) > 80 || this.state.value.length > 80)
       {
         return "textarea";
       }
@@ -642,6 +647,13 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
             }
           }
         };
+        // Compute textarea-specific props (rows and maxHeight) from minLines/maxLines constraints.
+        const textareaConstraintProps = component.controlType === "textarea"
+          ? {
+              ...(component.props.minLines ? { rows: component.props.minLines } : {}),
+              ...(component.props.maxLines ? { style: { maxHeight: `${component.props.maxLines * LINE_HEIGHT_EM}em`, overflowY: 'auto' as const } } : {})
+            }
+          : {};
         return (
           <div
             className="d-flex align-items-center"
@@ -677,6 +689,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               min={component.minInclusive()}
               max={component.maxInclusive()}
               {...(pattern ? { pattern: patternToSource(pattern) } : {})}
+              {...textareaConstraintProps}
               className={combinedClassName}
             />
             {showUndo && (

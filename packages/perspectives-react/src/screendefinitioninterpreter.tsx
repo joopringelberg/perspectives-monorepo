@@ -221,13 +221,14 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
   screenElement(taggedElement : ScreenElementDefTagged, index : number)
   {
     const component = this;
+    let tableDef, formDef, markDownDef, chatDef;
     switch (taggedElement.elementType){
       case "RowElementD":
         return component.buildRow( taggedElement.element as RowElementDef, index );
       case "ColumnElementD":
         return component.buildColumn( taggedElement.element as ColumnElementDef, index );    
       case "TableElementD":
-        const tableDef = taggedElement.element as TableElementDef;
+        tableDef = taggedElement.element as TableElementDef;
         return (
           <div
             className="border-bottom pb-4 pt-4 widget"
@@ -237,7 +238,7 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
           { component.buildTable( tableDef ) }
           </div>);
       case "FormElementD":
-        const formDef = taggedElement.element as FormElementDef;
+        formDef = taggedElement.element as FormElementDef;
         return (
           <div
             className="border-bottom pb-4 pt-4 widget"
@@ -247,14 +248,14 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
           { component.buildForm( formDef ) }
           </div>);
       case "MarkDownElementD":
-        const markDownDef = taggedElement.element as MarkDownElementDef;
+        markDownDef = taggedElement.element as MarkDownElementDef;
         return (
           <div 
             key={index}
           >{ component.buildMarkDown( markDownDef )}</div>
         )
       case "ChatElementD":
-        const chatDef = taggedElement.element as ChatElementDef;
+        chatDef = taggedElement.element as ChatElementDef;
         return (
           <div
             key={index}
@@ -305,6 +306,7 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
         perspective={perspective}
         cardtitle={ perspective.identifyingProperty }
         showControls={true}
+        fieldConstraints={widgetCommonFields.fieldConstraints}
         />);
   }
   buildChat({fields} : ChatElementDef)
@@ -377,7 +379,7 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
     const markDownProperty = Object.keys( perspective.properties ).filter( prop => prop != conditionProperty )[0] as PropertyType;  
     return  <Container>{
               Object.values( perspective.roleInstances )
-                .filter( roleInstance => !!conditionProperty ? roleInstance.propertyValues[ conditionProperty ].values[0] == "true" : true)
+                .filter( roleInstance => conditionProperty ? roleInstance.propertyValues[ conditionProperty ].values[0] == "true" : true)
                 .map( roleInstance => 
                 <Row key= { roleInstance.roleId }>
                   <Col>

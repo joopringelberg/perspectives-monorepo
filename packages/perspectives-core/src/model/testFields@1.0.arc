@@ -35,7 +35,7 @@ domain model://joopringelberg.nl#TestFields@1.0
     
     user Tester = sys:Me
       perspective on TestRole
-        props (Text, Bool, ADate, ANumber, AnEmail, WeekDay, Appel) verbs (Consult, SetPropertyValue)
+        props (Text, AnotherText, Bool, ADate, ANumber, AnEmail, WeekDay, Appel) verbs (Consult, SetPropertyValue)
         only (Remove, Create)
       perspective on TestTable
         defaults
@@ -46,7 +46,14 @@ domain model://joopringelberg.nl#TestFields@1.0
         what
           row
             form TestRole
-              props (Text, WeekDay, ADate) verbs (Consult)
+              props (Text, AnotherText, WeekDay, ADate) verbs (Consult)
+              fields
+                AnotherText
+                  minLines = 5
+                  maxLines = 10
+                Text
+                  minLines = 4
+                  maxLines = 4
           row
             table "With props style" TestTable
               with props (Text, ADate)
@@ -71,6 +78,7 @@ domain model://joopringelberg.nl#TestFields@1.0
       property Text (mandatory, String)
         minLength = 100
         maxLength = 200
+      property AnotherText (String)
       property Bool (Boolean)
       property ADate (Date)
         minInclusive = '2022-04-15'

@@ -1,4 +1,5 @@
 packages:
+  - packages/language-perspectives-arcII
   - packages/mycontexts
   - packages/perspectives-apitypes
   - packages/perspectives-core

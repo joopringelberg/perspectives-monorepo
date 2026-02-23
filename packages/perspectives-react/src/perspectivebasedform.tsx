@@ -19,7 +19,7 @@
 // END LICENSE
 
 import React, { PureComponent } from "react";
-import {PDRproxy, PropertyType, RoleInstanceT, Perspective, Roleinstancewithprops, RoleVerb} from "perspectives-proxy";
+import {PDRproxy, PropertyType, RoleInstanceT, Perspective, Roleinstancewithprops, RoleVerb, FieldDisplayConstraint} from "perspectives-proxy";
 import { mapRoleVerbsToBehaviourNames } from "./maproleverbstobehaviours.js";
 import RoleDropZone from "./roleDropzone.js";
 import PerspectivesComponent from "./perspectivesComponent";
@@ -49,6 +49,7 @@ interface PerspectiveBasedFormProps {
   cardtitle: PropertyType;
   showControls : boolean;
   suppressIdentifyingProperty?: boolean;
+  fieldConstraints?: FieldDisplayConstraint[];
 }
 
 interface PerspectiveBasedFormState {
@@ -277,26 +278,36 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
     }
     else
     {
+      // Build a lookup map from property id to field constraint for O(1) access.
+      const constraintMap = new Map(
+        (component.props.fieldConstraints ?? []).map(c => [c.propertyType.value as string, c])
+      );
       return (
         <Form onKeyDown={handleTab}>
           {
             Object.values(perspective.properties)
               .filter( property => !component.props.suppressIdentifyingProperty || property.id !== perspective.identifyingProperty)
               .map((serialisedProperty, index) =>
-              <div 
-                onClick= {() => component.setState({selectedField: index})}
-                key={serialisedProperty.id}
-              >
-                <SmartFieldControlGroup
-                  hasFocus={index === component.state.selectedField}
-                  serialisedProperty={serialisedProperty}
-                  propertyValues={component.findValues( serialisedProperty.id )}
-                  roleId={component.state.roleInstanceWithProps ? component.state.roleInstanceWithProps.roleId : undefined}
-                  myroletype={component.props.perspective.userRoleType}
-                  contextinstance={component.props.perspective.contextInstance}
-                />
-                </div>
-            )
+              {
+                const constraint = constraintMap.get(serialisedProperty.id as string);
+                return (
+                  <div 
+                    onClick= {() => component.setState({selectedField: index})}
+                    key={serialisedProperty.id}
+                  >
+                    <SmartFieldControlGroup
+                      hasFocus={index === component.state.selectedField}
+                      serialisedProperty={serialisedProperty}
+                      propertyValues={component.findValues( serialisedProperty.id )}
+                      roleId={component.state.roleInstanceWithProps ? component.state.roleInstanceWithProps.roleId : undefined}
+                      myroletype={component.props.perspective.userRoleType}
+                      contextinstance={component.props.perspective.contextInstance}
+                      minLines={constraint?.minLines}
+                      maxLines={constraint?.maxLines}
+                    />
+                  </div>
+                );
+              })
           }
           { component.props.showControls ? <Controls/> : null}
         </Form>);
