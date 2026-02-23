@@ -1,0 +1,223 @@
+# Copyright Joop Ringelberg 2022
+
+scopeName: source.arc
+fileTypes: 
+  - arc
+name: ARC
+
+# REPOSITORY
+repository:
+  string: 
+    name: string.quoted.double.arc
+    match: (\")(.*)(\")
+    captures:
+      1:
+        name: string.begin.arc
+      2:
+        name: string
+      3:
+        name: string.end.arc
+
+  ## SIMPLE COMMENT
+  simpleComment:
+    begin: (^[ \t]+)?(?=--+)
+    end: (--+)(.*)\n
+    beginCaptures:
+      1: 
+        name: 'punctuation.whitespace.comment.leading.arc'
+    endCaptures: 
+      1: 
+        name: 'comment.line.double-dash.arc'
+      2: 
+        name: 'punctuation.definition.comment.arc'
+
+  ## DOCUMENTATION COMMENT
+  documentationComment: 
+    begin: (^[ \t]+)?(?=--+\s+\|)
+    end: (--+\s+\|)(.*)\n
+    beginCaptures:
+      1: 
+        name: 'punctuation.whitespace.comment.leading.arc'
+    endCaptures: 
+      1: 
+        name: 'comment.line.double-dash.documentation.arc'
+      2: 
+        name: 'punctuation.definition.comment.documentation.arc'
+
+  ## BLOCK COMMENT
+  blockComment: 
+    begin: \{-
+    end: -\}
+    applyEndPatternLast: 1
+    beginCaptures:
+      0: 
+        name: 'punctuation.definition.comment.arc'
+
+# The rules
+patterns: 
+  - include: '#string'
+  - include: '#documentationComment'
+  - include: '#simpleComment'
+  - include: '#blockComment'
+
+  ## CONTEXT KINDS
+  - name: entity.name.class.contextkind.arc
+    match: ^\s*\b(domain|case|party|activity)\b
+
+  ## ROLE KINDS (NOT USER)
+  - name: entity.other.inherited-class.rolekind.arc
+    match: ^\s*\b(external|thing|context)\b
+  ### filledBy
+  - name: entity.other.inherited-class.rolekind.filledBy.arc
+    match: \bfilledBy\b
+
+  ## USER ROLE IS SPECIAL
+  - match: \b(user\s+)(\w+)\b
+    captures: 
+      1:
+        name: entity.other.inherited-class.rolekind.arc
+      2:
+        name: comment.userrole.arc
+
+  ## PROPERTY
+  - name: entity.name.tag.property.arc
+    match: \bproperty\b
+
+  ## PROPERTY FACETS
+  - name: entity.name.tag.propertyfacet.arc
+    match: \b(mandatory|relational|unlinked|minLength|maxLength|enumeration|pattern|maxInclusive|minInclusive)\b
+
+  ## PERSPECTIVE
+  - name: keyword.other.special-method.perspective.arc
+    match: \bperspective(\s+(on|of))?\b
+  - name: keyword.other.special-method.perspective.arc
+    match: \b(view(?=\s+[\w|:|\$]+\s+verbs)|verbs|props|only|except|defaults|all\s+roleverbs|action)\b
+
+  ## STATE
+  - name: keyword.state.arc
+    match: \bstate\b
+
+  ## STATE TRANSITION (ON ENTRY, ON EXIT)
+  - name: keyword.stateTransition.arc
+    match: \bon\s+(entry|exit)\b
+
+  ## NOTIFICATION
+  # Using captures, no lookbehind is needed:
+  - match: \b(notify)(\s+\w+)?\b
+    captures:
+      1: 
+        name: keyword.notification.arc
+      2:
+        name: comment.userrole.arc
+
+  ## AUTOMATIC ACTION
+  ### User in `do for user` gets the role coloring.
+  - match: \b(do)(\s+for\s+)?(\w+)?\b
+    captures:
+      1: 
+        name: keyword.automaticAction.arc
+      2: 
+        name: keyword.automaticAction.arc
+      3: 
+        name: comment.userrole.arc
+
+  ## ASSIGNMENT
+  ### remove role/context from <expr>
+  - match: \b(remove\s+)(role|context)\b
+    captures: 
+      1:
+        name: keyword.assignment.arc
+      2:
+        name: keyword.assignment.arc
+  ### create role RoleType [in <contextExpression>]
+  - match: \b(create\s+role\s+)(\w+)(\s+in\b)?
+    captures:
+      1:
+        name: keyword.assignment.arc
+      2: 
+        name: entity.other.inherited-class.rolekind.arc
+      3:
+        name: keyword.assignment.arc
+  ### delete role roleType from <context-expression>
+  - match: \b(delete\s+role\s+)(\w+)(\s+from)\b
+    captures: 
+      1:
+        name: keyword.assignment.arc
+      2: 
+        name: entity.other.inherited-class.rolekind.arc
+      3:
+        name: keyword.assignment.arc
+
+  ## TIMING
+  - name: keyword.timing.arc
+    match: \b(after|until|every|maximally|times)\b
+
+  ## BOOLEAN
+  - name: constant.boolean.arc
+    match: true|false
+  
+  ## STRINGS ARE IN REPOSITORY
+
+  ## DATE
+  - name: constant.date.arc
+    # match: \'([\+-]?\d{4}(?!\d{2}\b))((-?)((0[1-9]|1[0-2])(\3([12]\d|0[1-9]|3[01]))?|W([0-4]\d|5[0-2])(-?[1-7])?|(00[1-9]|0[1-9]\d|[12]\d{2}|3([0-5]\d|6[1-6])))([T\s]((([01]\d|2[0-3])((:?)[0-5]\d)?|24\:?00)([\.,]\d+(?!:))?)?(\17[0-5]\d([\.,]\d+)?)?([zZ]|([\+-])([01]\d|2[0-3]):?([0-5]\d)?)?)?)?\''
+    match: \'[\d|\-]+\'
+
+  ## NUMBER
+  - name: constant.numeric.arc
+    match: \b\d+\b
+  
+  ## REGULAR EXPRESSION
+  - name: constant.regexp.arc
+    match: \\.*\\
+  
+  ## TIME CONSTANTS
+  - name: constant.time.arc
+    match: \b(Milliseconds|Seconds|Minutes|Days|Hours)\b
+
+  ## OPERATORS
+  # alphabetic operators (without `filter`).
+  - name: support.function.operator.arc
+    match: \b(either|both|binds|matches|and|or|not|exists|available|boundBy|binder|context|extern)\b
+  # special pattern for `with` in `filter ... with`
+  - match: \b(filter)(.*)(with)\b
+    captures:
+      1: 
+        name: support.function.operator.arc
+      3:
+        name: keyword.operator.arc
+  # non-alphabetic operators
+  - name: support.function.operator.arc
+    match: (\>\>\=|\>\>|\*|\/|\+|\-|\=\=|\>\=|\<|>\=|>)
+
+  # LETA, LETE
+
+  ## STANDARD VARIABLES
+  - name: comment.language.arc
+    match: \b(currentcontext|nofifieduser|origin|currentactor)\b
+
+  ## PROPERTY RANGE
+  - name: constant.propertyrange.arc
+    match: \b(String|Number|Boolean|DateTime)\b
+    
+  ## ROLEVERBS
+  - name: entity.name.label.roleverb.arc
+    match: \b(Remove|Delete|Create|CreateAndFill|Fill|Unbind|RemoveFiller|Move)\b
+
+
+  ## PROPERTYVERBS
+  - name: entity.name.label.propertyverb.arc
+    match: \b(RemovePropertyValue|DeleteProperty|AddPropertyValue|SetPropertyValue|Consult)\b
+
+  ## META: ASPECT, USE, INDEXED
+  - name: keyword.operator
+    match: \b(aspect|indexed)\b
+
+  - match: \b(use)\b(.*)\b(for)\b
+    captures:
+      1: 
+        name: keyword.operator
+      3: 
+        name: keyword.operator
+
+  
