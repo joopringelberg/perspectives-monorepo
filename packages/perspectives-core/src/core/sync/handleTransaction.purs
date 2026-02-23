@@ -66,7 +66,7 @@ import Perspectives.ModelDependencies (rootContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
 import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit)
-import Perspectives.PerspectivesState (transactionLevel)
+import Perspectives.PerspectivesState (getExpectedIncomingSequenceNumber, transactionLevel, updateIncomingSequenceNumber)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..))
@@ -426,7 +426,24 @@ executeTransaction' t@(TransactionForPeer { deltas, publicKeys }) = do
   void $ for deltas verifyAndExcecuteDelta
   where
   verifyAndExcecuteDelta :: SignedDelta -> MonadPerspectivesTransaction Unit
-  verifyAndExcecuteDelta s = (lift $ verifyDelta s) >>= executeDelta s
+  verifyAndExcecuteDelta s@(SignedDelta { author, sequenceNumber }) = do
+    checkSequenceNumber author sequenceNumber
+    (lift $ verifyDelta s) >>= executeDelta s
+
+  -- | Check the incoming sequence number for a given author and log a warning if deltas appear to have been missed.
+  -- | In the gap case (GT), the delta is still processed and the counter is advanced to resume tracking from the
+  -- | new position. Recovery of missed deltas is handled by a separate mechanism (not yet implemented).
+  checkSequenceNumber :: PerspectivesUser -> Maybe Int -> MonadPerspectivesTransaction Unit
+  checkSequenceNumber author (Just seqNum) = do
+    expected <- lift $ getExpectedIncomingSequenceNumber author
+    padding <- lift transactionLevel
+    case compare seqNum expected of
+      GT -> do
+        log (padding <> "Warning: missed delta(s) from " <> show author <> " (expected seq " <> show expected <> ", got " <> show seqNum <> ")")
+        lift $ updateIncomingSequenceNumber author seqNum
+      EQ -> lift $ updateIncomingSequenceNumber author seqNum
+      LT -> log (padding <> "Note: duplicate or out-of-order delta from " <> show author <> " (expected seq " <> show expected <> ", got " <> show seqNum <> ")")
+  checkSequenceNumber _ Nothing = pure unit
 
   executeDelta :: SignedDelta -> Maybe String -> MonadPerspectivesTransaction Unit
   -- For now, we fail silently on deltas that cannot be authenticated.

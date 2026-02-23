@@ -110,7 +110,7 @@ theSuite = suite "ContextAndRole" do
     role3 <- pure $ deleteRol_property role2 (EnumeratedPropertyType "model:ContextAndRole$TestCase$Self$Prop1")
     liftAff $ assert "deleteRol_property fails" (length (rol_property role3 (EnumeratedPropertyType "model:ContextAndRole$TestCase$Self$Prop1")) == 0)
 
-    role4 <- pure $ setRol_property role3 (EnumeratedPropertyType "model:ContextAndRole$TestCase$Self$Prop1") [Value "1", Value "2"] (SignedDelta {author: PerspectivesUser "SomeUser", encryptedDelta: "SomeEncryptedDelta", signature: Just "SomeSignature"})
+    role4 <- pure $ setRol_property role3 (EnumeratedPropertyType "model:ContextAndRole$TestCase$Self$Prop1") [Value "1", Value "2"] (SignedDelta {author: PerspectivesUser "SomeUser", encryptedDelta: "SomeEncryptedDelta", signature: Just "SomeSignature", sequenceNumber: Nothing})
     liftAff $ assert "setRol_property fails" (length (rol_property role4 (EnumeratedPropertyType "model:ContextAndRole$TestCase$Self$Prop1")) == 2)
 
     role5 <- pure $ changeRol_binding (RoleInstance "blabla") role4
