@@ -2,3 +2,12 @@
 .vscode-test/**
 .gitignore
 vsc-extension-quickstart.md
+node_modules/**
+**/*.vsix
+syntaxes/arc.tmLanguage.yaml
+arc sources/
+arc to base64 mapping.xlsx
+settings.json
+package-lock.json
+../**
+../../**

@@ -28,6 +28,9 @@
 			"path": "packages/perspectives-proxy"
 		},
 		{
+			"path": "packages/language-perspectives-arcII"
+		},
+		{
 			"path": "."
 		}
 
