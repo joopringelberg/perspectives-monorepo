@@ -1,0 +1,46 @@
+{
+    "name": "language-perspectives-arc",
+    "displayName": "Perspectives ARC",
+    "description": "Syntax coloring for the ARC language.",
+    "version": "1.1.0",
+    "engines": {
+        "vscode": "^1.66.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "arc",
+                "aliases": [
+                    "ARC",
+                    "arc"
+                ],
+                "extensions": [
+                    ".arc"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "arc",
+                "scopeName": "source.arc",
+                "path": "./syntaxes/arc.tmLanguage.json"
+            }
+        ]
+    },
+    "devDependencies": {
+        "js-yaml": "^4.1.0"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/joopringelberg/language-perspectives-arcII.git"
+    },
+    "license" : "GPL-3.0-or-later",
+    "author": {
+        "name" : "Joop Ringelberg",
+        "email" : "joopringelberg@perspect.it"
+      }
+}
