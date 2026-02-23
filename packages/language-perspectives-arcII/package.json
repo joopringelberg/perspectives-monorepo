@@ -2,7 +2,7 @@
     "name": "language-perspectives-arc",
     "displayName": "Perspectives ARC",
     "description": "Syntax coloring for the ARC language.",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "engines": {
         "vscode": "^1.66.0"
     },

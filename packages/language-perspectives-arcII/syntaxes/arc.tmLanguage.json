@@ -80,7 +80,7 @@
     },
     {
       "name": "entity.name.class.contextkind.arc",
-      "match": "^\\s*\\b(domain|case|party|activity)\\b"
+      "match": "^\\s*\\b(domain|case|party|activity|public)\\b"
     },
     {
       "name": "entity.other.inherited-class.rolekind.arc",
@@ -107,7 +107,7 @@
     },
     {
       "name": "entity.name.tag.propertyfacet.arc",
-      "match": "\\b(mandatory|relational|unlinked|minLength|maxLength|enumeration|pattern|maxInclusive|minInclusive)\\b"
+      "match": "\\b(mandatory|relational|functional|unlinked|selfonly|authoronly|minLength|maxLength|enumeration|pattern|maxInclusive|minInclusive|maxExclusive|minExclusive|whiteSpace|totalDigits|fractionDigits|messageProperty|mediaProperty|readableName|regexp|setting)\\b"
     },
     {
       "name": "keyword.other.special-method.perspective.arc",
@@ -115,7 +115,7 @@
     },
     {
       "name": "keyword.other.special-method.perspective.arc",
-      "match": "\\b(view(?=\\s+[\\w|:|\\$]+\\s+verbs)|verbs|props|only|except|defaults|all\\s+roleverbs|action)\\b"
+      "match": "\\b(view(?=\\s+[\\w|:|\\$]+\\s+verbs)|verbs|without|props|only|except|defaults|default|all\\s+roleverbs|no\\s+roleverbs|action)\\b"
     },
     {
       "name": "keyword.state.arc",
@@ -124,6 +124,10 @@
     {
       "name": "keyword.stateTransition.arc",
       "match": "\\bon\\s+(entry|exit)\\b"
+    },
+    {
+      "name": "keyword.stateTransition.arc",
+      "match": "\\b(in\\s+state|subject\\s+state|object\\s+state|context\\s+state)\\b"
     },
     {
       "match": "\\b(notify)(\\s+\\w+)?\\b",
@@ -190,6 +194,44 @@
       }
     },
     {
+      "match": "\\b(bind)(\\s+\\w+)?\\b",
+      "captures": {
+        "1": {
+          "name": "keyword.assignment.arc"
+        }
+      }
+    },
+    {
+      "name": "keyword.assignment.arc",
+      "match": "\\b(unbind|unbind_|bind_)\\b"
+    },
+    {
+      "match": "\\b(move)(\\s+\\w+)?\\b",
+      "captures": {
+        "1": {
+          "name": "keyword.assignment.arc"
+        }
+      }
+    },
+    {
+      "match": "\\b(create_)(\\s+context\\s+)(\\w+)(\\s+bound)?\\b",
+      "captures": {
+        "1": {
+          "name": "keyword.assignment.arc"
+        },
+        "2": {
+          "name": "keyword.assignment.arc"
+        },
+        "4": {
+          "name": "keyword.assignment.arc"
+        }
+      }
+    },
+    {
+      "name": "keyword.assignment.arc",
+      "match": "\\b(callEffect|callDestructiveEffect|callExternal)\\b"
+    },
+    {
       "name": "keyword.timing.arc",
       "match": "\\b(after|until|every|maximally|times)\\b"
     },
@@ -211,11 +253,11 @@
     },
     {
       "name": "constant.time.arc",
-      "match": "\\b(Milliseconds|Seconds|Minutes|Days|Hours)\\b"
+      "match": "\\b(Milliseconds|Seconds|Minutes|Days|Hours|MilliSecond|Millisecond|Year|Month|Week|Day|Hour|Minute|Second|milliseconds|seconds|minutes|hours|days|weeks|months|years|millisecond|second|minute|hour|day|week|month|year)\\b"
     },
     {
       "name": "support.function.operator.arc",
-      "match": "\\b(either|both|binds|matches|and|or|not|exists|available|boundBy|binder|context|extern)\\b"
+      "match": "\\b(either|both|binds|matches|and|or|not|exists|available|boundBy|binder|context|extern|fills|filledBy|letE|letA|union|intersection|orElse|binding|this|me|indexedName|publicrole|publiccontext|isInState|contextinstance|roleinstance|specialisesRoleType|roleTypes|contextType|roleType|modelname|returns|translate)\\b"
     },
     {
       "match": "\\b(filter)(.*)(with)\\b",
@@ -238,7 +280,7 @@
     },
     {
       "name": "constant.propertyrange.arc",
-      "match": "\\b(String|Number|Boolean|DateTime)\\b"
+      "match": "\\b(String|Number|Boolean|DateTime|Date|Time|File|Email|MarkDown)\\b"
     },
     {
       "name": "entity.name.label.roleverb.arc",
@@ -247,6 +289,10 @@
     {
       "name": "entity.name.label.propertyverb.arc",
       "match": "\\b(RemovePropertyValue|DeleteProperty|AddPropertyValue|SetPropertyValue|Consult)\\b"
+    },
+    {
+      "name": "entity.name.tag.screenelement.arc",
+      "match": "\\b(screen|tab|row|column|form|markdown|table|chat|messages|media|who|what|where|master|detail|when|fillfrom)\\b"
     },
     {
       "name": "keyword.operator",
