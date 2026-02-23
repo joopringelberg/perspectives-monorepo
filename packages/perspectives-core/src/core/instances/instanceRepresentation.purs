@@ -34,7 +34,6 @@ import Perspectives.Persistence.Types (PouchbdDocumentFields)
 import Perspectives.Representation.Class.Identifiable (class Identifiable)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..), Value)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType, RoleType, StateIdentifier)
-import Perspectives.Sync.SignedDelta (SignedDelta)
 import Prelude (class Eq, class Show, eq, (<<<), (==))
 import Simple.JSON (class ReadForeign, class WriteForeign)
 
@@ -67,7 +66,6 @@ type ContextRecord = PouchbdDocumentFields
   , rolInContext :: F.Object (Array RoleInstance)
   , me :: Maybe RoleInstance
   , preferredUserRoleType :: Maybe RoleType
-  , universeContextDelta :: SignedDelta
   , states :: Array StateIdentifier
   , publicUrl :: Maybe PublicUrl
   )
@@ -116,11 +114,6 @@ type RolRecord = PouchbdDocumentFields
   , filledRoles :: F.Object (F.Object (Array RoleInstance))
   , occurrence :: Int
   , isMe :: Boolean
-  , universeRoleDelta :: SignedDelta
-  , contextDelta :: SignedDelta
-  , bindingDelta :: Maybe SignedDelta
-  -- The first index is the propertytype; the second is the value.
-  , propertyDeltas :: F.Object (F.Object SignedDelta)
   , states :: Array StateIdentifier
   , roleAliases :: F.Object String
   , contextAliases :: F.Object String

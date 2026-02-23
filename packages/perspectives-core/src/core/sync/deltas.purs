@@ -37,7 +37,7 @@ import Effect.Now (now)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.AMQP.Stomp (sendToTopic)
 import Perspectives.ApiTypes (CorrelationIdentifier)
-import Perspectives.ContextAndRole (rol_contextDelta, rol_property, rol_propertyDelta, rol_universeRoleDelta)
+import Perspectives.ContextAndRole (rol_property)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, (##>))
 import Perspectives.Data.EncodableMap as ENCMAP
 import Perspectives.DomeinCache (saveCachedDomeinFile)
@@ -49,6 +49,7 @@ import Perspectives.ModelDependencies (connectedToAMQPBroker, userChannel) as DE
 import Perspectives.ModelDependencies (perspectivesUsersCancelled, perspectivesUsersPublicKey)
 import Perspectives.Names (getMySystem)
 import Perspectives.Persistence.API (Url, addDocument)
+import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), getDeltasForResource, storeDeltaFromSignedDelta)
 import Perspectives.Persistent (getPerspectRol, postDatabaseName)
 import Perspectives.PerspectivesState (nextTransactionNumber, stompClient)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter)
@@ -204,7 +205,9 @@ computeUserRoleBottom rid = ((map ENR <<< roleType_ >=> isPublicProxy) rid) >>=
 -- |    * public roles
 -- |    * instances of sys:PerspectivesSystem$User, but not the one that equals the local sys:Me.
 addDelta :: DeltaInTransaction -> MonadPerspectivesTransaction Unit
-addDelta (DeltaInTransaction deltarecord@{ users }) = do
+addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
+  -- Store all locally-created deltas in the DeltaStore for persistent history.
+  lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
   users' <- lift $ filterA notIsMe users
   if null users' then pure unit
@@ -227,7 +230,9 @@ addDelta (DeltaInTransaction deltarecord@{ users }) = do
 
 -- | Insert the delta at the index, unless it is already in the transaction or there are no users (and ignore the own user).
 insertDelta :: DeltaInTransaction -> Int -> MonadPerspectivesTransaction Unit
-insertDelta (DeltaInTransaction deltarecord@{ users }) i = do
+insertDelta (DeltaInTransaction deltarecord@{ users, delta }) i = do
+  -- Store all locally-created deltas in the DeltaStore for persistent history.
+  lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
   users' <- lift $ filterA notIsMe users
   if null users' then pure unit
@@ -291,20 +296,22 @@ addPublicKeysToTransaction (Transaction tr@{ deltas }) = do
 
   -- This is built on the assumption that the argument is the string value of the RoleInstance of type TheWorld$PerspectivesUser
   -- that fills SocialEnvironment$Me
+  -- Queries the DeltaStore for the creation deltas and public key property delta of this PerspectivesUser role instance.
   getPkInfo :: PerspectivesUser -> MonadPerspectives PublicKeyInfo
   getPkInfo perspectivesUser = do
     -- The perspectivesUser is taken from the SignedDelta and is schemaless.
-    authorRole <- getPerspectRol (perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier perspectivesUser)
+    let roleInstanceId = perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier perspectivesUser
+    authorRole <- getPerspectRol roleInstanceId
+    -- Get creation deltas for this role instance (UniverseRoleDelta + ContextDelta).
+    creationDeltas <- getDeltasForResource (unwrap roleInstanceId)
+    -- Get property deltas for the public key property.
+    pkPropertyDeltas <- getDeltasForResource (unwrap roleInstanceId <> "#" <> unwrap (EnumeratedPropertyType perspectivesUsersPublicKey))
+    let allDeltas = map (\(DeltaStoreRecord { signedDelta }) -> signedDelta) (creationDeltas <> pkPropertyDeltas)
     pure
       let
         k@(Value key) = unsafePartial fromJust $ head $ rol_property authorRole (EnumeratedPropertyType perspectivesUsersPublicKey)
-        propertyDelta = unsafePartial fromJust $ rol_propertyDelta authorRole (EnumeratedPropertyType perspectivesUsersPublicKey) k
       in
         { key
-        , deltas:
-            [ rol_universeRoleDelta authorRole
-            , rol_contextDelta authorRole
-            , propertyDelta
-            ]
+        , deltas: allDeltas
         }
 

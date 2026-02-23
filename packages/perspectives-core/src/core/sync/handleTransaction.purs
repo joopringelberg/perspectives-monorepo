@@ -27,7 +27,7 @@ import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
-import Data.Array (catMaybes, concat, fromFoldable)
+import Data.Array (catMaybes, concat, filter, fromFoldable)
 import Data.Array.NonEmpty (head)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
@@ -50,7 +50,7 @@ import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (addProperty, addRoleInstanceToContext, deleteProperty, moveRoleInstanceToAnotherContext, removeProperty, setProperty)
 import Perspectives.Authenticate (deserializeJWK, tryGetPublicKey, verifyDelta, verifyDelta')
 import Perspectives.Checking.Authorization (roleHasPerspectiveOnExternalRoleWithVerbs, roleHasPerspectiveOnPropertyWithVerb, roleHasPerspectiveOnRoleWithVerb)
-import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord, getNextRolIndex, isDefaultContextDelta, rol_contextDelta)
+import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord, getNextRolIndex)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, removeInternally, (###=), (###>>), (##=), (##>), (##>>))
 import Perspectives.Data.EncodableMap as ENCMAP
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, addCreatedRoleToTransaction)
@@ -74,16 +74,18 @@ import Perspectives.Representation.TypeIdentifiers (ResourceType(..), RoleType(.
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Verbs
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, isInPublicScheme, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.SaveUserData (removeBinding, removeContextIfUnbound, replaceBinding, scheduleContextRemoval, scheduleRoleRemoval, setFirstBinding, synchronise)
-import Perspectives.SerializableNonEmptyArray (toArray, toNonEmptyArray)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
+import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), storeDelta, deltaStoreDocId)
+import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
+import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, setResourceVersion)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, pure, show, unit, void, ($), (*>), (+), (<$>), (<<<), (<>), (==), (>>=))
+import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, not, pure, show, unit, void, ($), (*>), (+), (<$>), (<<<), (<>), (==), (/=), (>), (>>=))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -110,13 +112,9 @@ executeContextDelta (ContextDelta { deltaType, contextInstance, contextType, rol
     MoveRoleInstancesToAnotherContext -> (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Create, Verbs.CreateAndFill ] Nothing Nothing) >>= case _ of
       Left e -> handleError e
       Right _ -> moveRoleInstanceToAnotherContext contextInstance (unsafePartial $ fromJust destinationContext) roleType (Just signedDelta) roleInstance
-    -- As the external role and the context have been constructed before (and apparently have not thrown errors) we just add the delta to the external role
-    -- iff it is not present!
-    AddExternalRole -> lift
-      ( getPerspectRol roleInstance >>= \rol@(PerspectRol r) ->
-          if isDefaultContextDelta (rol_contextDelta rol) then void $ saveEntiteit_ roleInstance (PerspectRol r { contextDelta = signedDelta })
-          else pure unit
-      )
+    -- The contextDelta is stored in the DeltaStore via executeDeltaWithVersionTracking.
+    -- No need to store it on the role record.
+    AddExternalRole -> pure unit
 
 executeRoleBindingDelta :: RoleBindingDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeRoleBindingDelta (RoleBindingDelta { filled, filler, deltaType, subject }) signedDelta = do
@@ -200,6 +198,35 @@ executeRolePropertyDelta d@(RolePropertyDelta { id, roleType, deltaType, values,
 handleError :: PerspectivesError -> MonadPerspectivesTransaction Unit
 handleError e = liftEffect $ log (show e)
 
+-----------------------------------------------------------
+-- DELTA ORDERING TYPES AND HELPERS
+-----------------------------------------------------------
+
+-- | Minimal record to extract just the ordering fields from any delta JSON.
+-- | All delta types share these fields via DeltaRecord.
+type DeltaOrderingInfo =
+  { resourceKey :: String
+  , resourceVersion :: Int
+  }
+
+-- | Extract ordering info from a stringified delta.
+-- | Returns Nothing if the JSON does not contain the required fields.
+extractOrderingInfo :: String -> Maybe DeltaOrderingInfo
+extractOrderingInfo stringifiedDelta = case runExcept $ readJSON' stringifiedDelta of
+  Right (info :: DeltaOrderingInfo) -> Just info
+  Left _ -> Nothing
+
+-- | Check whether a transaction has any version gaps.
+-- | A gap exists when a delta's resourceVersion is greater than the local version + 1.
+-- | Returns the list of missing deltas (gaps) if any.
+checkForGaps :: Array { resourceKey :: String, resourceVersion :: Int, author :: PerspectivesUser } -> MonadPerspectivesTransaction (Array MissingDelta)
+checkForGaps deltaInfos = do
+  gaps <- for deltaInfos \{ resourceKey, resourceVersion, author } -> do
+    localVersion <- lift $ getResourceVersion resourceKey
+    if resourceVersion > localVersion + 1 then pure $ Just { author, resourceKey, expectedVersion: localVersion + 1 }
+    else pure Nothing
+  pure $ catMaybes gaps
+
 -- | Retrieves from the repository the model that holds the ContextType, if necessary.
 -- | The ConstructExternalRole always precedes the UniverseContextDelta for the context it is the external
 -- | role for. Hence we only have to check whether the external role exists.
@@ -225,7 +252,6 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
                   , pspType = contextType
                   , allTypes = allTypes
                   , buitenRol = RoleInstance $ buitenRol $ unwrap id
-                  , universeContextDelta = signedDelta
                   , states = [ StateIdentifier $ unwrap contextType ]
                   }
               )
@@ -251,11 +277,11 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
 
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 executeUniverseRoleDelta :: UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, authorizedRole, deltaType, subject }) s = do
+executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, authorizedRole, deltaType, subject }) s = do
   padding <- lift transactionLevel
   readableRoleType <- lift $ toReadable roleType
   readableSubject <- lift $ toReadable subject
-  log (padding <> show deltaType <> " for/from " <> show id <> " with ids " <> show roleInstances <> " with type " <> show readableRoleType <> " for user role " <> show readableSubject)
+  log (padding <> show deltaType <> " for/from " <> show id <> " with id " <> show roleInstance <> " with type " <> show readableRoleType <> " for user role " <> show readableSubject)
   void $ lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ $ unwrap roleType)
   case deltaType of
     ConstructEmptyRole -> do
@@ -284,19 +310,18 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, autho
       -- Similarly, if the user is allowed to remove a contextrole with its filler (requiring RemoveContext), he is allowed to remove the contctrole instance.
       (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Remove, Verbs.Delete, Verbs.RemoveContext, Verbs.DeleteContext ] Nothing Nothing) >>= case _ of
         Left e -> handleError e
-        -- Right _ -> for_ (toNonEmptyArray roleInstances) removeRoleInstance
-        Right _ -> for_ (toNonEmptyArray roleInstances) (scheduleRoleRemoval synchronise)
+        Right _ -> void $ scheduleRoleRemoval synchronise roleInstance
 
     -- TODO Het lijkt niet nuttig om beide cases te behouden.
     RemoveUnboundExternalRoleInstance -> do
       (lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [ Verbs.DeleteContext, Verbs.RemoveContext ] Nothing Nothing) >>= case _ of
         Left e -> handleError e
-        Right _ -> for_ (toArray roleInstances) (flip removeContextIfUnbound authorizedRole)
+        Right _ -> flip removeContextIfUnbound authorizedRole roleInstance
     RemoveExternalRoleInstance -> do
       (lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [ Verbs.DeleteContext, Verbs.RemoveContext ] Nothing Nothing) >>= case _ of
         Left e -> handleError e
         -- As external roles are always stored the same as their contexts, we can reliably retrieve the context instance id from the role id.
-        Right _ -> for_ (ContextInstance <<< deconstructBuitenRol <<< unwrap <$> toArray roleInstances) (scheduleContextRemoval authorizedRole [])
+        Right _ -> scheduleContextRemoval authorizedRole [] (ContextInstance $ deconstructBuitenRol $ unwrap roleInstance)
   where
   userCreatesThemselves :: Boolean
   userCreatesThemselves = case subject of
@@ -307,16 +332,15 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, autho
   constructAnotherRole_ = do
     -- find the number of roleinstances in the context.
     offset <- (lift (id ##= getRoleInstances (ENR roleType))) >>= pure <<< getNextRolIndex
-    forWithIndex_ (toNonEmptyArray roleInstances)
-      \i roleInstance -> lookupOrCreateRoleInstance
-        roleType
-        (Just $ unwrap roleInstance)
-        do
-          (exists :: Maybe PerspectRol) <- lift $ tryGetPerspectEntiteit roleInstance
-          -- Here we make constructing another role idempotent. Nothing happens if it already exists.
-          if isNothing exists then void $ constructEmptyRole_ id (offset + i) roleInstance
-          else pure unit
-          pure roleInstance
+    void $ lookupOrCreateRoleInstance
+      roleType
+      (Just $ unwrap roleInstance)
+      do
+        (exists :: Maybe PerspectRol) <- lift $ tryGetPerspectEntiteit roleInstance
+        -- Here we make constructing another role idempotent. Nothing happens if it already exists.
+        if isNothing exists then void $ constructEmptyRole_ id offset roleInstance
+        else pure unit
+        pure roleInstance
 
   constructEmptyRole_ :: ContextInstance -> Int -> RoleInstance -> MonadPerspectivesTransaction Boolean
   constructEmptyRole_ contextInstance i rolInstanceId = do
@@ -331,7 +355,6 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, autho
             , allTypes = allTypes
             , context = contextInstance
             , occurrence = i
-            , universeRoleDelta = s
             -- The contextDelta will be added when we handle the corresponding ContextDelta.
             , states = [ StateIdentifier $ unwrap roleType ]
             }
@@ -344,14 +367,13 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, autho
   -- PERSISTENCE
   constructExternalRole :: MonadPerspectivesTransaction RoleInstance
   constructExternalRole = do
-    externalRole <- pure (head $ toNonEmptyArray roleInstances)
     padding <- lift transactionLevel
     log (padding <> "ConstructExternalRole in " <> show id)
     -- Here we make constructing an external role idempotent. Nothing happens if it already exists.
-    constructEmptyRole_ id 0 externalRole >>=
-      if _ then lift $ void $ saveEntiteit externalRole
+    constructEmptyRole_ id 0 roleInstance >>=
+      if _ then lift $ void $ saveEntiteit roleInstance
       else pure unit
-    pure externalRole
+    pure roleInstance
 
 -- | Execute all Deltas in a run that does not distribute.
 -- executeTransaction :: TransactionForPeer -> MonadPerspectives Unit
@@ -422,11 +444,51 @@ executeTransaction' t@(TransactionForPeer { deltas, publicKeys }) = do
   -- Add all public key information (possibly leading to more TheWorld$PerspectivesUsers instances).
   for_ (unwrap publicKeys) \{ deltas: keyDeltas } -> void $ for keyDeltas \s@(SignedDelta { encryptedDelta }) -> executeDelta s (Just encryptedDelta)
 
-  -- Process all deltas.
-  void $ for deltas verifyAndExcecuteDelta
+  -- STEP 1: Verify and extract ordering info from all deltas.
+  verifiedDeltas <- catMaybes <$> for deltas \s@(SignedDelta { author }) -> do
+    mStringified <- lift $ verifyDelta s
+    pure $ case mStringified of
+      Nothing -> Nothing
+      Just stringified -> case extractOrderingInfo stringified of
+        Nothing -> Just { signedDelta: s, stringified, resourceKey: "", resourceVersion: 0, author }
+        Just { resourceKey, resourceVersion } -> Just { signedDelta: s, stringified, resourceKey, resourceVersion, author }
+
+  -- STEP 2: Check for gaps. If any delta has resourceVersion > localVersion + 1, block the transaction.
+  let
+    deltaInfos = filter (\d -> d.resourceKey /= "")
+      (map (\d -> { resourceKey: d.resourceKey, resourceVersion: d.resourceVersion, author: d.author }) verifiedDeltas)
+  gaps <- checkForGaps deltaInfos
+  case gaps of
+    [] -> do
+      -- No gaps: execute all deltas with version tracking.
+      void $ for verifiedDeltas \{ signedDelta, stringified, resourceKey, resourceVersion, author } ->
+        executeDeltaWithVersionTracking signedDelta stringified resourceKey resourceVersion author
+    _ -> do
+      -- Gaps detected: block the entire transaction.
+      log "Transaction blocked: version gaps detected. Storing as pending."
+      lift $ storePendingTransaction t gaps
   where
-  verifyAndExcecuteDelta :: SignedDelta -> MonadPerspectivesTransaction Unit
-  verifyAndExcecuteDelta s = (lift $ verifyDelta s) >>= executeDelta s
+
+  executeDeltaWithVersionTracking :: SignedDelta -> String -> String -> Int -> PerspectivesUser -> MonadPerspectivesTransaction Unit
+  executeDeltaWithVersionTracking s stringified resourceKey resourceVersion author = do
+    -- Execute the delta (same logic as before).
+    executeDelta s (Just stringified)
+    -- After successful execution, update the resource version store and store delta in delta-store.
+    if resourceKey /= "" then do
+      -- Update the resource version to the delta's version (which should be localVersion + 1).
+      lift $ setResourceVersion resourceKey resourceVersion
+      -- Store the delta in the delta-store.
+      lift $ storeDelta $ DeltaStoreRecord
+        { _id: deltaStoreDocId resourceKey resourceVersion author
+        , _rev: Nothing
+        , resourceKey
+        , resourceVersion
+        , author
+        , signedDelta: s
+        , deltaType: "" -- TODO: extract deltaType string from the parsed delta
+        , applied: true
+        }
+    else pure unit
 
   executeDelta :: SignedDelta -> Maybe String -> MonadPerspectivesTransaction Unit
   -- For now, we fail silently on deltas that cannot be authenticated.

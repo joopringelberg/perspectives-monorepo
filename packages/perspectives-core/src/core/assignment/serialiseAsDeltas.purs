@@ -55,6 +55,7 @@ import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..)
 import Perspectives.Instances.ObjectGetters (binding_, roleType_)
 import Perspectives.ModelDependencies (perspectivesUsersPublicKey, sysUser)
 import Perspectives.Names (getMySystem, getUserIdentifier)
+import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), getDeltasForResource)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol)
 import Perspectives.PerspectivesState (getPerspectivesUser, transactionLevel)
 import Perspectives.Query.Interpreter (interpret)
@@ -276,40 +277,49 @@ serialiseDependency users mpreviousDependency currentDependency = do
 
   where
   -- | Returns true iff the binding of the first argument equals the second argument.
+  -- | If true, also adds the binding delta from the DeltaStore to the transaction.
   addBindingDelta :: RoleInstance -> RoleInstance -> MonadPerspectivesTransaction Boolean
   addBindingDelta roleId1 roleId2 = (liftToMPT $ try $ getPerspectRol roleId2) >>= handlePerspectRolError' "addBindingDelta" false
-    \(PerspectRol { binding, bindingDelta }) -> case binding of
+    \(PerspectRol { binding }) -> case binding of
       Just b ->
-        if b == roleId1 then traverse_ (\bd -> addDelta $ DeltaInTransaction { users, delta: bd }) bindingDelta *> pure true
+        if b == roleId1 then do
+          -- Query DeltaStore for binding delta of this role instance.
+          bindingDeltas <- lift $ getDeltasForResource (unwrap roleId2 <> "#binding")
+          for_ bindingDeltas \(DeltaStoreRecord { signedDelta }) ->
+            addDelta $ DeltaInTransaction { users, delta: signedDelta }
+          pure true
         else pure false
       Nothing -> pure false
 
+  -- | Query DeltaStore for property deltas of this role instance and property type.
   addPropertyDelta :: RoleInstance -> PropertyName -> String -> MonadPerspectivesTransaction Unit
-  addPropertyDelta roleId ptypeString val = (liftToMPT $ try $ getPerspectRol roleId) >>=
-    handlePerspectRolError "addPropertyDelta"
-      \(PerspectRol { propertyDeltas }) -> case lookup ptypeString propertyDeltas of
-        Nothing -> pure unit
-        Just x -> case lookup val x of
-          Nothing -> throwError (error $ "No propertyDelta for value " <> val <> " on " <> show roleId)
-          Just pdelta -> addDelta $ DeltaInTransaction { users, delta: pdelta }
+  addPropertyDelta roleId ptypeString val = do
+    propertyDeltas <- lift $ getDeltasForResource (unwrap roleId <> "#" <> ptypeString)
+    for_ propertyDeltas \(DeltaStoreRecord { signedDelta }) ->
+      addDelta $ DeltaInTransaction { users, delta: signedDelta }
 
+  -- | Query DeltaStore for creation deltas of this role and its context.
   addDeltasForRole :: RoleInstance -> MonadPerspectivesTransaction Unit
   addDeltasForRole roleId = do
     (liftToMPT $ try $ getPerspectRol roleId) >>=
       handlePerspectRolError "addDeltasForRole"
-        \(PerspectRol { context, universeRoleDelta, contextDelta }) -> do
+        \(PerspectRol { context }) -> do
           (liftToMPT $ try $ getPerspectContext context) >>=
             handlePerspectContextError "addDeltasForRole"
-              \(PerspectContext { universeContextDelta, buitenRol }) -> do
-                (liftToMPT $ try $ getPerspectRol buitenRol) >>=
-                  handlePerspectRolError "addDeltasForRole"
-                    \(PerspectRol { universeRoleDelta: eRoleDelta, contextDelta: eContextDelta }) -> do
-                      -- ORDER IS OF THE ESSENCE, HERE!!
-                      addDelta $ DeltaInTransaction { users, delta: eRoleDelta }
-                      addDelta $ DeltaInTransaction { users, delta: universeContextDelta }
-                      addDelta $ DeltaInTransaction { users, delta: eContextDelta }
-                      addDelta $ DeltaInTransaction { users, delta: universeRoleDelta }
-                      addDelta $ DeltaInTransaction { users, delta: contextDelta }
+              \(PerspectContext { buitenRol }) -> do
+                -- ORDER IS OF THE ESSENCE, HERE!!
+                -- Get creation deltas for external role.
+                extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
+                for_ extRoleDeltas \(DeltaStoreRecord { signedDelta }) ->
+                  addDelta $ DeltaInTransaction { users, delta: signedDelta }
+                -- Get creation deltas for context.
+                contextDeltas <- lift $ getDeltasForResource (unwrap context)
+                for_ contextDeltas \(DeltaStoreRecord { signedDelta }) ->
+                  addDelta $ DeltaInTransaction { users, delta: signedDelta }
+                -- Get creation deltas for this role.
+                roleDeltas <- lift $ getDeltasForResource (unwrap roleId)
+                for_ roleDeltas \(DeltaStoreRecord { signedDelta }) ->
+                  addDelta $ DeltaInTransaction { users, delta: signedDelta }
 
   withContext :: Boolean
   withContext = true

@@ -186,11 +186,13 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
             Nothing -> sendResponse (Result corrId []) setter
             Just restriction -> do
               let leaves = allLeavesInADT restriction
-              namesAndTypes <- traverse (\ric -> do
-                  let rt = ENR (roleInContext2Role ric)
-                  name <- displayNameOfRoleType rt
-                  pure $ writeJSON { roleType: roletype2string rt, readableName: name }
-                ) leaves
+              namesAndTypes <- traverse
+                ( \ric -> do
+                    let rt = ENR (roleInContext2Role ric)
+                    name <- displayNameOfRoleType rt
+                    pure $ writeJSON { roleType: roletype2string rt, readableName: name }
+                )
+                leaves
               sendResponse (Result corrId namesAndTypes) setter
       )
       (\e -> sendResponse (Error corrId (show e)) setter)

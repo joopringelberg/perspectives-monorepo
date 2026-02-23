@@ -85,7 +85,6 @@ import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.HashQFD (qfdSignature)
 import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), fromLocalModels, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping, lookupActionCuid, lookupContextIndividualId, lookupRoleIndividualId)
-import Perspectives.Sync.SignedDelta (SignedDelta)
 
 -- Environment carried during normalization: sidecars and a perspective id rewrite map
 type Env =
@@ -909,11 +908,10 @@ instance Normalize PerspectRol where
     allTypes' <- traverse fqn2tid pr.allTypes
     properties' <- fromFoldable <$> for ((toUnfoldable pr.properties) :: Array (Tuple String (Array Value))) \(Tuple proptype values) -> Tuple <$> (unwrap <$> fqn2tid (EnumeratedPropertyType proptype)) <*> pure values
     filledRoles' <- pure pr.filledRoles
-    propertyDeltas' <- fromFoldable <$> for ((toUnfoldable pr.propertyDeltas) :: Array (Tuple String (Object SignedDelta))) \(Tuple proptype values) -> Tuple <$> (unwrap <$> fqn2tid (EnumeratedPropertyType proptype)) <*> pure values
     states' <- traverse fqn2tid pr.states
     roleAliases' <- fromFoldable <$> for ((toUnfoldable pr.roleAliases) :: Array (Tuple String String)) \(Tuple roltype alias) -> Tuple <$> (unwrap <$> fqn2tid (EnumeratedRoleType roltype)) <*> (unwrap <$> fqn2tid (EnumeratedRoleType alias))
     contextAliases' <- fromFoldable <$> for ((toUnfoldable pr.contextAliases) :: Array (Tuple String String)) \(Tuple ctype alias) -> Tuple <$> (unwrap <$> fqn2tid (ContextType ctype)) <*> (unwrap <$> fqn2tid (ContextType alias))
-    pure $ PerspectRol pr { pspType = pspType', properties = properties', filledRoles = filledRoles', propertyDeltas = propertyDeltas', states = states', roleAliases = roleAliases', contextAliases = contextAliases', allTypes = allTypes' }
+    pure $ PerspectRol pr { pspType = pspType', properties = properties', filledRoles = filledRoles', states = states', roleAliases = roleAliases', contextAliases = contextAliases', allTypes = allTypes' }
 
 instance Normalize StateDependentPerspective where
   normalize (ContextPerspective sdp) = do

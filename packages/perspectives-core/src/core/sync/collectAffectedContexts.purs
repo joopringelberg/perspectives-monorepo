@@ -26,7 +26,6 @@ import Control.Monad.AvarMonadAsk (modify) as AA
 import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Reader (lift)
 import Data.Array (concat, cons, difference, elemIndex, filter, filterA, foldM, head, nub, null, union)
-import Data.Array.NonEmpty (fromArray, singleton) as ANE
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Map (isEmpty)
 import Data.Maybe (Maybe(..), fromJust, isJust, isNothing)
@@ -39,7 +38,6 @@ import Partial.Unsafe (unsafePartial)
 import Perspective.InvertedQuery.Indices (runTimeIndexForRoleQueries, runtimeIndexForContextQueries, runtimeIndexForFilledQueries', runtimeIndexForFillerQueries', runtimeIndexForPropertyQueries)
 import Perspectives.ArrayUnions (ArrayUnions(..))
 import Perspectives.Assignment.SerialiseAsDeltas (getPropertyValues, serialiseDependencies)
-import Perspectives.ContextAndRole (isDefaultContextDelta)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MonadPerspectivesTransaction, runMonadPerspectivesQuery, (##=), (##>), (##>>))
 import Perspectives.Data.EncodableMap (EncodableMap, filterKeys, lookup)
 import Perspectives.Deltas (addDelta)
@@ -53,6 +51,7 @@ import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwa
 import Perspectives.InvertedQuery.Storable (getContextQueries, getFilledQueries, getFillerQueries, getPropertyQueries, getRoleQueries)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), getDeltasForResource)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, tryGetPerspectEntiteit)
 import Perspectives.Query.Interpreter (interpret)
 import Perspectives.Query.Interpreter.Dependencies (Dependency(..), DependencyPath, allPaths, singletonPath)
@@ -66,7 +65,6 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleIns
 import Perspectives.Representation.State (StateFulObject(..))
 import Perspectives.Representation.State (StateFulObject(..), State(..)) as State
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType, EnumeratedRoleType, PropertyType(..), RoleType(..))
-import Perspectives.SerializableNonEmptyArray (SerializableNonEmptyArray(..), toArray)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
 import Perspectives.Sync.Transaction (Transaction(..))
@@ -559,7 +557,7 @@ runForwardsComputation roleInstance (InvertedQuery { description, forwardsCompil
         -- When there are no properties, we add the deltas for the role instance anyway.
         -- This covers the case of a new binding for a perspective without properties.
         PerspectRol { pspType, context } <- lift $ getPerspectRol roleInstance
-        if (isEmpty (unwrap statesPerProperty)) then magic context (SerializableNonEmptyArray $ ANE.singleton roleInstance) pspType (join $ snd <$> cwus)
+        if (isEmpty (unwrap statesPerProperty)) then magic context [ roleInstance ] pspType (join $ snd <$> cwus)
         else pure unit
         computeProperties [ singletonPath (R roleInstance) ] statesPerProperty cwus
 
@@ -681,9 +679,8 @@ computeProperties rinstances statesPerProperty cwus = forWithIndex_ (unwrap stat
 createDeltasFromAssumption :: Array RoleInstance -> InformedAssumption -> MonadPerspectivesTransaction Unit
 createDeltasFromAssumption users (RoleAssumption ctxt roleTypeId) = do
   instances <- lift (ctxt ##= getRoleInstances (ENR roleTypeId))
-  case SerializableNonEmptyArray <$> ANE.fromArray instances of
-    Nothing -> pure unit
-    Just instances' -> magic ctxt instances' roleTypeId users
+  if null instances then pure unit
+  else magic ctxt instances roleTypeId users
 
 -- The value of me of a context is indexed, and thus private. It never leads to a delta.
 createDeltasFromAssumption users (Me _) = pure unit
@@ -695,12 +692,11 @@ createDeltasFromAssumption users (Filler roleInstance) = do
     Just bnd -> do
       ctxt <- lift (bnd ##>> OG.context)
       rtype <- lift (bnd ##>> OG.roleType)
-      magic ctxt (SerializableNonEmptyArray $ ANE.singleton bnd) rtype users
-      (try $ lift $ getPerspectRol roleInstance) >>=
-        handlePerspectRolError "createDeltasFromAssumption:Filler"
-          \(PerspectRol { bindingDelta }) -> case bindingDelta of
-            Nothing -> pure unit
-            Just bd -> addDelta $ DeltaInTransaction { users, delta: bd }
+      magic ctxt [ bnd ] rtype users
+  -- Query DeltaStore for binding delta of this role instance.
+  bindingDeltas <- lift $ getDeltasForResource (unwrap roleInstance <> "#binding")
+  for_ bindingDeltas \(DeltaStoreRecord { signedDelta }) ->
+    addDelta $ DeltaInTransaction { users, delta: signedDelta }
 
 -- FilledRolesAssumption fillerId filledContextType filledType
 createDeltasFromAssumption users (FilledRolesAssumption fillerId filledContextType filledType) = do
@@ -711,29 +707,27 @@ createDeltasFromAssumption users (FilledRolesAssumption fillerId filledContextTy
       ( case _ of
           -- This means that the context of the filler is public.
           Nothing -> pure unit
-          Just (PerspectRol { context: filledContext }) -> magic filledContext (SerializableNonEmptyArray $ unsafePartial fromJust $ ANE.fromArray filledRoles) filledType users
+          Just (PerspectRol { context: filledContext }) -> magic filledContext filledRoles filledType users
       )
+  -- Query DeltaStore for binding deltas of filled roles.
   for_ filledRoles \filledId -> do
-    (try $ lift $ getPerspectRol filledId) >>=
-      handlePerspectRolError "createDeltasFromAssumption.FilledRolesAssumption"
-        \(PerspectRol { bindingDelta }) -> case bindingDelta of
-          Nothing -> pure unit
-          Just bd -> addDelta $ DeltaInTransaction { users, delta: bd }
+    bindingDeltas <- lift $ getDeltasForResource (unwrap filledId <> "#binding")
+    for_ bindingDeltas \(DeltaStoreRecord { signedDelta }) ->
+      addDelta $ DeltaInTransaction { users, delta: signedDelta }
 
 createDeltasFromAssumption users (Property roleInstance propertyType) = do
   ctxt <- lift (roleInstance ##>> OG.context)
   rtype <- lift (roleInstance ##>> OG.roleType)
-  magic ctxt (SerializableNonEmptyArray $ ANE.singleton roleInstance) rtype users
-  (try $ lift $ getPerspectRol roleInstance) >>=
-    handlePerspectRolError "createDeltasFromAssumption.Property"
-      \(PerspectRol { propertyDeltas }) -> case OBJ.lookup (unwrap propertyType) propertyDeltas of
-        Nothing -> pure unit
-        Just deltas -> void $ for deltas \propertyDelta -> addDelta $ DeltaInTransaction { users, delta: propertyDelta }
+  magic ctxt [ roleInstance ] rtype users
+  -- Query DeltaStore for property deltas of this role instance and property type.
+  propertyDeltas <- lift $ getDeltasForResource (unwrap roleInstance <> "#" <> unwrap propertyType)
+  for_ propertyDeltas \(DeltaStoreRecord { signedDelta }) ->
+    addDelta $ DeltaInTransaction { users, delta: signedDelta }
 
 createDeltasFromAssumption users (Context roleInstance) = do
   ctxt <- lift (roleInstance ##>> OG.context)
   rtype <- lift (roleInstance ##>> OG.roleType)
-  magic ctxt (SerializableNonEmptyArray $ ANE.singleton roleInstance) rtype users
+  magic ctxt [ roleInstance ] rtype users
 
 -- The forwards part of a QueryWithAKink in an filled InvertedQuery or filler InvertedQuery
 -- never starts with 'external', because these queries are applied to respectively the
@@ -750,27 +744,26 @@ createDeltasFromAssumption users (State contextInstance) = pure unit
 createDeltasFromAssumption users (RoleState _) = pure unit
 
 -- | Add a UniverseContextDelta, UniverseRoleDelta and a ContextDelta to the current Transaction.
-magic :: ContextInstance -> SerializableNonEmptyArray RoleInstance -> EnumeratedRoleType -> Array RoleInstance -> MonadPerspectivesTransaction Unit
+-- | Queries the DeltaStore for creation deltas of the context and role instances.
+magic :: ContextInstance -> Array RoleInstance -> EnumeratedRoleType -> Array RoleInstance -> MonadPerspectivesTransaction Unit
 magic ctxt roleInstances rtype users = do
-  ctype <- lift (ctxt ##>> contextType)
+  -- Get the context to find the external role (buitenRol).
   (try $ lift $ getPerspectContext ctxt) >>=
     handlePerspectContextError "Perspectives.CollectAffectedContexts.magic"
-      -- Fetch the UniverseContextDelta from the context instance here.
-      \(PerspectContext { universeContextDelta, buitenRol }) -> do
-        (try $ lift $ getPerspectRol buitenRol) >>=
-          handlePerspectRolError "Perspectives.CollectAffectedContexts.magic"
-            \(PerspectRol { universeRoleDelta: externalRoleDelta, contextDelta: eContextDelta }) -> do
-              addDelta $ DeltaInTransaction { users, delta: externalRoleDelta }
-              addDelta $ DeltaInTransaction { users, delta: universeContextDelta }
-              addDelta $ DeltaInTransaction { users, delta: eContextDelta }
-              for_ (toArray roleInstances) \roleInstance -> do
-                (try $ lift $ getPerspectRol roleInstance) >>=
-                  handlePerspectRolError "Perspectives.CollectAffectedContexts.magic"
-                    \(PerspectRol { universeRoleDelta, contextDelta }) -> do
-                      addDelta $ DeltaInTransaction { users, delta: universeRoleDelta }
-                      -- Not if the roleInstance is an external role!
-                      if (not $ isDefaultContextDelta contextDelta) then addDelta $ DeltaInTransaction { users, delta: contextDelta }
-                      else pure unit
+      \(PerspectContext { buitenRol }) -> do
+        -- Get creation deltas for the context (UniverseContextDelta).
+        contextDeltas <- lift $ getDeltasForResource (unwrap ctxt)
+        for_ contextDeltas \(DeltaStoreRecord { signedDelta }) ->
+          addDelta $ DeltaInTransaction { users, delta: signedDelta }
+        -- Get creation deltas for the external role (UniverseRoleDelta + ContextDelta).
+        extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
+        for_ extRoleDeltas \(DeltaStoreRecord { signedDelta }) ->
+          addDelta $ DeltaInTransaction { users, delta: signedDelta }
+        -- Get creation deltas for each role instance.
+        for_ roleInstances \roleInstance -> do
+          roleDeltas <- lift $ getDeltasForResource (unwrap roleInstance)
+          for_ roleDeltas \(DeltaStoreRecord { signedDelta }) ->
+            addDelta $ DeltaInTransaction { users, delta: signedDelta }
 
 -- | Adds users for SYNCHRONISATION, guarantees RULE TRIGGERING.
 -- The role instance is the current object; so if a perspective is conditional on object state, we can check

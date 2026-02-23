@@ -40,12 +40,12 @@ import Perspectives.ContextAndRole (defaultRolRecord)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (###=))
 import Perspectives.Deltas (addCreatedRoleToTransaction)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
+import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Instances.ObjectGetters (contextType_)
 import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType, cacheEntity)
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.ResourceIdentifiers (takeGuid)
-import Perspectives.SerializableNonEmptyArray (singleton) as SNEA
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Types.ObjectGetters (roleAspectsClosure)
 import Perspectives.TypesForDeltas (UniverseRoleDelta(..), UniverseRoleDeltaType(..))
@@ -68,11 +68,13 @@ constructEmptyRole contextInstance roleType i rolInstanceId = do
     ( writeJSON $ stripResourceSchemes $ UniverseRoleDelta
         { id: contextInstance
         , contextType
-        , roleInstances: (SNEA.singleton rolInstanceId)
+        , roleInstance: rolInstanceId
         , roleType
         , authorizedRole: Nothing
         , deltaType: ConstructEmptyRole
         , subject
+        , resourceKey: unwrap rolInstanceId
+        , resourceVersion: 0
         }
     )
   role <- pure
@@ -83,10 +85,12 @@ constructEmptyRole contextInstance roleType i rolInstanceId = do
         , allTypes = allTypes
         , context = contextInstance
         , occurrence = i
-        , universeRoleDelta = delta
         , states = [ StateIdentifier $ unwrap roleType ]
         }
     )
   void $ lift $ cacheEntity rolInstanceId role
+  -- Store the UniverseRoleDelta in the DeltaStore for later retrieval.
+  -- It will be added to the transaction (with users) by addRoleInstanceToContext.
+  lift $ storeDeltaFromSignedDelta delta
   addCreatedRoleToTransaction rolInstanceId
   pure role

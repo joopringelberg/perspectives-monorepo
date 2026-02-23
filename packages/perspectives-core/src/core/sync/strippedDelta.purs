@@ -26,7 +26,7 @@ import Control.Monad.AvarMonadAsk (gets)
 import Data.Map (Map, lookup)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (over, unwrap)
-import Data.Traversable (for_, traverse)
+import Data.Traversable (traverse)
 import Decacheable (decache)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ContextAndRole (change_context_publicUrl)
@@ -41,9 +41,9 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Rol
 import Perspectives.Representation.TypeIdentifiers (ResourceType(..))
 import Perspectives.ResourceIdentifiers (addPublicScheme, createDefaultIdentifier, createLocalIdentifier, createPublicIdentifier, createRemoteIdentifier, isInPublicScheme, stripNonPublicIdentifiers, takeGuid)
 import Perspectives.ResourceIdentifiers.Parser (ResourceIdentifier)
-import Perspectives.SerializableNonEmptyArray (SerializableNonEmptyArray(..), toArray)
+
 import Perspectives.TypesForDeltas (ContextDelta(..), RoleBindingDelta(..), RolePropertyDelta(..), UniverseContextDelta(..), UniverseRoleDelta(..))
-import Prelude (Unit, bind, discard, map, pure, void, ($), (<$>), (<<<), (>>=))
+import Prelude (Unit, bind, discard, pure, void, ($), (<$>), (<<<), (>>=))
 
 -----------------------------------------------------------
 -- STRIPPING RESOURCE IDENTIFIERS IN A DELTA
@@ -73,28 +73,24 @@ instance StrippedDelta UniverseContextDelta where
 instance StrippedDelta UniverseRoleDelta where
   stripResourceSchemes (UniverseRoleDelta r) = UniverseRoleDelta r
     { id = over ContextInstance stripNonPublicIdentifiers r.id
-    , roleInstances = over SerializableNonEmptyArray (map (over RoleInstance stripNonPublicIdentifiers)) r.roleInstances
+    , roleInstance = over RoleInstance stripNonPublicIdentifiers r.roleInstance
     }
   addResourceSchemes storageSchemes (UniverseRoleDelta r) = do
     id <- ContextInstance <$> (addSchemeToResourceIdentifier storageSchemes (CType r.contextType)) (unwrap r.id)
-    roleInstances <- (traverse (addSchemeToResourceIdentifier storageSchemes (RType r.roleType) <<< unwrap)) r.roleInstances
+    ri <- RoleInstance <$> addSchemeToResourceIdentifier storageSchemes (RType r.roleType) (unwrap r.roleInstance)
     pure $ UniverseRoleDelta r
       { id = id
-      , roleInstances = RoleInstance <$> roleInstances
+      , roleInstance = ri
       }
 
-  --  UniverseRoleDelta r 
-  -- { id = over ContextInstance (addSchemeToResourceIdentifier storageSchemes (CType r.contextType)) r.id
-  -- , roleInstances = over SerializableNonEmptyArray (map (over RoleInstance (addSchemeToResourceIdentifier storageSchemes (RType r.roleType)))) r.roleInstances
-  -- }
   addPublicResourceScheme url (UniverseRoleDelta r) = do
     curl <- addOwnStorageScheme (CType r.contextType) (unwrap r.id) >>= getUrlForPublishing url <<< ContextInstance
     rec <- pure r
       { id = over ContextInstance (createPublicIdentifier curl) r.id
-      , roleInstances = over SerializableNonEmptyArray (map (over RoleInstance (createPublicIdentifier curl))) r.roleInstances
+      , roleInstance = over RoleInstance (createPublicIdentifier curl) r.roleInstance
       }
     void $ decache rec.id
-    for_ (toArray rec.roleInstances) decache
+    void $ decache rec.roleInstance
     pure $ UniverseRoleDelta rec
 
 instance StrippedDelta ContextDelta where

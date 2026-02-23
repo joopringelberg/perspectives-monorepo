@@ -72,7 +72,6 @@ import Perspectives.Error.Boundaries (handleDomeinFileError, handleExternalFunct
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
-import Perspectives.InstanceRepresentation (PerspectContext)
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance, createAndAddRoleInstance_)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesDatabase, getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries)
@@ -452,7 +451,7 @@ createInitialInstances unversionedModelname versionedModelName patch build versi
     Nothing
   case r of
     Left e -> logPerspectivesError (Custom (show e))
-    Right (ctxt :: PerspectContext) -> do
+    Right { context: ctxt } -> do
       lift $ void $ saveEntiteit_ (identifier ctxt) ctxt
       addCreatedContextToTransaction (identifier ctxt)
 
@@ -674,7 +673,7 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
                 $ withPerspectivesUser (PerspectivesUser $ "pub:https://" <> ensureSlash namespace <> ensureSlash databaseName <> "#" <> takeGuid (unwrap sysUser))
                     -- Notice that the deltas in the result of constructEmptyContext are not added to the Transaction yet.
                     -- This is what we want; we take a short route to creating a public instance of TheWorld here.
-                    (runExceptT $ constructEmptyContext theworldid theWorld "TheWorld" (PropertySerialization empty) Nothing)
+                    (void $ runExceptT $ constructEmptyContext theworldid theWorld "TheWorld" (PropertySerialization empty) Nothing)
               lift $ void $ saveEntiteit theworldid
             _ -> pure unit
         _, _, _ -> pure unit
