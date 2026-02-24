@@ -73,6 +73,7 @@ import Perspectives.Assignment.Update (cacheAndSave, setProperty)
 import Perspectives.ContextAndRole (rol_property)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, removeInternally, (##=))
 import Perspectives.Data.EncodableMap as EM
+import Perspectives.DataUpgrade.DeltasMigration (migrateDeltasToStore)
 import Perspectives.DataUpgrade.PatchModels (patchModels)
 import Perspectives.DataUpgrade.PatchModels.PDR3061 as PDR3061
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
@@ -301,6 +302,20 @@ runDataUpgrades = do
             updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.2"
             updateModelForUpgrade $ ModelUri "model://perspectives.domains#CouchdbManagement@12.2"
             addModelToLocalStore (ModelUri repositoryRegistryModelName) isInitialLoad
+    )
+
+  -- Migrate deltas from old embedded format to the new DeltaStore.
+  -- This creates the DeltaStore and ResourceVersionStore databases (via databaseInfo)
+  -- and populates them from the entity data.
+  -- No transaction needed: old SignedDeltas are preserved as-is (not re-signed).
+  runUpgrade installedVersion "3.1.0"
+    ( \_ -> do
+        -- Ensure the DeltaStore and ResourceVersionStore databases exist.
+        sysId <- getSystemIdentifier
+        void $ databaseInfo (sysId <> "_deltastore")
+        void $ databaseInfo (sysId <> "_resourceversions")
+        -- Run the migration (reads old delta fields, stores them in DeltaStore, re-saves entities).
+        migrateDeltasToStore
     )
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)

@@ -10,6 +10,7 @@ import Perspectives.ApiTypes (PropertySerialization(..))
 import Perspectives.Assignment.Update (getSubject, setProperty)
 import Perspectives.Authenticate (signDelta)
 import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord)
+import Perspectives.Persistence.ResourceVersionStore (incrementResourceVersion)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (###=))
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedRoleToTransaction)
 import Perspectives.DependencyTracking.Dependency (findRoleRequests)
@@ -93,6 +94,9 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
         , resourceVersion: 0
         }
     )
+  -- The UniverseRoleDelta for the external role already uses version 0 on this resourceKey,
+  -- so the ContextDelta must use version 1 to avoid a collision in the DeltaStore.
+  contextDeltaVersion <- lift $ lift $ incrementResourceVersion (unwrap externalRole)
   contextDelta <- lift $ signDelta
     ( writeJSON $ stripResourceSchemes $ ContextDelta
         { contextInstance: contextInstanceId
@@ -104,7 +108,7 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
         , deltaType: AddExternalRole
         , subject
         , resourceKey: unwrap externalRole
-        , resourceVersion: 0
+        , resourceVersion: contextDeltaVersion
         }
     )
   _ <- lift $ lift $ cacheEntity externalRole
