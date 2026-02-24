@@ -18,7 +18,8 @@ const pageDispatcherVersion = "1";
 export default defineConfig(({ mode }) => {
   const isDev = mode === 'development'
   const devBase = '/'
-  const { build, buildPath } = JSON.parse(fs.readFileSync("./build.json", { encoding: "utf-8" }))
+  const { build, buildPath: jsonBuildPath } = JSON.parse(fs.readFileSync("./build.json", { encoding: "utf-8" }))
+  const buildPath = process.env.BUILD_PATH || jsonBuildPath
 
   // module-scope guards
   let devSwDone = false

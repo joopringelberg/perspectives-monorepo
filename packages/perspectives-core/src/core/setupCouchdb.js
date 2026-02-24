@@ -5,7 +5,7 @@
 export const roleView = (function (doc)
 {
   // a proxy for being a role:
-  if (doc.universeRoleDelta)
+  if (doc.context)
   {
     doc.allTypes.forEach(
       function(typeId)
@@ -44,7 +44,7 @@ export const roleFromContextView = (function (doc)
     return s.substring( s.lastIndexOf("#") + 1 );
   }
   // a proxy for being a role:
-  if (doc.universeRoleDelta)
+  if (doc.context)
   {
     doc.allTypes.forEach(
       function(typeId)
@@ -115,7 +115,7 @@ export const contextSpecialisations = (function( doc )
 export const filler2filledView = (function(filled)
   {
     // a proxy for being a role:
-    if (filled.universeRoleDelta)
+    if (filled.context)
     {
       emit(filled.binding, filled.id);
     }
@@ -134,7 +134,7 @@ export const filled2fillerView = (function(filler)
   // The latter two were originally used to register the reverse link from filler to filled.
   // As this view is used in situations where filled role is no longer present, that type information is useful.
   // a proxy for being a role:
-  if (filler.universeRoleDelta)
+  if (filler.context)
   {
     Object.keys( filler.filledRoles ).forEach(
       function( contextType )
@@ -159,7 +159,7 @@ export const filled2fillerView = (function(filler)
 export const context2roleView = (function(role)
 {
   // a proxy for being a role:
-  if (role.universeRoleDelta)
+  if (role.context)
   {
     emit( role.context, role.id);
   }
@@ -170,7 +170,7 @@ export const context2roleView = (function(role)
 export const role2contextView = (function(context)
 {
   // a proxy for being a context.
-  if (context.universeContextDelta)
+  if (context.rolInContext)
   {
     Object.values( context.rolInContext ).forEach(
       function(roles)
