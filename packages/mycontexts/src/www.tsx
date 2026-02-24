@@ -9,7 +9,7 @@ declare global {
 }
 import './styles/www.css';
 import './styles/accessibility.css'
-import {addRoleToClipboard, externalRoleType, i18next} from 'perspectives-react';
+import {addRoleToClipboard, externalRoleType, i18next, FileDropZone, importTransaction} from 'perspectives-react';
 import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective, InspectableContext, InspectableRole, Warning } from 'perspectives-proxy';
 import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice, InspectableContextView, InspectableRoleInstanceView} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
@@ -64,6 +64,8 @@ interface WWWComponentState {
   inspectableContext?: InspectableContext;
   inspectableRole?: InspectableRole;
   // No subscription handle needed; we fetch on-demand.
+  // Import transaction modal state
+  showImportTransaction: boolean;
 }
 
 class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponentState> {
@@ -92,6 +94,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       , inspectorMode: undefined
       , inspectableContext: undefined
       , inspectableRole: undefined
+      , showImportTransaction: false
     };
     this.checkScreenSize = this.checkScreenSize.bind(this);
     this.getScreenUnsubscriber = undefined;
@@ -724,6 +727,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           { component.renderBottomNavBar() }
         <EndUserNotifier message={component.state.endUserMessage}/>
         { component.renderInspector() }
+        { component.renderImportTransactionModal() }
         <UserChoice message={component.state.choiceMessage}/>
       </Container>
       </PSContext.Provider>
@@ -750,6 +754,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'apps'})}>Apps</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'settings'})}>Settings</NavDropdown.Item>
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.setState( {leftPanelContent: 'myroles'} ) }>{ i18next.t("www_myroles", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
+        <DropdownDivider />
+        <NavDropdown.Item onClick={() => component.setState({showImportTransaction: true})}>{ i18next.t("www_importTransaction", {ns: 'mycontexts'}) }</NavDropdown.Item>
         { component.state.actions && Object.keys( component.state.actions ).length > 0 ?
           <>
           <DropdownDivider />
@@ -823,6 +829,29 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               <div>Loading…</div>
             )
           ) : null}
+        </Modal.Body>
+      </Modal>
+    );
+  }
+
+  renderImportTransactionModal() {
+    const component = this;
+    return (
+      <Modal show={component.state.showImportTransaction} onHide={() => component.setState({showImportTransaction: false})} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{ i18next.t("www_importTransaction", {ns: 'mycontexts'}) }</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <FileDropZone
+            handlefile={(file: File) => { importTransaction(file); component.setState({showImportTransaction: false}); }}
+            extension=".json"
+            collapsenavbar={() => component.setState({showImportTransaction: false})}
+          >
+            <div className="text-center p-4 border border-secondary rounded">
+              <i className="bi bi-cloud-upload fs-1" aria-hidden="true"></i>
+              <p>{ i18next.t("www_importTransaction_dropHere", {ns: 'mycontexts'}) }</p>
+            </div>
+          </FileDropZone>
         </Modal.Body>
       </Modal>
     );
@@ -988,6 +1017,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           { component.renderBottomNavBar() }
           <EndUserNotifier message={component.state.endUserMessage}/>
           { component.renderInspector() }
+          { component.renderImportTransactionModal() }
           <UserChoice message={component.state.choiceMessage}/>
         </Container>
       </PSContext.Provider>);

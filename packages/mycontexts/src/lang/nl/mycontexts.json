@@ -148,4 +148,6 @@
   , "wider_context": "Hoort bij:"
   , "dive_in": "Duik in:"
   , "jump_to": "Spring naar:"
+  , "www_importTransaction": "Contexten en rollen importeren"
+  , "www_importTransaction_dropHere": "Sleep je bestand hier naartoe of klik om te selecteren"
 }
