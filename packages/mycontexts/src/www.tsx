@@ -916,7 +916,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
             <FileDropZone
               handlefile={(file: File) => component.handleImportFile(file)}
               extension=".json"
-              collapsenavbar={() => component.closeImportModal()}
+              collapsenavbar={() => {/* modal manages its own lifecycle */}}
             >
               <div className="text-center p-4 border border-secondary rounded">
                 <i className="bi bi-cloud-upload fs-1" aria-hidden="true"></i>
