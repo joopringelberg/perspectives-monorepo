@@ -233,9 +233,8 @@ migrateRolDeltas { id: roleId, universeRoleDelta, contextDelta, bindingDelta, pr
       }
 
   -- Set the resource version for the role (highest assigned = 1 if contextDelta was stored, else 0)
-  if not (isSentinel contextDelta)
-    then setResourceVersion resourceKey 1
-    else setResourceVersion resourceKey 0
+  if not (isSentinel contextDelta) then setResourceVersion resourceKey 1
+  else setResourceVersion resourceKey 0
 
   -- 3. BindingDelta (if present and not sentinel)
   case bindingDelta of

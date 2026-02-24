@@ -105,7 +105,7 @@ import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..), EnumeratedPropertyType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
-import Perspectives.SetupCouchdb (setContext2RoleView, setFilled2FillerView, setFiller2FilledView, setRole2ContextView)
+import Perspectives.SetupCouchdb (setContext2RoleView, setContextView, setCredentialsView, setFilled2FillerView, setFiller2FilledView, setRole2ContextView, setRoleFromContextView, setRoleView)
 import Perspectives.SetupUser (setupInvertedQueryDatabase)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.Sidecar.NormalizeTypeNames (fqn2tid, normalize, normalizeTypeNames)
@@ -316,6 +316,21 @@ runDataUpgrades = do
         void $ databaseInfo (sysId <> "_resourceversions")
         -- Run the migration (reads old delta fields, stores them in DeltaStore, re-saves entities).
         migrateDeltasToStore
+    )
+
+  runUpgrade installedVersion "3.1.1"
+    ( \_ -> do
+        -- Rebuild all entity views whose definitions have changed
+        -- (proxy checks for role/context documents).
+        db <- entitiesDatabaseName
+        setRoleView db
+        setRoleFromContextView db
+        setFiller2FilledView db
+        setFilled2FillerView db
+        setContext2RoleView db
+        setRole2ContextView db
+        setContextView db
+        setCredentialsView db
     )
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)
