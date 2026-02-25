@@ -148,4 +148,13 @@
   , "wider_context": "Belongs to:"
   , "dive_in": "Dive in:"
   , "jump_to": "Jump to:"
+  , "www_importTransaction": "Import contexts and roles"
+  , "www_importTransaction_dropHere": "Drop your file here or click to select"
+  , "www_importTransaction_confirmationCode": "Enter the confirmation code:"
+  , "www_importTransaction_invalidCode": "This code is invalid. Try again or cancel."
+  , "www_importTransaction_submit": "Import"
+  , "www_importTransaction_notJson": "The selected file is not a JSON file. Please select a valid JSON file."
+  , "www_importTransaction_invalidJson": "The file contains invalid JSON. Please check the file format and try again."
+  , "www_importTransaction_invalidTransaction": "The invitation file contains an invalid transaction. Please request a new invitation file."
+  , "www_importTransaction_notValid": "The file is not a valid Perspectives transaction or invitation."
   }

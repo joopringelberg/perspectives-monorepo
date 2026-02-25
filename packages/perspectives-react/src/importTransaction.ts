@@ -2,6 +2,19 @@ import {PDRproxy} from "perspectives-proxy";
 import {UserMessagingPromise} from "./userMessaging.js";
 import i18next from "i18next";
 
+// Sends a parsed transaction object to the PDR proxy.
+export function sendTransactionToProxy(transaction: any): void
+{
+  PDRproxy
+    .then( pproxy => pproxy.importTransaction( transaction ) )
+    .catch(e => UserMessagingPromise.then( um => 
+      um.addMessageForEndUser(
+        { title: i18next.t("importTransaction_title", { ns: 'preact' }) 
+        , message: i18next.t("importTransaction_message", {ns: 'preact'})
+        , error: e.toString()
+        })));
+}
+
 export default function importTransaction(theFile : File)
 {
   // A slight check.

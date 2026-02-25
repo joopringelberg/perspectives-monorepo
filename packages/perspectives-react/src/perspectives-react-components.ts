@@ -2,7 +2,7 @@ import "./types/globals.ts";
 
 // No items are included from the folder notinuse.
 export { ViewOnExternalRole } from "./views";
-export { default as importTransaction } from "./importTransaction";
+export { default as importTransaction, sendTransactionToProxy } from "./importTransaction";
 export * from "./reactcontexts";
 export { default as ExternalRole } from "./externalrole";
 export {
