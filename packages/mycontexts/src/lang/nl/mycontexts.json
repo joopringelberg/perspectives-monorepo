@@ -148,4 +148,13 @@
   , "wider_context": "Hoort bij:"
   , "dive_in": "Duik in:"
   , "jump_to": "Spring naar:"
+  , "www_importTransaction": "Contexten en rollen importeren"
+  , "www_importTransaction_dropHere": "Sleep je bestand hier naartoe of klik om te selecteren"
+  , "www_importTransaction_confirmationCode": "Voer de bevestigingscode in:"
+  , "www_importTransaction_invalidCode": "Deze code is ongeldig. Probeer opnieuw of annuleer."
+  , "www_importTransaction_submit": "Importeer"
+  , "www_importTransaction_notJson": "Het geselecteerde bestand is geen JSON-bestand. Selecteer een geldig JSON-bestand."
+  , "www_importTransaction_invalidJson": "Het bestand bevat ongeldige JSON. Controleer het bestandsformaat en probeer opnieuw."
+  , "www_importTransaction_invalidTransaction": "Het uitnodigingsbestand bevat een ongeldige transactie. Vraag een nieuw uitnodigingsbestand aan."
+  , "www_importTransaction_notValid": "Het bestand is geen geldige Perspectives-transactie of uitnodiging."
 }

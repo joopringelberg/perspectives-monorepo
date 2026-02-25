@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider, Modal, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider, Modal, OverlayTrigger, Tooltip, Button, Form } from 'react-bootstrap';
 
 // Add axe to the Window interface for TypeScript
 declare global {
@@ -9,7 +9,7 @@ declare global {
 }
 import './styles/www.css';
 import './styles/accessibility.css'
-import {addRoleToClipboard, externalRoleType, i18next} from 'perspectives-react';
+import {addRoleToClipboard, externalRoleType, i18next, FileDropZone, sendTransactionToProxy} from 'perspectives-react';
 import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective, InspectableContext, InspectableRole, Warning } from 'perspectives-proxy';
 import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice, InspectableContextView, InspectableRoleInstanceView} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
@@ -64,6 +64,11 @@ interface WWWComponentState {
   inspectableContext?: InspectableContext;
   inspectableRole?: InspectableRole;
   // No subscription handle needed; we fetch on-demand.
+  // Import transaction modal state
+  showImportTransaction: boolean;
+  invitationData?: { message: string; transaction: any; confirmation: string; };
+  importConfirmationCode: string;
+  importCodeInvalid: boolean;
 }
 
 class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponentState> {
@@ -92,6 +97,10 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       , inspectorMode: undefined
       , inspectableContext: undefined
       , inspectableRole: undefined
+      , showImportTransaction: false
+      , invitationData: undefined
+      , importConfirmationCode: ''
+      , importCodeInvalid: false
     };
     this.checkScreenSize = this.checkScreenSize.bind(this);
     this.getScreenUnsubscriber = undefined;
@@ -724,6 +733,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           { component.renderBottomNavBar() }
         <EndUserNotifier message={component.state.endUserMessage}/>
         { component.renderInspector() }
+        { component.renderImportTransactionModal() }
         <UserChoice message={component.state.choiceMessage}/>
       </Container>
       </PSContext.Provider>
@@ -750,6 +760,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'apps'})}>Apps</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'settings'})}>Settings</NavDropdown.Item>
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.setState( {leftPanelContent: 'myroles'} ) }>{ i18next.t("www_myroles", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
+        <DropdownDivider />
+        <NavDropdown.Item onClick={() => component.setState({showImportTransaction: true})}>{ i18next.t("www_importTransaction", {ns: 'mycontexts'}) }</NavDropdown.Item>
         { component.state.actions && Object.keys( component.state.actions ).length > 0 ?
           <>
           <DropdownDivider />
@@ -824,6 +836,129 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
             )
           ) : null}
         </Modal.Body>
+      </Modal>
+    );
+  }
+
+  closeImportModal() {
+    this.setState({
+      showImportTransaction: false,
+      invitationData: undefined,
+      importConfirmationCode: '',
+      importCodeInvalid: false,
+    });
+  }
+
+  handleImportFile(file: File) {
+    const component = this;
+    if (file.type !== "application/json") {
+      UserMessagingPromise.then( um => um.addMessageForEndUser(
+        { title: i18next.t("www_importTransaction", {ns: 'mycontexts'})
+        , message: i18next.t("www_importTransaction_notJson", {ns: 'mycontexts'})
+        , error: undefined
+        }));
+      return;
+    }
+    file.text().then(text => {
+      let json: any;
+      try {
+        json = JSON.parse(text);
+      } catch (e) {
+        UserMessagingPromise.then( um => um.addMessageForEndUser(
+          { title: i18next.t("www_importTransaction", {ns: 'mycontexts'})
+          , message: i18next.t("www_importTransaction_invalidJson", {ns: 'mycontexts'})
+          , error: (e as Error).toString()
+          }));
+        return;
+      }
+      if (json.message !== undefined && json.transaction !== undefined && json.confirmation !== undefined) {
+        // It's an invitation: parse the nested transaction string.
+        let transaction: any;
+        try {
+          transaction = typeof json.transaction === 'string' ? JSON.parse(json.transaction) : json.transaction;
+        } catch (e) {
+          UserMessagingPromise.then( um => um.addMessageForEndUser(
+            { title: i18next.t("www_importTransaction", {ns: 'mycontexts'})
+            , message: i18next.t("www_importTransaction_invalidTransaction", {ns: 'mycontexts'})
+            , error: (e as Error).toString()
+            }));
+          return;
+        }
+        component.setState({
+          invitationData: { message: json.message, transaction, confirmation: json.confirmation },
+          importConfirmationCode: '',
+          importCodeInvalid: false,
+        });
+      } else if (json.timeStamp !== undefined && json.deltas !== undefined) {
+        // It's a raw transaction; import directly.
+        sendTransactionToProxy(json);
+        component.closeImportModal();
+      } else {
+        UserMessagingPromise.then( um => um.addMessageForEndUser(
+          { title: i18next.t("www_importTransaction", {ns: 'mycontexts'})
+          , message: i18next.t("www_importTransaction_notValid", {ns: 'mycontexts'})
+          , error: undefined
+          }));
+      }
+    });
+  }
+
+  renderImportTransactionModal() {
+    const component = this;
+    const { invitationData, importConfirmationCode, importCodeInvalid } = component.state;
+    return (
+      <Modal show={component.state.showImportTransaction} onHide={() => component.closeImportModal()} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{ i18next.t("www_importTransaction", {ns: 'mycontexts'}) }</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          { !invitationData ?
+            <FileDropZone
+              handlefile={(file: File) => component.handleImportFile(file)}
+              extension=".json"
+              collapsenavbar={() => {/* modal manages its own lifecycle */}}
+            >
+              <div className="text-center p-4 border border-secondary rounded">
+                <i className="bi bi-cloud-upload fs-1" aria-hidden="true"></i>
+                <p>{ i18next.t("www_importTransaction_dropHere", {ns: 'mycontexts'}) }</p>
+              </div>
+            </FileDropZone>
+            :
+            <div>
+              <p>{invitationData.message}</p>
+              <Form.Group>
+                <Form.Label>{ i18next.t("www_importTransaction_confirmationCode", {ns: 'mycontexts'}) }</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={importConfirmationCode}
+                  onChange={(e) => component.setState({importConfirmationCode: e.target.value, importCodeInvalid: false})}
+                  isInvalid={importCodeInvalid}
+                />
+                <Form.Control.Feedback type="invalid">
+                  { i18next.t("www_importTransaction_invalidCode", {ns: 'mycontexts'}) }
+                </Form.Control.Feedback>
+              </Form.Group>
+            </div>
+          }
+        </Modal.Body>
+        { invitationData ?
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => component.closeImportModal()}>
+              { i18next.t("genericClose", {ns: 'mycontexts'}) }
+            </Button>
+            <Button variant="primary" onClick={() => {
+              if (importConfirmationCode === invitationData.confirmation) {
+                sendTransactionToProxy(invitationData.transaction);
+                component.closeImportModal();
+              } else {
+                component.setState({importCodeInvalid: true});
+              }
+            }}>
+              { i18next.t("www_importTransaction_submit", {ns: 'mycontexts'}) }
+            </Button>
+          </Modal.Footer>
+          : null
+        }
       </Modal>
     );
   }
@@ -988,6 +1123,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           { component.renderBottomNavBar() }
           <EndUserNotifier message={component.state.endUserMessage}/>
           { component.renderInspector() }
+          { component.renderImportTransactionModal() }
           <UserChoice message={component.state.choiceMessage}/>
         </Container>
       </PSContext.Provider>);
