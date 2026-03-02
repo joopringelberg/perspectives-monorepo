@@ -57,6 +57,7 @@ import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedCon
 import Perspectives.DependencyTracking.Dependency (findRoleRequests)
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Error.Pretty (logPerspectivesErrorPretty)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, typeUri2LocalName_, typeUri2ModelUri_)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.Builders (lookupOrCreateContextInstance, lookupOrCreateRoleInstance, createAndAddRoleInstance)
@@ -198,7 +199,7 @@ executeRolePropertyDelta d@(RolePropertyDelta { id, roleType, deltaType, values,
 -- fouten en waarschuwingen kunnen sturen.
 -- Totdat we dat hebben, zetten we een waarschuwing op de console.
 handleError :: PerspectivesError -> MonadPerspectivesTransaction Unit
-handleError e = liftEffect $ log (show e)
+handleError e = lift $ logPerspectivesErrorPretty e
 
 -- | Retrieves from the repository the model that holds the ContextType, if necessary.
 -- | The ConstructExternalRole always precedes the UniverseContextDelta for the context it is the external
@@ -247,7 +248,7 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
           else pure unit
           pure id
       )
-  else logPerspectivesError $ UnauthorizedForContext "auteur" subject contextType
+  else lift $ logPerspectivesErrorPretty $ UnauthorizedForContext "auteur" subject contextType
 
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 executeUniverseRoleDelta :: UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction Unit

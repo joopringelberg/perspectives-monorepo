@@ -47,7 +47,7 @@ import Perspectives.Assignment.Update (addProperty, deleteProperty, moveRoleInst
 import Perspectives.CoreTypes (type (~~>), MP, MPT, MonadPerspectivesTransaction, Updater, (###>>), (##=), (##>), (##>>))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.Error.Boundaries (handlePerspectRolError)
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Error.Pretty (logPerspectivesErrorPretty)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunctionNArgs, lookupHiddenFunction)
 import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.Identifiers (buitenRol)
@@ -435,7 +435,7 @@ compileContextAssignmentFromRole (UQD _ (QF.CreateContext qualifiedContextTypeId
             )
           case contextCreationResult of
             Left e -> do
-              logPerspectivesError e
+              lift $ logPerspectivesErrorPretty e
               pure $ Left e
             Right (ContextInstance newContext) -> pure $ Right newContext
 
@@ -467,7 +467,7 @@ compileContextAssignmentFromRole (UQD _ (QF.CreateContext qualifiedContextTypeId
                 )
               case r of
                 Left e -> do
-                  logPerspectivesError e
+                  lift $ logPerspectivesErrorPretty e
                   pure $ Left e
                 Right (ContextInstance newContext) -> do
                   void $ createAndAddRoleInstance roleTypeToCreate (unwrap ctxt)
@@ -500,7 +500,7 @@ compileContextAssignmentFromRole (UQD _ (QF.CreateRootContext qualifiedContextTy
           )
         case r of
           Left e -> do
-            logPerspectivesError e
+            lift $ logPerspectivesErrorPretty e
             pure $ Left e
           Right (ContextInstance newContext) -> pure $ Right newContext
 
@@ -539,7 +539,7 @@ compileContextAssignmentFromRole (UQD _ (QF.CreateContext_ qualifiedContextTypeI
           -- now bind it in the role instance.
           case newContext of
             Left e -> do
-              logPerspectivesError e
+              lift $ logPerspectivesErrorPretty e
               pure $ Left e
             Right (ContextInstance ctxtId) -> do
               -- now bind it in the role instance.
@@ -623,7 +623,7 @@ compileContextCreatingAssignments (UQD _ (QF.CreateContext qualifiedContextTypeI
             )
           case r of
             Left e -> do
-              logPerspectivesError e
+              lift $ logPerspectivesErrorPretty e
               pure $ Left e
             Right ci -> pure $ Right $ unwrap ci
 
@@ -652,7 +652,7 @@ compileContextCreatingAssignments (UQD _ (QF.CreateContext qualifiedContextTypeI
                 )
               case r of
                 Left e -> do
-                  logPerspectivesError e
+                  lift $ logPerspectivesErrorPretty e
                   pure $ Left e
                 Right (ContextInstance contextIdentifier) -> (Right <<< unwrap <<< unsafePartial fromJust) <$> createAndAddRoleInstance
                   roleTypeToCreate
@@ -686,7 +686,7 @@ compileContextCreatingAssignments (UQD _ (QF.CreateRootContext qualifiedContextT
         )
       case contextCreationResult of
         Left e -> do
-          logPerspectivesError e
+          lift $ logPerspectivesErrorPretty e
           pure $ Left e
         Right (ContextInstance ctxtId) -> pure $ Right ctxtId
     modify (over Transaction \t -> t { authoringRole = originalRole })

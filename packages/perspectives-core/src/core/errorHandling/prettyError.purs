@@ -7,11 +7,13 @@
 module Perspectives.Error.Pretty
   ( renderPerspectivesError
   , humanizePerspectivesError
+  , logPerspectivesErrorPretty
   ) where
 
 import Prelude
 
 import Data.Maybe (Maybe(..))
+import Effect.Class.Console (log)
 import Data.Traversable (for, traverse)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Identifiers (typeUri2ModelUri, typeUri2LocalName_)
@@ -24,6 +26,10 @@ import Perspectives.Sidecar.ToReadable (toReadable)
 -- | Falls back to `show` if a constructor isn't handled specially.
 renderPerspectivesError :: PerspectivesError -> MonadPerspectives String
 renderPerspectivesError e = humanizePerspectivesError e >>= pure <<< show
+
+-- | Log a PerspectivesError to the console with human-readable type names.
+logPerspectivesErrorPretty :: PerspectivesError -> MonadPerspectives Unit
+logPerspectivesErrorPretty e = renderPerspectivesError e >>= log
 
 -- | Map typed identifiers inside an error to their readable counterparts.
 -- | Keep everything else unchanged. This allows using the existing Show instance
@@ -46,9 +52,18 @@ humanizePerspectivesError e = case e of
     p' <- swapPropertyType p
     pure (UnauthorizedForProperty who s' o' p' v mstart mend)
 
+  UnauthorizedForContext who s ct -> do
+    s' <- swapRoleType s
+    ct' <- toReadable ct
+    pure (UnauthorizedForContext who s' ct')
+
   UnknownMarkDownConditionProperty start end prop rt -> do
     rt' <- swapRoleType rt
     pure (UnknownMarkDownConditionProperty start end prop rt')
+
+  UnknownMarkDownAction start end action rt -> do
+    rt' <- swapRoleType rt
+    pure (UnknownMarkDownAction start end action rt')
 
   StateDoesNotExist sid start end -> do
     sid' <- toReadable sid
