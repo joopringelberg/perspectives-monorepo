@@ -30,7 +30,7 @@ module Perspectives.Assignment.SerialiseAsDeltas
   ) where
 
 import Control.Monad.AvarMonadAsk (get) as AMA
-import Control.Monad.Error.Class (throwError, try)
+import Control.Monad.Error.Class (try)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (StateT, gets, runStateT)
 import Control.Monad.Trans.Class (lift)
@@ -44,8 +44,6 @@ import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (unwrap)
 import Effect.Aff.AVar (new)
 import Effect.Class.Console (log)
-import Effect.Exception (error)
-import Foreign.Object (lookup)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, (###=), (##=))
 import Perspectives.Deltas (addDelta, addPublicKeysToTransaction)
@@ -72,7 +70,7 @@ import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (perspectivesClosure_, propertiesInPerspective)
-import Prelude (Unit, bind, discard, join, pure, show, unit, void, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=))
+import Prelude (Unit, bind, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=))
 import Simple.JSON (unsafeStringify, write)
 
 serialisedAsDeltasFor :: ContextInstance -> RoleInstance -> MonadPerspectivesTransaction Unit

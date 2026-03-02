@@ -28,7 +28,6 @@ import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
 import Data.Array (catMaybes, concat, filter, fromFoldable)
-import Data.Array.NonEmpty (head)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -85,7 +84,7 @@ import Perspectives.Sync.Transaction (PublicKeyInfo)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, not, pure, show, unit, void, ($), (*>), (+), (<$>), (<<<), (<>), (==), (/=), (>), (>>=))
+import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, pure, show, unit, void, ($), (*>), (+), (/=), (<$>), (<<<), (<>), (==), (>), (>>=))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -385,24 +384,29 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, author
 -- TODO #29 Refactor delta decoding for performance
 -- | Executes all deltas, which leads to a changed store of resources. 
 -- | Does not change anything if some of the information could not be verified.
+-- | The verified keys map is passed from verifyTransaction to executeTransaction'
+-- | so that keys of authors not yet in the entity store can still be used for
+-- | re-verification during delta execution.
 executeTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
 executeTransaction t = try (verifyTransaction t) >>= case _ of
   Left e -> logPerspectivesError (Custom $ "Could not execute a transaction. Reason: " <> show e)
-  Right _ -> executeTransaction' t
+  Right verifiedKeys -> executeTransaction' verifiedKeys t
 
   where
 
-  verifyTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
-  verifyTransaction (TransactionForPeer { deltas, publicKeys }) = void $ ST.runStateT
-    ( do
-        -- Verify public key informaton.
-        -- Stop or throw if a key cannot be verified!
-        forWithIndex_ (unwrap publicKeys) verifyPublicKey
-        -- Verify all deltas, using the (now verified) public keys.
-        -- Stop or throw if a delta cannot be verified!
-        for_ deltas verifyDelta_
-    )
-    Map.empty
+  verifyTransaction :: TransactionForPeer -> MonadPerspectivesTransaction (Map.Map PerspectivesUser CryptoKey)
+  verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do
+    Tuple _ keysMap <- ST.runStateT
+      ( do
+          -- Verify public key informaton.
+          -- Stop or throw if a key cannot be verified!
+          forWithIndex_ (unwrap publicKeys) verifyPublicKey
+          -- Verify all deltas, using the (now verified) public keys.
+          -- Stop or throw if a delta cannot be verified!
+          for_ deltas verifyDelta_
+      )
+      Map.empty
+    pure keysMap
 
   -- Verify the deltas that make up the PerspectivesUser instance and his public key. 
   -- Add this author-key combination to state.
@@ -438,15 +442,19 @@ executeTransaction t = try (verifyTransaction t) >>= case _ of
         Nothing -> throwError (error $ "Cannot verify delta allegedly by author: " <> show author)
         Just _ -> pure unit
 
-executeTransaction' :: TransactionForPeer -> MonadPerspectivesTransaction Unit
-executeTransaction' t@(TransactionForPeer { deltas, publicKeys }) = do
+executeTransaction' :: Map.Map PerspectivesUser CryptoKey -> TransactionForPeer -> MonadPerspectivesTransaction Unit
+executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) = do
 
   -- Add all public key information (possibly leading to more TheWorld$PerspectivesUsers instances).
   for_ (unwrap publicKeys) \{ deltas: keyDeltas } -> void $ for keyDeltas \s@(SignedDelta { encryptedDelta }) -> executeDelta s (Just encryptedDelta)
 
   -- STEP 1: Verify and extract ordering info from all deltas.
+  -- Use the keys collected during verifyTransaction to avoid re-querying the entity store
+  -- for authors whose PerspectivesUsers instance may not yet have been fully persisted.
   verifiedDeltas <- catMaybes <$> for deltas \s@(SignedDelta { author }) -> do
-    mStringified <- lift $ verifyDelta s
+    mStringified <- case Map.lookup author verifiedKeys of
+      Just cryptoKey -> lift $ verifyDelta' s (Just cryptoKey)
+      Nothing -> lift $ verifyDelta s
     pure $ case mStringified of
       Nothing -> Nothing
       Just stringified -> case extractOrderingInfo stringified of
