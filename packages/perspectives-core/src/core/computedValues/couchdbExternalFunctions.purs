@@ -564,7 +564,6 @@ initSystem = do
                     )
                     true
                   roleIsMe puser world
-                  -- We need to fill 'me' with the PerspectivesUser that fills sys:SocialMe.
                   _ <- setFirstBinding me puser Nothing
                   void $ createAndAddRoleInstance_ (EnumeratedRoleType DEP.perspectivesUsers) worldId
                     ( RolSerialization

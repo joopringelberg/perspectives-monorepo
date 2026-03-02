@@ -491,27 +491,42 @@ setFirstBinding filled filler msignedDelta = (lift $ try $ getPerspectRol filled
 
             subject <- getSubject
             let rkey = unwrap filled <> "#binding"
-            rversion <- lift $ incrementResourceVersion rkey
-            delta@(RoleBindingDelta r) <- pure $ RoleBindingDelta
-              { filled: filled
-              , filledType: rol_pspType filledRole
-              , filler: Just filler
-              , fillerType: Just fillerType
-              , oldFiller: Nothing
-              , oldFillerType: Nothing
-              , deltaType: SetFirstBinding
-              , subject
-              , resourceKey: rkey
-              , resourceVersion: rversion
-              }
 
             -- STATE EVALUATION
             -- Adds deltas for paths beyond the nodes involved in the binding,
             -- for queries that use the binder- or binding step.
-            users <- usersWithPerspectiveOnRoleBinding delta true
+            -- We construct a delta for usersWithPerspectiveOnRoleBinding; resourceKey/resourceVersion are not used there.
+            let
+              deltaForUsers = RoleBindingDelta
+                { filled: filled
+                , filledType: rol_pspType filledRole
+                , filler: Just filler
+                , fillerType: Just fillerType
+                , oldFiller: Nothing
+                , oldFillerType: Nothing
+                , deltaType: SetFirstBinding
+                , subject
+                , resourceKey: rkey
+                , resourceVersion: 0
+                }
+            users <- usersWithPerspectiveOnRoleBinding deltaForUsers true
             signedDelta <- case msignedDelta of
-              Nothing -> signDelta
-                (writeJSON $ stripResourceSchemes $ delta)
+              Nothing -> do
+                rversion <- lift $ incrementResourceVersion rkey
+                let
+                  delta = RoleBindingDelta
+                    { filled: filled
+                    , filledType: rol_pspType filledRole
+                    , filler: Just filler
+                    , fillerType: Just fillerType
+                    , oldFiller: Nothing
+                    , oldFillerType: Nothing
+                    , deltaType: SetFirstBinding
+                    , subject
+                    , resourceKey: rkey
+                    , resourceVersion: rversion
+                    }
+                signDelta (writeJSON $ stripResourceSchemes $ delta)
               Just signedDelta -> pure signedDelta
 
             -- SYNCHRONISATION
@@ -577,34 +592,55 @@ removeBinding_ filled mFillerId msignedDelta = (lift $ try $ getPerspectRol fill
         fillerType <- lift $ traverse roleType_ mFillerId
         oldFillerType <- lift $ traverse roleType_ (rol_binding originalFilled)
         let rkey = unwrap filled <> "#binding"
-        rversion <- lift $ incrementResourceVersion rkey
-        delta@(RoleBindingDelta r) <- pure $ RoleBindingDelta
-          { filled
-          , filledType: rol_pspType originalFilled
-          , filler: case mFillerId of
-              Nothing -> (rol_binding originalFilled)
-              otherwise -> mFillerId
-          , fillerType: case mFillerId of
-              Nothing -> oldFillerType
-              _ -> fillerType
-          , oldFiller: (rol_binding originalFilled)
-          , oldFillerType
-          , deltaType: case mFillerId of
-              Nothing -> RemoveBinding
-              otherwise -> ReplaceBinding
-          , subject
-          , resourceKey: rkey
-          , resourceVersion: rversion
-          }
-        users <- usersWithPerspectiveOnRoleBinding delta true
+        -- Construct a delta for usersWithPerspectiveOnRoleBinding; resourceKey/resourceVersion are not used there.
+        let
+          deltaForUsers = RoleBindingDelta
+            { filled
+            , filledType: rol_pspType originalFilled
+            , filler: case mFillerId of
+                Nothing -> (rol_binding originalFilled)
+                otherwise -> mFillerId
+            , fillerType: case mFillerId of
+                Nothing -> oldFillerType
+                _ -> fillerType
+            , oldFiller: (rol_binding originalFilled)
+            , oldFillerType
+            , deltaType: case mFillerId of
+                Nothing -> RemoveBinding
+                otherwise -> ReplaceBinding
+            , subject
+            , resourceKey: rkey
+            , resourceVersion: 0
+            }
+        users <- usersWithPerspectiveOnRoleBinding deltaForUsers true
         roleWillBeRemoved <- gets \(Transaction { untouchableRoles }) -> isJust $ elemIndex filled untouchableRoles
         if roleWillBeRemoved then pure unit
         else do
           -- SYNCHRONISATION
           -- Only push a RoleBindingDelta if the role will not be removed.
           signedDelta <- case msignedDelta of
-            Nothing -> signDelta
-              (writeJSON $ stripResourceSchemes $ delta)
+            Nothing -> do
+              rversion <- lift $ incrementResourceVersion rkey
+              let
+                delta = RoleBindingDelta
+                  { filled
+                  , filledType: rol_pspType originalFilled
+                  , filler: case mFillerId of
+                      Nothing -> (rol_binding originalFilled)
+                      otherwise -> mFillerId
+                  , fillerType: case mFillerId of
+                      Nothing -> oldFillerType
+                      _ -> fillerType
+                  , oldFiller: (rol_binding originalFilled)
+                  , oldFillerType
+                  , deltaType: case mFillerId of
+                      Nothing -> RemoveBinding
+                      otherwise -> ReplaceBinding
+                  , subject
+                  , resourceKey: rkey
+                  , resourceVersion: rversion
+                  }
+              signDelta (writeJSON $ stripResourceSchemes $ delta)
             Just signedDelta -> pure signedDelta
           addDelta (DeltaInTransaction { users, delta: signedDelta })
 

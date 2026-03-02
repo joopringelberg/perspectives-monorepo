@@ -76,15 +76,16 @@ import Perspectives.SaveUserData (removeBinding, removeContextIfUnbound, replace
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
+import Perspectives.Sync.LegacyDeltas (extractLegacyResourceKey, toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
 import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), storeDelta, deltaStoreDocId)
 import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
-import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, setResourceVersion)
+import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, incrementResourceVersion, setResourceVersion)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, pure, show, unit, void, ($), (*>), (+), (/=), (<$>), (<<<), (<>), (==), (>), (>>=))
+import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, negate, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>>=))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -458,8 +459,11 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
     pure $ case mStringified of
       Nothing -> Nothing
       Just stringified -> case extractOrderingInfo stringified of
-        Nothing -> Just { signedDelta: s, stringified, resourceKey: "", resourceVersion: 0, author }
         Just { resourceKey, resourceVersion } -> Just { signedDelta: s, stringified, resourceKey, resourceVersion, author }
+        -- Legacy delta: derive resourceKey from content, use -1 to signal "compute next version".
+        Nothing -> case extractLegacyResourceKey stringified of
+          Just rkey -> Just { signedDelta: s, stringified, resourceKey: rkey, resourceVersion: (-1), author }
+          Nothing -> Just { signedDelta: s, stringified, resourceKey: "", resourceVersion: 0, author }
 
   -- STEP 2: Check for gaps. If any delta has resourceVersion > localVersion + 1, block the transaction.
   let
@@ -483,14 +487,19 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
     executeDelta s (Just stringified)
     -- After successful execution, update the resource version store and store delta in delta-store.
     if resourceKey /= "" then do
-      -- Update the resource version to the delta's version (which should be localVersion + 1).
-      lift $ setResourceVersion resourceKey resourceVersion
+      -- For legacy deltas (resourceVersion < 0), compute the next available version.
+      -- For new deltas, use the sender-provided version.
+      rversion <-
+        if resourceVersion < 0 then lift $ incrementResourceVersion resourceKey
+        else do
+          lift $ setResourceVersion resourceKey resourceVersion
+          pure resourceVersion
       -- Store the delta in the delta-store.
       lift $ storeDelta $ DeltaStoreRecord
-        { _id: deltaStoreDocId resourceKey resourceVersion author
+        { _id: deltaStoreDocId resourceKey rversion author
         , _rev: Nothing
         , resourceKey
-        , resourceVersion
+        , resourceVersion: rversion
         , author
         , signedDelta: s
         , deltaType: "" -- TODO: extract deltaType string from the parsed delta
@@ -515,7 +524,19 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
                 Right d4 -> lift ((addResourceSchemes storageSchemes d4)) >>= flip executeUniverseRoleDelta s
                 Left _ -> case runExcept $ readJSON' stringifiedDelta of
                   Right d5 -> lift (addResourceSchemes storageSchemes d5) >>= flip executeUniverseContextDelta s
-                  Left _ -> log (padding <> "Failing to parse and execute: " <> stringifiedDelta)
+                  -- Fallback: try legacy delta formats (old DeltaRecord without resourceKey/resourceVersion,
+                  -- old UniverseRoleDelta with roleInstances array). Legacy deltas are trusted without re-verification.
+                  Left _ -> case runExcept $ readJSON' stringifiedDelta of
+                    Right ld1 -> lift (addResourceSchemes storageSchemes (toRolePropertyDelta ld1)) >>= flip executeRolePropertyDelta s
+                    Left _ -> case runExcept $ readJSON' stringifiedDelta of
+                      Right ld2 -> lift (addResourceSchemes storageSchemes (toRoleBindingDelta ld2)) >>= flip executeRoleBindingDelta s
+                      Left _ -> case runExcept $ readJSON' stringifiedDelta of
+                        Right ld3 -> lift (addResourceSchemes storageSchemes (toContextDelta ld3)) >>= flip executeContextDelta s
+                        Left _ -> case runExcept $ readJSON' stringifiedDelta of
+                          Right ld4 -> lift (addResourceSchemes storageSchemes (toUniverseRoleDelta ld4)) >>= flip executeUniverseRoleDelta s
+                          Left _ -> case runExcept $ readJSON' stringifiedDelta of
+                            Right ld5 -> lift (addResourceSchemes storageSchemes (toUniverseContextDelta ld5)) >>= flip executeUniverseContextDelta s
+                            Left _ -> log (padding <> "Failing to parse and execute: " <> stringifiedDelta)
       )
       (\e -> liftEffect $ log (padding <> show e))
 
