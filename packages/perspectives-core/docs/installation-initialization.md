@@ -169,23 +169,12 @@ state NoSocialEnvironment = (not exists SocialEnvironment) and (exists sys:MySoc
 
 **Authoring role:** `PerspectivesSystem$User`.
 
-### Step 9 – PL State Reactions in `SocialEnvironment`
+### Step 9 – ~~PL State Reactions in `SocialEnvironment`~~ *(removed)*
 
-State `InitMe` is entered when this is the first installation and `SocialEnvironment$Me` does not yet exist:
-
-```
-state InitMe =
-  (callExternal util:SystemParameter( "IsFirstInstallation" ) returns Boolean)
-  and not exists Me
-  on entry
-    do for SystemUser
-      bind sys:TheWorld >> PerspectivesUsers >>= first to Me
-      bind sys:TheWorld >> PerspectivesUsers >>= first to Persons
-```
-
-The `SystemUser` (= `sys:Me`, i.e. `PerspectivesSystem$User`) binds the user's `PerspectivesUsers` role to `SocialEnvironment$Me` and creates a `Persons` entry for it.
-
-**Authoring role:** `SocialEnvironment$SystemUser` (= `sys:Me`).
+> **Note:** State `InitMe` in `SocialEnvironment` has been removed. `SocialEnvironment$Me` and
+> `SocialEnvironment$Persons` are now created in the PDR (`initSystem`, Step 3) for first
+> installations, and come from the identity document for subsequent installations. This makes `me`
+> available before any PL state reactions execute.
 
 ---
 
@@ -195,8 +184,8 @@ The `SystemUser` (= `sys:Me`, i.e. `PerspectivesSystem$User`) binds the user's `
 |------|-------------|---------|
 | `PerspectivesSystem$User` | The main user role of the installation. Indexed as `sys:Me`. Used to author most setup transactions. | `PerspectivesSystem` |
 | `PerspectivesSystem$Installer` | A non-calculated user role in the model root context. Created by the PDR and flagged as `isMe`. Performs initial setup in PL states. | model root context (= model domain context) |
-| `TheWorld$Initializer` | A calculated role equal to `sys:Me`. Used as the authoring role when creating `PerspectivesUsers` inside `TheWorld`. | `TheWorld` |
-| `SocialEnvironment$SystemUser` | A calculated role equal to `sys:Me`. Fills `SocialEnvironment$Me` and `SocialEnvironment$Persons` on first installation. Also used to export the identity document for a second device. | `SocialEnvironment` |
+| `TheWorld$Initializer` | A calculated role equal to `me`. Used as the authoring role when creating `PerspectivesUsers` inside `TheWorld`. | `TheWorld` |
+| `SocialEnvironment$SystemUser` | A calculated role equal to `me`. Used as the authoring role when creating `SocialEnvironment$Me` and `SocialEnvironment$Persons` in PDR, and to export the identity document for a second device. | `SocialEnvironment` |
 
 ---
 
@@ -313,36 +302,43 @@ PDR (Purescript)                                  PL (Perspectives Language)
       (isMe = true)
    ── FIRST INSTALLATION ──────────────
    c. create TheWorld context
-   d. withAuthoringRole TheWorld$Initializer:
+   d. withAuthoringRole TheWorld$Initializer (= me):
       - create PerspectivesUsers (user, with PublicKey)
       - create PerspectivesUsers (serializationuser)
+   e. withAuthoringRole SocialEnvironment$SystemUser (= me):
+      - create SocialEnvironment "TheSocialEnvironment"
+      - create SocialEnvironment$Me ← filled with PerspectivesUsers
+      - create SocialEnvironment$Persons ← filled with PerspectivesUsers
+      *** me is now available ***
    ── SUBSEQUENT INSTALLATION ─────────
    c'. execute identity document
-       (reconstructs TheWorld + PerspectivesUsers)
+       (reconstructs TheWorld + PerspectivesUsers
+        + SocialEnvironment + Me + Persons)
+       then: roleIsMe on SocialEnvironment$Me
+       *** me is now available ***
    ────────────────────────────────────
-   e. add BaseRepository to PerspectivesSystem
+   f. add BaseRepository to PerspectivesSystem
 4. create model root context
 5. create Installer role (isMe = true)
-                                                  6. Domain on entry (Installer):
+                                                  6. Domain on entry (Installer = me):
                                                      - create StartContexts in MySystem
                                                      (set Name, IsSystemModel)
-                                                  7. State FirstInstallation (Installer):
-                                                     - create SocialEnvironment "TheSocialEnvironment"
-                                                     - bind SocialEnvironment >> extern to MySystem
-                                                  8. PerspectivesSystem on entry (User):
+                                                  7. Domain on entry (Upgrader = me):
+                                                     - create SystemDataUpgrade
+                                                  8. State FirstInstallation (Installer = me):
+                                                     - bind MySocialEnvironment >> extern
+                                                       to SocialEnvironment in MySystem
+                                                  9. PerspectivesSystem on entry (User = me):
                                                      - create RecoveryPoint
                                                      - create SystemDataUpgrade
                                                      - set MaxHistoryLength = 7
-                                                  9. State NoCaches (User):
-                                                     - create Caches context → SystemCaches
-                                                  10. State NoSocialEnvironment (User):
+                                                  10. State NoCaches (User = me):
+                                                      - create Caches context → SystemCaches
+                                                  11. State NoSocialEnvironment (User = me):
                                                       [second device only]
                                                       - bind MySocialEnvironment to SocialEnvironment
-                                                  11. SocialEnvironment state InitMe (SystemUser):
-                                                      - bind TheWorld>>PerspectivesUsers to Me
-                                                      - bind TheWorld>>PerspectivesUsers to Persons
+                                                  [State InitMe removed]
 ```
-
 ---
 
 ## Source References
@@ -370,7 +366,7 @@ In both cases, the authoring role is a `RoleType` (enumerated or calculated). Th
 
 ---
 
-## Proposal: Moving Towards `me` as the Identity Anchor
+## Implemented: `me` as the Identity Anchor
 
 ### Background: the `me` keyword
 
@@ -407,11 +403,11 @@ The System model currently defines six calculated user roles as `X = sys:Me`:
 
 Under the current initialization order, `me` only becomes available in **Step 9** (the `InitMe` state of `SocialEnvironment`), which is far too late: several automatic actions in Steps 6–8 already run using roles defined as `= sys:Me`. If those roles were instead defined as `= me`, their computed value would be empty during Steps 6–8 and the automatic actions would be skipped.
 
-### Proposed revised initialization sequence
+### Revised initialization sequence (implemented)
 
 To allow all calculated roles to be defined as `X = me`, `SocialEnvironment$Persons` (and its fill chain) must exist **before** any PL state machine reactions execute — i.e., it must be created in PDR, not in PL.
 
-The proposed change moves steps 4d and 5 (creation of `SocialEnvironment` and population of `Me`/`Persons`) entirely into the PDR, right after `PerspectivesUsers` is created:
+The implemented change moved steps 4d and 5 (creation of `SocialEnvironment` and population of `Me`/`Persons`) entirely into the PDR, right after `PerspectivesUsers` is created:
 
 ```
 PDR (Purescript)                                  PL (Perspectives Language)
@@ -452,7 +448,7 @@ PDR (Purescript)                                  PL (Perspectives Language)
                                                       [Me and Persons already filled by PDR]
 ```
 
-Key consequences of this change:
+Key consequences of this implemented change:
 - `SocialEnvironment` is created in PDR for both first and subsequent installations (replacing the current PL state `FirstInstallation`).
 - `SocialEnvironment$Me` and `SocialEnvironment$Persons` are created in PDR (replacing the current PL state `InitMe`).
 - State `FirstInstallation` in the domain context simplifies to just binding an already-existing `SocialEnvironment` into `PerspectivesSystem`.

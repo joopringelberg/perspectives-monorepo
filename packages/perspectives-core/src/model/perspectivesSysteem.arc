@@ -37,23 +37,18 @@ domain model://perspectives.domains#System
         -- Add the perspectives.domains repository as BaseRepository:
         -- bind publicrole pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains$External to BaseRepository in sys:MySystem
 
-  state FirstInstallation = (callExternal util:SystemParameter( "IsFirstInstallation" ) returns Boolean) and (exists sys:TheWorld >> PerspectivesUsers)
+  state FirstInstallation = (callExternal util:SystemParameter( "IsFirstInstallation" ) returns Boolean) and (exists sys:MySocialEnvironment)
     on entry
       do for sys:PerspectivesSystem$Installer
-        letA
-          -- When a Person is used to fill a user role, SocialEnvironment will be shared with peers.
-          mysocialenvironment <- create context SocialEnvironment named "TheSocialEnvironment"
-        in 
-          -- notice that there is a state in User that is entered as soon as we have 
-          -- SocialEnvironment$Me, on entry of which we fill sys:Me.
-          bind mysocialenvironment >> extern to SocialEnvironment in sys:MySystem
+        -- SocialEnvironment was created by the PDR in initSystem; just bind it into PerspectivesSystem.
+        bind sys:MySocialEnvironment >> extern to SocialEnvironment in sys:MySystem
 
   -- PDRDEPENDENCY
   aspect user sys:PerspectivesSystem$Installer
 
-  -- We compute Upgrader as sys:Me because we know it is available when the domain context is created. 
-  -- Because of that we can then have SystemDataUpgrade being created in name of sys:Upgrader.
-  user Upgrader = sys:Me
+  -- We compute Upgrader as `me` because `me` is set up in the PDR before any PL state reactions
+  -- execute, so it is available from the very first on-entry action in the domain context.
+  user Upgrader = me
     perspective on SystemDataUpgrade
       only (Create, Fill)
       props (LastHandledUpgrade) verbs (SetPropertyValue, Consult)
@@ -171,7 +166,7 @@ domain model://perspectives.domains#System
       aspect sys:Addressable
 
     -- PDRDEPENDENCY
-    user Initializer = sys:Me
+    user Initializer = me
       perspective on PerspectivesUsers
         only (Create)
         props (Identifiable$PublicKey, SharedFileServerKey, HasKey) verbs (SetPropertyValue, AddPropertyValue)
@@ -180,16 +175,11 @@ domain model://perspectives.domains#System
     -- PDRDEPENDENCY
   case SocialEnvironment
     indexed sys:MySocialEnvironment
-    -- As we share SocialEnvironment over installations, this will happen only in the first installation.
-    -- SocialEnvironment is created on condition of there being an instance of PerspectivesUsers.
+    -- SocialEnvironment, Me and Persons are created in the PDR (initSystem) for first installations,
+    -- and via the identity document for subsequent installations.
     aspect sys:RootContext
     external 
       aspect sys:RootContext$External
-    state InitMe = (callExternal util:SystemParameter( "IsFirstInstallation" ) returns Boolean) and not exists Me 
-      on entry
-        do for SystemUser
-          bind sys:TheWorld >> PerspectivesUsers >>= first to Me
-          bind sys:TheWorld >> PerspectivesUsers >>= first to Persons
     -- To fill other user roles: require Persons as user role filler if there is no need to consider a natural person
     -- to be a peer with whom one wants to synchronize. Require PerspectivesSystem$Users otherwise.
     -- Using Persons rather than TheWorld$PerspectivesUsers or TheWorld$NonPerspectivesUsers creates a layer of indirection
@@ -206,7 +196,7 @@ domain model://perspectives.domains#System
       indexed sys:SocialMe
       property MyIdentity (File)
 
-    user SystemUser = sys:Me
+    user SystemUser = me
       perspective on Me
         only (Create, Fill)
         props (FirstName, LastName, PublicKey, MyIdentity) verbs (Consult)
@@ -500,7 +490,7 @@ domain model://perspectives.domains#System
       perspective on SocialEnvironment
         only (CreateAndFill, Fill)
 
-    user WWWUser = sys:Me
+    user WWWUser = me
       perspective on User
         props (FirstName, LastName) verbs (Consult, SetPropertyValue)
       perspective on ItemsOnClipboard
@@ -693,7 +683,7 @@ domain model://perspectives.domains#System
     external
       aspect sys:ContextWithScreenState$External
 
-    user Manager = sys:Me
+    user Manager = me
       perspective on Cache
         defaults
 
@@ -988,6 +978,6 @@ domain model://perspectives.domains#System
       property Patch (Number)
       -- PDRDEPENDENCY
       property Build (Number)
-    user Visitor = sys:Me
+    user Visitor = me
       perspective on extern
         props (Description, DomeinFileName) verbs (Consult)
