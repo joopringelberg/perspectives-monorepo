@@ -354,3 +354,137 @@ PDR (Purescript)                                  PL (Perspectives Language)
 | System model (PL) | `packages/perspectives-core/src/model/perspectivesSysteem.arc` |
 | RuntimeOptions (incl. `isFirstInstallation`) | `packages/perspectives-core/src/core/coreTypes.purs` |
 | `createAccount` (entry point for new installation) | `packages/perspectives-core/src/core/Main.purs` |
+
+---
+
+## Notes on the Authoring Role in Transactions
+
+When the PDR creates or modifies data (contexts, roles, properties), it records each change as a **delta**. Each delta is signed by, and carries the type of, the current **authoring role** — the role acting on behalf of the local user in the current transaction. Peers that receive these deltas check whether the sender, in their capacity as that authoring role, had a sufficient perspective to make the change.
+
+The authoring role is set in two ways:
+
+1. **Explicitly in PDR code** — using `withAuthoringRole authoringRole ...` from `Perspectives.Assignment.Update`, which temporarily sets `Transaction.authoringRole` for the duration of the monadic action.  
+2. **Implicitly by the PL automatic-action clause** — the role named after `do for <A>` becomes the authoring role for all statements in that block. This is the same mechanism: the state compiler calls `withAuthoringRole` under the hood when evaluating `do for A`.
+
+In both cases, the authoring role is a `RoleType` (enumerated or calculated). The PDR always resolves calculated roles to their concrete enumerated type when recording deltas and when checking perspectives.
+
+---
+
+## Proposal: Moving Towards `me` as the Identity Anchor
+
+### Background: the `me` keyword
+
+The PL keyword `me` is a query step that resolves, at runtime, to the `SocialEnvironment$Persons` role instance that is filled with the local user's `PerspectivesUsers` role. Its implementation (in `Perspectives.Queries.UnsafeCompiler`) is:
+
+```purescript
+compileFunction (SQD _ (DataTypeGetter MeF) _ _ _) = pure $ \_ -> do
+  PerspectivesUser pUser <- lift $ lift getPerspectivesUser
+  unwrap <$> getFilledRoles
+    (ContextType socialEnvironment)
+    (EnumeratedRoleType socialEnvironmentPersons)
+    (RoleInstance pUser)
+```
+
+That is, `me` looks up the `SocialEnvironment$Persons` roles filled by the user's CUID. For `me` to return a value, three things must exist: `SocialEnvironment`, `SocialEnvironment$Persons`, and the filler relationship from `SocialEnvironment$Persons` to `PerspectivesUsers`.
+
+### The six `X = sys:Me` calculated roles
+
+The System model currently defines six calculated user roles as `X = sys:Me`:
+
+| Role | Context |
+|------|---------|
+| `Upgrader` | System domain context |
+| `Initializer` | `TheWorld` |
+| `SystemUser` | `SocialEnvironment` |
+| `User` (via `FillWithPerspectivesUser` state) | `PerspectivesSystem` |
+| `WWWUser` | `PerspectivesSystem` |
+| `Manager` | `Caches` |
+| `Visitor` | public context |
+
+`sys:Me` resolves to the indexed instance of `PerspectivesSystem$User` — a locally-scoped indexed role whose value is `def:#<CUID>$User`. This is the earlier, PDR-centric identity anchor. The `me` keyword provides a more semantically rich anchor: the user as a social person (`SocialEnvironment$Persons`), backed by a `PerspectivesUsers` role in `TheWorld`. Changing all six definitions from `= sys:Me` to `= me` would make the social identity (`SocialEnvironment$Persons`) the canonical way the system recognises "the local user".
+
+### The timing problem
+
+Under the current initialization order, `me` only becomes available in **Step 9** (the `InitMe` state of `SocialEnvironment`), which is far too late: several automatic actions in Steps 6–8 already run using roles defined as `= sys:Me`. If those roles were instead defined as `= me`, their computed value would be empty during Steps 6–8 and the automatic actions would be skipped.
+
+### Proposed revised initialization sequence
+
+To allow all calculated roles to be defined as `X = me`, `SocialEnvironment$Persons` (and its fill chain) must exist **before** any PL state machine reactions execute — i.e., it must be created in PDR, not in PL.
+
+The proposed change moves steps 4d and 5 (creation of `SocialEnvironment` and population of `Me`/`Persons`) entirely into the PDR, right after `PerspectivesUsers` is created:
+
+```
+PDR (Purescript)                                  PL (Perspectives Language)
+─────────────────────────────────────────────     ─────────────────────────────────────────
+1. setupUser: set up database views
+2. addModelToLocalStore (System model)
+3. createInitialInstances → initSystem:
+   a. create PerspectivesSystem context
+   b. create PerspectivesSystem$User (isMe=true)
+   ── FIRST INSTALLATION ──────────────────
+   c. create TheWorld context
+   d. (withAuthoringRole TheWorld$Initializer):
+      - create PerspectivesUsers (user, PublicKey)
+   e. create SocialEnvironment "TheSocialEnvironment"
+      - create SocialEnvironment$Me  ← filled with PerspectivesUsers
+      - create SocialEnvironment$Persons ← filled with PerspectivesUsers
+      *** me is now available ***
+   ── SUBSEQUENT INSTALLATION ─────────────
+   c'. execute identity document
+       (reconstructs TheWorld + PerspectivesUsers
+        + SocialEnvironment + Me + Persons)
+      *** me is now available ***
+   ─────────────────────────────────────────
+   f. add BaseRepository to PerspectivesSystem
+4. create model root context
+5. create Installer role (isMe = true)
+                                                  6. Domain on entry (Installer = me):
+                                                     - create StartContexts in MySystem
+                                                  7. State FirstInstallation (Installer = me):
+                                                     - bind SocialEnvironment to MySystem
+                                                     [SocialEnvironment already exists]
+                                                  8. PerspectivesSystem on entry (User = me):
+                                                     - create RecoveryPoint
+                                                     - create SystemDataUpgrade
+                                                  9. State NoCaches (User = me):
+                                                     - create Caches → SystemCaches
+                                                  10. State InitMe: now a no-op
+                                                      [Me and Persons already filled by PDR]
+```
+
+Key consequences of this change:
+- `SocialEnvironment` is created in PDR for both first and subsequent installations (replacing the current PL state `FirstInstallation`).
+- `SocialEnvironment$Me` and `SocialEnvironment$Persons` are created in PDR (replacing the current PL state `InitMe`).
+- State `FirstInstallation` in the domain context simplifies to just binding an already-existing `SocialEnvironment` into `PerspectivesSystem`.
+- State `InitMe` in `SocialEnvironment` becomes redundant and can be removed.
+- All six `X = sys:Me` roles can be changed to `X = me`.
+- `TheWorld$Initializer` changes from `= sys:Me` to `= me`; since `me` is set before `TheWorld$Initializer` is used in PDR (with `withAuthoringRole`), the PDR must resolve `me` from the Purescript layer (i.e., by looking up `SocialEnvironment$Persons` directly) rather than from PL, or the PDR must continue to use `TheWorld$Initializer` directly by its stable type identifier during setup.
+
+### Perspective adjustments required
+
+If `SocialEnvironment$Me` and `SocialEnvironment$Persons` are created by the PDR in a transaction authored by `PerspectivesSystem$User`, the existing perspective:
+
+```arc
+user SystemUser = sys:Me   -- will become: = me
+  perspective on Me
+    only (Create, Fill)
+  perspective on Persons
+    only (Create, Fill)
+```
+
+should remain unchanged in structure, but the authoring role in the PDR code must be set to `SocialEnvironment$SystemUser` (via `withAuthoringRole`) when creating those roles, just as `TheWorld$Initializer` is used now for `PerspectivesUsers`.
+
+### On the serialisation persona
+
+The serialisation persona (`def:#serializationuser`) is a fictive `PerspectivesUsers` instance created in `TheWorld` with a fixed identifier. It is used by `serialisedAsDeltasForUserType` as a stand-in when serialising context data for a user *type* (not a specific instance):
+
+```purescript
+serialisedAsDeltasFor_ cid (RoleInstance "def:#serializationuser") userType
+```
+
+The persona is needed because serialisation deltas require a concrete role instance identifier to determine self-only perspectives. The code comment explicitly notes that the authoring role is "in effect ignored" in this path — only the user identifier matters for the self-only check.
+
+**Could it be replaced by the owner's `PerspectivesUsers`?**  
+Technically yes, if the intent is to treat the serialised view as if it were the owner's own view. However, using the owner's identifier carries a risk: if the owner's `PerspectivesUsers` role is not yet available when serialisation runs (e.g., on a fresh install), serialisation would fail. The fictive persona with a fixed, pre-known identifier sidesteps this. If the serialisation persona is retained, the perspective gap noted above (no `SetPropertyValue` for `LastName` on `Initializer`) needs to be resolved either by:
+1. Adding `props (Identifiable$LastName) verbs (SetPropertyValue)` to `TheWorld$Initializer`'s perspective on `PerspectivesUsers`, or
+2. Moving the persona creation to a different authoring role that already has that permission.
