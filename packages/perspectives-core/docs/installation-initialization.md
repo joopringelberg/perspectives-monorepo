@@ -32,7 +32,7 @@ There are two scenarios:
 ### Perspectives Language (PL) is responsible for:
 - Creating the `SocialEnvironment` context (on the first installation, from a state in the System domain context).
 - Binding the `SocialEnvironment` external role into `PerspectivesSystem`.
-- Populating `SocialEnvironment$Me` and `SocialEnvironment$Persons` from `TheWorld$PerspectivesUsers`.
+- Populating `SocialEnvironment$Persons` from `TheWorld$PerspectivesUsers` (`SocialEnvironment$Me` is now a calculated role `= me`).
 - Creating `StartContexts`, `RecoveryPoint`, `SystemDataUpgrade`, and `SystemCaches` role instances.
 
 ---
@@ -171,10 +171,10 @@ state NoSocialEnvironment = (not exists SocialEnvironment) and (exists sys:MySoc
 
 ### Step 9 – ~~PL State Reactions in `SocialEnvironment`~~ *(removed)*
 
-> **Note:** State `InitMe` in `SocialEnvironment` has been removed. `SocialEnvironment$Me` and
-> `SocialEnvironment$Persons` are now created in the PDR (`initSystem`, Step 3) for first
-> installations, and come from the identity document for subsequent installations. This makes `me`
-> available before any PL state reactions execute.
+> **Note:** State `InitMe` in `SocialEnvironment` has been removed. `SocialEnvironment$Persons` is
+> now created in the PDR (`initSystem`, Step 3) for first installations, and comes from the identity
+> document for subsequent installations. `SocialEnvironment$Me` is now a calculated role (`= me`);
+> no instance needs to be created. This makes `me` available before any PL state reactions execute.
 
 ---
 
@@ -185,7 +185,7 @@ state NoSocialEnvironment = (not exists SocialEnvironment) and (exists sys:MySoc
 | `PerspectivesSystem$User` | The main user role of the installation. Indexed as `sys:Me`. Used to author most setup transactions. | `PerspectivesSystem` |
 | `PerspectivesSystem$Installer` | A non-calculated user role in the model root context. Created by the PDR and flagged as `isMe`. Performs initial setup in PL states. | model root context (= model domain context) |
 | `TheWorld$Initializer` | A calculated role equal to `me`. Used as the authoring role when creating `PerspectivesUsers` inside `TheWorld`. | `TheWorld` |
-| `SocialEnvironment$SystemUser` | A calculated role equal to `me`. Used as the authoring role when creating `SocialEnvironment$Me` and `SocialEnvironment$Persons` in PDR, and to export the identity document for a second device. | `SocialEnvironment` |
+| `SocialEnvironment$SystemUser` | A calculated role equal to `me`. Used as the authoring role when creating `SocialEnvironment$Persons` in PDR, and to export the identity document for a second device. | `SocialEnvironment` |
 
 ---
 

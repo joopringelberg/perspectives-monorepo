@@ -76,7 +76,7 @@ import Perspectives.InstanceRepresentation (PerspectContext)
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance, createAndAddRoleInstance_)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesDatabase, getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries)
-import Perspectives.ModelDependencies (identifiableLastName, perspectivesUsersPublicKey, socialEnvironment, socialEnvironmentMe, socialEnvironmentPersons, socialEnvironmentSystemUser, theWorldInitializer)
+import Perspectives.ModelDependencies (identifiableLastName, perspectivesUsersPublicKey, socialEnvironment, socialEnvironmentPersons, socialEnvironmentSystemUser, theWorldInitializer)
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -502,11 +502,11 @@ createInitialInstances unversionedModelname versionedModelName patch build versi
 -- |      - the new user gets a PublicKey
 -- |      - the serializationuser gets a LastName ("serializationuser").
 -- |    * SocialEnvironment (with author SocialEnvironment$SystemUser):
--- |      - SocialEnvironment$Me  filled with the new user's PerspectivesUsers instance
 -- |      - SocialEnvironment$Persons filled with the new user's PerspectivesUsers instance
+-- |        (SocialEnvironment$Me is now a calculated role = me, so no instance is created)
 -- |    * BaseRepository, filled with the Perspectives Repository.
 -- |
--- | The SocialEnvironment, Me and Persons are created here (in PDR) so that the `me` query step
+-- | The SocialEnvironment and Persons are created here (in PDR) so that the `me` query step
 -- | resolves to a value before any PL state reactions execute. All six calculated roles that were
 -- | formerly defined as X = sys:Me can therefore be changed to X = me.
 initSystem :: MonadPerspectivesTransaction Unit
@@ -582,8 +582,10 @@ initSystem = do
                         }
                     )
                     false
-                -- Create SocialEnvironment with Me and Persons so that `me` is available
+                -- Create SocialEnvironment with Persons so that `me` is available
                 -- before any PL state reactions execute.
+                -- SocialEnvironment$Me is now a calculated role (= me), so only Persons
+                -- needs to be created; roleIsMe is called automatically by setFirstBinding.
                 socialEnvResult <- runExceptT $ constructContext Nothing
                   ( ContextSerialization
                       { id: Just "TheSocialEnvironment"
@@ -597,15 +599,6 @@ initSystem = do
                   Left e -> logPerspectivesError (Custom (show e))
                   Right socialEnv@(ContextInstance socialEnvId) ->
                     withAuthoringRole (CR $ CalculatedRoleType socialEnvironmentSystemUser) do
-                      socialMeRole <- createAndAddRoleInstance_ (EnumeratedRoleType socialEnvironmentMe) socialEnvId
-                        ( RolSerialization
-                            { id: Nothing
-                            , properties: PropertySerialization empty
-                            , binding: Just perspectivesUser
-                            }
-                        )
-                        true
-                      roleIsMe socialMeRole socialEnv
                       void $ createAndAddRoleInstance_ (EnumeratedRoleType socialEnvironmentPersons) socialEnvId
                         ( RolSerialization
                             { id: Nothing
@@ -613,7 +606,7 @@ initSystem = do
                             , binding: Just perspectivesUser
                             }
                         )
-                        false
+                        true
           Nothing -> logPerspectivesError (Custom "No public key found on setting up!")
       -- Instead, read the Identity document.
       else do
@@ -627,15 +620,16 @@ initSystem = do
                 pUserRole <- lift (getPerspectRol pUser)
                 lift $ void $ cacheEntity pUser $ changeRol_isMe pUserRole true
                 lift $ void $ saveEntiteit pUser
-                -- Also set isMe on SocialEnvironment$Me (sets context_me on SocialEnvironment so
-                -- getMe works; the identity document does not carry the purely-local context_me field).
+                -- Set isMe on SocialEnvironment$Persons so that context_me is set on SocialEnvironment
+                -- (the identity document does not carry the purely-local context_me field).
+                -- Me is now a calculated role (= me), so we set isMe on Persons.
                 msocialEnv <- lift $ tryGetPerspectContext (ContextInstance "TheSocialEnvironment")
                 case msocialEnv of
                   Nothing -> pure unit
                   Just socialEnv -> do
-                    Tuple _ meInstances <- lift $ context_rolInContext socialEnv (EnumeratedRoleType socialEnvironmentMe)
-                    case head meInstances of
-                      Just socialMeId -> roleIsMe socialMeId (ContextInstance "TheSocialEnvironment")
+                    Tuple _ personsInstances <- lift $ context_rolInContext socialEnv (EnumeratedRoleType socialEnvironmentPersons)
+                    case head personsInstances of
+                      Just personsId -> roleIsMe personsId (ContextInstance "TheSocialEnvironment")
                       Nothing -> pure unit
               Nothing -> pure unit
           Nothing -> pure unit
