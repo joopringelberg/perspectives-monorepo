@@ -148,10 +148,10 @@ domain model://perspectives.domains#System
       -- We don't want to hand out keys to users as seen by public users.
       -- PDRDEPENDENCY (actually, a MyContexts dependency)
       property SharedFileServerKey (String)
-      state NoKey = (not HasKey) and (exists sys:SocialMe >> SharedFileServerKey) and (not (callExternal util:BottomIdentifier() returns String matches regexp "^pub:.*"))
+      state NoKey = (not HasKey) and (exists me >> SharedFileServerKey) and (not (callExternal util:BottomIdentifier() returns String matches regexp "^pub:.*"))
         on entry
           do for Initializer
-            SharedFileServerKey = callExternal util:GetSharedFileServerKey( sys:SocialMe >> SharedFileServerKey ) returns String
+            SharedFileServerKey = callExternal util:GetSharedFileServerKey( me >> SharedFileServerKey ) returns String
             HasKey = true
       property HasKey (Boolean)
 
@@ -180,33 +180,34 @@ domain model://perspectives.domains#System
     aspect sys:RootContext
     external 
       aspect sys:RootContext$External
+      property MyIdentity (File)
     -- To fill other user roles: require Persons as user role filler if there is no need to consider a natural person
     -- to be a peer with whom one wants to synchronize. Require PerspectivesSystem$Users otherwise.
     -- Using Persons rather than TheWorld$PerspectivesUsers or TheWorld$NonPerspectivesUsers creates a layer of indirection
     -- that allows us to switch rather painlessly from NonPerspectivesuser to PerspectivesUsers.
-    -- Persons will be synchronized between peers because they will have a perspective on SocialEnvironment$Me with the properties of sys:Identifiable
+    -- Persons will be synchronized between peers because they will have a perspective on SocialEnvironment$Persons with the properties of sys:Identifiable
     -- We also make sure that each Persons instance we know about has access to all our System$User identities, so he/she can synchronize to us.
     -- PDRDEPENDENCY
     user Persons (relational, unlinked) filledBy (PerspectivesUsers, NonPerspectivesUsers)
       perspective on Me
         props (Cancelled, LastName, FirstName, PublicKey) verbs (Consult)
 
-    user Me filledBy PerspectivesUsers
-      aspect sys:RoleWithId
-      indexed sys:SocialMe
-      property MyIdentity (File)
+    -- Me is a computed alias for the local user's Persons entry.
+    user Me = me
 
     user SystemUser = me
-      perspective on Me
-        only (Create, Fill)
-        props (FirstName, LastName, PublicKey, MyIdentity) verbs (Consult)
-        props (MyIdentity, Cancelled) verbs (SetPropertyValue, Consult)
+      perspective on extern
+        props (MyIdentity) verbs (Consult, SetPropertyValue)
         action ExportForAnotherInstallation
           letA
             text <- callExternal ser:SerialiseFor( [role model://perspectives.domains#System$SocialEnvironment$SystemUser], context >> extern ) returns String
           in
-            create file ("identity_of_" + LastName + ".json") as "text/json" in MyIdentity for origin
+            create file ("identity_of_" + context >> Me >> LastName + ".json") as "text/json" in MyIdentity
               text
+      perspective on Me
+        only (Create, Fill)
+        props (FirstName, LastName, PublicKey) verbs (Consult)
+        props (Cancelled) verbs (SetPropertyValue, Consult)
         action Cancel
           Cancelled = true
       perspective on Persons
@@ -292,17 +293,16 @@ domain model://perspectives.domains#System
 
     -- If User is not filled with Persons, we can never fill a role that requires Persons with User. That may be inconvenient.
     -- OF WE MOETEN ME VULLEN MET PERSONS.
-    -- TODO. WHAT ABOUT SOCIALENVIRONMENT$ME?
-    user User (mandatory) filledBy PerspectivesUsers
+    user User (mandatory) filledBy (Persons + PerspectivesUsers)
       aspect sys:ContextWithNotification$NotifiedUser
-      -- This will happen on importing SocialEnvironment and Me from another installation.
+      -- This will happen on importing SocialEnvironment from another installation.
       -- If we import a peer's data, we will get a User instance that is already filled.
       state FillWithPerspectivesUser = (not exists binding) and exists sys:MySocialEnvironment >> Me
         on entry
           do for User
             -- User has a sufficient perspective on itself to do this. 
-            -- It will be filled with the Persons instance that is filled by the same PerspectivesUsers instance as SocialEnvironment$Me.
-            bind_ sys:MySocialEnvironment >> Me >> binding >> binder Persons >>= first to origin
+            -- It will be filled with the Persons instance for the local user.
+            bind_ sys:MySocialEnvironment >> Persons >>= first to origin
 
       -- PDRDEPENDENCY
       property Channel = (binder Initiator union binder ConnectedPartner) >> context >> extern >> ChannelDatabaseName
@@ -468,7 +468,7 @@ domain model://perspectives.domains#System
     context SocialEnvironment filledBy SocialEnvironment
 
     -- In effect, this will filter out the Serialization persona.
-    user Contacts = filter (callExternal cdb:RoleInstances( "model://perspectives.domains#System$TheWorld$PerspectivesUsers" ) returns sys:TheWorld$PerspectivesUsers) with (exists PublicKey) and (not this == sys:SocialMe >> binding)
+    user Contacts = filter (callExternal cdb:RoleInstances( "model://perspectives.domains#System$TheWorld$PerspectivesUsers" ) returns sys:TheWorld$PerspectivesUsers) with (exists PublicKey) and (not this == me >> binding)
     
     user ActiveContacts = filter Contacts with not Cancelled
 
@@ -873,8 +873,8 @@ domain model://perspectives.domains#System
           -- The Guest will not be able to fill the Inviter role.
 
     -- Without the filter, the Inviter will count as Guest and its bot will fire for the Inviter, too.
-    -- user Guest = (filter sys:SocialMe >> binding with not fills (currentcontext >> Inviter))
-    user Guest = sys:SocialMe >> binding
+    -- user Guest = (filter me >> binding with not fills (currentcontext >> Inviter))
+    user Guest = me >> binding
       perspective on extern
         props (InviterLastName, Message, EnteredCode) verbs (Consult)
         props (EnteredCode) verbs (SetPropertyValue)
@@ -888,7 +888,7 @@ domain model://perspectives.domains#System
         props (FirstName, LastName) verbs (Consult)
       in context state UnlockInvitation
         action AcceptInvitation
-          bind sys:SocialMe >> binding to Invitee
+          bind me >> binding to Invitee
       screen
         who 
           Inviter
