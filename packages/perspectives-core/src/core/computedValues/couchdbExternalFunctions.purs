@@ -60,7 +60,7 @@ import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..
 import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.Assignment.Update (withAuthoringRole)
 import Perspectives.Authenticate (getMyPublicKey)
-import Perspectives.ContextAndRole (changeRol_isMe, context_id, context_rolInContext, rol_id)
+import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_id)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2)
 import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
@@ -76,7 +76,7 @@ import Perspectives.InstanceRepresentation (PerspectContext)
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance, createAndAddRoleInstance_)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesDatabase, getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries)
-import Perspectives.ModelDependencies (identifiableLastName, perspectivesUsersPublicKey, socialEnvironment, socialEnvironmentMe, socialEnvironmentPersons, socialEnvironmentSystemUser, theWorldInitializer)
+import Perspectives.ModelDependencies (identifiableLastName, perspectivesUsersPublicKey, socialEnvironment, theWorldInitializer)
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -595,25 +595,7 @@ initSystem = do
                   )
                 case socialEnvResult of
                   Left e -> logPerspectivesError (Custom (show e))
-                  Right socialEnv@(ContextInstance socialEnvId) ->
-                    withAuthoringRole (CR $ CalculatedRoleType socialEnvironmentSystemUser) do
-                      socialMeRole <- createAndAddRoleInstance_ (EnumeratedRoleType socialEnvironmentMe) socialEnvId
-                        ( RolSerialization
-                            { id: Nothing
-                            , properties: PropertySerialization empty
-                            , binding: Just perspectivesUser
-                            }
-                        )
-                        true
-                      roleIsMe socialMeRole socialEnv
-                      void $ createAndAddRoleInstance_ (EnumeratedRoleType socialEnvironmentPersons) socialEnvId
-                        ( RolSerialization
-                            { id: Nothing
-                            , properties: PropertySerialization empty
-                            , binding: Just perspectivesUser
-                            }
-                        )
-                        false
+                  Right socialEnv@(ContextInstance socialEnvId) -> pure unit
           Nothing -> logPerspectivesError (Custom "No public key found on setting up!")
       -- Instead, read the Identity document.
       else do
@@ -627,16 +609,6 @@ initSystem = do
                 pUserRole <- lift (getPerspectRol pUser)
                 lift $ void $ cacheEntity pUser $ changeRol_isMe pUserRole true
                 lift $ void $ saveEntiteit pUser
-                -- Also set isMe on SocialEnvironment$Me (sets context_me on SocialEnvironment so
-                -- getMe works; the identity document does not carry the purely-local context_me field).
-                msocialEnv <- lift $ tryGetPerspectContext (ContextInstance "TheSocialEnvironment")
-                case msocialEnv of
-                  Nothing -> pure unit
-                  Just socialEnv -> do
-                    Tuple _ meInstances <- lift $ context_rolInContext socialEnv (EnumeratedRoleType socialEnvironmentMe)
-                    case head meInstances of
-                      Just socialMeId -> roleIsMe socialMeId (ContextInstance "TheSocialEnvironment")
-                      Nothing -> pure unit
               Nothing -> pure unit
           Nothing -> pure unit
 
