@@ -46,9 +46,6 @@ domain model://perspectives.domains#System@6.3
   -- PDRDEPENDENCY
   aspect user sys:PerspectivesSystem$Installer
 
-  -- PDRDEPENDENCY
-  aspect user sys:PerspectivesSystem$Installer
-
   -- We compute Upgrader as `me` because `me` is set up in the PDR before any PL state reactions
   -- execute, so it is available from the very first on-entry action in the domain context.
   user Upgrader = me
@@ -86,10 +83,6 @@ domain model://perspectives.domains#System@6.3
         on entry
           do for Upgrader
             LastHandledUpgrade = callExternal util:SystemParameter( "PDRVersion" ) returns String
-            -- Remove all Persons instances from sys:MySocialEnvironment that are filled with a public instance of PerspectivesUsers.
-            remove role (filter sys:MySocialEnvironment >> Persons with (binding >> callExternal util:RoleIdentifier() returns String matches regexp "^pub:.*"))
-            -- Fill sys:Me with the Persons instance that is filled by me.
-            bind_ me to sys:Me
 
   -- Used as model://perspectives.domains#System$RoleWithId$Id in the PDR code.
   thing RoleWithId
@@ -307,6 +300,7 @@ domain model://perspectives.domains#System@6.3
         do for User
           bind sys:MySocialEnvironment >> extern to SocialEnvironment
 
+    -- TODO: User is niet beschikbaar als PerspectivesSystem wordt opgestart. Controleer of deze on entry acties wel worden uitgevoerd.
     on entry
       do for User
         create role RecoveryPoint

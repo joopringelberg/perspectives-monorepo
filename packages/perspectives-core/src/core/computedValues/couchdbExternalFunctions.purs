@@ -60,7 +60,7 @@ import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..
 import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.Assignment.Update (withAuthoringRole)
 import Perspectives.Authenticate (getMyPublicKey)
-import Perspectives.ContextAndRole (changeRol_isMe, context_id, context_rolInContext, rol_id)
+import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_id)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2)
 import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
@@ -75,8 +75,8 @@ import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2
 import Perspectives.InstanceRepresentation (PerspectContext)
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance, createAndAddRoleInstance_)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
+import Perspectives.Instances.Me (computeMe_)
 import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesDatabase, getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries)
-import Perspectives.ModelDependencies (identifiableLastName, perspectivesUsersPublicKey, socialEnvironment, socialEnvironmentPersons, socialEnvironmentSystemUser, theWorldInitializer)
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -501,147 +501,149 @@ createInitialInstances unversionedModelname versionedModelName patch build versi
 -- |    * PerspectivesUsers (with author TheWorld$Initializer) for the new user and for authoring role "serializationuser", where
 -- |      - the new user gets a PublicKey
 -- |      - the serializationuser gets a LastName ("serializationuser").
--- |    * SocialEnvironment (with author SocialEnvironment$SystemUser):
--- |      - SocialEnvironment$Persons filled with the new user's PerspectivesUsers instance
--- |        (SocialEnvironment$Me is now a calculated role = me, so no instance is created)
 -- |    * BaseRepository, filled with the Perspectives Repository.
--- |
--- | The SocialEnvironment and Persons are created here (in PDR) so that the `me` query step
--- | resolves to a value before any PL state reactions execute. All six calculated roles that were
--- | formerly defined as X = sys:Me can therefore be changed to X = me.
 initSystem :: MonadPerspectivesTransaction Unit
 initSystem = do
   lift $ saveMarkedResources
-  -- Create the system instance (the instance of sys:PerspectivesSystem for this installation).
-  -- This will also create an instance of IndexedContext in the new system instance, filled with itself.
-  sysId <- lift getSystemIdentifier
-  language <- lift $ getCurrentLanguage
-  sysresult <- runExceptT $ constructContext Nothing
-    ( ContextSerialization
-        { id: Just sysId
-        , prototype: Nothing
-        , ctype: DEP.theSystem
-        , rollen: empty
-        , externeProperties: (PropertySerialization $ fromFoldable [ Tuple DEP.currentLanguage [ language ], Tuple DEP.previousLanguage [ language ] ])
+
+  -- Create the system instance. We let the PerspectivesSystem$Installer do this, as this role creates all the apps. 
+  -- It has no sufficient perspective but that seems to be no problem. Systems should not be shared between users anyway.
+  withAuthoringRole (ENR $ EnumeratedRoleType DEP.installer) createSystem
+
+  -- Then either create the world, or read the identity document and execute the transaction contained in it.
+  isFirstInstallation <- lift $ AMA.gets (_.isFirstInstallation <<< _.runtimeOptions)
+  if isFirstInstallation then withAuthoringRole (CR $ CalculatedRoleType DEP.theWorldInitializer) createTheWorld
+  else do
+    mIdoc <- gets \(Transaction { identityDocument }) -> identityDocument
+    case mIdoc of
+      Just (UninterpretedTransactionForPeer i) ->
+        case read_ i of
+          Just identityDocument -> do
+            executeTransaction identityDocument
+            -- TODO. Controleer de structuur van het identityDocument.
+            -- now set isMe of the PerspectivesUser that fills sys:SocialMe.
+            pUser <- perspectivesUser2RoleInstance <$> lift getPerspectivesUser
+            pUserRole <- lift (getPerspectRol pUser)
+            lift $ void $ cacheEntity pUser $ changeRol_isMe pUserRole true
+            lift $ void $ saveEntiteit pUser
+          Nothing -> pure unit
+      Nothing -> pure unit
+
+  -- Now add the System User role instance.
+  withAuthoringRole (ENR $ EnumeratedRoleType DEP.sysUser) createSystemUser
+  sysId <- lift getMySystem
+
+  -- Finally add the base repository to system:
+  void $ createAndAddRoleInstance (EnumeratedRoleType DEP.baseRepository) sysId
+    ( RolSerialization
+        { id: Nothing
+        , properties: PropertySerialization empty
+        , binding: Just "pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains$External"
         }
     )
-  case sysresult of
-    Left se -> logPerspectivesError (Custom (show se))
-    Right system@(ContextInstance systemId) -> do
-      -- Now create the user role (the instance of sys:PerspectivesSystem$User; it is cached automatically).
-      -- This will also create the IndexedRole in the System instance, filled with the new User instance.
-      userId <- pure (systemId <> "$User")
-      me <- createAndAddRoleInstance_ (EnumeratedRoleType DEP.sysUser) systemId
-        ( RolSerialization
-            { id: Just userId
-            , properties: PropertySerialization empty
-            , binding: Nothing
-            }
-        )
-        true
-      roleIsMe me system
-      mIdoc <- gets \(Transaction { identityDocument }) -> identityDocument
-      isFirstInstallation <- lift $ AMA.gets (_.isFirstInstallation <<< _.runtimeOptions)
-      if isFirstInstallation then do
-        mpublicKey <- lift getMyPublicKey
-        case mpublicKey of
-          Just publicKey -> do
-            -- Create TheWorld, complete with the PerspectivesUser role of TheWorld that represents the identity 
-            -- of the natural person setting up this installation.
-            worldresult <- runExceptT $ constructContext Nothing
+
+  where
+
+  createTheWorld :: MonadPerspectivesTransaction Unit
+  createTheWorld = do
+    mpublicKey <- lift getMyPublicKey
+    case mpublicKey of
+      Just publicKey -> do
+        -- Create TheWorld, complete with the PerspectivesUser role of TheWorld that represents the identity 
+        -- of the natural person setting up this installation.
+        worldresult <- runExceptT $ constructContext Nothing
+          ( ContextSerialization
+              { id: Just "TheWorld"
+              , prototype: Nothing
+              , ctype: theWorld
+              , rollen: empty
+              , externeProperties: (PropertySerialization empty)
+              }
+          )
+        case worldresult of
+          Left e -> logPerspectivesError (Custom (show e))
+          Right world@(ContextInstance worldId) -> do
+            -- Is with a storage scheme right from the start.
+            PerspectivesUser perspectivesUser <- lift getPerspectivesUser
+            puser <- createAndAddRoleInstance_ (EnumeratedRoleType DEP.perspectivesUsers) worldId
+              ( RolSerialization
+                  { id: Just perspectivesUser
+                  , properties: PropertySerialization (singleton DEP.perspectivesUsersPublicKey [ publicKey ])
+                  , binding: Nothing
+                  }
+              )
+              true
+            roleIsMe puser world
+            -- Now create the SocialEnvironment.
+            socialEnvResult <- runExceptT $ constructContext Nothing
               ( ContextSerialization
-                  { id: Just "TheWorld"
+                  { id: Just "TheSocialEnvironment"
                   , prototype: Nothing
-                  , ctype: theWorld
+                  , ctype: DEP.socialEnvironment
                   , rollen: empty
                   , externeProperties: (PropertySerialization empty)
                   }
               )
-            case worldresult of
+            case socialEnvResult of
               Left e -> logPerspectivesError (Custom (show e))
-              Right world@(ContextInstance worldId) -> do
-                -- Is with a storage scheme right from the start.
-                PerspectivesUser perspectivesUser <- lift getPerspectivesUser
-                withAuthoringRole (CR $ CalculatedRoleType theWorldInitializer) do
-                  puser <- createAndAddRoleInstance_ (EnumeratedRoleType DEP.perspectivesUsers) worldId
+              Right socialEnv@(ContextInstance socialEnvId) -> do
+                -- Then create a Persons instance and fill it with puser.
+                void $ withAuthoringRole (CR $ CalculatedRoleType DEP.socialEnvironmentSystemUser) do
+                  createAndAddRoleInstance_ (EnumeratedRoleType DEP.socialEnvironmentPersons) socialEnvId
                     ( RolSerialization
-                        { id: Just perspectivesUser
-                        , properties: PropertySerialization (singleton perspectivesUsersPublicKey [ publicKey ])
-                        , binding: Nothing
+                        { id: Nothing
+                        , properties: PropertySerialization empty
+                        , binding: Just perspectivesUser
                         }
                     )
                     true
-                  roleIsMe puser world
-                  -- We need to fill 'me' with the PerspectivesUser that fills sys:SocialMe.
-                  _ <- setFirstBinding me puser Nothing
-                  void $ createAndAddRoleInstance_ (EnumeratedRoleType DEP.perspectivesUsers) worldId
-                    ( RolSerialization
-                        { id: Just "def:#serializationuser"
-                        , properties: PropertySerialization (singleton identifiableLastName [ "Serialisation persona" ])
-                        , binding: Nothing
-                        }
-                    )
-                    false
-                -- Create SocialEnvironment with Persons so that `me` is available
-                -- before any PL state reactions execute.
-                -- SocialEnvironment$Me is now a calculated role (= me), so only Persons
-                -- needs to be created; roleIsMe is called automatically by setFirstBinding.
-                socialEnvResult <- runExceptT $ constructContext Nothing
-                  ( ContextSerialization
-                      { id: Just "TheSocialEnvironment"
-                      , prototype: Nothing
-                      , ctype: socialEnvironment
-                      , rollen: empty
-                      , externeProperties: (PropertySerialization empty)
+                -- Lastly: create the serializationuser.
+                void $ createAndAddRoleInstance_ (EnumeratedRoleType DEP.perspectivesUsers) worldId
+                  ( RolSerialization
+                      { id: Just "def:#serializationuser"
+                      , properties: PropertySerialization (singleton DEP.identifiableLastName [ "Serialisation persona" ])
+                      , binding: Nothing
                       }
                   )
-                case socialEnvResult of
-                  Left e -> logPerspectivesError (Custom (show e))
-                  Right socialEnv@(ContextInstance socialEnvId) ->
-                    withAuthoringRole (CR $ CalculatedRoleType socialEnvironmentSystemUser) do
-                      void $ createAndAddRoleInstance_ (EnumeratedRoleType socialEnvironmentPersons) socialEnvId
-                        ( RolSerialization
-                            { id: Nothing
-                            , properties: PropertySerialization empty
-                            , binding: Just perspectivesUser
-                            }
-                        )
-                        true
-          Nothing -> logPerspectivesError (Custom "No public key found on setting up!")
-      -- Instead, read the Identity document.
-      else do
-        case mIdoc of
-          Just (UninterpretedTransactionForPeer i) ->
-            case read_ i of
-              Just identityDocument -> do
-                executeTransaction identityDocument
-                -- now set isMe of the PerspectivesUser that fills sys:SocialMe.
-                pUser <- perspectivesUser2RoleInstance <$> lift getPerspectivesUser
-                pUserRole <- lift (getPerspectRol pUser)
-                lift $ void $ cacheEntity pUser $ changeRol_isMe pUserRole true
-                lift $ void $ saveEntiteit pUser
-                -- Set isMe on SocialEnvironment$Persons so that context_me is set on SocialEnvironment
-                -- (the identity document does not carry the purely-local context_me field).
-                -- Me is now a calculated role (= me), so we set isMe on Persons.
-                msocialEnv <- lift $ tryGetPerspectContext (ContextInstance "TheSocialEnvironment")
-                case msocialEnv of
-                  Nothing -> pure unit
-                  Just socialEnv -> do
-                    Tuple _ personsInstances <- lift $ context_rolInContext socialEnv (EnumeratedRoleType socialEnvironmentPersons)
-                    case head personsInstances of
-                      Just personsId -> roleIsMe personsId (ContextInstance "TheSocialEnvironment")
-                      Nothing -> pure unit
-              Nothing -> pure unit
-          Nothing -> pure unit
+                  false
+      Nothing -> logPerspectivesError (Custom "No public key found on setting up!")
 
-      -- Add the base repository to system:
-      void $ createAndAddRoleInstance (EnumeratedRoleType DEP.baseRepository) systemId
-        ( RolSerialization
-            { id: Nothing
-            , properties: PropertySerialization empty
-            , binding: Just "pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains$External"
-            }
-        )
+  createSystem :: MonadPerspectivesTransaction Unit
+  createSystem = do
+    sysId <- lift getSystemIdentifier
+    -- Create the system instance (the instance of sys:PerspectivesSystem for this installation).
+    -- This will also create an instance of IndexedContext in the new system instance, filled with itself.
+    language <- lift $ getCurrentLanguage
+    sysresult <- runExceptT $ constructContext Nothing
+      ( ContextSerialization
+          { id: Just sysId
+          , prototype: Nothing
+          , ctype: DEP.theSystem
+          , rollen: empty
+          , externeProperties: (PropertySerialization $ fromFoldable [ Tuple DEP.currentLanguage [ language ], Tuple DEP.previousLanguage [ language ] ])
+          }
+      )
+    case sysresult of
+      Left se -> logPerspectivesError (Custom (show se))
+      _ -> pure unit
+
+  createSystemUser :: MonadPerspectivesTransaction Unit
+  createSystemUser = do
+    -- Now create the user role (the instance of sys:PerspectivesSystem$User; it is cached automatically).
+    -- This will also create the IndexedRole in the System instance, filled with the new User instance.
+    sysId <- lift getMySystem
+    userId <- pure (sysId <> "$User")
+    sysUser <- createAndAddRoleInstance_ (EnumeratedRoleType DEP.sysUser) sysId
+      ( RolSerialization
+          { id: Just userId
+          , properties: PropertySerialization empty
+          , binding: Nothing
+          }
+      )
+      true
+    roleIsMe sysUser (ContextInstance sysId)
+    me <- lift $ computeMe_
+    void $ setFirstBinding sysUser me Nothing
 
 -- Returns string ending on forward slash (/).
 repository :: String -> MonadPerspectivesTransaction String
