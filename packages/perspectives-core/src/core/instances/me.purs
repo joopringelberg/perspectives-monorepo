@@ -6,17 +6,20 @@ import Control.Monad.Writer (lift)
 import Data.Array (singleton)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
+import Data.Unit (unit)
 import Perspectives.ContextAndRole (rol_binding, rol_isMe)
-import Perspectives.CoreTypes (type (~~>), MP, liftToInstanceLevel)
+import Perspectives.CoreTypes (type (~~>), MP, MonadPerspectives, MonadPerspectivesQuery, liftToInstanceLevel, runMonadPerspectivesQueryToObject)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.Instances.Combinators (filter, some) as Combinators
-import Perspectives.Instances.ObjectGetters (contextType, contextType_, getMe, getPreferredUserRoleType, roleType, roleType_)
+import Perspectives.Instances.ObjectGetters (contextType, contextType_, getFilledRoles, getMe, getPreferredUserRoleType, roleType, roleType_)
+import Perspectives.ModelDependencies (socialEnvironment, socialEnvironmentPersons)
 import Perspectives.Persistent (tryGetPerspectRol)
+import Perspectives.PerspectivesState (getPerspectivesUser)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.PersistentType (getContext)
 import Perspectives.Representation.Context (Context(..))
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..))
-import Perspectives.Representation.TypeIdentifiers (ResourceType(..), RoleType(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser(..), RoleInstance(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), ResourceType(..), RoleType(..), ContextType(..))
 import Perspectives.ResourceIdentifiers (isInPublicScheme, takeGuid)
 import Perspectives.StrippedDelta (addSchemeToResourceIdentifier)
 import Perspectives.Types.ObjectGetters (calculatedUserRole, contextAspectsClosure, enumeratedUserRole, isUnlinked_, userRole)
@@ -108,3 +111,11 @@ computesMe ctxt' rt = Combinators.some (getRoleInstances rt >=> lift <<< lift <<
 
 getMeInRoleAndContext :: RoleType -> ContextInstance ~~> RoleInstance
 getMeInRoleAndContext rt = Combinators.filter (getRoleInstances rt) (lift <<< lift <<< isMe)
+
+computeMe :: MonadPerspectivesQuery RoleInstance
+computeMe = do
+  PerspectivesUser pUser <- lift $ lift getPerspectivesUser
+  getFilledRoles (ContextType socialEnvironment) (EnumeratedRoleType socialEnvironmentPersons) (RoleInstance pUser)
+
+computeMe_ :: MonadPerspectives RoleInstance
+computeMe_ = runMonadPerspectivesQueryToObject unit \_ -> computeMe
