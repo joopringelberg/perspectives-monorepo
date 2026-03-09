@@ -294,8 +294,8 @@ domain model://perspectives.domains#System@6.3
         do for User
           create context Caches bound to SystemCaches
     
-    -- This is for installations that come after the first one.
-    state NoSocialEnvironment = (not exists SocialEnvironment) and (exists sys:MySocialEnvironment)
+    -- This is for installations that come after the first one - but only if this is my own system!
+    state NoSocialEnvironment = (not exists SocialEnvironment) and (exists sys:MySocialEnvironment) and User >> binding == me
       on entry
         do for User
           bind sys:MySocialEnvironment >> extern to SocialEnvironment
