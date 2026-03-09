@@ -47,8 +47,8 @@ socialEnvironmentPersons = "model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i
 socialEnvironmentMe :: String
 socialEnvironmentMe = "model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$robf7hy8p0"
 
-indexedSocialMe :: String
-indexedSocialMe = "model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$robf7hy8p0$f0yuqk3hg8"
+socialEnvironmentSystemUser :: String
+socialEnvironmentSystemUser = "model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$j5rm1oa0oq"
 
 systemModelName :: String
 systemModelName = "model://perspectives.domains#tiodn6tcyc" -- System

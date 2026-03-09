@@ -28,9 +28,9 @@ import Data.Newtype (over)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Extern.Couchdb (addModelToLocalStore, createInitialInstances, isInitialLoad)
-import Perspectives.ModelDependencies (bodiesWithAccountsModelName, couchdbManagementModelName, repositoryRegistryModelName, sysUser, systemModelName)
+import Perspectives.ModelDependencies (bodiesWithAccountsModelName, couchdbManagementModelName, repositoryRegistryModelName, sysUser, systemModelName, theWorldInitializer)
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, invertedQueryDatabaseName, modelDatabaseName)
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction)
 import Perspectives.SetupCouchdb (setContext2RoleView, setContextSpecialisationsView, setContextView, setCredentialsView, setFilled2FillerView, setFiller2FilledView, setModelIdNamespaceView, setModelView, setPendingInvitationView, setRTContextKeyView, setRTFilledKeyView, setRTFillerKeyView, setRTPropertyKeyView, setRTRoleKeyView, setRole2ContextView, setRoleFromContextView, setRoleSpecialisationsView, setRoleView)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
@@ -63,7 +63,7 @@ setupUser uninterpretedIdentityDoc = do
   modelDatabaseName >>= setModelIdNamespaceView
   -- Finally, upload model:System to perspect_models.
   void $ runMonadPerspectivesTransaction
-    (ENR $ EnumeratedRoleType sysUser)
+    (CR $ CalculatedRoleType theWorldInitializer)
     ( do
         modify (over Transaction \t -> t { identityDocument = uninterpretedIdentityDoc })
         addModelToLocalStore (ModelUri systemModelName) isInitialLoad

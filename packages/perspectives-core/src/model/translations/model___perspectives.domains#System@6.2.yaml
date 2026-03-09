@@ -5,6 +5,11 @@ model://perspectives.domains#tiodn6tcyc:
       translations:
         en: The World
         nl: De Wereld
+      indexedName:
+        name: model://perspectives.domains#System$TheWorld
+        translations:
+          nl: De wereld
+          en: The World
       users:
         Initializer:
           translations:
@@ -31,39 +36,69 @@ model://perspectives.domains#tiodn6tcyc:
       translations:
         en: Social Environment
         nl: Sociale Omgeving
+      indexedName:
+        name: model://perspectives.domains#System$MySocialEnvironment
+        translations:
+          nl: Adresboek
+          en: Address Book
+      external:
+        properties:
+          MyIdentity:
+            translations:
+              nl: MISSING nl
+              en: MISSING en
       users:
         SystemUser:
           translations:
             en: System user
             nl: Systeemgebruiker
-          actions:
-            model://perspectives.domains#System$SocialEnvironment:
-              ExportForAnotherInstallation:
-                translations:
-                  nl: Exporteer voor een andere installatie
-                  en: Export for another installation
-              Cancel:
-                translations:
-                  nl: Annuleren
-                  en: Cancel
-            model://perspectives.domains#System$RootContext:
-              ExportForAnotherInstallation:
-                translations:
-                  nl: Exporteer voor een andere installatie
-                  en: Export for another installation
-              Cancel:
-                translations:
-                  nl: Annuleren
-                  en: Cancel
+        Peers:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
+        OtherPersons:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
         Me:
           translations:
             en: Me
             nl: Mijzelf
-          properties:
-            MyIdentity:
+          actions:
+            model://perspectives.domains#System$SocialEnvironment:
+              AddOtherPerson:
+                translations:
+                  nl: MISSING nl
+                  en: MISSING en
+            model://perspectives.domains#System$RootContext:
+              Cancel:
+                translations:
+                  nl: MISSING nl
+                  en: MISSING en
+          markdowns:
+            0:
               translations:
-                en: My identity
-                nl: Mijn identiteit
+                orig: "## Medegebruikers\n
+                  Deze mensen zitten ook op MyContexts.\n
+                  Kopieer iemand uit deze tabel als je gegevens met hem of haar\n
+                  wilt delen."
+                nl: "MISSING nl"
+                en: "MISSING en"
+            1:
+              translations:
+                orig: "## Andere personen\n
+                  Deze mensen maken geen gebruik van MyContexts.\n
+                  Je kunt geen gegevens met hen delen.\n
+                  Voeg een nieuwe persoon toe met de actie [[action: AddOtherPerson| Voeg persoon toe]]."
+                nl: "MISSING nl"
+                en: "MISSING en"
+            2:
+              translations:
+                orig: "## Alle personen\n
+                  Kopieer iemand uit deze tabel als het niet uitmaakt of\n
+                  iemand wel of geen Perspectives gebruikt."
+                nl: "MISSING nl"
+                en: "MISSING en"
         Persons:
           translations:
             en: Persons
@@ -72,6 +107,11 @@ model://perspectives.domains#tiodn6tcyc:
       translations:
         en: Perspectives System
         nl: Perspectivessysteem
+      indexedName:
+        name: model://perspectives.domains#System$MySystem
+        translations:
+          nl: Mijn systeem
+          en: My system
       external:
         properties:
           MaxHistoryLength:
@@ -243,6 +283,10 @@ model://perspectives.domains#tiodn6tcyc:
                    These are the repositories that you have access to.\n
                    Open a repository to see the models it contains."
       things:
+        GlobalUpgradeHook:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
         SystemDataUpgrade:
           translations:
             nl: Systeem data upgrade
@@ -269,6 +313,10 @@ model://perspectives.domains#tiodn6tcyc:
             en: Items on clipboard
             nl: Items op clipboard
           properties:
+            TypeName:
+              translations:
+                nl: MISSING nl
+                en: MISSING en
             Name:
               translations:
                 en: Item
@@ -808,6 +856,10 @@ model://perspectives.domains#tiodn6tcyc:
             translations:
               en: Description
               nl: Beschrijving
+          ShouldNotBeRemoved:
+            translations:
+              nl: MISSING nl
+              en: MISSING en
           ModelName:
             translations:
               en: Model name
@@ -818,6 +870,10 @@ model://perspectives.domains#tiodn6tcyc:
             en: Visitor
             nl: Bezoeker
   roles:
+    ModelDataUpgrade:
+      translations:
+        nl: MISSING nl
+        en: MISSING en
     SystemDataUpgrade:
       translations:
         nl: System data upgrade
@@ -836,6 +892,15 @@ model://perspectives.domains#tiodn6tcyc:
           translations:
             en: Identification
             nl: Identificatie
+    RoleWithName:
+      translations:
+        nl: MISSING nl
+        en: MISSING en
+      properties:
+        Name:
+          translations:
+            nl: MISSING nl
+            en: MISSING en
     Chat:
       translations:
         nl: Chat

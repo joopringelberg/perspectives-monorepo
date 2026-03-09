@@ -217,7 +217,7 @@ createAndAddRoleInstance_ roleType@(EnumeratedRoleType rtype) contextId (RolSeri
       Just roleId -> constructEmptyRole contextInstanceId roleType (getNextRolIndex rolInstances) (RoleInstance roleId)
 
     if isMe then void $ lift $ cacheEntity roleInstance (changeRol_isMe r true)
-    else pure unit
+    else void $ lift $ cacheEntity roleInstance r
 
     -- Then add the new Role instance to the context. Takes care of SYNCHRONISATION by constructing and
     -- adding a ContextDelta. Also adds the UniverseRoleDelta constructed by constructEmptyRole.
