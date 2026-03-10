@@ -966,8 +966,8 @@ perspectivePart = do
     _, _ -> case first of
       "" -> do
         thisWord <- stringUntilNewline
-        fail ("Expected: view, props, verbs, only, except, all, in, on, action, perspective, selfonly (but found '" <> thisWord <> "'.) ")
-      otherwise -> fail ("Expected: view, props, verbs, only, except, all, in, on, action, perspective, selfonly (but found '" <> otherwise <> "'.) ")
+        fail ("Expected: view, props, verbs, only, except, all, in, on, action, perspective, selfonly, authoronly (but found '" <> thisWord <> "'.) ")
+      otherwise -> fail ("Expected: view, props, verbs, only, except, all, in, on, action, perspective, selfonly, authoronly (but found '" <> otherwise <> "'.) ")
 
 -- | inState =
 -- |  in [{subject | object | context}] state [<ident>]

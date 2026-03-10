@@ -69,7 +69,7 @@ import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
 import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..), createTransaction)
 import Perspectives.Types.ObjectGetters (contextRootStates, publicUrl_, roleRootStates)
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, unless, void, ($), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||))
+import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, void, ($), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||))
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -154,8 +154,8 @@ phase1 share authoringRole r = do
   ----------------------------------------------------------------
   -- Enter root states for newly created CONTEXTS (guarded)
   ----------------------------------------------------------------
-  unless (null createdContexts)
-    $ void
+  if (null createdContexts) then pure unit
+  else void
     $ runSharing share authoringRole
     $ for createdContexts \cid -> do
         states <- lift (cid ##= contextType >=> liftToInstanceLevel contextRootStates)
@@ -166,15 +166,16 @@ phase1 share authoringRole r = do
           void $ for states \st -> do
             let k = stateKeyForContext st cid
             already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
-            unless already do
+            if already then pure unit
+            else do
               enteringState cid st
               AA.modify \t -> over Transaction (\tr -> tr { executedStateKeys = Set.insert k tr.executedStateKeys }) t
           lift $ restoreFrame oldFrame
   ----------------------------------------------------------------
   -- Enter root states for newly created ROLES (guarded)
   ----------------------------------------------------------------
-  unless (null createdRoles)
-    $ void
+  if (null createdRoles) then pure unit
+  else void
     $ runSharing share authoringRole
     $ for createdRoles \rid -> do
         ctxt <- lift (rid ##>> context)
@@ -186,7 +187,8 @@ phase1 share authoringRole r = do
           void $ for states \st -> do
             let k = stateKeyForRole st rid
             already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
-            unless already do
+            if already then pure unit
+            else do
               enteringRoleState rid st
               AA.modify \t -> over Transaction (\tr -> tr { executedStateKeys = Set.insert k tr.executedStateKeys }) t
           lift $ restoreFrame oldFrame

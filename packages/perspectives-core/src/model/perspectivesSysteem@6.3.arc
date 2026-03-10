@@ -465,6 +465,7 @@ domain model://perspectives.domains#System@6.3
             callExternal sensor:ReadSensor( "models", "identifier" ) returns String)
           Restart = true for context >> extern
       perspective on GlobalUpgradeHook
+        authoronly
         props (LastHandledUpgrade) verbs (Consult, SetPropertyValue)
       screen
         who 
@@ -843,7 +844,7 @@ domain model://perspectives.domains#System@6.3
 
   case Invitation
     state NoInviter = not exists Inviter
-    state NoInvitee = not exists Invitee
+    state NoInvitee = not exists Invitee >> binding
     state UnlockInvitation = extern >> CorrectCodeEntered
 
     external
