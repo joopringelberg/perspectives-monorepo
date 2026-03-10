@@ -401,3 +401,47 @@ context PendingInvitations = callExternal cdb:PendingInvitations() returns sys:I
 ```
 
 This role is filled by external roles of `Invitation` contexts that were created by other users and stored in the shared post database. The Invitee discovers such an invitation by polling `PendingInvitations`. When they open the invitation file stored in `SerialisedInvitation`, the above process is triggered to reconstruct the full Invitation context locally.
+
+---
+
+## Design Consideration: State-Dependent Perspectives and the Return-Transaction Risk
+
+### Background
+
+`serialiseRoleInstancesAndProperties` is not only called via `ser:SerialiseFor`. It is also called inside `enteringRoleState` (module `Perspectives.RoleStateCompiler`) when a role instance enters a state that is decorated with `perspectivesOnEntry` entries. The rationale is: if a peer user gains a new (or enriched) perspective because a role enters a state, the installation that drives the transition must ensure the peer receives the corresponding resources as deltas.
+
+### The asymmetry in `enteringRoleState`
+
+`enteringRoleState` contains two distinct loops over on-entry entries:
+
+1. **Automatic actions** (`automaticOnEntry`): guarded by `whenRightUser`, which checks `isMe` on the set of actors that fill the `allowedUser` role. If the local end user does not fill that role, the automatic action is **silently skipped**.
+
+2. **Perspective synchronisation** (`perspectivesOnEntry`): **not** guarded by `whenRightUser`. It iterates over all instances of the `allowedUser` role that are *not* the local user (`COMB.not' (filledBy …me…)`), and calls `serialiseRoleInstancesAndProperties` for each such peer. This step runs regardless of who authored the incoming transaction.
+
+### What happens when the triggering transaction came from a peer
+
+Incoming peer transactions are executed with `share = false` (see `transactionConsumer` in `Perspectives.AMQP.IncomingPost`):
+
+```purescript
+runMonadPerspectivesTransaction'
+  false
+  (ENR $ EnumeratedRoleType sysUser)
+  (executeTransaction body)
+```
+
+However, state transitions triggered by the deltas in that transaction are evaluated inside `runSharing`, which spawns an embedded **sharing** transaction (`share = true`). Concretely:
+
+- Phase-1 steps 1.3, 1.4, 1.5, 1.6 and phase-2 step 2.1 all call `runSharing` before executing state entry/exit handlers.
+- Any deltas added to the transaction inside `runSharing` (including those produced by `serialiseRoleInstancesAndProperties` in `enteringRoleState`) are therefore in a **sharing** transaction and will be distributed to peers.
+
+### The resulting "return transaction"
+
+When the receiver's installation processes a peer transaction that causes a role to enter a state with `perspectivesOnEntry` entries, `serialiseRoleInstancesAndProperties` is called for those peers — which may include the **original sender**. The receiver thereby generates and sends back to the sender a `TransactionForPeer` containing deltas that represent the sender's perspective on the resources in question.
+
+Whether this return transaction is informative depends on whether the receiver holds resources the sender does not yet know about. In typical cases the sender already has all those resources (it created them), so the return transaction is **redundant**. In edge cases it may carry genuinely new information (e.g. a filler created locally by the receiver that is part of the perspective's object query).
+
+### What to remember
+
+> **Important:** When an incoming peer transaction causes a state transition, **automatic actions** specified for that state are only executed if the local user fills the `allowedUser` role (guarded by `whenRightUser`). The sender's automatic actions are **never** executed on behalf of the sender. However, **perspective-synchronisation deltas** (`perspectivesOnEntry`) are generated unconditionally for every non-local peer, including potentially the sender, and these are distributed in an embedded sharing transaction.
+>
+> This means: processing an incoming transaction can silently produce a return transaction back to the original sender, even though no automatic actions were executed for that sender. This interaction is easy to overlook. Whenever the mechanism of state-dependent perspectives is changed or extended, care must be taken to re-examine whether the return transaction could carry stale, duplicate, or conflicting information, or whether it could trigger further state transitions on the sender's side that create an unintended loop.
