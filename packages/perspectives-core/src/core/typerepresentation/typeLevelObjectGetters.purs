@@ -476,7 +476,6 @@ generalisesRoleType_ t1 t2 = do
   (et2 :: CNF RoleInContext) <- (roleADTOfRoleType >=> toConjunctiveNormalForm_) t2
   pure (et1 `generalises_` et2)
 
--- NOT IN USE
 specialisesRoleType :: RoleType -> (RoleType ~~~> Value)
 specialisesRoleType t1 t2 = ArrayT do
   x <- (t1 `specialisesRoleType_` t2)

@@ -393,7 +393,7 @@ domain model://perspectives.domains#System@6.3
         letA
           invitation <- create context Invitation bound to OutgoingInvitations
         in
-          bind sys:Me to Inviter in invitation >> binding >> context
+          bind me to Inviter in invitation >> binding >> context
       perspective on External
         props (ShowLibraries, CurrentLanguage, PreviousLanguage, ShowSystemApps, OnStartup, Restart, MaxHistoryLength) verbs (Consult, SetPropertyValue)
         props (MyContextsVersion, PDRVersion, CurrentDate, CurrentHour) verbs (Consult)
@@ -864,7 +864,7 @@ domain model://perspectives.domains#System@6.3
         on entry
           do for Inviter
             letA
-              transaction <- callExternal ser:SerialiseFor( ((filter origin >> context >> contextType >> roleTypes with specialisesRoleType model://perspectives.domains#System$Invitation$Invitee) orElse [role model://perspectives.domains#System$Invitation$Invitee])) returns String
+              transaction <- callExternal ser:SerialiseFor( (filter origin >> context >> contextType >> roleTypes with (this == [role model://perspectives.domains#System$Invitation$Invitee]) or (specialisesRoleType model://perspectives.domains#System$Invitation$Invitee))) returns String
               invitation <- callExternal util:CreateInvitation( CompleteMessage, transaction, ConfirmationCode ) returns String
             in
               create file ("invitation_of_" + InviterLastName + ".json") as "text/json" in SerialisedInvitation for origin
