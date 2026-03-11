@@ -194,6 +194,8 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
     function Controls()
     {
       const isPublic = component.state.roleInstanceWithProps ? isInPublicScheme(component.state.roleInstanceWithProps!.roleId) : false;
+      const isCalculated = component.props.perspective.isCalculated;
+      const cardClassName = `${isPublic ? 'public-role' : ''} ${isCalculated ? 'calculated-role' : ''}`.trim();
       return  <RoleInstance
                 roleinstance={component.state.roleInstanceWithProps ? component.state.roleInstanceWithProps.roleId : undefined}
                 roletype={component.props.perspective.roleType!}
@@ -212,7 +214,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
                   // No roleinstance.
                   myroletype={component.props.perspective.userRoleType}
                   card={ <DraggableCard 
-                      className={isPublic ? 'public-role' : ''}
+                      className={cardClassName}
                       behaviourNames={behaviourNames}
                       aria-label={component.props.cardtitle} 
                       title={component.props.perspective.displayName}/> }
@@ -231,7 +233,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
                     myroletype={component.props.perspective.userRoleType}
                     card={ <DraggableCard 
                       tabIndex={0}
-                      className={isPublic ? 'public-role' : ''}
+                      className={cardClassName}
                       behaviourNames={behaviourNames}
                       aria-label={component.props.cardtitle} 
                       title={component.state.roleInstanceWithProps?.readableName || component.props.cardtitle}/> }

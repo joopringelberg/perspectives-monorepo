@@ -93,6 +93,7 @@
 , "tableContextMenu_removerole": "Verwijder deze rol"
 , "tableContextMenu_removecontext": "Verwijder deze context"
 , "tableContextMenu_opencontextoffiller": "Open de context van de vuller"
+, "tableContextMenu_opencontextofrole": "Open de context van deze rol"
 , "restoreContextForUser_title": "Herstel context"
 , "restoreContextForUser_message": "Kon deze context niet herstellen, voor deze gebruiker."
 , "tableContextMenu_publicurl": "Kopieer het publieke adres van deze context"
