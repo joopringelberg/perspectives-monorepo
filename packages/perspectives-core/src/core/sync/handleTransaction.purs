@@ -77,7 +77,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
 import Perspectives.Sync.LegacyDeltas (extractLegacyResourceKey, toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
-import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), storeDelta, deltaStoreDocId)
+import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), storeDelta, getDeltasForResource, deltaStoreDocId)
 import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, incrementResourceVersion, setResourceVersion)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
@@ -85,7 +85,7 @@ import Perspectives.Sync.Transaction (PublicKeyInfo)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, negate, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>>=))
+import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -483,29 +483,95 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
 
   executeDeltaWithVersionTracking :: SignedDelta -> String -> String -> Int -> PerspectivesUser -> MonadPerspectivesTransaction Unit
   executeDeltaWithVersionTracking s stringified resourceKey resourceVersion author = do
-    -- Execute the delta (same logic as before).
-    executeDelta s (Just stringified)
-    -- After successful execution, update the resource version store and store delta in delta-store.
     if resourceKey /= "" then do
-      -- For legacy deltas (resourceVersion < 0), compute the next available version.
-      -- For new deltas, use the sender-provided version.
-      rversion <-
-        if resourceVersion < 0 then lift $ incrementResourceVersion resourceKey
+      localVersion <- lift $ getResourceVersion resourceKey
+      if resourceVersion < 0 then do
+        -- Legacy delta: always execute, compute next version.
+        executeDelta s (Just stringified)
+        rversion <- lift $ incrementResourceVersion resourceKey
+        lift $ storeDelta $ DeltaStoreRecord
+          { _id: deltaStoreDocId resourceKey rversion author
+          , _rev: Nothing
+          , resourceKey
+          , resourceVersion: rversion
+          , author
+          , signedDelta: s
+          , deltaType: ""
+          , applied: true
+          }
+      else if resourceVersion < localVersion then do
+        -- Outdated delta: version is behind local version. Store but don't execute.
+        log ("Skipping outdated delta for " <> resourceKey <> " (version " <> show resourceVersion <> " < local " <> show localVersion <> ")")
+        lift $ storeDelta $ DeltaStoreRecord
+          { _id: deltaStoreDocId resourceKey resourceVersion author
+          , _rev: Nothing
+          , resourceKey
+          , resourceVersion
+          , author
+          , signedDelta: s
+          , deltaType: ""
+          , applied: false
+          }
+      else if resourceVersion == localVersion then do
+        -- Version conflict: two deltas claim the same version from different authors.
+        -- Resolve deterministically by lexicographic comparison of author IDs:
+        -- the author with the highest ID wins on all installations.
+        existingDeltas <- lift $ getDeltasForResource resourceKey
+        let sameVersionDeltas = filter (\(DeltaStoreRecord r) -> r.resourceVersion == resourceVersion) existingDeltas
+        -- Check whether any already-stored delta at this version has an author >= the incoming author.
+        let incomingAuthorWins = not (hasAuthorGreaterOrEqual author sameVersionDeltas)
+        if incomingAuthorWins then do
+          -- Incoming author wins: execute the delta (overwriting the current value).
+          log ("Version conflict for " <> resourceKey <> " at version " <> show resourceVersion <> ": incoming author " <> show author <> " wins.")
+          executeDelta s (Just stringified)
+          lift $ storeDelta $ DeltaStoreRecord
+            { _id: deltaStoreDocId resourceKey resourceVersion author
+            , _rev: Nothing
+            , resourceKey
+            , resourceVersion
+            , author
+            , signedDelta: s
+            , deltaType: ""
+            , applied: true
+            }
         else do
-          lift $ setResourceVersion resourceKey resourceVersion
-          pure resourceVersion
-      -- Store the delta in the delta-store.
-      lift $ storeDelta $ DeltaStoreRecord
-        { _id: deltaStoreDocId resourceKey rversion author
-        , _rev: Nothing
-        , resourceKey
-        , resourceVersion: rversion
-        , author
-        , signedDelta: s
-        , deltaType: "" -- TODO: extract deltaType string from the parsed delta
-        , applied: true
-        }
-    else pure unit
+          -- Existing author wins: store but don't execute.
+          log ("Version conflict for " <> resourceKey <> " at version " <> show resourceVersion <> ": incoming author " <> show author <> " loses.")
+          lift $ storeDelta $ DeltaStoreRecord
+            { _id: deltaStoreDocId resourceKey resourceVersion author
+            , _rev: Nothing
+            , resourceKey
+            , resourceVersion
+            , author
+            , signedDelta: s
+            , deltaType: ""
+            , applied: false
+            }
+      else do
+        -- resourceVersion > localVersion: normal next expected version.
+        -- (Gaps have already been ruled out by checkForGaps.)
+        executeDelta s (Just stringified)
+        lift $ setResourceVersion resourceKey resourceVersion
+        lift $ storeDelta $ DeltaStoreRecord
+          { _id: deltaStoreDocId resourceKey resourceVersion author
+          , _rev: Nothing
+          , resourceKey
+          , resourceVersion
+          , author
+          , signedDelta: s
+          , deltaType: ""
+          , applied: true
+          }
+    else
+      -- No resourceKey: legacy delta without ordering info, just execute.
+      executeDelta s (Just stringified)
+
+  -- | Returns true if any DeltaStoreRecord in the array has an author >= the given author.
+  hasAuthorGreaterOrEqual :: PerspectivesUser -> Array DeltaStoreRecord -> Boolean
+  hasAuthorGreaterOrEqual _ [] = false
+  hasAuthorGreaterOrEqual incomingAuthor records = case filter (\(DeltaStoreRecord r) -> r.author >= incomingAuthor) records of
+    [] -> false
+    _ -> true
 
   executeDelta :: SignedDelta -> Maybe String -> MonadPerspectivesTransaction Unit
   -- For now, we fail silently on deltas that cannot be authenticated.

@@ -1,0 +1,41 @@
+model://joopringelberg.nl#dwb02zsqks:
+  version: "1.0"
+  contexts:
+    TestDeltaOrderingApp:
+      translations:
+        nl: Test Delta Ordering App
+        en: Test Delta Ordering App
+      indexedName:
+        name: model://joopringelberg.nl#TestDeltaOrdering$TestDeltaOrderingApp
+        translations:
+          nl: Test Delta Ordering App
+          en: Test Delta Ordering App
+      users:
+        Manager:
+          translations:
+            nl: Beheerder
+            en: Manager
+          actions:
+            model://joopringelberg.nl#TestDeltaOrdering$TestDeltaOrderingApp:
+              CreateTest:
+                translations:
+                  nl: Maak Test
+                  en: Create Test
+      contextroles:
+        IncomingTests:
+          translations:
+            nl: Tests van anderen
+            en: Incoming Tests
+        Tests:
+          translations:
+            nl: Tests
+            en: Tests
+    Test:
+      translations:
+        nl: Test
+        en: Test
+      users:
+        Tester:
+          translations:
+            nl: Tester
+            en: Tester
