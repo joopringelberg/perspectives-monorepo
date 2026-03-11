@@ -303,6 +303,24 @@ moveRoleInstanceToAnotherContext _ _ _ _ _ = pure unit
 -----------------------------------------------------------
 type PropertyUpdater = Array RoleInstance -> EnumeratedPropertyType -> (Updater (Array Value))
 
+-- | Include the role's creation deltas (universeRoleDelta and contextDelta) in the transaction
+-- | before a property modification delta.
+-- | This supports MODIFY-WINS-OVER-DELETE: if a peer has deleted the role, including these deltas
+-- | allows the peer to restore the role before applying the property modification.
+-- |
+-- | The `users` parameter is the set of peer role instances that should receive the deltas;
+-- | it should match the `users` list used for the property delta that follows.
+-- |
+-- | `isDefaultContextDelta` returns true only for the placeholder delta stored in
+-- | `defaultRolRecord`, indicating the role was never properly added to its context.
+-- | In that case no creation deltas are emitted because there is nothing to restore.
+addRoleCreationDeltasTx :: Array RoleInstance -> PerspectRol -> MonadPerspectivesTransaction Unit
+addRoleCreationDeltasTx users (PerspectRol { universeRoleDelta, contextDelta }) =
+  if not (isDefaultContextDelta contextDelta) then do
+    addDelta (DeltaInTransaction { users, delta: universeRoleDelta })
+    addDelta (DeltaInTransaction { users, delta: contextDelta })
+  else pure unit
+
 -- | Modify the role instance with the new property values.
 -- | When all values are already in the list of values of the property for the role instance, this is a no-op.
 -- | PERSISTENCE of the role instance.
@@ -361,6 +379,8 @@ addProperty rids propertyName valuesAndDeltas = case ARR.head rids of
               propertyName
               replacementProperty
               (rol_pspType propertyBearingInstanceRole)
+            -- Include role creation deltas before property delta to support MODIFY-WINS-OVER-DELETE.
+            addRoleCreationDeltasTx users propertyBearingInstanceRole
             void $ for deltas \(Tuple _ delta) ->
               -- TODO: For a Private property, remove users that are not another installation of the own user.
               -- NOTICE: probably self-synchronisation (keeping installations of the same user up to date) currently doesn't work.
@@ -438,6 +458,8 @@ removeProperty rids propertyName mdelta values = case ARR.head rids of
                           }
                       )
                   )
+              -- Include role creation deltas before property delta to support MODIFY-WINS-OVER-DELETE.
+              addRoleCreationDeltasTx users pe
               addDelta (DeltaInTransaction { users, delta: signedDelta })
               (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
               (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
@@ -487,6 +509,8 @@ deleteProperty rids propertyName mdelta = case ARR.head rids of
                           }
                       )
                   )
+              -- Include role creation deltas before property delta to support MODIFY-WINS-OVER-DELETE.
+              addRoleCreationDeltasTx users pe
               addDelta (DeltaInTransaction { users, delta: signedDelta })
               (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
               (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
@@ -547,6 +571,8 @@ setProperty rids propertyName mdelta values = do
                 -- Save the property values in the role instance. Do this now because it will affect computing the users.
                 lift $ void $ cacheAndSave rid (setRol_property pe replacementProperty values signedDelta)
                 users <- aisInPropertyDelta rid' rid propertyName replacementProperty pspType
+                -- Include role creation deltas before property delta to support MODIFY-WINS-OVER-DELETE.
+                addRoleCreationDeltasTx users pe
                 addDelta (DeltaInTransaction { users, delta: signedDelta })
                 (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
                 (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie

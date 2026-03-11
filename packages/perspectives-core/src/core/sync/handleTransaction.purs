@@ -30,7 +30,7 @@ import Crypto.Subtle.Key.Types (CryptoKey)
 import Data.Array (catMaybes, concat, fromFoldable)
 import Data.Array.NonEmpty (head)
 import Data.Either (Either(..))
-import Data.Foldable (for_)
+import Data.Foldable (any, for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Generic.Rep (class Generic)
 import Data.Map as Map
@@ -44,7 +44,7 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Effect.Exception (error)
-import Foreign.Object (empty)
+import Foreign.Object (empty, values) as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (addProperty, addRoleInstanceToContext, deleteProperty, moveRoleInstanceToAnotherContext, removeProperty, setProperty)
@@ -66,8 +66,8 @@ import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.ModelDependencies (rootContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
-import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit)
-import Perspectives.PerspectivesState (transactionLevel)
+import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit, tryGetPerspectRol)
+import Perspectives.PerspectivesState (getPerspectivesUser, transactionLevel)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..))
@@ -241,7 +241,7 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
                 \t -> createAndAddRoleInstance
                   t
                   (unwrap id)
-                  (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
+                  (RolSerialization { id: Nothing, properties: PropertySerialization OBJ.empty, binding: Nothing })
 
             (lift $ findRoleRequests (ContextInstance "def:AnyContext") (externalRoleType contextType)) >>= addCorrelationIdentifiersToTransactie
             addCreatedContextToTransaction id
@@ -286,7 +286,30 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, autho
       (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Remove, Verbs.Delete, Verbs.RemoveContext, Verbs.DeleteContext ] Nothing Nothing) >>= case _ of
         Left e -> handleError e
         -- Right _ -> for_ (toNonEmptyArray roleInstances) removeRoleInstance
-        Right _ -> for_ (toNonEmptyArray roleInstances) (scheduleRoleRemoval synchronise)
+        Right _ -> do
+          -- Modify-wins-over-delete: get the local user to detect concurrent modifications.
+          localUser <- lift getPerspectivesUser
+          for_ (toNonEmptyArray roleInstances) \ri -> do
+            mRole <- lift $ tryGetPerspectRol ri
+            case mRole of
+              Nothing -> void $ scheduleRoleRemoval synchronise ri
+              Just (PerspectRol { propertyDeltas }) -> do
+                -- `propertyDeltas` is an Object (Object SignedDelta), keyed first by property
+                -- type then by value string. Flatten it to a single Array SignedDelta so we
+                -- can check whether the local user has authored any of them.
+                let allDeltas = concat $ OBJ.values <$> OBJ.values propertyDeltas
+                -- If any property delta was authored by the local user, those deltas represent
+                -- concurrent local modifications that win over the remote delete.
+                if any (\(SignedDelta { author }) -> author == localUser) allDeltas
+                  then lift $ log
+                    ( padding
+                        <> "Skipping RemoveRoleInstance for "
+                        <> show ri
+                        <> " (MODIFY-WINS-OVER-DELETE: local modifications by "
+                        <> show localUser
+                        <> ")"
+                    )
+                  else void $ scheduleRoleRemoval synchronise ri
 
     -- TODO Het lijkt niet nuttig om beide cases te behouden.
     RemoveUnboundExternalRoleInstance -> do
