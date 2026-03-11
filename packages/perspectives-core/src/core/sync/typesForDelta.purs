@@ -112,6 +112,11 @@ newtype UniverseRoleDelta = UniverseRoleDelta
       , roleInstances :: SerializableNonEmptyArray RoleInstance
       , deltaType :: UniverseRoleDeltaType
       -- Add, Remove
+      -- The CouchDB _rev of the role instance at the time of deletion.
+      -- Only set for deltaType == RemoveRoleInstance. Used to detect concurrent modifications
+      -- (modify-wins-over-delete): if the local revision is higher than this value, the local
+      -- instance was modified concurrently and the deletion should be ignored.
+      , roleRevision :: Maybe String
       )
   )
 
@@ -126,6 +131,9 @@ instance eqUniverseRoleDelta :: Eq UniverseRoleDelta where
   eq (UniverseRoleDelta { id: i1, roleType: r1, roleInstances: ri1, deltaType: d1 }) (UniverseRoleDelta { id: i2, roleType: r2, roleInstances: ri2, deltaType: d2 }) = i1 == i2 && r1 == r2 && ri1 == ri2 && d1 == d2
 
 derive newtype instance WriteForeign UniverseRoleDelta
+-- | The derived ReadForeign instance handles the optional roleRevision field for backward compatibility:
+-- | simple-json treats a missing JSON key as Nothing for Maybe fields, so old delta records
+-- | that lack roleRevision will deserialize with roleRevision = Nothing.
 derive newtype instance ReadForeign UniverseRoleDelta
 
 instance prettyPrintUniverseRoleDelta :: PrettyPrint UniverseRoleDelta where

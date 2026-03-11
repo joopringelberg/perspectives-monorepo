@@ -29,6 +29,8 @@ import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
 import Data.Array (catMaybes, concat, fromFoldable)
 import Data.Array.NonEmpty (head)
+import Data.Int (fromString) as Int
+import Data.String (Pattern(..), split) as String
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -66,7 +68,7 @@ import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.ModelDependencies (rootContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
-import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit)
+import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit, tryGetPerspectRol)
 import Perspectives.PerspectivesState (transactionLevel)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType(..), cacheEntity)
@@ -84,7 +86,7 @@ import Perspectives.Sync.Transaction (PublicKeyInfo)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, pure, show, unit, void, ($), (*>), (+), (<$>), (<<<), (<>), (==), (>>=))
+import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, pure, show, unit, void, ($), (*>), (+), (<$>), (<<<), (<>), (==), (>), (>>=))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -252,7 +254,7 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
 
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 executeUniverseRoleDelta :: UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, authorizedRole, deltaType, subject }) s = do
+executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, authorizedRole, deltaType, subject, roleRevision }) s = do
   padding <- lift transactionLevel
   readableRoleType <- lift $ toReadable roleType
   readableSubject <- lift $ toReadable subject
@@ -285,8 +287,18 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, autho
       -- Similarly, if the user is allowed to remove a contextrole with its filler (requiring RemoveContext), he is allowed to remove the contctrole instance.
       (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Remove, Verbs.Delete, Verbs.RemoveContext, Verbs.DeleteContext ] Nothing Nothing) >>= case _ of
         Left e -> handleError e
-        -- Right _ -> for_ (toNonEmptyArray roleInstances) removeRoleInstance
-        Right _ -> for_ (toNonEmptyArray roleInstances) (scheduleRoleRemoval synchronise)
+        Right _ -> for_ (toNonEmptyArray roleInstances) \roleId -> do
+          -- Modify-wins-over-delete: check whether the local role instance was modified concurrently.
+          -- If the incoming delta includes a roleRevision and our local role has a higher revision,
+          -- the local user modified this role while the sender was deleting it (both offline).
+          -- In that case, the modification wins and we ignore the deletion.
+          mLocalRole <- lift $ tryGetPerspectRol roleId
+          case mLocalRole of
+            Nothing -> scheduleRoleRemoval synchronise roleId
+            Just (PerspectRol { _rev: localRev }) ->
+              if localRevisionIsHigher localRev roleRevision
+                then log (padding <> "modify-wins-over-delete: ignoring RemoveRoleInstance for " <> show roleId <> " (local revision " <> show localRev <> " > delta revision " <> show roleRevision <> ")")
+                else scheduleRoleRemoval synchronise roleId
 
     -- TODO Het lijkt niet nuttig om beide cases te behouden.
     RemoveUnboundExternalRoleInstance -> do
@@ -353,6 +365,29 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, autho
       if _ then lift $ void $ saveEntiteit externalRole
       else pure unit
     pure externalRole
+
+-----------------------------------------------------------
+-- MODIFY-WINS-OVER-DELETE HELPERS
+-----------------------------------------------------------
+
+-- | Parse the revision count from a CouchDB revision string.
+-- | CouchDB revisions have the format "N-hash" where N is a positive integer.
+-- | Returns Nothing if the string cannot be parsed.
+parseRevisionCount :: Maybe String -> Maybe Int
+parseRevisionCount Nothing = Nothing
+parseRevisionCount (Just s) = case String.split (String.Pattern "-") s of
+  [count, _] -> Int.fromString count
+  _ -> Nothing
+
+-- | Returns true if the local role revision is strictly higher than the revision recorded in
+-- | the incoming deletion delta. This indicates that the local user modified the role after
+-- | the peer issued the deletion (concurrent edit), so the modification wins over the deletion.
+-- | If either revision is absent or cannot be parsed, returns false (deletion proceeds normally).
+localRevisionIsHigher :: Maybe String -> Maybe String -> Boolean
+localRevisionIsHigher localRev deltaRev =
+  case parseRevisionCount localRev, parseRevisionCount deltaRev of
+    Just local, Just delta -> local > delta
+    _, _ -> false
 
 -- | Execute all Deltas in a run that does not distribute.
 -- executeTransaction :: TransactionForPeer -> MonadPerspectives Unit

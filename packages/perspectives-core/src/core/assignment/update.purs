@@ -61,7 +61,7 @@ import Partial.Unsafe (unsafePartial)
 import Persistence.Attachment (class Attachment)
 import Perspectives.Authenticate (signDelta)
 import Perspectives.CollectAffectedContexts (aisInPropertyDelta, usersWithPerspectiveOnRoleInstance)
-import Perspectives.ContextAndRole (addRol_property, changeContext_me, changeContext_preferredUserRoleType, context_pspType, context_rolInContext, deleteRol_property, isDefaultContextDelta, modifyContext_rolInContext, popContext_state, popRol_state, pushContext_state, pushRol_state, removeRol_property, rol_context, rol_isMe, rol_pspType, setRol_property)
+import Perspectives.ContextAndRole (addRol_property, changeContext_me, changeContext_preferredUserRoleType, context_pspType, context_rolInContext, deleteRol_property, isDefaultContextDelta, modifyContext_rolInContext, popContext_state, popRol_state, pushContext_state, pushRol_state, removeRol_property, rol_context, rol_contextDelta, rol_isMe, rol_pspType, rol_universeRoleDelta, setRol_property)
 import Perspectives.CoreTypes (class Persistent, InformedAssumption(..), MonadPerspectives, Updater, MonadPerspectivesTransaction, (###=), (##=), (##>), (##>>))
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addDelta)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
@@ -225,6 +225,9 @@ removeRoleInstancesFromContext contextId rolName rolInstances = (lift $ try $ ge
             , authorizedRole: Nothing
             , deltaType: RemoveRoleInstance
             , subject
+            -- roleRevision is not set here because this delta covers multiple instances;
+            -- per-instance revision tracking is done via synchroniseRoleRemoval.
+            , roleRevision: Nothing
             }
         )
       addDelta $ DeltaInTransaction { users, delta }
@@ -361,6 +364,10 @@ addProperty rids propertyName valuesAndDeltas = case ARR.head rids of
               propertyName
               replacementProperty
               (rol_pspType propertyBearingInstanceRole)
+            -- For modify-wins-over-delete: include the role's construction deltas before the property deltas.
+            -- This allows a peer that deleted this role to restore it and then apply the modification.
+            addDelta (DeltaInTransaction { users, delta: rol_universeRoleDelta propertyBearingInstanceRole })
+            addDelta (DeltaInTransaction { users, delta: rol_contextDelta propertyBearingInstanceRole })
             void $ for deltas \(Tuple _ delta) ->
               -- TODO: For a Private property, remove users that are not another installation of the own user.
               -- NOTICE: probably self-synchronisation (keeping installations of the same user up to date) currently doesn't work.
@@ -438,6 +445,10 @@ removeProperty rids propertyName mdelta values = case ARR.head rids of
                           }
                       )
                   )
+              -- For modify-wins-over-delete: include the role's construction deltas before the property delta.
+              -- This allows a peer that deleted this role to restore it and then apply the modification.
+              addDelta (DeltaInTransaction { users, delta: rol_universeRoleDelta pe })
+              addDelta (DeltaInTransaction { users, delta: rol_contextDelta pe })
               addDelta (DeltaInTransaction { users, delta: signedDelta })
               (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
               (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
@@ -487,6 +498,10 @@ deleteProperty rids propertyName mdelta = case ARR.head rids of
                           }
                       )
                   )
+              -- For modify-wins-over-delete: include the role's construction deltas before the property delta.
+              -- This allows a peer that deleted this role to restore it and then apply the modification.
+              addDelta (DeltaInTransaction { users, delta: rol_universeRoleDelta pe })
+              addDelta (DeltaInTransaction { users, delta: rol_contextDelta pe })
               addDelta (DeltaInTransaction { users, delta: signedDelta })
               (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
               (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
@@ -547,6 +562,10 @@ setProperty rids propertyName mdelta values = do
                 -- Save the property values in the role instance. Do this now because it will affect computing the users.
                 lift $ void $ cacheAndSave rid (setRol_property pe replacementProperty values signedDelta)
                 users <- aisInPropertyDelta rid' rid propertyName replacementProperty pspType
+                -- For modify-wins-over-delete: include the role's construction deltas before the property delta.
+                -- This allows a peer that deleted this role to restore it and then apply the modification.
+                addDelta (DeltaInTransaction { users, delta: rol_universeRoleDelta pe })
+                addDelta (DeltaInTransaction { users, delta: rol_contextDelta pe })
                 addDelta (DeltaInTransaction { users, delta: signedDelta })
                 (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
                 (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie

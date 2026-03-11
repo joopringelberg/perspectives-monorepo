@@ -73,6 +73,7 @@ constructEmptyRole contextInstance roleType i rolInstanceId = do
         , authorizedRole: Nothing
         , deltaType: ConstructEmptyRole
         , subject
+        , roleRevision: Nothing
         }
     )
   role <- pure

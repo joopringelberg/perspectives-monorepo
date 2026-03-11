@@ -80,6 +80,7 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
         , authorizedRole
         , deltaType: ConstructExternalRole
         , subject
+        , roleRevision: Nothing
         }
     )
   contextDelta <- lift $ signDelta

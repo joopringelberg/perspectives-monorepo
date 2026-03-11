@@ -181,6 +181,7 @@ scheduleContextRemoval authorizedRole usersWithPerspectiveOnEmbeddingRole id =
           , roleInstances: SNEA.singleton $ context_buitenRol ctxt
           , deltaType: RemoveExternalRoleInstance
           , subject
+          , roleRevision: Nothing
           }
         userRoleTypes <- lift (getContext (context_pspType ctxt) >>= pure <<< userRole)
         -- TODO: we missen de users die een perspectief hebben op de contextrol waar de context in is ingebed.
@@ -254,6 +255,7 @@ stateEvaluationAndQueryUpdatesForContext id authorizedRole = do
               , roleInstances: SNEA.singleton (context_buitenRol ctxt)
               , deltaType: RemoveExternalRoleInstance
               , subject
+              , roleRevision: Nothing
               }
           )
         addDelta $ DeltaInTransaction
@@ -327,7 +329,7 @@ statesAndPeersForRoleInstanceToRemove (PerspectRol { id: roleId, context, pspTyp
 -- | SYNCHRONISATION. Compute a RemoveRoleInstance UniverseRoleDelta 
 -- | (but not for external roles: a delta is generated on exiting the context).
 synchroniseRoleRemoval :: PerspectRol -> Array RoleInstance -> MonadPerspectivesTransaction Unit
-synchroniseRoleRemoval (PerspectRol { id: roleId, pspType: roleType, context: contextId }) users =
+synchroniseRoleRemoval (PerspectRol { id: roleId, pspType: roleType, context: contextId, _rev: roleRevision }) users =
   if isExternalRole (unwrap roleId) then pure unit
   else do
     contextWillBeRemoved <- gets (_.untouchableContexts <<< unwrap) >>= pure <<< isJust <<< elemIndex contextId
@@ -345,6 +347,9 @@ synchroniseRoleRemoval (PerspectRol { id: roleId, pspType: roleType, context: co
             , authorizedRole: Nothing
             , deltaType: RemoveRoleInstance
             , subject
+            -- Include the role's current revision for modify-wins-over-delete conflict detection.
+            -- Recipients can compare this to their local revision to detect concurrent modifications.
+            , roleRevision
             }
         )
       addDelta $ DeltaInTransaction { users, delta }
