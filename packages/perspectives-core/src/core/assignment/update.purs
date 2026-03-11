@@ -225,9 +225,9 @@ removeRoleInstancesFromContext contextId rolName rolInstances = (lift $ try $ ge
             , authorizedRole: Nothing
             , deltaType: RemoveRoleInstance
             , subject
-            -- roleRevision is not set here because this delta covers multiple instances;
-            -- per-instance revision tracking is done via synchroniseRoleRemoval.
-            , roleRevision: Nothing
+            -- knownModifierSeqs is not set here because this delta covers multiple instances;
+            -- per-instance conflict detection is handled via synchroniseRoleRemoval.
+            , knownModifierSeqs: Nothing
             }
         )
       addDelta $ DeltaInTransaction { users, delta }

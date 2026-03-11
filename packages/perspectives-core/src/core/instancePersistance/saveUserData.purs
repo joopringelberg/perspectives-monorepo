@@ -51,13 +51,13 @@ module Perspectives.SaveUserData
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (try)
 import Control.Monad.State (lift)
-import Data.Array (concat, cons, delete, elemIndex, find, nub, union)
+import Data.Array (concat, cons, delete, elemIndex, find, foldM, nub, union)
 import Data.Array.NonEmpty (singleton)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (over, unwrap)
 import Data.Traversable (for, for_, traverse)
 import Data.TraversableWithIndex (forWithIndex)
-import Foreign.Object (Object, values)
+import Foreign.Object (Object, empty, insert, values)
 import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor)
 import Perspectives.Assignment.Update (cacheAndSave, getSubject)
 import Perspectives.Authenticate (signDelta)
@@ -76,6 +76,7 @@ import Perspectives.Instances.Me (getMyType, isMe)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, context, contextType, contextType_, getUnlinkedRoleInstances, roleType_)
 import Perspectives.Names (findIndexedContextName, findIndexedRoleName, removeIndexedContext, removeIndexedRole)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, tryGetPerspectContext, tryGetPerspectRol)
+import Perspectives.PerspectivesState (getExpectedIncomingSequenceNumber)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Context (userRole)
 import Perspectives.Representation.Class.PersistentType (getContext, getEnumeratedRole)
@@ -90,7 +91,7 @@ import Perspectives.SerializableNonEmptyArray (singleton) as SNEA
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
-import Perspectives.Sync.SignedDelta (SignedDelta)
+import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (allUnlinkedRoles, isUnlinked_)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..), RoleBindingDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
@@ -181,7 +182,7 @@ scheduleContextRemoval authorizedRole usersWithPerspectiveOnEmbeddingRole id =
           , roleInstances: SNEA.singleton $ context_buitenRol ctxt
           , deltaType: RemoveExternalRoleInstance
           , subject
-          , roleRevision: Nothing
+          , knownModifierSeqs: Nothing
           }
         userRoleTypes <- lift (getContext (context_pspType ctxt) >>= pure <<< userRole)
         -- TODO: we missen de users die een perspectief hebben op de contextrol waar de context in is ingebed.
@@ -255,7 +256,7 @@ stateEvaluationAndQueryUpdatesForContext id authorizedRole = do
               , roleInstances: SNEA.singleton (context_buitenRol ctxt)
               , deltaType: RemoveExternalRoleInstance
               , subject
-              , roleRevision: Nothing
+              , knownModifierSeqs: Nothing
               }
           )
         addDelta $ DeltaInTransaction
@@ -328,13 +329,28 @@ statesAndPeersForRoleInstanceToRemove (PerspectRol { id: roleId, context, pspTyp
 
 -- | SYNCHRONISATION. Compute a RemoveRoleInstance UniverseRoleDelta 
 -- | (but not for external roles: a delta is generated on exiting the context).
+-- | Includes knownModifierSeqs for modify-wins-over-delete conflict detection:
+-- | for each author who has property deltas on this role, records A's expected-next
+-- | sequence number from that author at deletion time (Lamport clock).
 synchroniseRoleRemoval :: PerspectRol -> Array RoleInstance -> MonadPerspectivesTransaction Unit
-synchroniseRoleRemoval (PerspectRol { id: roleId, pspType: roleType, context: contextId, _rev: roleRevision }) users =
+synchroniseRoleRemoval (PerspectRol { id: roleId, pspType: roleType, context: contextId, propertyDeltas }) users =
   if isExternalRole (unwrap roleId) then pure unit
   else do
     contextWillBeRemoved <- gets (_.untouchableContexts <<< unwrap) >>= pure <<< isJust <<< elemIndex contextId
     if contextWillBeRemoved then pure unit
     else do
+      -- Build knownModifierSeqs for modify-wins-over-delete conflict detection.
+      -- For each author who has property deltas on this role, record the expected-next
+      -- sequence number from that author (from the local incomingSequenceNumbers at deletion time).
+      let allDeltas = concat (values <$> values propertyDeltas)
+          authors = nub $ (\(SignedDelta { author }) -> author) <$> allDeltas
+      knownModifierSeqs <- foldM
+        ( \acc author -> do
+            expectedNext <- lift $ getExpectedIncomingSequenceNumber author
+            pure $ insert (unwrap author) expectedNext acc
+        )
+        empty
+        authors
       -- SYNCHRONISATION
       contextType <- lift $ contextType_ contextId
       subject <- getSubject
@@ -347,9 +363,10 @@ synchroniseRoleRemoval (PerspectRol { id: roleId, pspType: roleType, context: co
             , authorizedRole: Nothing
             , deltaType: RemoveRoleInstance
             , subject
-            -- Include the role's current revision for modify-wins-over-delete conflict detection.
-            -- Recipients can compare this to their local revision to detect concurrent modifications.
-            , roleRevision
+            -- Lamport-clock snapshot for modify-wins-over-delete:
+            -- the receiver checks whether any local property delta is newer than
+            -- what the deleting peer had processed from that author.
+            , knownModifierSeqs: Just knownModifierSeqs
             }
         )
       addDelta $ DeltaInTransaction { users, delta }

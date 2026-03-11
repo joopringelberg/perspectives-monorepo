@@ -68,7 +68,7 @@ import Perspectives.Instances.ObjectGetters (deltaAuthor2ResourceIdentifier, get
 import Perspectives.ModelDependencies (perspectivesUsersPublicKey)
 import Perspectives.Persistence.Types (Password)
 import Perspectives.Persistent (entityExists)
-import Perspectives.PerspectivesState (getPerspectivesUser)
+import Perspectives.PerspectivesState (getPerspectivesUser, nextOutgoingSequenceNumber)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..))
 import Perspectives.ResourceIdentifiers (stripNonPublicIdentifiers, takeGuid)
@@ -85,6 +85,7 @@ import Web.Encoding.TextEncoder (encode, new) as Encoder
 signDelta :: String -> MonadPerspectivesTransaction SignedDelta
 signDelta encryptedDelta = do
   author <- lift getPerspectivesUser
+  seqNum <- lift nextOutgoingSequenceNumber
   deltaBuff :: ArrayBuffer <- liftEffect $ string2buff encryptedDelta
   mcryptoKey <- lift $ gets (_.privateKey <<< _.runtimeOptions)
   case mcryptoKey of
@@ -92,6 +93,7 @@ signDelta encryptedDelta = do
       { author: over PerspectivesUser stripNonPublicIdentifiers author
       , encryptedDelta
       , signature: Nothing
+      , sequenceNumber: Just seqNum
       }
     Just cryptoKey -> do
       signatureBuff <- lift $ lift $ sign (ecdsa sha384) (unsafeCoerce cryptoKey) deltaBuff
@@ -101,6 +103,7 @@ signDelta encryptedDelta = do
         { author: over PerspectivesUser stripNonPublicIdentifiers author
         , encryptedDelta
         , signature: Just signature
+        , sequenceNumber: Just seqNum
         }
       pure sd
 

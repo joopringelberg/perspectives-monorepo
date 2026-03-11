@@ -147,7 +147,7 @@ import Perspectives.Persistence.Types (PouchdbState)
 import Perspectives.Persistent.ChangesFeed (EventSource)
 import Perspectives.Repetition (Duration)
 import Perspectives.Representation.Class.Identifiable (class Identifiable, identifier)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser, RoleInstance(..), Value)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, ResourceType, RoleType, StateIdentifier)
 import Perspectives.ResourceIdentifiers.Parser (pouchdbDatabaseName)
@@ -239,6 +239,12 @@ type PerspectivesExtraState =
   , modelUnderCompilation :: Maybe (ModelUri Readable)
 
   , modelUris :: Map (ModelUri Readable) (ModelUri Stable)
+
+  -- Per-author sequence number tracking for detecting missed deltas (Lamport clocks).
+  -- Tracks the next sequence number to assign to an outgoing delta authored by this user.
+  , outgoingSequenceNumber :: Int
+  -- Maps each remote author to the next expected incoming sequence number from that author.
+  , incomingSequenceNumbers :: Map PerspectivesUser Int
   )
 
 type Warning = { message :: String, error :: String }

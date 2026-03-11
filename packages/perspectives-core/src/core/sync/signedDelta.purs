@@ -35,10 +35,13 @@ import Simple.JSON (class ReadForeign, class WriteForeign)
 
 -- | The author is the instance of sys:PerspectivesSystem$User who signed the delta.
 -- | NOTE: like all resource identifiers in Deltas, the author is a schemaless string!
+-- | sequenceNumber is a per-author monotonically increasing counter used to detect missed deltas (Lamport clock).
+-- | It is optional to maintain backward compatibility with existing deltas that lack this field.
 newtype SignedDelta = SignedDelta
   { author :: PerspectivesUser
   , encryptedDelta :: String
   , signature :: Maybe String
+  , sequenceNumber :: Maybe Int
   }
 
 derive instance genericRepSignedDelta :: Generic SignedDelta _

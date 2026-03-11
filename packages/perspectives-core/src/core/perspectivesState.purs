@@ -27,7 +27,7 @@ import Control.Monad.Trans.Class (lift)
 import Data.Array (cons)
 import Data.List (elem)
 import Data.Map (Map, empty, insert, lookup, values) as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
 import Effect.Aff.AVar (AVar, put, read)
@@ -98,6 +98,8 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , typeToBeFixed
   , modelUnderCompilation: Nothing
   , modelUris: Map.empty
+  , outgoingSequenceNumber: 0
+  , incomingSequenceNumbers: Map.empty
   }
 
 defaultRuntimeOptions :: RuntimeOptions
@@ -370,3 +372,28 @@ remove g k = do
   -- _ <- pure $ (delete dc k)
   _ <- liftEffect $ delete k dc
   pure ma
+
+-----------------------------------------------------------
+-- SEQUENCE NUMBER TRACKING (Lamport clocks for per-author delta ordering)
+-----------------------------------------------------------
+-- | Get the next outgoing sequence number for deltas authored by this installation,
+-- | and increment the counter in state.
+-- | This relies on transaction-level serialization (via transactionFlag) to be safe
+-- | in the context of MonadPerspectivesTransaction; do not call from concurrent fibers.
+nextOutgoingSequenceNumber :: MonadPerspectives Int
+nextOutgoingSequenceNumber = do
+  n <- gets _.outgoingSequenceNumber
+  void $ modify \s -> s { outgoingSequenceNumber = n + 1 }
+  pure n
+
+-- | Get the next expected incoming sequence number for a given remote author.
+-- | Returns 0 if no delta from this author has been seen yet.
+getExpectedIncomingSequenceNumber :: PerspectivesUser -> MonadPerspectives Int
+getExpectedIncomingSequenceNumber author = do
+  m <- gets _.incomingSequenceNumbers
+  pure $ fromMaybe 0 (Map.lookup author m)
+
+-- | Record that the next expected sequence number from the given author is seqNum + 1.
+updateIncomingSequenceNumber :: PerspectivesUser -> Int -> MonadPerspectives Unit
+updateIncomingSequenceNumber author seqNum =
+  modify \s -> s { incomingSequenceNumbers = Map.insert author (seqNum + 1) s.incomingSequenceNumbers }

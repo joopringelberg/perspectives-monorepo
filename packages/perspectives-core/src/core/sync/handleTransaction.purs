@@ -29,14 +29,12 @@ import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
 import Data.Array (catMaybes, concat, fromFoldable)
 import Data.Array.NonEmpty (head)
-import Data.Int (fromString) as Int
-import Data.String (Pattern(..), split) as String
 import Data.Either (Either(..))
-import Data.Foldable (for_)
+import Data.Foldable (any, for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Generic.Rep (class Generic)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromJust, isNothing)
+import Data.Maybe (Maybe(..), fromJust, fromMaybe, isNothing)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (over, unwrap)
 import Data.Ordering (Ordering(..))
@@ -46,7 +44,7 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Effect.Exception (error)
-import Foreign.Object (empty)
+import Foreign.Object (empty, lookup, values) as FO
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (addProperty, addRoleInstanceToContext, deleteProperty, moveRoleInstanceToAnotherContext, removeProperty, setProperty)
@@ -69,7 +67,7 @@ import Perspectives.ModelDependencies (rootContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
 import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit, tryGetPerspectRol)
-import Perspectives.PerspectivesState (transactionLevel)
+import Perspectives.PerspectivesState (getExpectedIncomingSequenceNumber, transactionLevel, updateIncomingSequenceNumber)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..))
@@ -86,7 +84,7 @@ import Perspectives.Sync.Transaction (PublicKeyInfo)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, pure, show, unit, void, ($), (*>), (+), (<$>), (<<<), (<>), (==), (>), (>>=))
+import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, pure, show, unit, void, ($), (*>), (+), (<$>), (<<<), (<>), (==), (>=), (>>=))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -243,7 +241,7 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
                 \t -> createAndAddRoleInstance
                   t
                   (unwrap id)
-                  (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
+                  (RolSerialization { id: Nothing, properties: PropertySerialization FO.empty, binding: Nothing })
 
             (lift $ findRoleRequests (ContextInstance "def:AnyContext") (externalRoleType contextType)) >>= addCorrelationIdentifiersToTransactie
             addCreatedContextToTransaction id
@@ -254,7 +252,7 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
 
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 executeUniverseRoleDelta :: UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, authorizedRole, deltaType, subject, roleRevision }) s = do
+executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, authorizedRole, deltaType, subject, knownModifierSeqs }) s = do
   padding <- lift transactionLevel
   readableRoleType <- lift $ toReadable roleType
   readableSubject <- lift $ toReadable subject
@@ -288,16 +286,17 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, autho
       (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Remove, Verbs.Delete, Verbs.RemoveContext, Verbs.DeleteContext ] Nothing Nothing) >>= case _ of
         Left e -> handleError e
         Right _ -> for_ (toNonEmptyArray roleInstances) \roleId -> do
-          -- Modify-wins-over-delete: check whether the local role instance was modified concurrently.
-          -- If the incoming delta includes a roleRevision and our local role has a higher revision,
-          -- the local user modified this role while the sender was deleting it (both offline).
-          -- In that case, the modification wins and we ignore the deletion.
+          -- Modify-wins-over-delete: check whether the local role instance has concurrent modifications.
+          -- If the deletion delta includes knownModifierSeqs (Lamport clock snapshot), compare local
+          -- property delta sequence numbers against the deleting peer's expected-next values per author.
+          -- If any local property delta is newer than what the deleting peer had seen from that author,
+          -- the modification was concurrent and wins over the deletion.
           mLocalRole <- lift $ tryGetPerspectRol roleId
           case mLocalRole of
             Nothing -> scheduleRoleRemoval synchronise roleId
-            Just (PerspectRol { _rev: localRev }) ->
-              if localRevisionIsHigher localRev roleRevision
-                then log (padding <> "modify-wins-over-delete: ignoring RemoveRoleInstance for " <> show roleId <> " (local revision " <> show localRev <> " > delta revision " <> show roleRevision <> ")")
+            Just (PerspectRol { propertyDeltas: localPropertyDeltas }) ->
+              if hasConcurrentModification localPropertyDeltas knownModifierSeqs
+                then log (padding <> "modify-wins-over-delete: ignoring RemoveRoleInstance for " <> show roleId <> " (local property modifications are newer than the deleting peer knew)")
                 else scheduleRoleRemoval synchronise roleId
 
     -- TODO Het lijkt niet nuttig om beide cases te behouden.
@@ -367,27 +366,33 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstances, autho
     pure externalRole
 
 -----------------------------------------------------------
--- MODIFY-WINS-OVER-DELETE HELPERS
+-- MODIFY-WINS-OVER-DELETE HELPERS (Lamport clock-based)
 -----------------------------------------------------------
 
--- | Parse the revision count from a CouchDB revision string.
--- | CouchDB revisions have the format "N-hash" where N is a positive integer.
--- | Returns Nothing if the string cannot be parsed.
-parseRevisionCount :: Maybe String -> Maybe Int
-parseRevisionCount Nothing = Nothing
-parseRevisionCount (Just s) = case String.split (String.Pattern "-") s of
-  [count, _] -> Int.fromString count
-  _ -> Nothing
-
--- | Returns true if the local role revision is strictly higher than the revision recorded in
--- | the incoming deletion delta. This indicates that the local user modified the role after
--- | the peer issued the deletion (concurrent edit), so the modification wins over the deletion.
--- | If either revision is absent or cannot be parsed, returns false (deletion proceeds normally).
-localRevisionIsHigher :: Maybe String -> Maybe String -> Boolean
-localRevisionIsHigher localRev deltaRev =
-  case parseRevisionCount localRev, parseRevisionCount deltaRev of
-    Just local, Just delta -> local > delta
-    _, _ -> false
+-- | Returns true if the local role has any property modification that the deleting peer had not yet seen.
+-- | This uses Lamport clock sequence numbers (from PR #192):
+-- | - knownModifierSeqs maps author strings to the deleting peer's expected-next seqNum from that author
+-- |   at deletion time (i.e., incomingSequenceNumbers[author] on the deleting peer when they deleted).
+-- | - A local property delta with sequenceNumber >= expectedNext means the deleting peer had NOT processed
+-- |   that delta yet → the modification was concurrent with the deletion → modification wins.
+-- | Returns false when knownModifierSeqs is Nothing (old-style delta without this field), so that
+-- | backward-compatible deletions are processed normally.
+hasConcurrentModification :: FO.Object (FO.Object SignedDelta) -> Maybe (FO.Object Int) -> Boolean
+hasConcurrentModification _ Nothing = false
+hasConcurrentModification localPropertyDeltas (Just knownSeqs) =
+  any
+    ( \(SignedDelta { author, sequenceNumber }) ->
+        case sequenceNumber of
+          Nothing -> false
+          Just localSeq ->
+            let
+              authorStr = unwrap author
+              -- If the deleting peer had never seen anything from this author, its expected-next is 0.
+              expectedNext = fromMaybe 0 (FO.lookup authorStr knownSeqs)
+            in
+              localSeq >= expectedNext
+    )
+    (concat $ FO.values <$> FO.values localPropertyDeltas)
 
 -- | Execute all Deltas in a run that does not distribute.
 -- executeTransaction :: TransactionForPeer -> MonadPerspectives Unit
@@ -462,7 +467,24 @@ executeTransaction' t@(TransactionForPeer { deltas, publicKeys }) = do
   void $ for deltas verifyAndExcecuteDelta
   where
   verifyAndExcecuteDelta :: SignedDelta -> MonadPerspectivesTransaction Unit
-  verifyAndExcecuteDelta s = (lift $ verifyDelta s) >>= executeDelta s
+  verifyAndExcecuteDelta s@(SignedDelta { author, sequenceNumber }) = do
+    checkSequenceNumber author sequenceNumber
+    (lift $ verifyDelta s) >>= executeDelta s
+
+  -- | Check the incoming sequence number for a given author and log a warning if deltas appear to have been missed.
+  -- | In the gap case (GT), the delta is still processed and the counter is advanced to resume tracking from the
+  -- | new position. Recovery of missed deltas is handled by a separate mechanism (not yet implemented).
+  checkSequenceNumber :: PerspectivesUser -> Maybe Int -> MonadPerspectivesTransaction Unit
+  checkSequenceNumber author (Just seqNum) = do
+    expected <- lift $ getExpectedIncomingSequenceNumber author
+    padding <- lift transactionLevel
+    case compare seqNum expected of
+      GT -> do
+        log (padding <> "Warning: missed delta(s) from " <> show author <> " (expected seq " <> show expected <> ", got " <> show seqNum <> ")")
+        lift $ updateIncomingSequenceNumber author seqNum
+      EQ -> lift $ updateIncomingSequenceNumber author seqNum
+      LT -> log (padding <> "Note: duplicate or out-of-order delta from " <> show author <> " (expected seq " <> show expected <> ", got " <> show seqNum <> ")")
+  checkSequenceNumber _ Nothing = pure unit
 
   executeDelta :: SignedDelta -> Maybe String -> MonadPerspectivesTransaction Unit
   -- For now, we fail silently on deltas that cannot be authenticated.
