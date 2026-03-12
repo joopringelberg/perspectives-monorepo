@@ -673,9 +673,10 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   isDeletionSuppressedByModifyWins :: String -> MonadPerspectivesTransaction Boolean
   isDeletionSuppressedByModifyWins roleInstanceId = do
     allRoleDeltas <- lift $ getDeltasForRoleInstance roleInstanceId
-    let hasAppliedSubResourceModification = any
-          (\d@(DeltaStoreRecord r) -> r.applied && isSubResourceDeltaOf roleInstanceId d)
-          allRoleDeltas
+    let
+      hasAppliedSubResourceModification = any
+        (\d@(DeltaStoreRecord r) -> r.applied && isSubResourceDeltaOf roleInstanceId d)
+        allRoleDeltas
     pure hasAppliedSubResourceModification
 
   -- | Restore a deleted role by re-applying its creation and property/binding deltas
@@ -702,12 +703,14 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       lift $ updateDeltaApplied _id false
     -- Role-level deltas (resourceKey == roleInstanceId): include ALL non-deletion ones
     -- regardless of applied status (role creation is idempotent).
-    let roleLevelDeltas = sortBy compareByVersion $
-          filter (\d@(DeltaStoreRecord r) -> not (isDeletionDeltaType r.deltaType) && not (isSubResourceDeltaOf roleInstanceId d)) allDeltas
+    let
+      roleLevelDeltas = sortBy compareByVersion $
+        filter (\d@(DeltaStoreRecord r) -> not (isDeletionDeltaType r.deltaType) && not (isSubResourceDeltaOf roleInstanceId d)) allDeltas
     -- Sub-resource deltas (resourceKey starts with roleInstanceId <> "#"): only applied=true
     -- to avoid re-applying outdated or suppressed property/binding modifications.
-    let subResourceDeltas = sortBy compareByVersion $
-          filter (\d@(DeltaStoreRecord r) -> r.applied && not (isDeletionDeltaType r.deltaType) && isSubResourceDeltaOf roleInstanceId d) allDeltas
+    let
+      subResourceDeltas = sortBy compareByVersion $
+        filter (\d@(DeltaStoreRecord r) -> r.applied && not (isDeletionDeltaType r.deltaType) && isSubResourceDeltaOf roleInstanceId d) allDeltas
     for_ roleLevelDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
       executeDelta sd (Just (unwrap sd).encryptedDelta)
     for_ subResourceDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
@@ -749,7 +752,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   extractRoleInstanceId key = case Str.indexOf (Str.Pattern "#") key of
     Nothing -> key
     Just p1 -> case Str.indexOf (Str.Pattern "#") (Str.drop (p1 + 1) key) of
-      Nothing -> key  -- Only one "#": this IS a role instance key, not a sub-resource key.
+      Nothing -> key -- Only one "#": this IS a role instance key, not a sub-resource key.
       Just p2 -> Str.take (p1 + 1 + p2) key
 
   executeDelta :: SignedDelta -> Maybe String -> MonadPerspectivesTransaction Unit

@@ -172,12 +172,14 @@ getDeltasForRoleInstance roleInstanceId = do
 
   isRoleOrSubResource :: String -> DeltaStoreRecord -> Boolean
   isRoleOrSubResource rid (DeltaStoreRecord { resourceKey }) =
-    let ridLen = Str.length rid
+    let
+      ridLen = Str.length rid
     in
       resourceKey == rid
-        || ( Str.length resourceKey > ridLen + 1
-               && Str.take (ridLen + 1) resourceKey == rid <> "#"
-           )
+        ||
+          ( Str.length resourceKey > ridLen + 1
+              && Str.take (ridLen + 1) resourceKey == rid <> "#"
+          )
 
 -- | Update the `applied` flag of an existing delta-store record.
 -- | No-op if the record does not exist.
