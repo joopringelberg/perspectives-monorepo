@@ -20,7 +20,7 @@
 
 import React from 'react';
 
-import {PDRproxy, CONTINUOUS, ContextInstanceT, ContextType, RoleType, Unsubscriber, PropertyType, EnumeratedOrCalculatedProperty, ScreenDefinition, ChatElementDef, ColumnElementDef, FormElementDef, MarkDownElementDef, Perspective, Roleinstancewithprops, RowElementDef, ScreenElementDefTagged, TabDef, TableElementDef, WidgetCommonFields, What} from "perspectives-proxy";
+import {PDRproxy, CONTINUOUS, ContextInstanceT, ContextType, RoleType, Unsubscriber, PropertyType, EnumeratedOrCalculatedProperty, ScreenDefinition, ChatElementDef, ColumnElementDef, FormElementDef, MarkDownElementDef, Perspective, Roleinstancewithprops, RowElementDef, ScreenElementDefTagged, TabDef, TableElementDef, WhenElementDef, WidgetCommonFields, What} from "perspectives-proxy";
 import PerspectivesComponent from "./perspectivesComponent";
 import {PSContext, PSContextType} from "./reactcontexts.js";
 import PerspectiveBasedForm from "./perspectivebasedform.js";
@@ -221,7 +221,7 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
   screenElement(taggedElement : ScreenElementDefTagged, index : number)
   {
     const component = this;
-    let tableDef, formDef, markDownDef, chatDef;
+    let tableDef, formDef, markDownDef, chatDef, whenDef;
     switch (taggedElement.elementType){
       case "RowElementD":
         return component.buildRow( taggedElement.element as RowElementDef, index );
@@ -260,6 +260,13 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
           <div
             key={index}
           >{ component.buildChat( chatDef )}</div>
+        )
+      case "WhenElementD":
+        whenDef = taggedElement.element as WhenElementDef;
+        return (
+          <React.Fragment key={index}>
+            { whenDef.elements.map( (el, idx) => component.screenElement(el, idx) ) }
+          </React.Fragment>
         )
     }
   }

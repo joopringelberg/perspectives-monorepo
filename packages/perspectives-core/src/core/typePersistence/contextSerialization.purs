@@ -64,7 +64,7 @@ import Perspectives.Query.Interpreter (lift2MPQ)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription)
 import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhenDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), RoleKind(..), RoleType(..), externalRoleType, roletype2string)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
@@ -360,6 +360,9 @@ instance addPerspectivesScreenElementDef :: AddPerspectives ScreenElementDef whe
   addPerspectives (FormElementD re) user ctxt = FormElementD <$> addPerspectives re user ctxt
   addPerspectives (MarkDownElementD re) user ctxt = MarkDownElementD <$> addPerspectives re user ctxt
   addPerspectives (ChatElementD re) user ctxt = ChatElementD <$> addPerspectives re user ctxt
+  addPerspectives (WhenElementD (WhenDef { condition, elements })) user ctxt = do
+    elements' <- traverse (\e -> addPerspectives e user ctxt) elements
+    pure $ WhenElementD (WhenDef { condition, elements: elements' })
 
 instance addPerspectivesTabDef :: AddPerspectives TabDef where
   addPerspectives (TabDef r) user ctxt = do
@@ -438,6 +441,14 @@ traverseScreenElement user ctxt a = case a of
           widgetFields
           ctxt
         pure $ Just $ MarkDownPerspectiveDef { widgetFields: widgetFields { perspective = Just perspective }, conditionProperty }
+  WhenElementD (WhenDef { condition, elements }) -> do
+    (criterium :: ContextInstance ~~> Value) <- lift $ unsafeCoerce compileFunction condition
+    shouldBeShown <- runArrayT $ criterium ctxt
+    case head shouldBeShown of
+      Just (Value "true") -> do
+        elements' <- catMaybes <$> traverse (traverseScreenElement user ctxt) elements
+        pure $ Just $ WhenElementD (WhenDef { condition, elements: elements' })
+      _ -> pure Nothing
   (other :: ScreenElementDef) -> Just <$> addPerspectives other user ctxt
 
   where

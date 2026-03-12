@@ -48,7 +48,7 @@ import Parsing.Indent.Monadic (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhenE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -1736,8 +1736,17 @@ screenElementE = withPos do
     "form" -> reserved "form" *> (FormElement <$> formE)
     "markdown" -> reserved "markdown" *> (MarkDownElement <$> markdownE)
     "chat" -> reserved "chat" *> (ChatElement <$> chatE)
+    "when" -> WhenElement <$> whenE
     -- NOTE: extend message when a new widget is added.
-    _ -> fail "Only `row`, `column`, `table` and `form` are allowed here. "
+    _ -> fail "Only `row`, `column`, `table`, `form`, `markdown`, `chat` and `when` are allowed here. "
+
+whenE :: IP WhenE
+whenE = do
+  void $ reserved "when"
+  condition <- step
+  context <- getCurrentContext
+  elements <- nestedBlock (defer \_ -> screenElementE)
+  pure $ WhenE condition context elements
 
 widgetCommonFields :: IP WidgetCommonFields
 widgetCommonFields = do

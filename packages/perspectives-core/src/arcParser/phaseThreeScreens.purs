@@ -42,7 +42,7 @@ import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_)
 import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), PropertyVerbE(..), PropsOrView, RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..), roleIdentification2context)
-import Perspectives.Parsing.Arc.AST (ColumnE(..), FieldConstraintE, FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), WhatE(..), WidgetCommonFields) as AST
+import Perspectives.Parsing.Arc.AST (ColumnE(..), FieldConstraintE, FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), WhatE(..), WhenE(..), WidgetCommonFields) as AST
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
@@ -58,7 +58,7 @@ import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.Class.Role (allProperties, displayName, perspectivesOfRoleType, roleADTOfRoleType, roleTypeIsFunctional)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..), elements_)
 import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsRoleVerbs)
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyRestrictions)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), What(..), WhenDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyRestrictions)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optimistic, pessimistic)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), roletype2string)
 import Perspectives.Representation.Verbs (allPropertyVerbs, roleVerbList2Verbs)
@@ -226,6 +226,10 @@ handleScreens screenEs = do
       screenElementDef (AST.FormElement formE) = FormElementD <$> form functionalWidget formE
       screenElementDef (AST.MarkDownElement markdownE) = MarkDownElementD <$> markdown markdownE
       screenElementDef (AST.ChatElement chatE) = ChatElementD <$> chat chatE
+      screenElementDef (AST.WhenElement (AST.WhenE condition ctxt elements)) = do
+        condition' <- compileStep (CDOM $ ST ctxt) condition
+        elements' <- traverse screenElementDef elements
+        pure $ WhenElementD (WhenDef { condition: condition', elements: fromFoldable elements' })
 
       functionalWidget :: ThreeValuedLogic
       functionalWidget = True

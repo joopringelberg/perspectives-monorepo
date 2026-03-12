@@ -9,21 +9,22 @@ import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesQuery, (###=))
+import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesQuery, type (~~>), (###=))
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Instances.ObjectGetters (getActiveRoleStates, getActiveStates)
 import Perspectives.ModelTranslation (translationOf)
-import Perspectives.Query.UnsafeCompiler (getRoleInstances)
+import Perspectives.Query.UnsafeCompiler (getRoleInstances, compileFunction)
 import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhenDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..))
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
 import Perspectives.Types.ObjectGetters (allEnumeratedRoles, aspectsOfRole)
+import Unsafe.Coerce (unsafeCoerce)
 
 type Context = { userRoleInstance :: RoleInstance, contextType :: ContextType, contextInstance :: ContextInstance }
 type InContext = ReaderT Context MonadPerspectivesQuery
@@ -96,6 +97,15 @@ contextualiseScreenElementDef (TableElementD e) = map TableElementD <$> contextu
 contextualiseScreenElementDef (FormElementD e) = map FormElementD <$> contextualiseFormDef e
 contextualiseScreenElementDef (MarkDownElementD e) = map MarkDownElementD <$> contextualiseMarkDownDef e
 contextualiseScreenElementDef (ChatElementD c) = map ChatElementD <$> contextualiseChatDef c
+contextualiseScreenElementDef (WhenElementD (WhenDef { condition, elements })) = do
+  { contextInstance } <- ask
+  (criterium :: ContextInstance ~~> Value) <- lift $ lift $ unsafeCoerce compileFunction condition
+  shouldBeShown <- lift $ lift $ runArrayT $ criterium contextInstance
+  case head shouldBeShown of
+    Just (Value "true") -> do
+      elements' <- catMaybes <$> (for elements contextualiseScreenElementDef)
+      pure $ Just $ WhenElementD (WhenDef { condition, elements: elements' })
+    _ -> pure Nothing
 
 contextualiseRowDef :: RowDef -> InContext (Maybe RowDef)
 contextualiseRowDef (RowDef elements) = do

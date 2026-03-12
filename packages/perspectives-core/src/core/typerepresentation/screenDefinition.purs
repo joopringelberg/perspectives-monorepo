@@ -77,9 +77,11 @@ data ScreenElementDef
   | FormElementD FormDef
   | MarkDownElementD MarkDownDef
   | ChatElementD ChatDef
+  | WhenElementD WhenDef
 
 newtype RowDef = RowDef (Array ScreenElementDef)
 newtype ColumnDef = ColumnDef (Array ScreenElementDef)
+newtype WhenDef = WhenDef { condition :: QueryFunctionDescription, elements :: Array ScreenElementDef }
 newtype TableDef = TableDef { markdown :: Array MarkDownDef, widgetCommonFields :: WidgetCommonFieldsDef }
 newtype FormDef = FormDef { markdown :: Array MarkDownDef, widgetCommonFields :: WidgetCommonFieldsDef }
 data MarkDownDef
@@ -167,6 +169,7 @@ derive instance genericScreenElementDef :: Generic ScreenElementDef _
 derive instance genericTabDef :: Generic TabDef _
 derive instance genericRowDef :: Generic RowDef _
 derive instance genericColumnDef :: Generic ColumnDef _
+derive instance genericWhenDef :: Generic WhenDef _
 derive instance genericTableDef :: Generic TableDef _
 derive instance genericTableDef' :: Generic TableDef' _
 derive instance genericFormDef :: Generic FormDef _
@@ -196,6 +199,9 @@ instance showRowDef :: Show RowDef where
 
 instance showColumnDef :: Show ColumnDef where
   show x = genericShow x
+
+instance Show WhenDef where
+  show = genericShow
 
 instance showTableDef :: Show TableDef where
   show = genericShow
@@ -242,6 +248,9 @@ instance eqRowDef :: Eq RowDef where
 instance eqColumnDef :: Eq ColumnDef where
   eq a b = genericEq a b
 
+instance Eq WhenDef where
+  eq = genericEq
+
 instance eqTableDef :: Eq TableDef where
   eq = genericEq
 
@@ -283,6 +292,7 @@ instance writeForeignScreenElementDef :: WriteForeign ScreenElementDef where
   writeImpl (FormElementD f) = write { elementType: "FormElementD", element: f }
   writeImpl (MarkDownElementD f) = write { elementType: "MarkDownElementD", element: f }
   writeImpl (ChatElementD c) = write { elementType: "ChatElementD", element: c }
+  writeImpl (WhenElementD w) = write { elementType: "WhenElementD", element: w }
 
 instance writeForeignTabDef :: WriteForeign TabDef where
   writeImpl (TabDef widgetCommonFields) = write widgetCommonFields
@@ -292,6 +302,9 @@ instance WriteForeign RowDef where
 
 instance WriteForeign ColumnDef where
   writeImpl (ColumnDef elements) = write { tag: "ColumnDef", elements }
+
+instance WriteForeign WhenDef where
+  writeImpl (WhenDef { condition, elements }) = write { tag: "WhenDef", condition, elements }
 
 instance WriteForeign TableDef where
   writeImpl (TableDef { markdown, widgetCommonFields }) = write { tag: "TableDef", markdown, widgetCommonFields }
@@ -346,6 +359,7 @@ instance ReadForeign ScreenElementDef where
           "MarkDownPerspectiveDef" -> MarkDownElementD <<< MarkDownPerspectiveDef <$> ((read' subElement) :: F { widgetFields :: WidgetCommonFieldsDef, conditionProperty :: Maybe PropertyType })
           "MarkDownExpressionDef" -> MarkDownElementD <<< MarkDownExpressionDef <$> ((read' subElement) :: F { textQuery :: QueryFunctionDescription, condition :: Maybe QueryFunctionDescription, text :: Maybe String })
       "ChatElementD" -> ChatElementD <$> ((read' element) :: F ChatDef)
+      "WhenElementD" -> WhenElementD <$> ((read' element) :: F WhenDef)
 
 instance ReadForeign ScreenKey where
   readImpl f = do
@@ -365,6 +379,13 @@ instance ReadForeign ColumnDef where
     case tag of
       "ColumnDef" -> pure $ ColumnDef elements
       _ -> fail (TypeMismatch "ColumnDef" tag)
+
+instance ReadForeign WhenDef where
+  readImpl f = do
+    ({ tag, condition, elements } :: { tag :: String, condition :: QueryFunctionDescription, elements :: Array ScreenElementDef }) <- read' f
+    case tag of
+      "WhenDef" -> pure $ WhenDef { condition, elements }
+      _ -> fail (TypeMismatch "WhenDef" tag)
 
 instance ReadForeign TableDef where
   readImpl f = do
