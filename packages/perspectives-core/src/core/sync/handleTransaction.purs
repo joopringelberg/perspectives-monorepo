@@ -592,6 +592,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           -- Incoming is a sub-resource modification (property or binding).
           -- Check whether the role instance was deleted and needs restoration.
           let roleInstanceId = case Str.indexOf (Str.Pattern "#") resourceKey of
+                -- indexOf returns Nothing only when contains returned false, which cannot happen here.
                 Just idx -> Str.take idx resourceKey
                 Nothing -> resourceKey
           mRole <- lift $ tryGetPerspectRol (RoleInstance roleInstanceId)
@@ -679,18 +680,19 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   restoreRoleFromDeltaStore :: String -> MonadPerspectivesTransaction Unit
   restoreRoleFromDeltaStore roleInstanceId = do
     allDeltas <- lift $ getDeltasForRoleInstance roleInstanceId
-    let byVersion (DeltaStoreRecord r1) (DeltaStoreRecord r2) = compare r1.resourceVersion r2.resourceVersion
+    let compareByVersion (DeltaStoreRecord r1) (DeltaStoreRecord r2) = compare r1.resourceVersion r2.resourceVersion
     -- Mark all applied deletion deltas as no longer applied.
     let deletionDeltas = filter (\(DeltaStoreRecord r) -> r.applied && isDeletionDeltaType r.deltaType) allDeltas
     for_ deletionDeltas \(DeltaStoreRecord { _id }) ->
       lift $ updateDeltaApplied _id false
     -- Collect non-deletion, applied deltas to re-execute.
-    let nonDeletionApplied = filter (\(DeltaStoreRecord r) -> r.applied && not (isDeletionDeltaType r.deltaType)) allDeltas
+    let isAppliedNonDeletion (DeltaStoreRecord r) = r.applied && not (isDeletionDeltaType r.deltaType)
+    let nonDeletionApplied = filter isAppliedNonDeletion allDeltas
     -- Role-level deltas (resourceKey has no "#"): execute first, sorted by version.
-    let roleLevelDeltas = sortBy byVersion $
+    let roleLevelDeltas = sortBy compareByVersion $
           filter (\(DeltaStoreRecord r) -> not (Str.contains (Str.Pattern "#") r.resourceKey)) nonDeletionApplied
     -- Sub-resource deltas (resourceKey has "#"): execute after, sorted by version.
-    let subResourceDeltas = sortBy byVersion $
+    let subResourceDeltas = sortBy compareByVersion $
           filter (\(DeltaStoreRecord r) -> Str.contains (Str.Pattern "#") r.resourceKey) nonDeletionApplied
     for_ roleLevelDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
       executeDelta sd (Just (unwrap sd).encryptedDelta)

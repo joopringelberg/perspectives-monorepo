@@ -157,6 +157,7 @@ getDeltasForRoleInstance roleInstanceId = do
   -- Sub-resource deltas: roleInstanceId#..._v..._...
   -- Both start with roleInstanceId, so a range query covers all of them.
   let startkey = roleInstanceId
+  -- Use the highest unicode character as end sentinel to include all possible suffixes.
   let endkey = roleInstanceId <> "\xFFFF"
   result <- documentsInRange dbName startkey endkey
   let allDeltas = catMaybes $ map decodeDoc result.rows
@@ -171,10 +172,12 @@ getDeltasForRoleInstance roleInstanceId = do
 
   isRoleOrSubResource :: String -> DeltaStoreRecord -> Boolean
   isRoleOrSubResource rid (DeltaStoreRecord { resourceKey }) =
-    resourceKey == rid
-      || ( Str.length resourceKey > Str.length rid + 1
-             && Str.take (Str.length rid + 1) resourceKey == rid <> "#"
-         )
+    let ridLen = Str.length rid
+    in
+      resourceKey == rid
+        || ( Str.length resourceKey > ridLen + 1
+               && Str.take (ridLen + 1) resourceKey == rid <> "#"
+           )
 
 -- | Update the `applied` flag of an existing delta-store record.
 -- | No-op if the record does not exist.
