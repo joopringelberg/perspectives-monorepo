@@ -600,12 +600,16 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           mRole <- lift $ tryGetPerspectRol (RoleInstance roleInstanceId)
           case mRole of
             Nothing -> do
-              -- Role does not exist. Check if it was deleted (modify-wins-over-delete).
-              roleDeltas <- lift $ getDeltasForResource roleInstanceId
-              let wasDeletionApplied = any (\(DeltaStoreRecord r) -> r.applied && isDeletionDeltaType r.deltaType) roleDeltas
-              if wasDeletionApplied then do
+              -- Role does not exist. Use the resource version as a proxy for deletion:
+              -- if localVersion > 0, the role existed at some point and was likely deleted.
+              -- This is more robust than relying on the deletion delta being in the DeltaStore,
+              -- because the creation deltas may have arrived in the same transaction as the
+              -- modification and been stored with applied=false (outdated path), preventing
+              -- a pure delta-store based check from working.
+              localRoleVersion <- lift $ getResourceVersion roleInstanceId
+              if localRoleVersion > 0 then do
                 -- Modify wins over delete: restore the role from the delta-store.
-                log ("Modify-wins-over-delete: restoring deleted role " <> roleInstanceId <> " to apply incoming modification.")
+                log ("Modify-wins-over-delete: restoring role " <> roleInstanceId <> " to apply incoming modification.")
                 restoreRoleFromDeltaStore roleInstanceId
               else pure unit
               -- Execute the modification (role should now exist if restored).
@@ -683,6 +687,16 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   -- | from the delta-store, then marking the deletion delta(s) as not applied.
   -- | Role-level deltas (ConstructEmptyRole, AddRoleInstancesToContext) are applied
   -- | before sub-resource deltas (properties, bindings) to preserve correct order.
+  -- |
+  -- | Role-level deltas are included regardless of their `applied` flag because:
+  -- |   1. Role creation (ConstructEmptyRole, AddRoleInstancesToContext) is idempotent.
+  -- |   2. When the creation deltas arrive in the SAME transaction as the modification
+  -- |      that triggers restoration, they are stored with applied=false (they were
+  -- |      outdated relative to the local deletion version). Filtering by applied=true
+  -- |      would exclude them and leave the role unrestored.
+  -- |
+  -- | Sub-resource deltas (properties, bindings) are included only when applied=true
+  -- | to avoid re-applying modifications that have already been superseded.
   restoreRoleFromDeltaStore :: String -> MonadPerspectivesTransaction Unit
   restoreRoleFromDeltaStore roleInstanceId = do
     allDeltas <- lift $ getDeltasForRoleInstance roleInstanceId
@@ -691,17 +705,14 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
     let deletionDeltas = filter (\(DeltaStoreRecord r) -> r.applied && isDeletionDeltaType r.deltaType) allDeltas
     for_ deletionDeltas \(DeltaStoreRecord { _id }) ->
       lift $ updateDeltaApplied _id false
-    -- Collect non-deletion, applied deltas to re-execute.
-    let isAppliedNonDeletion (DeltaStoreRecord r) = r.applied && not (isDeletionDeltaType r.deltaType)
-    let nonDeletionApplied = filter isAppliedNonDeletion allDeltas
-    -- Role-level deltas (resourceKey has no "#"): execute first, sorted by version.
-    let
-      roleLevelDeltas = sortBy compareByVersion $
-        filter (\(DeltaStoreRecord r) -> not (Str.contains (Str.Pattern "#") r.resourceKey)) nonDeletionApplied
-    -- Sub-resource deltas (resourceKey has "#"): execute after, sorted by version.
-    let
-      subResourceDeltas = sortBy compareByVersion $
-        filter (\(DeltaStoreRecord r) -> Str.contains (Str.Pattern "#") r.resourceKey) nonDeletionApplied
+    -- Role-level deltas (no "#" in resourceKey): include ALL non-deletion ones
+    -- regardless of applied status (role creation is idempotent).
+    let roleLevelDeltas = sortBy compareByVersion $
+          filter (\(DeltaStoreRecord r) -> not (isDeletionDeltaType r.deltaType) && not (Str.contains (Str.Pattern "#") r.resourceKey)) allDeltas
+    -- Sub-resource deltas (have "#" in resourceKey): include only applied=true ones
+    -- to avoid re-applying outdated or suppressed property/binding modifications.
+    let subResourceDeltas = sortBy compareByVersion $
+          filter (\(DeltaStoreRecord r) -> r.applied && not (isDeletionDeltaType r.deltaType) && Str.contains (Str.Pattern "#") r.resourceKey) allDeltas
     for_ roleLevelDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
       executeDelta sd (Just (unwrap sd).encryptedDelta)
     for_ subResourceDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
