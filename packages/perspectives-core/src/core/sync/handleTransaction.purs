@@ -27,7 +27,7 @@ import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
-import Data.Array (catMaybes, concat, filter, fromFoldable)
+import Data.Array (any, catMaybes, concat, filter, fromFoldable, sortBy)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -37,6 +37,7 @@ import Data.Maybe (Maybe(..), fromJust, isNothing)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (over, unwrap)
 import Data.Ordering (Ordering(..))
+import Data.String (Pattern(..), drop, indexOf, length, take) as Str
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (liftAff)
@@ -65,7 +66,7 @@ import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.ModelDependencies (rootContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
-import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit)
+import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit, tryGetPerspectRol)
 import Perspectives.PerspectivesState (transactionLevel)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType(..), cacheEntity)
@@ -78,7 +79,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
 import Perspectives.Sync.LegacyDeltas (extractLegacyResourceKey, toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
-import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), storeDelta, getDeltasForResource, deltaStoreDocId)
+import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), extractDeltaInfo, storeDelta, getDeltasForResource, getDeltasForRoleInstance, updateDeltaApplied, deltaStoreDocId)
 import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, incrementResourceVersion, setResourceVersion)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
@@ -86,7 +87,7 @@ import Perspectives.Sync.Transaction (PublicKeyInfo)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=))
+import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -484,6 +485,11 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
 
   executeDeltaWithVersionTracking :: SignedDelta -> String -> String -> Int -> PerspectivesUser -> MonadPerspectivesTransaction Unit
   executeDeltaWithVersionTracking s stringified resourceKey resourceVersion author = do
+    -- Extract the deltaType from the stringified delta content for modify-wins-over-delete checks.
+    let
+      deltaType = case extractDeltaInfo stringified of
+        Just info -> info.deltaType
+        Nothing -> ""
     if resourceKey /= "" then do
       localVersion <- lift $ getResourceVersion resourceKey
       if resourceVersion < 0 then do
@@ -497,7 +503,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           , resourceVersion: rversion
           , author
           , signedDelta: s
-          , deltaType: ""
+          , deltaType
           , applied: true
           }
       else if resourceVersion < localVersion then do
@@ -510,7 +516,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           , resourceVersion
           , author
           , signedDelta: s
-          , deltaType: ""
+          , deltaType
           , applied: false
           }
       else if resourceVersion == localVersion then do
@@ -532,7 +538,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
             , resourceVersion
             , author
             , signedDelta: s
-            , deltaType: ""
+            , deltaType
             , applied: true
             }
         else do
@@ -545,27 +551,170 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
             , resourceVersion
             , author
             , signedDelta: s
-            , deltaType: ""
+            , deltaType
             , applied: false
             }
       else do
         -- resourceVersion > localVersion: normal next expected version.
         -- (Gaps have already been ruled out by checkForGaps.)
-        executeDelta s (Just stringified)
-        lift $ setResourceVersion resourceKey resourceVersion
-        lift $ storeDelta $ DeltaStoreRecord
-          { _id: deltaStoreDocId resourceKey resourceVersion author
-          , _rev: Nothing
-          , resourceKey
-          , resourceVersion
-          , author
-          , signedDelta: s
-          , deltaType: ""
-          , applied: true
-          }
+        -- Apply modify-wins-over-delete logic before executing.
+        if isDeletionDeltaType deltaType then do
+          -- Incoming is a role deletion. Check for concurrent local modifications on sub-resources.
+          suppressedByModify <- isDeletionSuppressedByModifyWins resourceKey
+          if suppressedByModify then do
+            -- Modify wins over delete: suppress the deletion.
+            log ("Modify-wins-over-delete: suppressing deletion of " <> resourceKey <> " because concurrent sub-resource modifications exist.")
+            lift $ setResourceVersion resourceKey resourceVersion
+            lift $ storeDelta $ DeltaStoreRecord
+              { _id: deltaStoreDocId resourceKey resourceVersion author
+              , _rev: Nothing
+              , resourceKey
+              , resourceVersion
+              , author
+              , signedDelta: s
+              , deltaType
+              , applied: false
+              }
+          else do
+            -- No concurrent modifications: apply deletion normally.
+            executeDelta s (Just stringified)
+            lift $ setResourceVersion resourceKey resourceVersion
+            lift $ storeDelta $ DeltaStoreRecord
+              { _id: deltaStoreDocId resourceKey resourceVersion author
+              , _rev: Nothing
+              , resourceKey
+              , resourceVersion
+              , author
+              , signedDelta: s
+              , deltaType
+              , applied: true
+              }
+        else if isSubResourceKey resourceKey then do
+          -- Incoming is a sub-resource modification (property or binding).
+          -- Check whether the role instance was deleted and needs restoration.
+          -- Extract the role instance ID from the sub-resource key.
+          -- Resource keys have the form: roleInstanceId <> "#" <> subResourceId,
+          -- and roleInstanceId itself contains one "#" (the scheme separator, e.g. "def:#id").
+          -- So we must find the SECOND "#" to locate the role/sub-resource boundary.
+          let roleInstanceId = extractRoleInstanceId resourceKey
+          mRole <- lift $ tryGetPerspectRol (RoleInstance roleInstanceId)
+          case mRole of
+            Nothing -> do
+              -- Role does not exist. Use the resource version as a proxy for deletion:
+              -- if localVersion > 0, the role existed at some point and was likely deleted.
+              -- This is more robust than relying on the deletion delta being in the DeltaStore,
+              -- because the creation deltas may have arrived in the same transaction as the
+              -- modification and been stored with applied=false (outdated path), preventing
+              -- a pure delta-store based check from working.
+              localRoleVersion <- lift $ getResourceVersion roleInstanceId
+              if localRoleVersion > 0 then do
+                -- Modify wins over delete: restore the role from the delta-store.
+                log ("Modify-wins-over-delete: restoring role " <> roleInstanceId <> " to apply incoming modification.")
+                restoreRoleFromDeltaStore roleInstanceId
+              else pure unit
+              -- Execute the modification (role should now exist if restored).
+              executeDelta s (Just stringified)
+              lift $ setResourceVersion resourceKey resourceVersion
+              lift $ storeDelta $ DeltaStoreRecord
+                { _id: deltaStoreDocId resourceKey resourceVersion author
+                , _rev: Nothing
+                , resourceKey
+                , resourceVersion
+                , author
+                , signedDelta: s
+                , deltaType
+                , applied: true
+                }
+            Just _ -> do
+              -- Role exists: execute normally.
+              executeDelta s (Just stringified)
+              lift $ setResourceVersion resourceKey resourceVersion
+              lift $ storeDelta $ DeltaStoreRecord
+                { _id: deltaStoreDocId resourceKey resourceVersion author
+                , _rev: Nothing
+                , resourceKey
+                , resourceVersion
+                , author
+                , signedDelta: s
+                , deltaType
+                , applied: true
+                }
+        else do
+          -- Role-level delta that is not a deletion (e.g. ConstructEmptyRole, AddRoleInstancesToContext).
+          executeDelta s (Just stringified)
+          lift $ setResourceVersion resourceKey resourceVersion
+          lift $ storeDelta $ DeltaStoreRecord
+            { _id: deltaStoreDocId resourceKey resourceVersion author
+            , _rev: Nothing
+            , resourceKey
+            , resourceVersion
+            , author
+            , signedDelta: s
+            , deltaType
+            , applied: true
+            }
     else
       -- No resourceKey: legacy delta without ordering info, just execute.
       executeDelta s (Just stringified)
+
+  -- | Returns true if a deltaType string represents a role-instance deletion.
+  isDeletionDeltaType :: String -> Boolean
+  isDeletionDeltaType dt =
+    dt
+      == "RemoveRoleInstance"
+      || dt
+        == "RemoveExternalRoleInstance"
+      || dt
+        == "RemoveUnboundExternalRoleInstance"
+
+  -- | Returns true if an incoming deletion delta for `roleInstanceId` (a role instance ID)
+  -- | should be suppressed because there are locally-applied modification deltas on
+  -- | sub-resources (properties or bindings) of that role — modify-wins-over-delete.
+  isDeletionSuppressedByModifyWins :: String -> MonadPerspectivesTransaction Boolean
+  isDeletionSuppressedByModifyWins roleInstanceId = do
+    allRoleDeltas <- lift $ getDeltasForRoleInstance roleInstanceId
+    let
+      hasAppliedSubResourceModification = any
+        (\d@(DeltaStoreRecord r) -> r.applied && isSubResourceDeltaOf roleInstanceId d)
+        allRoleDeltas
+    pure hasAppliedSubResourceModification
+
+  -- | Restore a deleted role by re-applying its creation and property/binding deltas
+  -- | from the delta-store, then marking the deletion delta(s) as not applied.
+  -- | Role-level deltas (ConstructEmptyRole, AddRoleInstancesToContext) are applied
+  -- | before sub-resource deltas (properties, bindings) to preserve correct order.
+  -- |
+  -- | Role-level deltas are included regardless of their `applied` flag because:
+  -- |   1. Role creation (ConstructEmptyRole, AddRoleInstancesToContext) is idempotent.
+  -- |   2. When the creation deltas arrive in the SAME transaction as the modification
+  -- |      that triggers restoration, they are stored with applied=false (they were
+  -- |      outdated relative to the local deletion version). Filtering by applied=true
+  -- |      would exclude them and leave the role unrestored.
+  -- |
+  -- | Sub-resource deltas (properties, bindings) are included only when applied=true
+  -- | to avoid re-applying modifications that have already been superseded.
+  restoreRoleFromDeltaStore :: String -> MonadPerspectivesTransaction Unit
+  restoreRoleFromDeltaStore roleInstanceId = do
+    allDeltas <- lift $ getDeltasForRoleInstance roleInstanceId
+    let compareByVersion (DeltaStoreRecord r1) (DeltaStoreRecord r2) = compare r1.resourceVersion r2.resourceVersion
+    -- Mark all applied deletion deltas as no longer applied.
+    let deletionDeltas = filter (\(DeltaStoreRecord r) -> r.applied && isDeletionDeltaType r.deltaType) allDeltas
+    for_ deletionDeltas \(DeltaStoreRecord { _id }) ->
+      lift $ updateDeltaApplied _id false
+    -- Role-level deltas (resourceKey == roleInstanceId): include ALL non-deletion ones
+    -- regardless of applied status (role creation is idempotent).
+    let
+      roleLevelDeltas = sortBy compareByVersion $
+        filter (\d@(DeltaStoreRecord r) -> not (isDeletionDeltaType r.deltaType) && not (isSubResourceDeltaOf roleInstanceId d)) allDeltas
+    -- Sub-resource deltas (resourceKey starts with roleInstanceId <> "#"): only applied=true
+    -- to avoid re-applying outdated or suppressed property/binding modifications.
+    let
+      subResourceDeltas = sortBy compareByVersion $
+        filter (\d@(DeltaStoreRecord r) -> r.applied && not (isDeletionDeltaType r.deltaType) && isSubResourceDeltaOf roleInstanceId d) allDeltas
+    for_ roleLevelDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
+      executeDelta sd (Just (unwrap sd).encryptedDelta)
+    for_ subResourceDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
+      executeDelta sd (Just (unwrap sd).encryptedDelta)
 
   -- | Returns true if any DeltaStoreRecord in the array has an author >= the given author.
   hasAuthorGreaterOrEqual :: PerspectivesUser -> Array DeltaStoreRecord -> Boolean
@@ -573,6 +722,38 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   hasAuthorGreaterOrEqual incomingAuthor records = case filter (\(DeltaStoreRecord r) -> r.author >= incomingAuthor) records of
     [] -> false
     _ -> true
+
+  -- | Check whether a resource key is a sub-resource key (i.e. it has a second "#").
+  -- | Resource IDs have the form "scheme:#identifier" (one "#" from the scheme separator).
+  -- | Sub-resource keys extend that with another "#": "scheme:#identifier#subKey".
+  -- | We detect this by searching for a "#" after the first one.
+  isSubResourceKey :: String -> Boolean
+  isSubResourceKey key = case Str.indexOf (Str.Pattern "#") key of
+    Nothing -> false
+    Just p1 -> case Str.indexOf (Str.Pattern "#") (Str.drop (p1 + 1) key) of
+      Nothing -> false
+      Just _ -> true
+
+  -- | Check whether a DeltaStoreRecord is a sub-resource delta of the given role instance.
+  -- | A sub-resource delta has a resourceKey that starts with roleInstanceId <> "#".
+  -- | This avoids the incorrect Str.contains "#" check: roleInstanceId itself contains "#"
+  -- | (e.g. "def:#id"), so every delta resourceKey in a role's delta set also contains "#".
+  isSubResourceDeltaOf :: String -> DeltaStoreRecord -> Boolean
+  isSubResourceDeltaOf roleInstanceId (DeltaStoreRecord { resourceKey }) =
+    Str.length resourceKey > Str.length roleInstanceId
+      && Str.take (Str.length roleInstanceId + 1) resourceKey == roleInstanceId <> "#"
+
+  -- | Extract the role instance ID from a sub-resource key.
+  -- | A sub-resource key has the form: roleInstanceId <> "#" <> subResourceId,
+  -- | where roleInstanceId itself contains one "#" (the scheme separator, e.g. "def:#id").
+  -- | We find the SECOND "#" to locate the role/sub-resource boundary.
+  -- | If there is no second "#" the key is itself a role instance ID; it is returned as-is.
+  extractRoleInstanceId :: String -> String
+  extractRoleInstanceId key = case Str.indexOf (Str.Pattern "#") key of
+    Nothing -> key
+    Just p1 -> case Str.indexOf (Str.Pattern "#") (Str.drop (p1 + 1) key) of
+      Nothing -> key -- Only one "#": this IS a role instance key, not a sub-resource key.
+      Just p2 -> Str.take (p1 + 1 + p2) key
 
   executeDelta :: SignedDelta -> Maybe String -> MonadPerspectivesTransaction Unit
   -- For now, we fail silently on deltas that cannot be authenticated.

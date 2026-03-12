@@ -32,6 +32,9 @@ module Perspectives.Persistence.DeltaStore
   , getDelta
   , getDeltasForResource
   , getDeltasForResourceByDeltaType
+  , getDeltasForRoleInstance
+  , updateDeltaApplied
+  , extractDeltaInfo
   , deltaStoreDatabaseName
   , deltaStoreDocId
   ) where
@@ -43,6 +46,7 @@ import Data.Array (catMaybes, filter)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Data.String (contains, length, take, Pattern(..)) as Str
 import Foreign (Foreign)
 import Perspectives.Persistence.API (addDocument_, documentsInRange, tryGetDocument_)
 import Perspectives.Persistence.State (getSystemIdentifier)
@@ -140,6 +144,53 @@ getDeltasForResourceByDeltaType :: forall f. String -> String -> MonadPouchdb f 
 getDeltasForResourceByDeltaType resourceKey deltaType = do
   allDeltas <- getDeltasForResource resourceKey
   pure $ filter (\(DeltaStoreRecord r) -> r.deltaType == deltaType) allDeltas
+
+-- | Retrieve all deltas for a role instance AND all its sub-resources
+-- | (property and binding resource keys of the form roleInstance#subKey).
+-- | Uses a range query on the delta-store document IDs, then filters to exclude
+-- | false positives where another role instance shares the same ID prefix.
+getDeltasForRoleInstance :: forall f. String -> MonadPouchdb f (Array DeltaStoreRecord)
+getDeltasForRoleInstance roleInstanceId = do
+  dbName <- deltaStoreDatabaseName
+  -- Document IDs follow: <resourceKey>_v<version>_<author>
+  -- Role instance deltas:       roleInstanceId_v..._...
+  -- Sub-resource deltas: roleInstanceId#..._v..._...
+  -- Both start with roleInstanceId, so a range query covers all of them.
+  let startkey = roleInstanceId
+  -- Use the highest unicode character as end sentinel to include all possible suffixes.
+  let endkey = roleInstanceId <> "\xFFFF"
+  result <- documentsInRange dbName startkey endkey
+  let allDeltas = catMaybes $ map decodeDoc result.rows
+  -- Keep only records where resourceKey is the role itself or one of its sub-resources.
+  pure $ filter (isRoleOrSubResource roleInstanceId) allDeltas
+  where
+  decodeDoc :: { id :: String, value :: { rev :: String }, doc :: Maybe Foreign } -> Maybe DeltaStoreRecord
+  decodeDoc { doc: Just foreignDoc } = case runExcept $ read' foreignDoc of
+    Right (rec :: DeltaStoreRecord) -> Just rec
+    Left _ -> Nothing
+  decodeDoc _ = Nothing
+
+  isRoleOrSubResource :: String -> DeltaStoreRecord -> Boolean
+  isRoleOrSubResource rid (DeltaStoreRecord { resourceKey }) =
+    let
+      ridLen = Str.length rid
+    in
+      resourceKey == rid
+        ||
+          ( Str.length resourceKey > ridLen + 1
+              && Str.take (ridLen + 1) resourceKey == rid <> "#"
+          )
+
+-- | Update the `applied` flag of an existing delta-store record.
+-- | No-op if the record does not exist.
+updateDeltaApplied :: forall f. String -> Boolean -> MonadPouchdb f Unit
+updateDeltaApplied docId newApplied = do
+  dbName <- deltaStoreDatabaseName
+  (existing :: Maybe DeltaStoreRecord) <- tryGetDocument_ dbName docId
+  case existing of
+    Nothing -> pure unit
+    Just (DeltaStoreRecord r) ->
+      void $ addDocument_ dbName (DeltaStoreRecord (r { applied = newApplied })) docId
 
 -----------------------------------------------------------
 -- STORE FROM SIGNED DELTA
