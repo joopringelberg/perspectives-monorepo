@@ -37,7 +37,7 @@ import Data.Maybe (Maybe(..), fromJust, isNothing)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (over, unwrap)
 import Data.Ordering (Ordering(..))
-import Data.String (Pattern(..), contains, indexOf, take) as Str
+import Data.String (Pattern(..), drop, indexOf, length, take) as Str
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (liftAff)
@@ -588,13 +588,14 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               , deltaType
               , applied: true
               }
-        else if Str.contains (Str.Pattern "#") resourceKey then do
+        else if isSubResourceKey resourceKey then do
           -- Incoming is a sub-resource modification (property or binding).
           -- Check whether the role instance was deleted and needs restoration.
-          let roleInstanceId = case Str.indexOf (Str.Pattern "#") resourceKey of
-                -- indexOf returns Nothing only when contains returned false, which cannot happen here.
-                Just idx -> Str.take idx resourceKey
-                Nothing -> resourceKey
+          -- Extract the role instance ID from the sub-resource key.
+          -- Resource keys have the form: roleInstanceId <> "#" <> subResourceId,
+          -- and roleInstanceId itself contains one "#" (the scheme separator, e.g. "def:#id").
+          -- So we must find the SECOND "#" to locate the role/sub-resource boundary.
+          let roleInstanceId = extractRoleInstanceId resourceKey
           mRole <- lift $ tryGetPerspectRol (RoleInstance roleInstanceId)
           case mRole of
             Nothing -> do
@@ -662,18 +663,14 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       || dt == "RemoveExternalRoleInstance"
       || dt == "RemoveUnboundExternalRoleInstance"
 
-  -- | Returns true if an incoming deletion delta for `resourceKey` (a role instance ID)
+  -- | Returns true if an incoming deletion delta for `roleInstanceId` (a role instance ID)
   -- | should be suppressed because there are locally-applied modification deltas on
   -- | sub-resources (properties or bindings) of that role — modify-wins-over-delete.
   isDeletionSuppressedByModifyWins :: String -> MonadPerspectivesTransaction Boolean
   isDeletionSuppressedByModifyWins roleInstanceId = do
     allRoleDeltas <- lift $ getDeltasForRoleInstance roleInstanceId
-    -- A sub-resource modification is any applied delta whose resource key contains "#"
-    -- (meaning it is a property or binding delta, not the role creation/deletion itself).
     let hasAppliedSubResourceModification = any
-          ( \(DeltaStoreRecord r) ->
-              r.applied && Str.contains (Str.Pattern "#") r.resourceKey
-          )
+          (\d@(DeltaStoreRecord r) -> r.applied && isSubResourceDeltaOf roleInstanceId d)
           allRoleDeltas
     pure hasAppliedSubResourceModification
 
@@ -699,14 +696,14 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
     let deletionDeltas = filter (\(DeltaStoreRecord r) -> r.applied && isDeletionDeltaType r.deltaType) allDeltas
     for_ deletionDeltas \(DeltaStoreRecord { _id }) ->
       lift $ updateDeltaApplied _id false
-    -- Role-level deltas (no "#" in resourceKey): include ALL non-deletion ones
+    -- Role-level deltas (resourceKey == roleInstanceId): include ALL non-deletion ones
     -- regardless of applied status (role creation is idempotent).
     let roleLevelDeltas = sortBy compareByVersion $
-          filter (\(DeltaStoreRecord r) -> not (isDeletionDeltaType r.deltaType) && not (Str.contains (Str.Pattern "#") r.resourceKey)) allDeltas
-    -- Sub-resource deltas (have "#" in resourceKey): include only applied=true ones
+          filter (\d@(DeltaStoreRecord r) -> not (isDeletionDeltaType r.deltaType) && not (isSubResourceDeltaOf roleInstanceId d)) allDeltas
+    -- Sub-resource deltas (resourceKey starts with roleInstanceId <> "#"): only applied=true
     -- to avoid re-applying outdated or suppressed property/binding modifications.
     let subResourceDeltas = sortBy compareByVersion $
-          filter (\(DeltaStoreRecord r) -> r.applied && not (isDeletionDeltaType r.deltaType) && Str.contains (Str.Pattern "#") r.resourceKey) allDeltas
+          filter (\d@(DeltaStoreRecord r) -> r.applied && not (isDeletionDeltaType r.deltaType) && isSubResourceDeltaOf roleInstanceId d) allDeltas
     for_ roleLevelDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
       executeDelta sd (Just (unwrap sd).encryptedDelta)
     for_ subResourceDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
@@ -718,6 +715,38 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   hasAuthorGreaterOrEqual incomingAuthor records = case filter (\(DeltaStoreRecord r) -> r.author >= incomingAuthor) records of
     [] -> false
     _ -> true
+
+  -- | Check whether a resource key is a sub-resource key (i.e. it has a second "#").
+  -- | Resource IDs have the form "scheme:#identifier" (one "#" from the scheme separator).
+  -- | Sub-resource keys extend that with another "#": "scheme:#identifier#subKey".
+  -- | We detect this by searching for a "#" after the first one.
+  isSubResourceKey :: String -> Boolean
+  isSubResourceKey key = case Str.indexOf (Str.Pattern "#") key of
+    Nothing -> false
+    Just p1 -> case Str.indexOf (Str.Pattern "#") (Str.drop (p1 + 1) key) of
+      Nothing -> false
+      Just _ -> true
+
+  -- | Check whether a DeltaStoreRecord is a sub-resource delta of the given role instance.
+  -- | A sub-resource delta has a resourceKey that starts with roleInstanceId <> "#".
+  -- | This avoids the incorrect Str.contains "#" check: roleInstanceId itself contains "#"
+  -- | (e.g. "def:#id"), so every delta resourceKey in a role's delta set also contains "#".
+  isSubResourceDeltaOf :: String -> DeltaStoreRecord -> Boolean
+  isSubResourceDeltaOf roleInstanceId (DeltaStoreRecord { resourceKey }) =
+    Str.length resourceKey > Str.length roleInstanceId
+      && Str.take (Str.length roleInstanceId + 1) resourceKey == roleInstanceId <> "#"
+
+  -- | Extract the role instance ID from a sub-resource key.
+  -- | A sub-resource key has the form: roleInstanceId <> "#" <> subResourceId,
+  -- | where roleInstanceId itself contains one "#" (the scheme separator, e.g. "def:#id").
+  -- | We find the SECOND "#" to locate the role/sub-resource boundary.
+  -- | If there is no second "#" the key is itself a role instance ID; it is returned as-is.
+  extractRoleInstanceId :: String -> String
+  extractRoleInstanceId key = case Str.indexOf (Str.Pattern "#") key of
+    Nothing -> key
+    Just p1 -> case Str.indexOf (Str.Pattern "#") (Str.drop (p1 + 1) key) of
+      Nothing -> key  -- Only one "#": this IS a role instance key, not a sub-resource key.
+      Just p2 -> Str.take (p1 + 1 + p2) key
 
   executeDelta :: SignedDelta -> Maybe String -> MonadPerspectivesTransaction Unit
   -- For now, we fail silently on deltas that cannot be authenticated.
