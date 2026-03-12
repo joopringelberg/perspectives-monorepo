@@ -87,7 +87,7 @@ import Perspectives.Sync.Transaction (PublicKeyInfo)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=))
+import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -486,9 +486,10 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   executeDeltaWithVersionTracking :: SignedDelta -> String -> String -> Int -> PerspectivesUser -> MonadPerspectivesTransaction Unit
   executeDeltaWithVersionTracking s stringified resourceKey resourceVersion author = do
     -- Extract the deltaType from the stringified delta content for modify-wins-over-delete checks.
-    let deltaType = case extractDeltaInfo stringified of
-          Just info -> info.deltaType
-          Nothing -> ""
+    let
+      deltaType = case extractDeltaInfo stringified of
+        Just info -> info.deltaType
+        Nothing -> ""
     if resourceKey /= "" then do
       localVersion <- lift $ getResourceVersion resourceKey
       if resourceVersion < 0 then do
@@ -591,10 +592,11 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
         else if Str.contains (Str.Pattern "#") resourceKey then do
           -- Incoming is a sub-resource modification (property or binding).
           -- Check whether the role instance was deleted and needs restoration.
-          let roleInstanceId = case Str.indexOf (Str.Pattern "#") resourceKey of
-                -- indexOf returns Nothing only when contains returned false, which cannot happen here.
-                Just idx -> Str.take idx resourceKey
-                Nothing -> resourceKey
+          let
+            roleInstanceId = case Str.indexOf (Str.Pattern "#") resourceKey of
+              -- indexOf returns Nothing only when contains returned false, which cannot happen here.
+              Just idx -> Str.take idx resourceKey
+              Nothing -> resourceKey
           mRole <- lift $ tryGetPerspectRol (RoleInstance roleInstanceId)
           case mRole of
             Nothing -> do
@@ -654,9 +656,12 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   -- | Returns true if a deltaType string represents a role-instance deletion.
   isDeletionDeltaType :: String -> Boolean
   isDeletionDeltaType dt =
-    dt == "RemoveRoleInstance"
-      || dt == "RemoveExternalRoleInstance"
-      || dt == "RemoveUnboundExternalRoleInstance"
+    dt
+      == "RemoveRoleInstance"
+      || dt
+        == "RemoveExternalRoleInstance"
+      || dt
+        == "RemoveUnboundExternalRoleInstance"
 
   -- | Returns true if an incoming deletion delta for `resourceKey` (a role instance ID)
   -- | should be suppressed because there are locally-applied modification deltas on
@@ -666,11 +671,12 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
     allRoleDeltas <- lift $ getDeltasForRoleInstance roleInstanceId
     -- A sub-resource modification is any applied delta whose resource key contains "#"
     -- (meaning it is a property or binding delta, not the role creation/deletion itself).
-    let hasAppliedSubResourceModification = any
-          ( \(DeltaStoreRecord r) ->
-              r.applied && Str.contains (Str.Pattern "#") r.resourceKey
-          )
-          allRoleDeltas
+    let
+      hasAppliedSubResourceModification = any
+        ( \(DeltaStoreRecord r) ->
+            r.applied && Str.contains (Str.Pattern "#") r.resourceKey
+        )
+        allRoleDeltas
     pure hasAppliedSubResourceModification
 
   -- | Restore a deleted role by re-applying its creation and property/binding deltas
@@ -689,11 +695,13 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
     let isAppliedNonDeletion (DeltaStoreRecord r) = r.applied && not (isDeletionDeltaType r.deltaType)
     let nonDeletionApplied = filter isAppliedNonDeletion allDeltas
     -- Role-level deltas (resourceKey has no "#"): execute first, sorted by version.
-    let roleLevelDeltas = sortBy compareByVersion $
-          filter (\(DeltaStoreRecord r) -> not (Str.contains (Str.Pattern "#") r.resourceKey)) nonDeletionApplied
+    let
+      roleLevelDeltas = sortBy compareByVersion $
+        filter (\(DeltaStoreRecord r) -> not (Str.contains (Str.Pattern "#") r.resourceKey)) nonDeletionApplied
     -- Sub-resource deltas (resourceKey has "#"): execute after, sorted by version.
-    let subResourceDeltas = sortBy compareByVersion $
-          filter (\(DeltaStoreRecord r) -> Str.contains (Str.Pattern "#") r.resourceKey) nonDeletionApplied
+    let
+      subResourceDeltas = sortBy compareByVersion $
+        filter (\(DeltaStoreRecord r) -> Str.contains (Str.Pattern "#") r.resourceKey) nonDeletionApplied
     for_ roleLevelDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
       executeDelta sd (Just (unwrap sd).encryptedDelta)
     for_ subResourceDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
