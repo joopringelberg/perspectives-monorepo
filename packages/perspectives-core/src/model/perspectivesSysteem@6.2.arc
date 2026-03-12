@@ -365,9 +365,8 @@ domain model://perspectives.domains#System@6.2
     -- However, to be able to use Persons effectively when we don't care whether or not there is 
     -- a PerspectivesUsers behind it, we have to have Persons for PerspectivesUsers, too.
 
-    -- If User is not filled with Persons, we can never fill a role that requires Persons with User. That may be inconvenient.
-    -- OF WE MOETEN ME VULLEN MET PERSONS.
-    -- TODO. WHAT ABOUT SOCIALENVIRONMENT$ME?
+    -- This role is filled in the name of TheWorld$Initializer in Purescript code with the instance of PerspectivesUsers that represents the person that creates this installation. That way, we can be sure that it is filled in the first installation, and that it is filled with the right user.
+    -- TODO: this is wrong: we need a Person!
     user User (mandatory) filledBy (Persons + PerspectivesUsers)
       aspect sys:ContextWithNotification$NotifiedUser
 

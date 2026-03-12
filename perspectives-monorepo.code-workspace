@@ -55,7 +55,8 @@
 		"purescript.buildCommand": "pnpm exec spago build --json-errors",
 		"git.openRepositoryInParentFolders": "always",
 		"chat.tools.terminal.autoApprove": {
-			"pnpm": true
+			"pnpm": true,
+			"npx spago": true
 		}
 	}
 }

@@ -36,7 +36,7 @@ import Data.Number (ln10, log)
 import Data.Ord (Ordering, compare)
 import Data.String (Pattern(..), lastIndexOf, splitAt)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (Object, delete, empty, fromFoldable, insert, lookup, singleton)
+import Foreign.Object (Object, delete, empty, insert, lookup, singleton)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, MP, (###=))
 import Perspectives.Identifiers (Namespace, typeUri2typeNameSpace)
@@ -44,11 +44,10 @@ import Perspectives.InstanceRepresentation (ContextRecord, PerspectContext(..), 
 import Perspectives.InstanceRepresentation.PublicUrl (PublicUrl)
 import Perspectives.Representation.Class.PersistentType (getContext)
 import Perspectives.Representation.Context (Context(..))
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType, StateIdentifier)
-import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, roleAspectsClosure)
-import Prelude (bind, eq, flip, identity, pure, show, ($), (+), (/), (<#>), (<$>), (<<<), (<>))
+import Prelude (bind, flip, identity, pure, show, ($), (+), (/), (<#>), (<$>), (<<<), (<>))
 import Type.Proxy (Proxy(..))
 
 -- CONTEXT
@@ -79,9 +78,6 @@ context_allTypes (PerspectContext { allTypes }) = allTypes
 
 context_buitenRol :: PerspectContext -> RoleInstance
 context_buitenRol (PerspectContext { buitenRol }) = buitenRol
-
-context_universeContextDelta :: PerspectContext -> SignedDelta
-context_universeContextDelta (PerspectContext { universeContextDelta }) = universeContextDelta
 
 context_iedereRolInContext :: PerspectContext -> Object (Array RoleInstance)
 context_iedereRolInContext (PerspectContext { rolInContext }) = rolInContext
@@ -182,7 +178,6 @@ defaultContextRecord =
   , rolInContext: empty
   , me: Nothing
   , preferredUserRoleType: Nothing
-  , universeContextDelta: SignedDelta { author: PerspectivesUser "", encryptedDelta: "UniverseContextDelta from defaultContextRecord", signature: Nothing }
   , states: []
   , publicUrl: Nothing
   }
@@ -200,18 +195,11 @@ defaultRolRecord =
   , filledRoles: empty
   , occurrence: 0
   , isMe: false
-  , universeRoleDelta: SignedDelta { author: PerspectivesUser "", encryptedDelta: "UniverseRoleDelta from defaultRolRecord", signature: Nothing }
-  , contextDelta: SignedDelta { author: PerspectivesUser "", encryptedDelta: "ContextDelta from defaultRolRecord", signature: Nothing }
-  , bindingDelta: Nothing
-  , propertyDeltas: empty
   , states: []
   , roleAliases: empty
   , contextAliases: empty
   , _attachments: Nothing
   }
-
-isDefaultContextDelta :: SignedDelta -> Boolean
-isDefaultContextDelta (SignedDelta { encryptedDelta }) = encryptedDelta `eq` "ContextDelta from defaultRolRecord"
 
 context_publicUrl :: PerspectContext -> Maybe PublicUrl
 context_publicUrl (PerspectContext { publicUrl }) = publicUrl
@@ -245,7 +233,7 @@ changeRol_binding :: RoleInstance -> PerspectRol -> PerspectRol
 changeRol_binding b (PerspectRol cr) = PerspectRol $ cr { binding = (Just b) }
 
 removeRol_binding :: PerspectRol -> PerspectRol
-removeRol_binding (PerspectRol cr) = PerspectRol $ cr { binding = Nothing, bindingDelta = Nothing }
+removeRol_binding (PerspectRol cr) = PerspectRol $ cr { binding = Nothing }
 
 rol_context :: PerspectRol -> ContextInstance
 rol_context (PerspectRol { context }) = context
@@ -277,18 +265,6 @@ _propertyValues' (EnumeratedPropertyType t) = _Newtype <<< _properties <<< at t
 rol_property :: PerspectRol -> EnumeratedPropertyType -> Array Value
 rol_property (PerspectRol { properties }) pn = maybe [] identity (lookup (NT.unwrap pn) properties)
 
-rol_propertyDelta :: PerspectRol -> EnumeratedPropertyType -> Value -> Maybe SignedDelta
-rol_propertyDelta (PerspectRol { propertyDeltas }) (EnumeratedPropertyType pn) (Value v) =
-  case lookup pn propertyDeltas of
-    Nothing -> Nothing
-    Just x -> lookup v x
-
-rol_universeRoleDelta :: PerspectRol -> SignedDelta
-rol_universeRoleDelta (PerspectRol { universeRoleDelta }) = universeRoleDelta
-
-rol_contextDelta :: PerspectRol -> SignedDelta
-rol_contextDelta (PerspectRol { contextDelta }) = contextDelta
-
 addRol_property :: PerspectRol -> EnumeratedPropertyType -> Array Value -> PerspectRol
 -- addRol_property rl propertyName values = over (_propertyValues propertyName) (flip Arr.union values) rl
 addRol_property rl propertyName values = case view (_propertyValues' propertyName) rl of
@@ -301,15 +277,8 @@ removeRol_property rl propertyName values = over (_propertyValues propertyName) 
 deleteRol_property :: PerspectRol -> EnumeratedPropertyType -> PerspectRol
 deleteRol_property (PerspectRol rl@{ properties }) propertyName = PerspectRol (rl { properties = delete (NT.unwrap propertyName) properties })
 
--- setRol_property :: PerspectRol -> EnumeratedPropertyType -> Array Value -> PerspectRol
--- setRol_property rl propertyName values = set (_propertyValues' propertyName) (Just values) rl
-
--- | Notice that the delta is associated with each individual value.
-setRol_property :: PerspectRol -> EnumeratedPropertyType -> Array Value -> SignedDelta -> PerspectRol
-setRol_property (PerspectRol rl@{ propertyDeltas, properties }) propertyName values signedDelta = PerspectRol rl
-  { propertyDeltas = insert (NT.unwrap propertyName) (fromFoldable (flip Tuple signedDelta <<< NT.unwrap <$> values)) propertyDeltas
-  , properties = insert (NT.unwrap propertyName) values properties
-  }
+setRol_property :: PerspectRol -> EnumeratedPropertyType -> Array Value -> PerspectRol
+setRol_property rl propertyName values = set (_propertyValues' propertyName) (Just values) rl
 
 rol_gevuldeRollen :: PerspectRol -> Object (Object (Array RoleInstance))
 rol_gevuldeRollen (PerspectRol { filledRoles }) = filledRoles

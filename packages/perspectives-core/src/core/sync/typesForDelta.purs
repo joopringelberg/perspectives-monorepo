@@ -32,7 +32,6 @@ import Foreign (unsafeToForeign)
 import Perspectives.Representation.Class.EnumReadForeign (enumReadForeign)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, RoleType)
-import Perspectives.SerializableNonEmptyArray (SerializableNonEmptyArray)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 import Prelude (class Ord, class Show, show, (&&), (<<<), (<>), (==))
 import Simple.JSON (class ReadForeign, class WriteForeign)
@@ -44,7 +43,15 @@ import Simple.JSON (class ReadForeign, class WriteForeign)
 -- | and with an object that corresponds to the resource being modified by the delta.
 -- | This is often taken from the transacton in which modifications are made. It is the member 'authoringRole' of Transaction, provided when executing a transaction with runMonadPerspectivesTransaction
 -- | (not to be confused with member 'author', who must be an instance of sys:PerspectivesSystem$User). THIS REMARK MAY BE OBSOLETE!
-type DeltaRecord f = { subject :: RoleType | f }
+-- |
+-- | `resourceKey` identifies the resource this delta operates on (see deterministic-delta-ordering design).
+-- | `resourceVersion` is the version of the resource *after* this delta is applied.
+type DeltaRecord f =
+  { subject :: RoleType
+  , resourceKey :: String
+  , resourceVersion :: Int
+  | f
+  }
 
 -----------------------------------------------------------
 -- UNIVERSECONTEXTDELTA
@@ -109,7 +116,10 @@ newtype UniverseRoleDelta = UniverseRoleDelta
       -- It is the context role type that binds the external role; this is the role type that the user is authorized to construct and fill.
       -- It can also be a calculated rol that results in external roles (usually taken from the database).
       , authorizedRole :: Maybe RoleType
-      , roleInstances :: SerializableNonEmptyArray RoleInstance
+      -- | Changed from SerializableNonEmptyArray RoleInstance to a single RoleInstance.
+      -- | Each delta now operates on exactly one role instance, so that each delta maps to exactly one resource-key.
+      -- | When multiple role instances need the same operation, multiple deltas are created.
+      , roleInstance :: RoleInstance
       , deltaType :: UniverseRoleDeltaType
       -- Add, Remove
       )
@@ -123,7 +133,7 @@ instance showUniverseRoleDelta :: Show UniverseRoleDelta where
   show = genericShow
 
 instance eqUniverseRoleDelta :: Eq UniverseRoleDelta where
-  eq (UniverseRoleDelta { id: i1, roleType: r1, roleInstances: ri1, deltaType: d1 }) (UniverseRoleDelta { id: i2, roleType: r2, roleInstances: ri2, deltaType: d2 }) = i1 == i2 && r1 == r2 && ri1 == ri2 && d1 == d2
+  eq (UniverseRoleDelta { id: i1, roleType: r1, roleInstance: ri1, deltaType: d1 }) (UniverseRoleDelta { id: i2, roleType: r2, roleInstance: ri2, deltaType: d2 }) = i1 == i2 && r1 == r2 && ri1 == ri2 && d1 == d2
 
 derive newtype instance WriteForeign UniverseRoleDelta
 derive newtype instance ReadForeign UniverseRoleDelta

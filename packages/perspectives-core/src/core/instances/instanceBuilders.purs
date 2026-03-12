@@ -67,7 +67,7 @@ import Perspectives.Instances.CreateRole (constructEmptyRole)
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Parsing.Messages (PerspectivesError)
-import Perspectives.Persistent (getPerspectRol, saveEntiteit, tryGetPerspectEntiteit)
+import Perspectives.Persistent (saveEntiteit, tryGetPerspectEntiteit)
 import Perspectives.PerspectivesState (getIndexedResourceToCreate)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Cacheable (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), cacheEntity)
@@ -100,7 +100,8 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
       Just _ -> pure contextInstanceId
       Nothing -> do
         -- RULE TRIGGERING
-        PerspectContext { universeContextDelta, buitenRol } <- constructEmptyContext contextInstanceId ctype localName externeProperties mbindingRoleType
+        { context: contextResource, universeContextDelta, externalUniverseRoleDelta, externalContextDelta } <- constructEmptyContext contextInstanceId ctype localName externeProperties mbindingRoleType
+        let (PerspectContext { buitenRol }) = contextResource
         -- Get the number of deltas in the transaction. Insert the
         -- UniverseContextDelta and the UniverseRoleDelta after that point.
         i <- lift deltaIndex
@@ -144,15 +145,11 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
                 (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
 
         -- Add a UniverseRoleDelta to the Transaction for the external role.
-        -- As we've just constructed the context and its external role, no need to
-        -- catch errors rising from not being able to exchange the identifier for the
-        -- resources.
-        PerspectRol { universeRoleDelta, contextDelta } <- lift $ lift $ getPerspectRol buitenRol
-        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: universeRoleDelta }) (i)
+        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: externalUniverseRoleDelta }) (i)
         -- Add a UniverseContextDelta to the Transaction with the union of the users of the RoleBindingDeltas.
         lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: universeContextDelta }) (i + 1)
         -- Add the ContextDelta for the external role to the transaction.
-        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: contextDelta }) (i + 2)
+        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: externalContextDelta }) (i + 2)
         -- Add the context as a createdContext to the transaction
         lift $ addCreatedContextToTransaction contextInstanceId
         -- As the proxy of the public role is just another user, we have to make sure it will receive all deltas necessary

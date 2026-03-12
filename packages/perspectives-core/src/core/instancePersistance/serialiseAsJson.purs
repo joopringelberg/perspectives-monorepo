@@ -57,20 +57,21 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.SerializableNonEmptyArray (SerializableNonEmptyArray(..))
 import Perspectives.Sync.Channel (addPartnerToChannel, createChannel, setChannelReplication)
-import Perspectives.Types.ObjectGetters (propertyIsInPerspectiveOf, roleIsInPerspectiveOf)
+import Perspectives.Types.ObjectGetters (propertyIsInPerspectiveOf, roleIsInPerspectiveOf, string2RoleType)
 import Prelude (class Monad, Unit, bind, discard, eq, map, not, pure, unit, ($), (&&), (<$>), (>>=), (>>>), (>=>))
 import Unsafe.Coerce (unsafeCoerce)
 
 -- | A function for the External Core Module `model:Serialise`. The first argument should be a singleton holding
 -- | the RoleType (representing a User); the second should be the external role of the
 -- | context instance to be serialised.
-serialiseFor :: Array RoleType -> RoleInstance -> MPQ Value
+serialiseFor :: Array String -> RoleInstance -> MPQ Value
 serialiseFor userTypes externalRoleId =
   try
     ( ArrayT $ case ARR.head userTypes of
         Nothing -> pure []
         Just u -> do
-          lift $ ARR.singleton <$> serialisedAsDeltasForUserType (ContextInstance $ deconstructBuitenRol $ unwrap externalRoleId) u
+          userType <- lift $ string2RoleType u
+          lift $ ARR.singleton <$> serialisedAsDeltasForUserType (ContextInstance $ deconstructBuitenRol $ unwrap externalRoleId) userType
     )
     >>= handleExternalFunctionError "model://perspectives.domains#Serialise$SerialiseFor"
 

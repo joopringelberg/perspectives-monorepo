@@ -346,14 +346,28 @@ documentsInDatabase :: forall f. DatabaseName -> Boolean -> MonadPouchdb f Pouch
 documentsInDatabase dbName include_docs = withDatabase dbName
   \db -> catchError
     do
-      f <- lift $ fromEffectFnAff $ runEffectFnAff2 documentsInDatabaseImpl db { include_docs }
+      f <- lift $ fromEffectFnAff $ runEffectFnAff2 documentsInDatabaseImpl db (unsafeToForeign { include_docs })
       case (read f) of
         Left e -> throwError $ error ("documentsInDatabase: error in decoding result: " <> show e)
         Right r -> pure r
     -- Convert the incoming message to a PouchError type.
     (handlePouchError "documentsInDatabase" dbName)
 
-foreign import documentsInDatabaseImpl :: EffectFn2 PouchdbDatabase { include_docs :: Boolean } Foreign
+-- | Retrieve all documents whose IDs fall within the given [startkey, endkey] range.
+-- | This uses PouchDB's allDocs with startkey/endkey options.
+-- | Documents are returned sorted by ID and include their full content.
+documentsInRange :: forall f. DatabaseName -> String -> String -> MonadPouchdb f PouchdbAllDocs
+documentsInRange dbName startkey endkey = withDatabase dbName
+  \db -> catchError
+    do
+      f <- lift $ fromEffectFnAff $ runEffectFnAff2 documentsInDatabaseImpl db (unsafeToForeign { include_docs: true, startkey, endkey })
+      case (read f) of
+        Left e -> throwError $ error ("documentsInRange: error in decoding result: " <> show e)
+        Right r -> pure r
+    (handlePouchError "documentsInRange" dbName)
+
+-- | The options parameter is Foreign because PouchDB's allDocs accepts many different option combinations.
+foreign import documentsInDatabaseImpl :: EffectFn2 PouchdbDatabase Foreign Foreign
 
 type Rev = { rev :: String }
 type PouchdbAllDocs =

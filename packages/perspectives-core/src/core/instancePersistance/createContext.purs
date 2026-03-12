@@ -10,6 +10,7 @@ import Perspectives.ApiTypes (PropertySerialization(..))
 import Perspectives.Assignment.Update (getSubject, setProperty)
 import Perspectives.Authenticate (signDelta)
 import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord)
+import Perspectives.Persistence.ResourceVersionStore (incrementResourceVersion)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (###=))
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedRoleToTransaction)
 import Perspectives.DependencyTracking.Dependency (findRoleRequests)
@@ -23,8 +24,8 @@ import Perspectives.Representation.Class.PersistentType (StateIdentifier(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (RoleType, externalRoleType)
 import Perspectives.ResourceIdentifiers (takeGuid)
-import Perspectives.SerializableNonEmptyArray (singleton) as SNEA
 import Perspectives.StrippedDelta (stripResourceSchemes)
+import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, roleAspectsClosure)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Prelude (bind, discard, pure, unit, void, ($), (<$>), (<<<), (>>=))
@@ -43,7 +44,15 @@ import Simple.JSON (writeJSON)
 -- | SYNCHRONISATION by RolePropertyDelta.
 -- | RULE TRIGGERING
 -- | QUERY UPDATES
-constructEmptyContext :: ContextInstance -> String -> String -> PropertySerialization -> Maybe RoleType -> ExceptT PerspectivesError MonadPerspectivesTransaction PerspectContext
+-- | Result record for constructEmptyContext, carrying the deltas that callers need for the transaction.
+type ContextCreationResult =
+  { context :: PerspectContext
+  , universeContextDelta :: SignedDelta
+  , externalUniverseRoleDelta :: SignedDelta
+  , externalContextDelta :: SignedDelta
+  }
+
+constructEmptyContext :: ContextInstance -> String -> String -> PropertySerialization -> Maybe RoleType -> ExceptT PerspectivesError MonadPerspectivesTransaction ContextCreationResult
 constructEmptyContext contextInstanceId ctype localName externeProperties authorizedRole = do
   externalRole <- pure $ RoleInstance $ buitenRol $ unwrap contextInstanceId
   pspType <- ContextType <$> (lift $ lift $ expandDefaultNamespaces ctype)
@@ -56,6 +65,8 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
         , contextType: pspType
         , deltaType: ConstructEmptyContext
         , subject
+        , resourceKey: unwrap contextInstanceId
+        , resourceVersion: 0
         }
     )
   contextInstance <- pure
@@ -66,7 +77,6 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
         , pspType = pspType
         , allTypes = allContextTypes
         , buitenRol = externalRole
-        , universeContextDelta = delta
         , states = [ StateIdentifier $ unwrap pspType ]
         }
     )
@@ -75,13 +85,18 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
     ( writeJSON $ stripResourceSchemes $ UniverseRoleDelta
         { id: contextInstanceId
         , contextType: pspType
-        , roleInstances: (SNEA.singleton externalRole)
+        , roleInstance: externalRole
         , roleType: externalRoleType pspType
         , authorizedRole
         , deltaType: ConstructExternalRole
         , subject
+        , resourceKey: unwrap externalRole
+        , resourceVersion: 0
         }
     )
+  -- The UniverseRoleDelta for the external role already uses version 0 on this resourceKey,
+  -- so the ContextDelta must use version 1 to avoid a collision in the DeltaStore.
+  contextDeltaVersion <- lift $ lift $ incrementResourceVersion (unwrap externalRole)
   contextDelta <- lift $ signDelta
     ( writeJSON $ stripResourceSchemes $ ContextDelta
         { contextInstance: contextInstanceId
@@ -92,6 +107,8 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
         , destinationContextType: Nothing
         , deltaType: AddExternalRole
         , subject
+        , resourceKey: unwrap externalRole
+        , resourceVersion: contextDeltaVersion
         }
     )
   _ <- lift $ lift $ cacheEntity externalRole
@@ -102,8 +119,6 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
         , allTypes = allExternalRoleTypes
         , context = contextInstanceId
         , binding = Nothing
-        , universeRoleDelta = delta'
-        , contextDelta = contextDelta
         , states = [ StateIdentifier $ unwrap (externalRoleType pspType) ]
         }
     )
@@ -119,4 +134,4 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
         setProperty [ externalRole ] (EnumeratedPropertyType propertyTypeId) Nothing (Value <$> values)
       -- If there were no props, we have to save the external role now.
       if isEmpty props then lift $ void $ saveEntiteit externalRole else pure unit
-  pure contextInstance
+  pure { context: contextInstance, universeContextDelta: delta, externalUniverseRoleDelta: delta', externalContextDelta: contextDelta }

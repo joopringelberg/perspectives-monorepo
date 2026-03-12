@@ -40,7 +40,6 @@ import Perspectives.Representation.ADT (ADT)
 import Perspectives.Representation.Range (Range) as RAN
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType, CalculatedRoleType, ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType, RoleKind, RoleType, StateIdentifier, ViewType, propertytype2string, roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb, RoleVerb)
-import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
 import Perspectives.Utilities (prettyPrint)
 import Prelude (class Eq, class Show, show, (<<<), (<>), (<$>))
 

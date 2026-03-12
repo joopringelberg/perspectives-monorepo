@@ -82,9 +82,9 @@ import Perspectives.Representation.Range (Range(..)) as RAN
 import Perspectives.Representation.State (State(..), StateFulObject(..)) as STATE
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.Time (string2Date, string2DateTime, string2Time)
-import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextTypeModelName', generalisesRoleType, propertyAliases, publicUserRole, roleTypeModelName')
+import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextTypeModelName', propertyAliases, publicUserRole, roleTypeModelName', specialisesRoleType, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
-import Prelude (class Eq, class Ord, add, bind, discard, eq, flip, identity, mul, negate, notEq, pure, show, sub, ($), (&&), (*), (+), (-), (/), (<), (<$>), (<*>), (<<<), (<=), (<>), (==), (>), (>=), (>=>), (>>=), (||))
+import Prelude (class Eq, class Ord, add, bind, discard, eq, identity, mul, negate, notEq, pure, show, sub, ($), (&&), (*), (+), (-), (/), (<), (<$>), (<*>), (<<<), (<=), (<>), (==), (>), (>=), (>=>), (>>=), (||))
 import Unsafe.Coerce (unsafeCoerce)
 
 -- TODO. String dekt de lading niet sinds we RoleTypes toelaten. Een variabele zou
@@ -154,7 +154,7 @@ compileFunction (SQD _ (RoleTypeConstant qname) RoleKind _ _) = pure ((\_ -> pur
 
 compileFunction (SQD _ (ContextTypeConstant qname) ContextKind _ _) = pure $ (\_ -> pure $ unwrap qname)
 
-compileFunction (SQD _ (TypeGetter RoleTypesF) _ _ _) = pure $ unsafeCoerce (liftToInstanceLevel allRoleTypesInContext)
+compileFunction (SQD _ (TypeGetter RoleTypesF) _ _ _) = pure $ (unsafeCoerce (liftToInstanceLevel allRoleTypesInContext)) >=> pure <<< roletype2string
 
 compileFunction (SQD _ (DataTypeGetter FillerF) ran _ _) = pure $ unsafeCoerce (getFillerTypeRecursively $ unsafePartial domain2roleType ran)
 
@@ -443,7 +443,13 @@ compileFunction (SQD _ (DataTypeGetterWithParameter functionName parameter) ran 
     FillerF ->
       if parameter == "direct" then pure $ unsafeCoerce binding
       else pure $ unsafeCoerce (bindingInContext (ContextType parameter) (unsafePartial domain2roleType ran))
-    SpecialisesRoleTypeF -> pure $ unsafeCoerce (liftToInstanceLevel ((flip generalisesRoleType) (ENR $ EnumeratedRoleType parameter)))
+    -- SpecialisesRoleTypeF -> pure $ unsafeCoerce $ liftToInstanceLevel (\specialiser -> specialiser `specialisesRoleType` (ENR $ EnumeratedRoleType parameter))
+    SpecialisesRoleTypeF -> pure $ unsafeCoerce $ liftToInstanceLevel
+      ( \specialiser -> do
+          specialiser' <- lift $ string2RoleType specialiser
+          specialiser' `specialisesRoleType` (ENR $ EnumeratedRoleType parameter)
+      )
+
     IsInStateF -> do
       (STATE.State { stateFulObject }) <- getState (StateIdentifier parameter)
       case stateFulObject of
