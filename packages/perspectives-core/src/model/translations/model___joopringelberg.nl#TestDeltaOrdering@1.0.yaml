@@ -39,3 +39,8 @@ model://joopringelberg.nl#dwb02zsqks:
           translations:
             nl: Tester
             en: Tester
+      things:
+        DisposableRole:
+          translations:
+            nl: Wegwerp Rol
+            en: Disposable Role

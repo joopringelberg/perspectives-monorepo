@@ -65,3 +65,9 @@ domain model://joopringelberg.nl#TestDeltaOrdering@1.0
       perspective on Tester
         only (Create, Fill, Remove)
         props (FirstName) verbs (Consult)
+      perspective on DisposableRole
+        only (Create, Remove)
+        props (Name) verbs (Consult, SetPropertyValue)
+    
+    thing DisposableRole
+      aspect sys:RoleWithName
