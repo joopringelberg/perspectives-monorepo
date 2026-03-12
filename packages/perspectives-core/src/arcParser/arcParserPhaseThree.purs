@@ -1725,6 +1725,7 @@ roleIdentificationIsEnumerated _ = false
 
 isQFDofEnumeratedRole :: QueryFunctionDescription -> Boolean
 isQFDofEnumeratedRole (SQD _ (DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF _) _ _ _) = true
+isQFDofEnumeratedRole (SQD _ (DataTypeGetter ExternalRoleF) _ _ _) = true
 isQFDofEnumeratedRole (SQD _ (RolGetter rt) _ _ _) = case rt of
   ENR _ -> true
   CR _ -> false
