@@ -93,6 +93,7 @@
 , "tableContextMenu_removerole": "Remove this role"
 , "tableContextMenu_removecontext": "Remove this context"
 , "tableContextMenu_opencontextoffiller": "Open the context of the filler"
+, "tableContextMenu_opencontextofrole": "Open the context of this role"
 , "restoreContextForUser_title": "Restore context"
 , "restoreContextForUser_message": "Could not restore the context for this user."
 , "tableContextMenu_publicurl": "Copy the public address of this context"

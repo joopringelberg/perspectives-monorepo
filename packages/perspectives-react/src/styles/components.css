@@ -113,3 +113,7 @@ for a discussion about variables and sass. */
 .public-role {
   background-color: #e6f7ff !important; /* Light blue background for public roles */
 }
+
+.calculated-role {
+  background-color: #fff3cd !important; /* Light yellow background for calculated roles */
+}

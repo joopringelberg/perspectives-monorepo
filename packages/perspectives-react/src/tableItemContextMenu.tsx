@@ -51,6 +51,10 @@ interface TableItemContextMenuProps {
   // inside the MSComponent tree. When absent, we fall back to the
   // legacy behaviour of dispatching from this component's own ref.
   onOpenDetails?: (roleInstance: RoleInstanceT, roleType: RoleType) => void;
+  // Optional callback used by inline/floating menus to dispatch the
+  // OpenContext event when navigating to the context of a calculated role.
+  // When absent, we fall back to dispatching from this component's own ref.
+  onOpenContextOfRole?: (roleInstance: RoleInstanceT) => void;
 }
 
 interface TableItemContextMenuState {
@@ -480,6 +484,40 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
         pproxy.getRolContext( roleInstance).then( context => component.ref.current?.dispatchEvent( new CustomEvent( 'OpenContext', { detail: externalRole( context ) , bubbles: true } )))
       });
   }
+
+  // For a Calculated role instance, opens the context in which the role is enumerated.
+  computeOpenContextOfRoleItem() : JSX.Element[]
+  {
+  if (!this.props.isOpen) return [];
+    const component = this;
+    if (!this.props.perspective.isCalculated)
+    {
+      return [];
+    }
+    return [<Dropdown.Item
+              key="OpenContextOfRole"
+              eventKey="OpenContextOfRole"
+              onClick={ () => component.openContextOfRole( component.props.roleinstance )}
+            >{
+              i18next.t("tableContextMenu_opencontextofrole", { ns: 'preact' })
+            }</Dropdown.Item>];
+  }
+
+  openContextOfRole( roleInstance : RoleInstanceT )
+  {
+    const component = this;
+    PDRproxy.then(
+      function (pproxy)
+      {
+        pproxy.getRolContext( roleInstance ).then( context => {
+          if (component.props.onOpenContextOfRole) {
+            component.props.onOpenContextOfRole( externalRole( context ) );
+          } else {
+            component.ref.current?.dispatchEvent( new CustomEvent( 'OpenContext', { detail: externalRole( context ) , bubbles: true } ) );
+          }
+        });
+      });
+  }
   
   computeTakeOnThisRoleItem() : JSX.Element[] 
   {
@@ -685,6 +723,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     const addItems = this.computeAddItems();
     const removalItems = this.computeRemovalItems();
     const openContextOfFillerItems = this.computeOpenContextOfFillerItem();
+    const openContextOfRoleItems = this.computeOpenContextOfRoleItem();
     const actionItems = this.computeActionItems();
     const takeOnThisRoleItems = this.computeTakeOnThisRoleItem();
     const restoreContextForUserItems = this.computeRestoreContextForUserItem();
@@ -699,6 +738,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
         ...replaceFillerItems,
         ...removalItems,
         ...openContextOfFillerItems,
+        ...openContextOfRoleItems,
         ...actionItems,
         ...takeOnThisRoleItems,
         ...restoreContextForUserItems,
@@ -719,6 +759,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
           ...addItems,
           ...removalItems,
           ...openContextOfFillerItems,
+          ...openContextOfRoleItems,
           ...actionItems,
           ...takeOnThisRoleItems,
           ...restoreContextForUserItems,

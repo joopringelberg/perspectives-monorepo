@@ -123,6 +123,16 @@ const RowContextMenu: React.FC<{
             );
           }
         }}
+        onOpenContextOfRole={(contextExternalRole) => {
+          if (menuRef.current) {
+            menuRef.current.dispatchEvent(
+              new CustomEvent('OpenContext', {
+                detail: contextExternalRole,
+                bubbles: true,
+              })
+            );
+          }
+        }}
       />
     </div>
   );
