@@ -201,7 +201,7 @@ instance showColumnDef :: Show ColumnDef where
   show x = genericShow x
 
 instance Show WhenDef where
-  show = genericShow
+  show wd = genericShow wd
 
 instance showTableDef :: Show TableDef where
   show = genericShow
@@ -237,7 +237,7 @@ instance eqScreenDefinition :: Eq ScreenDefinition where
   eq = genericEq
 
 instance eqScreenElementDef :: Eq ScreenElementDef where
-  eq = genericEq
+  eq d1 d2 = genericEq d1 d2
 
 instance eqTabDef :: Eq TabDef where
   eq a b = genericEq a b
