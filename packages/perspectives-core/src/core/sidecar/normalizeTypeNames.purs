@@ -77,7 +77,7 @@ import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..), stateSpec2StateIdentifier, PropertyVerbs(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhenDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), IndexedRole(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
@@ -862,6 +862,16 @@ instance normalizeTableFormDefInst :: Normalize TableFormDef where
     table' <- normalize r.table
     form' <- normalize r.form
     pure $ TableFormDef { markdown: markdown', table: table', form: form' }
+
+instance normalizeWhenTableFormDefInst :: Normalize WhenTableFormDef where
+  normalize (WhenTableFormDef r) = do
+    condition' <- normalize r.condition
+    tableForms' <- traverse normalize r.tableForms
+    pure $ WhenTableFormDef { condition: condition', tableForms: tableForms' }
+
+instance normalizeTableFormOrWhenDefInst :: Normalize TableFormOrWhenDef where
+  normalize (PlainTableFormDef tfd) = PlainTableFormDef <$> normalize tfd
+  normalize (WhenTableFormItemDef wtfd) = WhenTableFormItemDef <$> normalize wtfd
 
 instance normalizeWhatInst :: Normalize What where
   normalize (TableForms r) = do

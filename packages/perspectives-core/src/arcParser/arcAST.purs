@@ -467,7 +467,11 @@ newtype FreeFormScreenE = FreeFormScreenE
 
 data WhatE = TableForms TableFormSectionE | FreeFormScreen FreeFormScreenE
 
-data TableFormSectionE = TableFormSectionE (List MarkDownE) (List TableFormE)
+data TableFormSectionE = TableFormSectionE (List MarkDownE) (List TableFormOrWhenE)
+
+data TableFormOrWhenE = PlainTableFormE TableFormE | WhenTableFormItem WhenTableFormE
+
+data WhenTableFormE = WhenTableFormE Step ContextType (List TableFormOrWhenE)
 
 data TableFormE = TableFormE (List MarkDownE) TableE FormE
 --------------------------------------------------------------------------------
@@ -682,6 +686,14 @@ instance Show WhoWhatWhereScreenE where
 
 derive instance Generic TableFormSectionE _
 instance Show TableFormSectionE where
+  show = genericShow
+
+derive instance Generic TableFormOrWhenE _
+instance Show TableFormOrWhenE where
+  show = genericShow
+
+derive instance Generic WhenTableFormE _
+instance Show WhenTableFormE where
   show = genericShow
 
 derive instance Generic FreeFormScreenE _
