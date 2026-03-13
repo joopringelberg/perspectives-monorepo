@@ -5,7 +5,7 @@ import Prelude
 import Control.Monad.Reader (ReaderT, ask)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (catMaybes, concat, elemIndex, filter, filterA, head, null)
-import Data.Maybe (Maybe(..), fromJust, isJust)
+import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Partial.Unsafe (unsafePartial)
@@ -81,7 +81,7 @@ contextualiseWhereTo (WhereTo { markdown, contextRoles }) = do
 contextualiseTableFormOrWhen :: TableFormOrWhenDef -> InContext (Array TableFormOrWhenDef)
 contextualiseTableFormOrWhen (PlainTableFormDef tfd) = do
   result <- contextualiseTableFormDef tfd
-  pure $ maybe [] (pure <<< PlainTableFormDef) result
+  pure $ maybe [] (\x -> [PlainTableFormDef x]) result
 contextualiseTableFormOrWhen (WhenTableFormItemDef (WhenTableFormDef { condition, tableForms })) = do
   { contextInstance } <- ask
   (criterium :: ContextInstance ~~> Value) <- lift $ lift $ unsafeCoerce compileFunction condition
