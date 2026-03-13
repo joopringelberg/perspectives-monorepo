@@ -55,7 +55,7 @@ domain model://joopringelberg.nl#TestWhen@1.0
       perspective on ExtraInfo
         only (Create, Remove)
         props (ExtraField1, ExtraField2) verbs (Consult, SetPropertyValue)
-      perspective on Items (relational)
+      perspective on Items
         only (Create, Remove)
         props (ItemName, ItemValue) verbs (Consult, SetPropertyValue)
 
@@ -74,22 +74,32 @@ domain model://joopringelberg.nl#TestWhen@1.0
       --   - get the Settings role of this context
       --   - get the ShowExtraDetails property value of that role
       screen "Test When"
+        who
         what
           row
             form Settings
           row
             form MainInfo
           -- 1. Conditionally show ExtraInfo form based on Settings >> ShowExtraDetails
-          when Settings >> ShowExtraDetails
-            form ExtraInfo
+          row 
+            when Settings >> ShowExtraDetails
+              form ExtraInfo
           -- 2. Conditionally show the Items table based on Settings >> ShowTable
-          when Settings >> ShowTable
-            table Items
+          row
+            when Settings >> ShowTable
+              table Items
           -- 3. Nested when: show a markdown header together with a form
-          when Settings >> ShowExtraDetails
-            row
-              markdown "### Extra Details are visible"
-            form ExtraInfo
+          row
+            when Settings >> ShowExtraDetails
+              row
+                markdown "### Extra Details are visible"
+              form ExtraInfo
+        where
+          when Settings >> ShowTable
+            Items
+              master
+                props (ItemName) verbs (Consult)
+              detail
 
     -- A single Settings role that holds the flags controlling visibility.
     thing Settings
