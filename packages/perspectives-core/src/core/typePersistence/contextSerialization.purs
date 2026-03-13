@@ -549,7 +549,7 @@ tableFormForContextAndUser userRoleInstance userRoleType contextType objectRoleT
   -- | Flatten TableFormOrWhenDef items: evaluates `when` conditions and returns
   -- | only TableFormDef items (recursively expanding nested when blocks).
   flattenItem :: ContextInstance -> TableFormOrWhenDef -> AssumptionTracking (Array TableFormDef)
-  flattenItem _ (PlainTableFormDef tfd) = pure [tfd]
+  flattenItem _ (PlainTableFormDef tfd) = pure [ tfd ]
   flattenItem ctxt (WhenTableFormItemDef (WhenTableFormDef { condition, tableForms })) = do
     (criterium :: ContextInstance ~~> Value) <- lift $ unsafeCoerce compileFunction condition
     shouldBeShown <- runArrayT $ criterium ctxt

@@ -81,7 +81,7 @@ contextualiseWhereTo (WhereTo { markdown, contextRoles }) = do
 contextualiseTableFormOrWhen :: TableFormOrWhenDef -> InContext (Array TableFormOrWhenDef)
 contextualiseTableFormOrWhen (PlainTableFormDef tfd) = do
   result <- contextualiseTableFormDef tfd
-  pure $ maybe [] (\x -> [PlainTableFormDef x]) result
+  pure $ maybe [] (\x -> [ PlainTableFormDef x ]) result
 contextualiseTableFormOrWhen (WhenTableFormItemDef (WhenTableFormDef { condition, tableForms })) = do
   { contextInstance } <- ask
   (criterium :: ContextInstance ~~> Value) <- lift $ lift $ unsafeCoerce compileFunction condition

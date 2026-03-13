@@ -234,7 +234,7 @@ instance Show TableFormDef where
   show = genericShow
 
 instance Show WhenTableFormDef where
-  show = genericShow
+  show wtf = genericShow wtf
 
 instance Show TableFormOrWhenDef where
   show = genericShow
@@ -288,7 +288,7 @@ instance Eq TableFormDef where
   eq = genericEq
 
 instance Eq WhenTableFormDef where
-  eq = genericEq
+  eq wtf1 wtf2 = genericEq wtf1 wtf2
 
 instance Eq TableFormOrWhenDef where
   eq = genericEq

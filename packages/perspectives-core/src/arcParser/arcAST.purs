@@ -690,7 +690,7 @@ instance Show TableFormSectionE where
 
 derive instance Generic TableFormOrWhenE _
 instance Show TableFormOrWhenE where
-  show = genericShow
+  show tf = genericShow tf
 
 derive instance Generic WhenTableFormE _
 instance Show WhenTableFormE where
