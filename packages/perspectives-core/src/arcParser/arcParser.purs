@@ -48,7 +48,7 @@ import Parsing.Indent.Monadic (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhenE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -1664,7 +1664,7 @@ whoWhatWhereScreenE start = do
   pure $ WWW $ WhoWhatWhereScreenE { who, what, whereTo, subject, context, start, end }
 
 whoE :: IP TableFormSectionE
-whoE = reserved "who" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
+whoE = reserved "who" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormOrWhenE))
 
 whatE :: IP WhatE
 whatE = reserved "what" *>
@@ -1690,12 +1690,29 @@ whatE = reserved "what" *>
 
   whatProperE :: IP WhatE
   whatProperE = do
-    tforms <- TableForms <$> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
+    tforms <- TableForms <$> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormOrWhenE))
     lookAhead (reserved "where")
     pure tforms
 
 whereE :: IP TableFormSectionE
-whereE = reserved "where" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
+whereE = reserved "where" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormOrWhenE))
+
+-- | Parses either a `when`-conditional block of table form items, or a plain table form item.
+tableFormOrWhenE :: IP TableFormOrWhenE
+tableFormOrWhenE = withPos do
+  keyword <- scanIdentifier
+  case keyword of
+    "when" -> WhenTableFormItem <$> whenTableFormE
+    _ -> PlainTableFormE <$> tableFormE
+
+-- | Parses a `when <step> <tableFormItems>` conditional block in a who/what/where section.
+whenTableFormE :: IP WhenTableFormE
+whenTableFormE = do
+  void $ reserved "when"
+  condition <- step
+  context <- getCurrentContext
+  items <- nestedBlock (defer \_ -> tableFormOrWhenE)
+  pure $ WhenTableFormE condition context items
 
 --  | Position is just before the keyword 'markdown' or a role identifier.
 tableFormE :: IP TableFormE

@@ -42,7 +42,7 @@ import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_)
 import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), PropertyVerbE(..), PropsOrView, RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..), roleIdentification2context)
-import Perspectives.Parsing.Arc.AST (ColumnE(..), FieldConstraintE, FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), WhatE(..), WhenE(..), WidgetCommonFields) as AST
+import Perspectives.Parsing.Arc.AST (ColumnE(..), FieldConstraintE, FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WidgetCommonFields) as AST
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
@@ -58,7 +58,7 @@ import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.Class.Role (allProperties, displayName, perspectivesOfRoleType, roleADTOfRoleType, roleTypeIsFunctional)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..), elements_)
 import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsRoleVerbs)
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), What(..), WhenDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyRestrictions)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyRestrictions)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optimistic, pessimistic)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), roletype2string)
 import Perspectives.Representation.Verbs (allPropertyVerbs, roleVerbList2Verbs)
@@ -120,17 +120,17 @@ handleScreens screenEs = do
       whoWhatWhereScreen :: WhoWhatWhereScreenE -> PhaseThree ScreenMap
       whoWhatWhereScreen (WhoWhatWhereScreenE { who, what, whereTo, context, subject, start, end }) = do
         who' <- case who of
-          TableFormSectionE markdowns tableForms -> Tuple <$> traverse markdown markdowns <*> traverse tableForm tableForms
+          TableFormSectionE markdowns tableForms -> Tuple <$> traverse markdown markdowns <*> traverse tableFormOrWhen tableForms
         what' <- case what of
           AST.TableForms (TableFormSectionE md tb) -> do
-            tableForms <- fromFoldable <$> traverse tableForm tb
+            tableForms <- fromFoldable <$> traverse tableFormOrWhen tb
             markdown' <- fromFoldable <$> traverse markdown md
             pure $ TableForms { tableForms, markdown: markdown' }
           AST.FreeFormScreen scrn' -> do
             ScreenDefinition { tabs, rows, columns } <- freeFormScreen scrn'
             pure $ FreeFormScreen { tabs, rows, columns }
         whereTo' <- case whereTo of
-          TableFormSectionE markdowns tableForms -> Tuple <$> traverse markdown markdowns <*> traverse tableForm tableForms
+          TableFormSectionE markdowns tableForms -> Tuple <$> traverse markdown markdowns <*> traverse tableFormOrWhen tableForms
         chats <- constructChatDefs
         screenDef <- pure $ ScreenDefinition
           { title: Nothing
@@ -145,6 +145,13 @@ handleScreens screenEs = do
               }
           }
         pure $ EM.insert (ScreenKey context subjectRoleType) screenDef screenDefMap
+
+      tableFormOrWhen :: AST.TableFormOrWhenE -> PhaseThree TableFormOrWhenDef
+      tableFormOrWhen (AST.PlainTableFormE tfe) = PlainTableFormDef <$> tableForm tfe
+      tableFormOrWhen (AST.WhenTableFormItem (AST.WhenTableFormE condition ctxt items)) = do
+        condition' <- compileStep (CDOM $ ST ctxt) condition
+        items' <- traverse tableFormOrWhen items
+        pure $ WhenTableFormItemDef (WhenTableFormDef { condition: condition', tableForms: fromFoldable items' })
 
       tableForm :: AST.TableFormE -> PhaseThree TableFormDef
       tableForm (AST.TableFormE markD tableE formE) = do

@@ -4,8 +4,8 @@ import Prelude
 
 import Control.Monad.Reader (ReaderT, ask)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, elemIndex, filter, filterA, head, null)
-import Data.Maybe (Maybe(..), fromJust, isJust)
+import Data.Array (catMaybes, concat, elemIndex, filter, filterA, head, null)
+import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Partial.Unsafe (unsafePartial)
@@ -19,7 +19,7 @@ import Perspectives.Query.UnsafeCompiler (getRoleInstances, compileFunction)
 import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhenDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..))
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
@@ -55,13 +55,13 @@ contextualiseWho :: Who -> InContext Who
 contextualiseWho (Who { markdown, chats, userRoles }) = do
   markdown' <- catMaybes <$> (traverse contextualiseMarkDownDef markdown)
   chats' <- catMaybes <$> (traverse contextualiseChatDef chats)
-  userRoles' <- catMaybes <$> (traverse contextualiseTableFormDef userRoles)
+  userRoles' <- concat <$> traverse contextualiseTableFormOrWhen userRoles
   pure $ Who { markdown: markdown', chats: chats', userRoles: userRoles' }
 
 contextualiseWhat :: What -> InContext What
 contextualiseWhat (TableForms { markdown, tableForms }) = do
   markdown' <- catMaybes <$> (traverse contextualiseMarkDownDef markdown)
-  tableForms' <- catMaybes <$> (traverse contextualiseTableFormDef tableForms)
+  tableForms' <- concat <$> traverse contextualiseTableFormOrWhen tableForms
   pure $ TableForms { markdown: markdown', tableForms: tableForms' }
 contextualiseWhat (FreeFormScreen { tabs, rows, columns }) = do
   tabs' <- emptyArrayToNothing <<< map catMaybes <$> (for tabs (traverse contextualiseTab))
@@ -72,8 +72,23 @@ contextualiseWhat (FreeFormScreen { tabs, rows, columns }) = do
 contextualiseWhereTo :: WhereTo -> InContext WhereTo
 contextualiseWhereTo (WhereTo { markdown, contextRoles }) = do
   markdown' <- catMaybes <$> (traverse contextualiseMarkDownDef markdown)
-  contextRoles' <- catMaybes <$> (traverse contextualiseTableFormDef contextRoles)
+  contextRoles' <- concat <$> traverse contextualiseTableFormOrWhen contextRoles
   pure $ WhereTo { markdown: markdown', contextRoles: contextRoles' }
+
+-- | Contextualise a TableFormOrWhenDef. For a plain table form, delegates to
+-- | contextualiseTableFormDef. For a conditional block, evaluates the condition:
+-- | if true, contextualises and inlines the children; if false, returns empty.
+contextualiseTableFormOrWhen :: TableFormOrWhenDef -> InContext (Array TableFormOrWhenDef)
+contextualiseTableFormOrWhen (PlainTableFormDef tfd) = do
+  result <- contextualiseTableFormDef tfd
+  pure $ maybe [] (\x -> [PlainTableFormDef x]) result
+contextualiseTableFormOrWhen (WhenTableFormItemDef (WhenTableFormDef { condition, tableForms })) = do
+  { contextInstance } <- ask
+  (criterium :: ContextInstance ~~> Value) <- lift $ lift $ unsafeCoerce compileFunction condition
+  shouldBeShown <- lift $ lift $ runArrayT $ criterium contextInstance
+  case head shouldBeShown of
+    Just (Value "true") -> concat <$> traverse contextualiseTableFormOrWhen tableForms
+    _ -> pure []
 
 emptyArrayToNothing :: forall a. Maybe (Array a) -> Maybe (Array a)
 emptyArrayToNothing marr = case marr of
