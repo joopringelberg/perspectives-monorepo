@@ -120,10 +120,13 @@ screenForContextAndUser userRoleInstance userRoleType contextType contextInstanc
   populateScreen :: ScreenDefinition -> String -> String -> MonadPerspectivesQuery SerialisedScreen
   populateScreen s@(ScreenDefinition { title, tabs, rows, columns, whoWhatWhereScreen }) computedTitle translatedUserRoleType = do
     if isJust whoWhatWhereScreen then do
-      -- Now populate the screen definition with instance data.
-      -- However, prevent chat roles from ending up in the What section. Add them to the Who section as ChatDefs.
-      (ScreenDefinition screenInstance :: ScreenDefinition) <- lift $ addPerspectives s userRoleInstance contextInstance
-      pure $ SerialisedScreen $ writeJSON (ScreenDefinition $ screenInstance { title = if isResourceIdentifier computedTitle then title else Just computedTitle, userRole = translatedUserRoleType })
+      -- Use contextualiseScreen which both evaluates `when` conditions and fills in perspectives.
+      -- Using addPerspectives here would keep WhenTableFormItemDef wrappers intact, causing
+      -- { tag: "WhenTableFormDef" } to surface on the client.
+      mscreen <- runReaderT (contextualiseScreen s computedTitle translatedUserRoleType) { userRoleInstance, contextType, contextInstance }
+      case mscreen of
+        Nothing -> defaultScreen computedTitle translatedUserRoleType
+        Just contextualisedScreen -> pure $ SerialisedScreen $ writeJSON contextualisedScreen
     else do
       (perspectives :: Array SerialisedPerspective') <- lift $ lift (contextInstance ##= perspectivesForContextAndUser' userRoleInstance userRoleType)
       perspectivesOnChats :: Array SerialisedPerspective' <- lift $ lift $ filterA isChat perspectives
