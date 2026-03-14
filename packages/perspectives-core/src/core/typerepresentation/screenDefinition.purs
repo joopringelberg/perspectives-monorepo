@@ -77,9 +77,11 @@ data ScreenElementDef
   | FormElementD FormDef
   | MarkDownElementD MarkDownDef
   | ChatElementD ChatDef
+  | WhenElementD WhenDef
 
 newtype RowDef = RowDef (Array ScreenElementDef)
 newtype ColumnDef = ColumnDef (Array ScreenElementDef)
+newtype WhenDef = WhenDef { condition :: QueryFunctionDescription, elements :: Array ScreenElementDef }
 newtype TableDef = TableDef { markdown :: Array MarkDownDef, widgetCommonFields :: WidgetCommonFieldsDef }
 newtype FormDef = FormDef { markdown :: Array MarkDownDef, widgetCommonFields :: WidgetCommonFieldsDef }
 data MarkDownDef
@@ -146,18 +148,28 @@ newtype WhoWhatWhereScreenDef = WhoWhatWhereScreenDef { who :: Who, what :: What
 newtype TableFormDef = TableFormDef { markdown :: Array MarkDownDef, table :: TableDef, form :: FormDef }
 
 -----------------------------------------------------------
+-- WHEN TABLE FORM
+-----------------------------------------------------------
+-- | A conditional block of master-detail (table-form) elements. The condition is evaluated
+-- | against the context at runtime. Children are shown only when the condition is true.
+newtype WhenTableFormDef = WhenTableFormDef { condition :: QueryFunctionDescription, tableForms :: Array TableFormOrWhenDef }
+
+-- | A table-form element that is either a plain TableFormDef or a conditional WhenTableFormDef.
+data TableFormOrWhenDef = PlainTableFormDef TableFormDef | WhenTableFormItemDef WhenTableFormDef
+
+-----------------------------------------------------------
 -- WHO
 -----------------------------------------------------------
-newtype Who = Who { markdown :: Array MarkDownDef, chats :: Array ChatDef, userRoles :: Array TableFormDef }
+newtype Who = Who { markdown :: Array MarkDownDef, chats :: Array ChatDef, userRoles :: Array TableFormOrWhenDef }
 -----------------------------------------------------------
 -- WHAT
 -----------------------------------------------------------
-data What = TableForms { markdown :: Array MarkDownDef, tableForms :: Array TableFormDef } | FreeFormScreen { | MainScreenElements }
+data What = TableForms { markdown :: Array MarkDownDef, tableForms :: Array TableFormOrWhenDef } | FreeFormScreen { | MainScreenElements }
 
 -----------------------------------------------------------
 -- WHERETO
 -----------------------------------------------------------
-newtype WhereTo = WhereTo { markdown :: Array MarkDownDef, contextRoles :: Array TableFormDef }
+newtype WhereTo = WhereTo { markdown :: Array MarkDownDef, contextRoles :: Array TableFormOrWhenDef }
 
 -----------------------------------------------------------
 -- GENERIC INSTANCES
@@ -167,6 +179,7 @@ derive instance genericScreenElementDef :: Generic ScreenElementDef _
 derive instance genericTabDef :: Generic TabDef _
 derive instance genericRowDef :: Generic RowDef _
 derive instance genericColumnDef :: Generic ColumnDef _
+derive instance genericWhenDef :: Generic WhenDef _
 derive instance genericTableDef :: Generic TableDef _
 derive instance genericTableDef' :: Generic TableDef' _
 derive instance genericFormDef :: Generic FormDef _
@@ -175,6 +188,8 @@ derive instance Generic MarkDownDef _
 derive instance Generic ChatDef _
 derive instance Generic WhoWhatWhereScreenDef _
 derive instance Generic TableFormDef _
+derive instance Generic WhenTableFormDef _
+derive instance Generic TableFormOrWhenDef _
 derive instance Generic What _
 derive instance Generic Who _
 derive instance Generic WhereTo _
@@ -197,6 +212,9 @@ instance showRowDef :: Show RowDef where
 instance showColumnDef :: Show ColumnDef where
   show x = genericShow x
 
+instance Show WhenDef where
+  show wd = genericShow wd
+
 instance showTableDef :: Show TableDef where
   show = genericShow
 
@@ -215,6 +233,12 @@ instance Show WhoWhatWhereScreenDef where
 instance Show TableFormDef where
   show = genericShow
 
+instance Show WhenTableFormDef where
+  show wtf = genericShow wtf
+
+instance Show TableFormOrWhenDef where
+  show = genericShow
+
 instance Show What where
   show = genericShow
 
@@ -231,7 +255,7 @@ instance eqScreenDefinition :: Eq ScreenDefinition where
   eq = genericEq
 
 instance eqScreenElementDef :: Eq ScreenElementDef where
-  eq = genericEq
+  eq d1 d2 = genericEq d1 d2
 
 instance eqTabDef :: Eq TabDef where
   eq a b = genericEq a b
@@ -241,6 +265,9 @@ instance eqRowDef :: Eq RowDef where
 
 instance eqColumnDef :: Eq ColumnDef where
   eq a b = genericEq a b
+
+instance Eq WhenDef where
+  eq = genericEq
 
 instance eqTableDef :: Eq TableDef where
   eq = genericEq
@@ -258,6 +285,12 @@ instance Eq WhoWhatWhereScreenDef where
   eq = genericEq
 
 instance Eq TableFormDef where
+  eq = genericEq
+
+instance Eq WhenTableFormDef where
+  eq wtf1 wtf2 = genericEq wtf1 wtf2
+
+instance Eq TableFormOrWhenDef where
   eq = genericEq
 
 instance Eq What where
@@ -283,6 +316,7 @@ instance writeForeignScreenElementDef :: WriteForeign ScreenElementDef where
   writeImpl (FormElementD f) = write { elementType: "FormElementD", element: f }
   writeImpl (MarkDownElementD f) = write { elementType: "MarkDownElementD", element: f }
   writeImpl (ChatElementD c) = write { elementType: "ChatElementD", element: c }
+  writeImpl (WhenElementD w) = write { elementType: "WhenElementD", element: w }
 
 instance writeForeignTabDef :: WriteForeign TabDef where
   writeImpl (TabDef widgetCommonFields) = write widgetCommonFields
@@ -292,6 +326,9 @@ instance WriteForeign RowDef where
 
 instance WriteForeign ColumnDef where
   writeImpl (ColumnDef elements) = write { tag: "ColumnDef", elements }
+
+instance WriteForeign WhenDef where
+  writeImpl (WhenDef { condition, elements }) = write { tag: "WhenDef", condition, elements }
 
 instance WriteForeign TableDef where
   writeImpl (TableDef { markdown, widgetCommonFields }) = write { tag: "TableDef", markdown, widgetCommonFields }
@@ -312,6 +349,15 @@ instance WriteForeign ScreenKey where
 
 instance WriteForeign TableFormDef where
   writeImpl (TableFormDef { markdown, table, form }) = write { tag: "TableFormDef", markdown, table, form }
+
+-- | PlainTableFormDef writes identically to TableFormDef (tag: "TableFormDef") so the client
+-- | receives plain TableFormDef objects, maintaining backward compatibility.
+instance WriteForeign TableFormOrWhenDef where
+  writeImpl (PlainTableFormDef tfd) = writeImpl tfd
+  writeImpl (WhenTableFormItemDef wtfd) = writeImpl wtfd
+
+instance WriteForeign WhenTableFormDef where
+  writeImpl (WhenTableFormDef { condition, tableForms }) = write { tag: "WhenTableFormDef", condition, tableForms }
 
 instance WriteForeign WhoWhatWhereScreenDef where
   writeImpl (WhoWhatWhereScreenDef { who, what, whereto }) = write { tag: "WhoWhatWhereScreenDef", who, what, whereto }
@@ -346,6 +392,7 @@ instance ReadForeign ScreenElementDef where
           "MarkDownPerspectiveDef" -> MarkDownElementD <<< MarkDownPerspectiveDef <$> ((read' subElement) :: F { widgetFields :: WidgetCommonFieldsDef, conditionProperty :: Maybe PropertyType })
           "MarkDownExpressionDef" -> MarkDownElementD <<< MarkDownExpressionDef <$> ((read' subElement) :: F { textQuery :: QueryFunctionDescription, condition :: Maybe QueryFunctionDescription, text :: Maybe String })
       "ChatElementD" -> ChatElementD <$> ((read' element) :: F ChatDef)
+      "WhenElementD" -> WhenElementD <$> ((read' element) :: F WhenDef)
 
 instance ReadForeign ScreenKey where
   readImpl f = do
@@ -365,6 +412,13 @@ instance ReadForeign ColumnDef where
     case tag of
       "ColumnDef" -> pure $ ColumnDef elements
       _ -> fail (TypeMismatch "ColumnDef" tag)
+
+instance ReadForeign WhenDef where
+  readImpl f = do
+    ({ tag, condition, elements } :: { tag :: String, condition :: QueryFunctionDescription, elements :: Array ScreenElementDef }) <- read' f
+    case tag of
+      "WhenDef" -> pure $ WhenDef { condition, elements }
+      _ -> fail (TypeMismatch "WhenDef" tag)
 
 instance ReadForeign TableDef where
   readImpl f = do
@@ -404,6 +458,23 @@ instance ReadForeign TableFormDef where
       "TableFormDef" -> pure $ TableFormDef { markdown, table, form }
       _ -> fail (TypeMismatch "TableFormDef" tag)
 
+-- | Reads either a plain TableFormDef (tag: "TableFormDef") or a conditional WhenTableFormDef
+-- | (tag: "WhenTableFormDef"), maintaining backward compatibility with stored models.
+instance ReadForeign TableFormOrWhenDef where
+  readImpl f = do
+    ({ tag } :: { tag :: String }) <- read' f
+    case tag of
+      "TableFormDef" -> PlainTableFormDef <$> read' f
+      "WhenTableFormDef" -> WhenTableFormItemDef <$> read' f
+      _ -> fail (TypeMismatch "TableFormOrWhenDef" tag)
+
+instance ReadForeign WhenTableFormDef where
+  readImpl f = do
+    ({ tag, condition, tableForms } :: { tag :: String, condition :: QueryFunctionDescription, tableForms :: Array TableFormOrWhenDef }) <- read' f
+    case tag of
+      "WhenTableFormDef" -> pure $ WhenTableFormDef { condition, tableForms }
+      _ -> fail (TypeMismatch "WhenTableFormDef" tag)
+
 instance ReadForeign WhoWhatWhereScreenDef where
   readImpl f = do
     ({ tag, who, what, whereto } :: { tag :: String, who :: Who, what :: What, whereto :: WhereTo }) <- read' f
@@ -425,14 +496,14 @@ instance ReadForeign What where
 
 instance ReadForeign Who where
   readImpl f = do
-    ({ tag, markdown, chats, userRoles } :: { tag :: String, markdown :: Array MarkDownDef, chats :: Array ChatDef, userRoles :: Array TableFormDef }) <- read' f
+    ({ tag, markdown, chats, userRoles } :: { tag :: String, markdown :: Array MarkDownDef, chats :: Array ChatDef, userRoles :: Array TableFormOrWhenDef }) <- read' f
     case tag of
       "Who" -> pure $ Who { markdown, chats, userRoles }
       _ -> fail (TypeMismatch "Who" tag)
 
 instance ReadForeign WhereTo where
   readImpl f = do
-    ({ tag, markdown, contextRoles } :: { tag :: String, markdown :: Array MarkDownDef, contextRoles :: Array TableFormDef }) <- read' f
+    ({ tag, markdown, contextRoles } :: { tag :: String, markdown :: Array MarkDownDef, contextRoles :: Array TableFormOrWhenDef }) <- read' f
     case tag of
       "WhereTo" -> pure $ WhereTo { markdown, contextRoles }
       _ -> fail (TypeMismatch "WhereTo" tag)
