@@ -55,8 +55,6 @@ domain model://joopringelberg.nl#TestWhen@1.0
       perspective on Items
         only (Create, Remove)
         props (ItemName, ItemValue) verbs (Consult, SetPropertyValue)
-      perspective on Projects
-        only (CreateAndFill, RemoveContext)
 
       -- Classic (freeform) screen – demonstrates `when` guarding individual screen elements.
       --
@@ -120,64 +118,5 @@ domain model://joopringelberg.nl#TestWhen@1.0
       property ItemName (String)
       property ItemValue (Number)
 
-    -- Context role linking to TestWhenProject instances.
-    context Projects (relational) filledBy TestWhenProject
 
-  -------------------------------------------------------------------------------
-  ---- WHO-WHAT-WHERE SCREEN TEST CONTEXT
-  -------------------------------------------------------------------------------
-  -- TestWhenProject demonstrates `when` in the who, what, and where sections of
-  -- a who-what-where style screen.
-  --
-  -- Set ShowTasks = true to reveal the Tasks master-detail in the `what` section.
-  -- Set ShowContexts = true to reveal the SubProjects master-detail in the `where` section.
-  case TestWhenProject
-    external
-      aspect sys:RoleWithName
-
-    -- Visibility flags for the who-what-where screen.
-    thing Settings
-      property ShowTasks (Boolean)
-      property ShowContexts (Boolean)
-
-    -- Tasks to show conditionally in the `what` section.
-    thing Tasks (relational)
-      property TaskName (String)
-      property Priority (String)
-
-    -- Sub-projects to show conditionally in the `where` section.
-    context SubProjects (relational) filledBy TestWhenProject
-
-    user Manager = sys:Me
-      perspective on Settings
-        only (Create, Remove)
-        props (ShowTasks, ShowContexts) verbs (Consult, SetPropertyValue)
-      perspective on Tasks (relational)
-        only (Create, Remove)
-        props (TaskName, Priority) verbs (Consult, SetPropertyValue)
-      perspective on SubProjects
-        only (CreateAndFill, RemoveContext)
-      perspective on extern
-        props (Name) verbs (Consult, SetPropertyValue)
-
-      -- Who-what-where screen demonstrating `when` in `what` and `where` sections.
-      --
-      -- Toggle Settings >> ShowTasks to show/hide the Tasks master-detail in `what`.
-      -- Toggle Settings >> ShowContexts to show/hide the SubProjects master-detail in `where`.
-      screen "Test When (who-what-where)"
-        who
-        what
-          -- `when` in the `what` section: Tasks master-detail only visible when ShowTasks = true.
-          when Settings >> ShowTasks
-            Tasks
-              master
-                props (TaskName) verbs (Consult)
-              detail
-        where
-          -- `when` in the `where` section: SubProjects master-detail only visible when ShowContexts = true.
-          when Settings >> ShowContexts
-            SubProjects
-              master
-                props (Name) verbs (Consult)
-              detail
-
+  

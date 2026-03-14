@@ -15,7 +15,7 @@ import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Instances.ObjectGetters (getActiveRoleStates, getActiveStates)
 import Perspectives.ModelTranslation (translationOf)
-import Perspectives.Query.UnsafeCompiler (getRoleInstances, compileFunction)
+import Perspectives.Query.UnsafeCompiler (context2propertyValue, getRoleInstances)
 import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
@@ -24,7 +24,6 @@ import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..))
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
 import Perspectives.Types.ObjectGetters (allEnumeratedRoles, aspectsOfRole)
-import Unsafe.Coerce (unsafeCoerce)
 
 type Context = { userRoleInstance :: RoleInstance, contextType :: ContextType, contextInstance :: ContextInstance }
 type InContext = ReaderT Context MonadPerspectivesQuery
@@ -84,7 +83,7 @@ contextualiseTableFormOrWhen (PlainTableFormDef tfd) = do
   pure $ maybe [] (\x -> [ PlainTableFormDef x ]) result
 contextualiseTableFormOrWhen (WhenTableFormItemDef (WhenTableFormDef { condition, tableForms })) = do
   { contextInstance } <- ask
-  (criterium :: ContextInstance ~~> Value) <- lift $ lift $ unsafeCoerce compileFunction condition
+  (criterium :: ContextInstance ~~> Value) <- lift $ lift $ lift $ context2propertyValue condition
   shouldBeShown <- lift $ lift $ runArrayT $ criterium contextInstance
   case head shouldBeShown of
     Just (Value "true") -> concat <$> traverse contextualiseTableFormOrWhen tableForms
@@ -114,7 +113,7 @@ contextualiseScreenElementDef (MarkDownElementD e) = map MarkDownElementD <$> co
 contextualiseScreenElementDef (ChatElementD c) = map ChatElementD <$> contextualiseChatDef c
 contextualiseScreenElementDef (WhenElementD (WhenDef { condition, elements })) = do
   { contextInstance } <- ask
-  (criterium :: ContextInstance ~~> Value) <- lift $ lift $ unsafeCoerce compileFunction condition
+  (criterium :: ContextInstance ~~> Value) <- lift $ lift $ lift $ (context2propertyValue condition)
   shouldBeShown <- lift $ lift $ runArrayT $ criterium contextInstance
   case head shouldBeShown of
     Just (Value "true") -> do

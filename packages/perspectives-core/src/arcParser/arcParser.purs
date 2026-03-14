@@ -1677,8 +1677,7 @@ whatE = reserved "what" *>
       "row" -> classicSubscreenE start
       "column" -> classicSubscreenE start
       "markdown" -> whatProperE
-      "" -> whatProperE
-      _ -> fail "Expected: tab, row, column for a classic screen, or markdown or master for a who-what-where screen. "
+      _ -> whatProperE
   where
   classicSubscreenE :: ArcPosition -> IP WhatE
   classicSubscreenE start = do
@@ -1692,7 +1691,9 @@ whatE = reserved "what" *>
   whatProperE = do
     tforms <- TableForms <$> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormOrWhenE))
     lookAhead (reserved "where")
-    pure tforms
+    case tforms of
+      TableForms tf -> pure $ tforms
+      _ -> fail "Expected: tab, row, column for a classic screen, or markdown or master for a who-what-where screen. "
 
 whereE :: IP TableFormSectionE
 whereE = reserved "where" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormOrWhenE))

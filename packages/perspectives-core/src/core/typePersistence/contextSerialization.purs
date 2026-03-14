@@ -62,7 +62,7 @@ import Perspectives.ModelTranslation (translationOf)
 import Perspectives.Names (findIndexedContextName)
 import Perspectives.Query.Interpreter (lift2MPQ)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription)
-import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances)
+import Perspectives.Query.UnsafeCompiler (context2propertyValue, getRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), RoleKind(..), RoleType(..), externalRoleType, roletype2string)
@@ -73,7 +73,6 @@ import Perspectives.TypePersistence.PerspectiveSerialisation.Data (SerialisedPer
 import Perspectives.TypePersistence.ScreenContextualisation (contextualiseScreen, contextualiseTableFormDef)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, generalisesRoleType_, indexedContextName, string2RoleType)
 import Simple.JSON (writeJSON)
-import Unsafe.Coerce (unsafeCoerce)
 
 newtype SerialisedScreen = SerialisedScreen String
 
@@ -443,7 +442,7 @@ traverseScreenElement user ctxt a = case a of
       conditionally condition (pure $ Just $ MarkDownConstantDef r { text = translatedText })
     MarkDownExpressionDef { textQuery, condition } -> conditionally condition
       do
-        (textGetter :: ContextInstance ~~> Value) <- lift $ unsafeCoerce compileFunction textQuery
+        (textGetter :: ContextInstance ~~> Value) <- lift $ context2propertyValue textQuery
         (textA :: Array Value) <- runArrayT $ textGetter ctxt
         pure $ Just $ MarkDownExpressionDef { textQuery, condition, text: maybe Nothing (Just <<< unwrap) (head textA) }
     MarkDownPerspectiveDef { widgetFields, conditionProperty } ->
@@ -454,7 +453,7 @@ traverseScreenElement user ctxt a = case a of
           ctxt
         pure $ Just $ MarkDownPerspectiveDef { widgetFields: widgetFields { perspective = Just perspective }, conditionProperty }
   WhenElementD (WhenDef { condition, elements }) -> do
-    (criterium :: ContextInstance ~~> Value) <- lift $ unsafeCoerce compileFunction condition
+    (criterium :: ContextInstance ~~> Value) <- lift $ context2propertyValue condition
     shouldBeShown <- runArrayT $ criterium ctxt
     case head shouldBeShown of
       Just (Value "true") -> do
@@ -468,7 +467,7 @@ traverseScreenElement user ctxt a = case a of
   conditionally condition f = case condition of
     Nothing -> f
     Just c -> do
-      (criterium :: ContextInstance ~~> Value) <- lift $ unsafeCoerce compileFunction c
+      (criterium :: ContextInstance ~~> Value) <- lift $ context2propertyValue c
       -- evaluate the condition in the current context
       shouldBeShown <- runArrayT $ criterium ctxt
       case head shouldBeShown of
@@ -554,7 +553,7 @@ tableFormForContextAndUser userRoleInstance userRoleType contextType objectRoleT
   flattenItem :: ContextInstance -> TableFormOrWhenDef -> AssumptionTracking (Array TableFormDef)
   flattenItem _ (PlainTableFormDef tfd) = pure [ tfd ]
   flattenItem ctxt (WhenTableFormItemDef (WhenTableFormDef { condition, tableForms })) = do
-    (criterium :: ContextInstance ~~> Value) <- lift $ unsafeCoerce compileFunction condition
+    (criterium :: ContextInstance ~~> Value) <- lift $ context2propertyValue condition
     shouldBeShown <- runArrayT $ criterium ctxt
     case head shouldBeShown of
       Just (Value "true") -> concat <$> traverse (flattenItem ctxt) tableForms
