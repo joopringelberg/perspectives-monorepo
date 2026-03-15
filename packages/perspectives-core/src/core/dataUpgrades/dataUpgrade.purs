@@ -74,6 +74,7 @@ import Perspectives.ContextAndRole (rol_property)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, removeInternally, (##=))
 import Perspectives.Data.EncodableMap as EM
 import Perspectives.DataUpgrade.DeltasMigration (migrateDeltasToStore)
+import Perspectives.DataUpgrade.DeltaStoreKeyMigration (migrateDeltaStoreKeys)
 import Perspectives.DataUpgrade.PatchModels (patchModels)
 import Perspectives.DataUpgrade.PatchModels.PDR3061 as PDR3061
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
@@ -331,6 +332,15 @@ runDataUpgrades = do
         setRole2ContextView db
         setContextView db
         setCredentialsView db
+    )
+
+  -- Migrate DeltaStore and ResourceVersionStore document IDs from old
+  -- URL-unsafe format (containing def:#, model://, etc.) to the new
+  -- safe format produced by safeKey. This also re-runs the original
+  -- delta migration with the new (safe) key scheme.
+  runUpgrade installedVersion "3.1.2"
+    ( \_ -> do
+        migrateDeltaStoreKeys
     )
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)

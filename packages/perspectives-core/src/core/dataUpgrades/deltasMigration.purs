@@ -59,7 +59,7 @@ import Foreign.Object as F
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
 import Perspectives.Persistence.API (documentsInDatabase, includeDocs)
-import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), deltaStoreDocId, storeDelta)
+import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), deltaStoreDocId, safeKey, storeDelta)
 import Perspectives.Persistence.ResourceVersionStore (setResourceVersion)
 import Perspectives.Persistent (entitiesDatabaseName, saveEntiteit_)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
@@ -182,7 +182,7 @@ migrateContextDeltas { id: contextId, universeContextDelta } = do
   storeDelta $ DeltaStoreRecord
     { _id: deltaStoreDocId resourceKey 0 author
     , _rev: Nothing
-    , resourceKey
+    , resourceKey: safeKey resourceKey
     , resourceVersion: 0
     , author
     , signedDelta: universeContextDelta
@@ -209,7 +209,7 @@ migrateRolDeltas { id: roleId, universeRoleDelta, contextDelta, bindingDelta, pr
   storeDelta $ DeltaStoreRecord
     { _id: deltaStoreDocId resourceKey 0 urd.author
     , _rev: Nothing
-    , resourceKey
+    , resourceKey: safeKey resourceKey
     , resourceVersion: 0
     , author: urd.author
     , signedDelta: universeRoleDelta
@@ -223,7 +223,7 @@ migrateRolDeltas { id: roleId, universeRoleDelta, contextDelta, bindingDelta, pr
     storeDelta $ DeltaStoreRecord
       { _id: deltaStoreDocId resourceKey 1 cd.author
       , _rev: Nothing
-      , resourceKey
+      , resourceKey: safeKey resourceKey
       , resourceVersion: 1
       , author: cd.author
       , signedDelta: contextDelta
@@ -245,7 +245,7 @@ migrateRolDeltas { id: roleId, universeRoleDelta, contextDelta, bindingDelta, pr
       storeDelta $ DeltaStoreRecord
         { _id: deltaStoreDocId bindingResourceKey 0 bdr.author
         , _rev: Nothing
-        , resourceKey: bindingResourceKey
+        , resourceKey: safeKey bindingResourceKey
         , resourceVersion: 0
         , author: bdr.author
         , signedDelta: bd
@@ -276,7 +276,7 @@ migratePropertyDeltas propResourceKey deltas = do
       storeDelta $ DeltaStoreRecord
         { _id: deltaStoreDocId propResourceKey version author
         , _rev: Nothing
-        , resourceKey: propResourceKey
+        , resourceKey: safeKey propResourceKey
         , resourceVersion: version
         , author
         , signedDelta: sd

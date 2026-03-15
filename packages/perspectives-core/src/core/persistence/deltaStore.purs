@@ -37,21 +37,23 @@ module Perspectives.Persistence.DeltaStore
   , extractDeltaInfo
   , deltaStoreDatabaseName
   , deltaStoreDocId
+  , safeKey
   ) where
 
 import Prelude
 
 import Control.Monad.Except (runExcept)
-import Data.Array (catMaybes, filter)
+import Data.Array (catMaybes, filter, head, last, length) as Arr
 import Data.Either (Either(..))
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
-import Data.String (contains, length, take, Pattern(..)) as Str
+import Data.String (Pattern(..), drop, indexOf, lastIndexOf, length, split, take) as Str
 import Foreign (Foreign)
 import Perspectives.Persistence.API (addDocument_, documentsInRange, tryGetDocument_)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (MonadPouchdb)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser)
+import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Simple.JSON (class ReadForeign, class WriteForeign, read', readJSON')
 
@@ -85,15 +87,68 @@ deltaStoreDatabaseName :: forall f. MonadPouchdb f String
 deltaStoreDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_deltastore")
 
 -----------------------------------------------------------
+-- URL-SAFE KEY
+-----------------------------------------------------------
+
+-- | Convert a (potentially composite) resource key to a URL-safe string
+-- | suitable for CouchDB document IDs.
+-- |
+-- | Resource keys may contain URI schemes (def:, loc:, rem:, model:) and
+-- | full model URIs with '://' which break CouchDB access through reverse
+-- | proxies that reject or mangle percent-encoded forward slashes (%2F).
+-- |
+-- | Transformation rules:
+-- |   "def:#somecuid"                                       → "somecuid"
+-- |   "def:#somecuid#binding"                               → "somecuid#binding"
+-- |   "def:#somecuid#model://domain#A$B$C$D"                → "somecuid#A$D"
+-- |   "somecuid"                                            → "somecuid" (already safe)
+-- |   "somecuid#binding"                                    → "somecuid#binding" (idempotent)
+safeKey :: String -> String
+safeKey key =
+  let
+    guidPart = takeGuid key -- strips scheme prefix (def:#, loc:db#, rem:url#)
+  in
+    case Str.indexOf (Str.Pattern "#") guidPart of
+      Nothing -> guidPart -- no suffix, just the CUID
+      Just hashIdx ->
+        let
+          baseCuid = Str.take hashIdx guidPart
+          suffix = Str.drop (hashIdx + 1) guidPart
+        in
+          if suffix == "binding" then guidPart -- already safe
+          else baseCuid <> "#" <> shortenPropertyType suffix
+
+-- | Shorten a property type identifier to just model-CUID + type-CUID.
+-- | Handles both full URIs and already-shortened forms:
+-- |   "model://domain#A$B$C$D"  → "A$D"
+-- |   "A$B$C$D"                 → "A$D"   (idempotent)
+-- |   "A$D"                     → "A$D"   (idempotent)
+-- |   "A"                       → "A"     (single segment)
+shortenPropertyType :: String -> String
+shortenPropertyType propType =
+  let
+    -- Strip everything up to and including the last '#' (the model URI part).
+    segments = case Str.lastIndexOf (Str.Pattern "#") propType of
+      Nothing -> propType
+      Just idx -> Str.drop (idx + 1) propType
+    parts = Str.split (Str.Pattern "$") segments
+    first = fromMaybe segments (Arr.head parts)
+    last_ = fromMaybe segments (Arr.last parts)
+  in
+    if Arr.length parts <= 1 then segments
+    else first <> "$" <> last_
+
+-----------------------------------------------------------
 -- DOCUMENT ID
 -----------------------------------------------------------
 
 -- | Construct the deterministic document ID for a delta in the store.
--- | Format: <resourceKey>_v<resourceVersion>_<author>
+-- | Format: <safeResourceKey>_v<resourceVersion>_<author>
 -- | This is unique: in a conflict, two deltas share resourceVersion but have different authors.
+-- | The resourceKey is converted to a URL-safe form via 'safeKey'.
 deltaStoreDocId :: String -> Int -> PerspectivesUser -> String
 deltaStoreDocId resourceKey resourceVersion author =
-  resourceKey <> "_v" <> show resourceVersion <> "_" <> unwrap author
+  safeKey resourceKey <> "_v" <> show resourceVersion <> "_" <> takeGuid (unwrap author)
 
 -----------------------------------------------------------
 -- OPERATIONS
@@ -125,12 +180,12 @@ getDelta docId = do
 getDeltasForResource :: forall f. String -> MonadPouchdb f (Array DeltaStoreRecord)
 getDeltasForResource resourceKey = do
   dbName <- deltaStoreDatabaseName
-  -- Document IDs follow the pattern: <resourceKey>_v<version>_<author>
-  -- Use \uffff as the end sentinel to match all suffixes.
-  let startkey = resourceKey <> "_v"
-  let endkey = resourceKey <> "_v\xFFFF"
+  -- Convert to URL-safe key for document ID range query.
+  let sk = safeKey resourceKey
+  let startkey = sk <> "_v"
+  let endkey = sk <> "_v\xFFFF"
   result <- documentsInRange dbName startkey endkey
-  pure $ catMaybes $ map decodeDoc result.rows
+  pure $ Arr.catMaybes $ map decodeDoc result.rows
   where
   decodeDoc :: { id :: String, value :: { rev :: String }, doc :: Maybe Foreign } -> Maybe DeltaStoreRecord
   decodeDoc { doc: Just foreignDoc } = case runExcept $ read' foreignDoc of
@@ -143,7 +198,7 @@ getDeltasForResource resourceKey = do
 getDeltasForResourceByDeltaType :: forall f. String -> String -> MonadPouchdb f (Array DeltaStoreRecord)
 getDeltasForResourceByDeltaType resourceKey deltaType = do
   allDeltas <- getDeltasForResource resourceKey
-  pure $ filter (\(DeltaStoreRecord r) -> r.deltaType == deltaType) allDeltas
+  pure $ Arr.filter (\(DeltaStoreRecord r) -> r.deltaType == deltaType) allDeltas
 
 -- | Retrieve all deltas for a role instance AND all its sub-resources
 -- | (property and binding resource keys of the form roleInstance#subKey).
@@ -152,17 +207,19 @@ getDeltasForResourceByDeltaType resourceKey deltaType = do
 getDeltasForRoleInstance :: forall f. String -> MonadPouchdb f (Array DeltaStoreRecord)
 getDeltasForRoleInstance roleInstanceId = do
   dbName <- deltaStoreDatabaseName
-  -- Document IDs follow: <resourceKey>_v<version>_<author>
-  -- Role instance deltas:       roleInstanceId_v..._...
-  -- Sub-resource deltas: roleInstanceId#..._v..._...
-  -- Both start with roleInstanceId, so a range query covers all of them.
-  let startkey = roleInstanceId
+  -- Convert to URL-safe key for document ID range query.
+  let sk = safeKey roleInstanceId
+  -- Document IDs follow: <safeKey>_v<version>_<author>
+  -- Role instance deltas:       safeKey_v..._...
+  -- Sub-resource deltas: safeKey#..._v..._...
+  -- Both start with safeKey, so a range query covers all of them.
+  let startkey = sk
   -- Use the highest unicode character as end sentinel to include all possible suffixes.
-  let endkey = roleInstanceId <> "\xFFFF"
+  let endkey = sk <> "\xFFFF"
   result <- documentsInRange dbName startkey endkey
-  let allDeltas = catMaybes $ map decodeDoc result.rows
+  let allDeltas = Arr.catMaybes $ map decodeDoc result.rows
   -- Keep only records where resourceKey is the role itself or one of its sub-resources.
-  pure $ filter (isRoleOrSubResource roleInstanceId) allDeltas
+  pure $ Arr.filter (isRoleOrSubResource sk) allDeltas
   where
   decodeDoc :: { id :: String, value :: { rev :: String }, doc :: Maybe Foreign } -> Maybe DeltaStoreRecord
   decodeDoc { doc: Just foreignDoc } = case runExcept $ read' foreignDoc of
@@ -171,14 +228,15 @@ getDeltasForRoleInstance roleInstanceId = do
   decodeDoc _ = Nothing
 
   isRoleOrSubResource :: String -> DeltaStoreRecord -> Boolean
-  isRoleOrSubResource rid (DeltaStoreRecord { resourceKey }) =
+  isRoleOrSubResource safeRid (DeltaStoreRecord { resourceKey }) =
     let
-      ridLen = Str.length rid
+      safeRk = safeKey resourceKey
+      ridLen = Str.length safeRid
     in
-      resourceKey == rid
+      safeRk == safeRid
         ||
-          ( Str.length resourceKey > ridLen + 1
-              && Str.take (ridLen + 1) resourceKey == rid <> "#"
+          ( Str.length safeRk > ridLen + 1
+              && Str.take (ridLen + 1) safeRk == safeRid <> "#"
           )
 
 -- | Update the `applied` flag of an existing delta-store record.
@@ -221,7 +279,7 @@ storeDeltaFromSignedDelta signedDelta@(SignedDelta { author, encryptedDelta }) =
       storeDelta $ DeltaStoreRecord
         { _id: docId
         , _rev: Nothing
-        , resourceKey
+        , resourceKey: safeKey resourceKey
         , resourceVersion
         , author
         , signedDelta
