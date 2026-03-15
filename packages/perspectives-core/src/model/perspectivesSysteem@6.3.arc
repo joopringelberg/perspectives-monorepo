@@ -175,6 +175,10 @@ domain model://perspectives.domains#System@6.3
     user NonPerspectivesUsers (relational)
       aspect sys:Identifiable
       aspect sys:Addressable
+    
+    user Onlookers (relational)
+      aspect sys:Identifiable
+      aspect sys:Addressable
 
     -- PDRDEPENDENCY
     user Initializer = me
@@ -228,12 +232,17 @@ domain model://perspectives.domains#System@6.3
       perspective on Peers
         props (FirstName, LastName) verbs (Consult)
         props (Cancelled) verbs (Consult, SetPropertyValue)
+      perspective on sys:TheWorld >> Onlookers
+        only (Create, Remove)
+        props (FirstName, LastName) verbs (Consult, SetPropertyValue)
       action AddOtherPerson
         letA 
           nuser <- create role NonPerspectivesUsers in sys:TheWorld
         in
           -- Het is de vraag of het perspectief tijdig is.
           bind nuser to Persons
+      action AddOnlooker
+        create role Onlookers in sys:TheWorld
       screen
         who
         what
@@ -254,7 +263,6 @@ domain model://perspectives.domains#System@6.3
                       >
             row
               table OtherPersons
-          column
             row 
               markdown <## Alle personen
                         Kopieer iemand uit deze tabel als het niet uitmaakt of 
@@ -262,6 +270,16 @@ domain model://perspectives.domains#System@6.3
                       >
             row
               table Persons
+                no roleverbs
+            row 
+              markdown <## Meekijkers
+                        Gebruik een `Meekijker` voor rollen die een organisatie-perspectief representeren. 
+                        Een `Meekijker` is geen persoon maar het is een programma dat toegestuurde gegevens opslaat 
+                        in een relationele database zodat bevoegde medewerkers van die organisatie die gegevens kunnen inzien.
+                        Voeg een nieuwe meekijker toe met de actie [[action: AddOnlooker| Voeg meekijker toe]].
+                      >
+            row
+              table sys:TheWorld$Onlookers
                 no roleverbs
         where
 

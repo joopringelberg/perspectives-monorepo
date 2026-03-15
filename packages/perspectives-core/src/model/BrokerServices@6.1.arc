@@ -474,7 +474,7 @@ domain model://perspectives.domains#BrokerServices@6.1
             bind_ me to context >> AccountHolder
     -----------------
 
-    user AccountHolder filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+    user AccountHolder filledBy ((sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons), sys:TheWorld$Onlookers)
       aspect sys:Invitation$Invitee
       aspect sys:ContextWithNotification$NotifiedUser
       -- PDRDEPENDENCY
