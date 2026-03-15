@@ -27,11 +27,11 @@ import Control.Lazy (defer)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (fromFoldable, snoc)
 import Data.Either (Either(..))
-import Data.Foldable (foldl)
+import Data.Foldable (all, foldl)
 import Data.Int (toNumber)
 import Data.JSDate (toISOString)
 import Data.List (List(..), concat, filter, find, intercalate, many, null, singleton, some, (:))
-import Data.List.NonEmpty (NonEmptyList, toList, singleton) as LNE
+import Data.List.NonEmpty (NonEmptyList, head, length, toList, singleton) as LNE
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.String (indexOf, splitAt, trim, Pattern(..)) as STRING
@@ -553,12 +553,15 @@ enumeratedRole_ uname knd pos = do
 -- | Here `SomeRole` and `AnotherRole` are alternatives.
 -- | filledBy SomeRole + AnotherRole
 -- | Here both are required: that is, only instances that have both types are allowed to fill this role.
+-- | filledBy (SomeRole + AnotherRole), ThirdRole
+-- | Here `SomeRole + AnotherRole` is a combination (conjunction) and `ThirdRole` is a single alternative;
+-- | the result is a disjunction of conjunctions.
 -- Implementation note: we cannot know, here, whether the filler is Calculated or
 -- Enumerated. This will be fixed in PhaseThree.
 filledBy :: IP (Maybe RolePart)
 filledBy = optionMaybe
   ( reserved "filledBy" *>
-      ( (try (FilledBySpecifications <<< Alternatives <$> token.parens (token.commaSep1 filler)))
+      ( (try (FilledBySpecifications <$> token.parens (makeSpec <$> token.commaSep1 fillerGroup)))
           <|> (try (FilledBySpecifications <<< Combination <$> token.parens (plusSep filler)))
           <|> (FilledBySpecifications <<< Alternatives <<< LNE.singleton <$> (try filler))
       )
@@ -578,6 +581,28 @@ filledBy = optionMaybe
 
   plusSep :: forall a. IP a -> IP (LNE.NonEmptyList a)
   plusSep p = sepBy1 p plus
+
+  -- | A fillerGroup is either a parenthesised combination `(A + B)` or a single filler `A`.
+  fillerGroup :: IP (LNE.NonEmptyList FilledByAttribute)
+  fillerGroup =
+    (try (token.parens (plusSep filler)))
+    <|> (LNE.singleton <$> filler)
+
+  -- | Determine the appropriate FilledBySpecification from a list of fillerGroups:
+  -- | * All groups are singletons → Alternatives (each group's head is the sole attribute)
+  -- | * Single group with multiple members → Combination (unwrap the sole group)
+  -- | * Multiple groups, at least one with multiple members → DisjunctionOfConjunctions
+  makeSpec :: LNE.NonEmptyList (LNE.NonEmptyList FilledByAttribute) -> FilledBySpecification
+  makeSpec groups =
+    if all (\g -> LNE.length g == 1) groups
+      -- Every group is a singleton: extract the single element from each group.
+      -- LNE.head is safe here because LNE.length g == 1 guarantees exactly one element.
+    then Alternatives (LNE.head <$> groups)
+    else if LNE.length groups == 1
+      -- Single group with multiple members: use Combination.
+      -- LNE.head is safe here because LNE.length groups == 1 guarantees exactly one group.
+      then Combination (LNE.head groups)
+      else DisjunctionOfConjunctions groups
 
 -- | rolePart =
 -- |   <perspectiveOn> |
