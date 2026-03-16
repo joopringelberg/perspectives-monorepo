@@ -70,7 +70,6 @@ domain model://joopringelberg.nl#TestFilledByRestrictions@1.0
     indexed mm:TestFilledByRestrictionsApp
     aspect sys:RootContext
     external
-      aspect sys:RootContext$External
 
     user Manager = sys:Me
       -- Perspectives on the concrete filler roles (create instances to use as fillers)
@@ -105,16 +104,13 @@ domain model://joopringelberg.nl#TestFilledByRestrictions@1.0
     -- Concrete filler roles inherit them via `aspect`.
 
     thing TraitAlpha
-      property Name (String)
-        readableName
+      aspect sys:RoleWithName
 
     thing TraitBeta
-      property Name (String)
-        readableName
+      aspect sys:RoleWithName
 
     thing TraitGamma
-      property Name (String)
-        readableName
+      aspect sys:RoleWithName
 
     ---- CONCRETE FILLER ROLES ----
 
