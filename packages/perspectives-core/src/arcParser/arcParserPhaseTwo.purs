@@ -329,6 +329,14 @@ traverseEnumeratedRoleE_ role@(EnumeratedRole { id: rn, kindOfRole }) roleParts 
         ebnd <- expandBinding bnd
         pure $ UET $ RoleInContext { role: EnumeratedRoleType ebnd, context }
       pure $ EnumeratedRole $ roleUnderConstruction { binding = Just $ PROD (ARR.fromFoldable restrictions) }
+
+    DisjunctionOfConjunctions groups -> do
+      conjunctions <- for groups \attrs -> do
+        restrictions <- for attrs \(FilledByAttribute bnd context) -> do
+          ebnd <- expandBinding bnd
+          pure $ UET $ RoleInContext { role: EnumeratedRoleType ebnd, context }
+        pure $ PROD (ARR.fromFoldable restrictions)
+      pure $ EnumeratedRole $ roleUnderConstruction { binding = Just $ SUM (ARR.fromFoldable conjunctions) }
     -- We assume the result of expandBinding refers to an EnumeratedRoleType. This need not be so;
     -- it will be repaired in PhaseThree.
     -- Note that `context` may not yet be fully qualified.

@@ -129,7 +129,10 @@ checkContext c = do
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 checkBinding :: EnumeratedRoleType -> RoleInstance -> MP Boolean
 checkBinding filledType filler = do
-  -- (mrestriction :: Maybe (ExpandedADT QT.RoleInContext)) <- getEnumeratedRole filledType >>= completeExpandedFillerRestriction
+  -- Alternative using full on-the-fly expansion (semantically equivalent when completeType is correct):
+  -- (mrestriction :: Maybe (CNF QT.RoleInContext)) <- getEnumeratedRole filledType >>= completeExpandedFillerRestriction <#> map toConjunctiveNormalForm
+  -- (completeExpandedFillerRestriction from Perspectives.Representation.Class.Role,
+  --  toConjunctiveNormalForm from Perspectives.Representation.CNF)
   (mrestriction :: Maybe (CNF QT.RoleInContext)) <- getEnumeratedRole filledType >>= completeDeclaredFillerRestriction >>= traverse toConjunctiveNormalForm_
   (fillerType :: CNF QT.RoleInContext) <- completeRuntimeType filler >>= toConjunctiveNormalForm_
   case mrestriction of

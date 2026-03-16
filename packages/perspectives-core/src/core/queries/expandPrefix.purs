@@ -28,7 +28,7 @@ import Data.Traversable (traverse)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.Identifiers (isTypeUri, typeUri2typeNameSpace)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyVerbE(..), PropsOrView(..), RoleIdentification(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..), TabE(..), TableE(..), TableFormE(..), TableFormSectionE(..), WhatE(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyVerbE(..), PropsOrView(..), RoleIdentification(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), PureLetStep(..), SimpleStep(..), Step(..), UnaryStep(..), VarBinding(..))
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo, expandNamespace)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetABinding(..), LetStep(..), Statements(..))
@@ -336,6 +336,16 @@ instance ScanSymbols TableFormE where
     markdown' <- traverse scan markdown
     pure $ TableFormE markdown' table' form'
 
+instance ScanSymbols TableFormOrWhenE where
+  scan (PlainTableFormE tfe) = PlainTableFormE <$> scan tfe
+  scan (WhenTableFormItem wtfe) = WhenTableFormItem <$> scan wtfe
+
+instance ScanSymbols WhenTableFormE where
+  scan (WhenTableFormE condition ctxt items) = do
+    condition' <- scan condition
+    items' <- traverse scan items
+    pure $ WhenTableFormE condition' ctxt items'
+
 instance ScanSymbols WhatE where
   scan (TableForms (TableFormSectionE markdowns tableforms)) = TableForms <$> (TableFormSectionE <$> traverse scan markdowns <*> traverse scan tableforms)
   scan (FreeFormScreen c) = FreeFormScreen <$> scan c
@@ -404,3 +414,10 @@ instance containsPrefixesScreenElement :: ScanSymbols ScreenElement where
   scan (FormElement r) = FormElement <$> scan r
   scan (MarkDownElement r) = MarkDownElement <$> scan r
   scan (ChatElement r) = ChatElement <$> scan r
+  scan (WhenElement r) = WhenElement <$> scan r
+
+instance ScanSymbols WhenE where
+  scan (WhenE condition context elements) = do
+    condition' <- scan condition
+    elements' <- traverse scan elements
+    pure $ WhenE condition' context elements'

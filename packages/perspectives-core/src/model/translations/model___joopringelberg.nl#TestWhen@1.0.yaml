@@ -1,0 +1,76 @@
+model://joopringelberg.nl#ldtvnrdtoc:
+  version: "1.0"
+  contexts:
+    TestWhenApp:
+      translations:
+        nl: App om `when` te testen
+        en: App to test `when`
+      indexedName:
+        name: model://joopringelberg.nl#TestWhen$MyTestWhenApp
+        translations:
+          nl: App om `when` te testen
+          en: App to test `when`
+      users:
+        Manager:
+          translations:
+            nl: Beheerder
+            en: Manager
+          titles:
+            0:
+              translations:
+                orig: Test When
+                nl: Test Wanneer
+                en: Test When
+      things:
+        Items:
+          translations:
+            nl: Items
+            en: Items
+          properties:
+            ItemValue:
+              translations:
+                nl: Item Waarde
+                en: Item Value
+            ItemName:
+              translations:
+                nl: Item Naam
+                en: Item Name
+        ExtraInfo:
+          translations:
+            nl: Extra Informatie
+            en: Extra Info
+          properties:
+            ExtraField2:
+              translations:
+                nl: Extra Veld 2
+                en: Extra Field 2
+            ExtraField1:
+              translations:
+                nl: Extra Veld 1
+                en: Extra Field 1
+        MainInfo:
+          translations:
+            nl: Belangrijkste Informatie
+            en: Main Info
+          properties:
+            Description:
+              translations:
+                nl: Beschrijving
+                en: Description
+            Name:
+              translations:
+                nl: Naam
+                en: Name
+        Settings:
+          translations:
+            nl: Instellingen
+            en: Settings
+          properties:
+            ShowTable:
+              translations:
+                nl: Toon Tabel
+                en: Show Table
+            ShowExtraDetails:
+              translations:
+                nl: Toon Extra Details
+                en: Show Extra Details

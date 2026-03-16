@@ -20,7 +20,7 @@
 
 import React from 'react';
 
-import {PDRproxy, ContextInstanceT, ContextType, RoleType, Unsubscriber, PropertyType, EnumeratedOrCalculatedProperty, ScreenDefinition, ChatElementDef, ColumnElementDef, FormElementDef, MarkDownElementDef, Perspective, Roleinstancewithprops, RowElementDef, ScreenElementDefTagged, TabDef, TableElementDef, WidgetCommonFields, MainScreenElements, TableFormDef, RoleInstanceT} from "perspectives-proxy";
+import {PDRproxy, ContextInstanceT, ContextType, RoleType, Unsubscriber, PropertyType, EnumeratedOrCalculatedProperty, ScreenDefinition, ChatElementDef, ColumnElementDef, FormElementDef, MarkDownElementDef, Perspective, Roleinstancewithprops, RowElementDef, ScreenElementDefTagged, TabDef, TableElementDef, WhenElementDef, WidgetCommonFields, MainScreenElements, TableFormDef, RoleInstanceT} from "perspectives-proxy";
 import PerspectivesComponent from "./perspectivesComponent";
 import {PSContext, PSContextType} from "./reactcontexts.js";
 import PerspectiveBasedForm from "./perspectivebasedform.js";
@@ -178,6 +178,7 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
     let formDef : FormElementDef | undefined;
     let markDownDef : MarkDownElementDef | undefined;
     let chatDef : ChatElementDef | undefined;
+    let whenDef : WhenElementDef | undefined;
     switch (taggedElement.elementType){
       case "RowElementD":
         return component.buildRow( taggedElement.element as RowElementDef, index );
@@ -216,6 +217,13 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
           <div
             key={index}
           >{ component.buildChat( chatDef )}</div>
+        )
+      case "WhenElementD":
+        whenDef = taggedElement.element as WhenElementDef;
+        return (
+          <React.Fragment key={index}>
+            { whenDef.elements.map( (el, idx) => component.screenElement(el, idx) ) }
+          </React.Fragment>
         )
     }
   }

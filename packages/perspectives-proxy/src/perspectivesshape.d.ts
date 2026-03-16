@@ -163,11 +163,17 @@ export type TabDef = {
 };
 
 export type ScreenElementDefTagged = {
-  elementType: "RowElementD" | "ColumnElementD" | "TableElementD" | "FormElementD" | "MarkDownElementD" | "ChatElementD";
+  elementType: "RowElementD" | "ColumnElementD" | "TableElementD" | "FormElementD" | "MarkDownElementD" | "ChatElementD" | "WhenElementD";
   element: ScreenElementDef;
 }
 
-export type ScreenElementDef = RowElementDef | ColumnElementDef | TableElementDef | FormElementDef | MarkDownElementDef | ChatElementDef;
+export type ScreenElementDef = RowElementDef | ColumnElementDef | TableElementDef | FormElementDef | MarkDownElementDef | ChatElementDef | WhenElementDef;
+
+export type WhenElementDef = {
+  tag: "WhenDef";
+  condition: unknown;
+  elements: ScreenElementDefTagged[];
+}
 
 export type RowElementDef = {
   tag: "RowDef";

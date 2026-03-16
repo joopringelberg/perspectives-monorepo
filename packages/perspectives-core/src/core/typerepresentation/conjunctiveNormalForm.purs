@@ -31,7 +31,7 @@ import Data.Traversable (traverse)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Representation.ExpandedADT (ExpandedADT(..))
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
-import Prelude (class Eq, class Ord, class Show, map, show, ($), (<#>), (<$>), (<>), (==))
+import Prelude (class Eq, class Ord, class Show, compare, map, show, ($), (<#>), (<$>), (<>), (==))
 import Simple.JSON (class ReadForeign, class WriteForeign, readImpl, writeImpl)
 
 --------------------------------------------------------------------------------------------------
@@ -60,14 +60,16 @@ instance (Show a, PrettyPrint a) => PrettyPrint (DSUM a) where
 instance (Ord a) => Eq (DSUM a) where
   eq (DSUM left) (DSUM right) = SET.fromFoldable left == SET.fromFoldable right
 
-derive instance (Ord a) => Ord (DSUM a)
+instance (Ord a) => Ord (DSUM a) where
+  compare (DSUM left) (DSUM right) = compare (SET.fromFoldable left) (SET.fromFoldable right)
 
 derive instance Generic (DPROD a) _
 
 instance (Eq a, Ord a) => Eq (DPROD a) where
   eq (DPROD left) (DPROD right) = SET.fromFoldable left == SET.fromFoldable right
 
-derive instance (Ord a) => Ord (DPROD a)
+instance (Ord a) => Ord (DPROD a) where
+  compare (DPROD left) (DPROD right) = compare (SET.fromFoldable left) (SET.fromFoldable right)
 
 instance (Show a) => Show (DPROD a) where
   show (DPROD adts) = "(" <> "DPROD" <> show adts <> ")"

@@ -85,7 +85,6 @@ newtype RoleE = RoleE
   , pos :: ArcPosition
   }
 
--- TODO: het verschil tussen conjunctie en disjunctie bij FilledByAttribute.
 data RolePart
   = PE PropertyE
   | SQP (List StateQualifiedPart)
@@ -102,7 +101,11 @@ data RolePart
   | PublicUrl Step
   | DefaultUserRole
 
-data FilledBySpecification = Alternatives (NonEmptyList FilledByAttribute) | Combination (NonEmptyList FilledByAttribute)
+data FilledBySpecification
+  = Alternatives (NonEmptyList FilledByAttribute)
+  | Combination (NonEmptyList FilledByAttribute)
+  | DisjunctionOfConjunctions (NonEmptyList (NonEmptyList FilledByAttribute))
+
 data FilledByAttribute = FilledByAttribute String ContextType
 --------------------------------------------------------------------------------
 ---- PROPERTYMAPPING
@@ -467,7 +470,11 @@ newtype FreeFormScreenE = FreeFormScreenE
 
 data WhatE = TableForms TableFormSectionE | FreeFormScreen FreeFormScreenE
 
-data TableFormSectionE = TableFormSectionE (List MarkDownE) (List TableFormE)
+data TableFormSectionE = TableFormSectionE (List MarkDownE) (List TableFormOrWhenE)
+
+data TableFormOrWhenE = PlainTableFormE TableFormE | WhenTableFormItem WhenTableFormE
+
+data WhenTableFormE = WhenTableFormE Step ContextType (List TableFormOrWhenE)
 
 data TableFormE = TableFormE (List MarkDownE) TableE FormE
 --------------------------------------------------------------------------------
@@ -480,6 +487,15 @@ data ScreenElement
   | FormElement FormE
   | MarkDownElement MarkDownE
   | ChatElement ChatE
+  | WhenElement WhenE
+
+--------------------------------------------------------------------------------
+---- WHEN
+--------------------------------------------------------------------------------
+-- | A conditional block of screen elements. The condition is a step expression
+-- | evaluated against the context. Child elements are only shown when the condition
+-- | evaluates to true.
+data WhenE = WhenE Step ContextType (List ScreenElement)
 
 --------------------------------------------------------------------------------
 ---- TAB, ROW, COLUMN
@@ -675,6 +691,14 @@ derive instance Generic TableFormSectionE _
 instance Show TableFormSectionE where
   show = genericShow
 
+derive instance Generic TableFormOrWhenE _
+instance Show TableFormOrWhenE where
+  show tf = genericShow tf
+
+derive instance Generic WhenTableFormE _
+instance Show WhenTableFormE where
+  show = genericShow
+
 derive instance Generic FreeFormScreenE _
 instance Show FreeFormScreenE where
   show = genericShow
@@ -720,3 +744,7 @@ instance Show ChatE where
   show = genericShow
 
 derive instance Newtype ChatE _
+
+derive instance Generic WhenE _
+instance Show WhenE where
+  show = genericShow

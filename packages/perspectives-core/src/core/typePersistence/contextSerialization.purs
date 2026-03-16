@@ -62,9 +62,9 @@ import Perspectives.ModelTranslation (translationOf)
 import Perspectives.Names (findIndexedContextName)
 import Perspectives.Query.Interpreter (lift2MPQ)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription)
-import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances)
+import Perspectives.Query.UnsafeCompiler (context2propertyValue, getRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), What(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), RoleKind(..), RoleType(..), externalRoleType, roletype2string)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
@@ -73,7 +73,6 @@ import Perspectives.TypePersistence.PerspectiveSerialisation.Data (SerialisedPer
 import Perspectives.TypePersistence.ScreenContextualisation (contextualiseScreen, contextualiseTableFormDef)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, generalisesRoleType_, indexedContextName, string2RoleType)
 import Simple.JSON (writeJSON)
-import Unsafe.Coerce (unsafeCoerce)
 
 newtype SerialisedScreen = SerialisedScreen String
 
@@ -120,15 +119,18 @@ screenForContextAndUser userRoleInstance userRoleType contextType contextInstanc
   populateScreen :: ScreenDefinition -> String -> String -> MonadPerspectivesQuery SerialisedScreen
   populateScreen s@(ScreenDefinition { title, tabs, rows, columns, whoWhatWhereScreen }) computedTitle translatedUserRoleType = do
     if isJust whoWhatWhereScreen then do
-      -- Now populate the screen definition with instance data.
-      -- However, prevent chat roles from ending up in the What section. Add them to the Who section as ChatDefs.
-      (ScreenDefinition screenInstance :: ScreenDefinition) <- lift $ addPerspectives s userRoleInstance contextInstance
-      pure $ SerialisedScreen $ writeJSON (ScreenDefinition $ screenInstance { title = if isResourceIdentifier computedTitle then title else Just computedTitle, userRole = translatedUserRoleType })
+      -- Use contextualiseScreen which both evaluates `when` conditions and fills in perspectives.
+      -- Using addPerspectives here would keep WhenTableFormItemDef wrappers intact, causing
+      -- { tag: "WhenTableFormDef" } to surface on the client.
+      mscreen <- runReaderT (contextualiseScreen s computedTitle translatedUserRoleType) { userRoleInstance, contextType, contextInstance }
+      case mscreen of
+        Nothing -> defaultScreen computedTitle translatedUserRoleType
+        Just contextualisedScreen -> pure $ SerialisedScreen $ writeJSON contextualisedScreen
     else do
       (perspectives :: Array SerialisedPerspective') <- lift $ lift (contextInstance ##= perspectivesForContextAndUser' userRoleInstance userRoleType)
       perspectivesOnChats :: Array SerialisedPerspective' <- lift $ lift $ filterA isChat perspectives
-      userRoles <- pure $ makeTableFormDef userRoleType <$> (filter isOnUserRole perspectives) `difference` perspectivesOnChats
-      wheretoContextRoles <- pure $ makeTableFormDef userRoleType <$> filter isOnContextRole perspectives
+      userRoles <- pure $ (PlainTableFormDef <<< makeTableFormDef userRoleType) <$> (filter isOnUserRole perspectives) `difference` perspectivesOnChats
+      wheretoContextRoles <- pure $ (PlainTableFormDef <<< makeTableFormDef userRoleType) <$> filter isOnContextRole perspectives
       constructedScreen <- lift $ addPerspectives
         ( ScreenDefinition
             { title: if isResourceIdentifier computedTitle then title else Just computedTitle
@@ -165,10 +167,10 @@ constructDefaultScreen :: RoleInstance -> RoleType -> ContextInstance -> String 
 constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRoleType = do
   (perspectives :: Array SerialisedPerspective') <- runArrayT $ perspectivesForContextAndUser' userRoleInstance userRoleType cid
   perspectivesOnChats :: Array SerialisedPerspective' <- lift $ filterA isChat perspectives
-  userRoles <- pure $ makeTableFormDef userRoleType <$> (filter isOnUserRole perspectives) `difference` perspectivesOnChats
-  who <- pure $ makeTableFormDef userRoleType <$> filter isOnUserRole perspectives
-  what <- pure $ makeTableFormDef userRoleType <$> ((filter isOnThingRole perspectives) `difference` perspectivesOnChats)
-  wheretoContextRoles <- pure $ makeTableFormDef userRoleType <$> filter isOnContextRole perspectives
+  userRoles <- pure $ (PlainTableFormDef <<< makeTableFormDef userRoleType) <$> (filter isOnUserRole perspectives) `difference` perspectivesOnChats
+  who <- pure $ (PlainTableFormDef <<< makeTableFormDef userRoleType) <$> filter isOnUserRole perspectives
+  what <- pure $ (PlainTableFormDef <<< makeTableFormDef userRoleType) <$> ((filter isOnThingRole perspectives) `difference` perspectivesOnChats)
+  wheretoContextRoles <- pure $ (PlainTableFormDef <<< makeTableFormDef userRoleType) <$> filter isOnContextRole perspectives
   pure $ ScreenDefinition
     { title: Just title
     , userRole: translatedUserRoleType
@@ -353,6 +355,15 @@ instance AddPerspectives TableFormDef where
     markdown' <- traverse (\a -> addPerspectives a user ctxt) markdown
     pure $ TableFormDef { markdown: markdown', table: table', form: form' }
 
+instance AddPerspectives WhenTableFormDef where
+  addPerspectives (WhenTableFormDef { condition, tableForms }) user ctxt = do
+    tableForms' <- traverse (\a -> addPerspectives a user ctxt) tableForms
+    pure $ WhenTableFormDef { condition, tableForms: tableForms' }
+
+instance AddPerspectives TableFormOrWhenDef where
+  addPerspectives (PlainTableFormDef tfd) user ctxt = PlainTableFormDef <$> addPerspectives tfd user ctxt
+  addPerspectives (WhenTableFormItemDef wtfd) user ctxt = WhenTableFormItemDef <$> addPerspectives wtfd user ctxt
+
 instance addPerspectivesScreenElementDef :: AddPerspectives ScreenElementDef where
   addPerspectives (RowElementD re) user ctxt = RowElementD <$> addPerspectives re user ctxt
   addPerspectives (ColumnElementD re) user ctxt = ColumnElementD <$> addPerspectives re user ctxt
@@ -360,6 +371,9 @@ instance addPerspectivesScreenElementDef :: AddPerspectives ScreenElementDef whe
   addPerspectives (FormElementD re) user ctxt = FormElementD <$> addPerspectives re user ctxt
   addPerspectives (MarkDownElementD re) user ctxt = MarkDownElementD <$> addPerspectives re user ctxt
   addPerspectives (ChatElementD re) user ctxt = ChatElementD <$> addPerspectives re user ctxt
+  addPerspectives (WhenElementD (WhenDef { condition, elements })) user ctxt = do
+    elements' <- traverse (\e -> addPerspectives e user ctxt) elements
+    pure $ WhenElementD (WhenDef { condition, elements: elements' })
 
 instance addPerspectivesTabDef :: AddPerspectives TabDef where
   addPerspectives (TabDef r) user ctxt = do
@@ -428,7 +442,7 @@ traverseScreenElement user ctxt a = case a of
       conditionally condition (pure $ Just $ MarkDownConstantDef r { text = translatedText })
     MarkDownExpressionDef { textQuery, condition } -> conditionally condition
       do
-        (textGetter :: ContextInstance ~~> Value) <- lift $ unsafeCoerce compileFunction textQuery
+        (textGetter :: ContextInstance ~~> Value) <- lift $ context2propertyValue textQuery
         (textA :: Array Value) <- runArrayT $ textGetter ctxt
         pure $ Just $ MarkDownExpressionDef { textQuery, condition, text: maybe Nothing (Just <<< unwrap) (head textA) }
     MarkDownPerspectiveDef { widgetFields, conditionProperty } ->
@@ -438,6 +452,14 @@ traverseScreenElement user ctxt a = case a of
           widgetFields
           ctxt
         pure $ Just $ MarkDownPerspectiveDef { widgetFields: widgetFields { perspective = Just perspective }, conditionProperty }
+  WhenElementD (WhenDef { condition, elements }) -> do
+    (criterium :: ContextInstance ~~> Value) <- lift $ context2propertyValue condition
+    shouldBeShown <- runArrayT $ criterium ctxt
+    case head shouldBeShown of
+      Just (Value "true") -> do
+        elements' <- catMaybes <$> traverse (traverseScreenElement user ctxt) elements
+        pure $ Just $ WhenElementD (WhenDef { condition, elements: elements' })
+      _ -> pure Nothing
   (other :: ScreenElementDef) -> Just <$> addPerspectives other user ctxt
 
   where
@@ -445,7 +467,7 @@ traverseScreenElement user ctxt a = case a of
   conditionally condition f = case condition of
     Nothing -> f
     Just c -> do
-      (criterium :: ContextInstance ~~> Value) <- lift $ unsafeCoerce compileFunction c
+      (criterium :: ContextInstance ~~> Value) <- lift $ context2propertyValue c
       -- evaluate the condition in the current context
       shouldBeShown <- runArrayT $ criterium ctxt
       case head shouldBeShown of
@@ -490,7 +512,9 @@ tableFormForContextAndUser userRoleInstance userRoleType contextType objectRoleT
 
   populateTableForm :: WhoWhatWhereScreenDef -> MonadPerspectivesQuery TableFormDef
   populateTableForm (WhoWhatWhereScreenDef { what }) = ArrayT case what of
-    TableForms { tableForms } -> traverse (\a -> addPerspectives a userRoleInstance contextInstance) tableForms
+    TableForms { tableForms } -> do
+      flattened <- concat <$> traverse (flattenItem contextInstance) tableForms
+      traverse (\a -> addPerspectives a userRoleInstance contextInstance) flattened
     _ -> pure []
 
   -- We are looking for a particular object RoleType. It could be in the who, what or whereto elements of the WhoWhatWhereScreenDef.
@@ -498,16 +522,23 @@ tableFormForContextAndUser userRoleInstance userRoleType contextType objectRoleT
   contextualiseWhoWhatWhereScreen :: WhoWhatWhereScreenDef -> MonadPerspectivesQuery TableFormDef
   contextualiseWhoWhatWhereScreen (WhoWhatWhereScreenDef { who, what, whereto }) = ArrayT do
     (who' :: Array TableFormDef) <- case who of
-      Who { userRoles } -> pure $ filter tableFormDefIsForRoleType userRoles
+      Who { userRoles } -> flattenAndFilter contextInstance userRoles
     what' <- case what of
       FreeFormScreen _ -> pure []
-      TableForms { tableForms } -> pure $ filter tableFormDefIsForRoleType tableForms
+      TableForms { tableForms } -> flattenAndFilter contextInstance tableForms
     (whereto' :: Array TableFormDef) <- case whereto of
-      WhereTo { contextRoles } -> pure $ filter tableFormDefIsForRoleType contextRoles
+      WhereTo { contextRoles } -> flattenAndFilter contextInstance contextRoles
     (x :: Array (Array (Maybe TableFormDef))) <- runArrayT $ runReaderT (traverse contextualiseTableFormDef (who' <> what' <> whereto')) { userRoleInstance, contextType, contextInstance }
     pure $ catMaybes $ concat x
 
     where
+
+    -- | Flatten a list of TableFormOrWhenDef items by evaluating `when` conditions,
+    -- | then filter by objectRoleType.
+    flattenAndFilter :: ContextInstance -> Array TableFormOrWhenDef -> AssumptionTracking (Array TableFormDef)
+    flattenAndFilter ctxt items = do
+      flattened <- concat <$> traverse (flattenItem ctxt) items
+      pure $ filter tableFormDefIsForRoleType flattened
 
     tableFormDefIsForRoleType :: TableFormDef -> Boolean
     tableFormDefIsForRoleType (TableFormDef { table, form }) = case table of
@@ -516,6 +547,17 @@ tableFormForContextAndUser userRoleInstance userRoleType contextType objectRoleT
         Just { roleType } -> case roleType of
           Just rt -> rt == roletype2string objectRoleType
           Nothing -> false
+
+  -- | Flatten TableFormOrWhenDef items: evaluates `when` conditions and returns
+  -- | only TableFormDef items (recursively expanding nested when blocks).
+  flattenItem :: ContextInstance -> TableFormOrWhenDef -> AssumptionTracking (Array TableFormDef)
+  flattenItem _ (PlainTableFormDef tfd) = pure [ tfd ]
+  flattenItem ctxt (WhenTableFormItemDef (WhenTableFormDef { condition, tableForms })) = do
+    (criterium :: ContextInstance ~~> Value) <- lift $ context2propertyValue condition
+    shouldBeShown <- runArrayT $ criterium ctxt
+    case head shouldBeShown of
+      Just (Value "true") -> concat <$> traverse (flattenItem ctxt) tableForms
+      _ -> pure []
 
 newtype SerialisedTableForm = SerialisedTableForm String
 

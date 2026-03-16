@@ -27,11 +27,11 @@ import Control.Lazy (defer)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (fromFoldable, snoc)
 import Data.Either (Either(..))
-import Data.Foldable (foldl)
+import Data.Foldable (all, foldl)
 import Data.Int (toNumber)
 import Data.JSDate (toISOString)
 import Data.List (List(..), concat, filter, find, intercalate, many, null, singleton, some, (:))
-import Data.List.NonEmpty (NonEmptyList, toList, singleton) as LNE
+import Data.List.NonEmpty (NonEmptyList, head, length, toList, singleton) as LNE
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.String (indexOf, splitAt, trim, Pattern(..)) as STRING
@@ -48,7 +48,7 @@ import Parsing.Indent.Monadic (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -553,12 +553,15 @@ enumeratedRole_ uname knd pos = do
 -- | Here `SomeRole` and `AnotherRole` are alternatives.
 -- | filledBy SomeRole + AnotherRole
 -- | Here both are required: that is, only instances that have both types are allowed to fill this role.
+-- | filledBy (SomeRole + AnotherRole), ThirdRole
+-- | Here `SomeRole + AnotherRole` is a combination (conjunction) and `ThirdRole` is a single alternative;
+-- | the result is a disjunction of conjunctions.
 -- Implementation note: we cannot know, here, whether the filler is Calculated or
 -- Enumerated. This will be fixed in PhaseThree.
 filledBy :: IP (Maybe RolePart)
 filledBy = optionMaybe
   ( reserved "filledBy" *>
-      ( (try (FilledBySpecifications <<< Alternatives <$> token.parens (token.commaSep1 filler)))
+      ( (try (FilledBySpecifications <$> token.parens (makeSpec <$> token.commaSep1 fillerGroup)))
           <|> (try (FilledBySpecifications <<< Combination <$> token.parens (plusSep filler)))
           <|> (FilledBySpecifications <<< Alternatives <<< LNE.singleton <$> (try filler))
       )
@@ -578,6 +581,28 @@ filledBy = optionMaybe
 
   plusSep :: forall a. IP a -> IP (LNE.NonEmptyList a)
   plusSep p = sepBy1 p plus
+
+  -- | A fillerGroup is either a parenthesised combination `(A + B)` or a single filler `A`.
+  fillerGroup :: IP (LNE.NonEmptyList FilledByAttribute)
+  fillerGroup =
+    (try (token.parens (plusSep filler)))
+      <|> (LNE.singleton <$> filler)
+
+  -- | Determine the appropriate FilledBySpecification from a list of fillerGroups:
+  -- | * All groups are singletons → Alternatives (each group's head is the sole attribute)
+  -- | * Single group with multiple members → Combination (unwrap the sole group)
+  -- | * Multiple groups, at least one with multiple members → DisjunctionOfConjunctions
+  makeSpec :: LNE.NonEmptyList (LNE.NonEmptyList FilledByAttribute) -> FilledBySpecification
+  makeSpec groups =
+    if all (\g -> LNE.length g == 1) groups
+    -- Every group is a singleton: extract the single element from each group.
+    -- LNE.head is safe here because LNE.length g == 1 guarantees exactly one element.
+    then Alternatives (LNE.head <$> groups)
+    else if LNE.length groups == 1
+    -- Single group with multiple members: use Combination.
+    -- LNE.head is safe here because LNE.length groups == 1 guarantees exactly one group.
+    then Combination (LNE.head groups)
+    else DisjunctionOfConjunctions groups
 
 -- | rolePart =
 -- |   <perspectiveOn> |
@@ -1664,7 +1689,7 @@ whoWhatWhereScreenE start = do
   pure $ WWW $ WhoWhatWhereScreenE { who, what, whereTo, subject, context, start, end }
 
 whoE :: IP TableFormSectionE
-whoE = reserved "who" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
+whoE = reserved "who" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormOrWhenE))
 
 whatE :: IP WhatE
 whatE = reserved "what" *>
@@ -1677,8 +1702,7 @@ whatE = reserved "what" *>
       "row" -> classicSubscreenE start
       "column" -> classicSubscreenE start
       "markdown" -> whatProperE
-      "" -> whatProperE
-      _ -> fail "Expected: tab, row, column for a classic screen, or markdown or master for a who-what-where screen. "
+      _ -> whatProperE
   where
   classicSubscreenE :: ArcPosition -> IP WhatE
   classicSubscreenE start = do
@@ -1690,12 +1714,31 @@ whatE = reserved "what" *>
 
   whatProperE :: IP WhatE
   whatProperE = do
-    tforms <- TableForms <$> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
+    tforms <- TableForms <$> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormOrWhenE))
     lookAhead (reserved "where")
-    pure tforms
+    case tforms of
+      TableForms tf -> pure $ tforms
+      _ -> fail "Expected: tab, row, column for a classic screen, or markdown or master for a who-what-where screen. "
 
 whereE :: IP TableFormSectionE
-whereE = reserved "where" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormE))
+whereE = reserved "where" *> (TableFormSectionE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> option Nil (entireBlock tableFormOrWhenE))
+
+-- | Parses either a `when`-conditional block of table form items, or a plain table form item.
+tableFormOrWhenE :: IP TableFormOrWhenE
+tableFormOrWhenE = withPos do
+  keyword <- scanIdentifier
+  case keyword of
+    "when" -> WhenTableFormItem <$> whenTableFormE
+    _ -> PlainTableFormE <$> tableFormE
+
+-- | Parses a `when <step> <tableFormItems>` conditional block in a who/what/where section.
+whenTableFormE :: IP WhenTableFormE
+whenTableFormE = do
+  void $ reserved "when"
+  condition <- step
+  context <- getCurrentContext
+  items <- nestedBlock (defer \_ -> tableFormOrWhenE)
+  pure $ WhenTableFormE condition context items
 
 --  | Position is just before the keyword 'markdown' or a role identifier.
 tableFormE :: IP TableFormE
@@ -1736,8 +1779,17 @@ screenElementE = withPos do
     "form" -> reserved "form" *> (FormElement <$> formE)
     "markdown" -> reserved "markdown" *> (MarkDownElement <$> markdownE)
     "chat" -> reserved "chat" *> (ChatElement <$> chatE)
+    "when" -> WhenElement <$> whenE
     -- NOTE: extend message when a new widget is added.
-    _ -> fail "Only `row`, `column`, `table` and `form` are allowed here. "
+    _ -> fail "Only `row`, `column`, `table`, `form`, `markdown`, `chat` and `when` are allowed here. "
+
+whenE :: IP WhenE
+whenE = do
+  void $ reserved "when"
+  condition <- step
+  context <- getCurrentContext
+  elements <- nestedBlock (defer \_ -> screenElementE)
+  pure $ WhenE condition context elements
 
 widgetCommonFields :: IP WidgetCommonFields
 widgetCommonFields = do

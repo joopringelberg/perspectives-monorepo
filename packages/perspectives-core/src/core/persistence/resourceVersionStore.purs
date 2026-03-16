@@ -37,6 +37,7 @@ import Prelude
 import Data.Maybe (Maybe(..))
 import Effect.Aff (error, throwError)
 import Perspectives.Persistence.API (addDocument_, tryGetDocument_)
+import Perspectives.Persistence.DeltaStore (safeKey)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (MonadPouchdb)
 import Simple.JSON (class ReadForeign, class WriteForeign)
@@ -83,7 +84,8 @@ resourceVersionDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_resourcev
 getResourceVersion :: forall f. ResourceKey -> MonadPouchdb f Int
 getResourceVersion key = do
   dbName <- resourceVersionDatabaseName
-  (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName key
+  let sk = safeKey key
+  (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
   case mDoc of
     Nothing -> pure 0
     Just (ResourceVersionDoc { resourceVersion }) -> pure resourceVersion
@@ -93,10 +95,11 @@ getResourceVersion key = do
 initResourceVersion :: forall f. ResourceKey -> MonadPouchdb f Unit
 initResourceVersion key = do
   dbName <- resourceVersionDatabaseName
-  (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName key
+  let sk = safeKey key
+  (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
   case mDoc of
     Nothing -> do
-      _ <- addDocument_ dbName (ResourceVersionDoc { _id: key, _rev: Nothing, resourceVersion: 0 }) key
+      _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev: Nothing, resourceVersion: 0 }) sk
       pure unit
     Just _ -> pure unit
 
@@ -105,13 +108,14 @@ initResourceVersion key = do
 setResourceVersion :: forall f. ResourceKey -> Int -> MonadPouchdb f Unit
 setResourceVersion key version = do
   dbName <- resourceVersionDatabaseName
-  (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName key
+  let sk = safeKey key
+  (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
   case mDoc of
     Nothing -> do
-      _ <- addDocument_ dbName (ResourceVersionDoc { _id: key, _rev: Nothing, resourceVersion: version }) key
+      _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev: Nothing, resourceVersion: version }) sk
       pure unit
     Just (ResourceVersionDoc { _rev }) -> do
-      _ <- addDocument_ dbName (ResourceVersionDoc { _id: key, _rev, resourceVersion: version }) key
+      _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev, resourceVersion: version }) sk
       pure unit
 
 -- | Increment the version for a resource-key by 1 and return the new version.
@@ -122,12 +126,13 @@ setResourceVersion key version = do
 incrementResourceVersion :: forall f. ResourceKey -> MonadPouchdb f Int
 incrementResourceVersion key = do
   dbName <- resourceVersionDatabaseName
-  (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName key
+  let sk = safeKey key
+  (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
   case mDoc of
     Nothing -> do
-      _ <- addDocument_ dbName (ResourceVersionDoc { _id: key, _rev: Nothing, resourceVersion: 1 }) key
+      _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev: Nothing, resourceVersion: 1 }) sk
       pure 1
     Just (ResourceVersionDoc { _rev, resourceVersion }) -> do
       let newVersion = resourceVersion + 1
-      _ <- addDocument_ dbName (ResourceVersionDoc { _id: key, _rev, resourceVersion: newVersion }) key
+      _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev, resourceVersion: newVersion }) sk
       pure newVersion
