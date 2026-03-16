@@ -474,6 +474,15 @@ domain model://perspectives.domains#BrokerServices@6.1
             bind_ me to context >> AccountHolder
     -----------------
 
+    user TCPManager filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+      perspective on AccountHolder
+        props (FirstName, LastName, AccountName, AccountPassword) verbs (Consult)
+      perspective on Queues
+        props (QueueName) verbs (Consult)
+      perspective on extern
+        props (Name, Url, Exchange) verbs (Consult)
+
+
     user AccountHolder filledBy ((sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons), sys:TheWorld$Onlookers)
       aspect sys:Invitation$Invitee
       aspect sys:ContextWithNotification$NotifiedUser

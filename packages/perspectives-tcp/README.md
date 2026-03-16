@@ -87,7 +87,7 @@ Copy `config.example.json` to `config.json` and edit it:
 
 ```jsonc
 {
-  "cuid": "YOUR_TCP_CUID",           // identity in the Perspectives Universe
+  "cuid": "YOUR_TCP_CUID",           // queue in RabbitMQ that the TCP reads from
 
   "rabbitmq": {
     "url": "amqp://user:pass@host:5672/mycontexts",
@@ -113,7 +113,7 @@ Copy `config.example.json` to `config.json` and edit it:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `cuid` | ✓ | CUID that identifies this TCP in the Perspectives Universe. Peers send transactions to the queue with this name. |
+| `cuid` | ✓ | CUID that identifies the secret queue this TCP reads from. It is NOT the identifier that peers use to send messages to; the mapping between the two is set up by BrokerServices. |
 | `rabbitmq.url` | ✓ | AMQP connection URL (`amqp[s]://user:pass@host:port/vhost`) |
 | `rabbitmq.exchange` | | Topic exchange name. Default: `amq.topic` |
 | `rabbitmq.queue` | | Queue name. Default: `cuid` |
