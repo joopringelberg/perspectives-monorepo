@@ -85,7 +85,6 @@ newtype RoleE = RoleE
   , pos :: ArcPosition
   }
 
--- TODO: het verschil tussen conjunctie en disjunctie bij FilledByAttribute.
 data RolePart
   = PE PropertyE
   | SQP (List StateQualifiedPart)
@@ -102,7 +101,10 @@ data RolePart
   | PublicUrl Step
   | DefaultUserRole
 
-data FilledBySpecification = Alternatives (NonEmptyList FilledByAttribute) | Combination (NonEmptyList FilledByAttribute)
+data FilledBySpecification
+  = Alternatives (NonEmptyList FilledByAttribute)
+  | Combination (NonEmptyList FilledByAttribute)
+  | DisjunctionOfConjunctions (NonEmptyList (NonEmptyList FilledByAttribute))
 data FilledByAttribute = FilledByAttribute String ContextType
 --------------------------------------------------------------------------------
 ---- PROPERTYMAPPING
