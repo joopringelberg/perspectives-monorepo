@@ -18,18 +18,19 @@
 --
 -- Full text of this license can be found in the LICENSE directory in the projects root.
 
--- | The functions exported by this module claim to result in a resource (Context or Role), but actually
--- | never do so. Instead, they throw an exception that will have to be handled elsewhere.
--- | They do, however, take away the **cause** of that exception. 
--- | In essence that means that the end user can retry her action and the problem will have gone away.
--- | We fix by removing 'broken links'; that is, references to resources that cannot be found, will be removed.
--- | As a consequence, of course, the end user may not be able to re-execute her action. 
--- | The good thing is that the referential integrity of her representation of the part of the 
--- | Perspectives Universe that is visible to her, has been restored.
--- | Each installation must fix its own referential integrity problems. Results of this fixing
--- | will not be synchronized.
--- | This again is a good thing, as it may (but need not) happen that a peer will later send a transaction
--- | that restores the resource that went missing.
+-- | This module provides two complementary strategies for handling a missing resource
+-- | (a role or context for which the local entities database has no document):
+-- |
+-- | 1. **Restore** (default): Re-applies the creation and modification deltas stored in
+-- |    the DeltaStore to reconstitute the missing document. See `Perspectives.RestoreResource`.
+-- |
+-- | 2. **Clean up** (kept for future use): Removes all dangling references to the missing
+-- |    resource. This was the previous default behaviour. The functions `fixContextReferences`
+-- |    and `fixRoleReferences` below are retained for the planned feature that lets the end
+-- |    user choose between restoring or cleaning up.
+-- |
+-- | `fixReferences` currently delegates directly to `restoreResource`. No clean-up fallback
+-- | is applied; if no deltas are found the call is a no-op.
 
 -- END LICENSE
 module Perspectives.ReferentialIntegrity
@@ -58,16 +59,18 @@ import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntite
 import Perspectives.PerspectivesState (transactionLevel)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType(..), RoleType(..))
+import Perspectives.RestoreResource (restoreResource)
 import Perspectives.RoleAssignment (filledNoLongerPointsTo) as RA
 import Perspectives.RoleStateCompiler (evaluateRoleState)
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary)
 import Perspectives.SaveUserData (scheduleRoleRemoval)
 import Perspectives.Types.ObjectGetters (contextGroundState, roleGroundState)
 
+-- | Restore a missing resource from the DeltaStore by re-applying its creation and
+-- | modification deltas.  Domain-file resources are silently ignored.
+-- | If no deltas are found for the resource this is a no-op.
 fixReferences :: ResourceToBeStored -> MonadPerspectives Unit
-fixReferences (Ctxt cid) = fixContextReferences cid
-fixReferences (Rle rid) = fixRoleReferences rid
-fixReferences (Dfile did) = pure unit
+fixReferences resource = restoreResource resource
 
 -- | Apply this function when a reference to a context has been found that cannot be retrieved.
 -- | We want all references to this context to be removed.
