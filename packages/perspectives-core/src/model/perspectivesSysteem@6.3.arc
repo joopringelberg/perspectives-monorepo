@@ -913,7 +913,9 @@ domain model://perspectives.domains#System@6.3
               without props (Message)
         where 
 
-    user Invitee (mandatory) filledBy (Persons + PerspectivesUsers)
+    -- Note. The Onlookers alternative is a hack. We need it for BrokerServices$AccountHolder,
+    -- which we want to be able to fill with an Onlookers instance.
+    user Invitee (mandatory) filledBy ((Persons + PerspectivesUsers), Onlookers)
       perspective on Inviter
         props (FirstName, LastName, HasKey) verbs (Consult)
       perspective on extern
