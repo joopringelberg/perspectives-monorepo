@@ -105,6 +105,7 @@ data FilledBySpecification
   = Alternatives (NonEmptyList FilledByAttribute)
   | Combination (NonEmptyList FilledByAttribute)
   | DisjunctionOfConjunctions (NonEmptyList (NonEmptyList FilledByAttribute))
+
 data FilledByAttribute = FilledByAttribute String ContextType
 --------------------------------------------------------------------------------
 ---- PROPERTYMAPPING

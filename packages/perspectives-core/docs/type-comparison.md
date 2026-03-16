@@ -36,7 +36,7 @@ A disjunction (sum) appears in filler restrictions:
 user AccountHolder filledBy ((sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons), sys:TheWorld$Onlookers)
 ```
 
-Here `+` is a disjunct (OR-alternative), and `,` (a comma between parenthesised groups) introduces another conjunct (AND-requirement).
+Here `,` is a disjunct (OR-alternative), and `+` (a plus-sign between parenthesised groups) introduces another conjunct (AND-requirement).
 
 ---
 
