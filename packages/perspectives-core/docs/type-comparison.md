@@ -402,24 +402,35 @@ toConjunctiveNormalForm                              │
 
 ## 8. Known issues and design observations
 
-### 8.1 `checkBinding` uses the declared (not expanded) restriction
+### 8.1 Two equivalent paths to normalise the filler restriction
 
-`checkBinding` normalises the filler restriction of the role by calling `completeDeclaredFillerRestriction` followed by `toConjunctiveNormalForm_`. The `_` variant reads the pre-stored `completeType` for each leaf. This is **not** the same as calling `completeExpandedFillerRestriction` (which performs a fresh expansion of the full type tree) followed by `toConjunctiveNormalForm` (the `ExpandedADT` version).
-
-Consequences:
-* If the filler restriction contains `UET` nodes, `toConjunctiveNormalForm_` substitutes the `completeType` that was computed during Phase 3 for each such node.
-* `completeType` is computed from `completeExpandedType`, which **includes the filler restriction** of the role itself, not just its aspects. This means the CNF of a `UET` leaf in a filler restriction already encodes the full depth of the type hierarchy.
-* In contrast, `completeDeclaredFillerRestriction` only returns the **one-level-deep** restriction (the direct `binding` field, plus the `binding` fields of direct aspects). It does **not** recursively pull in the filler restrictions of the aspects of aspects.
-* The practical result is that `toConjunctiveNormalForm_` applied to the output of `completeDeclaredFillerRestriction` may produce a different CNF than `completeExpandedFillerRestriction` followed by `toConjunctiveNormalForm`, because the former relies on each leaf's pre-cached CNF while the latter follows the declaration graph fresh.
-
-The commented-out alternative in `checkBinding`:
+`checkBinding` currently normalises the filler restriction using:
 
 ```purescript
--- (mrestriction :: Maybe (ExpandedADT QT.RoleInContext)) <- 
---   getEnumeratedRole filledType >>= completeExpandedFillerRestriction
+getEnumeratedRole filledType
+  >>= completeDeclaredFillerRestriction   -- yields Maybe (ADT RoleInContext)
+  >>= traverse toConjunctiveNormalForm_   -- reads cached completeType per leaf
 ```
 
-would have used the fully-expanded path and would therefore have been equivalent to the Phase 3 computation. This is a candidate fix for any discrepancy in binding checks.
+An alternative path that works directly from the expanded declaration tree is:
+
+```purescript
+getEnumeratedRole filledType
+  >>= completeExpandedFillerRestriction   -- yields Maybe (ExpandedADT RoleInContext)
+  <#> map toConjunctiveNormalForm         -- applies ExpandedADT → CNF conversion
+-- (completeExpandedFillerRestriction from Perspectives.Representation.Class.Role,
+--  toConjunctiveNormalForm from Perspectives.Representation.CNF)
+```
+
+**Are the two paths equivalent?**
+
+Yes — *provided every `completeType` value is correct and complete* — both paths produce the same CNF. The reasoning is:
+
+1. `toConjunctiveNormalForm_` on a `UET a` leaf returns `completeType(a)`.
+2. `completeType(a)` was written by Phase 3 as `toConjunctiveNormalForm(completeExpandedType(role_a))`.
+3. `completeExpandedFillerRestriction` calls `expandUnexpandedLeaves` on each leaf `UET a`, which itself calls `completeExpandedType` for every aspect. The resulting `ExpandedADT` is therefore identical to what Phase 3 computed for each leaf. Applying `toConjunctiveNormalForm` then produces the same CNF as `completeType(a)`.
+
+The paths **can diverge** if `completeType` is stale — for example, if a role's aspects or filler were changed after Phase 3 last ran. In that situation, `toConjunctiveNormalForm_` would return the outdated cached value, while `completeExpandedFillerRestriction` + `toConjunctiveNormalForm` would reflect the current declaration graph.
 
 ### 8.2 The `ECT` label in `ExpandedADT` is redundant during comparison
 
