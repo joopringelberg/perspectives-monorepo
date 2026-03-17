@@ -344,7 +344,7 @@ runDataUpgrades = do
         migrateDeltaStoreKeys
     )
 
-  runUpgrade installedVersion "3.1.3"
+  runUpgrade installedVersion "3.1.4"
     removeSocialEnvironmentMeInstances
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)
