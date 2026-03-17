@@ -16,11 +16,12 @@ import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Instances.ObjectGetters (getActiveRoleStates, getActiveStates)
 import Perspectives.ModelTranslation (translationOf)
 import Perspectives.Query.UnsafeCompiler (context2propertyValue, getRoleInstances)
+import Perspectives.Query.QueryTypes (QueryFunctionDescription)
 import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
-import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType, RoleType(..), externalRoleType)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
 import Perspectives.Types.ObjectGetters (allEnumeratedRoles, aspectsOfRole)
@@ -156,10 +157,28 @@ contextualiseMarkDownDef md = case md of
     case mwidgetFields of
       Just widgetFields' -> pure $ Just $ MarkDownPerspectiveDef { widgetFields: widgetFields', conditionProperty }
       Nothing -> pure Nothing
-  MarkDownConstantDef r@{ text, domain } -> do
-    translatedText <- lift2InContext $ translationOf domain text
-    pure $ Just $ MarkDownConstantDef r { text = translatedText }
-  _ -> pure $ Just md
+  MarkDownConstantDef r@{ text, domain, condition } -> do
+    conditionMet <- checkCondition condition
+    if not conditionMet
+      then pure Nothing
+      else do
+        translatedText <- lift2InContext $ translationOf domain text
+        pure $ Just $ MarkDownConstantDef r { text = translatedText }
+  MarkDownExpressionDef r@{ condition } -> do
+    conditionMet <- checkCondition condition
+    if not conditionMet then pure Nothing else pure $ Just md
+
+-- | Evaluates an optional compiled condition against the current context instance.
+-- | Returns true if no condition is present, or if the condition evaluates to "true".
+checkCondition :: Maybe QueryFunctionDescription -> InContext Boolean
+checkCondition Nothing = pure true
+checkCondition (Just condition) = do
+  { contextInstance } <- ask
+  (criterium :: ContextInstance ~~> Value) <- lift $ lift $ lift $ context2propertyValue condition
+  shouldBeShown <- lift $ lift $ runArrayT $ criterium contextInstance
+  pure $ case head shouldBeShown of
+    Just (Value "true") -> true
+    _ -> false
 
 contextualiseChatDef :: ChatDef -> InContext (Maybe ChatDef)
 contextualiseChatDef (ChatDef r@{ chatRole, title }) = do
@@ -195,23 +214,27 @@ contextualisePerspective p@(Perspective pr) =
     -- since the perspective is enumerated, we know there is but a single, EnumeratedRoleType in `roleTypes`.
     roleType <- pure (unsafePartial fromJust $ head pr.roleTypes) >>= unsafePartial case _ of ENR roleType -> pure roleType
     { contextType } <- ask
-    allRoles <- lift2InContext (contextType ###= allEnumeratedRoles)
-    if isJust $ elemIndex roleType allRoles
-    -- The context has the roleType, probably as an aspect role.
+    -- The External role is not included in allEnumeratedRoles, so check it explicitly.
+    if roleType == (externalRoleType contextType :: EnumeratedRoleType)
     then pure $ Just p
-    -- find a role in contextType that has roleType as aspect
     else do
-      rolesWithAspect <- filterA
-        ( \erole -> do
-            aspects <- lift2InContext (erole ###= aspectsOfRole)
-            pure $ isJust $ elemIndex roleType aspects
-        )
-        allRoles
-      case head rolesWithAspect of
-        -- No role has the type we're looking for. This perspective should not be used in the screen.
-        Nothing -> pure Nothing
-        -- This role has roleType as aspect. Contextualise the perspective.
-        Just roleWithAspect -> pure $ Just $ Perspective pr { roleTypes = [ ENR roleWithAspect ], displayName = show roleWithAspect }
+      allRoles <- lift2InContext (contextType ###= allEnumeratedRoles)
+      if isJust $ elemIndex roleType allRoles
+      -- The context has the roleType, probably as an aspect role.
+      then pure $ Just p
+      -- find a role in contextType that has roleType as aspect
+      else do
+        rolesWithAspect <- filterA
+          ( \erole -> do
+              aspects <- lift2InContext (erole ###= aspectsOfRole)
+              pure $ isJust $ elemIndex roleType aspects
+          )
+          allRoles
+        case head rolesWithAspect of
+          -- No role has the type we're looking for. This perspective should not be used in the screen.
+          Nothing -> pure Nothing
+          -- This role has roleType as aspect. Contextualise the perspective.
+          Just roleWithAspect -> pure $ Just $ Perspective pr { roleTypes = [ ENR roleWithAspect ], displayName = show roleWithAspect }
   -- A calculated perspective may work. We cannot say.
   else pure $ Just p
 
