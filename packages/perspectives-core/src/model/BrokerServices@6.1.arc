@@ -590,6 +590,10 @@ domain model://perspectives.domains#BrokerServices@6.1
         in object state Active
           action TerminateContract
             ContractTerminated = true
+      
+      perspective on TCPManager
+        only (Create, Fill, Remove)
+        props (FirstName, LastName) verbs (Consult)
 
       screen
         who
@@ -598,6 +602,13 @@ domain model://perspectives.domains#BrokerServices@6.1
               with props (LastName)
             detail
               without props (HasKey)
+          TCPManager
+            master
+              markdown <### TCP Manager
+                        This is an optional TCP Manager. Fill it with a peer who needs to set up a Transaction Collection Point (TCP).
+                        >
+              with props (LastName)
+            detail
         what
           row
             form "Broker Service" External
