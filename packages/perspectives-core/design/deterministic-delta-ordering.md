@@ -56,8 +56,24 @@ resourceKey     :: String -- identifies the resource this delta operates on
 
 ### Version number administration
 
-Maintain a persistent `Map ResourceKey Int` in a dedicated PouchDB database
-(robust across restarts).
+Maintain a persistent `Map ResourceKey Int` stored as documents in the **same
+PouchDB database as the delta-store** (`{systemIdentifier}_deltastore`).
+This avoids an extra database round-trip on every version lookup compared to
+keeping the version counter in a dedicated `_resourceversions` database.
+
+Document ID collision is not possible because:
+- Version documents use the bare safe resource key as `_id`
+  (e.g. `somecuid`, `somecuid#binding`).
+- Delta documents use `<safeKey>_v<resourceVersion>_<author>`.
+  They always contain `_v` followed by digits, which cannot appear in a bare
+  safe resource key (CUIDs contain only lowercase letters and digits, no
+  underscores).
+
+Range queries in `getDeltasForResource` (`startkey = sk <> "_v"`) naturally
+skip the version document. The broader range in `getDeltasForRoleInstance`
+(`startkey = sk`) does include the version document, but the `decodeDoc`
+function discards any document that does not match the `DeltaStoreRecord`
+shape, so the version document is silently ignored.
 
 Rules:
 
@@ -178,4 +194,5 @@ includes `resourceVersion` and `resourceKey`. The trial deserialization in
 | Gap handling            | Block entire transaction                                            | Selective buffering / execute + correct       |
 | Pending storage         | Persistent (PouchDB)                                                | In-memory only                               |
 | Delta storage           | Separate delta-store, no duplication on resources                   | On resources / both                          |
+| Version counter storage | Merged into delta-store (`_deltastore`)                             | Dedicated `_resourceversions` database        |
 | Conflict UX             | Last-Writer-Wins, no user interaction                               | Show conflict to user                        |

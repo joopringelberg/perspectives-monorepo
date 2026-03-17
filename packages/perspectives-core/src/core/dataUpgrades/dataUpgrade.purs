@@ -75,6 +75,7 @@ import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, 
 import Perspectives.Data.EncodableMap as EM
 import Perspectives.DataUpgrade.DeltasMigration (migrateDeltasToStore)
 import Perspectives.DataUpgrade.DeltaStoreKeyMigration (migrateDeltaStoreKeys)
+import Perspectives.DataUpgrade.ResourceVersionsMigration (mergeResourceVersionsIntoDeltaStore)
 import Perspectives.DataUpgrade.PatchModels (patchModels)
 import Perspectives.DataUpgrade.PatchModels.PDR3061 as PDR3061
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
@@ -341,6 +342,15 @@ runDataUpgrades = do
   runUpgrade installedVersion "3.1.2"
     ( \_ -> do
         migrateDeltaStoreKeys
+    )
+
+  -- Merge resource version documents from the legacy _resourceversions database
+  -- into _deltastore. From this version onwards, ResourceVersionStore uses
+  -- _deltastore directly. This makes resource version lookups cheaper by
+  -- avoiding a separate database round-trip.
+  runUpgrade installedVersion "3.1.3"
+    ( \_ -> do
+        mergeResourceVersionsIntoDeltaStore
     )
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)

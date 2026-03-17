@@ -22,7 +22,10 @@
 
 -- | A persistent store for resource version numbers.
 -- | Each resource-key (see deterministic-delta-ordering.md) maps to a version number (Int).
--- | This store is backed by a dedicated PouchDB database so it survives restarts.
+-- | Resource version documents are stored in the same database as deltas (_deltastore)
+-- | to reduce the number of database fetches. Document IDs do not clash: version docs
+-- | use the bare safe resource key as their ID, while delta docs use
+-- | <safeKey>_v<resourceVersion>_<author>.
 module Perspectives.Persistence.ResourceVersionStore
   ( ResourceKey
   , getResourceVersion
@@ -37,7 +40,7 @@ import Prelude
 import Data.Maybe (Maybe(..))
 import Effect.Aff (error, throwError)
 import Perspectives.Persistence.API (addDocument_, tryGetDocument_)
-import Perspectives.Persistence.DeltaStore (safeKey)
+import Perspectives.Persistence.DeltaStore (deltaStoreDatabaseName, safeKey)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (MonadPouchdb)
 import Simple.JSON (class ReadForeign, class WriteForeign)
@@ -83,7 +86,7 @@ resourceVersionDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_resourcev
 -- | Returns 0 if the resource-key is not yet tracked (i.e., a newly created resource).
 getResourceVersion :: forall f. ResourceKey -> MonadPouchdb f Int
 getResourceVersion key = do
-  dbName <- resourceVersionDatabaseName
+  dbName <- deltaStoreDatabaseName
   let sk = safeKey key
   (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
   case mDoc of
@@ -94,7 +97,7 @@ getResourceVersion key = do
 -- | This is a no-op if the key already exists.
 initResourceVersion :: forall f. ResourceKey -> MonadPouchdb f Unit
 initResourceVersion key = do
-  dbName <- resourceVersionDatabaseName
+  dbName <- deltaStoreDatabaseName
   let sk = safeKey key
   (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
   case mDoc of
@@ -107,7 +110,7 @@ initResourceVersion key = do
 -- | Creates the document if it does not exist; updates it otherwise.
 setResourceVersion :: forall f. ResourceKey -> Int -> MonadPouchdb f Unit
 setResourceVersion key version = do
-  dbName <- resourceVersionDatabaseName
+  dbName <- deltaStoreDatabaseName
   let sk = safeKey key
   (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
   case mDoc of
@@ -125,7 +128,7 @@ setResourceVersion key version = do
 -- |   2. Stamp the delta with that version
 incrementResourceVersion :: forall f. ResourceKey -> MonadPouchdb f Int
 incrementResourceVersion key = do
-  dbName <- resourceVersionDatabaseName
+  dbName <- deltaStoreDatabaseName
   let sk = safeKey key
   (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
   case mDoc of
