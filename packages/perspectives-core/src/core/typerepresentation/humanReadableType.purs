@@ -7,7 +7,7 @@ import Data.Newtype (unwrap)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Identifiers (typeUri2LocalName)
 import Perspectives.ModelTranslation (translateTypeString)
-import Perspectives.Representation.Class.PersistentType (getPerspectType)
+import Perspectives.Representation.Class.PersistentType (tryGetPerspectType)
 import Perspectives.Representation.State (State(..))
 import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..), StateIdentifier, ViewType)
 import Perspectives.Representation.View (View(..))
@@ -86,19 +86,23 @@ instance HumanReadableType IndexedContext where
 
 -- As we have no views in the translation yaml file yet, we directly use the readableName property.
 instance HumanReadableType ViewType where
-  translateType vt = getPerspectType vt >>= \(View { readableName }) -> pure
-    ( case typeUri2LocalName (unwrap readableName) of
-        Just dn -> dn
-        Nothing -> unwrap vt
-    )
+  translateType vt = tryGetPerspectType vt >>= \r -> case r of
+    Just (View { readableName }) -> pure
+      ( case typeUri2LocalName (unwrap readableName) of
+          Just dn -> dn
+          Nothing -> unwrap vt
+      )
+    Nothing -> pure (unwrap vt)
 
 -- As we have no states in the translation yaml file yet, we directly use the readableName property.
 instance HumanReadableType StateIdentifier where
-  translateType st = getPerspectType st >>= \(State r) -> pure
-    ( case typeUri2LocalName (unwrap r.readableName) of
-        Just dn -> dn
-        Nothing -> unwrap st
-    )
+  translateType st = tryGetPerspectType st >>= \res -> case res of
+    Just (State r) -> pure
+      ( case typeUri2LocalName (unwrap r.readableName) of
+          Just dn -> dn
+          Nothing -> unwrap st
+      )
+    Nothing -> pure (unwrap st)
 
 instance HumanReadableType ActionIdentifier where
   translateType (ActionIdentifier a) = do

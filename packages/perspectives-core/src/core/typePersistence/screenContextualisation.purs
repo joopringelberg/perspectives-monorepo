@@ -159,11 +159,10 @@ contextualiseMarkDownDef md = case md of
       Nothing -> pure Nothing
   MarkDownConstantDef r@{ text, domain, condition } -> do
     conditionMet <- checkCondition condition
-    if not conditionMet
-      then pure Nothing
-      else do
-        translatedText <- lift2InContext $ translationOf domain text
-        pure $ Just $ MarkDownConstantDef r { text = translatedText }
+    if not conditionMet then pure Nothing
+    else do
+      translatedText <- lift2InContext $ translationOf domain text
+      pure $ Just $ MarkDownConstantDef r { text = translatedText }
   MarkDownExpressionDef r@{ condition } -> do
     conditionMet <- checkCondition condition
     if not conditionMet then pure Nothing else pure $ Just md
@@ -215,8 +214,7 @@ contextualisePerspective p@(Perspective pr) =
     roleType <- pure (unsafePartial fromJust $ head pr.roleTypes) >>= unsafePartial case _ of ENR roleType -> pure roleType
     { contextType } <- ask
     -- The External role is not included in allEnumeratedRoles, so check it explicitly.
-    if roleType == (externalRoleType contextType :: EnumeratedRoleType)
-    then pure $ Just p
+    if roleType == (externalRoleType contextType :: EnumeratedRoleType) then pure $ Just p
     else do
       allRoles <- lift2InContext (contextType ###= allEnumeratedRoles)
       if isJust $ elemIndex roleType allRoles
