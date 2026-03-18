@@ -720,18 +720,18 @@ domain model://perspectives.domains#CouchdbManagement@12.2
 
       -- The design pattern for nested public contexts requires that Admin has write access
       -- to both the cw_servers_and_repositories and to the Repository database.
-      perspective on Manifests
-        only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
-        props (DomeinFileName, LocalModelName) verbs (SetPropertyValue, Consult)
-        props (Description, ModelCuid) verbs (Consult)
-        in object state ReadyToMake
-          props (ModelCuid) verbs (SetPropertyValue)
+      -- perspective on Manifests
+      --   only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
+      --   props (DomeinFileName, LocalModelName) verbs (SetPropertyValue, Consult)
+      --   props (Description, ModelCuid) verbs (Consult)
+      --   in object state ReadyToMake
+      --     props (ModelCuid) verbs (SetPropertyValue)
       
-      action CreateManifest
-        create role Manifests
+      -- action CreateManifest
+      --   create role Manifests
       
-      perspective on Manifests >> binding >> context >> Author
-        only (Create, Fill)
+      -- perspective on Manifests >> binding >> context >> Author
+      --   only (Create, Fill)
 
       perspective on Visitor
         props (FirstName, LastName) verbs (Consult)
@@ -753,25 +753,25 @@ domain model://perspectives.domains#CouchdbManagement@12.2
           row
             markdown <### Repository Administration
                       A repository is a collection of models and versions of those models.
-                      You can add manifests to the repository, which are pointers to models in the CouchdbServer.
+                      Authors can add manifests to the repository, which are pointers to models in the CouchdbServer.
                       **Notice** the function in the main menu on the left, `Compile models in repository`. 
                       Use it to recompile all models in the repository when the shape of the model representation has changed.
                       >
             form "Repository" External
               with props (RepositoryUrl, IsPublic)
         where
-          Manifests
-            master
-              markdown <## Add a manifest
-                        Add a manifest by opening the menu and creating a new empty role.
-                        Then enter the *unqualified* name of the model in the column `Local model name`.
-                        For the domain 'model://perspectives.domains#System' for example, this would be 'System'.
-                        >
-              -- Notice that we will have a table with both LocalModelName and Name. The latter is the ReadableName. 
-              -- We cannot omit the readable name. It equals the LocalModelName, but we cannot edit it. 
-              -- Hence we need both.
-              with props (ModelManifest$External$Name)
-            detail
+          -- Manifests
+          --   master
+          --     markdown <## Add a manifest
+          --               Add a manifest by opening the menu and creating a new empty role.
+          --               Then enter the *unqualified* name of the model in the column `Local model name`.
+          --               For the domain 'model://perspectives.domains#System' for example, this would be 'System'.
+          --               >
+          --     -- Notice that we will have a table with both LocalModelName and Name. The latter is the ReadableName. 
+          --     -- We cannot omit the readable name. It equals the LocalModelName, but we cannot edit it. 
+          --     -- Hence we need both.
+          --     with props (ModelManifest$External$Name)
+          --   detail
       
     -- This role requires credentials for the ServerUrl. It 'inherits' them from its filler.
     -- It also requires credentials for the RepositoryUrl, because it creates and updates Manifests.
@@ -805,9 +805,9 @@ domain model://perspectives.domains#CouchdbManagement@12.2
         props (IsPublic, NameSpace_, RepositoryUrl) verbs (Consult)
 
       perspective on Manifests
-        only (Create, Fill, Delete, RemoveContext, Remove)
+        only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
+        props (LocalModelName, DomeinFileName) verbs (SetPropertyValue, DeleteProperty, Consult)
         props (Description, ModelCuid) verbs (Consult)
-        props (LocalModelName, DomeinFileName) verbs (SetPropertyValue, DeleteProperty)
         in object state NoLocalModelName
           props (ModelCuid) verbs (SetPropertyValue)
       action CreateManifest
