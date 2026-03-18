@@ -492,6 +492,34 @@ domain model://perspectives.domains#BrokerServices@6.1
         props (QueueName) verbs (Consult)
       perspective on extern
         props (Name, Url, Exchange) verbs (Consult)
+      perspective on Administrator
+        props (FirstName, LastName) verbs (Consult)
+      perspective on TCPManager
+        props (FirstName, LastName) verbs (Consult)
+      screen
+        who
+          AccountHolder
+            master
+              with props (LastName)
+            detail
+          Administrator
+            master
+              with props (LastName)
+            detail
+        what
+          row
+            markdown <### TCP Manager
+                      This is a Broker Contract for a Transaction Collection Point (TCP).
+                      A TCP is a point where you can send information to, that will be collected and forwarded to other peers in batches. 
+                      It is meant for collecting Business Information, usually for reporting purposes.
+                      Read the AccountHolder details and use them to set up a TCP that connects to the RabbitMQ server of the Broker Service. 
+                      Read the Queue name, the Url of the RabbitMQ server and the Exchange name below.
+                    >
+          row
+            form "Queues" Queues
+          row 
+            form External
+        where
 
 
     user AccountHolder filledBy ((sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons), sys:TheWorld$Onlookers)
