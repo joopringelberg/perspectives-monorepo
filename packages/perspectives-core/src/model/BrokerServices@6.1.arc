@@ -66,6 +66,8 @@ domain model://perspectives.domains#BrokerServices@6.1
     -- A contract for the BrokerService I use.
     context Contracts = me >> binder AccountHolder >> context >> extern
 
+    context TcpContracts = me >> binder TCPManager >> context >> extern
+
     -- PDRDEPENDENCY
     -- Arbitrarily take the first registered (=active) contract to be the one that is in use.
     context ContractInUse (functional) = filter Contracts with IsInUse >>= first
@@ -87,6 +89,8 @@ domain model://perspectives.domains#BrokerServices@6.1
             remove context binder Accounts
       perspective on ContractInUse
         props (Name, UseExpiresOn) verbs (Consult)
+      perspective on TcpContracts
+        props (Name) verbs (Consult)
       perspective on PublicBrokers
         only (Create, Fill, Remove)
         props (Name) verbs (Consult)
@@ -152,6 +156,13 @@ domain model://perspectives.domains#BrokerServices@6.1
                         You can only have a single active contract.
                       >
               without props (Name, UseExpiresOn, IsInUse)
+            detail
+          TcpContracts
+            master
+              markdown <### Your TCP contracts
+                        These are contracts meant for a Transaction Collection Point (TCP). 
+                      >
+              with props (Name)
             detail
           ManagedBrokers
             master
@@ -474,7 +485,16 @@ domain model://perspectives.domains#BrokerServices@6.1
             bind_ me to context >> AccountHolder
     -----------------
 
-    user AccountHolder filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+    user TCPManager filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+      perspective on AccountHolder
+        props (FirstName, LastName, AccountName, AccountPassword) verbs (Consult)
+      perspective on Queues
+        props (QueueName) verbs (Consult)
+      perspective on extern
+        props (Name, Url, Exchange) verbs (Consult)
+
+
+    user AccountHolder filledBy ((sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons), sys:TheWorld$Onlookers)
       aspect sys:Invitation$Invitee
       aspect sys:ContextWithNotification$NotifiedUser
       -- PDRDEPENDENCY
@@ -543,13 +563,18 @@ domain model://perspectives.domains#BrokerServices@6.1
             detail
         what
           row
+            markdown <### Terminated contract
+                      This contract is terminated when the AccountHolder did not renew it in time, or when the AccountHolder or you terminated it manually. 
+                      When a contract is terminated, the AccountHolder can no longer receive information from peers through this Broker Service. 
+                    >
+              when extern >> ContractTerminated
             markdown <### Account holder
                       This is your account at the Broker Service. 
                       See below when it expires. To cancel it, first click the bolt icon in the toolbar below.
                     >
+              when not (extern >> ContractTerminated)
           row
             form "Broker Service" External
-              without props (Registered, GracePeriodExpiresOn, ContractTerminated, Url, Exchange, CurrentQueueName, InviterLastName, Message, ConfirmationCode, Addressing)
               props (Name, UseExpiresOn) verbs (Consult)
           row
             table "Queues" Queues
@@ -581,6 +606,10 @@ domain model://perspectives.domains#BrokerServices@6.1
         in object state Active
           action TerminateContract
             ContractTerminated = true
+      
+      perspective on TCPManager
+        only (Create, Fill, Remove)
+        props (FirstName, LastName) verbs (Consult)
 
       screen
         who
@@ -589,7 +618,20 @@ domain model://perspectives.domains#BrokerServices@6.1
               with props (LastName)
             detail
               without props (HasKey)
+          TCPManager
+            master
+              markdown <### TCP Manager
+                        This is an optional TCP Manager. Fill it with a peer who needs to set up a Transaction Collection Point (TCP).
+                        >
+              with props (LastName)
+            detail
         what
+          row
+            markdown <### Terminated contract
+                      This contract is terminated when the AccountHolder did not renew it in time, or when the AccountHolder or you terminated it manually. 
+                      When a contract is terminated, the AccountHolder can no longer receive information from peers through this Broker Service. 
+                    >
+              when extern >> ContractTerminated
           row
             form "Broker Service" External
               with props (IsInUse)

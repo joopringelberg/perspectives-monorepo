@@ -1,0 +1,60 @@
+{
+  "name": "perspectives-tcp",
+  "version": "1.0.0",
+  "description": "Transaction Collection Point for the Perspectives Distributed Runtime. Receives Perspectives transactions via RabbitMQ and stores data in a relational database.",
+  "main": "dist/index.js",
+  "bin": {
+    "perspectives-tcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint 'src/**/*.ts'",
+    "test": "echo \"No tests configured\" && exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joopringelberg/perspectives-monorepo.git"
+  },
+  "keywords": [
+    "perspectives",
+    "tcp",
+    "transaction",
+    "rabbitmq",
+    "database"
+  ],
+  "author": "Joop Ringelberg <joop.ringelberg@gmail.com>",
+  "license": "GPL-3.0-or-later",
+  "dependencies": {
+    "amqplib": "^0.10.9",
+    "knex": "^3.1.0"
+  },
+  "peerDependencies": {
+    "better-sqlite3": ">=8.0.0",
+    "pg": ">=8.0.0",
+    "mysql2": ">=3.0.0",
+    "tedious": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "better-sqlite3": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "tedious": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.8",
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.34.1",
+    "@typescript-eslint/parser": "^8.34.1",
+    "eslint": "^9.29.0",
+    "typescript": "^5.8.3"
+  }
+}

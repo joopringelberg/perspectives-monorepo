@@ -23,9 +23,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 /* eslint-env serviceworker */
-/* global "3.0.0", 729, true */
+/* global "3.0.0", 730, true */
 
-const currentVersion = "3.0.0" + 729;
+const currentVersion = "3.0.0" + 730;
 const IS_DEV = true;
 let previousVersion = '';
 

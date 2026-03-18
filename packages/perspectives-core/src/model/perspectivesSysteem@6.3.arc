@@ -71,18 +71,22 @@ domain model://perspectives.domains#System@6.3
     property LastHandledUpgrade (String)
     -- OnStartup is guaranteed to change to false and then to true every time the system is started.
     state CheckUpgrades = sys:MySystem >> extern >> OnStartup
-      -- LastHandledUpgrade < "3.0.71" and ("3.0.71" < PDRVersion  or PDRVersion == "3.0.71")
-      state Upgrade3_0_71 = callExternal util:IsLowerVersion( sys:UpgradeHook >> LastHandledUpgrade, "3.0.71" ) returns Boolean and 
-        (callExternal util:IsLowerVersion( "3.0.71", callExternal util:SystemParameter( "PDRVersion" ) returns String) returns Boolean or
-          ("3.0.71" == callExternal util:SystemParameter( "PDRVersion" ) returns String))
-        perspective of Upgrader
-          perspective on sys:MySocialEnvironment >> Persons
-            only (Remove)
-          perspective on sys:MySystem >> User
-            only (RemoveFiller, Fill)
-        on entry
-          do for Upgrader
-            LastHandledUpgrade = callExternal util:SystemParameter( "PDRVersion" ) returns String
+      -- LastHandledUpgrade < "3.1.3" and ("3.1.3" < PDRVersion  or PDRVersion == "3.1.3")
+      state Upgrade_3_1_3 = callExternal util:IsLowerVersion( sys:UpgradeHook >> LastHandledUpgrade, "3.1.3" ) returns Boolean and 
+        (callExternal util:IsLowerVersion( "3.1.3", callExternal util:SystemParameter( "PDRVersion" ) returns String) returns Boolean or
+          ("3.1.3" == callExternal util:SystemParameter( "PDRVersion" ) returns String))
+        state SwitchKey = (filter sys:TheWorld >> PerspectivesUsers with fills me) >> PerspectivesUsers$HasKey
+          perspective of Upgrader
+            perspective on filter sys:TheWorld >> PerspectivesUsers with fills me
+              props (PerspectivesUsers$HasKey, UserWithHasKey$HasKey) verbs (DeleteProperty, SetPropertyValue)
+          on entry
+            do for Upgrader
+              letA
+                therole <- filter sys:TheWorld >> PerspectivesUsers with fills me
+              in
+                UserWithHasKey$HasKey = true for therole
+                LastHandledUpgrade = callExternal util:SystemParameter( "PDRVersion" ) returns String
+                delete property PerspectivesUsers$HasKey from therole
 
   -- Used as model://perspectives.domains#System$RoleWithId$Id in the PDR code.
   thing RoleWithId
@@ -101,6 +105,9 @@ domain model://perspectives.domains#System@6.3
     property Media (relational, String)
       mediaProperty
   
+  user UserWithHasKey
+    property HasKey (Boolean)
+
   -- PDRDEPENDENCY
   user WithCredentials
     -- | The role identifier of the filler of SocialEnvironment$Me - that is, the unique identifier of this user
@@ -153,34 +160,41 @@ domain model://perspectives.domains#System@6.3
     user PerspectivesUsers (relational)
       aspect sys:Identifiable
       aspect sys:Addressable
+      aspect sys:UserWithHasKey
 
       -- The unique key provided to each new participant in the Perspectives Trusted Network by one of his peers.
       -- It can be used to store a limited number of media files in the perspectives sharedfile storage.
       -- We don't want to hand out keys to users as seen by public users.
       -- PDRDEPENDENCY (actually, a MyContexts dependency)
       property SharedFileServerKey (String)
-      state NoKey = (not HasKey) and (exists me >> SharedFileServerKey) and (not (callExternal util:BottomIdentifier() returns String matches regexp "^pub:.*"))
+      state NoKey = (not PerspectivesUsers$HasKey) and (exists me >> SharedFileServerKey) and (not (callExternal util:BottomIdentifier() returns String matches regexp "^pub:.*"))
         on entry
           do for Initializer
             SharedFileServerKey = callExternal util:GetSharedFileServerKey( me >> SharedFileServerKey ) returns String
-            HasKey = true
+            PerspectivesUsers$HasKey = true
+      -- OBSOLETE. This property is obsolete from version 3.1.3 onwards. It is replaced by UserWithHasKey$HasKey in the upgrade code of that version. We keep it for a while to avoid breaking the PDR upgrade code, but we don't use it anymore.
       property HasKey (Boolean)
 
       perspective on PerspectivesUsers
         -- As this perspective is selfonly, it doesn't cause synchronization with peers.
         -- In other words: a PerspectivesUsers instance cannot see other PerspectivesUsers instances.
         selfonly
-        props (SharedFileServerKey, HasKey) verbs (Consult)
+        props (SharedFileServerKey, PerspectivesUsers$HasKey) verbs (Consult)
     
     user NonPerspectivesUsers (relational)
       aspect sys:Identifiable
       aspect sys:Addressable
+    
+    user Onlookers (relational)
+      aspect sys:Identifiable
+      aspect sys:Addressable
+      aspect sys:UserWithHasKey
 
     -- PDRDEPENDENCY
     user Initializer = me
       perspective on PerspectivesUsers
         only (Create)
-        props (Identifiable$PublicKey, SharedFileServerKey, HasKey) verbs (SetPropertyValue, AddPropertyValue)
+        props (Identifiable$PublicKey, SharedFileServerKey, PerspectivesUsers$HasKey) verbs (SetPropertyValue, AddPropertyValue)
  
   -- MySocialEnvironment is the same on all of my devices.
     -- PDRDEPENDENCY
@@ -228,12 +242,17 @@ domain model://perspectives.domains#System@6.3
       perspective on Peers
         props (FirstName, LastName) verbs (Consult)
         props (Cancelled) verbs (Consult, SetPropertyValue)
+      perspective on sys:TheWorld >> Onlookers
+        only (Create, Remove)
+        props (FirstName, LastName) verbs (Consult, SetPropertyValue)
       action AddOtherPerson
         letA 
           nuser <- create role NonPerspectivesUsers in sys:TheWorld
         in
           -- Het is de vraag of het perspectief tijdig is.
           bind nuser to Persons
+      action AddOnlooker
+        create role Onlookers in sys:TheWorld
       screen
         who
         what
@@ -254,7 +273,6 @@ domain model://perspectives.domains#System@6.3
                       >
             row
               table OtherPersons
-          column
             row 
               markdown <## Alle personen
                         Kopieer iemand uit deze tabel als het niet uitmaakt of 
@@ -262,6 +280,16 @@ domain model://perspectives.domains#System@6.3
                       >
             row
               table Persons
+                no roleverbs
+            row 
+              markdown <## Meekijkers
+                        Gebruik een `Meekijker` voor rollen die een organisatie-perspectief representeren. 
+                        Een `Meekijker` is geen persoon maar het is een programma dat toegestuurde gegevens opslaat 
+                        in een relationele database zodat bevoegde medewerkers van die organisatie die gegevens kunnen inzien.
+                        Voeg een nieuwe meekijker toe met de actie [[action: AddOnlooker| Voeg meekijker toe]].
+                      >
+            row
+              table sys:TheWorld$Onlookers
                 no roleverbs
         where
 
@@ -872,7 +900,7 @@ domain model://perspectives.domains#System@6.3
 
     user Inviter (mandatory) filledBy (Persons + PerspectivesUsers)
       perspective on Invitee
-        props (FirstName, LastName, HasKey) verbs (Consult)
+        props (FirstName, LastName, UserWithHasKey$HasKey) verbs (Consult)
       perspective on External
         props (Message, ConfirmationCode, SerialisedInvitation) verbs (SetPropertyValue, Consult)
         props (CompleteMessage) verbs (Consult)
@@ -884,9 +912,9 @@ domain model://perspectives.domains#System@6.3
         who 
           Invitee
             master
-              without props (FirstName, HasKey)
+              without props (FirstName, UserWithHasKey$HasKey)
             detail
-              without props (HasKey)
+              without props (UserWithHasKey$HasKey)
         what
           row 
             markdown <### Invite a new person to Perspectives
@@ -917,16 +945,16 @@ domain model://perspectives.domains#System@6.3
     -- which we want to be able to fill with an Onlookers instance.
     user Invitee (mandatory) filledBy ((Persons + PerspectivesUsers), Onlookers)
       perspective on Inviter
-        props (FirstName, LastName, HasKey) verbs (Consult)
+        props (FirstName, LastName, UserWithHasKey$HasKey) verbs (Consult)
       perspective on extern
         props (InviterLastName, Message, ConfirmationCode, Addressing) verbs (Consult)
       screen
         who 
           Inviter
             master
-              without props (FirstName, HasKey)
+              without props (FirstName, UserWithHasKey$HasKey)
             detail
-              without props (HasKey)
+              without props (UserWithHasKey$HasKey)
         what
           row 
             markdown <### Invitation to Perspectives

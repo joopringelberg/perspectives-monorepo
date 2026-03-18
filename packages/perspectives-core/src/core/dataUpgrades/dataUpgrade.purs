@@ -345,8 +345,19 @@ runDataUpgrades = do
     )
 
   runUpgrade installedVersion "3.1.4"
-    removeSocialEnvironmentMeInstances
-
+    ( \_ -> do 
+      removeSocialEnvironmentMeInstances unit
+      runMonadPerspectivesTransaction'
+        false
+        (ENR $ EnumeratedRoleType sysUser)
+        do
+          -- The upgrade in System set the UserWithHasKey$HasKey property to true for me >> binding.
+          -- It also removes PerspectivesUsers$HasKey from me >> binding.
+          -- We have moved the HasKey property from PerspectivesUsers to the aspect UserWithHasKey.
+          updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.3"
+          updateModelForUpgrade $ ModelUri "model://perspectives.domains#BrokerServices@6.1"
+    )
+  
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 
