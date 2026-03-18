@@ -119,7 +119,7 @@ const FlippingTitle: React.FC<FlippingTitleProps> = ({
   return (
     <h1
       ref={headingRef}
-      className={`fs-4 mb-0 ${interactive ? 'cursor-pointer' : ''} ${showUserRole ? showRoleClass : showTitleClass}`}
+      className={`fs-4 mb-0 ${interactive ? 'cursor-pointer' : ''} ${!canShowBoth && showUserRole ? showRoleClass : showTitleClass}`}
       onClick={interactive ? flipToRoleAndRevert : undefined}
       onKeyDown={interactive ? (e => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -153,9 +153,9 @@ const FlippingTitle: React.FC<FlippingTitleProps> = ({
       {canShowBoth && formattedRoleType
         ? (
           <>
-            <span className={showTitleClass}>{formattedRoleType}</span>
+            <span className={showRoleClass}>{formattedRoleType}</span>
             {' in'}
-            <span >{title}</span>
+            <span className={showTitleClass}>{title}</span>
           </>
         )
         : (showUserRole ? formattedRoleType : title)}
