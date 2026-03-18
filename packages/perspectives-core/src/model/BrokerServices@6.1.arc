@@ -516,7 +516,7 @@ domain model://perspectives.domains#BrokerServices@6.1
                       Read the Queue name, the Url of the RabbitMQ server and the Exchange name below.
                     >
           row
-            form "Queues" Queues
+            table "Queues" Queues
           row 
             form External
         where
