@@ -153,7 +153,7 @@ const FlippingTitle: React.FC<FlippingTitleProps> = ({
       {canShowBoth && formattedRoleType
         ? (
           <>
-            <span className={showRoleClass}>{formattedRoleType}</span>
+            <span className={showTitleClass}>{formattedRoleType}</span>
             {' in'}
             <span className={showTitleClass}>{title}</span>
           </>
