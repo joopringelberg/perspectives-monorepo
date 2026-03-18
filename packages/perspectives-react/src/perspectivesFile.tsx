@@ -501,6 +501,10 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
     {
       return "text/arc";
     }
+    else if ( fileName.match(/\.ya?ml$/i))
+    {
+      return "text/yaml";
+    }
     else 
     {
       return mime;
