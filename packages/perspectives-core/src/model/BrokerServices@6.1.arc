@@ -631,9 +631,8 @@ domain model://perspectives.domains#BrokerServices@6.1
       perspective on extern
         props (Name, ContractTerminated, ManagementEndpoint) verbs (Consult)
         props (Registered, ContractTerminated, TerminatesOn, IsInUse) verbs (SetPropertyValue)
-        in object state Active
-          action TerminateContract
-            ContractTerminated = true
+        action TerminateContract
+          ContractTerminated = true
       
       perspective on TCPManager
         only (Create, Fill, Remove)
