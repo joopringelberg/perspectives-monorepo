@@ -31,6 +31,9 @@
 			"path": "packages/language-perspectives-arcII"
 		},
 		{
+			"path": "packages/perspectives-tcp"
+		},
+		{
 			"path": "."
 		}
 
@@ -50,7 +53,8 @@
 			"perspectives-proxy",
 			"perspectives language",
 			"purescript-lru-cache",
-			"dataupgrade"
+			"dataupgrade",
+			"perspectives-tcp"
 		],
 		"purescript.buildCommand": "pnpm exec spago build --json-errors",
 		"git.openRepositoryInParentFolders": "always",

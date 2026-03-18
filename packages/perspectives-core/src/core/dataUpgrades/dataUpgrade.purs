@@ -34,6 +34,7 @@ module Perspectives.DataUpgrade
   , indexedQueries
   , normalizeIndexedNames
   , normalizeTypes
+  , removeSocialEnvironmentMeInstances
   , runDataUpgrades
   , runUpgrade
   , save
@@ -70,7 +71,7 @@ import Main.RecompileBasicModels (UninterpretedDomeinFile(..), executeInTopologi
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (cacheAndSave, setProperty)
-import Perspectives.ContextAndRole (rol_property)
+import Perspectives.ContextAndRole (deleteContext_rolInContext, rol_property)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, removeInternally, (##=))
 import Perspectives.Data.EncodableMap as EM
 import Perspectives.DataUpgrade.DeltasMigration (migrateDeltasToStore)
@@ -92,13 +93,13 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter)
 import Perspectives.Instances.ObjectGetters (binding, getProperty)
 import Perspectives.Instances.Values (PerspectivesFile, parsePerspectivesFile, writePerspectivesFile)
-import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, isSystemModel, repositoryRegistryModelName, rootName, settings, startContexts, sysUser, systemModelName, theSystem)
-import Perspectives.Names (getMySystem)
+import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, isSystemModel, mySocialEnvironment, repositoryRegistryModelName, rootName, settings, socialEnvironmentMe, startContexts, sysUser, systemModelName, theSystem)
+import Perspectives.Names (getMySystem, lookupIndexedContext)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (toReadableDomeinFile, toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (Keys(..), databaseInfo, documentsInDatabase, includeDocs, resetViewIndex)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspectRol, saveEntiteit_, saveMarkedResources, tryGetPerspectEntiteit, tryGetPerspectRol)
+import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspectRol, saveEntiteit_, saveMarkedResources, tryGetPerspectEntiteit, tryGetPerspectRol, tryRemoveEntiteit)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
@@ -343,6 +344,20 @@ runDataUpgrades = do
         migrateDeltaStoreKeys
     )
 
+  runUpgrade installedVersion "3.1.4"
+    ( \_ -> do 
+      removeSocialEnvironmentMeInstances unit
+      runMonadPerspectivesTransaction'
+        false
+        (ENR $ EnumeratedRoleType sysUser)
+        do
+          -- The upgrade in System set the UserWithHasKey$HasKey property to true for me >> binding.
+          -- It also removes PerspectivesUsers$HasKey from me >> binding.
+          -- We have moved the HasKey property from PerspectivesUsers to the aspect UserWithHasKey.
+          updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.3"
+          updateModelForUpgrade $ ModelUri "model://perspectives.domains#BrokerServices@6.1"
+    )
+  
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 
@@ -498,6 +513,30 @@ addSettingsType _ = do
   PerspectRol rec@{ allTypes } <- getPerspectRol (RoleInstance $ buitenRol systemId)
   cacheAndSave (RoleInstance $ buitenRol systemId) (PerspectRol rec { allTypes = [ (EnumeratedRoleType settings) ] `union` allTypes })
   saveMarkedResources
+
+-- | Removes obsolete instances of SocialEnvironment$Me from the local SocialEnvironment context.
+-- | An earlier version of domain model://perspectives.domains#System@6.3 defined SocialEnvironment$Me
+-- | as an Enumerated role. The current version defines it as a Calculated role.
+-- | Old installations still have instances of this role type stored in SocialEnvironment's rolInContext,
+-- | causing errors when the PDR tries to look up the (no longer existing) EnumeratedRoleType definition.
+removeSocialEnvironmentMeInstances :: Upgrade
+removeSocialEnvironmentMeInstances _ = do
+  mSocialEnvId <- lookupIndexedContext mySocialEnvironment
+  case mSocialEnvId of
+    Nothing -> log "removeSocialEnvironmentMeInstances: no SocialEnvironment found, skipping"
+    Just socialEnvId -> do
+      mctxt <- tryGetPerspectEntiteit socialEnvId
+      case mctxt of
+        Nothing -> log "removeSocialEnvironmentMeInstances: cannot retrieve SocialEnvironment, skipping"
+        Just ctxt@(PerspectContext { rolInContext }) ->
+          case lookup socialEnvironmentMe rolInContext of
+            Nothing -> log "removeSocialEnvironmentMeInstances: no obsolete Me role instances found"
+            Just instances -> do
+              for_ instances \roleId -> tryRemoveEntiteit roleId
+              let cleanedContext = deleteContext_rolInContext ctxt (EnumeratedRoleType socialEnvironmentMe)
+              void $ saveEntiteit_ socialEnvId cleanedContext
+              saveMarkedResources
+              log ("removeSocialEnvironmentMeInstances: removed " <> show (length instances) <> " obsolete Me role instance(s)")
 
 updateModels02611 :: Upgrade
 updateModels02611 _ = runMonadPerspectivesTransaction'
