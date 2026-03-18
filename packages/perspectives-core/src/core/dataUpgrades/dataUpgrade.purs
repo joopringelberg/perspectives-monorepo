@@ -35,6 +35,7 @@ module Perspectives.DataUpgrade
   , normalizeIndexedNames
   , normalizeTypes
   , removeSocialEnvironmentMeInstances
+  , removeSocialMeIndexedRole
   , runDataUpgrades
   , runUpgrade
   , save
@@ -71,7 +72,7 @@ import Main.RecompileBasicModels (UninterpretedDomeinFile(..), executeInTopologi
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (cacheAndSave, setProperty)
-import Perspectives.ContextAndRole (deleteContext_rolInContext, rol_property)
+import Perspectives.ContextAndRole (deleteContext_rolInContext, removeContext_rolInContext, rol_property)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, removeInternally, (##=))
 import Perspectives.Data.EncodableMap as EM
 import Perspectives.DataUpgrade.DeltasMigration (migrateDeltasToStore)
@@ -358,6 +359,11 @@ runDataUpgrades = do
           updateModelForUpgrade $ ModelUri "model://perspectives.domains#BrokerServices@6.1"
     )
   
+  runUpgrade installedVersion "3.1.5"
+    ( \_ -> do
+        removeSocialMeIndexedRole unit
+    )
+
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 
@@ -537,6 +543,53 @@ removeSocialEnvironmentMeInstances _ = do
               void $ saveEntiteit_ socialEnvId cleanedContext
               saveMarkedResources
               log ("removeSocialEnvironmentMeInstances: removed " <> show (length instances) <> " obsolete Me role instance(s)")
+
+-- | Removes the obsolete IndexedRoles entry for sys:SocialMe from PerspectivesSystem.
+-- | SocialEnvironment$Me was previously an indexed Enumerated role. Its definition has since been
+-- | removed from the model, but an IndexedRoles instance whose Name property refers to it remains.
+-- | This function finds and removes that specific IndexedRoles instance.
+removeSocialMeIndexedRole :: Upgrade
+removeSocialMeIndexedRole _ = do
+  systemId <- getMySystem
+  mctxt <- tryGetPerspectEntiteit (ContextInstance systemId)
+  case mctxt of
+    Nothing -> log "removeSocialMeIndexedRole: cannot retrieve PerspectivesSystem, skipping"
+    Just ctxt@(PerspectContext { rolInContext }) ->
+      case lookup indexedRole rolInContext of
+        Nothing -> log "removeSocialMeIndexedRole: no IndexedRoles instances found, skipping"
+        Just instances -> do
+          mTargetId <- foldM
+            ( \acc rid -> case acc of
+                Just _ -> pure acc
+                Nothing -> do
+                  mrol <- tryGetPerspectRol rid
+                  pure $ case mrol of
+                    Nothing -> Nothing
+                    Just rol -> case head $ rol_property rol (EnumeratedPropertyType indexedRoleName) of
+                      Nothing -> Nothing
+                      Just (Value name) ->
+                        if name == socialMeStableId || name == socialMeReadableId
+                          then Just rid
+                          else Nothing
+            )
+            Nothing
+            instances
+          case mTargetId of
+            Nothing -> log "removeSocialMeIndexedRole: no IndexedRoles instance for sys:SocialMe found"
+            Just targetId -> do
+              tryRemoveEntiteit targetId
+              let cleanedContext = removeContext_rolInContext ctxt (EnumeratedRoleType indexedRole) targetId
+              void $ saveEntiteit_ (ContextInstance systemId) cleanedContext
+              saveMarkedResources
+              log "removeSocialMeIndexedRole: removed IndexedRoles instance for sys:SocialMe"
+
+-- | Stable identifier for the (now obsolete) indexed role sys:SocialMe.
+socialMeStableId :: String
+socialMeStableId = "model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$robf7hy8p0$f0yuqk3hg8"
+
+-- | Readable identifier for the (now obsolete) indexed role sys:SocialMe.
+socialMeReadableId :: String
+socialMeReadableId = "model://perspectives.domains#System$SocialMe"
 
 updateModels02611 :: Upgrade
 updateModels02611 _ = runMonadPerspectivesTransaction'
