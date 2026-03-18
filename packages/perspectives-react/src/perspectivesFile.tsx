@@ -470,10 +470,27 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
     const component = this;
     if ( theFile )
     {
+      const computedMimeType = component.mapMimeType( theFile.type, theFile.name );
+      const patternFacet = component.props.serialisedProperty.constrainingFacets.pattern;
+      if (patternFacet)
+      {
+        const match = patternFacet.regex.match(/\/(.*)\//);
+        const patternStr = match ? match[1] : "";
+        if (patternStr && !new RegExp(patternStr).test(computedMimeType))
+        {
+          UserMessagingPromise.then( um =>
+            um.addMessageForEndUser(
+              { title: i18next.t("saveFile_title", { ns: 'preact' })
+              , message: patternFacet.label || i18next.t("mimeType_invalid", { ns: 'preact' })
+              , error: i18next.t("uploadFile_mimeTypeMismatch", { ns: 'preact', mimeType: computedMimeType })
+              }));
+          return;
+        }
+      }
       this.saveFileAndProperty( theFile ).then( () => 
         this.setState(
           { fileName: theFile.name
-          , mimeType: component.mapMimeType( theFile.type, theFile.name )
+          , mimeType: computedMimeType
           , state: FILLED}));
     }
   }
@@ -642,9 +659,30 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
                     size='medium'
                   />
                 </div>
+                <div
+                  style={{flexShrink: 1}}
+                  id={component.props.serialisedProperty.id + '_upload'}
+                  onClick={ e => component.upload(e) }
+                  onKeyDown={ e => component.upload(e) }
+                  tabIndex={-1}
+                  >
+                  <UploadIcon
+                      aria-label={ i18next.t("perspectivesFile_upload", { ns: 'preact' }) }
+                      size='medium'/>
+                </div>
               </div>
             </Col>
             </Row>
+            <input 
+              type="file" 
+              id={component.props.serialisedProperty.id + '_selectedFile'} 
+              style={{display: "none"}} 
+              onChange={ev => {
+                if (ev.target.files) {
+                  component.handleFile(ev.target.files.item(0));
+                }
+              }}
+            />
           </div>);
     
       case EDITABLE:

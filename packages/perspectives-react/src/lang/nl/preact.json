@@ -60,6 +60,7 @@
 , "retrieveFile_message": "Kon het bestand niet ophalen."
 , "fileName_invalid": "Geef een geldige bestandsnaam."
 , "mimeType_invalid": "Geef een geldig MIME type."
+, "uploadFile_mimeTypeMismatch": "Het bestand heeft MIME type '{{mimeType}}', dat niet overeenkomt met het vereiste type."
 , "tablePasteRole_Create": "Maak een nieuwe rol voor dit formulier en vul hem met de rol op het klembord."
 , "tablePasteRole_Incompatible": "De rol op het klembord kan deze rol niet vullen."
 , "tablePasteRole_Alt": "Vul met de rol op het klembord."

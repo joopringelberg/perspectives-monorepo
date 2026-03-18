@@ -60,6 +60,7 @@
 , "retrieveFile_message": "Could not retieve the file or the property."
 , "fileName_invalid": "Provide a valid filename."
 , "mimeType_invalid": "Provide a valid MIME type."
+, "uploadFile_mimeTypeMismatch": "The file has MIME type '{{mimeType}}', which does not match the required type."
 , "tablePasteRole_Create": "Create a new role for this form and then fill it with the role on the clipboard."
 , "tablePasteRole_Incompatible": "The role on the clipboard cannot fill a role in this form."
 , "tablePasteRole_Alt": "Paste the role on the clipboard"
