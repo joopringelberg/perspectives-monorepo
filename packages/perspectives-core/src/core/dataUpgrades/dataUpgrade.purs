@@ -344,8 +344,10 @@ runDataUpgrades = do
         migrateDeltaStoreKeys
     )
 
-  runUpgrade installedVersion "3.1.3"
-    ( \_ -> runMonadPerspectivesTransaction'
+  runUpgrade installedVersion "3.1.4"
+    ( \_ -> do 
+      removeSocialEnvironmentMeInstances unit
+      runMonadPerspectivesTransaction'
         false
         (ENR $ EnumeratedRoleType sysUser)
         do
@@ -355,9 +357,7 @@ runDataUpgrades = do
           updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.3"
           updateModelForUpgrade $ ModelUri "model://perspectives.domains#BrokerServices@6.1"
     )
-  runUpgrade installedVersion "3.1.4"
-    removeSocialEnvironmentMeInstances
-
+  
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 
