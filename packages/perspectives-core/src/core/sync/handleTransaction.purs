@@ -27,7 +27,7 @@ import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
-import Data.Array (any, catMaybes, concat, filter, fromFoldable, sortBy)
+import Data.Array (any, catMaybes, concat, filter, fromFoldable, null, sortBy)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -520,16 +520,14 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           , applied: false
           }
       else if resourceVersion == localVersion then do
-        -- Version conflict: two deltas claim the same version from different authors.
-        -- Resolve deterministically by lexicographic comparison of author IDs:
-        -- the author with the highest ID wins on all installations.
+        -- Check for existing deltas at this version to distinguish a fresh creation from a genuine conflict.
         existingDeltas <- lift $ getDeltasForResource resourceKey
         let sameVersionDeltas = filter (\(DeltaStoreRecord r) -> r.resourceVersion == resourceVersion) existingDeltas
-        -- Check whether any already-stored delta at this version has an author >= the incoming author.
-        let incomingAuthorWins = not (hasAuthorGreaterOrEqual author sameVersionDeltas)
-        if incomingAuthorWins then do
-          -- Incoming author wins: execute the delta (overwriting the current value).
-          log ("Version conflict for " <> resourceKey <> " at version " <> show resourceVersion <> ": incoming author " <> show author <> " wins.")
+        if resourceVersion == 0 && null sameVersionDeltas then do
+          -- Fresh resource creation: version 0 with no prior deltas for this key.
+          -- getResourceVersion returns 0 both for untracked resources and for resources
+          -- at version 0, so when there are no existing deltas this is the first mutation,
+          -- not a write-write conflict. Execute directly.
           executeDelta s (Just stringified)
           lift $ storeDelta $ DeltaStoreRecord
             { _id: deltaStoreDocId resourceKey resourceVersion author
@@ -542,18 +540,38 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
             , applied: true
             }
         else do
-          -- Existing author wins: store but don't execute.
-          log ("Version conflict for " <> resourceKey <> " at version " <> show resourceVersion <> ": incoming author " <> show author <> " loses.")
-          lift $ storeDelta $ DeltaStoreRecord
-            { _id: deltaStoreDocId resourceKey resourceVersion author
-            , _rev: Nothing
-            , resourceKey
-            , resourceVersion
-            , author
-            , signedDelta: s
-            , deltaType
-            , applied: false
-            }
+          -- Genuine version conflict: two deltas claim the same version from different authors.
+          -- Resolve deterministically by lexicographic comparison of author IDs:
+          -- the author with the highest ID wins on all installations.
+          -- Check whether any already-stored delta at this version has an author >= the incoming author.
+          let incomingAuthorWins = not (hasAuthorGreaterOrEqual author sameVersionDeltas)
+          if incomingAuthorWins then do
+            -- Incoming author wins: execute the delta (overwriting the current value).
+            log ("Version conflict for " <> resourceKey <> " at version " <> show resourceVersion <> ": incoming author " <> show author <> " wins.")
+            executeDelta s (Just stringified)
+            lift $ storeDelta $ DeltaStoreRecord
+              { _id: deltaStoreDocId resourceKey resourceVersion author
+              , _rev: Nothing
+              , resourceKey
+              , resourceVersion
+              , author
+              , signedDelta: s
+              , deltaType
+              , applied: true
+              }
+          else do
+            -- Existing author wins: store but don't execute.
+            log ("Version conflict for " <> resourceKey <> " at version " <> show resourceVersion <> ": incoming author " <> show author <> " loses.")
+            lift $ storeDelta $ DeltaStoreRecord
+              { _id: deltaStoreDocId resourceKey resourceVersion author
+              , _rev: Nothing
+              , resourceKey
+              , resourceVersion
+              , author
+              , signedDelta: s
+              , deltaType
+              , applied: false
+              }
       else do
         -- resourceVersion > localVersion: normal next expected version.
         -- (Gaps have already been ruled out by checkForGaps.)
