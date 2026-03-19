@@ -652,12 +652,21 @@ hasPerspectiveWithVerb subjectType roleType verbs = do
     -- Find for the subject (including its aspects) a perspective
     --    * whose object adt equals the adt of `roleType` or is a generalisation of it, AND
     --    * that supports at least one of the requested RoleVerbs.
-    -- (allObjects :: Array EnumeratedRoleType) <- roleType ###= roleAspectsClosure
-    adtOfRoleType <- getEnumeratedRole roleType >>= roleADT
+    -- We check the roleType itself and all its (transitive) aspects, so that a perspective on
+    -- an aspect of `roleType` is correctly recognised as a perspective on `roleType`.
+    (allObjects :: Array EnumeratedRoleType) <- roleType ###= roleAspectsClosure
     isJust <$> findPerspective subjectType
-      \perspective -> do
-        p <- perspective `isPerspectiveOnADT` adtOfRoleType
-        pure (p && (null verbs || perspectiveSupportsOneOfRoleVerbs perspective verbs))
+      \perspective ->
+        foldM
+          ( \found rt ->
+              if found then pure true
+              else do
+                adtOfRt <- getEnumeratedRole rt >>= roleADT
+                p <- perspective `isPerspectiveOnADT` adtOfRt
+                pure (p && (null verbs || perspectiveSupportsOneOfRoleVerbs perspective verbs))
+          )
+          false
+          allObjects
 
 ----------------------------------------------------------------------------------------
 ------- USER ROLETYPES WITH A PERSPECTIVE ON A PROPERTYTYPE

@@ -346,19 +346,19 @@ runDataUpgrades = do
     )
 
   runUpgrade installedVersion "3.1.4"
-    ( \_ -> do 
-      removeSocialEnvironmentMeInstances unit
-      runMonadPerspectivesTransaction'
-        false
-        (ENR $ EnumeratedRoleType sysUser)
-        do
-          -- The upgrade in System set the UserWithHasKey$HasKey property to true for me >> binding.
-          -- It also removes PerspectivesUsers$HasKey from me >> binding.
-          -- We have moved the HasKey property from PerspectivesUsers to the aspect UserWithHasKey.
-          updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.3"
-          updateModelForUpgrade $ ModelUri "model://perspectives.domains#BrokerServices@6.1"
+    ( \_ -> do
+        removeSocialEnvironmentMeInstances unit
+        runMonadPerspectivesTransaction'
+          false
+          (ENR $ EnumeratedRoleType sysUser)
+          do
+            -- The upgrade in System set the UserWithHasKey$HasKey property to true for me >> binding.
+            -- It also removes PerspectivesUsers$HasKey from me >> binding.
+            -- We have moved the HasKey property from PerspectivesUsers to the aspect UserWithHasKey.
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.3"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#BrokerServices@6.1"
     )
-  
+
   runUpgrade installedVersion "3.1.5"
     ( \_ -> do
         removeSocialMeIndexedRole unit
@@ -568,9 +568,8 @@ removeSocialMeIndexedRole _ = do
                     Just rol -> case head $ rol_property rol (EnumeratedPropertyType indexedRoleName) of
                       Nothing -> Nothing
                       Just (Value name) ->
-                        if name == socialMeStableId || name == socialMeReadableId
-                          then Just rid
-                          else Nothing
+                        if name == socialMeStableId || name == socialMeReadableId then Just rid
+                        else Nothing
             )
             Nothing
             instances
