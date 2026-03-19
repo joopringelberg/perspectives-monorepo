@@ -288,7 +288,7 @@ domain model://perspectives.domains#BrokerServices@6.1
                       >
             detail
 
-    user Guest = sys:Me
+    user Guest = me
       perspective on Administrator
         only (Fill, Create)
       perspective on extern
@@ -369,7 +369,7 @@ domain model://perspectives.domains#BrokerServices@6.1
     state NoAdministrator = not exists Administrator
       on entry
         do for sys:Invitation$Guest
-          -- Guest has a sufficient perspective on Administrator in state Invitation$NoInviter, which corresponds to this state NoAdministrator.
+          -- Guest has a sufficient perspective on Inviter and Administrator is Inviter.
           bind extern >> binder model://perspectives.domains#BrokerServices$BrokerService$Accounts >> context >> Administrator >>= first to Administrator
     state NoAccountHolder = (exists Administrator) and (not exists AccountHolder)
       on entry
@@ -473,16 +473,16 @@ domain model://perspectives.domains#BrokerServices@6.1
       aspect sys:SystemDataUpgrade
       aspect sys:ModelDataUpgrade
       -- One-time initialisation to version 3.0.68
-      on entry
-        do for Upgrader
-          LastHandledUpgrade = "3.0.68"
-      -- Next upgrade to version 3.0.73
-      state Upgrade3_0_73 = callExternal util:IsUpgradeTo( "3.0.73", LastHandledUpgrade ) returns Boolean and not (context >> AccountHolder == me)
-        on entry
-          do for Upgrader
-            LastHandledUpgrade = "3.0.73"
-          do for AccountHolder
-            bind_ me to context >> AccountHolder
+      -- on entry
+      --   do for Upgrader
+      --     LastHandledUpgrade = "3.0.68"
+      -- -- Next upgrade to version 3.0.73
+      -- state Upgrade3_0_73 = callExternal util:IsUpgradeTo( "3.0.73", LastHandledUpgrade ) returns Boolean and not (context >> AccountHolder == me)
+      --   on entry
+      --     do for Upgrader
+      --       LastHandledUpgrade = "3.0.73"
+      --     do for AccountHolder
+      --       bind_ me to context >> AccountHolder
     -----------------
 
     user TCPManager filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)

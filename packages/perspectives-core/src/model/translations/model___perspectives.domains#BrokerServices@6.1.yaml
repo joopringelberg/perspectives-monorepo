@@ -5,6 +5,11 @@ model://perspectives.domains#zjuzxbqpgc:
       translations:
         en: Message Broker Services
         nl: Message Broker Services
+      indexedName:
+        name: model://perspectives.domains#BrokerServices$MyBrokers
+        translations:
+          nl: Mijn brokers
+          en: My brokers
       users:
         Manager:
           translations:
@@ -105,16 +110,24 @@ model://perspectives.domains#zjuzxbqpgc:
                    You can only sign up to a single service."
             4:
               translations:
-                orig: "### Your contract\n
-                  This is the contract you have with the broker service.\n
-                  You can see when it expires, and you can cancel it."
-                nl: "### Jouw contract\n
-                   Dit is het contract dat je hebt met de broker service.\n
-                   Je kunt zien wanneer het verloopt, en je kunt het opzeggen."
-                en: "### Your contract\n
-                   This is the contract you have with the broker service.\n
-                   You can see when it expires, and you can cancel it."
+                orig: "### Your broker service contracts\n
+                  These are the broker services you have signed up to.\n
+                  You can only have a single active contract."
+                nl: "### Jouw broker service contracten\n
+                   Dit zijn de broker services waarvoor je je hebt ingeschreven.\n
+                   Je kunt slechts één actief contract hebben."
+                en: "### Your broker service contracts\n
+                   These are the broker services you have signed up to.\n
+                   You can only have a single active contract."
             5:
+              translations:
+                orig: "### Your TCP contracts\n
+                  These are contracts meant for a Transaction Collection Point (TCP)."
+                nl: "### Jouw TCP contracten\n
+                   Dit zijn contracten bedoeld voor een Transaction Collection Point (TCP)."
+                en: "### Your TCP contracts\n
+                   These are contracts meant for a Transaction Collection Point (TCP)."
+            6:
               translations:
                 orig: "### Managed broker services\n
                   These are the broker services you manage. You can add new ones, remove existing ones,\n
@@ -136,6 +149,10 @@ model://perspectives.domains#zjuzxbqpgc:
           translations:
             en: Contract in use
             nl: Contract in gebruik
+        TcpContracts:
+          translations:
+            nl: TCP Contracten
+            en: TCP Contracts
         Contracts:
           translations:
             en: Contracts
@@ -413,6 +430,17 @@ model://perspectives.domains#zjuzxbqpgc:
         en: Broker contract
         nl: Broker contract
       external:
+        notifications:
+          0:
+            translations:
+              orig: Your lease of the BrokerService has ended. Within $0 days, you will no longer be able to receive information from peers.
+              nl: Je lease van de BrokerService is beëindigd. Binnen $0 dagen kun je geen informatie meer ontvangen van andere gebruikers.
+              en: Your lease of the BrokerService has ended. Within $0 days, you will no longer be able to receive information from peers.
+          1:
+            translations:
+              orig: You now have an account at the BrokerService $0
+              nl: Je hebt nu een account bij de BrokerService $0
+              en: You now have an account at the BrokerService $0
         properties:
           ContractTerminated:
             translations:
@@ -473,25 +501,45 @@ model://perspectives.domains#zjuzxbqpgc:
       notifications:
         0:
           translations:
-            orig: Your lease of the BrokerService has ended. Within $0 days, you will no longer be able to receive information from peers.
-            nl: Je lease van de BrokerService is beëindigd. Binnen $0 dagen kun je geen informatie meer ontvangen van andere gebruikers.
-            en: Your lease of the BrokerService has ended. Within $0 days, you will no longer be able to receive information from peers.
-        1:
-          translations:
-            orig: You now have an account at the BrokerService $0
-            nl: Je hebt nu een account bij de BrokerService $0
-            en: You now have an account at the BrokerService $0
+            orig: Your account at the BrokerService $0 has been terminated.
+            nl: Je account bij de BrokerService $0 is beëindigd.
+            en: Your account at the BrokerService $0 has been terminated.
       users:
         Administrator:
           translations:
             en: Administrator
             nl: Beheerder
           actions:
+            model://perspectives.domains#BrokerServices$BrokerContract$Administrator:
+              TerminateContract:
+                translations:
+                  nl: Beëindig contract
+                  en: Terminate contract
             model://perspectives.domains#System$Invitation$External$Message:
               CreateInvitation:
                 translations:
+                  nl: Maak uitnodiging aan
                   en: Create invitation
-                  nl: Maak uitnodiging
+          markdowns:
+            0:
+              translations:
+                orig: "### TCP Manager\n
+                  This is an optional TCP Manager. Fill it with a peer who needs to set up a Transaction Collection Point (TCP)."
+                nl: "### TCP Beheerder\n
+                   Dit is een optionele TCP Beheerder. Vul deze met een peer die een Transaction Collection Point (TCP) moet opzetten."
+                en: "### TCP Manager\n
+                   This is an optional TCP Manager. Fill it with a peer who needs to set up a Transaction Collection Point (TCP)."
+            1:
+              translations:
+                orig: "### Terminated contract\n
+                  This contract is terminated when the AccountHolder did not renew it in time, or when the AccountHolder or you terminated it manually.\n
+                  When a contract is terminated, the AccountHolder can no longer receive information from peers through this Broker Service."
+                nl: "### Beëindigd contract\n
+                   Dit contract is beëindigd omdat de deelnemer het niet op tijd heeft verlengd, of omdat de deelnemer of jij het handmatig hebt beëindigd.\n
+                   Wanneer een contract is beëindigd, kan de deelnemer geen informatie meer ontvangen van andere gebruikers via deze Broker Service."
+                en: "### Terminated contract\n
+                   This contract is terminated when the AccountHolder did not renew it in time, or when the AccountHolder or you terminated it manually.\n
+                   When a contract is terminated, the AccountHolder can no longer receive information from peers through this Broker Service."
           titles:
             0:
               translations:
@@ -512,7 +560,7 @@ model://perspectives.domains#zjuzxbqpgc:
                 en: Account name
                 nl: Lidmaatschap naam
           actions:
-            model://perspectives.domains#BrokerServices$BrokerContract$AccountHolder:
+            model://perspectives.domains#BrokerServices$BrokerContract$External$Active:
               TerminateContract:
                 translations:
                   nl: Beëindig contract
@@ -531,6 +579,17 @@ model://perspectives.domains#zjuzxbqpgc:
                    You can contact him or her if you have questions about the service."
             1:
               translations:
+                orig: "### Terminated contract\n
+                  This contract is terminated when the AccountHolder did not renew it in time, or when the AccountHolder or you terminated it manually.\n
+                  When a contract is terminated, the AccountHolder can no longer receive information from peers through this Broker Service."
+                nl: "### Beëindigd contract\n
+                   Dit contract is beëindigd omdat de deelnemer het niet op tijd heeft verlengd, of omdat de deelnemer of jij het handmatig hebt beëindigd.\n
+                   Wanneer een contract is beëindigd, kan de deelnemer geen informatie meer ontvangen van andere gebruikers via deze Broker Service."
+                en: "### Terminated contract\n
+                   This contract is terminated when the AccountHolder did not renew it in time, or when the AccountHolder or you terminated it manually.\n
+                   When a contract is terminated, the AccountHolder can no longer receive information from peers through this Broker Service."
+            2:
+              translations:
                 orig: "### Account holder\n
                   This is your account at the Broker Service.\n
                   See below when it expires. To cancel it, first click the bolt icon in the toolbar below."
@@ -547,6 +606,37 @@ model://perspectives.domains#zjuzxbqpgc:
                 nl: Broker Service
                 en: Broker Service
             1:
+              translations:
+                orig: Queues
+                en: Queues
+                nl: Queues
+        TCPManager:
+          translations:
+            nl: TCP Beheerder
+            en: TCP Manager
+          markdowns:
+            0:
+              translations:
+                orig: "### TCP Manager\n
+                  This is a Broker Contract for a Transaction Collection Point (TCP).\n
+                  A TCP is a point where you can send information to, that will be collected and forwarded to other peers in batches.\n
+                  It is meant for collecting Business Information, usually for reporting purposes.\n
+                  Read the AccountHolder details and use them to set up a TCP that connects to the RabbitMQ server of the Broker Service.\n
+                  Read the Queue name, the Url of the RabbitMQ server and the Exchange name below."
+                nl: "### TCP Beheerder\n
+                   Dit is een Broker Contract voor een Transaction Collection Point (TCP).\n
+                   Een TCP is een punt waar je informatie naartoe kunt sturen, die verzameld en in batches doorgestuurd wordt naar andere peers.\n
+                   Het is bedoeld voor het verzamelen van bedrijfsinformatie, meestal voor rapportagedoeleinden.\n
+                   Lees de gegevens van de deelnemer en gebruik ze om een TCP op te zetten die verbinding maakt met de RabbitMQ server van de Broker Service.\n
+                   Lees de Queue naam, de URL van de RabbitMQ server en de Exchange naam hieronder."
+                en: "### TCP Manager\n
+                   This is a Broker Contract for a Transaction Collection Point (TCP).\n
+                   A TCP is a point where you can send information to, that will be collected and forwarded to other peers in batches.\n
+                   It is meant for collecting Business Information, usually for reporting purposes.\n
+                   Read the AccountHolder details and use them to set up a TCP that connects to the RabbitMQ server of the Broker Service.\n
+                   Read the Queue name, the Url of the RabbitMQ server and the Exchange name below."
+          titles:
+            0:
               translations:
                 orig: Queues
                 en: Queues
