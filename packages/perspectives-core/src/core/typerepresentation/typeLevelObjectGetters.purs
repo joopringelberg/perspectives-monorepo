@@ -657,13 +657,16 @@ hasPerspectiveWithVerb subjectType roleType verbs = do
     (allObjects :: Array EnumeratedRoleType) <- roleType ###= roleAspectsClosure
     isJust <$> findPerspective subjectType
       \perspective ->
-        foldM (\found rt ->
-          if found then pure true
-          else do
-            adtOfRt <- getEnumeratedRole rt >>= roleADT
-            p <- perspective `isPerspectiveOnADT` adtOfRt
-            pure (p && (null verbs || perspectiveSupportsOneOfRoleVerbs perspective verbs))
-        ) false allObjects
+        foldM
+          ( \found rt ->
+              if found then pure true
+              else do
+                adtOfRt <- getEnumeratedRole rt >>= roleADT
+                p <- perspective `isPerspectiveOnADT` adtOfRt
+                pure (p && (null verbs || perspectiveSupportsOneOfRoleVerbs perspective verbs))
+          )
+          false
+          allObjects
 
 ----------------------------------------------------------------------------------------
 ------- USER ROLETYPES WITH A PERSPECTIVE ON A PROPERTYTYPE
