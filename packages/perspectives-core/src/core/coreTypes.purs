@@ -47,6 +47,9 @@ module Perspectives.CoreTypes
   , LibFunc1
   , LibFunc2
   , LibFunc3
+  , LogConfig
+  , LogLevel(..)
+  , LogTopic
   , MP
   , MPQ
   , MPT
@@ -239,9 +242,34 @@ type PerspectivesExtraState =
   , modelUnderCompilation :: Maybe (ModelUri Readable)
 
   , modelUris :: Map (ModelUri Readable) (ModelUri Stable)
+
+  , logConfig :: LogConfig
   )
 
 type Warning = { message :: String, error :: String }
+
+-----------------------------------------------------------
+-- STRUCTURED LOGGING
+-----------------------------------------------------------
+type LogTopic = String
+
+data LogLevel = Trace | Debug | Info | Warn | Error
+
+derive instance eqLogLevel :: Eq LogLevel
+
+derive instance ordLogLevel :: Ord LogLevel
+
+instance showLogLevel :: Show LogLevel where
+  show Trace = "TRACE"
+  show Debug = "DEBUG"
+  show Info  = "INFO"
+  show Warn  = "WARN"
+  show Error = "ERROR"
+
+type LogConfig =
+  { defaultLevel :: LogLevel
+  , topicLevels  :: Map LogTopic LogLevel
+  }
 
 -- | These are options that can be provided to the PDR at startup.
 type RuntimeOptions =

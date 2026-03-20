@@ -29,7 +29,8 @@ import Data.Array (cons)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Class.Console (log, warn)
 import Effect.Exception (Error)
-import Perspectives.CoreTypes (MonadPerspectives)
+import Perspectives.CoreTypes (LogLevel(..), MonadPerspectives)
+import Perspectives.Logging (pdrLog)
 import Perspectives.Parsing.Messages (PerspectivesError)
 import Perspectives.Warning (PerspectivesWarning)
 
@@ -44,9 +45,9 @@ logPerspectivesError = liftEffect <<< log <<< show
 warnModeller :: PerspectivesWarning -> MonadPerspectives Unit
 warnModeller warning = do
   modify \(s@{ warnings }) -> s { warnings = cons ({ message: show warning, error: "" }) warnings }
-  warn $ show warning
+  pdrLog "MODEL" Warn (show warning)
 
 warnModellerWithError :: PerspectivesWarning -> String -> MonadPerspectives Unit
 warnModellerWithError warning error = do
   modify \(s@{ warnings }) -> s { warnings = cons ({ message: show warning, error: error }) warnings }
-  warn $ show warning
+  pdrLog "MODEL" Warn (show warning)

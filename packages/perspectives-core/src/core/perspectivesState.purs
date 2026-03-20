@@ -36,7 +36,7 @@ import Foreign.Object (empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
 import Perspectives.AMQP.Stomp (StompClient)
-import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, RolInstances, RuntimeOptions, TranslationTable, TypeFix, Warning)
+import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, RolInstances, RuntimeOptions, TranslationTable, TypeFix, Warning)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, empty, lookup) as ENV
 import Perspectives.Persistence.API (PouchdbUser)
@@ -98,6 +98,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , typeToBeFixed
   , modelUnderCompilation: Nothing
   , modelUris: Map.empty
+  , logConfig: { defaultLevel: Warn, topicLevels: Map.empty }
   }
 
 defaultRuntimeOptions :: RuntimeOptions
@@ -370,3 +371,12 @@ remove g k = do
   -- _ <- pure $ (delete dc k)
   _ <- liftEffect $ delete k dc
   pure ma
+
+-----------------------------------------------------------
+-- LOG CONFIGURATION
+-----------------------------------------------------------
+getLogConfig :: MonadPerspectives LogConfig
+getLogConfig = gets _.logConfig
+
+setLogConfig :: LogConfig -> MonadPerspectives Unit
+setLogConfig config = modify \s -> s { logConfig = config }
