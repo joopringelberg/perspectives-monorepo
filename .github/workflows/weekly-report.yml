@@ -78,5 +78,4 @@ jobs:
               repo: context.repo.repo,
               title: `📊 Weekly Progress Report - ${today}`,
               body: issueBody,
-              assignees: ['copilot']
             });
