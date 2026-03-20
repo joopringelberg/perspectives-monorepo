@@ -42,40 +42,25 @@ module Perspectives.Persistence.DeltaStore
 
 import Prelude
 
+import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Except (runExcept)
 import Data.Array (catMaybes, filter, head, last, length) as Arr
 import Data.Either (Either(..))
+import Data.Foldable (traverse_)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), drop, indexOf, lastIndexOf, length, split, take) as Str
+import Effect.Class (liftEffect)
 import Foreign (Foreign)
+import LRUCache (defaultGetOptions, get, set) as LRU
+import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Persistence.API (addDocument_, documentsInRange, tryGetDocument_)
+import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistence.Types (MonadPouchdb)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser)
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Simple.JSON (class ReadForeign, class WriteForeign, read', readJSON')
-
------------------------------------------------------------
--- TYPES
------------------------------------------------------------
-
--- | A record stored in the delta-store PouchDB database.
--- | Document ID: <resourceKey>_<resourceVersion>_<author>
-newtype DeltaStoreRecord = DeltaStoreRecord
-  { _id :: String
-  , _rev :: Maybe String
-  , resourceKey :: String
-  , resourceVersion :: Int
-  , author :: PerspectivesUser
-  , signedDelta :: SignedDelta
-  , deltaType :: String
-  , applied :: Boolean
-  }
-
-derive newtype instance WriteForeign DeltaStoreRecord
-derive newtype instance ReadForeign DeltaStoreRecord
 
 -----------------------------------------------------------
 -- DATABASE NAME
@@ -83,7 +68,7 @@ derive newtype instance ReadForeign DeltaStoreRecord
 
 -- | The name of the PouchDB database for the delta-store.
 -- | Convention: {systemIdentifier}_deltastore
-deltaStoreDatabaseName :: forall f. MonadPouchdb f String
+deltaStoreDatabaseName :: MonadPerspectives String
 deltaStoreDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_deltastore")
 
 -----------------------------------------------------------
@@ -151,33 +136,69 @@ deltaStoreDocId resourceKey resourceVersion author =
   safeKey resourceKey <> "_v" <> show resourceVersion <> "_" <> takeGuid (unwrap author)
 
 -----------------------------------------------------------
+-- CACHE HELPERS
+-----------------------------------------------------------
+
+-- | Insert a delta record into the in-memory cache.
+cacheInsertDelta :: String -> DeltaStoreRecord -> MonadPerspectives Unit
+cacheInsertDelta key rec = do
+  cache <- gets _.deltaCache
+  void $ liftEffect $ LRU.set key rec Nothing cache
+
+-- | Look up a delta record in the in-memory cache.
+cacheLookupDelta :: String -> MonadPerspectives (Maybe DeltaStoreRecord)
+cacheLookupDelta key = do
+  cache <- gets _.deltaCache
+  liftEffect $ LRU.get key LRU.defaultGetOptions cache
+
+-- | Populate the cache with a batch of delta records.
+populateDeltaCache :: Array DeltaStoreRecord -> MonadPerspectives Unit
+populateDeltaCache records = do
+  cache <- gets _.deltaCache
+  void $ liftEffect $ traverse_ (\rec@(DeltaStoreRecord { _id }) -> LRU.set _id rec Nothing cache) records
+
+-----------------------------------------------------------
 -- OPERATIONS
 -----------------------------------------------------------
 
 -- | Store a delta in the delta-store.
 -- | If a delta with the same document ID already exists, this is a no-op
--- | (deltas are immutable once created).
-storeDelta :: forall f. DeltaStoreRecord -> MonadPouchdb f Unit
+-- | (deltas are immutable once created). Also stores the delta in the
+-- | in-memory cache.
+storeDelta :: DeltaStoreRecord -> MonadPerspectives Unit
 storeDelta rec@(DeltaStoreRecord { _id }) = do
   dbName <- deltaStoreDatabaseName
   -- Check if the delta already exists to avoid overwriting.
   (existing :: Maybe DeltaStoreRecord) <- tryGetDocument_ dbName _id
   case existing of
-    Just _ -> pure unit -- Already stored, nothing to do.
+    Just existingRec ->
+      -- Delta already exists in DB; cache the stored record (which has the correct _rev).
+      cacheInsertDelta _id existingRec
     Nothing -> do
       _ <- addDocument_ dbName rec _id
-      pure unit
+      cacheInsertDelta _id rec
 
 -- | Retrieve a specific delta from the store by its document ID.
-getDelta :: forall f. String -> MonadPouchdb f (Maybe DeltaStoreRecord)
+-- | Checks the in-memory cache first; falls back to PouchDB on a miss.
+getDelta :: String -> MonadPerspectives (Maybe DeltaStoreRecord)
 getDelta docId = do
-  dbName <- deltaStoreDatabaseName
-  tryGetDocument_ dbName docId
+  mCached <- cacheLookupDelta docId
+  case mCached of
+    Just rec -> pure (Just rec)
+    Nothing -> do
+      dbName <- deltaStoreDatabaseName
+      (mRec :: Maybe DeltaStoreRecord) <- tryGetDocument_ dbName docId
+      case mRec of
+        Nothing -> pure Nothing
+        Just rec -> do
+          cacheInsertDelta docId rec
+          pure (Just rec)
 
 -- | Retrieve all deltas for a given resource-key, sorted by resourceVersion.
 -- | Uses PouchDB allDocs range query with startkey/endkey to efficiently
 -- | find all documents matching the resourceKey prefix.
-getDeltasForResource :: forall f. String -> MonadPouchdb f (Array DeltaStoreRecord)
+-- | Also populates the in-memory delta cache with the returned records.
+getDeltasForResource :: String -> MonadPerspectives (Array DeltaStoreRecord)
 getDeltasForResource resourceKey = do
   dbName <- deltaStoreDatabaseName
   -- Convert to URL-safe key for document ID range query.
@@ -185,7 +206,10 @@ getDeltasForResource resourceKey = do
   let startkey = sk <> "_v"
   let endkey = sk <> "_v\xFFFF"
   result <- documentsInRange dbName startkey endkey
-  pure $ Arr.catMaybes $ map decodeDoc result.rows
+  let records = Arr.catMaybes $ map decodeDoc result.rows
+  -- Populate the cache with all returned records.
+  populateDeltaCache records
+  pure records
   where
   decodeDoc :: { id :: String, value :: { rev :: String }, doc :: Maybe Foreign } -> Maybe DeltaStoreRecord
   decodeDoc { doc: Just foreignDoc } = case runExcept $ read' foreignDoc of
@@ -195,7 +219,7 @@ getDeltasForResource resourceKey = do
 
 -- | Retrieve all deltas for a given resource-key, filtered by deltaType.
 -- | Useful for finding e.g. only property deltas or only binding deltas.
-getDeltasForResourceByDeltaType :: forall f. String -> String -> MonadPouchdb f (Array DeltaStoreRecord)
+getDeltasForResourceByDeltaType :: String -> String -> MonadPerspectives (Array DeltaStoreRecord)
 getDeltasForResourceByDeltaType resourceKey deltaType = do
   allDeltas <- getDeltasForResource resourceKey
   pure $ Arr.filter (\(DeltaStoreRecord r) -> r.deltaType == deltaType) allDeltas
@@ -204,7 +228,8 @@ getDeltasForResourceByDeltaType resourceKey deltaType = do
 -- | (property and binding resource keys of the form roleInstance#subKey).
 -- | Uses a range query on the delta-store document IDs, then filters to exclude
 -- | false positives where another role instance shares the same ID prefix.
-getDeltasForRoleInstance :: forall f. String -> MonadPouchdb f (Array DeltaStoreRecord)
+-- | Also populates the in-memory delta cache with the returned records.
+getDeltasForRoleInstance :: String -> MonadPerspectives (Array DeltaStoreRecord)
 getDeltasForRoleInstance roleInstanceId = do
   dbName <- deltaStoreDatabaseName
   -- Convert to URL-safe key for document ID range query.
@@ -219,7 +244,10 @@ getDeltasForRoleInstance roleInstanceId = do
   result <- documentsInRange dbName startkey endkey
   let allDeltas = Arr.catMaybes $ map decodeDoc result.rows
   -- Keep only records where resourceKey is the role itself or one of its sub-resources.
-  pure $ Arr.filter (isRoleOrSubResource sk) allDeltas
+  let filtered = Arr.filter (isRoleOrSubResource sk) allDeltas
+  -- Populate cache.
+  populateDeltaCache filtered
+  pure filtered
   where
   decodeDoc :: { id :: String, value :: { rev :: String }, doc :: Maybe Foreign } -> Maybe DeltaStoreRecord
   decodeDoc { doc: Just foreignDoc } = case runExcept $ read' foreignDoc of
@@ -240,15 +268,17 @@ getDeltasForRoleInstance roleInstanceId = do
           )
 
 -- | Update the `applied` flag of an existing delta-store record.
--- | No-op if the record does not exist.
-updateDeltaApplied :: forall f. String -> Boolean -> MonadPouchdb f Unit
+-- | No-op if the record does not exist. Also updates the in-memory cache.
+updateDeltaApplied :: String -> Boolean -> MonadPerspectives Unit
 updateDeltaApplied docId newApplied = do
   dbName <- deltaStoreDatabaseName
   (existing :: Maybe DeltaStoreRecord) <- tryGetDocument_ dbName docId
   case existing of
     Nothing -> pure unit
-    Just (DeltaStoreRecord r) ->
-      void $ addDocument_ dbName (DeltaStoreRecord (r { applied = newApplied })) docId
+    Just (DeltaStoreRecord r) -> do
+      let updated = DeltaStoreRecord (r { applied = newApplied })
+      void $ addDocument_ dbName updated docId
+      cacheInsertDelta docId updated
 
 -----------------------------------------------------------
 -- STORE FROM SIGNED DELTA
@@ -270,7 +300,7 @@ extractDeltaInfo stringifiedDelta = case runExcept $ readJSON' stringifiedDelta 
 -- | Store a locally-created delta from a SignedDelta.
 -- | Extracts resourceKey, resourceVersion and deltaType from the encryptedDelta string.
 -- | This is a no-op if the ordering fields cannot be extracted.
-storeDeltaFromSignedDelta :: forall f. SignedDelta -> MonadPouchdb f Unit
+storeDeltaFromSignedDelta :: SignedDelta -> MonadPerspectives Unit
 storeDeltaFromSignedDelta signedDelta@(SignedDelta { author, encryptedDelta }) =
   case extractDeltaInfo encryptedDelta of
     Nothing -> pure unit -- Cannot extract ordering info, skip storage

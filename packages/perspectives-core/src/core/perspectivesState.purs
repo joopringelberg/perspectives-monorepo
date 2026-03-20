@@ -36,7 +36,7 @@ import Foreign.Object (empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
 import Perspectives.AMQP.Stomp (StompClient)
-import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, RolInstances, RuntimeOptions, TranslationTable, TypeFix, Warning)
+import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceVersionCache, RolInstances, RuntimeOptions, TranslationTable, TypeFix, Warning)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, empty, lookup) as ENV
 import Perspectives.Persistence.API (PouchdbUser)
@@ -64,6 +64,8 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , contextInstances: newCache defaultCreateOptions
   , domeinCache: newCache defaultCreateOptions
   , queryCache: newCache defaultCreateOptions
+  , deltaCache: newCache defaultCreateOptions
+  , resourceVersionCache: newCache defaultCreateOptions
   , queryAssumptionRegister: empty
   , variableBindings: ENV.empty
   , systemIdentifier: uinfo.systemIdentifier
@@ -126,6 +128,12 @@ queryCache = gets _.queryCache
 
 clearQueryCache :: MonadPerspectives Unit
 clearQueryCache = queryCache >>= liftEffect <<< clear
+
+deltaCache :: MonadPerspectives DeltaCache
+deltaCache = gets _.deltaCache
+
+resourceVersionCache :: MonadPerspectives ResourceVersionCache
+resourceVersionCache = gets _.resourceVersionCache
 
 domeinCacheLookup :: String -> MonadPerspectives (Maybe (AVar (DomeinFile Stable)))
 domeinCacheLookup = lookup domeinCache
