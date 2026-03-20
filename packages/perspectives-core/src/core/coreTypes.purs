@@ -61,10 +61,12 @@ module Perspectives.CoreTypes
   , PropertyValueGetter
   , QueryInstances
   , RepeatingTransaction(..)
+  , ResourceDeltasCache
   , ResourceToBeStored(..)
   , ResourceVersionCache
   , RolInstances
   , RoleGetter
+  , RoleInstanceDeltasCache
   , RuntimeOptions
   , StorageScheme(..)
   , TrackingObjectsGetter
@@ -175,6 +177,12 @@ type DeltaCache = Cache DeltaStoreRecord
 -- | In-memory cache for resource version numbers, keyed by safe resource key.
 type ResourceVersionCache = Cache Int
 
+-- | In-memory cache for getDeltasForResource results, keyed by safe resource key.
+type ResourceDeltasCache = Cache (Array DeltaStoreRecord)
+
+-- | In-memory cache for getDeltasForRoleInstance results, keyed by safe role instance ID.
+type RoleInstanceDeltasCache = Cache (Array DeltaStoreRecord)
+
 type BrokerService = ConnectAndSubscriptionParameters (url :: String)
 
 type PerspectivesState = PouchdbState PerspectivesExtraState
@@ -195,6 +203,12 @@ type PerspectivesExtraState =
 
   -- Caching resource version numbers by safe resource key
   , resourceVersionCache :: ResourceVersionCache
+
+  -- Caching getDeltasForResource results by safe resource key
+  , resourceDeltasCache :: ResourceDeltasCache
+
+  -- Caching getDeltasForRoleInstance results by safe role instance ID
+  , roleInstanceDeltasCache :: RoleInstanceDeltasCache
 
   , queryAssumptionRegister :: AssumptionRegister
 
