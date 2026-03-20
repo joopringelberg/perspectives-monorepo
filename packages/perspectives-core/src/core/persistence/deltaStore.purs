@@ -26,8 +26,7 @@
 -- | with a deterministic ID: <resourceKey>_<resourceVersion>_<author>.
 -- | See design/deterministic-delta-ordering.md for details.
 module Perspectives.Persistence.DeltaStore
-  ( DeltaStoreRecord(..)
-  , storeDelta
+  ( storeDelta
   , storeDeltaFromSignedDelta
   , getDelta
   , getDeltasForResource
