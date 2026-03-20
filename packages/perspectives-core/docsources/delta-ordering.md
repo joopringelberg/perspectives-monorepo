@@ -149,6 +149,12 @@ The incoming version is behind the local version.  The delta describes a state o
 
 Two deltas from different authors claim to produce the same version of the resource.  This is the classic write-write conflict.
 
+**Special case — fresh resource creation (`resourceVersion == 0`, no prior deltas):**
+`getResourceVersion` returns 0 both for resources that have never been tracked and for resources that are genuinely at version 0.  When the incoming `resourceVersion` is 0 *and* the DeltaStore contains no existing deltas for this resource key, the "conflict" is spurious: the incoming delta is simply the first mutation ever applied to this resource at the receiving installation.  In this situation the function executes the delta directly without any conflict-resolution check and stores it with `applied = true`.
+
+**General conflict resolution:**
+When there *are* existing deltas at version 0 for this resource (meaning another author already claimed version 0), or when `resourceVersion > 0` and both versions are equal, this is a genuine write-write conflict.
+
 **Tiebreaker rule:** the author whose `PerspectivesUser` identifier is *alphabetically highest* wins deterministically on all installations.
 
 The function queries the DeltaStore for all already-stored deltas at the same `resourceVersion` for the same `resourceKey`.  If any stored delta has an author ≥ the incoming author, the incoming delta loses; otherwise the incoming author wins.
