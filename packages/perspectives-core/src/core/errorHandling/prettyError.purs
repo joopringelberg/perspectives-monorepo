@@ -8,18 +8,25 @@ module Perspectives.Error.Pretty
   ( renderPerspectivesError
   , humanizePerspectivesError
   , logPerspectivesErrorPretty
+  , humanizePerspectivesWarning
+  , renderPerspectivesWarning
+  , warnModellerPretty
+  , warnModellerWithErrorPretty
   ) where
 
 import Prelude
 
+import Control.Monad.AvarMonadAsk (modify)
+import Data.Array (cons)
 import Data.Maybe (Maybe(..))
-import Effect.Class.Console (log)
+import Effect.Class.Console (log, warn)
 import Data.Traversable (for, traverse)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Identifiers (typeUri2ModelUri, typeUri2LocalName_)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
+import Perspectives.Warning (PerspectivesWarning(..))
 
 -- | Convert a PerspectivesError to a human-friendly string by replacing
 -- | stable ids in typed fields with readable display names where possible.
@@ -134,3 +141,48 @@ humanizeString :: String -> MonadPerspectives String
 humanizeString s = case typeUri2ModelUri s of
   Just _ -> pure (typeUri2LocalName_ s)
   Nothing -> pure s
+
+-- | Map typed identifiers inside a warning to their readable counterparts.
+-- | Constructors whose fields are already plain Strings are left unchanged.
+humanizePerspectivesWarning :: PerspectivesWarning -> MonadPerspectives PerspectivesWarning
+humanizePerspectivesWarning w = case w of
+  PropertySynchronizationIncomplete prop source destinations -> do
+    prop' <- toReadable prop
+    source' <- toReadable source
+    destinations' <- traverse toReadable destinations
+    pure (PropertySynchronizationIncomplete prop' source' destinations')
+  RoleSynchronizationIncomplete role source destinations -> do
+    role' <- toReadable role
+    source' <- toReadable source
+    destinations' <- traverse toReadable destinations
+    pure (RoleSynchronizationIncomplete role' source' destinations')
+  RoleBindingSynchronizationIncomplete role source destinations -> do
+    role' <- toReadable role
+    source' <- toReadable source
+    destinations' <- traverse toReadable destinations
+    pure (RoleBindingSynchronizationIncomplete role' source' destinations')
+  NotificationError sid -> NotificationError <$> toReadable sid
+  AutomaticActionError sid -> AutomaticActionError <$> toReadable sid
+  _ -> pure w
+
+-- | Convert a PerspectivesWarning to a human-friendly string.
+renderPerspectivesWarning :: PerspectivesWarning -> MonadPerspectives String
+renderPerspectivesWarning w = humanizePerspectivesWarning w >>= pure <<< show
+
+-- | Log a PerspectivesWarning to the console with human-readable type names,
+-- | and accumulate it in the warnings list.
+warnModellerPretty :: PerspectivesWarning -> MonadPerspectives Unit
+warnModellerPretty warning = do
+  humanized <- humanizePerspectivesWarning warning
+  let msg = show humanized
+  modify \(s@{ warnings }) -> s { warnings = cons ({ message: msg, error: "" }) warnings }
+  warn msg
+
+-- | Log a PerspectivesWarning with associated error detail, with human-readable
+-- | type names, and accumulate it in the warnings list.
+warnModellerWithErrorPretty :: PerspectivesWarning -> String -> MonadPerspectives Unit
+warnModellerWithErrorPretty warning err = do
+  humanized <- humanizePerspectivesWarning warning
+  let msg = show humanized
+  modify \(s@{ warnings }) -> s { warnings = cons ({ message: msg, error: err }) warnings }
+  warn msg

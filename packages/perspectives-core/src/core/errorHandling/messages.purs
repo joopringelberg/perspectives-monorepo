@@ -162,6 +162,10 @@ data PerspectivesError
   | MultipleDefaultUserRoles ContextType
 
   | Custom String
+  -- Incoming transaction / delta errors
+  | UnparseableIncomingDelta String
+  | IncomingTransactionFailed String
+  | DeltaExecutionError String
 
 derive instance eqPerspectivesError :: Eq PerspectivesError
 
@@ -286,6 +290,9 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (DomeinFileErrorBoundary boundaryName err) = "(DomeinFileErrorBoundary) ErrorBoundary in '" <> boundaryName <> "' for DomeinFile (" <> err <> ")"
   show (ApiErrorBoundary m) = "(ApiErrorBoundary) An error occurred while processing an API request: " <> show m
   show (RuleErrorBoundary ruleName m) = "(RuleErrorBoundary) An error occurred while running rule " <> ruleName <> ": " <> show m
+  show (UnparseableIncomingDelta delta) = "(UnparseableIncomingDelta) Failing to parse and execute incoming delta: " <> delta
+  show (IncomingTransactionFailed err) = "(IncomingTransactionFailed) Could not execute a transaction. Reason: " <> err
+  show (DeltaExecutionError err) = "(DeltaExecutionError) An error occurred while executing a delta: " <> err
 
 maybeShowPosition :: Maybe ArcPosition -> Maybe ArcPosition -> String
 maybeShowPosition (Just start) (Just end) = "(between " <> show start <> " and " <> show end <> ")."
