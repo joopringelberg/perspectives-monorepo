@@ -195,6 +195,9 @@ domain model://perspectives.domains#System@6.3
       perspective on PerspectivesUsers
         only (Create)
         props (Identifiable$PublicKey, SharedFileServerKey, PerspectivesUsers$HasKey) verbs (SetPropertyValue, AddPropertyValue)
+      -- Legacy: this perspective was necessary because Initializer created the Persons instance on installation of the PDR.
+      perspective on sys:MySocialEnvironment >> Persons
+        only (Create, Fill)
  
   -- MySocialEnvironment is the same on all of my devices.
     -- PDRDEPENDENCY
