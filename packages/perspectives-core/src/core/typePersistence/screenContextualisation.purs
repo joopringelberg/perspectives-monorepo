@@ -183,8 +183,8 @@ contextualiseChatDef :: ChatDef -> InContext (Maybe ChatDef)
 contextualiseChatDef (ChatDef r@{ chatRole, title }) = do
   { contextInstance } <- ask
   title' <- lift $ lift $ lift $ translateType chatRole
-  chatRoleInstance <- lift $ getRoleInstances chatRole contextInstance
-  pure $ Just $ ChatDef r { chatInstance = Just chatRoleInstance, title = Just title' }
+  chatRoleInstances <- lift $ lift $ runArrayT $ getRoleInstances chatRole contextInstance
+  pure $ Just $ ChatDef r { chatInstance = head chatRoleInstances, title = Just title' }
 
 contextualiseWidgetCommonFields :: WidgetCommonFieldsDef -> InContext (Maybe WidgetCommonFieldsDef)
 contextualiseWidgetCommonFields wc@{ title, perspectiveId, fillFrom, propertyRestrictions, withoutProperties, roleVerbs, userRole } = do
