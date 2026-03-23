@@ -16,8 +16,6 @@ module Perspectives.Error.Pretty
 
 import Prelude
 
-import Control.Monad.AvarMonadAsk (modify)
-import Data.Array (cons)
 import Data.Maybe (Maybe(..))
 import Effect.Class.Console (log, warn)
 import Data.Traversable (for, traverse)
@@ -175,7 +173,7 @@ warnModellerPretty :: PerspectivesWarning -> MonadPerspectives Unit
 warnModellerPretty warning = do
   humanized <- humanizePerspectivesWarning warning
   let msg = show humanized
-  modify \(s@{ warnings }) -> s { warnings = cons ({ message: msg, error: "" }) warnings }
+  -- modify \(s@{ warnings }) -> s { warnings = cons ({ message: msg, error: "" }) warnings }
   warn msg
 
 -- | Log a PerspectivesWarning with associated error detail, with human-readable
@@ -184,5 +182,5 @@ warnModellerWithErrorPretty :: PerspectivesWarning -> String -> MonadPerspective
 warnModellerWithErrorPretty warning err = do
   humanized <- humanizePerspectivesWarning warning
   let msg = show humanized
-  modify \(s@{ warnings }) -> s { warnings = cons ({ message: msg, error: err }) warnings }
+  -- modify \(s@{ warnings }) -> s { warnings = cons ({ message: msg, error: err }) warnings }
   warn msg
