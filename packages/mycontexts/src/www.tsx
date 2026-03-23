@@ -527,7 +527,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                     , openContextType: contextType
                     , openContextUserType: userRoleType
                     , actions
-                    , title: screens[0].title ? screens[0].title : "MyContexts"}))
+                    , title: screens[0]?.title || "MyContexts"}))
                 .catch(e => UserMessagingPromise.then( um => 
                   um.addMessageForEndUser(
                     { title: i18next.t("app_contextactions_title", { ns: 'mycontexts' }) 
