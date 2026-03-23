@@ -42,12 +42,14 @@ import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, 
 import Perspectives.Data.EncodableMap as ENCMAP
 import Perspectives.DomeinCache (saveCachedDomeinFile)
 import Perspectives.EntiteitAndRDFAliases (ID)
+import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Me (notIsMe)
 import Perspectives.Instances.ObjectGetters (deltaAuthor2ResourceIdentifier, getProperty, perspectivesUsersRole_, roleType_)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, userChannel) as DEP
 import Perspectives.ModelDependencies (perspectivesUsersCancelled, perspectivesUsersPublicKey)
 import Perspectives.Names (getMySystem)
+import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (Url, addDocument)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource, storeDeltaFromSignedDelta)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
@@ -292,13 +294,15 @@ addPublicKeysToTransaction (Transaction tr@{ deltas }) = do
       case Map.lookup author keys of
         Just _ -> pure unit
         Nothing -> do
-          pkInfo <- lift $ getPkInfo author
-          void $ modify (\keys' -> Map.insert author pkInfo keys')
+          mpkInfo <- lift $ getPkInfo author
+          case mpkInfo of
+            Nothing -> pure unit
+            Just pkInfo -> void $ modify (\keys' -> Map.insert author pkInfo keys')
 
   -- This is built on the assumption that the argument is the string value of the RoleInstance of type TheWorld$PerspectivesUser
   -- that fills SocialEnvironment$Me
   -- Queries the DeltaStore for the creation deltas and public key property delta of this PerspectivesUser role instance.
-  getPkInfo :: PerspectivesUser -> MonadPerspectives PublicKeyInfo
+  getPkInfo :: PerspectivesUser -> MonadPerspectives (Maybe PublicKeyInfo)
   getPkInfo perspectivesUser = do
     -- The perspectivesUser is taken from the SignedDelta and is schemaless.
     let roleInstanceId = perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier perspectivesUser
@@ -308,11 +312,7 @@ addPublicKeysToTransaction (Transaction tr@{ deltas }) = do
     -- Get property deltas for the public key property.
     pkPropertyDeltas <- getDeltasForResource (unwrap roleInstanceId <> "#" <> unwrap (EnumeratedPropertyType perspectivesUsersPublicKey))
     let allDeltas = map (\(DeltaStoreRecord { signedDelta }) -> signedDelta) (creationDeltas <> pkPropertyDeltas)
-    pure
-      let
-        k@(Value key) = unsafePartial fromJust $ head $ rol_property authorRole (EnumeratedPropertyType perspectivesUsersPublicKey)
-      in
-        { key
-        , deltas: allDeltas
-        }
+    case head $ rol_property authorRole (EnumeratedPropertyType perspectivesUsersPublicKey) of
+      Nothing -> logPerspectivesError (NoPublicKeyForAuthor (unwrap roleInstanceId)) *> pure Nothing
+      Just (Value key) -> pure $ Just { key, deltas: allDeltas }
 
