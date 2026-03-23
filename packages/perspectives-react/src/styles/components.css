@@ -117,3 +117,7 @@ for a discussion about variables and sass. */
 .calculated-role {
   background-color: #fff3cd !important; /* Light yellow background for calculated roles */
 }
+
+.cancelled-peer {
+  background-color: #ffe0e0 !important; /* Light red background for cancelled/disconnected peers */
+}

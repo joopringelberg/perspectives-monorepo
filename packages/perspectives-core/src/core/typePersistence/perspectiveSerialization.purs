@@ -48,7 +48,7 @@ import Perspectives.Identifiers (isExternalRole)
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextType, contextType_, getActiveRoleStates, getActiveStates, roleType_)
 import Perspectives.Instances.Values (parseNumber)
-import Perspectives.ModelDependencies (roleWithId)
+import Perspectives.ModelDependencies (perspectivesUsersCancelled, roleWithId)
 import Perspectives.Names (findIndexedContextName)
 import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), domain, domain2roleType, functional, isContextDomain, makeComposition, mandatory, queryFunction, range, roleInContext2Context, roleInContext2Role, roleRange)
@@ -66,7 +66,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ScreenDefinition (WidgetCommonFieldsDef, PropertyRestrictions)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
-import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), ContextType(..), IndexedContext(..), PropertyType(..), RoleKind(..), RoleType(..), externalRoleType, propertytype2string, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), IndexedContext(..), PropertyType(..), RoleKind(..), RoleType(..), externalRoleType, propertytype2string, roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..)) as Verbs
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..), roleVerbList2Verbs)
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, guid)
@@ -537,6 +537,9 @@ roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContex
             pure $ Tuple actionName translatedActionName
       )
     readableName <- computeReadableName valuesAndVerbs
+    -- Check if this role instance represents a cancelled peer (Identifiable$Cancelled = true).
+    cancelledValues <- lift $ runArrayT $ getPropertyValues (ENP $ EnumeratedPropertyType perspectivesUsersCancelled) roleId
+    let cancelled = maybe false (\(Value v) -> v == "true") (head cancelledValues)
     pure $ Just
       { roleId: (unwrap roleId)
       , objectStateBasedRoleVerbs
@@ -547,6 +550,7 @@ roleInstancesWithProperties allProps contextSubjectStateBasedProps subjectContex
       , isMe
       , publicUrl
       , readableName
+      , cancelled
       }
 
     where

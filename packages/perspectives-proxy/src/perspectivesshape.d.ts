@@ -101,8 +101,9 @@ export type Roleinstancewithprops = {
   publicUrl?: string;
   filler?: RoleInstanceT;
   isMe: boolean;
-  publicUrl?: string;
-  readableName: string
+  readableName: string;
+  // True iff this role instance represents a peer that has been cancelled (disconnected).
+  cancelled: boolean;
 };
 
 export type PropertyValues = {

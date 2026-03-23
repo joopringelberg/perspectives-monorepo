@@ -78,6 +78,7 @@ interface TableCellProps
   propertyValues?: PropertyValues;
   perspective: Perspective;
   readableName: string;
+  cancelled: boolean;
 }
 
 interface TableCellState
@@ -318,6 +319,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     const ariaLabel = title ? title : component.props.perspective.displayName; 
     const isPublic = isInPublicScheme(component.props.roleinstance);
     const isCalculated = component.props.perspective.isCalculated;
+    const isCancelled = component.props.cancelled ?? false;
 
     if (component.props.iscard)
     {
@@ -418,7 +420,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                     aria-label={ariaLabel}
                     // Other properties to pass on.
                     tabIndex={receiveFocusByKeyboard}
-                    className={`shadow ${component.props.isselected ? 'card-selected' : ''} ${isPublic ? 'public-role' : ''} ${isCalculated ? 'calculated-role' : ''}`}
+                    className={`shadow ${component.props.isselected ? 'card-selected' : ''} ${isPublic ? 'public-role' : ''} ${isCalculated ? 'calculated-role' : ''} ${isCancelled ? 'cancelled-peer' : ''}`}
                     onClick={component.handleClick}
                     type={component.inputType == 'date' ? 'text' : component.inputType || 'text'}
                   />
@@ -436,7 +438,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                 key={component.props.roleinstance}
                 tabIndex={focusable}
                 {... (title !== undefined ? { title } : {})}
-                className={`shadow ${component.props.isselected ? 'card-selected' : ''}` + ` ${isPublic ? 'public-role' : ''} ${isCalculated ? 'calculated-role' : ''}`}
+                className={`shadow ${component.props.isselected ? 'card-selected' : ''}` + ` ${isPublic ? 'public-role' : ''} ${isCalculated ? 'calculated-role' : ''} ${isCancelled ? 'cancelled-peer' : ''}`}
                 onClick={component.handleClick}
                 aria-label={ariaLabel}
                 type={component.inputType == 'date' ? 'text' : component.inputType || 'text'}
