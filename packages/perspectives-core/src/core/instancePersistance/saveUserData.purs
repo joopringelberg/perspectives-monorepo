@@ -74,6 +74,7 @@ import Perspectives.Instances.Clipboard (allItemsOnClipboard)
 import Perspectives.Instances.Me (getMyType, isMe)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, context, contextType, contextType_, getUnlinkedRoleInstances, roleType_)
 import Perspectives.Names (findIndexedContextName, findIndexedRoleName, removeIndexedContext, removeIndexedRole)
+import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Persistence.ResourceVersionStore (incrementResourceVersion)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, tryGetPerspectContext, tryGetPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
@@ -530,6 +531,12 @@ setFirstBinding filled filler msignedDelta = (lift $ try $ getPerspectRol filled
               Just signedDelta -> pure signedDelta
 
             -- SYNCHRONISATION
+            -- Store the binding delta in the DeltaStore before calling handleNewPeer, so that
+            -- serialisedAsDeltasFor_ can find and include it when serialising the context for the
+            -- new peer. Without this, addBindingDelta queries the DeltaStore and finds nothing
+            -- (addDelta has not yet been called), causing the SetFirstBinding delta to be omitted
+            -- from the context serialisation sent to the new peer.
+            lift $ storeDeltaFromSignedDelta signedDelta
             -- Compute the deltas that must be sent to other users in case the filled role is a 
             -- perspective object.
             handleNewPeer filled
