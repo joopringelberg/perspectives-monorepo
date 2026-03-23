@@ -195,7 +195,8 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
     {
       const isPublic = component.state.roleInstanceWithProps ? isInPublicScheme(component.state.roleInstanceWithProps!.roleId) : false;
       const isCalculated = component.props.perspective.isCalculated;
-      const cardClassName = `${isPublic ? 'public-role' : ''} ${isCalculated ? 'calculated-role' : ''}`.trim();
+      const isCancelled = component.state.roleInstanceWithProps?.cancelled ?? false;
+      const cardClassName = `${isPublic ? 'public-role' : ''} ${isCalculated ? 'calculated-role' : ''} ${isCancelled ? 'cancelled-peer' : ''}`.trim();
       return  <RoleInstance
                 roleinstance={component.state.roleInstanceWithProps ? component.state.roleInstanceWithProps.roleId : undefined}
                 roletype={component.props.perspective.roleType!}
