@@ -19,10 +19,13 @@ domain model://perspectives.domains#System@6.3
     do for sys:PerspectivesSystem$Installer
       letA
         start <- create role StartContexts in sys:MySystem
+        adressbook <- create role StartContexts in sys:MySystem
       in
         bind_ sys:MySystem >> extern to start
         Name = "My System" for start
         IsSystemModel = true for start
+        bind_ sys:MySocialEnvironment >> extern to adressbook
+        Name = "Adressbook" for adressbook
     do for Upgrader
         create role SystemDataUpgrade
 
