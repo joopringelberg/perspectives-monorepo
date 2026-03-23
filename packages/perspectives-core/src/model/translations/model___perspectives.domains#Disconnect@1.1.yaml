@@ -5,6 +5,11 @@ model://perspectives.domains#kxrm2cilp9:
       translations:
         en: Disconnect app
         nl: Verbreek verbinding app
+      indexedName:
+        name: model://perspectives.domains#Disconnect$DisconnectApp
+        translations:
+          nl: Verbreek verbinding app
+          en: Disconnect app
       users:
         Manager:
           translations:
@@ -14,13 +19,14 @@ model://perspectives.domains#kxrm2cilp9:
             0:
               translations:
                 orig: "### Roles\n
-                  There is just a single role you can have in this context: that of the Manager, who \n
+                  There is just a single role you can have in this context: that of the Manager, who\n
                   decides which peers to disconnect from. You have this role automatically."
-                en: "### Roles\n
-                   There is just a single role you can have in this context: that of the Manager, who \n
-                   decides which peers to disconnect from. You have this role automatically."
                 nl: "### Rollen\n
-                   Er is slechts één rol die je in deze context kunt hebben: die van Beheerder, die beslist van welke peers de verbinding wordt verbroken. Je hebt deze rol automatisch."
+                   Er is slechts één rol die je in deze context kunt hebben: die van de Beheerder, die\n
+                   beslist van welke peers de verbinding wordt verbroken. Je hebt deze rol automatisch."
+                en: "### Roles\n
+                     There is just a single role you can have in this context: that of the Manager, who\n
+                     decides which peers to disconnect from. You have this role automatically."
             1:
               translations:
                 orig: "### Manager\n
@@ -129,31 +135,34 @@ model://perspectives.domains#kxrm2cilp9:
             0:
               translations:
                 orig: "### Disconnected peer\n
-                    This peer has disconnected from you."
+                  This peer has disconnected from you."
                 en: "### Disconnected peer\n
-                    This peer has disconnected from you."
+                   This peer has disconnected from you."
                 nl: "### Afgesloten andere gebruiker\n
-                    Deze gebruiker heeft de verbinding met jou verbroken."
+                   Deze gebruiker heeft de verbinding met jou verbroken."
             1:
               translations:
                 orig: "### You have been disconnected\n
                   Your peer has severed the connection with you.\n
                   Your installation automatically stops sending information to the peer.\n
                   You can reconnect to your peer by choosing the *Reconnect* item from the main menu (top left corner).\n
+                  Or press [[action:Reconnect|Reconnect]].\n
                   This will e.g. allow you to send chat messages to the peer again.\n
                   However, it is up to the peer to restore her/his side of the connection."
+                nl: "### Je bent losgekoppeld\n
+                   Je peer heeft de verbinding met jou verbroken.\n
+                   Je installatie stopt automatisch met het verzenden van informatie naar de peer.\n
+                   Je kunt opnieuw verbinding maken met je peer door het item *Verbind opnieuw* te kiezen in het hoofdmenu (linksboven).\n
+                   Of druk op [[action:Reconnect|Verbind opnieuw]].\n
+                   Dit zal bijvoorbeeld toestaan dat je weer chatberichten naar de peer kunt sturen.\n
+                   Het is echter aan de peer om zijn/haar kant van de verbinding te herstellen."
                 en: "### You have been disconnected\n
                    Your peer has severed the connection with you.\n
                    Your installation automatically stops sending information to the peer.\n
                    You can reconnect to your peer by choosing the *Reconnect* item from the main menu (top left corner).\n
+                   Or press [[action:Reconnect|Reconnect]].\n
                    This will e.g. allow you to send chat messages to the peer again.\n
                    However, it is up to the peer to restore her/his side of the connection."
-                nl: "### Je bent afgesloten\n
-                   Je peer heeft de verbinding met jou verbroken.\n
-                   Jouw installatie stopt automatisch met het versturen van informatie naar de peer.\n
-                   Je kunt de verbinding met je peer herstellen door het menu-item *Verbind opnieuw* te kiezen in het hoofdmenu (linksboven).\n
-                   Hiermee kun je bijvoorbeeld weer chatberichten sturen naar de peer.\n
-                   Het is echter aan de peer om haar/zijn kant van de verbinding te herstellen."
             2:
               translations:
                 orig: "### You can't go anywhere from here\n
@@ -173,11 +182,6 @@ model://perspectives.domains#kxrm2cilp9:
                 en: You can now start a chat with the peer.
                 nl: Je kunt nu een chat starten met de andere gebruiker.
           actions:
-            model://perspectives.domains#System$ContextWithNotification$NotifiedUser:
-              DeleteNotifications:
-                translations:
-                  en: Delete notifications
-                  nl: Verwijder meldingen
             model://perspectives.domains#Disconnect$DisconnectedPeer$Disconnecter:
               Disconnect:
                 translations:
@@ -192,30 +196,33 @@ model://perspectives.domains#kxrm2cilp9:
               translations:
                 orig: "### Disconnect and reconnect\n
                   If the *Disconnected* property is set to *true*, you are disconnected from the peer.\n
-                  Restore contact by choosing the *Reconnect* action in the main menu (top left corner)."
+                  Do so by choosing the *Disconnect* action in the main menu (top left corner). Or press [[action:Disconnect|Disconnect]].\n
+                  Restore contact by choosing the *Reconnect* action in the main menu (top left corner). Or press [[action:Reconnect|Reconnect]]."
+                nl: "### Loskoppelen en opnieuw verbinden\n
+                   Als de eigenschap *Losgekoppeld* is ingesteld op *true*, ben je losgekoppeld van de peer.\n
+                   Doe dit door de actie *Loskoppelen* te kiezen in het hoofdmenu (linksboven). Of druk op [[action:Disconnect|Loskoppelen]].\n
+                   Herstel contact door de actie *Verbind opnieuw* te kiezen in het hoofdmenu (linksboven). Of druk op [[action:Reconnect|Verbind opnieuw]]."
                 en: "### Disconnect and reconnect\n
-                   If the *Disconnected* property is set to *true*, you are disconnected from the peer.\n
-                   Restore contact by choosing the *Reconnect* action in the main menu (top left corner)."
-                nl: "### Verbreek en herstel de verbinding\n
-                   Als de eigenschap *Afgesloten* is ingesteld op *true*, ben je afgesloten van de andere gebruiker.\n
-                   Herstel het contact door de actie *Verbind opnieuw* te kiezen in het hoofdmenu (linksboven)."
+                     If the *Disconnected* property is set to *true*, you are disconnected from the peer.\n
+                     Do so by choosing the *Disconnect* action in the main menu (top left corner). Or press [[action:Disconnect|Disconnect]].\n
+                     Restore contact by choosing the *Reconnect* action in the main menu (top left corner). Or press [[action:Reconnect|Reconnect]]."
             1:
               translations:
                 orig: "### Disconnect from or reconnect to a peer\n
                   Disconnect from this peer by choosing the *Disconnect* action from the main menu (top left corner).\n
-                  Reconnect by choosing the *Reconnect* action.\n
-                  \n
+                  Reconnect by choosing the *Reconnect* action. Or press [[action:Reconnect|Reconnect]].\n
+                  Disconnecting is bilateral: if you disconnect from a peer, the peer is also disconnected from you. Reconnecting is unilateral: if you reconnect to a peer, the peer is not automatically reconnected to you. The peer has to choose to reconnect to you as well.\n
                   As long as you are connected, you can chat with the peer (see the chat under *Who*)."
+                nl: "### Loskoppelen van of opnieuw verbinden met een peer\n
+                   Verbreek de verbinding met deze peer door de actie *Loskoppelen* te kiezen in het hoofdmenu (linksboven).\n
+                   Maak opnieuw verbinding door de actie *Verbind opnieuw* te kiezen. Of druk op [[action:Reconnect|Verbind opnieuw]].\n
+                   Loskoppelen is bilateraal: als je de verbinding met een peer verbreekt, wordt de peer ook van jou losgekoppeld. Opnieuw verbinden is unilateraal: als je opnieuw verbinding maakt met een peer, wordt de peer niet automatisch opnieuw met jou verbonden. De peer moet zelf kiezen om opnieuw verbinding te maken.\n
+                   Zolang je verbonden bent, kun je chatten met de peer (zie de chat onder *Wie*)."
                 en: "### Disconnect from or reconnect to a peer\n
-                   Disconnect from this peer by choosing the *Disconnect* action from the main menu (top left corner).\n
-                   Reconnect by choosing the *Reconnect* action.\n
-                   \n
-                   As long as you are connected, you can chat with the peer (see the chat under *Who*)."
-                nl: "### Verbreek of herstel de verbinding met een peer\n
-                   Verbreek de verbinding met deze gebruiker door de actie *Verbreek verbinding* te kiezen in het hoofdmenu (linksboven).\n
-                   Herstel de verbinding door de actie *Verbind opnieuw* te kiezen.\n
-                   \n
-                   Zolang je verbonden bent, kun je chatten met de andere gebruiker (zie de chat onder *Wie*)."
+                     Disconnect from this peer by choosing the *Disconnect* action from the main menu (top left corner).\n
+                     Reconnect by choosing the *Reconnect* action. Or press [[action:Reconnect|Reconnect]].\n
+                     Disconnecting is bilateral: if you disconnect from a peer, the peer is also disconnected from you. Reconnecting is unilateral: if you reconnect to a peer, the peer is not automatically reconnected to you. The peer has to choose to reconnect to you as well.\n
+                     As long as you are connected, you can chat with the peer (see the chat under *Who*)."
             2:
               translations:
                 orig: "### You can't go anywhere from here\n
