@@ -123,6 +123,7 @@ domain model://perspectives.domains#Disconnect@1.1
       state ActionsCanBeTaken = exists binding
         on entry
           do
+            -- NOTE: Disconnecter has no perspective on Chat. This won't happen.
             create role sys:Chat
           notify "You can now start a chat with the peer."
       perspective on Disconnecter
@@ -153,8 +154,8 @@ domain model://perspectives.domains#Disconnect@1.1
                         If the *Disconnected* property is set to *true*, you are disconnected from the peer.
                         Restore contact by choosing the *Reconnect* action in the main menu (top left corner).
                         >
-              without props (Reconnect)
-              props (Cancelled, Reconnect) without (SetPropertyValue)
+              -- without props (Reconnect)
+              props (Cancelled, Reconnect)-- without (SetPropertyValue)
         what
           markdown <### Disconnect from or reconnect to a peer
                     Disconnect from this peer by choosing the *Disconnect* action from the main menu (top left corner).
