@@ -96,6 +96,20 @@ Mutations produce **deltas** (change records). Delta types:
 - `contextualiseScreen` must be used (not `addPerspectives`) for who/what/where screens so `WhenTableFormItemDef` wrappers are evaluated before serialisation.
 - `allEnumeratedRoles` does **not** include the External role; check `roleType == externalRoleType contextType` before `allEnumeratedRoles`.
 
+
+### Model files
+
+ARC model files are in `src/model/`. They are compiled by the PDR and currently only through the MyContexts WebApp interface. They are stored in PouchDB as `DomeinFile` documents. The `domeinCache` field of the state record holds the in-memory cache of compiled models.
+Models are published in a DNS domain. Each model URI is deterministically mapped to the URL where its DomeinFile can be found. They are stored in Couchdb. 
+The most important domains are:
+- perspectives.domains, which maps to https://perspectives.domains/models_perspectives_domains
+- joopringelberg.nl, which maps to https://joopringelberg.nl/models_joopringelberg_nl
+For example: the model model://perspectives.domains#System@6.3 can be found at 	https://perspectives.domains/models_perspectives_domains/perspectives_domains-tiodn6tcyc@6.3.json
+Each model has three attachments:
+- storedQueries.json: the inverted queries for detecting modelled state change and computing peers affected by a change;
+- stableIdMapping.json: the mapping from stable IDs in the model to the generated internal CUIDs used in the compiled model;
+- translationTable.json: the translation of type names, markdown texts, etc to internationalised versions (currently only English and Dutch).
+
 ---
 
 ## Build
