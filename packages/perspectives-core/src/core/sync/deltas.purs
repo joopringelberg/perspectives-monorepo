@@ -192,6 +192,8 @@ addDomeinFileToTransactie dfId = AA.modify
 
 -- | If we have a public role instance, return [Tuple rid [PublicDestination rid]].
 -- | If the role chain bottoms out in an instance of TheWorld$PerspectivesUsers, return Tuple rid <<the other PerspectivesSystem$Users>>.
+-- | If the role chain bottoms out in another UserRole that is not TheWorld$NonPerspectivesUsers (e.g. Onlookers), return Tuple rid <<that role instance>>.
+-- | Onlookers instances represent TCP subscribers (Transaction Collection Points) reached via RabbitMQ.
 -- | Otherwise return an empty array.
 -- | Also return an empty array if the PerspectivesUser has been cancelled.
 computeUserRoleBottom :: RoleInstance -> MonadPerspectives (Array (Tuple RoleInstance TransactionDestination))
