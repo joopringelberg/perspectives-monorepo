@@ -60,7 +60,7 @@ import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor, seriali
 import Perspectives.Assignment.Update (addRoleInstanceToContext, setProperty)
 import Perspectives.ContextAndRole (changeRol_isMe, getNextRolIndex)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (##=), (###=), IndexedResource(..))
-import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, deltaIndex, insertDelta)
+import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, addDelta, deltaIndex, insertDelta)
 import Perspectives.DependencyTracking.Dependency (findIndexedContextNamesRequests)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.CreateContext (constructEmptyContext)
@@ -68,6 +68,8 @@ import Perspectives.Instances.CreateRole (constructEmptyRole)
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Parsing.Messages (PerspectivesError)
+import Perspectives.Persistence.DeltaStore (getDeltasForResource)
+import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (saveEntiteit, tryGetPerspectEntiteit)
 import Perspectives.PerspectivesState (getIndexedResourceToCreate)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
@@ -165,7 +167,22 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
           calcUserInstances <- lift $ lift (contextInstanceId ##= getRoleInstances calcUserRoleType)
           for_ calcUserInstances \calcUserInstance -> do
             me <- lift $ lift $ isMe calcUserInstance
-            unless me $ lift (serialisedAsDeltasFor_ contextInstanceId calcUserInstance calcUserRoleType)
+            unless me $ do
+              -- First, explicitly add the context creation deltas (external role + context) to
+              -- guarantee correct ordering on the receiver side. This is necessary because when
+              -- no perspective produces role instances (e.g. the context has no filled user role
+              -- instances at creation time), addDeltasForRole inside serialisedAsDeltasFor_ is
+              -- never called and the receiver would never learn the context exists.
+              -- ORDER IS OF THE ESSENCE: external role deltas first, then context delta,
+              -- matching the ordering in addDeltasForRole.
+              extRoleDeltas <- lift $ lift $ getDeltasForResource (unwrap buitenRol)
+              for_ extRoleDeltas \(DeltaStoreRecord { signedDelta }) ->
+                lift $ addDelta $ DeltaInTransaction { users: [ calcUserInstance ], delta: signedDelta }
+              ctxDeltas <- lift $ lift $ getDeltasForResource (unwrap contextInstanceId)
+              for_ ctxDeltas \(DeltaStoreRecord { signedDelta }) ->
+                lift $ addDelta $ DeltaInTransaction { users: [ calcUserInstance ], delta: signedDelta }
+              -- Then process all perspectives for this calculated user.
+              lift $ serialisedAsDeltasFor_ contextInstanceId calcUserInstance calcUserRoleType
         pure contextInstanceId
   where
 
