@@ -39,7 +39,8 @@ export async function processTransaction(
     `Processing transaction from "${author}" at ${timeStamp} (${deltas.length} deltas)`,
   );
 
-  for (const signedDelta of deltas) {
+  for (let i = 0; i < deltas.length; i++) {
+    const signedDelta = deltas[i];
     if (options.verifySignatures) {
       const valid = await verifySignature(signedDelta, publicKeys);
       if (!valid) {
@@ -57,6 +58,8 @@ export async function processTransaction(
       );
       continue;
     }
+
+    logger.debug(`  delta[${i}]: ${tagged.kind} from "${signedDelta.author}"`);
 
     try {
       await dispatchDelta(tagged, db, options.tables);
@@ -160,7 +163,10 @@ async function handleUniverseContextDelta(
   tables: TableConfig[],
 ): Promise<void> {
   // Narrow to UniverseContextDelta
-  if (!('contextType' in delta && 'id' in delta && !('roleInstance' in delta))) return;
+  if (!('contextType' in delta && 'id' in delta && !('roleInstance' in delta))) {
+    logger.debug(`UniverseContextDelta: unexpected delta shape (fields: ${Object.keys(delta).join(', ')}) – skipping`);
+    return;
+  }
   const d = delta as import('../types').UniverseContextDelta;
 
   const table = tables.find((t) => t.contextType === d.contextType);
@@ -174,6 +180,9 @@ async function handleUniverseContextDelta(
       logger.debug(`UniverseContextDelta: INSERT context "${d.id}" into "${table.name}"`);
       await db.insertRow(table.name, { id: d.id, context_type: d.contextType });
       break;
+    default:
+      logger.debug(`UniverseContextDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
+      break;
   }
 }
 
@@ -182,7 +191,10 @@ async function handleUniverseRoleDelta(
   db: DatabaseAdapter,
   tables: TableConfig[],
 ): Promise<void> {
-  if (!('roleType' in delta && 'roleInstance' in delta)) return;
+  if (!('roleType' in delta && 'roleInstance' in delta)) {
+    logger.debug(`UniverseRoleDelta: unexpected delta shape (fields: ${Object.keys(delta).join(', ')}) – skipping`);
+    return;
+  }
   const d = delta as import('../types').UniverseRoleDelta;
 
   const table = tables.find((t) => t.roleType === d.roleType);
@@ -207,6 +219,10 @@ async function handleUniverseRoleDelta(
       logger.debug(`UniverseRoleDelta: DELETE role "${d.roleInstance}" from "${table.name}"`);
       await db.deleteRow(table.name, d.roleInstance);
       break;
+
+    default:
+      logger.debug(`UniverseRoleDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
+      break;
   }
 }
 
@@ -215,7 +231,10 @@ async function handleContextDelta(
   db: DatabaseAdapter,
   tables: TableConfig[],
 ): Promise<void> {
-  if (!('contextInstance' in delta)) return;
+  if (!('contextInstance' in delta)) {
+    logger.debug(`ContextDelta: unexpected delta shape (fields: ${Object.keys(delta).join(', ')}) – skipping`);
+    return;
+  }
   const d = delta as import('../types').ContextDelta;
 
   const table = tables.find((t) => t.roleType === d.roleType);
@@ -249,6 +268,11 @@ async function handleContextDelta(
     case 'AddExternalRole':
       // External roles link a context to its external role instance.
       // No separate table operation needed beyond what UniverseRoleDelta provides.
+      logger.debug(`ContextDelta: AddExternalRole for "${d.roleInstance}" – no database operation needed`);
+      break;
+
+    default:
+      logger.debug(`ContextDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
       break;
   }
 }
@@ -258,7 +282,10 @@ async function handleRoleBindingDelta(
   db: DatabaseAdapter,
   tables: TableConfig[],
 ): Promise<void> {
-  if (!('filled' in delta)) return;
+  if (!('filled' in delta)) {
+    logger.debug(`RoleBindingDelta: unexpected delta shape (fields: ${Object.keys(delta).join(', ')}) – skipping`);
+    return;
+  }
   const d = delta as import('../types').RoleBindingDelta;
 
   const table = tables.find((t) => t.roleType === d.filledType);
@@ -280,6 +307,10 @@ async function handleRoleBindingDelta(
       logger.debug(`RoleBindingDelta: CLEAR filler_id for "${d.filled}"`);
       await db.updateRow(table.name, d.filled, { filler_id: null });
       break;
+
+    default:
+      logger.debug(`RoleBindingDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
+      break;
   }
 }
 
@@ -288,7 +319,10 @@ async function handleRolePropertyDelta(
   db: DatabaseAdapter,
   tables: TableConfig[],
 ): Promise<void> {
-  if (!('property' in delta && 'id' in delta)) return;
+  if (!('property' in delta && 'id' in delta)) {
+    logger.debug(`RolePropertyDelta: unexpected delta shape (fields: ${Object.keys(delta).join(', ')}) – skipping`);
+    return;
+  }
   const d = delta as import('../types').RolePropertyDelta;
 
   const table = tables.find((t) => t.roleType === d.roleType);
@@ -326,8 +360,17 @@ async function handleRolePropertyDelta(
     case 'UploadFile':
       // File uploads are tracked as a URL/path stored in the property value
       if (d.values.length > 0) {
+        logger.debug(
+          `RolePropertyDelta: UploadFile – UPDATE ${table.name}.${col.name} for "${d.id}" → ${JSON.stringify(d.values[0])}`,
+        );
         await db.updateRow(table.name, d.id, { [col.name]: d.values[0] });
+      } else {
+        logger.debug(`RolePropertyDelta: UploadFile – no value provided for "${d.id}", ignoring`);
       }
+      break;
+
+    default:
+      logger.debug(`RolePropertyDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
       break;
   }
 }

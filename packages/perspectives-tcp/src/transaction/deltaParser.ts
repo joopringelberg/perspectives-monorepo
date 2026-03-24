@@ -14,6 +14,7 @@ import {
   UniverseContextDelta,
   UniverseRoleDelta,
 } from '../types';
+import { logger } from '../logger';
 
 // ---------------------------------------------------------------------------
 // Type guards
@@ -87,11 +88,13 @@ export function parseDelta(encryptedDelta: string): TaggedDelta | null {
 
   try {
     obj = JSON.parse(encryptedDelta) as Record<string, unknown>;
-  } catch {
+  } catch (err) {
+    logger.debug(`parseDelta: failed to JSON-parse delta (length=${encryptedDelta.length}, error=${(err as Error).message})`);
     return null;
   }
 
   if (typeof obj !== 'object' || obj === null) {
+    logger.debug(`parseDelta: parsed value is not an object`);
     return null;
   }
 
@@ -101,19 +104,27 @@ export function parseDelta(encryptedDelta: string): TaggedDelta | null {
   if (isRolePropertyDelta(obj)) {
     kind = 'RolePropertyDelta';
     delta = obj;
+    logger.debug(`parseDelta: classified as RolePropertyDelta (property="${obj['property']}", roleType="${obj['roleType']}")`);
   } else if (isRoleBindingDelta(obj)) {
     kind = 'RoleBindingDelta';
     delta = obj;
+    logger.debug(`parseDelta: classified as RoleBindingDelta (filled="${obj['filled']}", filledType="${obj['filledType']}")`);
   } else if (isContextDelta(obj)) {
     kind = 'ContextDelta';
     delta = obj;
+    logger.debug(`parseDelta: classified as ContextDelta (contextInstance="${obj['contextInstance']}", roleType="${obj['roleType']}")`);
   } else if (isUniverseRoleDelta(obj)) {
     kind = 'UniverseRoleDelta';
     delta = obj;
+    logger.debug(`parseDelta: classified as UniverseRoleDelta (roleInstance="${obj['roleInstance']}", roleType="${obj['roleType']}")`);
   } else if (isUniverseContextDelta(obj)) {
     kind = 'UniverseContextDelta';
     delta = obj;
+    logger.debug(`parseDelta: classified as UniverseContextDelta (id="${obj['id']}", contextType="${obj['contextType']}")`);
   } else {
+    logger.debug(
+      `parseDelta: delta did not match any known type – keys present: ${Object.keys(obj).join(', ')}`,
+    );
     return null;
   }
 
