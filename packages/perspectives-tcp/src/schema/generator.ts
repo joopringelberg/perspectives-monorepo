@@ -86,6 +86,10 @@ function addStandardColumns(table: TableConfig): TableConfig {
     prefix.push({ name: 'id', type: 'text', primaryKey: true, nullable: false });
   }
 
+  if (table.contextType && !existing.has('context_type')) {
+    prefix.push({ name: 'context_type', type: 'text', nullable: true });
+  }
+
   if (table.roleType && !existing.has('context_id')) {
     prefix.push({ name: 'context_id', type: 'text', nullable: true });
   }

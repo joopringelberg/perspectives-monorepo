@@ -38,15 +38,34 @@ export class KnexAdapter implements DatabaseAdapter {
   // -------------------------------------------------------------------------
 
   async applySchema(tables: TableConfig[]): Promise<void> {
+    // Pass 1: create all tables without foreign key constraints
     for (const table of tables) {
       const exists = await this.db.schema.hasTable(table.name);
       if (!exists) {
         logger.info(`Creating table "${table.name}"`);
         await this.db.schema.createTable(table.name, (t) => {
-          this.buildTable(t, table);
+          this.buildTable(t, table, false);
         });
       } else {
         logger.debug(`Table "${table.name}" already exists – skipping`);
+      }
+    }
+
+    // Pass 2: add foreign key constraints now that all tables exist
+    for (const table of tables) {
+      const fkCols = table.columns.filter((c) => c.references);
+      for (const col of fkCols) {
+        try {
+          await this.db.schema.alterTable(table.name, (t) => {
+            t.foreign(col.name)
+              .references(col.references!.column)
+              .inTable(col.references!.table)
+              .onDelete('SET NULL');
+          });
+        } catch {
+          // Constraint may already exist from a previous run
+          logger.debug(`FK constraint on "${table.name}"."${col.name}" already exists – skipping`);
+        }
       }
     }
   }
@@ -64,7 +83,7 @@ export class KnexAdapter implements DatabaseAdapter {
     return statements.join('\n\n');
   }
 
-  private buildTable(builder: Knex.CreateTableBuilder, table: TableConfig): void {
+  private buildTable(builder: Knex.CreateTableBuilder, table: TableConfig, includeForeignKeys = true): void {
     for (const col of table.columns) {
       const colBuilder = this.addColumn(builder, col);
       if (col.nullable === false) {
@@ -78,13 +97,15 @@ export class KnexAdapter implements DatabaseAdapter {
     }
 
     // Add foreign key constraints separately (after all columns are defined)
-    for (const col of table.columns) {
-      if (col.references) {
-        builder
-          .foreign(col.name)
-          .references(col.references.column)
-          .inTable(col.references.table)
-          .onDelete('SET NULL');
+    if (includeForeignKeys) {
+      for (const col of table.columns) {
+        if (col.references) {
+          builder
+            .foreign(col.name)
+            .references(col.references.column)
+            .inTable(col.references.table)
+            .onDelete('SET NULL');
+        }
       }
     }
   }

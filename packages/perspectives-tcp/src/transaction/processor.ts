@@ -6,10 +6,44 @@
 
 import { createVerify, createPublicKey } from 'crypto';
 import { TransactionForPeer, SignedDelta, TaggedDelta } from '../types';
-import { TableConfig } from '../config';
+import { TableConfig, ColumnType } from '../config';
 import { DatabaseAdapter, columnForProperty } from '../database/adapter';
 import { parseDelta } from './deltaParser';
 import { logger } from '../logger';
+
+// ---------------------------------------------------------------------------
+// Value coercion
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a raw string value (as delivered by Perspectives) to the JS type
+ * that Knex / the database driver expects for the given column type.
+ */
+function coerceValue(raw: string | null, colType: ColumnType): unknown {
+  if (raw === null || raw === undefined) return null;
+  switch (colType) {
+    case 'datetime': {
+      // Perspectives sends epoch milliseconds as a string
+      const n = Number(raw);
+      if (!isNaN(n)) return new Date(n);
+      // Fall back: let the driver try to parse whatever string was sent
+      return raw;
+    }
+    case 'integer': {
+      const n = parseInt(raw, 10);
+      return isNaN(n) ? null : n;
+    }
+    case 'real': {
+      const n = parseFloat(raw);
+      return isNaN(n) ? null : n;
+    }
+    case 'boolean':
+      return raw === 'true' || raw === '1';
+    case 'text':
+    default:
+      return raw;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -325,10 +359,23 @@ async function handleRolePropertyDelta(
   }
   const d = delta as import('../types').RolePropertyDelta;
 
-  const table = tables.find((t) => t.roleType === d.roleType);
-  if (!table) {
-    logger.debug(`No table configured for roleType "${d.roleType}" – ignoring`);
-    return;
+  // External role properties are stored in the context table, not a separate role table.
+  // If the roleType ends with "$External", look up the context table instead.
+  const isExternalRole = d.roleType.endsWith('$External');
+  let table: TableConfig | undefined;
+  if (isExternalRole) {
+    const contextType = d.roleType.slice(0, -'$External'.length);
+    table = tables.find((t) => t.contextType === contextType);
+    if (!table) {
+      logger.debug(`No context table configured for external roleType "${d.roleType}" (contextType="${contextType}") – ignoring`);
+      return;
+    }
+  } else {
+    table = tables.find((t) => t.roleType === d.roleType);
+    if (!table) {
+      logger.debug(`No table configured for roleType "${d.roleType}" – ignoring`);
+      return;
+    }
   }
 
   const col = columnForProperty(table, d.property);
@@ -339,31 +386,36 @@ async function handleRolePropertyDelta(
     return;
   }
 
+  // For External role properties written to the context table, the row id is
+  // the context id (without the "$External" suffix).
+  const rowId = isExternalRole ? d.id.replace(/\$External$/, '') : d.id;
+
   switch (d.deltaType) {
     case 'AddProperty':
     case 'SetProperty': {
-      const value = d.values.length > 0 ? d.values[0] : null;
+      const rawValue = d.values.length > 0 ? d.values[0] : null;
+      const value = coerceValue(rawValue, col.type);
       logger.debug(
-        `RolePropertyDelta: UPDATE ${table.name}.${col.name} for "${d.id}" → ${JSON.stringify(value)}`,
+        `RolePropertyDelta: UPDATE ${table.name}.${col.name} for "${rowId}" → ${JSON.stringify(value)}`,
       );
-      await db.updateRow(table.name, d.id, { [col.name]: value });
+      await db.updateRow(table.name, rowId, { [col.name]: value });
       break;
     }
     case 'RemoveProperty':
     case 'DeleteProperty':
       logger.debug(
-        `RolePropertyDelta: SET NULL ${table.name}.${col.name} for "${d.id}"`,
+        `RolePropertyDelta: SET NULL ${table.name}.${col.name} for "${rowId}"`,
       );
-      await db.updateRow(table.name, d.id, { [col.name]: null });
+      await db.updateRow(table.name, rowId, { [col.name]: null });
       break;
 
     case 'UploadFile':
       // File uploads are tracked as a URL/path stored in the property value
       if (d.values.length > 0) {
         logger.debug(
-          `RolePropertyDelta: UploadFile – UPDATE ${table.name}.${col.name} for "${d.id}" → ${JSON.stringify(d.values[0])}`,
+          `RolePropertyDelta: UploadFile – UPDATE ${table.name}.${col.name} for "${rowId}" → ${JSON.stringify(d.values[0])}`,
         );
-        await db.updateRow(table.name, d.id, { [col.name]: d.values[0] });
+        await db.updateRow(table.name, rowId, { [col.name]: d.values[0] });
       } else {
         logger.debug(`RolePropertyDelta: UploadFile – no value provided for "${d.id}", ignoring`);
       }
