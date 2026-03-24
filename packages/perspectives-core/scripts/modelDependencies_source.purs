@@ -14,6 +14,9 @@ module Perspectives.ModelDependencies where
 perspectivesUsers :: String
 perspectivesUsers = "model://perspectives.domains#System$TheWorld$PerspectivesUsers"
 
+nonPerspectivesUsers :: String
+nonPerspectivesUsers = "model://perspectives.domains#System$TheWorld$NonPerspectivesUsers"
+
 identifiableLastName :: String
 identifiableLastName = "model://perspectives.domains#System$Identifiable$LastName"
 
