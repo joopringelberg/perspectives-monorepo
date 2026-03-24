@@ -38,6 +38,7 @@ module Perspectives.Instances.Builders
   , module Perspectives.Instances.CreateContext
   ) where
 
+import Control.Monad (unless)
 import Control.Monad.AvarMonadAsk (modify)
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Writer (WriterT, lift, runWriterT, tell)
@@ -55,7 +56,7 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign.Object (empty, insert)
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
-import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor)
+import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor, serialisedAsDeltasFor_)
 import Perspectives.Assignment.Update (addRoleInstanceToContext, setProperty)
 import Perspectives.ContextAndRole (changeRol_isMe, getNextRolIndex)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (##=), (###=), IndexedResource(..))
@@ -79,7 +80,7 @@ import Perspectives.ResourceIdentifiers (createResourceIdentifier, createResourc
 import Perspectives.SaveUserData (setFirstBinding)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..))
-import Perspectives.Types.ObjectGetters (indexedContextName, indexedRoleName, publicUserRole)
+import Perspectives.Types.ObjectGetters (calculatedUserRole, indexedContextName, indexedRoleName, publicUserRole)
 import Prelude (Unit, bind, discard, eq, pure, unit, void, ($), (*>), (+), (<$>), (<<<), (<>), (>>=), (&&), (-))
 
 -- | Construct a context from the serialization. If a context with the given id exists, returns a PerspectivesError.
@@ -155,6 +156,16 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
         -- As the proxy of the public role is just another user, we have to make sure it will receive all deltas necessary
         -- according to its perspectives.
         for_ publicRoleInstances \proxy -> lift (contextInstanceId `serialisedAsDeltasFor` proxy)
+        -- SYNCHRONISATION for Calculated user roles:
+        -- When a new context is created, Calculated user roles are never instantiated and therefore
+        -- handleNewPeer is never called for them. We must evaluate each Calculated user role for the
+        -- new context and serialise the context for any resulting user instances that are not 'me'.
+        calcUserRoleTypes <- lift $ lift ((ContextType ctype) ###= calculatedUserRole)
+        for_ calcUserRoleTypes \calcUserRoleType -> do
+          calcUserInstances <- lift $ lift (contextInstanceId ##= getRoleInstances calcUserRoleType)
+          for_ calcUserInstances \calcUserInstance -> do
+            me <- lift $ lift $ isMe calcUserInstance
+            unless me $ lift (serialisedAsDeltasFor_ contextInstanceId calcUserInstance calcUserRoleType)
         pure contextInstanceId
   where
 
