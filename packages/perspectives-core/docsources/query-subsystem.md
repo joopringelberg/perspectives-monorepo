@@ -131,7 +131,7 @@ data Step
 | `>>` | Composition (pipe): apply right to result of left |
 | `filter ... with ...` | Keep only results from left that satisfy right (boolean) |
 | `==`, `!=`, `<`, `<=`, `>`, `>=` | Comparison operators |
-| `&&`, `||` | Logical AND / OR |
+| `&&`, `\|\|` | Logical AND / OR |
 | `+`, `-`, `*`, `/` | Arithmetic |
 | `union`, `intersection`, `orElse` | Set operations |
 | `binds`, `fills`, `matches` | Role-binding tests |
@@ -312,7 +312,7 @@ compileStep :: Domain -> Step -> FD
 |---|---|
 | `>>` | `BinaryCombinator ComposeF` |
 | `filter ... with ...` | `FilterF` (unary, with criterion as sub-query) |
-| `&&`, `||` | `BinaryCombinator AndF`, `BinaryCombinator OrF` |
+| `&&`, `\|\|` | `BinaryCombinator AndF`, `BinaryCombinator OrF` |
 | `==`, `!=`, `<`, `<=`, `>`, `>=` | Comparison combinators |
 | `+`, `-`, `*`, `/` | Arithmetic combinators |
 | `union`, `intersection` | `BinaryCombinator UnionF`, `BinaryCombinator IntersectionF` |
