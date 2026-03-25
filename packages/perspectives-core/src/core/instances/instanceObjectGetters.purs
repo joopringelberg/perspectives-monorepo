@@ -283,13 +283,11 @@ perspectivesUsersRole_ r = do
         -- Other UserRole types (e.g. Onlookers) are recognised as valid AMQP peers.
         -- The isUserRole guard protects against non-UserRole instances (e.g. ExternalRole)
         -- accidentally appearing at the bottom of a binding chain.
-        if rt == nonPerspectivesUsers
-          then pure Nothing
-          else do
-            isUser <- isUserRole r
-            if isUser
-              then pure $ Just (roleInstance2PerspectivesUser r)
-              else pure Nothing
+        if rt == nonPerspectivesUsers then pure Nothing
+        else do
+          isUser <- isUserRole r
+          if isUser then pure $ Just (roleInstance2PerspectivesUser r)
+          else pure Nothing
       Just b -> perspectivesUsersRole_ b
 
 -- | From the instance of a Role (fillerId) of any kind, find the instances of the Role of the given

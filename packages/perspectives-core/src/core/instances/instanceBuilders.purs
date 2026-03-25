@@ -42,7 +42,7 @@ import Control.Monad (unless)
 import Control.Monad.AvarMonadAsk (modify)
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Writer (WriterT, lift, runWriterT, tell)
-import Data.Array (catMaybes, elemIndex, length)
+import Data.Array (catMaybes, concat, elemIndex, length)
 import Data.Array.NonEmpty (NonEmptyArray, toArray)
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -59,7 +59,7 @@ import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..
 import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor, serialisedAsDeltasFor_)
 import Perspectives.Assignment.Update (addRoleInstanceToContext, setProperty)
 import Perspectives.ContextAndRole (changeRol_isMe, getNextRolIndex)
-import Perspectives.CoreTypes (MonadPerspectivesTransaction, (##=), (###=), IndexedResource(..))
+import Perspectives.CoreTypes (IndexedResource(..), MonadPerspectivesTransaction, MonadPerspectives, (###=), (##=))
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, addDelta, deltaIndex, insertDelta)
 import Perspectives.DependencyTracking.Dependency (findIndexedContextNamesRequests)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
@@ -146,45 +146,34 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
                 t
                 (unwrap contextInstanceId)
                 (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
-
+        calculatedUserInstances <- lift $ computeCalculatedUserRoleInstances contextInstanceId
         -- Add a UniverseRoleDelta to the Transaction for the external role.
-        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: externalUniverseRoleDelta }) (i)
+        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances <> calculatedUserInstances, delta: externalUniverseRoleDelta }) (i)
         -- Add a UniverseContextDelta to the Transaction with the union of the users of the RoleBindingDeltas.
-        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: universeContextDelta }) (i + 1)
+        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances <> calculatedUserInstances, delta: universeContextDelta }) (i + 1)
         -- Add the ContextDelta for the external role to the transaction.
-        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: externalContextDelta }) (i + 2)
+        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances <> calculatedUserInstances, delta: externalContextDelta }) (i + 2)
         -- Add the context as a createdContext to the transaction
         lift $ addCreatedContextToTransaction contextInstanceId
         -- As the proxy of the public role is just another user, we have to make sure it will receive all deltas necessary
         -- according to its perspectives.
-        for_ publicRoleInstances \proxy -> lift (contextInstanceId `serialisedAsDeltasFor` proxy)
-        -- SYNCHRONISATION for Calculated user roles:
-        -- When a new context is created, Calculated user roles are never instantiated and therefore
-        -- handleNewPeer is never called for them. We must evaluate each Calculated user role for the
-        -- new context and serialise the context for any resulting user instances that are not 'me'.
-        calcUserRoleTypes <- lift $ lift ((ContextType ctype) ###= calculatedUserRole)
-        for_ calcUserRoleTypes \calcUserRoleType -> do
-          calcUserInstances <- lift $ lift (contextInstanceId ##= getRoleInstances calcUserRoleType)
-          for_ calcUserInstances \calcUserInstance -> do
-            me <- lift $ lift $ isMe calcUserInstance
-            unless me $ do
-              -- First, explicitly add the context creation deltas (external role + context) to
-              -- guarantee correct ordering on the receiver side. This is necessary because when
-              -- no perspective produces role instances (e.g. the context has no filled user role
-              -- instances at creation time), addDeltasForRole inside serialisedAsDeltasFor_ is
-              -- never called and the receiver would never learn the context exists.
-              -- ORDER IS OF THE ESSENCE: external role deltas first, then context delta,
-              -- matching the ordering in addDeltasForRole.
-              extRoleDeltas <- lift $ lift $ getDeltasForResource (unwrap buitenRol)
-              for_ extRoleDeltas \(DeltaStoreRecord { signedDelta }) ->
-                lift $ addDelta $ DeltaInTransaction { users: [ calcUserInstance ], delta: signedDelta }
-              ctxDeltas <- lift $ lift $ getDeltasForResource (unwrap contextInstanceId)
-              for_ ctxDeltas \(DeltaStoreRecord { signedDelta }) ->
-                lift $ addDelta $ DeltaInTransaction { users: [ calcUserInstance ], delta: signedDelta }
-              -- Then process all perspectives for this calculated user.
-              lift $ serialisedAsDeltasFor_ contextInstanceId calcUserInstance calcUserRoleType
+        -- NOTE: this will not work for calculate user role instances - they will generally be outside the context!
+        for_ (publicRoleInstances <> calculatedUserInstances) \proxy -> lift (contextInstanceId `serialisedAsDeltasFor` proxy)
         pure contextInstanceId
   where
+
+  -- NOTE. It is entirely possible that the new context is not yet bound in a contextrole. In that case, user role calculation will not work if it depends on 
+  -- 'climbing up' the context tree.
+  computeCalculatedUserRoleInstances :: ContextInstance -> MonadPerspectivesTransaction (Array RoleInstance)
+  computeCalculatedUserRoleInstances contextInstanceId = do
+    calcUserRoleTypes <- lift $ ((ContextType ctype) ###= calculatedUserRole)
+    concat <$> for calcUserRoleTypes \calcUserRoleType -> do
+      calcUserInstances <- lift (contextInstanceId ##= getRoleInstances calcUserRoleType)
+      catMaybes <$>
+        for calcUserInstances \calcUserInstance -> do
+          me <- lift $ isMe calcUserInstance
+          if me then pure Nothing
+          else pure $ Just calcUserInstance
 
   -- Constructed with a UniverseRoleDelta but no RoleBindingDelta.
   constructSingleRoleInstance
