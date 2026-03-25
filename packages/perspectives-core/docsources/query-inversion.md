@@ -31,11 +31,11 @@ user Requester
   perspective on Approver >> binding >> Profile$Name
 ```
 
-This perspective object query says: "starting from this context, follow the role `Approver`, then follow the `binding` (filler) of that role, then get the property `Profile$Name`."
+This perspective object query says: "starting from this context, follow the role `Approver`, then follow the `binding` (filler) of that role, then get the property `Profile$Name`." (*the example is simplified, because perspectives are on roles only; properties that fall in the perspective are listed seperately. However, for this explanation the distinction is irrelevant*).
 
 When the PDR executes a transaction that modifies a data item visited by such a query — for example, when the value of `Profile$Name` changes — it must determine:
 
-1. **Which context instances are affected** (so that state conditions can be re-evaluated), and
+1. **Which role or context instances are affected** (so that state conditions can be re-evaluated), and
 2. **Which user role instances need to receive synchronisation deltas** (so that they see the change in their perspective).
 
 With thousands of contexts and queries, doing a forward scan ("run every query and check if the changed item appears in the result") would be too slow. Instead, the PDR pre-computes **inverted versions** of all queries at compile time, and at runtime applies only the relevant inverted queries starting from the changed item.
