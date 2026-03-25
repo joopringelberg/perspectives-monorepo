@@ -376,3 +376,35 @@ At runtime, when `usersWithAnActivePerspective` computes user instances, it call
 **Important limitation**: The inverted query is stored on the type visited by the perspective object query. It is indexed so that mutations to that type trigger the backwards query, which navigates back to a context where the Calculated user role is defined. In that context, the Calculated role is evaluated to find the actual user instances.
 
 However, when the Calculated role's **query itself** traverses a role binding (filler/filled step), a change to that binding can introduce entirely new user instances whose context has never been serialised. This is a known limitation and the subject of ongoing work.
+
+---
+
+## Note on Redundancy in Inverted Query Storage (Future Optimisation)
+
+When a context defines two user roles U1 and U2 that both have a perspective on the same Calculated thing role O, `invertPerspectiveObjects` processes each user role's perspective independently:
+
+1. For U1's perspective on O: `invert` runs on O's query, producing N `QueryWithAKink` records. Each is stored via `addStorableInvertedQuery` with `users = [U1]`.
+2. For U2's perspective on O: `invert` runs again on the **same** query, producing another N `QueryWithAKink` records. Each is stored with `users = [U2]`.
+
+The result is **2 × N** stored `InvertedQuery` documents — N with `users = [U1]`, N with `users = [U2]` — all sharing identical `description` (the same `QueryWithAKink`). At runtime, when an instance of O changes, both sets of records are fetched and the backwards computation runs twice over the same data.
+
+This is **semantically correct but redundant**. A single record with `users = [U1, U2]` and a shared `description` would avoid the duplicated backwards traversal and halve the CouchDB storage for the inverted queries of O.
+
+### Why a Simple Merge Is Not Straightforward
+
+A naïve merge on equal `description` values is unsafe because the other fields of `InvertedQuery` can differ between U1 and U2:
+
+- **`roleStates` / `statesPerProperty`**: U1 and U2 may have their perspective on O active in different subject states or context states. If we merge the records, a mutation would incorrectly notify both users regardless of which states are active.
+- **`statesPerProperty`**: U1 may see a subset of O's properties that U2 does not. If we use a merged record, a property-value delta might reach U2 even though U2's perspective does not include that property.
+- **`selfOnly` / `authorOnly`**: These flags further constrain which user instances are notified.
+
+### Proposed (Deferred) Optimisation
+
+A correct optimisation would separate the `InvertedQuery` record into two parts:
+
+1. **Shared part** — `description`, `backwardsCompiled`, `forwardsCompiled`: the actual query execution logic, which is identical for all users when the perspective object is the same.
+2. **Per-user part** — `users`, `roleStates`, `statesPerProperty`, `selfOnly`, `authorOnly`: the per-perspective constraints.
+
+The shared part could be referenced by multiple per-user records (or stored once with an array of per-user constraint records). This would allow the backwards traversal to run only once, with the results dispatched to each user according to their individual constraints.
+
+This is a **complex refactor** of the `InvertedQuery` data structure and the compile-time storage and runtime retrieval code. It is deferred to a future optimisation pass.
