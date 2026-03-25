@@ -408,3 +408,21 @@ A correct optimisation would separate the `InvertedQuery` record into two parts:
 The shared part could be referenced by multiple per-user records (or stored once with an array of per-user constraint records). This would allow the backwards traversal to run only once, with the results dispatched to each user according to their individual constraints.
 
 This is a **complex refactor** of the `InvertedQuery` data structure and the compile-time storage and runtime retrieval code. It is deferred to a future optimisation pass.
+
+---
+
+## Note on Redundancy Introduced by `invertCalculatedUsers` (Future Optimisation)
+
+Phase 3 now runs two separate query-inversion passes:
+
+1. **`invertPerspectiveObjects`** — inverts the perspective-object query for every user role that has a perspective. If a Calculated User role CU is a perspective object for some other user U, then CU's query is inverted with `users = [U]`.
+
+2. **`invertCalculatedUsers`** — inverts the _calculation_ of every Calculated User role, tagging the result with `calculatedUserRoleType = Just (CR id)` and `users = []`. This is used at runtime to detect new Calculated User instances when a binding changes.
+
+When a Calculated User role CU has _both_ (a) another user U with a perspective on CU, _and_ (b) a binding-traversing calculation, two sets of `InvertedQuery` records are generated for (some of) the same `QueryWithAKink` values:
+- From `invertPerspectiveObjects`: stored with `users = [U]`, `calculatedUserRoleType = Nothing`
+- From `invertCalculatedUsers`: stored with `users = []`, `calculatedUserRoleType = Just (CR CU_id)`
+
+These two records have the same `description` but serve different purposes. The first is for synchronising U; the second is for detecting new CU instances. They cannot be merged because they carry different metadata.
+
+A future optimisation could detect this overlap and avoid the redundant backwards traversal by sharing the backwards query execution while dispatching to both purposes. This is deferred alongside the broader per-user merging optimisation described above.

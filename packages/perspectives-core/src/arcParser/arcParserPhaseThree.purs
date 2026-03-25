@@ -38,7 +38,7 @@ import Data.Either (Either(..))
 import Data.Foldable (for_, traverse_)
 import Data.Identity as Identity
 import Data.List (catMaybes, List, concat, filter, filterM, fromFoldable) as LIST
-import Data.Map (Map, fromFoldable, toUnfoldable) as Map
+import Data.Map (Map, empty, fromFoldable, toUnfoldable) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, isNothing, maybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), indexOf)
@@ -71,6 +71,7 @@ import Perspectives.Parsing.Arc.PhaseThree.CheckPerspectivesModifiers (checkPers
 import Perspectives.Parsing.Arc.PhaseThree.PerspectiveContextualisation (addAspectsToExternalRoles, contextualisePerspectives)
 import Perspectives.Parsing.Arc.PhaseThree.Screens (collectPropertyTypes, collectRoles, handleScreens, roleIdentification2Context, roleIdentification2Step)
 import Perspectives.Parsing.Arc.PhaseThree.SetInvertedQueries (setInvertedQueries)
+import Perspectives.Parsing.Arc.PhaseThree.StoreInvertedQueries (storeCalculatedUserInvertedQuery)
 import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType_)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, lift2, modifyDF, runPhaseTwo_', throwError, toReadableDomeinFile, toStableDomeinFile, toStableModelUri, withDomeinFile, withFrame)
 import Perspectives.Parsing.Arc.Position (ArcPosition, arcParserStartPosition)
@@ -78,7 +79,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspective
 import Perspectives.Persistent (getDomeinFile)
 import Perspectives.PerspectivesState (addWarning, setModelUnderCompilation)
 import Perspectives.Query.ExpressionCompiler (compileAndDistributeStep, compileAndSaveProperty, compileAndSaveRole, compileExpression, compileStep, qualifyLocalContextName, qualifyLocalEnumeratedRoleName, qualifyLocalRoleName)
-import Perspectives.Query.Kinked (completeInversions)
+import Perspectives.Query.Kinked (completeInversions, invert)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), domain, domain2roleInContext, domain2roleType, mandatory, range, replaceContext, roleInContext2Role, roleRange, sumOfDomains, traverseQfd)
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
 import Perspectives.Query.StatementCompiler (compileStatement)
@@ -217,6 +218,8 @@ phaseThreeWithMapping_ df@{ id, referredModels } postponedParts screens mMapping
           handleScreens screens
           checkPerspectiveModifiers
           invertPerspectiveObjects
+          -- Invert Calculated User Role queries to detect new user instances on binding changes.
+          invertCalculatedUsers
           -- combinePerspectives
           addUserRoleGraph
           checkSynchronization
@@ -1567,6 +1570,36 @@ invertPerspectiveObjects = do
     explicitSet2RelevantProperties Universal = All
     explicitSet2RelevantProperties Empty = Properties []
     explicitSet2RelevantProperties (PSet ps) = Properties ps
+
+-- | For every Calculated User Role in the DomeinFile, invert its query and store the resulting
+-- | InvertedQueries (tagged with the Calculated User role type) under RTFilledKey / RTFillerKey.
+-- | At runtime, when a role binding changes, these InvertedQueries are used to detect new
+-- | Calculated User role instances whose contexts need to be serialised for those users.
+-- | NOTE: This introduces a deliberate redundancy: if another user has a perspective on this
+-- | Calculated User Role, its query is also inverted by invertPerspectiveObjects. See docs for details.
+invertCalculatedUsers :: PhaseThree Unit
+invertCalculatedUsers = do
+  df@{ id } <- lift $ State.gets _.dfr
+  withDomeinFile
+    id
+    (DomeinFile df)
+    (invertCalculatedUsers' df)
+  where
+  invertCalculatedUsers' :: DomeinFileRecord Readable -> PhaseThree Unit
+  invertCalculatedUsers' { calculatedRoles } = traverse_ processCalcUserRole calculatedRoles
+    where
+    processCalcUserRole :: CalculatedRole -> PhaseThree Unit
+    processCalcUserRole (CalculatedRole { id, calculation, kindOfRole }) =
+      if kindOfRole == UserRole
+      then case calculation of
+        -- Only process already-compiled calculations (Q).
+        Q qfd -> do
+          zqs <- invert qfd
+          -- Use an empty modification summary: these queries don't represent modifications.
+          let emptyModSummary = { modifiesRoleInstancesOf: [], modifiesRoleBindingOf: [], modifiesPropertiesOf: Map.empty }
+          for_ zqs \qwk -> runReaderT (storeCalculatedUserInvertedQuery (CR id) qwk) emptyModSummary
+        S _ _ -> pure unit
+      else pure unit
 
 -- Compile a RoleIdentification to a sequence of bindings for the standard
 -- variables `currentcontext` and `origin`.
