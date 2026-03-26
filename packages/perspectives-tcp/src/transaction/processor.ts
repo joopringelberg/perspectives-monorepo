@@ -231,9 +231,21 @@ async function handleUniverseRoleDelta(
   }
   const d = delta as import('../types').UniverseRoleDelta;
 
+  // RemoveExternalRoleInstance cascades: remove all role rows for the context,
+  // then remove the context row itself.
+  if (d.deltaType === 'RemoveExternalRoleInstance') {
+    await handleRemoveExternalRoleInstance(d, db, tables);
+    return;
+  }
+
   const table = tables.find((t) => t.roleType === d.roleType);
   if (!table) {
-    logger.debug(`No table configured for roleType "${d.roleType}" – ignoring`);
+    // External roles never have a dedicated table (their properties are stored
+    // in the context table).  Suppress the "not found" log for these types.
+    // Note: RemoveExternalRoleInstance is already handled above and never reaches here.
+    if (d.deltaType !== 'ConstructExternalRole' && d.deltaType !== 'RemoveUnboundExternalRoleInstance') {
+      logger.debug(`No table configured for roleType "${d.roleType}" – ignoring`);
+    }
     return;
   }
 
@@ -249,7 +261,6 @@ async function handleUniverseRoleDelta(
 
     case 'RemoveRoleInstance':
     case 'RemoveUnboundExternalRoleInstance':
-    case 'RemoveExternalRoleInstance':
       logger.debug(`UniverseRoleDelta: DELETE role "${d.roleInstance}" from "${table.name}"`);
       await db.deleteRow(table.name, d.roleInstance);
       break;
@@ -257,6 +268,45 @@ async function handleUniverseRoleDelta(
     default:
       logger.debug(`UniverseRoleDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
       break;
+  }
+}
+
+/**
+ * Handle a RemoveExternalRoleInstance delta by cascade-deleting all role rows
+ * that belong to the context, then deleting the context row itself.
+ */
+async function handleRemoveExternalRoleInstance(
+  d: import('../types').UniverseRoleDelta,
+  db: DatabaseAdapter,
+  tables: TableConfig[],
+): Promise<void> {
+  const contextId = d.id;
+  const contextType = d.contextType;
+
+  // Delete all rows from role tables whose roleType belongs to this context type.
+  // Role types of a context have the form "<contextType>$<RoleName>".
+  const contextTypePrefix = contextType + '$';
+  const roleTables = tables.filter(
+    (t) => t.roleType && t.roleType.startsWith(contextTypePrefix),
+  );
+  for (const roleTable of roleTables) {
+    logger.debug(
+      `RemoveExternalRoleInstance: DELETE all roles with context_id "${contextId}" from "${roleTable.name}"`,
+    );
+    await db.deleteRowsByContextId(roleTable.name, contextId);
+  }
+
+  // Delete the context row itself.
+  const contextTable = tables.find((t) => t.contextType === contextType);
+  if (contextTable) {
+    logger.debug(
+      `RemoveExternalRoleInstance: DELETE context "${contextId}" from "${contextTable.name}"`,
+    );
+    await db.deleteRow(contextTable.name, contextId);
+  } else {
+    logger.debug(
+      `RemoveExternalRoleInstance: no context table configured for "${contextType}" – skipping context row deletion`,
+    );
   }
 }
 

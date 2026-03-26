@@ -60,6 +60,16 @@ export interface DatabaseAdapter {
   deleteRow(table: string, id: string): Promise<void>;
 
   /**
+   * Delete all rows whose `context_id` column equals the given context identifier.
+   * Used to cascade-delete all role instances when a context is removed.
+   * Has no effect if no matching rows exist.
+   *
+   * @param table      SQL table name
+   * @param contextId  Value to match against the `context_id` column
+   */
+  deleteRowsByContextId(table: string, contextId: string): Promise<void>;
+
+  /**
    * Upsert: insert the row if absent, otherwise update the specified columns.
    *
    * @param table  SQL table name

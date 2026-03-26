@@ -158,6 +158,10 @@ export class KnexAdapter implements DatabaseAdapter {
     await this.db(table).where({ id }).delete();
   }
 
+  async deleteRowsByContextId(table: string, contextId: string): Promise<void> {
+    await this.db(table).where({ context_id: contextId }).delete();
+  }
+
   async upsertRow(
     table: string,
     id: string,
