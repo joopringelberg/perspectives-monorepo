@@ -1590,8 +1590,7 @@ invertCalculatedUsers = do
     where
     processCalcUserRole :: CalculatedRole -> PhaseThree Unit
     processCalcUserRole (CalculatedRole { id, calculation, kindOfRole }) =
-      if kindOfRole == UserRole
-      then case calculation of
+      if kindOfRole == UserRole then case calculation of
         -- Only process already-compiled calculations (Q).
         Q qfd -> do
           zqs <- invert qfd

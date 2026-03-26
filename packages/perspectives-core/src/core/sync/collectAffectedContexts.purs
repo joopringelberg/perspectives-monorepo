@@ -374,7 +374,7 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
   filledContextType <- lift $ enumeratedRoleContextType filledType
   fillerContextType <- lift $ enumeratedRoleContextType fillerType
   -- Includes calculations from all types of filledType.
-  (ArrayUnions fillerKeys) <- lift $ unsafePartial runtimeIndexForFillerQueries' filledType filledContextType
+  (ArrayUnions fillerKeys) <- lift $ runtimeIndexForFillerQueries' filledType filledContextType
   fillerCalculations <- lift
     ( getFillerQueries compileBoth fillerKeys
         >>= filterA (invertedQueryHasRoleDomain fillerContextType fillerType)
@@ -395,7 +395,7 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
     )
   -- FILLED step
   -- These are inverted queries that begin with the filled step starting from filler.
-  (ArrayUnions filledKeys) <- lift $ unsafePartial runtimeIndexForFilledQueries' filledType filledContextType
+  (ArrayUnions filledKeys) <- lift $ runtimeIndexForFilledQueries' filledType filledContextType
   filledCalculations <- lift
     ( getFilledQueries compileBoth filledKeys
         >>= filterA (invertedQueryHasRoleDomain filledContextType filledType)

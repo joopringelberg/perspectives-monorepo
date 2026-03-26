@@ -38,11 +38,10 @@ module Perspectives.Instances.Builders
   , module Perspectives.Instances.CreateContext
   ) where
 
-import Control.Monad (unless)
 import Control.Monad.AvarMonadAsk (modify)
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Writer (WriterT, lift, runWriterT, tell)
-import Data.Array (catMaybes, concat, elemIndex, length)
+import Data.Array (catMaybes, elemIndex, length)
 import Data.Array.NonEmpty (NonEmptyArray, toArray)
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -56,11 +55,11 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign.Object (empty, insert)
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
-import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor, serialisedAsDeltasFor_)
+import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor)
 import Perspectives.Assignment.Update (addRoleInstanceToContext, setProperty)
 import Perspectives.ContextAndRole (changeRol_isMe, getNextRolIndex)
-import Perspectives.CoreTypes (IndexedResource(..), MonadPerspectivesTransaction, MonadPerspectives, (###=), (##=))
-import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, addDelta, deltaIndex, insertDelta)
+import Perspectives.CoreTypes (IndexedResource(..), MonadPerspectivesTransaction, (###=), (##=))
+import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, deltaIndex, insertDelta)
 import Perspectives.DependencyTracking.Dependency (findIndexedContextNamesRequests)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.CreateContext (constructEmptyContext)
@@ -68,8 +67,6 @@ import Perspectives.Instances.CreateRole (constructEmptyRole)
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Parsing.Messages (PerspectivesError)
-import Perspectives.Persistence.DeltaStore (getDeltasForResource)
-import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (saveEntiteit, tryGetPerspectEntiteit)
 import Perspectives.PerspectivesState (getIndexedResourceToCreate)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
@@ -82,7 +79,7 @@ import Perspectives.ResourceIdentifiers (createResourceIdentifier, createResourc
 import Perspectives.SaveUserData (setFirstBinding)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..))
-import Perspectives.Types.ObjectGetters (calculatedUserRole, indexedContextName, indexedRoleName, publicUserRole)
+import Perspectives.Types.ObjectGetters (indexedContextName, indexedRoleName, publicUserRole)
 import Prelude (Unit, bind, discard, eq, pure, unit, void, ($), (*>), (+), (<$>), (<<<), (<>), (>>=), (&&), (-))
 
 -- | Construct a context from the serialization. If a context with the given id exists, returns a PerspectivesError.
@@ -146,34 +143,20 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
                 t
                 (unwrap contextInstanceId)
                 (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
-        calculatedUserInstances <- lift $ computeCalculatedUserRoleInstances contextInstanceId
+
         -- Add a UniverseRoleDelta to the Transaction for the external role.
-        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances <> calculatedUserInstances, delta: externalUniverseRoleDelta }) (i)
+        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: externalUniverseRoleDelta }) (i)
         -- Add a UniverseContextDelta to the Transaction with the union of the users of the RoleBindingDeltas.
-        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances <> calculatedUserInstances, delta: universeContextDelta }) (i + 1)
+        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: universeContextDelta }) (i + 1)
         -- Add the ContextDelta for the external role to the transaction.
-        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances <> calculatedUserInstances, delta: externalContextDelta }) (i + 2)
+        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: externalContextDelta }) (i + 2)
         -- Add the context as a createdContext to the transaction
         lift $ addCreatedContextToTransaction contextInstanceId
         -- As the proxy of the public role is just another user, we have to make sure it will receive all deltas necessary
         -- according to its perspectives.
-        -- NOTE: this will not work for calculate user role instances - they will generally be outside the context!
-        for_ (publicRoleInstances <> calculatedUserInstances) \proxy -> lift (contextInstanceId `serialisedAsDeltasFor` proxy)
+        for_ publicRoleInstances \proxy -> lift (contextInstanceId `serialisedAsDeltasFor` proxy)
         pure contextInstanceId
   where
-
-  -- NOTE. It is entirely possible that the new context is not yet bound in a contextrole. In that case, user role calculation will not work if it depends on 
-  -- 'climbing up' the context tree.
-  computeCalculatedUserRoleInstances :: ContextInstance -> MonadPerspectivesTransaction (Array RoleInstance)
-  computeCalculatedUserRoleInstances contextInstanceId = do
-    calcUserRoleTypes <- lift $ ((ContextType ctype) ###= calculatedUserRole)
-    concat <$> for calcUserRoleTypes \calcUserRoleType -> do
-      calcUserInstances <- lift (contextInstanceId ##= getRoleInstances calcUserRoleType)
-      catMaybes <$>
-        for calcUserInstances \calcUserInstance -> do
-          me <- lift $ isMe calcUserInstance
-          if me then pure Nothing
-          else pure $ Just calcUserInstance
 
   -- Constructed with a UniverseRoleDelta but no RoleBindingDelta.
   constructSingleRoleInstance
