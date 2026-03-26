@@ -283,12 +283,33 @@ async function handleRemoveExternalRoleInstance(
   const contextId = d.id;
   const contextType = d.contextType;
 
-  // Delete all rows from role tables whose roleType belongs to this context type.
-  // Role types of a context have the form "<contextType>$<RoleName>".
+  // Find the context table for this context type (needed for FK cross-reference).
+  const contextTable = tables.find((t) => t.contextType === contextType);
+
+  // Collect role tables that belong to this context.  There are two ways a role
+  // table can be associated with a context type:
+  //
+  // 1. Standard roles: roleType starts with "<contextType>$" (the role is
+  //    lexically defined inside this context).
+  //
+  // 2. Aspect roles: the role is lexically defined in another context but
+  //    "adopted" by this context.  In that case roleType does NOT start with
+  //    "<contextType>$", but the table has a column that carries a foreign-key
+  //    reference to the context table (references.table === contextTable.name).
+  //
+  // Using the FK reference as the authoritative signal covers both cases.
   const contextTypePrefix = contextType + '$';
-  const roleTables = tables.filter(
-    (t) => t.roleType && t.roleType.startsWith(contextTypePrefix),
-  );
+  const roleTables = tables.filter((t) => {
+    if (!t.roleType) return false;
+    // Case 1: standard role – roleType prefix match
+    if (t.roleType.startsWith(contextTypePrefix)) return true;
+    // Case 2: aspect role – a column references the context table
+    if (contextTable) {
+      return t.columns.some((c) => c.references?.table === contextTable.name);
+    }
+    return false;
+  });
+
   for (const roleTable of roleTables) {
     logger.debug(
       `RemoveExternalRoleInstance: DELETE all roles with context_id "${contextId}" from "${roleTable.name}"`,
@@ -297,7 +318,6 @@ async function handleRemoveExternalRoleInstance(
   }
 
   // Delete the context row itself.
-  const contextTable = tables.find((t) => t.contextType === contextType);
   if (contextTable) {
     logger.debug(
       `RemoveExternalRoleInstance: DELETE context "${contextId}" from "${contextTable.name}"`,
