@@ -81,6 +81,7 @@ serialisedAsDeltasFor cid userId = do
 
 -- | Construct a Transaction that represents a context for a particular user role.
 -- | Serialise the Transaction as a string.
+-- NOTE: this function is only called from `serialiseFor` (module Perspectives.Instances.SerialiseAsJson), which is itself never called. This function might therefore be dead code.
 serialisedAsDeltasForUserType :: ContextInstance -> RoleType -> MonadPerspectives Value
 serialisedAsDeltasForUserType cid userType = do
   me <- getUserIdentifier

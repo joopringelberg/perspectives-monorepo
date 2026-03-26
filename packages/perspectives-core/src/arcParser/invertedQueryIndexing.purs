@@ -222,20 +222,21 @@ isFilledF qf = case qf of
   _ -> false
 
 -- | Compute the keys for the filledBy (Filler) step.
--- | Is exactly like typeLevelKeyForFilledQueries, but with role and domain reversed.
+-- | FillerF is the inverse of FilledF: it takes a filled role as input (domain) and returns the filler (range).
+-- | The key is indexed by the filled role (origin) and the filler role (destination), matching the runtime lookup.
 typeLevelKeyForFillerQueries :: Partial => QueryFunctionDescription -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
 typeLevelKeyForFillerQueries qfd | isFiller (queryFunction qfd) =
   do
-    -- domain of the qfd represents the filler roles;
+    -- domain of the qfd represents the filled roles (FillerF takes a filled role as input).
     -- All RoleInContext items in the domain of the query.
-    (fillerRoleInContexts :: Array RoleInContext) <- pure $ computeCollection singleton (domain2roleInContext $ domain qfd)
-    -- range represents the filled roles.
+    (filledRoleInContexts :: Array RoleInContext) <- pure $ computeCollection singleton (domain2roleInContext $ domain qfd)
+    -- range represents the filler roles (FillerF returns the filler).
     -- all RoleInContext items in the range of the query.
-    (filledRoleInContexts :: Array RoleInContext) <- pure $ computeCollection singleton (domain2roleInContext $ range qfd)
+    (fillerRoleInContexts :: Array RoleInContext) <- pure $ computeCollection singleton (domain2roleInContext $ range qfd)
     pure $ ArrayUnions do
       RoleInContext { role: filledRole_origin, context: filledContext_origin } <- filledRoleInContexts
       RoleInContext { role: fillerRole_destination, context: fillerContext_destination } <- fillerRoleInContexts
-      pure $ RTFillerKey { fillerRole_destination, fillerContext_destination, filledRole_origin, filledContext_origin }
+      pure $ RTFillerKey { filledRole_origin, filledContext_origin, fillerRole_destination, fillerContext_destination }
 
 isFiller :: QueryFunction -> Boolean
 isFiller (DataTypeGetter FillerF) = true

@@ -36,7 +36,7 @@ import Effect.Exception (error)
 import Partial.Unsafe (unsafePartial)
 import Perspective.InvertedQuery.Indices (runTimeIndexForRoleQueries, runtimeIndexForContextQueries, runtimeIndexForFilledQueries', runtimeIndexForFillerQueries', runtimeIndexForPropertyQueries)
 import Perspectives.ArrayUnions (ArrayUnions(..))
-import Perspectives.Assignment.SerialiseAsDeltas (getPropertyValues, serialiseDependencies)
+import Perspectives.Assignment.SerialiseAsDeltas (getPropertyValues, serialiseDependencies, serialisedAsDeltasFor_)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MonadPerspectivesTransaction, runMonadPerspectivesQuery, (##=), (##>), (##>>))
 import Perspectives.Data.EncodableMap (EncodableMap, filterKeys, lookup)
 import Perspectives.Deltas (addDelta)
@@ -46,7 +46,7 @@ import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..)
 import Perspectives.Instances.Me (notIsMe)
 import Perspectives.Instances.ObjectGetters (allFillers, binding, context, context', contextIsInState, contextType, contextType_, getActiveRoleStates_, getFilledRoles, getRecursivelyAllFilledRoles, roleIsInState, roleType_)
 import Perspectives.Instances.ObjectGetters (context, contextType, roleType) as OG
-import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwards, shouldResultInContextStateQuery, shouldResultInRoleStateQuery)
+import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwards, isCalculatedUserQuery, shouldResultInContextStateQuery, shouldResultInRoleStateQuery)
 import Perspectives.InvertedQuery.Storable (getContextQueries, getFilledQueries, getFillerQueries, getPropertyQueries, getRoleQueries)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -61,7 +61,7 @@ import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.PersistentType (ContextType, StateIdentifier, tryGetState, getEnumeratedRole)
 import Perspectives.Representation.Class.Property (propertyTypeIsAuthorOnly, propertyTypeIsSelfOnly)
 import Perspectives.Representation.Class.Role (bindingOfRole, calculationOfRoleType, contextOfRepresentation)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, externalRole)
 import Perspectives.Representation.State (StateFulObject(..))
 import Perspectives.Representation.State (StateFulObject(..), State(..)) as State
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType, EnumeratedRoleType, PropertyType(..), RoleType(..))
@@ -374,14 +374,17 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
   filledContextType <- lift $ enumeratedRoleContextType filledType
   fillerContextType <- lift $ enumeratedRoleContextType fillerType
   -- Includes calculations from all types of filledType.
-  (ArrayUnions fillerKeys) <- lift $ unsafePartial runtimeIndexForFillerQueries' filledType filledContextType
+  (ArrayUnions fillerKeys) <- lift $ runtimeIndexForFillerQueries' filledType filledContextType
   fillerCalculations <- lift
     ( getFillerQueries compileBoth fillerKeys
         >>= filterA (invertedQueryHasRoleDomain fillerContextType fillerType)
     )
+  -- Separate Calculated User detection queries from regular synchronisation/state queries.
+  let regularFillerCalculations = filter (not <<< isCalculatedUserQuery) fillerCalculations
+  let calcUserFillerCalculations = filter isCalculatedUserQuery fillerCalculations
   -- FILLER step
   -- These are inverted queries that begin with the filler step starting from filled.
-  (users1 :: Array RoleInstance) <- concat <$> for fillerCalculations
+  (users1 :: Array RoleInstance) <- concat <$> for regularFillerCalculations
     -- Find all affected contexts, starting from the filler instance of the Delta (on storing the query, we left out the filler step).
     ( \iq ->
         if isForSelfOnly iq then handleSelfOnlyQuery iq filler filled
@@ -392,12 +395,15 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
     )
   -- FILLED step
   -- These are inverted queries that begin with the filled step starting from filler.
-  (ArrayUnions filledKeys) <- lift $ unsafePartial runtimeIndexForFilledQueries' filledType filledContextType
+  (ArrayUnions filledKeys) <- lift $ runtimeIndexForFilledQueries' filledType filledContextType
   filledCalculations <- lift
     ( getFilledQueries compileBoth filledKeys
         >>= filterA (invertedQueryHasRoleDomain filledContextType filledType)
     )
-  (users2 :: Array RoleInstance) <- concat <$> for filledCalculations
+  -- Separate Calculated User detection queries from regular synchronisation/state queries.
+  let regularFilledCalculations = filter (not <<< isCalculatedUserQuery) filledCalculations
+  let calcUserFilledCalculations = filter isCalculatedUserQuery filledCalculations
+  (users2 :: Array RoleInstance) <- concat <$> for regularFilledCalculations
     ( \iq ->
         if isForSelfOnly iq
         -- These inverted queries skip the first step and so must be applied to the filled itself.
@@ -419,8 +425,13 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
       -- Hence, no forward computation. `handleBackwardQuery` just passes on users that have at least one
       -- valid perspective, even if the condition is object state.
       -- TODO: FIRSTONLY
-      concat <<< map snd <$> (concat <$> for fillerCalculations (handleBackwardQuery oldFiller))
+      concat <<< map snd <$> (concat <$> for regularFillerCalculations (handleBackwardQuery oldFiller))
     otherwise -> pure []
+  -- Detect new Calculated User role instances that arise from the new binding and serialise their context.
+  -- For RTFillerKey queries: bw starts from filler, fw starts from filled.
+  -- For RTFilledKey queries: bw starts from filled, fw starts from filler.
+  for_ calcUserFillerCalculations (handleNewCalculatedUsersForBinding filler filled)
+  for_ calcUserFilledCalculations (handleNewCalculatedUsersForBinding filled filler)
   lift $ filterA notIsMe (nub $ union users1 (users2 `union` users3))
 
   where
@@ -466,6 +477,42 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
     roleAtHead :: Partial => DependencyPath -> RoleInstance
     roleAtHead { head } = case head of
       R r -> r
+
+-- | When a role binding changes, detect newly accessible Calculated User role instances
+-- | (computed by InvertedQueries with calculatedUserRoleType set) and serialise the context
+-- | for each new user.
+-- | The `bwStart` argument is the role instance to start the backwards query from:
+-- |   - filler (for RTFillerKey queries) — goes backwards from filler to find context(s)
+-- |   - filled (for RTFilledKey queries) — goes backwards from filled to find context(s)
+-- | The `fwStart` argument is the role instance to start the forwards query from:
+-- |   - filled (for RTFillerKey queries) — goes forwards from filled to find Calculated User instances
+-- |   - filler (for RTFilledKey queries) — goes forwards from filler to find Calculated User instances
+-- | This mirrors the convention used for regular RTFillerKey/RTFilledKey queries in
+-- | `usersWithPerspectiveOnRoleBinding'`.
+handleNewCalculatedUsersForBinding :: RoleInstance -> RoleInstance -> InvertedQuery -> MonadPerspectivesTransaction Unit
+handleNewCalculatedUsersForBinding bwStart fwStart (InvertedQuery { backwardsCompiled, forwardsCompiled, calculatedUserRoleType: Just calcUserRoleType }) =
+  case backwardsCompiled, forwardsCompiled of
+    Just bw, Just fw -> do
+      -- The backwards query runs from `bwStart` to the context(s) where the Calculated User role is defined.
+      (contextInstances :: Array ContextInstance) <- lift (bwStart ##= (unsafeCoerce bw :: RoleInstance ~~> ContextInstance))
+      -- The forwards query runs from `fwStart` to the new Calculated User role instances.
+      (calcUserInstances :: Array RoleInstance) <- lift (fwStart ##= (unsafeCoerce fw :: RoleInstance ~~> RoleInstance))
+      newCalcUsers <- lift $ filterA notIsMe calcUserInstances
+      -- For each (context, new user) pair: add context creation deltas first, then serialise the full context.
+      for_ contextInstances \contextInstance -> do
+        let buitenRol = externalRole contextInstance
+        for_ newCalcUsers \calcUserInstance -> do
+          -- ORDER IS OF THE ESSENCE: external role deltas first, then context delta.
+          extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
+          for_ extRoleDeltas \(DeltaStoreRecord { signedDelta }) ->
+            addDelta $ DeltaInTransaction { users: [ calcUserInstance ], delta: signedDelta }
+          ctxDeltas <- lift $ getDeltasForResource (unwrap contextInstance)
+          for_ ctxDeltas \(DeltaStoreRecord { signedDelta }) ->
+            addDelta $ DeltaInTransaction { users: [ calcUserInstance ], delta: signedDelta }
+          -- Serialise all perspectives of the Calculated User for this context.
+          serialisedAsDeltasFor_ contextInstance calcUserInstance calcUserRoleType
+    _, _ -> pure unit
+handleNewCalculatedUsersForBinding _ _ _ = pure unit
 
 -- | If the role instance is the object of a perspective, add deltas to the transaction for the user(s) of that perspective
 -- | so that they will receive the data they have access to according to the perspective.
@@ -531,7 +578,8 @@ reEvaluatePublicFillerChanges filled filler = do
       filledCalculations <- lift (getFilledQueries compileBoth filledKeys)
       -- No need to do a handle selfOnly (personal) queries differently, as we're only interested in state changes here
       -- and handleSelfOnlyQuery is for synchronizing.
-      for_ filledCalculations (handleBackwardQuery filled)
+      -- Exclude Calculated User detection queries: those are handled separately in usersWithPerspectiveOnRoleBinding'.
+      for_ (filter (not <<< isCalculatedUserQuery) filledCalculations) (handleBackwardQuery filled)
 
 -- | Runs the forward part of the QueryWithAKink. That is part of the original query. Assumptions collected
 -- | during evaluation are turned into Deltas for peers with a perspective and collected in the current transaction.

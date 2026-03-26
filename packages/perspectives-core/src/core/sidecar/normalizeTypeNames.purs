@@ -760,7 +760,8 @@ instance normalizeInvertedQueryInst :: Normalize InvertedQuery where
     users' <- for r.users fqn2tid
     states' <- for r.states fqn2tid
     statesPerProperty' <- EM.fromFoldable <$> for (EM.toUnfoldable r.statesPerProperty) \(Tuple pt sps) -> Tuple <$> fqn2tid pt <*> for sps fqn2tid
-    pure $ InvertedQuery r { description = description', users = users', states = states', statesPerProperty = statesPerProperty' }
+    calculatedUserRoleType' <- traverse fqn2tid r.calculatedUserRoleType
+    pure $ InvertedQuery r { description = description', users = users', states = states', statesPerProperty = statesPerProperty', calculatedUserRoleType = calculatedUserRoleType' }
 
 instance Normalize QueryWithAKink where
   normalize (ZQ backwards forwards) = ZQ <$> traverse normalize backwards <*> traverse normalize forwards
