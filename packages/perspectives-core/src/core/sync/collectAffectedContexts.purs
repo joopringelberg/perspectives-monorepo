@@ -428,8 +428,10 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
       concat <<< map snd <$> (concat <$> for regularFillerCalculations (handleBackwardQuery oldFiller))
     otherwise -> pure []
   -- Detect new Calculated User role instances that arise from the new binding and serialise their context.
-  for_ calcUserFillerCalculations (handleNewCalculatedUsersForBinding filler)
-  for_ calcUserFilledCalculations (handleNewCalculatedUsersForBinding filled)
+  -- For RTFillerKey queries: bw starts from filler, fw starts from filled.
+  -- For RTFilledKey queries: bw starts from filled, fw starts from filler.
+  for_ calcUserFillerCalculations (handleNewCalculatedUsersForBinding filler filled)
+  for_ calcUserFilledCalculations (handleNewCalculatedUsersForBinding filled filler)
   lift $ filterA notIsMe (nub $ union users1 (users2 `union` users3))
 
   where
@@ -479,17 +481,22 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
 -- | When a role binding changes, detect newly accessible Calculated User role instances
 -- | (computed by InvertedQueries with calculatedUserRoleType set) and serialise the context
 -- | for each new user.
--- | The `start` argument is the filler (for RTFillerKey queries) or the filled (for RTFilledKey queries).
--- | The backwards query gives the context(s) where the Calculated User is defined.
--- | The forwards query gives the new Calculated User role instances.
-handleNewCalculatedUsersForBinding :: RoleInstance -> InvertedQuery -> MonadPerspectivesTransaction Unit
-handleNewCalculatedUsersForBinding start (InvertedQuery { backwardsCompiled, forwardsCompiled, calculatedUserRoleType: Just calcUserRoleType }) =
+-- | The `bwStart` argument is the role instance to start the backwards query from:
+-- |   - filler (for RTFillerKey queries) — goes backwards from filler to find context(s)
+-- |   - filled (for RTFilledKey queries) — goes backwards from filled to find context(s)
+-- | The `fwStart` argument is the role instance to start the forwards query from:
+-- |   - filled (for RTFillerKey queries) — goes forwards from filled to find Calculated User instances
+-- |   - filler (for RTFilledKey queries) — goes forwards from filler to find Calculated User instances
+-- | This mirrors the convention used for regular RTFillerKey/RTFilledKey queries in
+-- | `usersWithPerspectiveOnRoleBinding'`.
+handleNewCalculatedUsersForBinding :: RoleInstance -> RoleInstance -> InvertedQuery -> MonadPerspectivesTransaction Unit
+handleNewCalculatedUsersForBinding bwStart fwStart (InvertedQuery { backwardsCompiled, forwardsCompiled, calculatedUserRoleType: Just calcUserRoleType }) =
   case backwardsCompiled, forwardsCompiled of
     Just bw, Just fw -> do
-      -- The backwards query runs from `start` to the context(s) where the Calculated User role is defined.
-      (contextInstances :: Array ContextInstance) <- lift (start ##= (unsafeCoerce bw :: RoleInstance ~~> ContextInstance))
-      -- The forwards query runs from `start` to the new Calculated User role instances.
-      (calcUserInstances :: Array RoleInstance) <- lift (start ##= (unsafeCoerce fw :: RoleInstance ~~> RoleInstance))
+      -- The backwards query runs from `bwStart` to the context(s) where the Calculated User role is defined.
+      (contextInstances :: Array ContextInstance) <- lift (bwStart ##= (unsafeCoerce bw :: RoleInstance ~~> ContextInstance))
+      -- The forwards query runs from `fwStart` to the new Calculated User role instances.
+      (calcUserInstances :: Array RoleInstance) <- lift (fwStart ##= (unsafeCoerce fw :: RoleInstance ~~> RoleInstance))
       newCalcUsers <- lift $ filterA notIsMe calcUserInstances
       -- For each (context, new user) pair: add context creation deltas first, then serialise the full context.
       for_ contextInstances \contextInstance -> do
@@ -505,7 +512,7 @@ handleNewCalculatedUsersForBinding start (InvertedQuery { backwardsCompiled, for
           -- Serialise all perspectives of the Calculated User for this context.
           serialisedAsDeltasFor_ contextInstance calcUserInstance calcUserRoleType
     _, _ -> pure unit
-handleNewCalculatedUsersForBinding _ _ = pure unit
+handleNewCalculatedUsersForBinding _ _ _ = pure unit
 
 -- | If the role instance is the object of a perspective, add deltas to the transaction for the user(s) of that perspective
 -- | so that they will receive the data they have access to according to the perspective.
