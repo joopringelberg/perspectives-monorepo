@@ -162,6 +162,14 @@ export class KnexAdapter implements DatabaseAdapter {
     await this.db(table).where({ context_id: contextId }).delete();
   }
 
+  async updateRowByFillerId(
+    table: string,
+    fillerId: string,
+    data: Record<string, unknown>,
+  ): Promise<void> {
+    await this.db(table).where({ filler_id: fillerId }).update(data);
+  }
+
   async upsertRow(
     table: string,
     id: string,

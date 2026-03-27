@@ -6,7 +6,7 @@
 
 import { createVerify, createPublicKey } from 'crypto';
 import { TransactionForPeer, SignedDelta, TaggedDelta } from '../types';
-import { TableConfig, ColumnType } from '../config';
+import { TableConfig, ColumnConfig, ColumnType } from '../config';
 import { DatabaseAdapter, columnForProperty } from '../database/adapter';
 import { parseDelta } from './deltaParser';
 import { logger } from '../logger';
@@ -429,70 +429,83 @@ async function handleRolePropertyDelta(
   }
   const d = delta as import('../types').RolePropertyDelta;
 
-  // External role properties are stored in the context table, not a separate role table.
-  // If the roleType ends with "$External", look up the context table instead.
-  const isExternalRole = d.roleType.endsWith('$External');
-  let table: TableConfig | undefined;
-  if (isExternalRole) {
-    const contextType = d.roleType.slice(0, -'$External'.length);
-    table = tables.find((t) => t.contextType === contextType);
-    if (!table) {
-      logger.debug(`No context table configured for external roleType "${d.roleType}" (contextType="${contextType}") – ignoring`);
-      return;
-    }
-  } else {
-    table = tables.find((t) => t.roleType === d.roleType);
-    if (!table) {
-      logger.debug(`No table configured for roleType "${d.roleType}" – ignoring`);
-      return;
-    }
+  // Search ALL tables for any column that is configured to store this property.
+  // Due to "flattening", a property may surface in a table whose roleType differs
+  // from d.roleType (e.g. when the table includes properties from bound/filler roles
+  // further up the role chain).  We must update every matching table.
+  const matches: Array<{ table: TableConfig; col: ColumnConfig }> = [];
+  for (const t of tables) {
+    const col = columnForProperty(t, d.property);
+    if (col != null) matches.push({ table: t, col });
   }
 
-  const col = columnForProperty(table, d.property);
-  if (!col) {
-    logger.debug(
-      `No column configured for property "${d.property}" in table "${table.name}" – ignoring`,
-    );
+  if (matches.length === 0) {
+    logger.debug(`No column configured for property "${d.property}" – ignoring`);
     return;
   }
 
-  // For External role properties written to the context table, the row id is
-  // the context id (without the "$External" suffix).
-  const rowId = isExternalRole ? d.id.replace(/\$External$/, '') : d.id;
+  for (const { table, col } of matches) {
+    // Determine how to identify the row to update:
+    //
+    //  a) Same roleType → the row IS the role instance: update by primary key (d.id).
+    //
+    //  b) Context table (has contextType) → this is an External role property stored
+    //     in the context table; the external role instance id carries a "$External"
+    //     suffix that must be stripped to obtain the context row id.
+    //
+    //  c) Different roleType (flattened) → the role whose property changed is a filler
+    //     of this table's role; the row's filler_id column holds d.id.
+    const isSameRoleType = table.roleType === d.roleType;
+    const isContextTable = !!table.contextType;
+    const isFlattened = !isSameRoleType && !isContextTable;
 
-  switch (d.deltaType) {
-    case 'AddProperty':
-    case 'SetProperty': {
-      const rawValue = d.values.length > 0 ? d.values[0] : null;
-      const value = coerceValue(rawValue, col.type);
-      logger.debug(
-        `RolePropertyDelta: UPDATE ${table.name}.${col.name} for "${rowId}" → ${JSON.stringify(value)}`,
-      );
-      await db.updateRow(table.name, rowId, { [col.name]: value });
-      break;
-    }
-    case 'RemoveProperty':
-    case 'DeleteProperty':
-      logger.debug(
-        `RolePropertyDelta: SET NULL ${table.name}.${col.name} for "${rowId}"`,
-      );
-      await db.updateRow(table.name, rowId, { [col.name]: null });
-      break;
+    const rowId = isContextTable ? d.id.replace(/\$External$/, '') : d.id;
 
-    case 'UploadFile':
-      // File uploads are tracked as a URL/path stored in the property value
-      if (d.values.length > 0) {
+    switch (d.deltaType) {
+      case 'AddProperty':
+      case 'SetProperty': {
+        const rawValue = d.values.length > 0 ? d.values[0] : null;
+        const value = coerceValue(rawValue, col.type);
         logger.debug(
-          `RolePropertyDelta: UploadFile – UPDATE ${table.name}.${col.name} for "${rowId}" → ${JSON.stringify(d.values[0])}`,
+          `RolePropertyDelta: UPDATE ${table.name}.${col.name} for ${isFlattened ? 'filler' : 'row'} "${rowId}" → ${JSON.stringify(value)}`,
         );
-        await db.updateRow(table.name, rowId, { [col.name]: d.values[0] });
-      } else {
-        logger.debug(`RolePropertyDelta: UploadFile – no value provided for "${d.id}", ignoring`);
+        if (isFlattened) {
+          await db.updateRowByFillerId(table.name, rowId, { [col.name]: value });
+        } else {
+          await db.updateRow(table.name, rowId, { [col.name]: value });
+        }
+        break;
       }
-      break;
+      case 'RemoveProperty':
+      case 'DeleteProperty':
+        logger.debug(
+          `RolePropertyDelta: SET NULL ${table.name}.${col.name} for ${isFlattened ? 'filler' : 'row'} "${rowId}"`,
+        );
+        if (isFlattened) {
+          await db.updateRowByFillerId(table.name, rowId, { [col.name]: null });
+        } else {
+          await db.updateRow(table.name, rowId, { [col.name]: null });
+        }
+        break;
 
-    default:
-      logger.debug(`RolePropertyDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
-      break;
+      case 'UploadFile':
+        if (d.values.length > 0) {
+          logger.debug(
+            `RolePropertyDelta: UploadFile – UPDATE ${table.name}.${col.name} for ${isFlattened ? 'filler' : 'row'} "${rowId}" → ${JSON.stringify(d.values[0])}`,
+          );
+          if (isFlattened) {
+            await db.updateRowByFillerId(table.name, rowId, { [col.name]: d.values[0] });
+          } else {
+            await db.updateRow(table.name, rowId, { [col.name]: d.values[0] });
+          }
+        } else {
+          logger.debug(`RolePropertyDelta: UploadFile – no value provided for "${d.id}", ignoring`);
+        }
+        break;
+
+      default:
+        logger.debug(`RolePropertyDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
+        break;
+    }
   }
 }
