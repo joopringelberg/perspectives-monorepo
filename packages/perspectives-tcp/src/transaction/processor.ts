@@ -6,7 +6,7 @@
 
 import { createVerify, createPublicKey } from 'crypto';
 import { TransactionForPeer, SignedDelta, TaggedDelta } from '../types';
-import { TableConfig, ColumnType } from '../config';
+import { TableConfig, ColumnConfig, ColumnType } from '../config';
 import { DatabaseAdapter, columnForProperty } from '../database/adapter';
 import { parseDelta } from './deltaParser';
 import { logger } from '../logger';
@@ -231,9 +231,21 @@ async function handleUniverseRoleDelta(
   }
   const d = delta as import('../types').UniverseRoleDelta;
 
+  // RemoveExternalRoleInstance cascades: remove all role rows for the context,
+  // then remove the context row itself.
+  if (d.deltaType === 'RemoveExternalRoleInstance') {
+    await handleRemoveExternalRoleInstance(d, db, tables);
+    return;
+  }
+
   const table = tables.find((t) => t.roleType === d.roleType);
   if (!table) {
-    logger.debug(`No table configured for roleType "${d.roleType}" – ignoring`);
+    // External roles never have a dedicated table (their properties are stored
+    // in the context table).  Suppress the "not found" log for these types.
+    // Note: RemoveExternalRoleInstance is already handled above and never reaches here.
+    if (d.deltaType !== 'ConstructExternalRole' && d.deltaType !== 'RemoveUnboundExternalRoleInstance') {
+      logger.debug(`No table configured for roleType "${d.roleType}" – ignoring`);
+    }
     return;
   }
 
@@ -249,7 +261,6 @@ async function handleUniverseRoleDelta(
 
     case 'RemoveRoleInstance':
     case 'RemoveUnboundExternalRoleInstance':
-    case 'RemoveExternalRoleInstance':
       logger.debug(`UniverseRoleDelta: DELETE role "${d.roleInstance}" from "${table.name}"`);
       await db.deleteRow(table.name, d.roleInstance);
       break;
@@ -257,6 +268,65 @@ async function handleUniverseRoleDelta(
     default:
       logger.debug(`UniverseRoleDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
       break;
+  }
+}
+
+/**
+ * Handle a RemoveExternalRoleInstance delta by cascade-deleting all role rows
+ * that belong to the context, then deleting the context row itself.
+ */
+async function handleRemoveExternalRoleInstance(
+  d: import('../types').UniverseRoleDelta,
+  db: DatabaseAdapter,
+  tables: TableConfig[],
+): Promise<void> {
+  const contextId = d.id;
+  const contextType = d.contextType;
+
+  // Find the context table for this context type (needed for FK cross-reference).
+  const contextTable = tables.find((t) => t.contextType === contextType);
+
+  // Collect role tables that belong to this context.  There are two ways a role
+  // table can be associated with a context type:
+  //
+  // 1. Standard roles: roleType starts with "<contextType>$" (the role is
+  //    lexically defined inside this context).
+  //
+  // 2. Aspect roles: the role is lexically defined in another context but
+  //    "adopted" by this context.  In that case roleType does NOT start with
+  //    "<contextType>$", but the table has a column that carries a foreign-key
+  //    reference to the context table (references.table === contextTable.name).
+  //
+  // Using the FK reference as the authoritative signal covers both cases.
+  const contextTypePrefix = contextType + '$';
+  const roleTables = tables.filter((t) => {
+    if (!t.roleType) return false;
+    // Case 1: standard role – roleType prefix match
+    if (t.roleType.startsWith(contextTypePrefix)) return true;
+    // Case 2: aspect role – a column references the context table
+    if (contextTable) {
+      return t.columns.some((c) => c.references?.table === contextTable.name);
+    }
+    return false;
+  });
+
+  for (const roleTable of roleTables) {
+    logger.debug(
+      `RemoveExternalRoleInstance: DELETE all roles with context_id "${contextId}" from "${roleTable.name}"`,
+    );
+    await db.deleteRowsByContextId(roleTable.name, contextId);
+  }
+
+  // Delete the context row itself.
+  if (contextTable) {
+    logger.debug(
+      `RemoveExternalRoleInstance: DELETE context "${contextId}" from "${contextTable.name}"`,
+    );
+    await db.deleteRow(contextTable.name, contextId);
+  } else {
+    logger.debug(
+      `RemoveExternalRoleInstance: no context table configured for "${contextType}" – skipping context row deletion`,
+    );
   }
 }
 
@@ -359,70 +429,83 @@ async function handleRolePropertyDelta(
   }
   const d = delta as import('../types').RolePropertyDelta;
 
-  // External role properties are stored in the context table, not a separate role table.
-  // If the roleType ends with "$External", look up the context table instead.
-  const isExternalRole = d.roleType.endsWith('$External');
-  let table: TableConfig | undefined;
-  if (isExternalRole) {
-    const contextType = d.roleType.slice(0, -'$External'.length);
-    table = tables.find((t) => t.contextType === contextType);
-    if (!table) {
-      logger.debug(`No context table configured for external roleType "${d.roleType}" (contextType="${contextType}") – ignoring`);
-      return;
-    }
-  } else {
-    table = tables.find((t) => t.roleType === d.roleType);
-    if (!table) {
-      logger.debug(`No table configured for roleType "${d.roleType}" – ignoring`);
-      return;
-    }
+  // Search ALL tables for any column that is configured to store this property.
+  // Due to "flattening", a property may surface in a table whose roleType differs
+  // from d.roleType (e.g. when the table includes properties from bound/filler roles
+  // further up the role chain).  We must update every matching table.
+  const matches: Array<{ table: TableConfig; col: ColumnConfig }> = [];
+  for (const t of tables) {
+    const col = columnForProperty(t, d.property);
+    if (col != null) matches.push({ table: t, col });
   }
 
-  const col = columnForProperty(table, d.property);
-  if (!col) {
-    logger.debug(
-      `No column configured for property "${d.property}" in table "${table.name}" – ignoring`,
-    );
+  if (matches.length === 0) {
+    logger.debug(`No column configured for property "${d.property}" – ignoring`);
     return;
   }
 
-  // For External role properties written to the context table, the row id is
-  // the context id (without the "$External" suffix).
-  const rowId = isExternalRole ? d.id.replace(/\$External$/, '') : d.id;
+  for (const { table, col } of matches) {
+    // Determine how to identify the row to update:
+    //
+    //  a) Same roleType → the row IS the role instance: update by primary key (d.id).
+    //
+    //  b) Context table (has contextType) → this is an External role property stored
+    //     in the context table; the external role instance id carries a "$External"
+    //     suffix that must be stripped to obtain the context row id.
+    //
+    //  c) Different roleType (flattened) → the role whose property changed is a filler
+    //     of this table's role; the row's filler_id column holds d.id.
+    const isSameRoleType = table.roleType === d.roleType;
+    const isContextTable = !!table.contextType;
+    const isFlattened = !isSameRoleType && !isContextTable;
 
-  switch (d.deltaType) {
-    case 'AddProperty':
-    case 'SetProperty': {
-      const rawValue = d.values.length > 0 ? d.values[0] : null;
-      const value = coerceValue(rawValue, col.type);
-      logger.debug(
-        `RolePropertyDelta: UPDATE ${table.name}.${col.name} for "${rowId}" → ${JSON.stringify(value)}`,
-      );
-      await db.updateRow(table.name, rowId, { [col.name]: value });
-      break;
-    }
-    case 'RemoveProperty':
-    case 'DeleteProperty':
-      logger.debug(
-        `RolePropertyDelta: SET NULL ${table.name}.${col.name} for "${rowId}"`,
-      );
-      await db.updateRow(table.name, rowId, { [col.name]: null });
-      break;
+    const rowId = isContextTable ? d.id.replace(/\$External$/, '') : d.id;
 
-    case 'UploadFile':
-      // File uploads are tracked as a URL/path stored in the property value
-      if (d.values.length > 0) {
+    switch (d.deltaType) {
+      case 'AddProperty':
+      case 'SetProperty': {
+        const rawValue = d.values.length > 0 ? d.values[0] : null;
+        const value = coerceValue(rawValue, col.type);
         logger.debug(
-          `RolePropertyDelta: UploadFile – UPDATE ${table.name}.${col.name} for "${rowId}" → ${JSON.stringify(d.values[0])}`,
+          `RolePropertyDelta: UPDATE ${table.name}.${col.name} for ${isFlattened ? 'filler' : 'row'} "${rowId}" → ${JSON.stringify(value)}`,
         );
-        await db.updateRow(table.name, rowId, { [col.name]: d.values[0] });
-      } else {
-        logger.debug(`RolePropertyDelta: UploadFile – no value provided for "${d.id}", ignoring`);
+        if (isFlattened) {
+          await db.updateRowByFillerId(table.name, rowId, { [col.name]: value });
+        } else {
+          await db.updateRow(table.name, rowId, { [col.name]: value });
+        }
+        break;
       }
-      break;
+      case 'RemoveProperty':
+      case 'DeleteProperty':
+        logger.debug(
+          `RolePropertyDelta: SET NULL ${table.name}.${col.name} for ${isFlattened ? 'filler' : 'row'} "${rowId}"`,
+        );
+        if (isFlattened) {
+          await db.updateRowByFillerId(table.name, rowId, { [col.name]: null });
+        } else {
+          await db.updateRow(table.name, rowId, { [col.name]: null });
+        }
+        break;
 
-    default:
-      logger.debug(`RolePropertyDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
-      break;
+      case 'UploadFile':
+        if (d.values.length > 0) {
+          logger.debug(
+            `RolePropertyDelta: UploadFile – UPDATE ${table.name}.${col.name} for ${isFlattened ? 'filler' : 'row'} "${rowId}" → ${JSON.stringify(d.values[0])}`,
+          );
+          if (isFlattened) {
+            await db.updateRowByFillerId(table.name, rowId, { [col.name]: d.values[0] });
+          } else {
+            await db.updateRow(table.name, rowId, { [col.name]: d.values[0] });
+          }
+        } else {
+          logger.debug(`RolePropertyDelta: UploadFile – no value provided for "${d.id}", ignoring`);
+        }
+        break;
+
+      default:
+        logger.debug(`RolePropertyDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
+        break;
+    }
   }
 }
