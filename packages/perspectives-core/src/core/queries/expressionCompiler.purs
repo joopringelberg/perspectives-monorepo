@@ -701,7 +701,7 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
       criterium <- compileStep (range source) right
       case range criterium of
         VDOM PBool _ ->
-          if pessimistic $ functional criterium then pure $ makeComposition source (UQD currentDomain QF.FilterF criterium (range source) (functional source) False)
+          if pessimistic $ functional criterium then pure $ makeComposition source (UQD (range source) QF.FilterF criterium (range source) (functional source) False)
           else throwError $ NotFunctional (startOf right) (endOf right) right
         otherwise -> throwError $ NotABoolean (startOf right)
     Compose pos -> do

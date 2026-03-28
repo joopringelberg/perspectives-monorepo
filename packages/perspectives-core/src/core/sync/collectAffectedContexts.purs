@@ -46,7 +46,7 @@ import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..)
 import Perspectives.Instances.Me (notIsMe)
 import Perspectives.Instances.ObjectGetters (allFillers, binding, context, context', contextIsInState, contextType, contextType_, getActiveRoleStates_, getFilledRoles, getRecursivelyAllFilledRoles, roleIsInState, roleType_)
 import Perspectives.Instances.ObjectGetters (context, contextType, roleType) as OG
-import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwards, isCalculatedUserQuery, shouldResultInContextStateQuery, shouldResultInRoleStateQuery)
+import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwards, isCalculatedUserQuery, shouldResultInContextStateQuery, shouldResultInRoleStateQuery, startsWithFilter)
 import Perspectives.InvertedQuery.Storable (getContextQueries, getFilledQueries, getFillerQueries, getPropertyQueries, getRoleQueries)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -891,15 +891,25 @@ addDeltasForPropertyChange roleWithPropertyValue property replacementProperty = 
       then do
         computeProperties [ (singletonPath (R roleWithPropertyValue')) ] (filterKeys (\k -> isJust $ elemIndex k [ ENP property, ENP replacementProperty ]) statesPerProperty) [ (Tuple contextInstance [ roleWithPropertyValue' ]) ]
         pure [ roleWithPropertyValue' ]
+      else if startsWithFilter iq
+      -- The property is the filter criterion for a calculated role object of a perspective.
+      -- When the filter condition is now satisfied (usersWithAnActivePerspective applied the filter and found users),
+      -- treat this as if the role instance just became visible to those users:
+      -- add role creation deltas AND all perspective property deltas (not just the changed property).
+      then do
+        magic contextInstance [ roleWithPropertyValue' ] rType (join $ snd <$> cwus')
+        computeProperties [ (singletonPath (R roleWithPropertyValue')) ] statesPerProperty cwus'
+        pure $ concat (snd <$> cwus')
       else do
         computeProperties [ (singletonPath (R roleWithPropertyValue')) ] (filterKeys (\k -> isJust $ elemIndex k [ ENP property, ENP replacementProperty ]) statesPerProperty) cwus'
         pure $ concat (snd <$> cwus) -- Should this not be cwus'??
 
   where
-  -- It must be a perspective on the right property! 
+  -- It must be a perspective on the right property, or the query starts with a filter
+  -- (meaning the property is used as a filter criterion for a calculated role in the perspective object).
   isPerspectiveObject :: InvertedQuery -> Boolean
-  isPerspectiveObject (InvertedQuery { forwardsCompiled, statesPerProperty }) =
-    if isNothing forwardsCompiled then (isJust $ lookup (ENP property) statesPerProperty) || (isJust $ lookup (ENP replacementProperty) statesPerProperty)
+  isPerspectiveObject iq@(InvertedQuery { forwardsCompiled, statesPerProperty }) =
+    if isNothing forwardsCompiled then (isJust $ lookup (ENP property) statesPerProperty) || (isJust $ lookup (ENP replacementProperty) statesPerProperty) || startsWithFilter iq
     else false
 
 -- | Compiles both the backwards and forwards functions of an `InvertedQuery`.
