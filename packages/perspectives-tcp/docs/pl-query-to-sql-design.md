@@ -16,6 +16,7 @@
    - 4.2 [Category 1 — Straightforwardly Implementable in SQL](#42-category-1--straightforwardly-implementable-in-sql)
    - 4.3 [Category 2 — Cannot be Implemented in SQL](#43-category-2--cannot-be-implemented-in-sql)
    - 4.4 [Category 3 — Implementable with Limitations](#44-category-3--implementable-with-limitations)
+   - 4.5 [Known Limitation: Specialised Fillers](#45-known-limitation-specialised-fillers)
 5. [Composition: Building SQL Queries and Views from Query Paths](#5-composition-building-sql-queries-and-views-from-query-paths)
 6. [Proposed Architecture for Automatic SQL Generation](#6-proposed-architecture-for-automatic-sql-generation)
 7. [Open Questions](#7-open-questions)
@@ -54,8 +55,11 @@ The following query functions are **out of scope** for this analysis:
 
 The TCP uses the **Smashed Role Chains** schema strategy:
 
-### Context table (one per context type)
+### Context table
 
+Two strategies are being considered for storing context instances:
+
+**Strategy A — One table per context type** (original Smashed Role Chains approach):
 ```sql
 CREATE TABLE <context_type_name> (
   id         TEXT PRIMARY KEY
@@ -64,13 +68,23 @@ CREATE TABLE <context_type_name> (
 );
 ```
 
+**Strategy B — A single universal Context table**:
+```sql
+CREATE TABLE context (
+  id           TEXT PRIMARY KEY,
+  context_type TEXT NOT NULL    -- the fully-qualified Perspectives context type URI
+);
+```
+
+Under Strategy B, every role table's `context_id` column references this single `context` table rather than a type-specific table. See the discussion under [Open Question Q2](#q2-external-role-storage-and-context-table-strategy).
+
 ### Role table (one per role type, including external roles)
 
 ```sql
 CREATE TABLE <role_type_name> (
   id         TEXT PRIMARY KEY,
-  context_id TEXT REFERENCES <owning_context_table>(id) ON DELETE CASCADE,
-  filler_id  TEXT REFERENCES <filler_role_table>(id)    ON DELETE SET NULL,
+  context_id TEXT REFERENCES <context_table>(id) ON DELETE CASCADE,
+  filler_id  TEXT REFERENCES <filler_role_table>(id) ON DELETE SET NULL,
   <prop_1>   <sql_type>,   -- one column per Perspectives property in scope
   <prop_2>   <sql_type>,
   ...
@@ -506,11 +520,9 @@ SELECT * FROM step2
 #### `DataTypeGetter MeF`
 **PDR semantics**: Return the current user (the role instance representing "me" in the current PDR session).
 
-**Why not in SQL**: SQL queries are executed against a database without a concept of "currently authenticated Perspectives user". The `MeF` function is intrinsically tied to the PDR's session state. In the TCP context, the observer is a configured Onlooker instance; there is no equivalent of a dynamic "me" pointer.
+**Decision**: `MeF` is **prohibited in Onlooker queries**. A calculated role or calculated property used in an Onlooker perspective must not contain a `me` step. The PDR's model compiler should detect this at compile time and report a clear error to the modeller, together with guidance on which other query steps are unsupported in Onlooker contexts (see [Section 4.2 exclusions](#41-functions-excluded-from-analysis) and [Q9](#q9-handling-unsupported-query-steps)).
 
-**Possible workaround**: If a perspective query uses `me` to self-reference (e.g., "the Onlooker's own profile"), the specific Onlooker instance ID could be injected as a parameter at SQL generation time by the PDR. This requires the PDR to resolve `MeF` at view-generation time and replace it with a constant (`RoleIndividual`). Whether this is semantically correct depends on whether "me" is stable for a given TCP instance.
-
-> **Open question**: In what Onlooker queries does `MeF` actually appear? If the Onlooker only has perspectives on other users' data (and not on itself), `MeF` may never appear in practice.
+**Rationale**: SQL queries are executed against a database without a concept of "currently authenticated Perspectives user". The Onlooker role, by its nature, observes *other* users' data; a reference to `me` in such a perspective would typically be a modelling error. Prohibiting it and providing a clear error message is preferable to attempting a partial workaround.
 
 ---
 
@@ -530,7 +542,9 @@ SELECT * FROM step2
 
 **Limitation**: The full filler chain may span multiple role tables (e.g., `Participant` is filled by `Profile`, which is filled by `NationalProfile`). A recursive CTE in SQL cannot span multiple tables.
 
-**SQL for a single-table filler chain**:
+Note that the fill relation is **never truly self-referential** in Perspectives: a role of type R cannot be filled by another instance of type R, and a role instance cannot fill itself. This means the filler chain is always acyclic and finite. The maximum supported chain depth is **5 hops** (expandable to 6 if required in future).
+
+**SQL for a single-table filler chain** (same role type fills itself — e.g., a tree of organisational units):
 ```sql
 WITH RECURSIVE filler_chain(id, filler_id) AS (
   SELECT id, filler_id
@@ -551,7 +565,7 @@ WHERE filler_id IS NULL   -- the ultimate filler has no further filler
 
 This works when the entire filler chain stays within one table (one role type fills another of the same type).
 
-**When the chain crosses tables**: The PDR model always knows the complete filler chain type statically. If the chain is bounded and known, it can be **unrolled** into a fixed-depth join:
+**When the chain crosses tables**: The PDR model always knows the complete filler chain type statically. The chain is unrolled into a fixed-depth join sequence using the statically-known types at each hop:
 
 ```sql
 -- Filler chain: Participant → Profile → NationalProfile (depth 2)
@@ -562,9 +576,9 @@ JOIN nationalprofile_role np ON np.id = pr.filler_id
 WHERE p.id = :participant_id
 ```
 
-**Recommendation**: The PDR compiler, having access to the model, can determine the filler chain depth and cross-table path. It should unroll the chain into a fixed-depth JOIN sequence. If the chain depth is variable or unbounded (self-referential role types), this approach breaks down.
+**Decision**: The PDR compiler should unroll filler chains into a fixed-depth JOIN sequence. Maximum supported depth is **5** (may be increased to 6 later). At generation time, if the statically-known chain exceeds this limit, the PDR should emit a warning and the affected view should be flagged as unsupported.
 
-> **Open question**: Is there a practical upper bound on filler chain depth in real Perspectives models? In the examples seen so far, chains are typically 1–3 hops. A configurable maximum depth (e.g., 5) with a warning when exceeded would be pragmatic.
+> **Known limitation — Specialised fillers**: See [Section 4.5](#45-known-limitation-specialised-fillers) for an important caveat that affects runtime correctness of filler-chain unrolling when the modeller uses subtype-filling patterns.
 
 ---
 
@@ -735,6 +749,53 @@ This is feasible as long as the model's type metadata is available to the SQL ge
 3. **Exclude from TCP queries**: Accept that state-conditional expressions cannot be evaluated in the TCP SQL layer. This is the pragmatic fallback for the initial implementation.
 
 > **Open question**: Which Onlooker perspectives are expected to use `IsInStateF`? This step is most relevant in **state conditions** for actions, not typically in perspective object queries. If it does appear in an Onlooker's calculated role/property definition, the SQL translator should flag it as unsupported and skip or approximate the view.
+
+---
+
+### 4.5 Known Limitation: Specialised Fillers
+
+A fundamental challenge for compile-time filler-chain unrolling arises from the **subtype propagation** rule in the Perspectives type system.
+
+#### The problem
+
+A role's definition may include a `filledBy` constraint, e.g.:
+
+```arc
+role Participant
+  filledBy PersonProfile
+```
+
+This asserts that `Participant` must be filled by an instance of type `PersonProfile` (or a specialisation thereof). The SQL translator can unroll this as a JOIN to the `person_profile` table, which appears correct.
+
+However, the Perspectives type system allows a filler instance's **effective type set** to include types it is filled by. In practice this means:
+
+- `PersonProfile` might itself be filled by `RichPersonProfile` (a specialised variant).
+- From the type system's perspective, instances of `RichPersonProfile` count as instances of `PersonProfile` (because `RichPersonProfile` specialises `PersonProfile` via the filler chain).
+- Therefore a `Participant` might effectively be filled by a `RichPersonProfile` instance rather than a plain `PersonProfile` instance.
+
+This introduces an **extra hop** that is not visible in the compile-time type of the `filledBy` constraint. The SQL JOIN unrolled from the `filledBy` constraint alone would point to `person_profile`, missing the additional `rich_person_profile` indirection.
+
+#### Impact
+
+Queries that navigate via `FillerF` (or properties accessed via a filler) may produce incorrect or incomplete results when:
+1. The nominal filler type is itself filled by a more specialised type, and
+2. The relevant properties live on the specialised type's table rather than the nominal type's table.
+
+This cannot be fully resolved at compile time without additional runtime information about which filler instances are "simple" (a direct row in the nominal table) versus "deep" (a row in the specialised table that is itself a filler).
+
+#### Accepted risk
+
+This limitation is acknowledged as a **known risk** that is acceptable for the initial implementation scope. Reasons:
+
+1. In practice, deeply specialised filler chains are rare in the observable Onlooker-accessible portions of a model.
+2. The failure mode is silent incompleteness (missing results) rather than incorrect values, which is preferable in a reporting context.
+3. If a model is known to use this pattern, the modeller can flatten the filler chain manually in the ARC model (e.g., by ensuring properties are accessible at the nominal filler level).
+
+#### Documentation requirement
+
+The PDR's query-to-SQL compiler should emit a **warning** when generating a view that traverses a filler hop where the nominal filler type is itself a filler target for more specific types. This allows operators to be aware of the potential incompleteness.
+
+> **Open question**: Are there practical modelling patterns where specialised fillers are commonly used in Onlooker-accessible perspectives? If yes, a more complete solution (e.g., SQL `COALESCE` across multiple potential filler tables, or a union of all specialisation tables) should be designed in a follow-up.
 
 ---
 
@@ -916,16 +977,26 @@ The PDR therefore:
 
 ## 7. Open Questions
 
-The following questions remain open and should be resolved through further iteration:
+The following questions remain open and should be resolved through further iteration. Resolved questions are marked ✅.
 
-### Q1: Filler chain depth
-Is there a practical upper bound on filler chain depth in real Perspectives models? A maximum depth of 3–5 hops would allow the SQL translator to unroll filler chains without recursive CTEs. If filler chains are occasionally deeper or unbounded (self-referential roles), a separate strategy (e.g., materialized path or nested set) would be needed.
+### ✅ Q1: Filler chain depth *(resolved)*
+**Decision**: The maximum supported filler chain depth is **5 hops**, extendable to 6 if needed. The fill relation in Perspectives is never truly self-referential (a role of type R cannot be filled by another instance of R; a role instance cannot fill itself), so chains are always acyclic and finite. The PDR compiler will unroll chains up to the configured maximum and emit a warning if a chain exceeds it. See also the [Specialised Fillers limitation](#45-known-limitation-specialised-fillers).
 
-### Q2: External role storage
-Should external roles always have their own dedicated table, or should their properties be denormalised onto the context table? The current TCP implementation writes external role properties to the context table. The SQL translator must know which convention is used (possibly per-table in the config).
+### Q2: External role storage and context table strategy
+Two design decisions remain open and are related:
 
-### Q3: `MeF` in Onlooker queries
-Does `MeF` (the "current user") ever appear in queries for Onlooker perspectives? If yes, how should it be handled: as a runtime parameter, a constant baked into the view at generation time, or an unsupported case?
+**(a) External role properties**: Should external role properties be written to the context table (current TCP behaviour) or to a dedicated external role table?
+- Writing to the context table simplifies navigation (one less join for external role properties) but conflates context and role storage.
+- A dedicated external role table is conceptually cleaner but requires joins for all external role property access.
+
+**(b) Context table structure**: Should there be one table per context type, or a single universal `context` table with a `context_type` column?
+- A single `context` table (Strategy B in [Section 2](#2-assumed-relational-table-structure)) simplifies the schema and avoids the need to know the target context type for generic `ContextF` navigation steps.
+- Per-type context tables are consistent with the Smashed Role Chains strategy applied to roles, but context tables contain only an `id` column and are essentially lookup tables.
+
+If Strategy B is adopted (single `context` table), context-level tables become very minimal and context type information is stored as data rather than schema. This would also simplify FK references in role tables. Please advise on the preferred strategy.
+
+### ✅ Q3: `MeF` in Onlooker queries *(resolved)*
+**Decision**: `MeF` is **prohibited** in Onlooker-perspective queries. The PDR model compiler must detect and report this to the modeller. See the [MeF section](#datatypegetter-mef) for details.
 
 ### Q4: Indexed names
 Are indexed context/role names used in Onlooker perspective queries? If so, which of the three strategies (pre-resolution, lookup table, or exclusion — see [Category 3 analysis](#datatypegetter-indexedcontextname-datatypegetter-indexedrolename)) is most appropriate?
