@@ -72,7 +72,7 @@ import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (perspectivesClosure_, propertiesInPerspective)
-import Prelude (Unit, bind, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=))
+import Prelude (Unit, bind, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
 import Simple.JSON (unsafeStringify, write)
 
 serialisedAsDeltasFor :: ContextInstance -> RoleInstance -> MonadPerspectivesTransaction Unit
@@ -259,8 +259,7 @@ serialiseDependency users mpreviousDependency currentDependency = do
   -- from the public endpoint.
   case currentDependency of
     (R roleId) -> do
-      if isInPublicScheme (unwrap roleId)
-      then pure unit
+      if isInPublicScheme (unwrap roleId) then pure unit
       else do
         seenBefore <- gets \depsSeenBefore -> isJust $ elemIndex currentDependency depsSeenBefore
         if seenBefore then pure unit
@@ -269,8 +268,7 @@ serialiseDependency users mpreviousDependency currentDependency = do
 
   case mpreviousDependency, currentDependency of
     Just first@(R roleId1), (R roleId2) -> do
-      if isInPublicScheme (unwrap roleId1) || isInPublicScheme (unwrap roleId2)
-      then pure unit
+      if isInPublicScheme (unwrap roleId1) || isInPublicScheme (unwrap roleId2) then pure unit
       else
         lift $ addBindingDelta roleId1 roleId2 >>=
           if _ then pure unit
@@ -280,8 +278,7 @@ serialiseDependency users mpreviousDependency currentDependency = do
               padding <- lift transactionLevel
               log (padding <> "serialiseDependency finds two role dependencies without binding: " <> show mpreviousDependency <> ", " <> show currentDependency)
     Just (V ptypeString (Value val)), (R roleId) ->
-      if isInPublicScheme (unwrap roleId)
-      then pure unit
+      if isInPublicScheme (unwrap roleId) then pure unit
       else lift $ addPropertyDelta roleId ptypeString val
     _, _ -> pure unit
   pure $ Just currentDependency
