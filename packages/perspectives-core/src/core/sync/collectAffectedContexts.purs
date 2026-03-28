@@ -724,6 +724,13 @@ computeProperties rinstances statesPerProperty cwus = forWithIndex_ (unwrap stat
         for_ (join (allPaths <$> vals)) (serialiseDependencies users)
 
 -- | Add deltas for all the users to the current transaction, from the given assumption.
+-- | Note: this function is only called from `handleSelfOnlyQuery`, where `users` is always a
+-- | single user role instance derived from a selfOnly perspective. In a selfOnly perspective,
+-- | the object role is the user role itself, which is always filled by a PerspectivesUsers
+-- | instance (a private, non-public resource). Therefore, the contexts and role instances
+-- | encountered here are always private resources, never public ones (pub: scheme).
+-- | The `FilledRolesAssumption` case already guards explicitly for the case where the filler
+-- | context is public (via `tryGetPerspectEntiteit` returning Nothing).
 createDeltasFromAssumption :: Array RoleInstance -> InformedAssumption -> MonadPerspectivesTransaction Unit
 createDeltasFromAssumption users (RoleAssumption ctxt roleTypeId) = do
   instances <- lift (ctxt ##= getRoleInstances (ENR roleTypeId))
