@@ -60,6 +60,7 @@ import Foreign.Object (Object, values)
 import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor)
 import Perspectives.Assignment.Update (cacheAndSave, getSubject)
 import Perspectives.Authenticate (signDelta)
+import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
 import Perspectives.CollectAffectedContexts (addDeltasForPerspectiveObjects, usersWithPerspectiveOnRoleBinding, usersWithPerspectiveOnRoleBinding', usersWithPerspectiveOnRoleInstance)
 import Perspectives.ContextAndRole (changeContext_me, context_buitenRol, context_pspType, modifyContext_rolInContext, rol_binding, rol_context, rol_isMe, rol_pspType)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, Updater, MonadPerspectives, (###=), (##=), (##>), (##>>))
@@ -72,7 +73,7 @@ import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..)
 import Perspectives.Instances.AutoRemoveWithFiller (emptyRolesToRemove)
 import Perspectives.Instances.Clipboard (allItemsOnClipboard)
 import Perspectives.Instances.Me (getMyType, isMe)
-import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, context, contextType, contextType_, getUnlinkedRoleInstances, roleType_)
+import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, binding_, context, contextType, contextType_, getUnlinkedRoleInstances, roleType_)
 import Perspectives.Names (findIndexedContextName, findIndexedRoleName, removeIndexedContext, removeIndexedRole)
 import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Persistence.ResourceVersionStore (incrementResourceVersion)
@@ -452,13 +453,42 @@ replaceBinding :: RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPers
 replaceBinding roleId (newBindingId :: RoleInstance) msignedDelta = (lift $ try $ getPerspectRol roleId) >>=
   handlePerspectRolError' "replaceBinding" []
     \(originalRole :: PerspectRol) -> do
-      if (rol_binding originalRole == Just newBindingId) then pure []
+      -- When msignedDelta is Nothing (local call), find the exact filler in the binding chain
+      -- so that the resolved filler matches the compile-time declared type constraint of the filled role.
+      -- This ensures a fixed filler depth: A fills only instances of the declared filler type,
+      -- not 'specialised' instances that are themselves filled by the declared type.
+      actualNewBinding <- case msignedDelta of
+        Nothing -> do
+          mexact <- lift $ findExactFiller (rol_pspType originalRole) newBindingId
+          pure $ case mexact of
+            Just exactFiller -> exactFiller
+            Nothing -> newBindingId
+        Just _ -> pure newBindingId
+      if (rol_binding originalRole == Just actualNewBinding) then pure []
       else do
-        users <- removeBinding_ roleId (Just newBindingId) msignedDelta
+        users <- removeBinding_ roleId (Just actualNewBinding) msignedDelta
         -- PERSISTENCE
         -- Schedule the replacement of the binding; add it to the end of the stack of destructive effects.
-        modify (\t -> over Transaction (\tr -> tr { scheduledAssignments = tr.scheduledAssignments `union` [ RoleUnbinding roleId (Just newBindingId) msignedDelta ] }) t)
+        modify (\t -> over Transaction (\tr -> tr { scheduledAssignments = tr.scheduledAssignments `union` [ RoleUnbinding roleId (Just actualNewBinding) msignedDelta ] }) t)
         pure users
+
+-- | Given the type of the role to be filled and a proposed filler instance, find the first
+-- | instance in the filler binding chain that satisfies the filler restriction of the filled type.
+-- | If the proposed filler itself satisfies the constraint, it is returned immediately.
+-- | Returns Nothing if no matching filler exists in the chain.
+-- | Assumes the binding chain is acyclic (enforced as a system invariant by the PDR).
+-- | In practice binding chains are very short (1-3 hops), matching the pattern used
+-- | by `allFillers` and `bottom_` in instanceObjectGetters.purs.
+findExactFiller :: EnumeratedRoleType -> RoleInstance -> MonadPerspectives (Maybe RoleInstance)
+findExactFiller filledType filler = do
+  ok <- checkBinding filledType filler
+  if ok
+    then pure (Just filler)
+    else do
+      mNextFiller <- binding_ filler
+      case mNextFiller of
+        Nothing -> pure Nothing
+        Just nextFiller -> findExactFiller filledType nextFiller
 
 -- | PERSISTENCE
 -- | QUERY EVALUATION
@@ -469,21 +499,32 @@ replaceBinding roleId (newBindingId :: RoleInstance) msignedDelta = (lift $ try 
 setFirstBinding :: RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPerspectivesTransaction (Array RoleInstance)
 setFirstBinding filled filler msignedDelta = (lift $ try $ getPerspectRol filled) >>=
   handlePerspectRolError' "setFirstBinding, filled" []
-    \(filledRole :: PerspectRol) ->
-      if rol_binding filledRole == Just filler then pure []
-      else (lift $ try $ getPerspectRol filler) >>=
+    \(filledRole :: PerspectRol) -> do
+      -- When msignedDelta is Nothing (local call), find the exact filler in the binding chain
+      -- so that the resolved filler matches the compile-time declared type constraint of the filled role.
+      -- This ensures a fixed filler depth: A fills only instances of the declared filler type,
+      -- not 'specialised' instances that are themselves filled by the declared type.
+      actualFiller <- case msignedDelta of
+        Nothing -> do
+          mexact <- lift $ findExactFiller (rol_pspType filledRole) filler
+          pure $ case mexact of
+            Just exactFiller -> exactFiller
+            Nothing -> filler
+        Just _ -> pure filler
+      if rol_binding filledRole == Just actualFiller then pure []
+      else (lift $ try $ getPerspectRol actualFiller) >>=
         handlePerspectRolError' "setFirstBinding, filler" []
           \fillerRole@(PerspectRol { isMe, pspType: fillerType }) -> do
             loadModel fillerType
 
             -- PERSISTENCE
-            lift (filled `filledPointsTo` filler)
-            if isInPublicScheme (unwrap filler) && not isInPublicScheme (unwrap filled) then pure unit
-            else lift (filler `fillerPointsTo` filled)
+            lift (filled `filledPointsTo` actualFiller)
+            if isInPublicScheme (unwrap actualFiller) && not isInPublicScheme (unwrap filled) then pure unit
+            else lift (actualFiller `fillerPointsTo` filled)
 
             -- QUERY EVALUATION
             filledContextType <- lift (rol_context filledRole ##>> contextType)
-            (lift $ findFilledRoleRequests filler filledContextType (rol_pspType filledRole)) >>= addCorrelationIdentifiersToTransactie
+            (lift $ findFilledRoleRequests actualFiller filledContextType (rol_pspType filledRole)) >>= addCorrelationIdentifiersToTransactie
             (lift $ findBindingRequests filled) >>= addCorrelationIdentifiersToTransactie
 
             -- ISME, ME
@@ -501,7 +542,7 @@ setFirstBinding filled filler msignedDelta = (lift $ try $ getPerspectRol filled
               deltaForUsers = RoleBindingDelta
                 { filled: filled
                 , filledType: rol_pspType filledRole
-                , filler: Just filler
+                , filler: Just actualFiller
                 , fillerType: Just fillerType
                 , oldFiller: Nothing
                 , oldFillerType: Nothing
@@ -518,7 +559,7 @@ setFirstBinding filled filler msignedDelta = (lift $ try $ getPerspectRol filled
                   delta = RoleBindingDelta
                     { filled: filled
                     , filledType: rol_pspType filledRole
-                    , filler: Just filler
+                    , filler: Just actualFiller
                     , fillerType: Just fillerType
                     , oldFiller: Nothing
                     , oldFillerType: Nothing
