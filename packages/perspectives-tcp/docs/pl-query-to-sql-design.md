@@ -16,7 +16,7 @@
    - 4.2 [Category 1 — Straightforwardly Implementable in SQL](#42-category-1--straightforwardly-implementable-in-sql)
    - 4.3 [Category 2 — Cannot be Implemented in SQL](#43-category-2--cannot-be-implemented-in-sql)
    - 4.4 [Category 3 — Implementable with Limitations](#44-category-3--implementable-with-limitations)
-   - 4.5 [Known Limitation: Specialised Fillers](#45-known-limitation-specialised-fillers)
+   - 4.5 [Specialised Fillers: Problem, Runtime Fix, and Design Decision](#45-specialised-fillers-problem-runtime-fix-and-design-decision)
 5. [Composition: Building SQL Queries and Views from Query Paths](#5-composition-building-sql-queries-and-views-from-query-paths)
 6. [Proposed Architecture for Automatic SQL Generation](#6-proposed-architecture-for-automatic-sql-generation)
 7. [Open Questions](#7-open-questions)
@@ -578,7 +578,7 @@ WHERE p.id = :participant_id
 
 **Decision**: The PDR compiler should unroll filler chains into a fixed-depth JOIN sequence. Maximum supported depth is **5** (may be increased to 6 later). At generation time, if the statically-known chain exceeds this limit, the PDR should emit a warning and the affected view should be flagged as unsupported.
 
-> **Known limitation — Specialised fillers**: See [Section 4.5](#45-known-limitation-specialised-fillers) for an important caveat that affects runtime correctness of filler-chain unrolling when the modeller uses subtype-filling patterns.
+> **Specialised fillers**: See [Section 4.5](#45-specialised-fillers-problem-runtime-fix-and-design-decision) for background on the specialised-filler scenario and the runtime-level fix that makes this fixed-depth approach correct.
 
 ---
 
@@ -752,11 +752,9 @@ This is feasible as long as the model's type metadata is available to the SQL ge
 
 ---
 
-### 4.5 Known Limitation: Specialised Fillers
+### 4.5 Specialised Fillers: Problem, Runtime Fix, and Design Decision
 
-A fundamental challenge for compile-time filler-chain unrolling arises from the **subtype propagation** rule in the Perspectives type system.
-
-#### The problem
+#### The original problem
 
 A role's definition may include a `filledBy` constraint, e.g.:
 
@@ -765,37 +763,31 @@ role Participant
   filledBy PersonProfile
 ```
 
-This asserts that `Participant` must be filled by an instance of type `PersonProfile` (or a specialisation thereof). The SQL translator can unroll this as a JOIN to the `person_profile` table, which appears correct.
+This asserts that `Participant` must be filled by an instance of type `PersonProfile` (or a specialisation thereof). The SQL translator would naturally unroll this as a JOIN to the `person_profile` table.
 
-However, the Perspectives type system allows a filler instance's **effective type set** to include types it is filled by. In practice this means:
+However, the Perspectives type system allows a filler instance's **effective type set** to include types it is itself filled by. Concretely:
 
 - `PersonProfile` might itself be filled by `RichPersonProfile` (a specialised variant).
-- From the type system's perspective, instances of `RichPersonProfile` count as instances of `PersonProfile` (because `RichPersonProfile` specialises `PersonProfile` via the filler chain).
-- Therefore a `Participant` might effectively be filled by a `RichPersonProfile` instance rather than a plain `PersonProfile` instance.
+- From the type system's perspective, the `RichPersonProfile` instance counts as an instance of `PersonProfile` (because it specialises `PersonProfile` via the filler chain).
+- Therefore a `Participant` might in principle be effectively filled by a `RichPersonProfile` instance rather than a plain `PersonProfile` instance.
 
-This introduces an **extra hop** that is not visible in the compile-time type of the `filledBy` constraint. The SQL JOIN unrolled from the `filledBy` constraint alone would point to `person_profile`, missing the additional `rich_person_profile` indirection.
+This would introduce an **extra hop** invisible to the compile-time `filledBy` type, causing the SQL JOIN to point to `person_profile` while the actual filler row lives in `rich_person_profile`.
 
-#### Impact
+#### Runtime-level fix
 
-Queries that navigate via `FillerF` (or properties accessed via a filler) may produce incorrect or incomplete results when:
-1. The nominal filler type is itself filled by a more specialised type, and
-2. The relevant properties live on the specialised type's table rather than the nominal type's table.
+The PDR runtime has been updated to **prevent this situation from arising at data entry time**: when a role is filled, the runtime ensures the filler is never an instance that itself has a filler complying with the filled role's `filledBy` restriction. In other words, the runtime enforces that the immediate filler is always a "leaf" instance at the correct level of the type hierarchy — it does not delegate further down via another filler hop.
 
-This cannot be fully resolved at compile time without additional runtime information about which filler instances are "simple" (a direct row in the nominal table) versus "deep" (a row in the specialised table that is itself a filler).
+This runtime guarantee means the SQL translator can rely on the compile-time `filledBy` type being the actual storage location of the filler, without needing to chase additional hops at query time.
 
-#### Accepted risk
+#### Design decision: fixed-depth filler chain
 
-This limitation is acknowledged as a **known risk** that is acceptable for the initial implementation scope. Reasons:
+As a direct consequence of the runtime guarantee above, the design adopts the following decision:
 
-1. In practice, deeply specialised filler chains are rare in the observable Onlooker-accessible portions of a model.
-2. The failure mode is silent incompleteness (missing results) rather than incorrect values, which is preferable in a reporting context.
-3. If a model is known to use this pattern, the modeller can flatten the filler chain manually in the ARC model (e.g., by ensuring properties are accessible at the nominal filler level).
+> **Properties of a filler role can always be found at a compile-time-known, fixed depth in terms of filler hops.**
 
-#### Documentation requirement
+The SQL translator unrolls filler chains into a fixed-depth JOIN sequence determined entirely by the statically-known `filledBy` types in the model. No runtime introspection of filler chains is needed. The maximum supported depth remains **5 hops** (extendable to 6).
 
-The PDR's query-to-SQL compiler should emit a **warning** when generating a view that traverses a filler hop where the nominal filler type is itself a filler target for more specific types. This allows operators to be aware of the potential incompleteness.
-
-> **Open question**: Are there practical modelling patterns where specialised fillers are commonly used in Onlooker-accessible perspectives? If yes, a more complete solution (e.g., SQL `COALESCE` across multiple potential filler tables, or a union of all specialisation tables) should be designed in a follow-up.
+This eliminates the need for the warning mechanism described in the earlier draft of this section. The specialised-filler scenario is now a historical note rather than an active risk.
 
 ---
 
@@ -980,7 +972,7 @@ The PDR therefore:
 The following questions remain open and should be resolved through further iteration. Resolved questions are marked ✅.
 
 ### ✅ Q1: Filler chain depth *(resolved)*
-**Decision**: The maximum supported filler chain depth is **5 hops**, extendable to 6 if needed. The fill relation in Perspectives is never truly self-referential (a role of type R cannot be filled by another instance of R; a role instance cannot fill itself), so chains are always acyclic and finite. The PDR compiler will unroll chains up to the configured maximum and emit a warning if a chain exceeds it. See also the [Specialised Fillers limitation](#45-known-limitation-specialised-fillers).
+**Decision**: The maximum supported filler chain depth is **5 hops**, extendable to 6 if needed. The fill relation in Perspectives is never truly self-referential (a role of type R cannot be filled by another instance of R; a role instance cannot fill itself), so chains are always acyclic and finite. The PDR compiler will unroll chains up to the configured maximum and emit a warning if a chain exceeds it. See also [Section 4.5](#45-specialised-fillers-problem-runtime-fix-and-design-decision) for the specialised-filler scenario and why properties can always be found at a fixed, compile-time-known depth.
 
 ### Q2: External role storage and context table strategy
 Two design decisions remain open and are related:
