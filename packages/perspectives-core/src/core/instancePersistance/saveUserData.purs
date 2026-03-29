@@ -472,23 +472,25 @@ replaceBinding roleId (newBindingId :: RoleInstance) msignedDelta = (lift $ try 
         modify (\t -> over Transaction (\tr -> tr { scheduledAssignments = tr.scheduledAssignments `union` [ RoleUnbinding roleId (Just actualNewBinding) msignedDelta ] }) t)
         pure users
 
--- | Given the type of the role to be filled and a proposed filler instance, find the first
+-- | Given the type of the role to be filled and a proposed filler instance, find the deepest
 -- | instance in the filler binding chain that satisfies the filler restriction of the filled type.
--- | If the proposed filler itself satisfies the constraint, it is returned immediately.
--- | Returns Nothing if no matching filler exists in the chain.
+-- | Descends the chain tracking the last compliant instance seen. Terminates when filler n+1
+-- | does NOT comply (or the chain ends), then returns filler n.
+-- | Returns Nothing if no instance in the chain satisfies the constraint.
 -- | Assumes the binding chain is acyclic (enforced as a system invariant by the PDR).
 -- | In practice binding chains are very short (1-3 hops), matching the pattern used
 -- | by `allFillers` and `bottom_` in instanceObjectGetters.purs.
 findExactFiller :: EnumeratedRoleType -> RoleInstance -> MonadPerspectives (Maybe RoleInstance)
-findExactFiller filledType filler = do
-  ok <- checkBinding filledType filler
-  if ok
-    then pure (Just filler)
-    else do
-      mNextFiller <- binding_ filler
-      case mNextFiller of
-        Nothing -> pure Nothing
-        Just nextFiller -> findExactFiller filledType nextFiller
+findExactFiller filledType startFiller = go Nothing startFiller
+  where
+  go :: Maybe RoleInstance -> RoleInstance -> MonadPerspectives (Maybe RoleInstance)
+  go mDeepest candidate = do
+    ok <- checkBinding filledType candidate
+    let newDeepest = if ok then Just candidate else mDeepest
+    mNextFiller <- binding_ candidate
+    case mNextFiller of
+      Nothing -> pure newDeepest
+      Just nextFiller -> go newDeepest nextFiller
 
 -- | PERSISTENCE
 -- | QUERY EVALUATION
