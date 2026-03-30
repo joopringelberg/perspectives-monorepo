@@ -62,6 +62,7 @@ import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2ModelUrl)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.ModelDependencies (modelURIReadable, sysUser, versionedModelManifestModelCuid) as MD
 import Perspectives.ModelTranslation (augmentModelTranslation, emptyTranslationTable, generateFirstTranslation, generateTranslationTable, parseTranslation_pass1, parseTranslation_pass2, writeReadableTranslationYaml, writeTranslationYaml) as MT
+import Perspectives.TCP.Configuration (buildTCPConfiguration) as TCP
 import Perspectives.ModelTranslation.Representation (ModelTranslation(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, addDocument, deleteDocument, fromBlob, getAttachment, getDocument, retrieveDocumentVersion, toFile, tryGetDocument_)
@@ -451,10 +452,7 @@ generateTCPConfiguration modelUri_ _ = case head modelUri_ of
       Left e -> handleExternalFunctionError "model://perspectives.domains#Parsing$GenerateTCPConfiguration"
         (Left e)
       Right (domeinFile :: DomeinFile Sidecar.Stable) ->
-        -- TODO: implement full TCP configuration generation per design in
-        -- packages/perspectives-tcp/docs/pl-query-to-sql-design.md
-        -- domeinFile holds the compiled model; use it to walk Onlooker perspectives here.
-        pure $ Value $ writeJSON { status: "not yet implemented", modelUri }
+        pure $ Value $ writeJSON $ TCP.buildTCPConfiguration domeinFile modelUri
 
 -- | Fill a ModelTranslation freshly generated from a DomeinFile, with translations taken from a TranslationTable.
 -- | NOTE: the TranslationTable must be available on the versioned model in the repository. It is not a property value.

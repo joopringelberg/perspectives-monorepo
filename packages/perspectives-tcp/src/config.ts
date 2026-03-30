@@ -54,8 +54,17 @@ export interface TableConfig {
   /**
    * Perspectives context type URI.
    * Context instance data is stored here.
+   * @deprecated Prefer `isUniversalContextTable` for the single context table.
    */
   contextType?: string;
+  /**
+   * When true, this table is the single universal context table.
+   * The schema generator will add `id` (PRIMARY KEY) and `context_type` columns
+   * automatically.  Role tables reference this table via their `context_id` column.
+   * Set by the PDR-generated TCP configuration; the delta processor uses this flag
+   * to route UniverseContextDelta events to this table regardless of context type.
+   */
+  isUniversalContextTable?: boolean;
   /** Column definitions */
   columns: ColumnConfig[];
 }

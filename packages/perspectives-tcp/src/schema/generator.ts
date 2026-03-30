@@ -72,9 +72,10 @@ export class SchemaGenerator {
 /**
  * Add the three standard columns that every TCP role/context table requires
  * unless they are already explicitly declared in the config:
- *   - `id`         TEXT NOT NULL (primary key)
- *   - `context_id` TEXT (FK to the owning context table, when a context table exists)
- *   - `filler_id`  TEXT (FK to the filler role, when applicable)
+ *   - `id`           TEXT NOT NULL (primary key)
+ *   - `context_type` TEXT (only for universal context table)
+ *   - `context_id`   TEXT (FK to the owning context table, for role tables)
+ *   - `filler_id`    TEXT (FK to the filler role, for role tables)
  *
  * Standard columns are inserted **before** any user-defined columns.
  */
@@ -86,7 +87,14 @@ function addStandardColumns(table: TableConfig): TableConfig {
     prefix.push({ name: 'id', type: 'text', primaryKey: true, nullable: false });
   }
 
-  if (table.contextType && !existing.has('context_type')) {
+  // Universal context table: add context_type column
+  if (table.isUniversalContextTable && !existing.has('context_type')) {
+    // Every context must have a type; nullable: false enforces this invariant.
+    prefix.push({ name: 'context_type', type: 'text', nullable: false });
+  }
+
+  // Legacy per-type context tables (contextType set, not the universal table)
+  if (table.contextType && !table.isUniversalContextTable && !existing.has('context_type')) {
     prefix.push({ name: 'context_type', type: 'text', nullable: true });
   }
 

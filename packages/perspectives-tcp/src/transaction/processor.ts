@@ -203,9 +203,15 @@ async function handleUniverseContextDelta(
   }
   const d = delta as import('../types').UniverseContextDelta;
 
-  const table = tables.find((t) => t.contextType === d.contextType);
+  // Prefer the single universal context table (isUniversalContextTable === true).
+  // Fall back to a per-type context table for backwards compatibility with hand-
+  // crafted configs that do not use the universal context table.
+  const table =
+    tables.find((t) => t.isUniversalContextTable === true) ??
+    tables.find((t) => t.contextType === d.contextType);
+
   if (!table) {
-    logger.debug(`No table configured for contextType "${d.contextType}" – ignoring`);
+    logger.debug(`No context table configured for contextType "${d.contextType}" – ignoring`);
     return;
   }
 
@@ -279,6 +285,9 @@ async function handleContextDelta(
 
   switch (d.deltaType) {
     case 'AddRoleInstancesToContext':
+    case 'AddExternalRole':
+      // Per design decision (§2): external roles are stored as dedicated role tables.
+      // AddExternalRole is treated identically to AddRoleInstancesToContext.
       logger.debug(
         `ContextDelta: UPSERT role "${d.roleInstance}" in "${table.name}" (context_id = "${d.contextInstance}")`,
       );
@@ -297,12 +306,6 @@ async function handleContextDelta(
           context_id: d.destinationContext,
         });
       }
-      break;
-
-    case 'AddExternalRole':
-      // External roles link a context to its external role instance.
-      // No separate table operation needed beyond what UniverseRoleDelta provides.
-      logger.debug(`ContextDelta: AddExternalRole for "${d.roleInstance}" – no database operation needed`);
       break;
 
     default:
@@ -359,23 +362,13 @@ async function handleRolePropertyDelta(
   }
   const d = delta as import('../types').RolePropertyDelta;
 
-  // External role properties are stored in the context table, not a separate role table.
-  // If the roleType ends with "$External", look up the context table instead.
-  const isExternalRole = d.roleType.endsWith('$External');
-  let table: TableConfig | undefined;
-  if (isExternalRole) {
-    const contextType = d.roleType.slice(0, -'$External'.length);
-    table = tables.find((t) => t.contextType === contextType);
-    if (!table) {
-      logger.debug(`No context table configured for external roleType "${d.roleType}" (contextType="${contextType}") – ignoring`);
-      return;
-    }
-  } else {
-    table = tables.find((t) => t.roleType === d.roleType);
-    if (!table) {
-      logger.debug(`No table configured for roleType "${d.roleType}" – ignoring`);
-      return;
-    }
+  // Per design decision (§2): external roles are stored as dedicated role tables,
+  // just like all other enumerated roles.  Properties are always looked up via
+  // the role table, never via a context table.
+  const table = tables.find((t) => t.roleType === d.roleType);
+  if (!table) {
+    logger.debug(`No table configured for roleType "${d.roleType}" – ignoring`);
+    return;
   }
 
   const col = columnForProperty(table, d.property);
@@ -386,36 +379,32 @@ async function handleRolePropertyDelta(
     return;
   }
 
-  // For External role properties written to the context table, the row id is
-  // the context id (without the "$External" suffix).
-  const rowId = isExternalRole ? d.id.replace(/\$External$/, '') : d.id;
-
   switch (d.deltaType) {
     case 'AddProperty':
     case 'SetProperty': {
       const rawValue = d.values.length > 0 ? d.values[0] : null;
       const value = coerceValue(rawValue, col.type);
       logger.debug(
-        `RolePropertyDelta: UPDATE ${table.name}.${col.name} for "${rowId}" → ${JSON.stringify(value)}`,
+        `RolePropertyDelta: UPDATE ${table.name}.${col.name} for "${d.id}" → ${JSON.stringify(value)}`,
       );
-      await db.updateRow(table.name, rowId, { [col.name]: value });
+      await db.updateRow(table.name, d.id, { [col.name]: value });
       break;
     }
     case 'RemoveProperty':
     case 'DeleteProperty':
       logger.debug(
-        `RolePropertyDelta: SET NULL ${table.name}.${col.name} for "${rowId}"`,
+        `RolePropertyDelta: SET NULL ${table.name}.${col.name} for "${d.id}"`,
       );
-      await db.updateRow(table.name, rowId, { [col.name]: null });
+      await db.updateRow(table.name, d.id, { [col.name]: null });
       break;
 
     case 'UploadFile':
       // File uploads are tracked as a URL/path stored in the property value
       if (d.values.length > 0) {
         logger.debug(
-          `RolePropertyDelta: UploadFile – UPDATE ${table.name}.${col.name} for "${rowId}" → ${JSON.stringify(d.values[0])}`,
+          `RolePropertyDelta: UploadFile – UPDATE ${table.name}.${col.name} for "${d.id}" → ${JSON.stringify(d.values[0])}`,
         );
-        await db.updateRow(table.name, rowId, { [col.name]: d.values[0] });
+        await db.updateRow(table.name, d.id, { [col.name]: d.values[0] });
       } else {
         logger.debug(`RolePropertyDelta: UploadFile – no value provided for "${d.id}", ignoring`);
       }

@@ -1040,13 +1040,48 @@ Example sketch of the name map in the query plan:
 
 ### 6.6 `GenerateTCPConfiguration` — Callable from a Model
 
-The SQL view configuration generation can be triggered from within a Perspectives model, analogously to how translation YAML files are generated. The function `GenerateTCPConfiguration` is an external core function (in module `Perspectives.Extern.Parsing`) that:
+The SQL view configuration generation can be triggered from within a Perspectives model, analogously to how translation YAML files are generated. The function `GenerateTCPConfiguration` is an external core function (in module `Perspectives.Extern.Parsing`, implementation in `Perspectives.TCP.Configuration`) that:
 
 1. Accepts a **versioned model URI** as its argument (e.g. `model://perspectives.domains#MyApp@1.2`).
 2. Retrieves the corresponding `DomeinFile` from the repository using `modelUri2ModelUrl`.
-3. Scans the model for user roles ultimately filled by `sys:Onlookers`.
-4. For each such role, translates its perspective QFDs into a relational-algebra query plan (applying the rules in Section 4 and the decisions in Sections 4.5–4.6, Q4–Q9).
-5. Returns the resulting TCP configuration as a **JSON string**.
+3. Scans the model for user roles with `kindOfRole == UserRole` that are not `PerspectivesUsers` or `NonPerspectivesUsers` (these are Onlooker roles).
+4. For each Onlooker role, collects its perspectives, expands CalculatedRole definitions (dropping `FilterF` nodes per §4.6), and resolves the leaf EnumeratedRoleTypes.
+5. For each leaf ENR, emits one SQL table config entry (with all enumerated properties of that role as columns).
+6. Adds the single universal `context` table (flagged with `isUniversalContextTable: true`).
+7. Returns the resulting TCP configuration as a **JSON string**.
+
+#### JSON output format
+
+```json
+{
+  "modelUri": "model://perspectives.domains#MyApp@1.2",
+  "nameMap": {
+    "<stable-role-id>": "<readable-role-qualified-name>",
+    "<stable-prop-id>": "<readable-prop-qualified-name>"
+  },
+  "tables": [
+    {
+      "name": "context",
+      "isUniversalContextTable": true,
+      "columns": []
+    },
+    {
+      "name": "<local-role-name>",
+      "roleType": "<stable-role-id>",
+      "columns": [
+        {
+          "name": "<local-prop-name>",
+          "type": "text|boolean|real|datetime",
+          "nullable": true,
+          "propertyType": "<stable-prop-id>"
+        }
+      ]
+    }
+  ]
+}
+```
+
+The `tables` array is a drop-in replacement for `TCPConfig.schema.tables`. The operator must merge it with the RabbitMQ broker and database connection settings before starting the TCP process.
 
 The returned string can then be used to create a file (e.g. `TCPConfig`) within a management model, in exactly the same way as the translation YAML is created in `model://perspectives.domains#CouchdbManagement`. Example ARC usage:
 
@@ -1077,6 +1112,8 @@ It is registered in `externalFunctions` as:
 ```purescript
 mkLibFunc1 "model://perspectives.domains#Parsing$GenerateTCPConfiguration" True generateTCPConfiguration
 ```
+
+The implementation lives in `Perspectives.TCP.Configuration` (module `tcpConfiguration.purs`).
 
 ---
 

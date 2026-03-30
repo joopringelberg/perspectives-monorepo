@@ -23,8 +23,13 @@
   "schema": {
     "tables": [
       {
+        "name": "context",
+        "isUniversalContextTable": true,
+        "columns": []
+      },
+      {
         "name": "stadskamer_orgs",
-        "contextType": "model://stadskamer.org#Stadskamer$Stadskamer",
+        "roleType": "model://stadskamer.org#Stadskamer$Stadskamer$External",
         "columns": [
           { "name": "naam", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Stadskamer$Naam" }
         ]
@@ -33,12 +38,6 @@
         "name": "lokaties",
         "roleType": "model://stadskamer.org#Stadskamer$Stadskamer$Lokatie",
         "columns": [
-          {
-            "name": "context_id",
-            "type": "text",
-            "nullable": true,
-            "references": { "table": "stadskamer_orgs", "column": "id" }
-          },
           { "name": "naam", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Lokatie$Naam" },
           { "name": "adres", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Lokatie$Adres" }
         ]
@@ -47,12 +46,6 @@
         "name": "activiteitencentra",
         "roleType": "model://stadskamer.org#Stadskamer$Lokatie$ActiviteitenCentrum",
         "columns": [
-          {
-            "name": "context_id",
-            "type": "text",
-            "nullable": true,
-            "references": { "table": "lokaties", "column": "id" }
-          },
           { "name": "naam", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$ActiviteitenCentrum$Naam" }
         ]
       },
@@ -60,12 +53,6 @@
         "name": "activiteiten",
         "roleType": "model://stadskamer.org#Stadskamer$ActiviteitenCentrum$Activiteit",
         "columns": [
-          {
-            "name": "context_id",
-            "type": "text",
-            "nullable": true,
-            "references": { "table": "activiteitencentra", "column": "id" }
-          },
           { "name": "naam", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Activiteit$Naam" },
           { "name": "categorie", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Activiteit$Categorie" }
         ]
@@ -74,12 +61,6 @@
         "name": "bijeenkomsten",
         "roleType": "model://stadskamer.org#Stadskamer$Activiteit$Bijeenkomst",
         "columns": [
-          {
-            "name": "context_id",
-            "type": "text",
-            "nullable": true,
-            "references": { "table": "activiteiten", "column": "id" }
-          },
           { "name": "datum", "type": "datetime", "propertyType": "model://stadskamer.org#Stadskamer$Bijeenkomst$Datum" },
           { "name": "locatie_naam", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Bijeenkomst$LocatieNaam" }
         ]
@@ -88,12 +69,6 @@
         "name": "deelnemers",
         "roleType": "model://stadskamer.org#Stadskamer$Bijeenkomst$Deelnemer",
         "columns": [
-          {
-            "name": "context_id",
-            "type": "text",
-            "nullable": true,
-            "references": { "table": "bijeenkomsten", "column": "id" }
-          },
           { "name": "naam", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Deelnemer$Naam" },
           { "name": "aankomst", "type": "datetime", "propertyType": "model://stadskamer.org#Stadskamer$Deelnemer$Aankomst" },
           { "name": "vertrek", "type": "datetime", "propertyType": "model://stadskamer.org#Stadskamer$Deelnemer$Vertrek" }
