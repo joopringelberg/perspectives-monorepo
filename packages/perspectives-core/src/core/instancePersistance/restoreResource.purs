@@ -44,7 +44,7 @@ import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, ResourceToBeStored(..), removeInternally)
 import Perspectives.ModelDependencies (sysUser)
-import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), getDeltasForResource, getDeltasForRoleInstance, updateDeltaApplied)
+import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), getDeltasForResource, getDeltasForRoleInstance, safeKey, updateDeltaApplied)
 import Perspectives.PerspectivesState (transactionLevel)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary)
@@ -120,11 +120,14 @@ isDeletionDeltaType dt =
     || dt == "RemoveUnboundExternalRoleInstance"
 
 -- | Returns true if a DeltaStoreRecord is a sub-resource delta of the given
--- | role instance (i.e. its resourceKey starts with roleInstanceId <> "#").
+-- | role instance (i.e. its resourceKey starts with safeKey(roleInstanceId) <> "#").
+-- | DeltaStoreRecord.resourceKey is stored as a safe key; the roleInstanceId is
+-- | compared after conversion via safeKey to strip any scheme prefix.
 isSubResourceDeltaOf :: String -> DeltaStoreRecord -> Boolean
 isSubResourceDeltaOf roleInstanceId (DeltaStoreRecord { resourceKey }) =
-  Str.length resourceKey > Str.length roleInstanceId
-    && Str.take (Str.length roleInstanceId + 1) resourceKey == roleInstanceId <> "#"
+  let safeRid = safeKey roleInstanceId
+  in Str.length resourceKey > Str.length safeRid + 1
+    && Str.take (Str.length safeRid + 1) resourceKey == safeRid <> "#"
 
 -- | Apply a signed delta by dispatching to the appropriate execute function.
 -- | Tries to parse the encrypted delta as each known delta type in turn.
