@@ -17,6 +17,7 @@
    - 4.3 [Category 2 — Cannot be Implemented in SQL](#43-category-2--cannot-be-implemented-in-sql)
    - 4.4 [Category 3 — Implementable with Limitations](#44-category-3--implementable-with-limitations)
    - 4.5 [Specialised Fillers: Problem, Runtime Fix, and Design Decision](#45-specialised-fillers-problem-runtime-fix-and-design-decision)
+   - 4.6 [Design Decision: Omitting Filter Steps from Calculated Roles](#46-design-decision-omitting-filter-steps-from-calculated-roles)
 5. [Composition: Building SQL Queries and Views from Query Paths](#5-composition-building-sql-queries-and-views-from-query-paths)
 6. [Proposed Architecture for Automatic SQL Generation](#6-proposed-architecture-for-automatic-sql-generation)
 7. [Open Questions](#7-open-questions)
@@ -44,7 +45,7 @@ The following query functions are **out of scope** for this analysis:
 |---|---|
 | `callExternal` / `ExternalCoreRoleGetter`, `ExternalCorePropertyGetter`, `ExternalCoreContextGetter`, `ForeignRoleGetter`, `ForeignPropertyGetter` | External function calls into registered PureScript/JS libraries; no SQL equivalent exists |
 | Steps returning type values: `TypeOfContextF`, `TypeOfRoleF`, `RoleTypesF`, `SpecialisesRoleTypeF`, `TypeGetter`, `RoleTypeConstant`, `ContextTypeConstant` | Return type metadata, not instance data; not meaningful in a data-level SQL query |
-| `FilterF` | Filtering is applied by PDR peers before a mutation is forwarded to the TCP; the TCP receives only pre-filtered data |
+| `FilterF` | Filtering is applied by PDR peers before a mutation is forwarded to the TCP; the TCP receives only pre-filtered data. See [Section 4.6](#46-design-decision-omitting-filter-steps-from-calculated-roles) for the design decision on how this affects Calculated Role expansion. |
 | Assignment operators: `CreateContext`, `CreateRole`, `Bind`, `Unbind`, `DeleteRole`, `DeleteContext`, `DeleteProperty`, `Move`, `RemoveRole`, `RemoveContext`, `AddPropertyValue`, `RemovePropertyValue`, `SetPropertyValue`, `CreateFileF`, `ExternalEffectFullFunction`, `ExternalDestructiveFunction`, `ForeignEffectFullFunction`, `BindResultFromCreatingAssignment` | These are action-execution operators, not query operators |
 | `TranslateContextType`, `TranslateRoleType` | Translation of type identifiers to human-readable strings; purely presentational |
 | `TypeTimeOnlyContextF`, `TypeTimeOnlyEnumeratedRoleF`, `TypeTimeOnlyCalculatedRoleF` | Compile-time-only type references; produce no runtime values |
@@ -791,6 +792,73 @@ This eliminates the need for the warning mechanism described in the earlier draf
 
 ---
 
+### 4.6 Design Decision: Omitting Filter Steps from Calculated Roles
+
+#### Background
+
+The Perspectives information-sharing model is built on a **need-to-know principle**: a PDR peer only shares the data that the Perspectives model authorises for the receiving peer. Before forwarding a transaction to the TCP (which acts as an Onlooker), the sending peer therefore already applies all relevant perspective filters — the TCP receives only the data that the Onlooker role is entitled to see.
+
+A **Calculated role** in Perspectives may be defined as a filtered subset of an enumerated role, for example:
+
+```arc
+case Bijeenkomst
+
+  user Aanwezigen (relational) filledBy Deelnemer
+    property Aanwezig (Boolean)
+
+  user Geregistreerden = filter Aanwezigen with Aanwezig
+
+  user Meekijker = Organizer >> binding >> context >> Meekijker
+    perspective on Geregistreerden
+      props (FirstName, LastName) verbs (Consult)
+```
+
+Here `Geregistreerden` is defined as the subset of `Aanwezigen` instances where `Aanwezig` is `true`.
+
+#### Why re-applying the filter in the TCP would produce wrong results
+
+When the `Organizer` peer sends transactions to the TCP/Meekijker, it only forwards instances of `Aanwezigen` who have `Aanwezig = true` — the `Organizer`'s own PDR has already applied the perspective filter. As a result:
+
+1. The TCP's relational database never receives `Aanwezigen` rows where `Aanwezig = false`.
+2. Critically, `Meekijker` does **not** have a perspective on `Aanwezigen` that includes the `Aanwezig` property — so the `Aanwezig` column is not even present in the TCP's role table for `Aanwezigen`.
+
+If the TCP were to translate `Geregistreerden` faithfully as `SELECT * FROM aanwezigen WHERE aanwezig = true`, it would find **no results** for every row. Under the [Closed World Assumption](https://en.wikipedia.org/wiki/Closed-world_assumption), the absence of the `Aanwezig` column is interpreted as `false`, so the filter predicate fails universally.
+
+#### Could filter data arrive from a different peer?
+
+One might ask: could a situation arise where one peer sends the unfiltered `Aanwezigen` data and a different peer sends the `Aanwezig` property values, so that the TCP could reassemble the complete picture and apply the filter itself?
+
+In the Perspectives model, this cannot happen for Onlooker perspectives used for reporting. An Onlooker's perspective is defined at the model level and is consistent across all peers who share data with the TCP. A peer who has the `Aanwezig` property in their perspective would already apply the filter before forwarding transactions; the TCP receives the pre-filtered result, not the raw inputs.
+
+#### Design decision
+
+> **The TCP's SQL view generator must omit `FilterF` steps when expanding a Calculated Role definition.**
+>
+> When the PDR compiler expands a `RolGetter (CR calculatedRoleType)` into its definition QFD for SQL generation, any `FilterF` node in the definition tree is **dropped**. The role on which the filter was applied (the unfiltered base role) is used directly.
+>
+> In the example above, `Geregistreerden` is treated as equivalent to `Aanwezigen` for SQL view purposes. The view reads:
+>
+> ```sql
+> -- View for Geregistreerden (filter step dropped):
+> SELECT id, context_id, first_name, last_name
+> FROM aanwezigen
+> WHERE context_id = :context_id
+> ```
+>
+> rather than including a `WHERE aanwezig = true` predicate that would always produce an empty result set.
+
+#### Considerations and caveats
+
+1. **Correctness in the TCP context**: The design decision is correct because the TCP only ever receives already-filtered data. The SQL view accurately reflects the set of instances visible to the Onlooker.
+
+2. **Operational vs. reporting filters**: End users of the TCP database may wish to add their own SQL filters on top of the generated views (e.g., `WHERE first_name LIKE 'A%'`). This is distinct from the Perspectives model-level `FilterF` step and is entirely appropriate at the reporting layer.
+
+3. **Compound calculated roles**: If a calculated role's definition contains nested `FilterF` nodes (e.g., `filter (filter R with P1) with P2`), all `FilterF` nodes are dropped. Only the leaf enumerated role is used as the SQL source.
+
+4. **Modeller awareness**: The PDR's SQL view compiler should log or annotate, in the generated view metadata, which `FilterF` steps were dropped. This makes the transformation transparent and aids debugging.
+
+---
+
 ## 5. Composition: Building SQL Queries and Views from Query Paths
 
 ### 5.1 The translation model
@@ -1068,5 +1136,5 @@ The answer has implications for which ARC modelling patterns are "Onlooker-compa
 | `BindVariable`, `WithFrame`, `VariableLookup` | 3 | CTE (`WITH x AS (...)`) | Sequential bindings must reference earlier CTEs |
 | External functions (`ExternalCoreRoleGetter`, etc.) | excluded | — | callExternal out of scope |
 | Type getters (`TypeOfContextF`, etc.) | excluded | — | Type metadata out of scope |
-| `FilterF` | excluded | — | Pre-filtered by PDR peers |
+| `FilterF` | excluded (design decision) | — | Dropped when expanding Calculated Roles; pre-filtered by PDR peers. See [§4.6](#46-design-decision-omitting-filter-steps-from-calculated-roles) |
 | Assignment operators | excluded | — | Not query steps |
