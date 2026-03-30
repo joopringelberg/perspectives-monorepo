@@ -1761,6 +1761,27 @@ export class PerspectivesProxy
       });
   }
 
+  /**
+   * TESTING ONLY. Deletes a resource document from PouchDB by its Perspectives resource identifier.
+   * This performs a proper PouchDB delete (not a raw IndexedDB removal), so PouchDB metadata stays consistent.
+   * Call from browser console: pdr.deleteResource("model://perspect.it/...")
+   *
+   * @param resourceIdentifier - The full Perspectives resource identifier (context or role).
+   * @returns A promise that resolves to true if the document was deleted, false otherwise.
+   */
+  deleteResource(resourceIdentifier : string) : Promise<boolean>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        proxy.send(
+          { request: "DeleteResource", subject: resourceIdentifier, onlyOnce: true },
+          (r => resolver(r[0] === "true")),
+          function(e){ rejecter( e )}
+        );
+      });
+  }
+
 }
 export const FIREANDFORGET = true;
 export const CONTINUOUS = false;
