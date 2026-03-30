@@ -3,6 +3,7 @@ module Perspectives.Proxy
   , handleClientRequest
   , pdrStatusMessageChannel
   , receivePDRStatusMessageChannel
+  , registerPutUserIntegrityChoice
   , retrieveRequestEmitter
   ) where
 
@@ -44,3 +45,9 @@ retrieveRequestEmitter :: Emitter Effect Foreign Unit -> Effect Unit
 retrieveRequestEmitter = runEffectFn1 retrieveRequestEmitterImpl
 
 foreign import pdrStatusMessageChannel :: Promise (Fn2 String String Unit)
+
+-- | Called by the PDR during startup to register the function that delivers
+-- | the end-user's integrity choice (Boolean) into the userIntegrityChoice AVar.
+-- | The registered function is later called by handleClientRequest when the
+-- | "resolveUserIntegrityChoice" proxy request arrives from the frontend.
+foreign import registerPutUserIntegrityChoice :: (Boolean -> Effect Unit) -> Effect Unit

@@ -21,16 +21,17 @@
 -- | This module provides two complementary strategies for handling a missing resource
 -- | (a role or context for which the local entities database has no document):
 -- |
--- | 1. **Restore** (default): Re-applies the creation and modification deltas stored in
--- |    the DeltaStore to reconstitute the missing document. See `Perspectives.RestoreResource`.
+-- | 1. **Restore**: Re-applies the creation and modification deltas stored in the DeltaStore
+-- |    to reconstitute the missing document. See `Perspectives.RestoreResource`.
 -- |
--- | 2. **Clean up** (kept for future use): Removes all dangling references to the missing
--- |    resource. This was the previous default behaviour. The functions `fixContextReferences`
--- |    and `fixRoleReferences` below are retained for the planned feature that lets the end
--- |    user choose between restoring or cleaning up.
+-- | 2. **Clean up**: Removes all dangling references to the missing resource. This was the
+-- |    previous default behaviour.
 -- |
--- | `fixReferences` currently delegates directly to `restoreResource`. No clean-up fallback
--- | is applied; if no deltas are found the call is a no-op.
+-- | `fixReferences` first restores the missing resource (so its readable name and type are
+-- | available), then asks the end user via a blocking `setPDRStatus` message whether to keep
+-- | the restored resource or permanently remove all dangling references.  The frontend puts
+-- | its choice (true = restore, false = remove) into the `userIntegrityChoice` AVar stored in
+-- | `PerspectivesState`; `fixReferences` blocks until that AVar is filled.
 
 -- END LICENSE
 module Perspectives.ReferentialIntegrity
@@ -42,21 +43,27 @@ import Prelude
 import Control.Monad.Error.Class (try)
 import Control.Monad.Writer (execWriterT, lift, tell)
 import Data.Array (concat, delete)
+import Data.Either (either)
 import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
+import Data.String (drop, length) as Str
 import Data.Traversable (for, for_)
+import Effect.Aff.AVar (take) as AVar
+import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign.Object (mapWithKey)
 import Perspectives.Assignment.Update (cacheAndSave)
 import Perspectives.ContextAndRole (changeContext_me, context_me, removeRol_gevuldeRollen, rol_binding, rol_gevuldeRollen, setRol_gevuldeRollen)
 import Perspectives.ContextStateCompiler (evaluateContextState)
-import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, ResourceToBeStored)
+import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, ResourceToBeStored(..))
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError')
+import Perspectives.HumanReadableType (translateType)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol)
 import Perspectives.Instances.Clipboard (findItemOnClipboardWithRole)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context2roleFromDatabase_, contextType_, filled2fillerFromDatabase_, filler2filledFromDatabase_, role2contextFromDatabase_, roleType_)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, saveMarkedResources)
-import Perspectives.PerspectivesState (transactionLevel)
+import Perspectives.PerspectivesState (getUserIntegrityChoiceAVar, getPDRStatusSetter, transactionLevel)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RestoreResource (restoreResource)
@@ -65,14 +72,98 @@ import Perspectives.RoleStateCompiler (evaluateRoleState)
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary)
 import Perspectives.SaveUserData (scheduleRoleRemoval)
 import Perspectives.Types.ObjectGetters (contextGroundState, roleGroundState)
+import Simple.JSON (writeJSON)
 
--- | Restore a missing resource from the DeltaStore by re-applying its creation and
--- | modification deltas.  Domain-file resources are silently ignored.
--- | If no deltas are found for the resource this is a no-op.
+-- | Handle a missing resource by first restoring it from the DeltaStore and then
+-- | asking the end user whether to keep the restored resource or permanently remove
+-- | all dangling references to it.
+-- |
+-- | The user is presented with a blocking dialog via the `setPDRStatus`
+-- | "requestUserIntegrityChoice" channel.  The frontend must:
+-- |   1. Show the dialog with the provided message and the two option labels.
+-- |   2. Call the PDR's `putUserIntegrityChoice(true/false)` API to unblock this fiber.
+-- |
+-- | Domain-file resources are silently ignored.
 fixReferences :: ResourceToBeStored -> MonadPerspectives Unit
-fixReferences resource = do
+fixReferences resource@(Rle roleId) = do
+  -- Restore the resource so that its type is queryable.
   restoreResource resource
-  saveMarkedResources
+  -- Determine a human-readable description for the dialog.
+  mTypeName <- try $ roleType_ roleId >>= translateType
+  let
+    typeName = either (const "onbekende rol") identity mTypeName
+    instanceDisplay = shortId (unwrap roleId)
+    message = buildIntegrityChoiceMessage "rol" instanceDisplay typeName
+  -- Ask the user; this call blocks until the frontend puts a value into the AVar.
+  choice <- requestIntegrityChoice message
+  if choice
+    then
+      -- User chose "Herstel": the resource is already restored; persist it.
+      saveMarkedResources
+    else do
+      -- User chose "Verwijder definitief": undo the restoration and clean up.
+      void $ removeEntiteit roleId
+      fixRoleReferences roleId
+fixReferences resource@(Ctxt contextId) = do
+  -- Restore the resource so that its type is queryable.
+  restoreResource resource
+  -- Determine a human-readable description for the dialog.
+  mTypeName <- try $ contextType_ contextId >>= translateType
+  let
+    typeName = either (const "onbekende context") identity mTypeName
+    instanceDisplay = shortId (unwrap contextId)
+    message = buildIntegrityChoiceMessage "context" instanceDisplay typeName
+  -- Ask the user; this call blocks until the frontend puts a value into the AVar.
+  choice <- requestIntegrityChoice message
+  if choice
+    then
+      -- User chose "Herstel": the resource is already restored; persist it.
+      saveMarkedResources
+    else do
+      -- User chose "Verwijder definitief": undo the restoration and clean up.
+      void $ removeEntiteit contextId
+      fixContextReferences contextId
+fixReferences (Dfile _) = pure unit
+
+-- | Send a "requestUserIntegrityChoice" status message to all connected frontend clients
+-- | and block this fiber until one of them puts a Boolean into `userIntegrityChoice`.
+-- | Returns `true` (restore) or `false` (remove permanently).
+requestIntegrityChoice :: String -> MonadPerspectives Boolean
+requestIntegrityChoice message = do
+  setPDRStatus <- getPDRStatusSetter
+  _ <- pure $ setPDRStatus "requestUserIntegrityChoice" message
+  choiceAVar <- getUserIntegrityChoiceAVar
+  liftAff $ AVar.take choiceAVar
+
+-- | Build the JSON payload sent to the frontend for the integrity-choice dialog.
+-- | resourceKind: "rol" or "context"
+-- | instanceDisplay: a short identifier for the instance
+-- | typeName: the translated (Dutch) type name
+buildIntegrityChoiceMessage :: String -> String -> String -> String
+buildIntegrityChoiceMessage resourceKind instanceDisplay typeName =
+  writeJSON
+    { resourceKind
+    , message:
+        "De "
+          <> resourceKind
+          <> " "
+          <> instanceDisplay
+          <> ", een "
+          <> typeName
+          <> " is niet langer beschikbaar, maar er wordt nog wel naar verwezen."
+          <> " Dat kan vanuit een andere rol of context zijn, maar ook vanuit het klembord of de vastgeprikte contexten."
+          <> " Wil je deze "
+          <> resourceKind
+          <> " definitief verwijderen of juist herstellen?"
+    , restoreOption: "Herstel"
+    , removeOption: "Verwijder definitief"
+    }
+
+-- | Returns the last N characters of a string; or the full string if shorter.
+shortId :: String -> String
+shortId s =
+  let l = Str.length s
+  in if l > 30 then Str.drop (l - 30) s else s
 
 -- | Apply this function when a reference to a context has been found that cannot be retrieved.
 -- | We want all references to this context to be removed.
