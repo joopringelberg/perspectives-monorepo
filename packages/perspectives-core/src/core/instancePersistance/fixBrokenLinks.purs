@@ -92,7 +92,7 @@ fixReferences resource@(Rle roleId) = do
   mTypeName <- try $ roleType_ roleId >>= translateType
   let
     typeName = either (const "onbekende rol") identity mTypeName
-    instanceDisplay = shortId (unwrap roleId)
+    instanceDisplay = trailingInstanceId (unwrap roleId)
     message = buildIntegrityChoiceMessage "rol" instanceDisplay typeName
   -- Ask the user; this call blocks until the frontend puts a value into the AVar.
   choice <- requestIntegrityChoice message
@@ -111,7 +111,7 @@ fixReferences resource@(Ctxt contextId) = do
   mTypeName <- try $ contextType_ contextId >>= translateType
   let
     typeName = either (const "onbekende context") identity mTypeName
-    instanceDisplay = shortId (unwrap contextId)
+    instanceDisplay = trailingInstanceId (unwrap contextId)
     message = buildIntegrityChoiceMessage "context" instanceDisplay typeName
   -- Ask the user; this call blocks until the frontend puts a value into the AVar.
   choice <- requestIntegrityChoice message
@@ -135,10 +135,9 @@ requestIntegrityChoice message = do
   choiceAVar <- getUserIntegrityChoiceAVar
   liftAff $ AVar.take choiceAVar
 
--- | Build the JSON payload sent to the frontend for the integrity-choice dialog.
--- | resourceKind: "rol" or "context"
--- | instanceDisplay: a short identifier for the instance
--- | typeName: the translated (Dutch) type name
+-- | The hardcoded Dutch dialog text mirrors the spec agreed with the product owner.
+-- | If multi-language support is needed in the future, this string should be moved
+-- | to the translation system (see Perspectives.ModelTranslation).
 buildIntegrityChoiceMessage :: String -> String -> String -> String
 buildIntegrityChoiceMessage resourceKind instanceDisplay typeName =
   writeJSON
@@ -159,9 +158,11 @@ buildIntegrityChoiceMessage resourceKind instanceDisplay typeName =
     , removeOption: "Verwijder definitief"
     }
 
--- | Returns the last N characters of a string; or the full string if shorter.
-shortId :: String -> String
-shortId s =
+-- | Returns the trailing 30 characters of a string, or the full string if
+-- | shorter than 30 characters.  Used to produce a short instance identifier
+-- | for user-facing messages without exposing the full (potentially long) ID.
+trailingInstanceId :: String -> String
+trailingInstanceId s =
   let l = Str.length s
   in if l > 30 then Str.drop (l - 30) s else s
 
