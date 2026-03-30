@@ -20,6 +20,7 @@
    - 4.6 [Design Decision: Omitting Filter Steps from Calculated Roles](#46-design-decision-omitting-filter-steps-from-calculated-roles)
 5. [Composition: Building SQL Queries and Views from Query Paths](#5-composition-building-sql-queries-and-views-from-query-paths)
 6. [Proposed Architecture for Automatic SQL Generation](#6-proposed-architecture-for-automatic-sql-generation)
+   - 6.5 [Stable Identifiers and Readable Names](#65-stable-identifiers-and-readable-names)
 7. [Open Questions](#7-open-questions)
 
 ---
@@ -521,7 +522,7 @@ SELECT * FROM step2
 #### `DataTypeGetter MeF`
 **PDR semantics**: Return the current user (the role instance representing "me" in the current PDR session).
 
-**Decision**: `MeF` is **prohibited in Onlooker queries**. A calculated role or calculated property used in an Onlooker perspective must not contain a `me` step. The PDR's model compiler should detect this at compile time and report a clear error to the modeller, together with guidance on which other query steps are unsupported in Onlooker contexts (see [Section 4.2 exclusions](#41-functions-excluded-from-analysis) and [Q9](#q9-handling-unsupported-query-steps)).
+**Decision**: `MeF` is **prohibited in Onlooker queries**. A calculated role or calculated property used in an Onlooker perspective must not contain a `me` step. The PDR's model compiler should detect this at compile time and report a clear error to the modeller, together with guidance on which other query steps are unsupported in Onlooker contexts (see [Section 4.2 exclusions](#41-functions-excluded-from-analysis) and [Q9](#-q9-handling-unsupported-query-steps-resolved)).
 
 **Rationale**: SQL queries are executed against a database without a concept of "currently authenticated Perspectives user". The Onlooker role, by its nature, observes *other* users' data; a reference to `me` in such a perspective would typically be a modelling error. Prohibiting it and providing a clear error message is preferable to attempting a partial workaround.
 
@@ -690,19 +691,11 @@ No runtime lookup is needed.
 ---
 
 #### `DataTypeGetter IndexedContextName`, `DataTypeGetter IndexedRoleName`
-**PDR semantics**: Look up the specific instance associated with a symbolic indexed name (e.g., "the world context for user X").
+**PDR semantics**: Look up the specific instance associated with a symbolic indexed name (e.g., "the world context for user X"). The semantics of indexed names is that each peer resolves the name to their own instance — like the word "home" which means something different for each person.
 
-**Why not Category 1**: Indexed name resolution is managed by the PDR and is stored in PouchDB, not in the TCP's relational database. A TCP does not have direct access to the indexed name mapping.
+**Why prohibited in Onlooker queries**: An Onlooker is an impersonal role by definition. It has no identity of its own and therefore no personal indexed name can have any meaningful referent in an Onlooker context. An indexed name in a query that an Onlooker has a perspective on would be a modelling error.
 
-**Possible approaches**:
-1. **Pre-resolve at generation time**: The PDR resolves the indexed name to a specific instance ID and emits a `ContextIndividual` / `RoleIndividual` constant in the generated SQL. This only works if the indexed name maps to a stable, fixed instance.
-2. **Add an indexed-names lookup table to the TCP**: Maintain an additional table `indexed_names(name TEXT PRIMARY KEY, instance_id TEXT)` in the TCP database, populated when the PDR creates indexed contexts/roles. Then:
-   ```sql
-   SELECT instance_id FROM indexed_names WHERE name = 'MyIndexedName'
-   ```
-3. **Exclude from TCP queries**: If Onlooker perspectives never use indexed names in their query paths (which is likely for data-access perspectives), this function can simply be excluded from TCP SQL generation.
-
-> **Open question**: Do Onlooker-accessible calculated roles/properties in practice use `IndexedContextName` or `IndexedRoleName`? These are primarily used for "system singletons" (e.g., `usr:MySystem`). If they appear only in state conditions (which are pre-evaluated by the PDR), they may never reach a TCP query.
+**Decision**: `IndexedContextName` and `IndexedRoleName` are **prohibited in Onlooker queries**, for the same reasons as `MeF`. The PDR model compiler must detect their presence in a calculated role or calculated property that forms part of an Onlooker's perspective, and report a clear error to the modeller (see also [Q9](#-q9-handling-unsupported-query-steps-resolved)).
 
 ---
 
@@ -742,14 +735,9 @@ This is feasible as long as the model's type metadata is available to the SQL ge
 #### `DataTypeGetter IsInStateF` (or `UnaryCombinator IsInStateF`)
 **PDR semantics**: Tests whether the current entity (context or role instance) is in a named state. States are computed from conditions defined in the ARC model, not stored as flat values.
 
-**Limitation**: State is a derived concept. Whether an entity is in a state depends on the evaluation of the state's entry condition (a PL query itself), which may reference data inside or outside the TCP's schema.
+**Why prohibited in Onlooker queries**: The PDR never emits state information from one installation to another — state is always re-evaluated locally from the data available to a peer. By extension, the TCP never receives state values as part of the delta stream. Re-evaluating state conditions from raw TCP data would require re-implementing the PDR's state machine in SQL, which is out of scope and error-prone.
 
-**Possible approaches**:
-1. **Materialise state as a column**: Add a boolean column to each role/context table for each relevant state. The PDR must send a delta when an entity's state changes (this is not a native delta type today but could be introduced).
-2. **Derive state in SQL**: If the state's entry condition is itself translatable to SQL, the SQL generator can inline the condition expression. This is the ideal approach but is limited to states whose conditions are expressible as SQL.
-3. **Exclude from TCP queries**: Accept that state-conditional expressions cannot be evaluated in the TCP SQL layer. This is the pragmatic fallback for the initial implementation.
-
-> **Open question**: Which Onlooker perspectives are expected to use `IsInStateF`? This step is most relevant in **state conditions** for actions, not typically in perspective object queries. If it does appear in an Onlooker's calculated role/property definition, the SQL translator should flag it as unsupported and skip or approximate the view.
+**Decision**: `IsInStateF` is **prohibited in Onlooker queries**. Its presence in a calculated role or calculated property that forms part of an Onlooker's perspective is a modelling error. The PDR model compiler must detect and report this (see [Q9](#-q9-handling-unsupported-query-steps-resolved)).
 
 ---
 
@@ -977,23 +965,13 @@ This works because every table has `context_id`, enabling upward (role → conte
 
 The PDR has all the information needed to translate a `QueryFunctionDescription` into SQL: domain, range, and the specific QueryFunction at each step. The TCP does not need to understand PL queries at all.
 
-### 6.2 Metadata format (proposed)
+### 6.2 Metadata format
 
-The PDR should emit a **view configuration** document, separate from the runtime delta stream. This document is a configuration artefact, not a transaction. One natural format (consistent with the existing TCP config style) is JSON:
+**Design decision**: The PDR should emit a **portable query plan** (an intermediate representation closer to relational algebra), not raw SQL text. Raw SQL would couple the PDR to a specific SQL dialect, whereas a query plan allows the TCP to generate database-specific SQL via Knex.
 
-```json
-{
-  "views": [
-    {
-      "name": "v_approver_profiles",
-      "description": "Profiles of all Approvers in each Meeting context",
-      "sql": "SELECT p.id AS participant_id, pr.name AS full_name FROM approver a JOIN profile pr ON pr.id = a.filler_id"
-    }
-  ]
-}
-```
-
-Alternatively, the PDR could emit a higher-level **query plan** (an intermediate representation closer to relational algebra), from which the TCP generates the SQL using its own Knex-based code. This provides better portability across database backends.
+The view configuration is a JSON document containing one entry per SQL view to be created. Each view entry contains:
+- A `name` (the SQL view name, derived from a Readable name — see [Section 6.5](#65-stable-identifiers-and-readable-names))
+- A `steps` array of relational-algebra operations
 
 **Proposed intermediate representation** (sketch):
 ```json
@@ -1016,12 +994,9 @@ The TCP's SQL generator would use Knex's query builder to convert these steps in
 
 ### 6.3 Trigger for view generation
 
-View definitions should be (re-)generated when:
+View definitions should be (re-)generated when a new DomeinFile (compiled model) is loaded into the PDR. The TCP starts up and applies the view configurations to the database schema.
 
-1. A new DomeinFile (compiled model) is loaded into the PDR.
-2. The TCP starts up and detects that its local view configuration is stale.
-
-The PDR exposes an endpoint (or writes to a file) with the current view configurations. The TCP applies them to the database schema.
+**Design decision (Q8)**: Maintaining the TCP and deciding when to regenerate SQL view configurations in response to model updates is an **organisational responsibility**, outside the Perspectives system itself. A model update is a deliberate organisational act. Applying the new SQL configuration to the TCP's database schema — including any required schema migrations for changed role types or properties — is the responsibility of the organisation deploying the TCP. The system provides the tooling (PDR generates the query plan; TCP applies it), but the trigger and governance are external.
 
 ### 6.4 Scope: which perspectives to translate
 
@@ -1030,14 +1005,41 @@ Only perspectives on roles that are **ultimately filled by `sys:Onlookers`** (or
 The PDR therefore:
 1. Collects all Perspectives user roles that are (transitively) filled by `sys:Onlookers`.
 2. For each such user role, collects all perspective objects (calculated roles and roles with calculated properties).
-3. Translates each relevant QFD into a SQL view definition (using the rules in Section 4).
-4. Emits the view configurations to the TCP.
+3. Expands any `RolGetter (CR calculatedRoleType)` references recursively into their leaf enumerated definitions (see [Q7](#q7-calculated-role-expansion-resolved)).
+4. Drops all `FilterF` nodes from the expanded QFDs (see [Section 4.6](#46-design-decision-omitting-filter-steps-from-calculated-roles)).
+5. Translates each resulting QFD into a relational-algebra query plan step sequence (using the rules in Section 4).
+6. Emits the view configurations (including the Stable→Readable name map — see [Section 6.5](#65-stable-identifiers-and-readable-names)) to the TCP.
+
+### 6.5 Stable Identifiers and Readable Names
+
+The PDR evaluates and translates models that are internally written in terms of **Stable identifiers** — machine-generated CUIDs that uniquely identify context types, role types, and property types across model versions. These are the identifiers present in the compiled `DomeinFile` and in the `QueryFunctionDescription` trees that the SQL translator processes.
+
+However, for the TCP's relational database, table names and column names must be **Readable** — derived from the names as they appear in the ARC model source (e.g., `Aanwezigen`, `FirstName`), not from the internal CUIDs.
+
+**Design decision**: The query plan emitted by the PDR must include a **Stable→Readable name map**: a dictionary that maps each Stable identifier occurring in the plan to its Readable (source-level) name. The TCP uses this map when creating tables, columns, and views.
+
+Notes:
+- These are **source-level names**, not translated (internationalised) names. Translation is a presentation concern handled at the GUI layer, not in the reporting database.
+- The same Stable identifier always maps to the same Readable name for a given model version, so the map is stable within a model version.
+- When a model is updated and a new query plan is emitted, the TCP must re-apply any name changes (which in practice means a schema migration if a type is renamed in the model).
+
+Example sketch of the name map in the query plan:
+```json
+{
+  "nameMap": {
+    "cuidAbc123": "Aanwezigen",
+    "cuidDef456": "FirstName",
+    "cuidGhi789": "Bijeenkomst"
+  },
+  "views": [ ... ]
+}
+```
 
 ---
 
 ## 7. Open Questions
 
-The following questions remain open and should be resolved through further iteration. Resolved questions are marked ✅.
+All open questions have now been resolved. Decisions are summarised below and detailed in the relevant sections of the document.
 
 ### ✅ Q1: Filler chain depth *(resolved)*
 **Decision**: The maximum supported filler chain depth is **5 hops**, extendable to 6 if needed. The fill relation in Perspectives is never truly self-referential (a role of type R cannot be filled by another instance of R; a role instance cannot fill itself), so chains are always acyclic and finite. The PDR compiler will unroll chains up to the configured maximum and emit a warning if a chain exceeds it. See also [Section 4.5](#45-specialised-fillers-problem-runtime-fix-and-design-decision) for the specialised-filler scenario and why properties can always be found at a fixed, compile-time-known depth.
@@ -1058,30 +1060,37 @@ If Strategy B is adopted (single `context` table), context-level tables become v
 ### ✅ Q3: `MeF` in Onlooker queries *(resolved)*
 **Decision**: `MeF` is **prohibited** in Onlooker-perspective queries. The PDR model compiler must detect and report this to the modeller. See the [MeF section](#datatypegetter-mef) for details.
 
-### Q4: Indexed names
-Are indexed context/role names used in Onlooker perspective queries? If so, which of the three strategies (pre-resolution, lookup table, or exclusion — see [Category 3 analysis](#datatypegetter-indexedcontextname-datatypegetter-indexedrolename)) is most appropriate?
+### ✅ Q4: Indexed names *(resolved)*
+**Decision**: `IndexedContextName` and `IndexedRoleName` are **prohibited in Onlooker queries**. An Onlooker is an impersonal role; indexed names have per-peer semantics (like "home") and have no meaningful referent for an impersonal observer. The PDR model compiler must detect and report their presence (see [Section 4.4 analysis](#datatypegetter-indexedcontextname-datatypegetter-indexedrolename) and [Q9](#-q9-handling-unsupported-query-steps-resolved)).
 
-### Q5: State as a SQL column
-Should state be materialised as a column in the TCP tables? This would require:
-(a) The PDR to compute and emit state transitions as deltas (a new delta type).
-(b) The TCP to write these state values to a `state_<name>` boolean column.
-Is this feasible and desirable?
+### ✅ Q5: State as a SQL column *(resolved)*
+**Decision**: `IsInStateF` is **prohibited in Onlooker queries**. The PDR never emits state information between installations; state is always re-evaluated locally. The TCP therefore never receives state values in the delta stream and cannot reproduce state evaluation from its data alone. The PDR model compiler must detect and report `IsInStateF` in Onlooker-perspective queries (see [Section 4.4 analysis](#datatypegetter-isinstateF-or-unarycombinator-isinstateF) and [Q9](#-q9-handling-unsupported-query-steps-resolved)).
 
-### Q6: Intermediate representation format
-Should the PDR emit raw SQL text or a Knex-portable query plan? Raw SQL is simple to implement but ties the TCP to specific SQL dialect choices made by the PDR. A query plan (e.g., a small relational-algebra JSON format) gives the TCP more control over database-specific SQL generation.
+### ✅ Q6: Intermediate representation format *(resolved)*
+**Decision**: The PDR should emit a **portable query plan** (a relational-algebra JSON format), not raw SQL text. This keeps the PDR decoupled from specific SQL dialects and allows the TCP to use Knex's query builder to generate database-appropriate SQL. See [Section 6.2](#62-metadata-format) for the proposed format.
 
-### Q7: Calculated role expansion
-When a PDR query refers to a `RolGetter (CR calculatedRoleType)`, the SQL translator must inline the calculated role's definition. At what point in the process should this expansion happen: during PDR compilation (before emitting the SQL config) or during TCP view generation? Pre-expansion by the PDR is cleaner (the TCP receives only leaf-level SQL operations) but may produce larger view definitions for deeply nested calculated roles.
+### ✅ Q7: Calculated role expansion *(resolved)*
+**Decision**: Calculated role definitions must be **expanded in the PDR** before the query plan is emitted to the TCP. The PDR performs all `RolGetter (CR ...)` inline expansion (recursively, until only enumerated roles remain) and also drops all `FilterF` nodes (see [Section 4.6](#46-design-decision-omitting-filter-steps-from-calculated-roles)). The TCP receives only a leaf-level relational-algebra plan; it never needs to understand calculated roles or perform expansion itself.
 
-### Q8: View maintenance and model updates
-When a model is updated (e.g., a new property is added to a role type), views that reference that role's table may need to be recreated. What is the protocol for notifying the TCP that its views are stale? Should view names be versioned?
+### ✅ Q8: View maintenance and model updates *(resolved)*
+**Decision**: Maintaining the TCP and deciding when to apply new SQL view configurations is an **organisational responsibility**, outside the Perspectives system. A model update is a deliberate organisational act; regenerating and applying the new query plan to the TCP database schema — including any required migrations — is the responsibility of the organisation deploying the TCP. The Perspectives system provides the tooling (PDR generates the plan; TCP applies it) but does not automate the governance. See [Section 6.3](#63-trigger-for-view-generation) for details.
 
-### Q9: Handling unsupported query steps
-When the SQL translator encounters a query step that cannot be translated (Category 2, or a Category 3 step beyond current scope), should it:
-(a) Skip the view entirely and log a warning?
-(b) Generate a partial view covering the translatable parts?
-(c) Return an error to the model author at compile time?
-The answer has implications for which ARC modelling patterns are "Onlooker-compatible" (i.e., fully translatable to SQL).
+### ✅ Q9: Handling unsupported query steps *(resolved)*
+**Decision**: When the PDR's SQL view compiler encounters a query step that cannot be translated (i.e., a step that is neither Category 1 nor safely ignorable like `FilterF`), it must:
+
+1. **Abandon the view under consideration** — do not emit a partial or incorrect SQL view for the perspective that contains the unsupported step.
+2. **Emit a compile-time warning** — report the problematic query step to the modeller with a clear message identifying the affected perspective and the unsupported function.
+3. **Continue with remaining views** — process all other perspectives and emit as many valid view definitions as possible.
+
+The result is a **partial query plan**: correct and complete for all translatable perspectives, and absent (with warnings) for those containing unsupported steps. This is preferable to either failing entirely or silently producing incorrect views.
+
+Steps that are unconditionally prohibited in Onlooker queries (and therefore always trigger a warning + view abandonment):
+- `DataTypeGetter MeF` (see [Section 4.3](#datatypegetter-mef))
+- `DataTypeGetter IndexedContextName`, `DataTypeGetter IndexedRoleName` (see [Section 4.4 analysis](#datatypegetter-indexedcontextname-datatypegetter-indexedrolename))
+- `DataTypeGetter IsInStateF` (see [Section 4.4 analysis](#datatypegetter-isinstateF-or-unarycombinator-isinstateF))
+
+Steps that can be safely ignored (dropped without warning):
+- `FilterF` — pre-filtered by PDR peers; see [Section 4.6](#46-design-decision-omitting-filter-steps-from-calculated-roles)
 
 ---
 
@@ -1096,8 +1105,8 @@ The answer has implications for which ARC modelling patterns are "Onlooker-compa
 | `DataTypeGetterWithParameter FillerF ctx` | 3 | Unrolled JOIN with context type filter | Same as FillerF |
 | `DataTypeGetter IdentityF` | 1 | No-op | |
 | `DataTypeGetter ModelNameF` | 3 | String literal constant | Known at generation time |
-| `DataTypeGetter IndexedContextName` | 3 | Pre-resolve or lookup table | Depends on strategy (see Q4) |
-| `DataTypeGetter IndexedRoleName` | 3 | Pre-resolve or lookup table | Depends on strategy (see Q4) |
+| `DataTypeGetter IndexedContextName` | 2 | — | Prohibited in Onlooker queries (per-peer semantics; see §4.4, Q4) |
+| `DataTypeGetter IndexedRoleName` | 2 | — | Prohibited in Onlooker queries (per-peer semantics; see §4.4, Q4) |
 | `DataTypeGetter MeF` | 2 | — | No SQL equivalent; session-dependent |
 | `UnaryCombinator CountF` | 1 | `COUNT(*)` | Used as sequence function in ComposeSequenceF |
 | `UnaryCombinator MinimumF` | 1 | `MIN()` | Used as sequence function in ComposeSequenceF |
@@ -1132,7 +1141,7 @@ The answer has implications for which ARC modelling patterns are "Onlooker-compa
 | `BinaryCombinator AddF`, `BinaryCombinator SubtractF`, `BinaryCombinator DivideF`, `BinaryCombinator MultiplyF` | 1 | `+`, `-`, `/`, `*` | Binary arithmetic |
 | `UnaryCombinator AddF` (sum) | 1 | `SUM()` | Used as sequence function in ComposeSequenceF |
 | `RegExMatch` | 3 | `~` / `REGEXP` / `LIKE` | DB-specific syntax |
-| `UnaryCombinator IsInStateF` | 3 | Materialise state or inline condition | Complex; see Q5 |
+| `UnaryCombinator IsInStateF` | 2 | — | Prohibited in Onlooker queries; state is never emitted between peers (see §4.4, Q5) |
 | `BindVariable`, `WithFrame`, `VariableLookup` | 3 | CTE (`WITH x AS (...)`) | Sequential bindings must reference earlier CTEs |
 | External functions (`ExternalCoreRoleGetter`, etc.) | excluded | — | callExternal out of scope |
 | Type getters (`TypeOfContextF`, etc.) | excluded | — | Type metadata out of scope |
