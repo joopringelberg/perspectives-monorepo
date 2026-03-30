@@ -586,7 +586,7 @@ filledBy = optionMaybe
   fillerGroup :: IP (LNE.NonEmptyList FilledByAttribute)
   fillerGroup =
     (try (token.parens (plusSep filler)))
-    <|> (LNE.singleton <$> filler)
+      <|> (LNE.singleton <$> filler)
 
   -- | Determine the appropriate FilledBySpecification from a list of fillerGroups:
   -- | * All groups are singletons → Alternatives (each group's head is the sole attribute)
@@ -595,14 +595,14 @@ filledBy = optionMaybe
   makeSpec :: LNE.NonEmptyList (LNE.NonEmptyList FilledByAttribute) -> FilledBySpecification
   makeSpec groups =
     if all (\g -> LNE.length g == 1) groups
-      -- Every group is a singleton: extract the single element from each group.
-      -- LNE.head is safe here because LNE.length g == 1 guarantees exactly one element.
+    -- Every group is a singleton: extract the single element from each group.
+    -- LNE.head is safe here because LNE.length g == 1 guarantees exactly one element.
     then Alternatives (LNE.head <$> groups)
     else if LNE.length groups == 1
-      -- Single group with multiple members: use Combination.
-      -- LNE.head is safe here because LNE.length groups == 1 guarantees exactly one group.
-      then Combination (LNE.head groups)
-      else DisjunctionOfConjunctions groups
+    -- Single group with multiple members: use Combination.
+    -- LNE.head is safe here because LNE.length groups == 1 guarantees exactly one group.
+    then Combination (LNE.head groups)
+    else DisjunctionOfConjunctions groups
 
 -- | rolePart =
 -- |   <perspectiveOn> |
