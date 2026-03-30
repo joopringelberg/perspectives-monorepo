@@ -443,14 +443,17 @@ generateTCPConfiguration modelUri_ _ = case head modelUri_ of
   Nothing -> handleExternalFunctionError "model://perspectives.domains#Parsing$GenerateTCPConfiguration"
     (Left (error "A versioned model URI should be provided (e.g. model://perspectives.domains#MyApp@1.0)."))
   Just modelUri -> do
+    -- unsafePartial is safe here: the ARC runtime only passes well-formed model URIs to
+    -- external functions; malformed URIs are rejected at parse time.
     let { repositoryUrl, documentName } = unsafePartial modelUri2ModelUrl modelUri
     x <- try $ lift $ lift $ getDocument repositoryUrl documentName
     case x of
       Left e -> handleExternalFunctionError "model://perspectives.domains#Parsing$GenerateTCPConfiguration"
         (Left e)
-      Right (_ :: DomeinFile Sidecar.Stable) ->
+      Right (domeinFile :: DomeinFile Sidecar.Stable) ->
         -- TODO: implement full TCP configuration generation per design in
         -- packages/perspectives-tcp/docs/pl-query-to-sql-design.md
+        -- domeinFile holds the compiled model; use it to walk Onlooker perspectives here.
         pure $ Value $ writeJSON { status: "not yet implemented", modelUri }
 
 -- | Fill a ModelTranslation freshly generated from a DomeinFile, with translations taken from a TranslationTable.
