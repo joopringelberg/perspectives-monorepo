@@ -50,6 +50,7 @@ import Perspectives.Assignment.Update (cacheAndSave)
 import Perspectives.ContextAndRole (changeContext_me, context_me, removeRol_gevuldeRollen, rol_binding, rol_gevuldeRollen, setRol_gevuldeRollen)
 import Perspectives.ContextStateCompiler (evaluateContextState)
 import Perspectives.CoreTypes (MonadPerspectives, ResourceToBeStored(..), MonadPerspectivesTransaction)
+import Perspectives.DataUpgrade (save)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError')
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol)
 import Perspectives.Instances.Clipboard (findItemOnClipboardWithRole)
@@ -70,7 +71,9 @@ import Perspectives.Types.ObjectGetters (contextGroundState, roleGroundState)
 -- | modification deltas.  Domain-file resources are silently ignored.
 -- | If no deltas are found for the resource this is a no-op.
 fixReferences :: ResourceToBeStored -> MonadPerspectives Unit
-fixReferences resource = restoreResource resource
+fixReferences resource = do
+  restoreResource resource
+  saveMarkedResources
 
 -- | Apply this function when a reference to a context has been found that cannot be retrieved.
 -- | We want all references to this context to be removed.
