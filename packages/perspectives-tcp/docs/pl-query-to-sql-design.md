@@ -21,6 +21,7 @@
 5. [Composition: Building SQL Queries and Views from Query Paths](#5-composition-building-sql-queries-and-views-from-query-paths)
 6. [Proposed Architecture for Automatic SQL Generation](#6-proposed-architecture-for-automatic-sql-generation)
    - 6.5 [Stable Identifiers and Readable Names](#65-stable-identifiers-and-readable-names)
+   - 6.6 [`GenerateTCPConfiguration` — Callable from a Model](#66-generatetcpconfiguration--callable-from-a-model)
 7. [Open Questions](#7-open-questions)
 
 ---
@@ -61,7 +62,7 @@ The TCP uses the **Smashed Role Chains** schema strategy:
 
 Two strategies are being considered for storing context instances:
 
-**Strategy A — One table per context type** (original Smashed Role Chains approach):
+**Strategy A — One table per context type** *(considered, not adopted)*:
 ```sql
 CREATE TABLE <context_type_name> (
   id         TEXT PRIMARY KEY
@@ -70,7 +71,7 @@ CREATE TABLE <context_type_name> (
 );
 ```
 
-**Strategy B — A single universal Context table**:
+**Strategy B — A single universal Context table** *(adopted)*:
 ```sql
 CREATE TABLE context (
   id           TEXT PRIMARY KEY,
@@ -78,9 +79,11 @@ CREATE TABLE context (
 );
 ```
 
-Under Strategy B, every role table's `context_id` column references this single `context` table rather than a type-specific table. See the discussion under [Open Question Q2](#q2-external-role-storage-and-context-table-strategy).
+**Design decision**: Strategy B is adopted. Every role table's `context_id` column references this single `context` table. Context type information is stored as data (the `context_type` column) rather than as schema, which simplifies FK references and avoids the need to know the target context type when generating `ContextF` navigation steps.
 
 ### Role table (one per role type, including external roles)
+
+External roles are stored as role tables, just like other (enumerated) roles. Each external role instance's `context_id` references the single universal `context` table. There is no separate handling of external roles at the schema level — the only distinction is that an external role type name conventionally ends with `$External`.
 
 ```sql
 CREATE TABLE <role_type_name> (
@@ -216,9 +219,9 @@ FROM <context_type_external_role_table> ext
 WHERE ext.context_id = :context_id
 ```
 
-The external role type is always known: it is `<contextType>$External`. In the Smashed Role Chains schema the external role has its own table (or its properties are denormalised onto the context table). The TCP already handles this in `handleRolePropertyDelta` where external role property writes use the context table.
+The external role type is always known: it is `<contextType>$External`. Per the design decision in [Section 2](#2-assumed-relational-table-structure), external roles are stored as dedicated role tables. `ExternalRoleF` maps to a simple SELECT on the external role table filtered by `context_id`.
 
-> **Note**: If external role properties are written to the context table (as the current TCP implementation does), then `ExternalRoleF` followed by a property step should reach into the context table, not a separate external role table. The SQL translator must know whether the external role is stored separately or inlined into the context table.
+> **Design decision**: External role properties are stored in the external role's own table (a row in `<contextType>_external`), not inlined into the context table. The universal `context` table holds only `id` and `context_type`. See [Q2](#-q2-external-role-storage-and-context-table-strategy-resolved) for the decision.
 
 ---
 
@@ -1035,27 +1038,59 @@ Example sketch of the name map in the query plan:
 }
 ```
 
----
+### 6.6 `GenerateTCPConfiguration` — Callable from a Model
 
-## 7. Open Questions
+The SQL view configuration generation can be triggered from within a Perspectives model, analogously to how translation YAML files are generated. The function `GenerateTCPConfiguration` is an external core function (in module `Perspectives.Extern.Parsing`) that:
+
+1. Accepts a **versioned model URI** as its argument (e.g. `model://perspectives.domains#MyApp@1.2`).
+2. Retrieves the corresponding `DomeinFile` from the repository using `modelUri2ModelUrl`.
+3. Scans the model for user roles ultimately filled by `sys:Onlookers`.
+4. For each such role, translates its perspective QFDs into a relational-algebra query plan (applying the rules in Section 4 and the decisions in Sections 4.5–4.6, Q4–Q9).
+5. Returns the resulting TCP configuration as a **JSON string**.
+
+The returned string can then be used to create a file (e.g. `TCPConfig`) within a management model, in exactly the same way as the translation YAML is created in `model://perspectives.domains#CouchdbManagement`. Example ARC usage:
+
+```arc
+thing TCPConfig
+  property FileName = context >> extern >> (ModelURIReadable + "@" + External$Version) + "-tcp-config.json"
+    readableName
+  property ConfigJson (File)
+    pattern = "application/json" "Only .json files for TCP configurations are allowed."
+
+  state GenerateConfig = GenerateConfig and context >> extern >> ArcFeedback matches regexp "^OK"
+    on entry
+      do for Author
+        letA
+            config <- callExternal p:GenerateTCPConfiguration( context >> extern >> VersionedModelURI ) returns String
+          in
+            create file FileName as "application/json" in ConfigJson
+              config
+```
+
+The function signature in PureScript (in `Perspectives.Extern.Parsing`) is:
+
+```purescript
+generateTCPConfiguration :: Array ModelUriString -> (RoleInstance ~~> Value)
+```
+
+It is registered in `externalFunctions` as:
+```purescript
+mkLibFunc1 "model://perspectives.domains#Parsing$GenerateTCPConfiguration" True generateTCPConfiguration
+```
+
+---
 
 All open questions have now been resolved. Decisions are summarised below and detailed in the relevant sections of the document.
 
 ### ✅ Q1: Filler chain depth *(resolved)*
 **Decision**: The maximum supported filler chain depth is **5 hops**, extendable to 6 if needed. The fill relation in Perspectives is never truly self-referential (a role of type R cannot be filled by another instance of R; a role instance cannot fill itself), so chains are always acyclic and finite. The PDR compiler will unroll chains up to the configured maximum and emit a warning if a chain exceeds it. See also [Section 4.5](#45-specialised-fillers-problem-runtime-fix-and-design-decision) for the specialised-filler scenario and why properties can always be found at a fixed, compile-time-known depth.
 
-### Q2: External role storage and context table strategy
-Two design decisions remain open and are related:
+### ✅ Q2: External role storage and context table strategy *(resolved)*
+**Decision (a) — Context table structure**: A **single universal `context` table** with columns `id` (primary key) and `context_type` (the Perspectives context type URI) is used. All role tables' `context_id` columns reference this single table. Per-type context tables are not used.
 
-**(a) External role properties**: Should external role properties be written to the context table (current TCP behaviour) or to a dedicated external role table?
-- Writing to the context table simplifies navigation (one less join for external role properties) but conflates context and role storage.
-- A dedicated external role table is conceptually cleaner but requires joins for all external role property access.
+**Decision (b) — External role storage**: External roles are represented as **role tables**, in exactly the same way as other enumerated roles. External role properties are stored in columns of the external role table; they are not inlined into the context table. An external role instance's `context_id` references the universal `context` table, like any other role.
 
-**(b) Context table structure**: Should there be one table per context type, or a single universal `context` table with a `context_type` column?
-- A single `context` table (Strategy B in [Section 2](#2-assumed-relational-table-structure)) simplifies the schema and avoids the need to know the target context type for generic `ContextF` navigation steps.
-- Per-type context tables are consistent with the Smashed Role Chains strategy applied to roles, but context tables contain only an `id` column and are essentially lookup tables.
-
-If Strategy B is adopted (single `context` table), context-level tables become very minimal and context type information is stored as data rather than schema. This would also simplify FK references in role tables. Please advise on the preferred strategy.
+See [Section 2](#2-assumed-relational-table-structure) for the schema details.
 
 ### ✅ Q3: `MeF` in Onlooker queries *(resolved)*
 **Decision**: `MeF` is **prohibited** in Onlooker-perspective queries. The PDR model compiler must detect and report this to the modeller. See the [MeF section](#datatypegetter-mef) for details.
@@ -1099,7 +1134,7 @@ Steps that can be safely ignored (dropped without warning):
 | QueryFunction | Category | SQL pattern | Notes |
 |---|---|---|---|
 | `DataTypeGetter ContextF` | 1 | `JOIN context ON context.id = role.context_id` | |
-| `DataTypeGetter ExternalRoleF` | 1 | `SELECT * FROM <ctx>_ext WHERE context_id = ?` | Depends on external role storage convention |
+| `DataTypeGetter ExternalRoleF` | 1 | `SELECT * FROM <ctx>_external WHERE context_id = ?` | External role stored in its own table (see §2 and Q2) |
 | `DataTypeGetter DirectFillerF` | 1 | `JOIN filler ON filler.id = role.filler_id` | |
 | `DataTypeGetter FillerF` | 3 | Recursive CTE or unrolled JOIN | Multi-table chains require unrolling |
 | `DataTypeGetterWithParameter FillerF ctx` | 3 | Unrolled JOIN with context type filter | Same as FillerF |

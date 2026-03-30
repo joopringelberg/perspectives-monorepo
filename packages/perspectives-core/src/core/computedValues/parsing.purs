@@ -431,6 +431,28 @@ generateTranslationTable translation_ modelUri_ _ = case head translation_, head
           theFile
           (MediaType "text/json")
 
+-- | Generate a TCP configuration (a JSON query plan) from the DomeinFile identified by the
+-- | versioned model URI. The TCP uses this plan to create SQL views that materialise all
+-- | Onlooker perspectives in the model, enabling direct SQL reporting without PDR involvement.
+-- | The ModelUriString should be versioned (e.g. model://perspectives.domains#MyApp@1.0).
+-- |
+-- | NOTE: This is currently a stub. Full implementation follows the design in
+-- |       packages/perspectives-tcp/docs/pl-query-to-sql-design.md
+generateTCPConfiguration :: Array ModelUriString -> (RoleInstance ~~> Value)
+generateTCPConfiguration modelUri_ _ = case head modelUri_ of
+  Nothing -> handleExternalFunctionError "model://perspectives.domains#Parsing$GenerateTCPConfiguration"
+    (Left (error "A versioned model URI should be provided (e.g. model://perspectives.domains#MyApp@1.0)."))
+  Just modelUri -> do
+    let { repositoryUrl, documentName } = unsafePartial modelUri2ModelUrl modelUri
+    x <- try $ lift $ lift $ getDocument repositoryUrl documentName
+    case x of
+      Left e -> handleExternalFunctionError "model://perspectives.domains#Parsing$GenerateTCPConfiguration"
+        (Left e)
+      Right (_ :: DomeinFile Sidecar.Stable) ->
+        -- TODO: implement full TCP configuration generation per design in
+        -- packages/perspectives-tcp/docs/pl-query-to-sql-design.md
+        pure $ Value $ writeJSON { status: "not yet implemented", modelUri }
+
 -- | Fill a ModelTranslation freshly generated from a DomeinFile, with translations taken from a TranslationTable.
 -- | NOTE: the TranslationTable must be available on the versioned model in the repository. It is not a property value.
 -- | The ModelTranslation must be passed in as a string.
@@ -474,4 +496,5 @@ externalFunctions =
   , mkLibFunc1 "model://perspectives.domains#Parsing$ParseYamlTranslation" True parseYamlTranslation
   , mkLibEffect2 "model://perspectives.domains#Parsing$GenerateTranslationTable" True generateTranslationTable
   , mkLibFunc2 "model://perspectives.domains#Parsing$AugmentModelTranslation" True augmentModelTranslation
+  , mkLibFunc1 "model://perspectives.domains#Parsing$GenerateTCPConfiguration" True generateTCPConfiguration
   ]
