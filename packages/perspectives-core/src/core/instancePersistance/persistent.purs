@@ -197,10 +197,15 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
       pure doc
 
     \e -> do
-      if test decodingErrorRegex (show e) then logPerspectivesError (Custom ("fetchEntiteit: failed to decode resource " <> unwrap id <> ". Parser message: " <> show e))
-      -- Try to fix referential integrity
-      else if tryToFix then internetRequiredButMissing (unwrap id) >>=
-        if _ then log ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> ", but there is no internet. Will not try to fix links.")
+      if test decodingErrorRegex (show e) then do
+        logPerspectivesError (Custom ("fetchEntiteit: failed to decode resource " <> unwrap id <> ". Parser message: " <> show e))
+        throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
+      -- Try to fix by restoring the resource
+      else if tryToFix then do
+        offLine <- internetRequiredButMissing (unwrap id)
+        if offLine then do
+          log ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> ", but there is no internet. Will not try to fix.")
+          throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
         else do
           logPerspectivesError
             (Custom ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb: " <> show e))
@@ -211,12 +216,21 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
             FixingHotLine av -> do
               result <- liftAff $ take av
               case result of
-                FixFailed s -> logPerspectivesError (Custom "fetchEntiteit: cannot fix references.")
-                FixSucceeded -> logPerspectivesError (Custom "fetchEntiteit: succesfully removed all references to missing resource.")
-                _ -> logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
-            _ -> logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
-      else pure unit
-      throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
+                FixSucceeded -> do
+                  log ("fetchEntiteit: resource " <> unwrap id <> " restored successfully, retrying fetch.")
+                  -- The resource has been restored; retry the fetch (with tryToFix=false to avoid infinite loop).
+                  fetchEntiteit doNotFix id
+                FixFailed s -> do
+                  logPerspectivesError (Custom ("fetchEntiteit: cannot fix resource " <> unwrap id <> ": " <> s))
+                  throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
+                _ -> do
+                  logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
+                  throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
+            _ -> do
+              logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
+              throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
+      else
+        throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
   where
   decodingErrorRegex :: Regex
   decodingErrorRegex = unsafeRegex "error in decoding result" noFlags

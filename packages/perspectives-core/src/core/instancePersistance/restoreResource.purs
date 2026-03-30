@@ -125,9 +125,11 @@ isDeletionDeltaType dt =
 -- | compared after conversion via safeKey to strip any scheme prefix.
 isSubResourceDeltaOf :: String -> DeltaStoreRecord -> Boolean
 isSubResourceDeltaOf roleInstanceId (DeltaStoreRecord { resourceKey }) =
-  let safeRid = safeKey roleInstanceId
-  in Str.length resourceKey > Str.length safeRid + 1
-    && Str.take (Str.length safeRid + 1) resourceKey == safeRid <> "#"
+  let
+    safeRid = safeKey roleInstanceId
+  in
+    Str.length resourceKey > Str.length safeRid + 1
+      && Str.take (Str.length safeRid + 1) resourceKey == safeRid <> "#"
 
 -- | Apply a signed delta by dispatching to the appropriate execute function.
 -- | Tries to parse the encrypted delta as each known delta type in turn.
