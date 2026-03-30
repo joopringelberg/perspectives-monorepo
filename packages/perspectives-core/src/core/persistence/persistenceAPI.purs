@@ -404,6 +404,10 @@ addDocument dbName doc docName = withDatabase dbName
           -- there are multiple users that contribute to that perspective, and they may not agree on the version.
           -- However, we resolve that here by just overwriting the document.
           Just 409 -> resolveDocumentConflict dbName doc docName
+          -- A missing revision: the _rev provided does not exist in the database. This can happen when the
+          -- entity in cache has a stale revision from before the document was deleted (e.g. after manual
+          -- IndexedDB removal or incomplete deletion). Recover by purging the document history and re-creating.
+          Just 404 -> forceCleanSave dbName doc docName
           -- Promise rejected otherwise. Convert the incoming message to a PouchError type.
           _ -> handlePouchError "addDocument" docName e
 

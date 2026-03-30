@@ -42,7 +42,7 @@ import Data.Newtype (unwrap)
 import Data.String (length, take) as Str
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
-import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, ResourceToBeStored(..))
+import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, ResourceToBeStored(..), removeInternally)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), getDeltasForResource, getDeltasForRoleInstance, updateDeltaApplied)
 import Perspectives.PerspectivesState (transactionLevel)
@@ -58,11 +58,17 @@ import Simple.JSON (readJSON')
 -- | For a missing role, re-applies all creation and modification deltas.
 -- | For a missing context, re-applies the context-creation delta.
 -- | Domain files (Dfile) are not handled here.
+-- | The entity is removed from the LRU cache before replay so that delta
+-- | execution creates a fresh entity without a stale _rev.  A stale _rev
+-- | causes PouchDB to fail with 404 "missing" when the document was deleted
+-- | outside of PouchDB's normal API (e.g., manual IndexedDB removal).
 restoreResource :: ResourceToBeStored -> MonadPerspectives Unit
-restoreResource (Rle roleInstance) =
+restoreResource (Rle roleInstance) = do
+  void $ removeInternally roleInstance
   runEmbeddedIfNecessary doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser) $
     restoreRoleFromDeltaStore (unwrap roleInstance)
-restoreResource (Ctxt contextInstance) =
+restoreResource (Ctxt contextInstance) = do
+  void $ removeInternally contextInstance
   runEmbeddedIfNecessary doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser) $
     restoreContextFromDeltaStore (unwrap contextInstance)
 restoreResource (Dfile _) = pure unit
