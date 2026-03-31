@@ -34,22 +34,25 @@ import Prelude
 import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Error.Class (catchError)
 import Control.Monad.Except (lift, runExcept)
-import Data.Array (filter, sortBy)
+import Data.Array (catMaybes, filter, nub, sortBy)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (unwrap)
 import Data.String (length, take) as Str
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, ResourceToBeStored(..), removeInternally)
 import Perspectives.ModelDependencies (sysUser)
+import Perspectives.Persistent (tryGetPerspectRol)
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
 import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), getDeltasForResource, getDeltasForRoleInstance, safeKey, updateDeltaApplied)
 import Perspectives.PerspectivesState (transactionLevel)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary)
 import Perspectives.StrippedDelta (addResourceSchemes)
 import Perspectives.Sync.HandleTransaction (executeContextDelta, executeRoleBindingDelta, executeRolePropertyDelta, executeUniverseContextDelta, executeUniverseRoleDelta)
+import Perspectives.TypesForDeltas (ContextDelta(..))
 import Perspectives.Sync.LegacyDeltas (toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Simple.JSON (readJSON')
@@ -101,13 +104,26 @@ restoreRoleFromDeltaStore roleInstanceId = do
   for_ subResourceDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
     applyDelta sd (Just (unwrap sd).encryptedDelta)
 
--- | Restore a deleted or missing context by re-applying its creation deltas
--- | from the DeltaStore.
+-- | Restore a deleted or missing context by re-applying its creation and
+-- | role-placement deltas from the DeltaStore.
+-- | For each ContextDelta that references a role instance, the role is restored
+-- | first (if it is missing) so that addRoleInstanceToContext has a valid document
+-- | to work with.  This covers both enumerated roles and the external role.
 restoreContextFromDeltaStore :: String -> MonadPerspectivesTransaction Unit
 restoreContextFromDeltaStore contextId = do
   allDeltas <- lift $ getDeltasForResource contextId
   let compareByVersion (DeltaStoreRecord r1) (DeltaStoreRecord r2) = compare r1.resourceVersion r2.resourceVersion
-  -- Apply all deltas in version order (there are no context-deletion delta types).
+  -- Collect the role instances referenced by ContextDeltas that add a role to the context.
+  -- We parse each encrypted delta as a ContextDelta; those that succeed give us a roleInstance.
+  let roleInstances = nub $ catMaybes $ map extractRoleInstanceId allDeltas
+  -- For each referenced role instance that is missing from the DB, restore it first.
+  for_ roleInstances \rid -> do
+    exists <- lift $ tryGetPerspectRol (RoleInstance rid)
+    unless (isJust exists) do
+      -- Evict any stale cache entry before restoring, same as restoreResource does.
+      lift $ void $ removeInternally (RoleInstance rid)
+      restoreRoleFromDeltaStore rid
+  -- Apply all context deltas in version order.
   let creationDeltas = sortBy compareByVersion allDeltas
   for_ creationDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
     applyDelta sd (Just (unwrap sd).encryptedDelta)
@@ -130,6 +146,16 @@ isSubResourceDeltaOf roleInstanceId (DeltaStoreRecord { resourceKey }) =
   in
     Str.length resourceKey > Str.length safeRid + 1
       && Str.take (Str.length safeRid + 1) resourceKey == safeRid <> "#"
+
+-- | If the DeltaStoreRecord contains a ContextDelta, return the unwrapped
+-- | role-instance ID referenced by that delta (the role that is added to or
+-- | moved within the context).  Returns Nothing for any other delta type.
+extractRoleInstanceId :: DeltaStoreRecord -> Maybe String
+extractRoleInstanceId (DeltaStoreRecord { signedDelta }) =
+  let encDelta = (unwrap signedDelta).encryptedDelta
+  in case runExcept $ readJSON' encDelta of
+    Right (ContextDelta { roleInstance }) -> Just (unwrap roleInstance)
+    Left _ -> Nothing
 
 -- | Apply a signed delta by dispatching to the appropriate execute function.
 -- | Tries to parse the encrypted delta as each known delta type in turn.
