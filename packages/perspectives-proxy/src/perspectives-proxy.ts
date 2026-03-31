@@ -202,8 +202,15 @@ type WorkerResponse = {
 
 type PDRMessage = {
   responseType: "PDRMessage";
-  action: "push" | "remove", 
+  action: "push" | "remove" | "requestUserIntegrityChoice", 
   message: string
+};
+
+type IntegrityChoicePayload = {
+  resourceKind: "rol" | "context";
+  message: string;
+  restoreOption: string;
+  removeOption: string;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -322,7 +329,31 @@ class SharedWorkerChannel
     }
     else if ( e.data.responseType === "PDRMessage" )
     {
-      proxy.cursor.setPDRStatus( e.data );
+      if ( e.data.action === "requestUserIntegrityChoice" )
+      {
+        // The PDR is blocking, waiting for the end user's choice.
+        // Parse the payload, show a dialog, then deliver the answer back to the PDR.
+        let payload: IntegrityChoicePayload;
+        try {
+          payload = JSON.parse( e.data.message ) as IntegrityChoicePayload;
+        } catch (_) {
+          payload = {
+            resourceKind: "rol",
+            message: e.data.message,
+            restoreOption: "Herstel",
+            removeOption: "Verwijder definitief"
+          };
+        }
+        proxy.cursor.showIntegrityChoiceDialog( payload ).then( (choice: boolean) => {
+          proxy.channelId.then( channelId => proxy.port.postMessage(
+            { proxyRequest: "resolveUserIntegrityChoice", choice, channelId }
+          ));
+        });
+      }
+      else
+      {
+        proxy.cursor.setPDRStatus( e.data as { action: "push" | "remove"; message: string } );
+      }
     }
   }
 
@@ -1930,6 +1961,146 @@ class Cursor {
     } else if (action === "remove") {
       this.removeMessage(STATUS_ID);
     }
+  }
+
+  // Show a blocking modal dialog presenting the integrity choice to the end user.
+  // Resolves with true (restore) or false (permanently delete).
+  showIntegrityChoiceDialog( payload: IntegrityChoicePayload ): Promise<boolean> {
+    return new Promise<boolean>( (resolve) => {
+      // Build dialog overlay
+      const overlay = document.createElement('div');
+      overlay.className = 'pdr-integrity-overlay';
+
+      const msgId = 'pdr-integrity-msg-' + Date.now();
+      const dialog = document.createElement('div');
+      dialog.className = 'pdr-integrity-dialog';
+      dialog.setAttribute('role', 'dialog');
+      dialog.setAttribute('aria-modal', 'true');
+      dialog.setAttribute('aria-labelledby', msgId);
+
+      const msgEl = document.createElement('p');
+      msgEl.id = msgId;
+      msgEl.className = 'pdr-integrity-message';
+      msgEl.textContent = payload.message;
+
+      const btnRow = document.createElement('div');
+      btnRow.className = 'pdr-integrity-buttons';
+
+      const restoreBtn = document.createElement('button');
+      restoreBtn.className = 'pdr-integrity-btn pdr-integrity-btn-restore';
+      restoreBtn.textContent = payload.restoreOption;
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'pdr-integrity-btn pdr-integrity-btn-remove';
+      removeBtn.textContent = payload.removeOption;
+
+      const previouslyFocused = document.activeElement as HTMLElement | null;
+
+      const close = (choice: boolean) => {
+        if (document.body.contains(overlay)) {
+          document.body.removeChild(overlay);
+        }
+        // Restore focus to the element that had it before the dialog opened
+        if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+          previouslyFocused.focus();
+        }
+        resolve(choice);
+      };
+
+      // Keyboard handling: Escape closes without restoring, Tab traps focus
+      dialog.addEventListener('keydown', (ev: KeyboardEvent) => {
+        if (ev.key === 'Escape') {
+          // Default to restoring on Escape (non-destructive default)
+          close(true);
+        } else if (ev.key === 'Tab') {
+          const focusable = [restoreBtn, removeBtn];
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (ev.shiftKey) {
+            if (document.activeElement === first) {
+              ev.preventDefault();
+              last.focus();
+            }
+          } else {
+            if (document.activeElement === last) {
+              ev.preventDefault();
+              first.focus();
+            }
+          }
+        }
+      });
+
+      restoreBtn.addEventListener('click', () => close(true));
+      removeBtn.addEventListener('click', () => close(false));
+
+      btnRow.appendChild(restoreBtn);
+      btnRow.appendChild(removeBtn);
+      dialog.appendChild(msgEl);
+      dialog.appendChild(btnRow);
+      overlay.appendChild(dialog);
+
+      // Inject styles once
+      if (!document.getElementById('pdr-integrity-style')) {
+        const style = document.createElement('style');
+        style.id = 'pdr-integrity-style';
+        style.textContent = `
+          .pdr-integrity-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000; /* sits above the pdr-loading-overlay at z-index 9999 */
+          }
+          .pdr-integrity-dialog {
+            background-color: #fff;
+            padding: 24px 28px;
+            border-radius: 8px;
+            max-width: 480px;
+            width: 90%;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+          }
+          .pdr-integrity-message {
+            margin: 0 0 20px 0;
+            font-size: 15px;
+            line-height: 1.5;
+          }
+          .pdr-integrity-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+          }
+          .pdr-integrity-btn {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+          }
+          .pdr-integrity-btn-restore {
+            background-color: #3498db;
+            color: #fff;
+          }
+          .pdr-integrity-btn-restore:hover {
+            background-color: #2980b9;
+          }
+          .pdr-integrity-btn-remove {
+            background-color: #e74c3c;
+            color: #fff;
+          }
+          .pdr-integrity-btn-remove:hover {
+            background-color: #c0392b;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+
+      document.body.appendChild(overlay);
+      // Move focus into the dialog (default to the restore/safe option)
+      restoreBtn.focus();
+    });
   }
 
   // Show the loading overlay if it is not already visible
