@@ -321,7 +321,7 @@ export function receivePDRStatusMessageChannel( channel )
 
 // Called from the PDR during startup to register a function that delivers the user's
 // integrity-choice (Boolean) into the userIntegrityChoice AVar inside PerspectivesState.
-export function registerPutUserIntegrityChoice( fn )
+export function registerPutUserIntegrityChoice_( fn )
 {
   putUserIntegrityChoiceFn = fn;
 }

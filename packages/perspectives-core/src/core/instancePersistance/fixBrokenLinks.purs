@@ -96,14 +96,13 @@ fixReferences resource@(Rle roleId) = do
     message = buildIntegrityChoiceMessage "rol" instanceDisplay typeName
   -- Ask the user; this call blocks until the frontend puts a value into the AVar.
   choice <- requestIntegrityChoice message
-  if choice
-    then
-      -- User chose "Herstel": the resource is already restored; persist it.
-      saveMarkedResources
-    else do
-      -- User chose "Verwijder definitief": undo the restoration and clean up.
-      void $ removeEntiteit roleId
-      fixRoleReferences roleId
+  if choice then
+    -- User chose "Herstel": the resource is already restored; persist it.
+    saveMarkedResources
+  else do
+    -- User chose "Verwijder definitief": undo the restoration and clean up.
+    void $ removeEntiteit roleId
+    fixRoleReferences roleId
 fixReferences resource@(Ctxt contextId) = do
   -- Restore the resource so that its type is queryable.
   restoreResource resource
@@ -115,14 +114,13 @@ fixReferences resource@(Ctxt contextId) = do
     message = buildIntegrityChoiceMessage "context" instanceDisplay typeName
   -- Ask the user; this call blocks until the frontend puts a value into the AVar.
   choice <- requestIntegrityChoice message
-  if choice
-    then
-      -- User chose "Herstel": the resource is already restored; persist it.
-      saveMarkedResources
-    else do
-      -- User chose "Verwijder definitief": undo the restoration and clean up.
-      void $ removeEntiteit contextId
-      fixContextReferences contextId
+  if choice then
+    -- User chose "Herstel": the resource is already restored; persist it.
+    saveMarkedResources
+  else do
+    -- User chose "Verwijder definitief": undo the restoration and clean up.
+    void $ removeEntiteit contextId
+    fixContextReferences contextId
 fixReferences (Dfile _) = pure unit
 
 -- | Send a "requestUserIntegrityChoice" status message to all connected frontend clients
@@ -163,8 +161,10 @@ buildIntegrityChoiceMessage resourceKind instanceDisplay typeName =
 -- | for user-facing messages without exposing the full (potentially long) ID.
 trailingInstanceId :: String -> String
 trailingInstanceId s =
-  let l = Str.length s
-  in if l > 30 then Str.drop (l - 30) s else s
+  let
+    l = Str.length s
+  in
+    if l > 30 then Str.drop (l - 30) s else s
 
 -- | Apply this function when a reference to a context has been found that cannot be retrieved.
 -- | We want all references to this context to be removed.
