@@ -84,7 +84,7 @@ import Simple.JSON (writeJSON)
 -- |   2. Call the PDR's `putUserIntegrityChoice(true/false)` API to unblock this fiber.
 -- |
 -- | Domain-file resources are silently ignored.
-fixReferences :: ResourceToBeStored -> MonadPerspectives Unit
+fixReferences :: ResourceToBeStored -> MonadPerspectives Boolean
 fixReferences resource@(Rle roleId) = do
   -- Restore the resource so that its type is queryable.
   restoreResource resource
@@ -96,13 +96,15 @@ fixReferences resource@(Rle roleId) = do
     message = buildIntegrityChoiceMessage "rol" instanceDisplay typeName
   -- Ask the user; this call blocks until the frontend puts a value into the AVar.
   choice <- requestIntegrityChoice message
-  if choice then
+  if choice then do
     -- User chose "Herstel": the resource is already restored; persist it.
     saveMarkedResources
+    pure true
   else do
     -- User chose "Verwijder definitief": undo the restoration and clean up.
     void $ removeEntiteit roleId
     fixRoleReferences roleId
+    pure false
 fixReferences resource@(Ctxt contextId) = do
   -- Restore the resource so that its type is queryable.
   restoreResource resource
@@ -114,14 +116,16 @@ fixReferences resource@(Ctxt contextId) = do
     message = buildIntegrityChoiceMessage "context" instanceDisplay typeName
   -- Ask the user; this call blocks until the frontend puts a value into the AVar.
   choice <- requestIntegrityChoice message
-  if choice then
+  if choice then do
     -- User chose "Herstel": the resource is already restored; persist it.
     saveMarkedResources
+    pure true
   else do
     -- User chose "Verwijder definitief": undo the restoration and clean up.
     void $ removeEntiteit contextId
     fixContextReferences contextId
-fixReferences (Dfile _) = pure unit
+    pure false
+fixReferences (Dfile _) = pure false
 
 -- | Send a "requestUserIntegrityChoice" status message to all connected frontend clients
 -- | and block this fiber until one of them puts a Boolean into `userIntegrityChoice`.

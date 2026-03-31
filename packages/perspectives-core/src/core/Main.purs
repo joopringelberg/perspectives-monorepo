@@ -505,7 +505,9 @@ forkReferentialIntegrityFixer missingResourceAVar state = run
             liftAff $ put (FixFailed $ show e) hotline
           -- Report back to the caller on the Aff level, i.e. when the fixing on the level of
           -- MonadPerspectives has been executed.
-          Right _ -> liftAff $ put FixSucceeded hotline
+          Right restored ->
+            if restored then liftAff $ put FixRestored hotline
+            else liftAff $ put (FixDeleted) hotline
         -- and repeat
         run
       -- This we never send, currently.

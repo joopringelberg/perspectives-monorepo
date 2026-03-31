@@ -216,10 +216,13 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
             FixingHotLine av -> do
               result <- liftAff $ take av
               case result of
-                FixSucceeded -> do
+                FixRestored -> do
                   log ("fetchEntiteit: resource " <> unwrap id <> " restored successfully, retrying fetch.")
                   -- The resource has been restored; retry the fetch (with tryToFix=false to avoid infinite loop).
                   fetchEntiteit doNotFix id
+                FixDeleted -> do
+                  log ("fetchEntiteit: resource " <> unwrap id <> " was deleted during fixing, so cannot be retrieved.")
+                  throwError $ error ("fetchEntiteit: user deleted resource " <> unwrap id <> " from couchdb.")
                 FixFailed s -> do
                   logPerspectivesError (Custom ("fetchEntiteit: cannot fix resource " <> unwrap id <> ": " <> s))
                   throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")

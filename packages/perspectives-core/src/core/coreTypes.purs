@@ -572,7 +572,7 @@ class (Cacheable v i, WriteForeign v, ReadForeign v) <= Persistent v i | i -> v,
   resourceIdToBeStored :: i -> ResourceToBeStored
   typeOfInstance :: i -> ResourceToBeStored
 
-data IntegrityFix = Missing ResourceToBeStored | FixSucceeded | FixFailed String | StopFixing | FixingHotLine (AVar IntegrityFix)
+data IntegrityFix = Missing ResourceToBeStored | FixRestored | FixDeleted | FixFailed String | StopFixing | FixingHotLine (AVar IntegrityFix)
 
 data ResourceToBeStored
   = Ctxt ContextInstance
