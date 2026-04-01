@@ -23,8 +23,8 @@
 -- | Generates a TCP SQL configuration (schema + name map) from a compiled DomeinFile.
 -- |
 -- | The generator:
--- |   1. Finds all UserRole EnumeratedRoles that are not PerspectivesUsers / NonPerspectivesUsers
--- |      (these are "Onlooker" roles whose data is forwarded to a TCP subscriber).
+-- |   1. Finds all Onlooker roles: EnumeratedRoles whose filledBy restriction chain
+-- |      includes the sys:TheWorld$Onlookers type (directly or via specialisation).
 -- |   2. Collects every Perspective held by those Onlooker roles.
 -- |   3. Resolves EnumeratedRoleTypes visible in each perspective, expanding CalculatedRoles
 -- |      and dropping FilterF steps (§4.6 design decision).
@@ -39,22 +39,23 @@ module Perspectives.TCP.Configuration where
 
 import Prelude
 
-import Data.Array (catMaybes, concatMap, last, mapMaybe, nub)
+import Data.Array (any, catMaybes, concatMap, last, mapMaybe, nub)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), split)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, fromFoldable, lookup, values) as OBJ
 import Perspectives.DomeinFile (DomeinFile(..))
-import Perspectives.ModelDependencies (nonPerspectivesUsers, perspectivesUsers) as MD
+import Perspectives.ModelDependencies (onlookers) as MD
+import Perspectives.Representation.ADT (ADT, allLeavesInADT)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..))
-import Perspectives.Query.QueryTypes (Calculation(..), QueryFunctionDescription(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
+import Perspectives.Query.QueryTypes (Calculation(..), QueryFunctionDescription(..), RoleInContext(..))
 import Perspectives.Sidecar.StableIdMapping (Stable) as Sidecar
 import Simple.JSON (class WriteForeign, write)
 
@@ -114,8 +115,9 @@ type TCPConfiguration =
 buildTCPConfiguration :: DomeinFile Sidecar.Stable -> String -> TCPConfiguration
 buildTCPConfiguration (DomeinFile dfr) modelUri =
   let
-    -- 1. Onlooker user roles: any UserRole that is NOT PerspectivesUsers / NonPerspectivesUsers
-    onlookerRoles = catMaybes $ map toOnlooker $ OBJ.values dfr.enumeratedRoles
+    -- 1. Onlooker user roles: any EnumeratedRole whose filledBy restriction chain
+    --    includes the sys:TheWorld$Onlookers type (directly or via specialisation)
+    onlookerRoles = catMaybes $ map (toOnlooker dfr.enumeratedRoles) $ OBJ.values dfr.enumeratedRoles
 
     -- 2. Collect all perspectives from Onlookers
     allPerspectives = concatMap (\(EnumeratedRole r) -> r.perspectives) onlookerRoles
@@ -143,14 +145,29 @@ buildTCPConfiguration (DomeinFile dfr) modelUri =
 ---- ONLOOKER DETECTION
 -------------------------------------------------------------------------------
 
--- | An Onlooker is any EnumeratedRole with kindOfRole == UserRole that is
--- | neither the global PerspectivesUsers nor NonPerspectivesUsers role.
-toOnlooker :: EnumeratedRole -> Maybe EnumeratedRole
-toOnlooker er@(EnumeratedRole r)
-  | r.kindOfRole == UserRole
-  , unwrap r.id /= MD.perspectivesUsers
-  , unwrap r.id /= MD.nonPerspectivesUsers = Just er
-toOnlooker _ = Nothing
+-- | An Onlooker role is an EnumeratedRole whose filledBy restriction chain
+-- | includes the sys:TheWorld$Onlookers type (directly or via specialisation).
+-- | The filler restriction is walked up to 5 hops deep (per §4.1 design decision).
+toOnlooker :: OBJ.Object EnumeratedRole -> EnumeratedRole -> Maybe EnumeratedRole
+toOnlooker erMap er@(EnumeratedRole r)
+  | bindingIncludesOnlooker erMap 0 r.binding = Just er
+toOnlooker _ _ = Nothing
+
+-- | Returns true if the binding ADT (the filledBy restriction) contains the
+-- | Onlookers type anywhere in the recursive filler chain.
+-- | `depth` guards against cycles (though the PDR runtime prevents them).
+bindingIncludesOnlooker :: OBJ.Object EnumeratedRole -> Int -> Maybe (ADT RoleInContext) -> Boolean
+bindingIncludesOnlooker _ _ Nothing = false
+bindingIncludesOnlooker _ depth _ | depth > 5 = false
+bindingIncludesOnlooker erMap depth (Just binding) =
+  any
+    ( \(RoleInContext { role }) ->
+        unwrap role == MD.onlookers
+          || case OBJ.lookup (unwrap role) erMap of
+            Nothing -> false
+            Just (EnumeratedRole r) -> bindingIncludesOnlooker erMap (depth + 1) r.binding
+    )
+    (allLeavesInADT binding)
 
 -------------------------------------------------------------------------------
 ---- PERSPECTIVE → ENR RESOLUTION

@@ -17,6 +17,9 @@ perspectivesUsers = "model://perspectives.domains#System$TheWorld$PerspectivesUs
 nonPerspectivesUsers :: String
 nonPerspectivesUsers = "model://perspectives.domains#System$TheWorld$NonPerspectivesUsers"
 
+onlookers :: String
+onlookers = "model://perspectives.domains#System$TheWorld$Onlookers"
+
 identifiableLastName :: String
 identifiableLastName = "model://perspectives.domains#System$Identifiable$LastName"
 
