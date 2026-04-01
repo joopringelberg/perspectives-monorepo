@@ -37,16 +37,16 @@ import Control.Monad.Except (lift, runExcept)
 import Data.Array (catMaybes, filter, nub, sortBy)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
-import Data.Maybe (Maybe(..), isJust)
+import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.String (length, take) as Str
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, ResourceToBeStored(..), removeInternally)
+import Perspectives.Identifiers (buitenRol)
 import Perspectives.ModelDependencies (sysUser)
-import Perspectives.Persistent (tryGetPerspectRol)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
-import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), getDeltasForResource, getDeltasForRoleInstance, safeKey, updateDeltaApplied)
+import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), getDeltasByDeltaTypes, getDeltasForResource, getDeltasForRoleInstance, safeKey, updateDeltaApplied)
 import Perspectives.PerspectivesState (transactionLevel)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary)
@@ -104,29 +104,70 @@ restoreRoleFromDeltaStore roleInstanceId = do
   for_ subResourceDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
     applyDelta sd (Just (unwrap sd).encryptedDelta)
 
--- | Restore a deleted or missing context by re-applying its creation and
--- | role-placement deltas from the DeltaStore.
--- | For each ContextDelta that references a role instance, the role is restored
--- | first (if it is missing) so that addRoleInstanceToContext has a valid document
--- | to work with.  This covers both enumerated roles and the external role.
+-- | Restore a deleted or missing context by:
+-- |   1. Restoring the external role first (required before ConstructEmptyContext can run).
+-- |   2. Applying the ConstructEmptyContext delta.
+-- |   3. Scanning the full DeltaStore for ContextDeltas that reference this context instance.
+-- |      ContextDeltas are stored under the role-instance resource key (not the context key),
+-- |      so they cannot be found via getDeltasForResource.
+-- |   4. Restoring every role referenced by those ContextDeltas (idempotent for existing roles).
+-- |   5. Applying all found ContextDeltas to link every role to the restored context.
 restoreContextFromDeltaStore :: String -> MonadPerspectivesTransaction Unit
 restoreContextFromDeltaStore contextId = do
-  allDeltas <- lift $ getDeltasForResource contextId
   let compareByVersion (DeltaStoreRecord r1) (DeltaStoreRecord r2) = compare r1.resourceVersion r2.resourceVersion
-  -- Collect the role instances referenced by ContextDeltas that add a role to the context.
-  -- We parse each encrypted delta as a ContextDelta; those that succeed give us a roleInstance.
-  let roleInstances = nub $ catMaybes $ map extractRoleInstanceId allDeltas
-  -- For each referenced role instance that is missing from the DB, restore it first.
-  for_ roleInstances \rid -> do
-    exists <- lift $ tryGetPerspectRol (RoleInstance rid)
-    unless (isJust exists) do
-      -- Evict any stale cache entry before restoring, same as restoreResource does.
-      lift $ void $ removeInternally (RoleInstance rid)
-      restoreRoleFromDeltaStore rid
-  -- Apply all context deltas in version order.
-  let creationDeltas = sortBy compareByVersion allDeltas
-  for_ creationDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
+  -- Step 1: Restore the external role first.
+  -- executeUniverseContextDelta(ConstructEmptyContext) checks that the external role exists
+  -- before creating the context, so we must create the external role before applying
+  -- the ConstructEmptyContext delta.  The ContextDelta(AddExternalRole) in the external
+  -- role's delta history will fail silently here (context not yet created); it will be
+  -- re-applied idempotently in step 5 once the context exists.
+  let externalRoleId = buitenRol contextId
+  lift $ void $ removeInternally (RoleInstance externalRoleId)
+  restoreRoleFromDeltaStore externalRoleId
+  -- Step 2: Apply ConstructEmptyContext (external role now exists, so the check passes).
+  contextLevelDeltas <- lift $ getDeltasForResource contextId
+  for_ (sortBy compareByVersion contextLevelDeltas) \(DeltaStoreRecord { signedDelta: sd }) ->
     applyDelta sd (Just (unwrap sd).encryptedDelta)
+  -- Step 3: Scan the full DeltaStore for ContextDeltas referencing this context.
+  contextDeltas <- lift $ getContextDeltasForContextInstance contextId
+  -- Step 4: Restore every role referenced by those ContextDeltas.
+  -- We use the role-instance ID from the delta (already safe/stripped form) as the
+  -- argument to restoreRoleFromDeltaStore; safeKey is idempotent for stripped IDs so
+  -- getDeltasForRoleInstance will find the right deltas.  ConstructEmptyRole is
+  -- idempotent so calling this for already-existing roles is harmless.
+  let roleInstances = nub $ catMaybes $ map extractRoleInstanceId contextDeltas
+  for_ roleInstances \rid ->
+    restoreRoleFromDeltaStore rid
+  -- Step 5: Apply all ContextDeltas so every role is properly linked to the context.
+  -- This is idempotent for roles already linked in step 4; it is essential for roles
+  -- that already existed in the DB (step 4 was a no-op for them).
+  for_ (sortBy compareByVersion contextDeltas) \(DeltaStoreRecord { signedDelta: sd }) ->
+    applyDelta sd (Just (unwrap sd).encryptedDelta)
+
+-- | Scan the DeltaStore for all ContextDelta records whose `contextInstance` field
+-- | matches the given context ID (after scheme-stripping, since deltas are stored
+-- | with stripped identifiers).
+-- | This requires a full-table scan because ContextDeltas are stored under the
+-- | role-instance resource key, not the context resource key.
+getContextDeltasForContextInstance :: String -> MonadPerspectives (Array DeltaStoreRecord)
+getContextDeltasForContextInstance contextId = do
+  -- Fetch all deltas whose deltaType is one of the ContextDelta variants.
+  candidates <- getDeltasByDeltaTypes
+    [ "AddRoleInstancesToContext"
+    , "AddExternalRole"
+    , "MoveRoleInstancesToAnotherContext"
+    ]
+  -- The stored contextInstance field is scheme-stripped (stripNonPublicIdentifiers was
+  -- applied when the delta was stored).  safeKey strips the scheme from the input
+  -- contextId so both sides of the comparison are in the same form.
+  let safeCid = safeKey contextId
+  pure $ filter (isContextDeltaForInstance safeCid) candidates
+  where
+  isContextDeltaForInstance :: String -> DeltaStoreRecord -> Boolean
+  isContextDeltaForInstance safeCid (DeltaStoreRecord { signedDelta }) =
+    case runExcept $ readJSON' (unwrap signedDelta).encryptedDelta of
+      Right (ContextDelta { contextInstance }) -> unwrap contextInstance == safeCid
+      Left _ -> false
 
 -- | Returns true if a deltaType string represents a role-instance deletion.
 isDeletionDeltaType :: String -> Boolean

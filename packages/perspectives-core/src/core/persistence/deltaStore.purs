@@ -33,6 +33,7 @@ module Perspectives.Persistence.DeltaStore
   , getDeltasForResource
   , getDeltasForResourceByDeltaType
   , getDeltasForRoleInstance
+  , getDeltasByDeltaTypes
   , updateDeltaApplied
   , extractDeltaInfo
   , deltaStoreDatabaseName
@@ -43,7 +44,7 @@ module Perspectives.Persistence.DeltaStore
 import Prelude
 
 import Control.Monad.Except (runExcept)
-import Data.Array (catMaybes, filter, head, last, length) as Arr
+import Data.Array (catMaybes, elem, filter, head, last, length) as Arr
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
@@ -248,6 +249,23 @@ updateDeltaApplied docId newApplied = do
     Nothing -> pure unit
     Just (DeltaStoreRecord r) ->
       void $ addDocument_ dbName (DeltaStoreRecord (r { applied = newApplied })) docId
+
+-- | Scan the entire DeltaStore for records whose `deltaType` matches any of the
+-- | given delta-type strings.  This performs a full-table scan; call sparingly.
+-- | Useful when there is no resource-key index for the desired delta types
+-- | (e.g. ContextDeltas are stored under the role-instance key, not the context key).
+getDeltasByDeltaTypes :: forall f. Array String -> MonadPouchdb f (Array DeltaStoreRecord)
+getDeltasByDeltaTypes deltaTypes = do
+  dbName <- deltaStoreDatabaseName
+  result <- documentsInRange dbName "" "\xFFFF"
+  let allRecords = Arr.catMaybes $ map decodeDoc result.rows
+  pure $ Arr.filter (\(DeltaStoreRecord r) -> Arr.elem r.deltaType deltaTypes) allRecords
+  where
+  decodeDoc :: { id :: String, value :: { rev :: String }, doc :: Maybe Foreign } -> Maybe DeltaStoreRecord
+  decodeDoc { doc: Just foreignDoc } = case runExcept $ read' foreignDoc of
+    Right (rec :: DeltaStoreRecord) -> Just rec
+    Left _ -> Nothing
+  decodeDoc _ = Nothing
 
 -----------------------------------------------------------
 -- STORE FROM SIGNED DELTA
