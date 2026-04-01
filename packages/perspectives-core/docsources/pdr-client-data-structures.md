@@ -194,7 +194,7 @@ newtype WhenDef = WhenDef
   }
 ```
 
-> **Important:** `WhenDef` elements reachable through `ScreenElementDef` are *structural* conditions on the free-form part of the screen. The analogous conditional wrapper for the Who/What/Where master-detail sections is `WhenTableFormDef` (see §10).
+> **Important:** `WhenDef` elements reachable through `ScreenElementDef` are *structural* conditions on the free-form part of the screen. The analogous conditional wrapper for the Who/What/Where master-detail sections is `WhenTableFormDef` (see §10: TableFormDef and WhenTableFormDef).
 
 ---
 
@@ -656,7 +656,7 @@ export type Roleinstancewithprops = {
   propertyValues: Record<string, PropertyValues>;
   actions: Record<string, string>;
   objectStateBasedProperties: { type: string; value: PropertyType }[];
-  publicUrl?: string;   // OBSOLETE
+  publicUrl?: string;
   filler?: RoleInstanceT;
   isMe: boolean;
   readableName: string;
