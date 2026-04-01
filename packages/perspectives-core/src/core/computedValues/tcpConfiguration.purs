@@ -43,19 +43,25 @@ import Data.Array (any, catMaybes, concatMap, last, mapMaybe, nub)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), split)
+import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, fromFoldable, lookup, values) as OBJ
+import Perspectives.CoreTypes (MP)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ModelDependencies (onlookers) as MD
-import Perspectives.Representation.ADT (ADT, allLeavesInADT)
+import Perspectives.Query.QueryTypes (Calculation(..), QueryFunctionDescription(..), RoleInContext(..))
+import Perspectives.Query.QueryTypes (RoleInContext) as QT
+import Perspectives.Representation.ADT (ADT, allLeavesInADT, equalsOrSpecialises_)
+import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
+import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
+import Perspectives.Representation.Class.Role (completeDeclaredFillerRestriction, roleADT, toConjunctiveNormalForm_)
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
-import Perspectives.Query.QueryTypes (Calculation(..), QueryFunctionDescription(..), RoleInContext(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType, EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.Sidecar.StableIdMapping (Stable) as Sidecar
 import Simple.JSON (class WriteForeign, write)
 
@@ -80,7 +86,7 @@ newtype TCPColumnConfigJ = TCPColumnConfigJ TCPColumnConfig
 instance WriteForeign TCPColumnConfigJ where
   writeImpl (TCPColumnConfigJ c) = write
     { name: c.name
-    , `type`: c.sqlType
+    , type: c.sqlType
     , nullable: c.nullable
     , propertyType: c.propertyType
     }
@@ -112,34 +118,33 @@ type TCPConfiguration =
 
 -- | Build a `TCPConfiguration` from a compiled (stable) DomeinFile.
 -- | `modelUri` is the versioned model URI used as a reference key.
-buildTCPConfiguration :: DomeinFile Sidecar.Stable -> String -> TCPConfiguration
+buildTCPConfiguration :: DomeinFile Sidecar.Stable -> String -> MP TCPConfiguration
 buildTCPConfiguration (DomeinFile dfr) modelUri =
-  let
+  do
     -- 1. Onlooker user roles: any EnumeratedRole whose filledBy restriction chain
     --    includes the sys:TheWorld$Onlookers type (directly or via specialisation)
-    onlookerRoles = catMaybes $ map (toOnlooker dfr.enumeratedRoles) $ OBJ.values dfr.enumeratedRoles
+    onlookerRoles <- catMaybes <$> traverse (toOnlooker dfr.enumeratedRoles) (OBJ.values dfr.enumeratedRoles)
 
     -- 2. Collect all perspectives from Onlookers
-    allPerspectives = concatMap (\(EnumeratedRole r) -> r.perspectives) onlookerRoles
+    allPerspectives <- pure $ concatMap (\(EnumeratedRole r) -> r.perspectives) onlookerRoles
 
     -- 3. For each perspective resolve to leaf EnumeratedRoleTypes
     --    (FilterF steps dropped per §4.6)
-    enumeratedRoleTypes =
-      nub $ concatMap (perspectiveToENRs dfr.calculatedRoles) allPerspectives
+    enumeratedRoleTypes <- pure $ nub $ concatMap (perspectiveToENRs dfr.calculatedRoles) allPerspectives
 
     -- 4. Build one role table per ENR
-    roleTables = mapMaybe (buildRoleTable dfr.enumeratedRoles dfr.enumeratedProperties) enumeratedRoleTypes
+    roleTables <- pure $ mapMaybe (buildRoleTable dfr.enumeratedRoles dfr.enumeratedProperties) enumeratedRoleTypes
 
     -- 5. Universal context table (single table, referenced by all role tables)
-    ctxTable = buildUniversalContextTable
+    ctxTable <- pure $ buildUniversalContextTable
 
     -- 6. Name map: stable → readable for every ENR (and its properties) encountered
-    nameMap = buildNameMap dfr.enumeratedRoles dfr.enumeratedProperties enumeratedRoleTypes
-  in
-  { modelUri
-  , nameMap
-  , tables: [ ctxTable ] <> roleTables
-  }
+    nameMap <- pure $ buildNameMap dfr.enumeratedRoles dfr.enumeratedProperties enumeratedRoleTypes
+    pure
+      { modelUri
+      , nameMap
+      , tables: [ ctxTable ] <> roleTables
+      }
 
 -------------------------------------------------------------------------------
 ---- ONLOOKER DETECTION
@@ -149,10 +154,10 @@ buildTCPConfiguration (DomeinFile dfr) modelUri =
 -- | includes the sys:TheWorld$Onlookers type (directly or via specialisation).
 -- | The filler restriction is walked up to 6 hops deep (depths 0–5), covering
 -- | the §Q1 design decision (max 5, extendable to 6).
-toOnlooker :: OBJ.Object EnumeratedRole -> EnumeratedRole -> Maybe EnumeratedRole
-toOnlooker erMap er@(EnumeratedRole r)
-  | bindingIncludesOnlooker erMap 0 r.binding = Just er
-toOnlooker _ _ = Nothing
+toOnlooker :: OBJ.Object EnumeratedRole -> EnumeratedRole -> MP (Maybe EnumeratedRole)
+toOnlooker erMap er@(EnumeratedRole r) = bindingEqualsOrSpecialisesOnlookers er >>= case _ of
+  true -> pure $ Just er
+  false -> pure Nothing
 
 -- | Returns true if the binding ADT (the filledBy restriction) contains the
 -- | Onlookers type anywhere in the recursive filler chain.
@@ -171,6 +176,17 @@ bindingIncludesOnlooker erMap depth (Just binding) =
             Just (EnumeratedRole r) -> bindingIncludesOnlooker erMap (depth + 1) r.binding
     )
     (allLeavesInADT binding)
+
+-- | Alternative approach: check if the binding restriction equals or specialises the Onlookers type.
+-- | `bindingIncludesOnlooker` is incomplete as it ignores Aspects. `bindingEqualsOrSpecialisesOnlookers` is more complete but also more expensive to compute, as it requires retrieving and CNF-transforming the full binding restriction of each role.
+-- | Furthermore, it would require computing `buildTCPConfiguration` in the MP monad, as it needs to retrieve models from the repository. For these reasons, we currently use `bindingIncludesOnlooker`.
+bindingEqualsOrSpecialisesOnlookers :: EnumeratedRole -> MP Boolean
+bindingEqualsOrSpecialisesOnlookers er = do
+  (mrestriction :: Maybe (CNF QT.RoleInContext)) <- completeDeclaredFillerRestriction er >>= traverse toConjunctiveNormalForm_
+  onlookersCNF <- getEnumeratedRole (EnumeratedRoleType MD.onlookers) >>= roleADT >>= toConjunctiveNormalForm_
+  case mrestriction of
+    Nothing -> pure false
+    Just restriction -> pure (restriction `equalsOrSpecialises_` onlookersCNF)
 
 -------------------------------------------------------------------------------
 ---- PERSPECTIVE → ENR RESOLUTION
@@ -211,7 +227,7 @@ extractENRsFromQFD crMap = go
   where
   go (SQD _ (RolGetter (ENR ert)) _ _ _) = [ ert ]
   go (SQD _ (RolGetter (CR crt)) _ _ _) = extractENRsFromCR crMap crt
-  go (UQD _ FilterF inner _ _ _) = go inner   -- §4.6: peers pre-filter before forwarding to TCP; re-applying filters would yield empty results under the Closed World Assumption
+  go (UQD _ FilterF inner _ _ _) = go inner -- §4.6: peers pre-filter before forwarding to TCP; re-applying filters would yield empty results under the Closed World Assumption
   go (UQD _ (UnaryCombinator _) inner _ _ _) = go inner
   go (BQD _ (BinaryCombinator ComposeF) _ right _ _ _) = go right
   go (BQD _ (BinaryCombinator UnionF) left right _ _ _) = go left <> go right
@@ -250,13 +266,13 @@ buildRoleTable erMap epMap ert =
         columns = mapMaybe (buildPropertyColumn epMap) r.properties
         tableName = localName (unwrap r.readableName)
       in
-      Just
-        { name: tableName
-        , roleType: Just (unwrap ert)
-        , contextType: Nothing
-        , isUniversalContextTable: false
-        , columns
-        }
+        Just
+          { name: tableName
+          , roleType: Just (unwrap ert)
+          , contextType: Nothing
+          , isUniversalContextTable: false
+          , columns
+          }
 
 -- | Build a column config for a single PropertyType.
 -- | CalculatedPropertyTypes are skipped (they are not materialised).

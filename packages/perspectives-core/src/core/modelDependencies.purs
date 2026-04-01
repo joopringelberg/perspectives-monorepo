@@ -17,10 +17,8 @@ perspectivesUsers = "model://perspectives.domains#tiodn6tcyc$xzummxis57$v8palo8w
 nonPerspectivesUsers :: String
 nonPerspectivesUsers = "model://perspectives.domains#tiodn6tcyc$xzummxis57$hs8prklioh"
 
--- TODO: Replace with stable ID by running: pnpm run transpileDependencies
--- (requires network access; model://perspectives.domains#System@6.3 sidecar contains the CUID)
 onlookers :: String
-onlookers = "model://perspectives.domains#System$TheWorld$Onlookers"
+onlookers = "model://perspectives.domains#tiodn6tcyc$xzummxis57$vycnk9go0o"
 
 identifiableLastName :: String
 identifiableLastName = "model://perspectives.domains#tiodn6tcyc$xku8d2dtb7$xdi1iix1mm"

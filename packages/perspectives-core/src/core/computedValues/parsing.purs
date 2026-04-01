@@ -451,8 +451,9 @@ generateTCPConfiguration modelUri_ _ = case head modelUri_ of
     case x of
       Left e -> handleExternalFunctionError "model://perspectives.domains#Parsing$GenerateTCPConfiguration"
         (Left e)
-      Right (domeinFile :: DomeinFile Sidecar.Stable) ->
-        pure $ Value $ writeJSON $ TCP.buildTCPConfiguration domeinFile modelUri
+      Right (domeinFile :: DomeinFile Sidecar.Stable) -> do
+        config <- lift $ lift $ TCP.buildTCPConfiguration domeinFile modelUri
+        pure $ Value (writeJSON config)
 
 -- | Fill a ModelTranslation freshly generated from a DomeinFile, with translations taken from a TranslationTable.
 -- | NOTE: the TranslationTable must be available on the versioned model in the repository. It is not a property value.
