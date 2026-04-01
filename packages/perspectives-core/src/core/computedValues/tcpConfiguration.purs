@@ -49,8 +49,7 @@ import Foreign.Object (Object, fromFoldable, lookup, values) as OBJ
 import Perspectives.CoreTypes (MP)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ModelDependencies (onlookers) as MD
-import Perspectives.Query.QueryTypes (Calculation(..), QueryFunctionDescription(..), RoleInContext(..))
-import Perspectives.Query.QueryTypes (RoleInContext) as QT
+import Perspectives.Query.QueryTypes (Calculation(..), QueryFunctionDescription(..), RoleInContext(..)) as QT
 import Perspectives.Representation.ADT (ADT, allLeavesInADT, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -61,7 +60,7 @@ import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType, EnumeratedRoleType(..), PropertyType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..))
 import Perspectives.Sidecar.StableIdMapping (Stable) as Sidecar
 import Simple.JSON (class WriteForeign, write)
 
@@ -164,12 +163,12 @@ toOnlooker erMap er@(EnumeratedRole r) = bindingEqualsOrSpecialisesOnlookers er 
 -- | `depth` is defensive: the PDR runtime prevents actual filler cycles at
 -- | data-entry time, but this guard protects against unexpected model states
 -- | during compilation (e.g. draft models not yet validated by the runtime).
-bindingIncludesOnlooker :: OBJ.Object EnumeratedRole -> Int -> Maybe (ADT RoleInContext) -> Boolean
+bindingIncludesOnlooker :: OBJ.Object EnumeratedRole -> Int -> Maybe (ADT QT.RoleInContext) -> Boolean
 bindingIncludesOnlooker _ _ Nothing = false
 bindingIncludesOnlooker _ depth _ | depth > 5 = false
 bindingIncludesOnlooker erMap depth (Just binding) =
   any
-    ( \(RoleInContext { role }) ->
+    ( \(QT.RoleInContext { role }) ->
         unwrap role == MD.onlookers
           || case OBJ.lookup (unwrap role) erMap of
             Nothing -> false
@@ -181,12 +180,14 @@ bindingIncludesOnlooker erMap depth (Just binding) =
 -- | `bindingIncludesOnlooker` is incomplete as it ignores Aspects. `bindingEqualsOrSpecialisesOnlookers` is more complete but also more expensive to compute, as it requires retrieving and CNF-transforming the full binding restriction of each role.
 -- | Furthermore, it would require computing `buildTCPConfiguration` in the MP monad, as it needs to retrieve models from the repository. For these reasons, we currently use `bindingIncludesOnlooker`.
 bindingEqualsOrSpecialisesOnlookers :: EnumeratedRole -> MP Boolean
-bindingEqualsOrSpecialisesOnlookers er = do
-  (mrestriction :: Maybe (CNF QT.RoleInContext)) <- completeDeclaredFillerRestriction er >>= traverse toConjunctiveNormalForm_
-  onlookersCNF <- getEnumeratedRole (EnumeratedRoleType MD.onlookers) >>= roleADT >>= toConjunctiveNormalForm_
-  case mrestriction of
-    Nothing -> pure false
-    Just restriction -> pure (restriction `equalsOrSpecialises_` onlookersCNF)
+bindingEqualsOrSpecialisesOnlookers er@(EnumeratedRole { kindOfRole }) =
+  if kindOfRole == UserRole then do
+    (mrestriction :: Maybe (CNF QT.RoleInContext)) <- completeDeclaredFillerRestriction er >>= traverse toConjunctiveNormalForm_
+    onlookersCNF <- getEnumeratedRole (EnumeratedRoleType MD.onlookers) >>= roleADT >>= toConjunctiveNormalForm_
+    case mrestriction of
+      Nothing -> pure false
+      Just restriction -> pure (restriction `equalsOrSpecialises_` onlookersCNF)
+  else pure false
 
 -------------------------------------------------------------------------------
 ---- PERSPECTIVE → ENR RESOLUTION
@@ -211,7 +212,7 @@ extractENRsFromCR crMap crt =
     Nothing -> []
     Just (CalculatedRole cr) ->
       case cr.calculation of
-        Q qfd -> extractENRsFromQFD crMap qfd
+        QT.Q qfd -> extractENRsFromQFD crMap qfd
         _ -> []
 
 -- | Recursively extract EnumeratedRoleTypes from a QueryFunctionDescription.
@@ -222,16 +223,16 @@ extractENRsFromCR crMap crt =
 -- |   * BinaryCombinator ComposeF         → result type is from right operand
 -- |   * BinaryCombinator UnionF / IntersectionF → both operands
 -- |   * UnaryCombinator _                 → pass through to inner
-extractENRsFromQFD :: OBJ.Object CalculatedRole -> QueryFunctionDescription -> Array EnumeratedRoleType
+extractENRsFromQFD :: OBJ.Object CalculatedRole -> QT.QueryFunctionDescription -> Array EnumeratedRoleType
 extractENRsFromQFD crMap = go
   where
-  go (SQD _ (RolGetter (ENR ert)) _ _ _) = [ ert ]
-  go (SQD _ (RolGetter (CR crt)) _ _ _) = extractENRsFromCR crMap crt
-  go (UQD _ FilterF inner _ _ _) = go inner -- §4.6: peers pre-filter before forwarding to TCP; re-applying filters would yield empty results under the Closed World Assumption
-  go (UQD _ (UnaryCombinator _) inner _ _ _) = go inner
-  go (BQD _ (BinaryCombinator ComposeF) _ right _ _ _) = go right
-  go (BQD _ (BinaryCombinator UnionF) left right _ _ _) = go left <> go right
-  go (BQD _ (BinaryCombinator IntersectionF) left right _ _ _) = go left <> go right
+  go (QT.SQD _ (RolGetter (ENR ert)) _ _ _) = [ ert ]
+  go (QT.SQD _ (RolGetter (CR crt)) _ _ _) = extractENRsFromCR crMap crt
+  go (QT.UQD _ FilterF inner _ _ _) = go inner -- §4.6: peers pre-filter before forwarding to TCP; re-applying filters would yield empty results under the Closed World Assumption
+  go (QT.UQD _ (UnaryCombinator _) inner _ _ _) = go inner
+  go (QT.BQD _ (BinaryCombinator ComposeF) _ right _ _ _) = go right
+  go (QT.BQD _ (BinaryCombinator UnionF) left right _ _ _) = go left <> go right
+  go (QT.BQD _ (BinaryCombinator IntersectionF) left right _ _ _) = go left <> go right
   go _ = []
 
 -------------------------------------------------------------------------------
