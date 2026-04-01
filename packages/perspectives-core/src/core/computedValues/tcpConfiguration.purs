@@ -147,7 +147,8 @@ buildTCPConfiguration (DomeinFile dfr) modelUri =
 
 -- | An Onlooker role is an EnumeratedRole whose filledBy restriction chain
 -- | includes the sys:TheWorld$Onlookers type (directly or via specialisation).
--- | The filler restriction is walked up to 5 hops deep (per §4.1 design decision).
+-- | The filler restriction is walked up to 6 hops deep (depths 0–5), covering
+-- | the §Q1 design decision (max 5, extendable to 6).
 toOnlooker :: OBJ.Object EnumeratedRole -> EnumeratedRole -> Maybe EnumeratedRole
 toOnlooker erMap er@(EnumeratedRole r)
   | bindingIncludesOnlooker erMap 0 r.binding = Just er
@@ -155,7 +156,9 @@ toOnlooker _ _ = Nothing
 
 -- | Returns true if the binding ADT (the filledBy restriction) contains the
 -- | Onlookers type anywhere in the recursive filler chain.
--- | `depth` guards against cycles (though the PDR runtime prevents them).
+-- | `depth` is defensive: the PDR runtime prevents actual filler cycles at
+-- | data-entry time, but this guard protects against unexpected model states
+-- | during compilation (e.g. draft models not yet validated by the runtime).
 bindingIncludesOnlooker :: OBJ.Object EnumeratedRole -> Int -> Maybe (ADT RoleInContext) -> Boolean
 bindingIncludesOnlooker _ _ Nothing = false
 bindingIncludesOnlooker _ depth _ | depth > 5 = false
