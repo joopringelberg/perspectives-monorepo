@@ -104,7 +104,7 @@ export function parseDelta(encryptedDelta: string): TaggedDelta | null {
   if (isRolePropertyDelta(obj)) {
     kind = 'RolePropertyDelta';
     delta = obj;
-    logger.debug(`parseDelta: classified as RolePropertyDelta (property="${obj['property']}", roleType="${obj['roleType']}")`);
+    logger.debug(`parseDelta: classified as RolePropertyDelta (property="${obj['property']}", roleType="${obj['roleType']}", values=${JSON.stringify(obj['values'])})`);
   } else if (isRoleBindingDelta(obj)) {
     kind = 'RoleBindingDelta';
     delta = obj;

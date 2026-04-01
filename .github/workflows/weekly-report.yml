@@ -2,7 +2,7 @@ name: Weekly Progress Report
 
 on:
   schedule:
-    - cron: '0 16 * * 5'
+    - cron: '0 15 * * 2'
   workflow_dispatch:
 
 jobs:
