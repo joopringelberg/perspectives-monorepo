@@ -39,7 +39,7 @@ module Perspectives.TCP.Configuration where
 
 import Prelude
 
-import Data.Array (any, catMaybes, concatMap, last, mapMaybe, nub)
+import Data.Array (catMaybes, concatMap, last, mapMaybe, nub)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), split)
@@ -50,7 +50,7 @@ import Perspectives.CoreTypes (MP)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ModelDependencies (onlookers) as MD
 import Perspectives.Query.QueryTypes (Calculation(..), QueryFunctionDescription(..), RoleInContext(..)) as QT
-import Perspectives.Representation.ADT (ADT, allLeavesInADT, equalsOrSpecialises_)
+import Perspectives.Representation.ADT (equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
@@ -120,12 +120,18 @@ type TCPConfiguration =
 buildTCPConfiguration :: DomeinFile Sidecar.Stable -> String -> MP TCPConfiguration
 buildTCPConfiguration (DomeinFile dfr) modelUri =
   do
-    -- 1. Onlooker user roles: any EnumeratedRole whose filledBy restriction chain
-    --    includes the sys:TheWorld$Onlookers type (directly or via specialisation)
-    onlookerRoles <- catMaybes <$> traverse (toOnlooker dfr.enumeratedRoles) (OBJ.values dfr.enumeratedRoles)
+    -- 1a. Onlooker enumerated user roles: any EnumeratedRole whose filledBy restriction
+    --     chain includes the sys:TheWorld$Onlookers type (directly or via specialisation).
+    onlookerERoles <- catMaybes <$> traverse (toOnlooker dfr.enumeratedRoles) (OBJ.values dfr.enumeratedRoles)
 
-    -- 2. Collect all perspectives from Onlookers
-    allPerspectives <- pure $ concatMap (\(EnumeratedRole r) -> r.perspectives) onlookerRoles
+    -- 1b. Onlooker calculated user roles: any CalculatedRole (UserRole) whose type
+    --     expansion (roleADT → toConjunctiveNormalForm_) specialises sys:TheWorld$Onlookers.
+    onlookerCRoles <- catMaybes <$> traverse toOnlookerCR (OBJ.values dfr.calculatedRoles)
+
+    -- 2. Collect all perspectives from Onlookers (both enumerated and calculated)
+    allPerspectives <- pure $
+      concatMap (\(EnumeratedRole r) -> r.perspectives) onlookerERoles
+        <> concatMap (\(CalculatedRole r) -> r.perspectives) onlookerCRoles
 
     -- 3. For each perspective resolve to leaf EnumeratedRoleTypes
     --    (FilterF steps dropped per §4.6)
@@ -154,31 +160,12 @@ buildTCPConfiguration (DomeinFile dfr) modelUri =
 -- | The filler restriction is walked up to 6 hops deep (depths 0–5), covering
 -- | the §Q1 design decision (max 5, extendable to 6).
 toOnlooker :: OBJ.Object EnumeratedRole -> EnumeratedRole -> MP (Maybe EnumeratedRole)
-toOnlooker erMap er@(EnumeratedRole r) = bindingEqualsOrSpecialisesOnlookers er >>= case _ of
+toOnlooker _ er = bindingEqualsOrSpecialisesOnlookers er >>= case _ of
   true -> pure $ Just er
   false -> pure Nothing
 
--- | Returns true if the binding ADT (the filledBy restriction) contains the
--- | Onlookers type anywhere in the recursive filler chain.
--- | `depth` is defensive: the PDR runtime prevents actual filler cycles at
--- | data-entry time, but this guard protects against unexpected model states
--- | during compilation (e.g. draft models not yet validated by the runtime).
-bindingIncludesOnlooker :: OBJ.Object EnumeratedRole -> Int -> Maybe (ADT QT.RoleInContext) -> Boolean
-bindingIncludesOnlooker _ _ Nothing = false
-bindingIncludesOnlooker _ depth _ | depth > 5 = false
-bindingIncludesOnlooker erMap depth (Just binding) =
-  any
-    ( \(QT.RoleInContext { role }) ->
-        unwrap role == MD.onlookers
-          || case OBJ.lookup (unwrap role) erMap of
-            Nothing -> false
-            Just (EnumeratedRole r) -> bindingIncludesOnlooker erMap (depth + 1) r.binding
-    )
-    (allLeavesInADT binding)
-
--- | Alternative approach: check if the binding restriction equals or specialises the Onlookers type.
--- | `bindingIncludesOnlooker` is incomplete as it ignores Aspects. `bindingEqualsOrSpecialisesOnlookers` is more complete but also more expensive to compute, as it requires retrieving and CNF-transforming the full binding restriction of each role.
--- | Furthermore, it would require computing `buildTCPConfiguration` in the MP monad, as it needs to retrieve models from the repository. For these reasons, we currently use `bindingIncludesOnlooker`.
+-- | Returns true if the filler restriction of an EnumeratedRole equals or specialises the
+-- | sys:TheWorld$Onlookers type (using full CNF expansion of the declared filler restriction).
 bindingEqualsOrSpecialisesOnlookers :: EnumeratedRole -> MP Boolean
 bindingEqualsOrSpecialisesOnlookers er@(EnumeratedRole { kindOfRole }) =
   if kindOfRole == UserRole then do
@@ -188,6 +175,24 @@ bindingEqualsOrSpecialisesOnlookers er@(EnumeratedRole { kindOfRole }) =
       Nothing -> pure false
       Just restriction -> pure (restriction `equalsOrSpecialises_` onlookersCNF)
   else pure false
+
+-- | Returns Just the CalculatedRole if it is an Onlooker: a UserRole whose type expansion
+-- | (the range of its calculation, fully expanded via toConjunctiveNormalForm_) specialises
+-- | or equals sys:TheWorld$Onlookers.
+-- |
+-- | The expansion uses `roleADT` (range of the calculation) followed by `toConjunctiveNormalForm_`,
+-- | which resolves each leaf EnumeratedRoleType to its pre-computed `completeType` CNF field.
+-- | That `completeType` includes the role's own type, its aspects, and its filler restrictions —
+-- | so if the yielded role type has `filledBy Onlookers`, this check returns true.
+toOnlookerCR :: CalculatedRole -> MP (Maybe CalculatedRole)
+toOnlookerCR cr@(CalculatedRole { kindOfRole }) =
+  if kindOfRole == UserRole then do
+    crCNF <- roleADT cr >>= toConjunctiveNormalForm_
+    onlookersCNF <- getEnumeratedRole (EnumeratedRoleType MD.onlookers) >>= roleADT >>= toConjunctiveNormalForm_
+    if crCNF `equalsOrSpecialises_` onlookersCNF
+      then pure $ Just cr
+      else pure Nothing
+  else pure Nothing
 
 -------------------------------------------------------------------------------
 ---- PERSPECTIVE → ENR RESOLUTION
