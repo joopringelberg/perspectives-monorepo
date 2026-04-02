@@ -75,6 +75,7 @@ import Perspectives.Assignment.Update (cacheAndSave, setProperty)
 import Perspectives.ContextAndRole (deleteContext_rolInContext, removeContext_rolInContext, rol_property)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, removeInternally, (##=))
 import Perspectives.Data.EncodableMap as EM
+import Perspectives.DataUpgrade.AddContextKeyMigration (addContextKeyToDeltas)
 import Perspectives.DataUpgrade.DeltasMigration (migrateDeltasToStore)
 import Perspectives.DataUpgrade.DeltaStoreKeyMigration (migrateDeltaStoreKeys)
 import Perspectives.DataUpgrade.PatchModels (patchModels)
@@ -362,6 +363,14 @@ runDataUpgrades = do
   runUpgrade installedVersion "3.1.5"
     ( \_ -> do
         removeSocialMeIndexedRole unit
+    )
+
+  -- Populate the contextKey field on ContextDelta records in the DeltaStore.
+  -- Before 3.2.0, contextKey was absent (Nothing); this upgrade fills it in
+  -- so that getDeltasForContextKey can filter without deserialising signedDelta.
+  runUpgrade installedVersion "3.2.0"
+    ( \_ -> do
+        addContextKeyToDeltas unit
     )
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)

@@ -45,7 +45,7 @@ import Effect.Class.Console (log)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, ResourceToBeStored(..), removeInternally)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.ModelDependencies (sysUser)
-import Perspectives.Persistence.DeltaStore (getDeltasByDeltaTypes, getDeltasForResource, getDeltasForRoleInstance, safeKey, updateDeltaApplied)
+import Perspectives.Persistence.DeltaStore (getDeltasForContextKey, getDeltasForResource, getDeltasForRoleInstance, safeKey, updateDeltaApplied)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.PerspectivesState (transactionLevel)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
@@ -145,30 +145,15 @@ restoreContextFromDeltaStore contextId = do
   for_ (sortBy compareByVersion contextDeltas) \(DeltaStoreRecord { signedDelta: sd }) ->
     applyDelta sd (Just (unwrap sd).encryptedDelta)
 
--- | Scan the DeltaStore for all ContextDelta records whose `contextInstance` field
--- | matches the given context ID (after scheme-stripping, since deltas are stored
--- | with stripped identifiers).
--- | This requires a full-table scan because ContextDeltas are stored under the
--- | role-instance resource key, not the context resource key.
+-- | Retrieve all ContextDelta records for the given context instance from the DeltaStore.
+-- | Uses the `contextKey` field that is stored directly on each ContextDelta record
+-- | (populated since version 3.2.0; the 3.2.0 upgrade fills it in for pre-existing records).
+-- | This avoids the expensive per-record `signedDelta` deserialisation that the
+-- | legacy `getDeltasByDeltaTypes` approach required.
 getContextDeltasForContextInstance :: String -> MonadPerspectives (Array DeltaStoreRecord)
 getContextDeltasForContextInstance contextId = do
-  -- Fetch all deltas whose deltaType is one of the ContextDelta variants.
-  candidates <- getDeltasByDeltaTypes
-    [ "AddRoleInstancesToContext"
-    , "AddExternalRole"
-    , "MoveRoleInstancesToAnotherContext"
-    ]
-  -- The stored contextInstance field is scheme-stripped (stripNonPublicIdentifiers was
-  -- applied when the delta was stored).  safeKey strips the scheme from the input
-  -- contextId so both sides of the comparison are in the same form.
   let safeCid = safeKey contextId
-  pure $ filter (isContextDeltaForInstance safeCid) candidates
-  where
-  isContextDeltaForInstance :: String -> DeltaStoreRecord -> Boolean
-  isContextDeltaForInstance safeCid (DeltaStoreRecord { signedDelta }) =
-    case runExcept $ readJSON' (unwrap signedDelta).encryptedDelta of
-      Right (ContextDelta { contextInstance }) -> unwrap contextInstance == safeCid
-      Left _ -> false
+  getDeltasForContextKey safeCid
 
 -- | Returns true if a deltaType string represents a role-instance deletion.
 isDeletionDeltaType :: String -> Boolean
