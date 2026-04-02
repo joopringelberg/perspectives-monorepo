@@ -607,7 +607,7 @@ export const SharedWorkerChannelPromise: Promise<SharedWorkerChannel> = new Prom
 ////////////////////////////////////////////////////////////////////////////////
 type UserMessageChannel = (warnings: Warning[]) => void;
 
-export type Warning = { message: string; error: string };
+export type Warning = { message: string; error: string; externalRoleId?: string; contextName?: string };
 
 export class PerspectivesProxy
 {

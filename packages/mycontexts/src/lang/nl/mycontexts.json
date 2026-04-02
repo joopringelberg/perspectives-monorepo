@@ -103,6 +103,8 @@
   , "pdr_version": "PDR versie"
   , "userMessagingPanel_title": "Waarschuwing"
   , "userMessagingPanel_message": "Er heeft zich een fout voorgedaan die verder gebruik niet in de weg staat: {{- warning}}"
+  , "restorationPanel_title": "Gegevens Hersteld"
+  , "restorationPanel_message": "Sommige gegevens waren beschadigd of verloren gegaan. De ontbrekende gegevens zijn hersteld. Klik op de hyperlink om de relevante context te openen:"
   , "www_who": "Wie"
   , "www_what": "Wat"
   , "www_where": "Waar"

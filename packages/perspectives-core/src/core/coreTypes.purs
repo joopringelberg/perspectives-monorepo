@@ -277,7 +277,7 @@ type PerspectivesExtraState =
   , modelUris :: Map (ModelUri Readable) (ModelUri Stable)
   )
 
-type Warning = { message :: String, error :: String }
+type Warning = { message :: String, error :: String, externalRoleId :: String, contextName :: String }
 
 -- | These are options that can be provided to the PDR at startup.
 type RuntimeOptions =

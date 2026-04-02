@@ -115,22 +115,22 @@ applyImmediately :: Array ModelUriString -> Array ArcSource -> Array ModelUriStr
 applyImmediately modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
   try
     ( case head modelUri_, head arcSource_, head basedOnVersion_ of
-        Nothing, _, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model name given!", error: "" }
-        _, Nothing, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no arc source given!", error: "" }
+        Nothing, _, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model name given!", error: "", externalRoleId: "", contextName: "" }
+        _, Nothing, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no arc source given!", error: "", externalRoleId: "", contextName: "" }
         Just modelUri, Just arcSource, mbasedOnVersion -> catchError
           do
             mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
             mmodelUriReadable <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.modelURIReadable))
             case mmodelCuid, mmodelUriReadable of
-              Nothing, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model CUID given!", error: "" }
-              _, Nothing -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model URI Readable given!", error: "" }
+              Nothing, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model CUID given!", error: "", externalRoleId: "", contextName: "" }
+              _, Nothing -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model URI Readable given!", error: "", externalRoleId: "", contextName: "" }
               Just (Value modelCuid), Just (Value modelUriReadable) -> do
                 r <- lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType MD.sysUser)
                   (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource true modelCuid modelUriReadable mbasedOnVersion)
                 case r of
-                  Left errs -> lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: show errs })
+                  Left errs -> lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: show errs, externalRoleId: "", contextName: "" })
                   Right _ -> pure unit
-          \e -> lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: show e })
+          \e -> lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: show e, externalRoleId: "", contextName: "" })
     )
     >>= handleExternalStatementError "model://perspectives.domains#Parsing$ApplyImmediately"
 
@@ -154,8 +154,8 @@ uploadToRepository modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           mmodelUriReadable <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.modelURIReadable))
           case mmodelCuid, mmodelUriReadable of
-            Nothing, _ -> lift $ addWarning { message: "Parsing$UploadToRepository: no model CUID given!", error: "" }
-            _, Nothing -> lift $ addWarning { message: "Parsing$UploadToRepository: no model URI Readable given!", error: "" }
+            Nothing, _ -> lift $ addWarning { message: "Parsing$UploadToRepository: no model CUID given!", error: "", externalRoleId: "", contextName: "" }
+            _, Nothing -> lift $ addWarning { message: "Parsing$UploadToRepository: no model URI Readable given!", error: "", externalRoleId: "", contextName: "" }
             Just (Value modelCuid), Just (Value modelUriReadable) -> do
               r <- loadAndCompileArcFile_ ((Sidecar.ModelUri modelUri) :: Sidecar.ModelUri Sidecar.Stable) arcSource false modelCuid modelUriReadable mbasedOnVersion
               case r of
@@ -303,8 +303,8 @@ storeModelLocally_ modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           mmodelUriReadable <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.modelURIReadable))
           case mmodelCuid, mmodelUriReadable of
-            Nothing, _ -> lift $ addWarning { message: "Parsing$StoreModelLocally: no model CUID given!", error: "" }
-            _, Nothing -> lift $ addWarning { message: "Parsing$StoreModelLocally: no model URI Readable given!", error: "" }
+            Nothing, _ -> lift $ addWarning { message: "Parsing$StoreModelLocally: no model CUID given!", error: "", externalRoleId: "", contextName: "" }
+            _, Nothing -> lift $ addWarning { message: "Parsing$StoreModelLocally: no model URI Readable given!", error: "", externalRoleId: "", contextName: "" }
             Just (Value modelCuid), Just (Value modelUriReadable) -> do
               r <- loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource false modelCuid modelUriReadable mbasedOnVersion
               case r of

@@ -103,6 +103,8 @@
   , "pdr_version": "PDR version"
   , "userMessagingPanel_title": "Warning"
   , "userMessagingPanel_message": "An error has occurred that does not prevent further use: {{- warning}}"
+  , "restorationPanel_title": "Data Restored"
+  , "restorationPanel_message": "Some data had been damaged or lost. The missing data have been restored. Click the hyperlink to open the relevant context:"
   , "www_who": "Who"
   , "www_what": "What"
   , "www_where": "Where"
