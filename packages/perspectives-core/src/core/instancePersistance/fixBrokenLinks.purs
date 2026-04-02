@@ -72,8 +72,10 @@ fixReferences resource@(Rle roleId) = do
         Left _ -> { displayName: "", extRole: buitenRol (unwrap contextId) }
         Right ctxt -> { displayName: context_displayName ctxt, extRole: unwrap (context_buitenRol ctxt) }
   -- Notify the user that the resource has been restored, via the piggybacked warning mechanism.
+  -- The message field serves as a stable identifier; the frontend uses i18n keys for the
+  -- user-facing text when externalRoleId is non-empty (see www.tsx restorationPanel_message).
   addWarning
-    { message: "Some data had been damaged or lost. The missing data have been restored. Click the hyperlink to open the relevant context:"
+    { message: "RestoredMissingResource"
     , error: ""
     , externalRoleId: extRole
     , contextName: displayName
@@ -90,8 +92,10 @@ fixReferences resource@(Ctxt contextId) = do
         Left _ -> { displayName: "", extRole: buitenRol (unwrap contextId) }
         Right ctxt -> { displayName: context_displayName ctxt, extRole: unwrap (context_buitenRol ctxt) }
   -- Notify the user that the context has been restored, via the piggybacked warning mechanism.
+  -- The message field serves as a stable identifier; the frontend uses i18n keys for the
+  -- user-facing text when externalRoleId is non-empty (see www.tsx restorationPanel_message).
   addWarning
-    { message: "Some data had been damaged or lost. The missing data have been restored. Click the hyperlink to open the relevant context:"
+    { message: "RestoredMissingResource"
     , error: ""
     , externalRoleId: extRole
     , contextName: displayName
