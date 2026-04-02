@@ -27,7 +27,7 @@ There are two distinct mechanisms:
 | Mechanism | Direction | Timing | Purpose |
 |---|---|---|---|
 | **`setPDRStatus`** (push / remove) | PDR → all clients | Real-time, out-of-band | Show / hide a loading overlay with a status message |
-| **`warnings`** accumulation | PDR → responding client | Piggybacked on API response | Deliver non-fatal diagnostic messages to the modelling user |
+| **`warnings`** accumulation | PDR → responding client | Piggybacked on API response | Deliver non-fatal diagnostic messages; also used for restoration notifications with navigation links |
 
 A third, generalised extension of `setPDRStatus` — the **`requestUserIntegrityChoice`** dialog — blocks the PDR fiber until the user has made a yes/no choice; it is described separately below.
 
@@ -172,7 +172,7 @@ setPDRStatus({ action, message }: { action: "push" | "remove"; message: string }
 
 ### Design intent
 
-Non-fatal problems detected during the execution of an API call (e.g. model inconsistencies, parse warnings) are collected in the `warnings` array of `PerspectivesState` and returned to the *requesting client* as part of the API response.  This mechanism is intended for diagnostics aimed at **modellers**, not end users.
+Non-fatal problems detected during the execution of an API call (e.g. model inconsistencies, parse warnings) are collected in the `warnings` array of `PerspectivesState` and returned to the *requesting client* as part of the API response.  This mechanism is also used for restoration notifications: when a missing resource is automatically restored, a warning with navigation metadata is accumulated and delivered on the next API response.
 
 ### PDR side (PureScript)
 
@@ -180,8 +180,10 @@ Warnings accumulate in `PerspectivesState.warnings :: Array Warning` where:
 
 ```purescript
 -- coreTypes.purs:
-type Warning = { message :: String, error :: String }
+type Warning = { message :: String, error :: String, externalRoleId :: String, contextName :: String }
 ```
+
+Non-restoration warnings have `externalRoleId = ""` and `contextName = ""`. Restoration notifications have `externalRoleId` set to the external role of the restored context and `contextName` set to its display name.
 
 Three helpers write to this array:
 
@@ -276,7 +278,7 @@ PDRproxy.then(pproxy =>
 
 ## Mechanism 3 — Blocking Yes/No Dialog (`requestUserIntegrityChoice`)
 
-This is a generalised extension of Mechanism 1, used when the PDR must block the current fiber until the user has answered a yes/no question. The most common use case is asking whether to restore or permanently remove a missing resource, but the mechanism can carry any question via a `PerspectivesWarning` value.
+This is a generalised extension of Mechanism 1, used when the PDR must block the current fiber until the user has answered a yes/no question.  The mechanism is still available in `Perspectives.UserInteraction` but is **no longer used for missing-resource handling**: missing resources are now automatically restored and reported via Mechanism 2 (see `Perspectives.ReferentialIntegrity`).
 
 ### Flow overview
 

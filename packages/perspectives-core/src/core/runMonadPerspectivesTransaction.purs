@@ -211,7 +211,7 @@ phase1 share authoringRole r = do
             -- Error boundary.
             catchError (void $ for states (exitingRoleState rid))
               \e -> do
-                lift $ addWarning { message: show NonCriticalError, error: (show e) }
+                lift $ addWarning { message: show NonCriticalError, error: (show e), externalRoleId: "", contextName: "" }
                 logPerspectivesError $ Custom ("Cannot exit role state for " <> show rid <> ", because " <> show e)
                 lift $ restoreFrame oldFrame
                 throwError e
@@ -448,7 +448,7 @@ exitContext (ContextRemoval ctxt authorizedRole) = do
     -- Error boundary.
     catchError (void $ for states (exitingState ctxt))
       \e -> do
-        lift $ addWarning { message: show NonCriticalError, error: (show e) }
+        lift $ addWarning { message: show NonCriticalError, error: (show e), externalRoleId: "", contextName: "" }
         logPerspectivesError $ Custom ("Cannot exit state, because " <> show e)
     lift $ restoreFrame oldFrame
     -- Remove executed keys for these context states

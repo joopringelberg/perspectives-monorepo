@@ -120,10 +120,22 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         });
         // Add a way for the proxy to inform the user of warnings that consist of caught errors that did not lead to a crash.
     PDRproxy.then( pproxy => pproxy.setUserMessageChannel( (warnings: Warning[]) => UserMessagingPromise.then( um => 
-      warnings.forEach( warning => um.addMessageForEndUser(
-        { title: i18next.t("userMessagingPanel_title", { ns: 'mycontexts' })
-        , message: i18next.t("userMessagingPanel_message", { ns: 'mycontexts', warning: warning.message }) 
-        , error: warning.error }) ) ) ) );
+      warnings.forEach( warning => {
+        if (warning.externalRoleId) {
+          // Restoration notification: the PDR automatically restored a missing resource.
+          // Show a message with a navigation hyperlink to the restored context.
+          um.addMessageForEndUser(
+            { title: i18next.t("restorationPanel_title", { ns: 'mycontexts' })
+            , message: i18next.t("restorationPanel_message", { ns: 'mycontexts' })
+            , link: { label: warning.contextName || warning.externalRoleId, externalRoleId: warning.externalRoleId }
+            });
+        } else {
+          um.addMessageForEndUser(
+            { title: i18next.t("userMessagingPanel_title", { ns: 'mycontexts' })
+            , message: i18next.t("userMessagingPanel_message", { ns: 'mycontexts', warning: warning.message }) 
+            , error: warning.error });
+        }
+      }) ) ) );
   }
 
   componentDidMount() {

@@ -39,6 +39,7 @@ export interface UserMessagingMessage {
   message?: string;
   acknowledge?: (value: boolean) => void;
   error?: string;
+  link?: { label: string; externalRoleId: string };
 }
 
 export type NotifyFunction = (message: UserMessagingMessage) => Promise<void>;
@@ -148,8 +149,9 @@ export class EndUserNotifier extends PerspectivesComponent<EndUserNotifierProps,
   {
     const component = this;
     const acknowledge = component.props.message.acknowledge ? component.props.message.acknowledge : () => undefined;
+    const link = component.props.message.link;
     return <Modal
-      show={component.props.message.message !== undefined}
+      show={component.props.message.message !== undefined || link !== undefined}
       onHide={ () => acknowledge( true )}>
       <Modal.Header closeButton>
         <Modal.Title>{component.props.message.title || "A message"}</Modal.Title>
@@ -159,6 +161,15 @@ export class EndUserNotifier extends PerspectivesComponent<EndUserNotifierProps,
           <Card.Body>
             <Card.Text>
               {component.props.message.message}
+              {link
+                ? <> {" "}<a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      document.body.dispatchEvent(new CustomEvent("OpenContext", { detail: link.externalRoleId, bubbles: true }));
+                    }}
+                  >{link.label}</a></>
+                : null}
             </Card.Text>
           </Card.Body>
         </Card>
