@@ -81,7 +81,10 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ModifyWinsOverDeleteRestoring roleInstanceId) = "(ModifyWinsOverDeleteRestoring) Modify-wins-over-delete: restoring role " <> roleInstanceId <> " to apply incoming modification."
   show (MissingResource resourceKind instanceDisplay typeName) =
     "De " <> resourceKind <> " " <> instanceDisplay
-      <> ", een " <> typeName
+      <> ", een "
+      <> typeName
       <> " is niet langer beschikbaar, maar er wordt nog wel naar verwezen."
       <> " Dat kan vanuit een andere rol of context zijn, maar ook vanuit het klembord of de vastgeprikte contexten."
-      <> " Wil je deze " <> resourceKind <> " definitief verwijderen of juist herstellen?"
+      <> " Wil je deze "
+      <> resourceKind
+      <> " definitief verwijderen of juist herstellen?"

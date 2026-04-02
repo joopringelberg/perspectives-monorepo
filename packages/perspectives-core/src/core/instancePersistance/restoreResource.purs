@@ -45,16 +45,17 @@ import Effect.Class.Console (log)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, ResourceToBeStored(..), removeInternally)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.ModelDependencies (sysUser)
-import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
-import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), getDeltasByDeltaTypes, getDeltasForResource, getDeltasForRoleInstance, safeKey, updateDeltaApplied)
+import Perspectives.Persistence.DeltaStore (getDeltasByDeltaTypes, getDeltasForResource, getDeltasForRoleInstance, safeKey, updateDeltaApplied)
+import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.PerspectivesState (transactionLevel)
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary)
 import Perspectives.StrippedDelta (addResourceSchemes)
 import Perspectives.Sync.HandleTransaction (executeContextDelta, executeRoleBindingDelta, executeRolePropertyDelta, executeUniverseContextDelta, executeUniverseRoleDelta)
-import Perspectives.TypesForDeltas (ContextDelta(..))
 import Perspectives.Sync.LegacyDeltas (toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
 import Perspectives.Sync.SignedDelta (SignedDelta)
+import Perspectives.TypesForDeltas (ContextDelta(..))
 import Simple.JSON (readJSON')
 
 -- | Restore a missing resource from the DeltaStore.
@@ -193,10 +194,12 @@ isSubResourceDeltaOf roleInstanceId (DeltaStoreRecord { resourceKey }) =
 -- | moved within the context).  Returns Nothing for any other delta type.
 extractRoleInstanceId :: DeltaStoreRecord -> Maybe String
 extractRoleInstanceId (DeltaStoreRecord { signedDelta }) =
-  let encDelta = (unwrap signedDelta).encryptedDelta
-  in case runExcept $ readJSON' encDelta of
-    Right (ContextDelta { roleInstance }) -> Just (unwrap roleInstance)
-    Left _ -> Nothing
+  let
+    encDelta = (unwrap signedDelta).encryptedDelta
+  in
+    case runExcept $ readJSON' encDelta of
+      Right (ContextDelta { roleInstance }) -> Just (unwrap roleInstance)
+      Left _ -> Nothing
 
 -- | Apply a signed delta by dispatching to the appropriate execute function.
 -- | Tries to parse the encrypted delta as each known delta type in turn.
