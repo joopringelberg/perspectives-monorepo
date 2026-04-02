@@ -53,6 +53,8 @@ data PerspectivesWarning
   | VersionConflictIncomingLoses String Int String
   | ModifyWinsOverDeleteSuppressed String
   | ModifyWinsOverDeleteRestoring String
+  -- User interaction
+  | MissingResource String String String
 
 instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ModelLacksModelId dfid) = "(ModelLacksModelId) The model '" <> dfid <> "' lacks a value for the property ModelIdentification on its Model instance."
@@ -77,3 +79,9 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (VersionConflictIncomingLoses resourceKey resourceVersion author) = "(VersionConflictIncomingLoses) Version conflict for " <> resourceKey <> " at version " <> show resourceVersion <> ": incoming author " <> author <> " loses."
   show (ModifyWinsOverDeleteSuppressed resourceKey) = "(ModifyWinsOverDeleteSuppressed) Modify-wins-over-delete: suppressing deletion of " <> resourceKey <> " because concurrent sub-resource modifications exist."
   show (ModifyWinsOverDeleteRestoring roleInstanceId) = "(ModifyWinsOverDeleteRestoring) Modify-wins-over-delete: restoring role " <> roleInstanceId <> " to apply incoming modification."
+  show (MissingResource resourceKind instanceDisplay typeName) =
+    "De " <> resourceKind <> " " <> instanceDisplay
+      <> ", een " <> typeName
+      <> " is niet langer beschikbaar, maar er wordt nog wel naar verwezen."
+      <> " Dat kan vanuit een andere rol of context zijn, maar ook vanuit het klembord of de vastgeprikte contexten."
+      <> " Wil je deze " <> resourceKind <> " definitief verwijderen of juist herstellen?"

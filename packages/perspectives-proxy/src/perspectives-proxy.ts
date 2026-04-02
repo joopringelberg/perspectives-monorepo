@@ -206,11 +206,10 @@ type PDRMessage = {
   message: string
 };
 
-type IntegrityChoicePayload = {
-  resourceKind: "rol" | "context";
+type UserChoicePayload = {
   message: string;
-  restoreOption: string;
-  removeOption: string;
+  yesOption: string;
+  noOption: string;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -333,18 +332,17 @@ class SharedWorkerChannel
       {
         // The PDR is blocking, waiting for the end user's choice.
         // Parse the payload, show a dialog, then deliver the answer back to the PDR.
-        let payload: IntegrityChoicePayload;
+        let payload: UserChoicePayload;
         try {
-          payload = JSON.parse( e.data.message ) as IntegrityChoicePayload;
+          payload = JSON.parse( e.data.message ) as UserChoicePayload;
         } catch (_) {
           payload = {
-            resourceKind: "rol",
             message: e.data.message,
-            restoreOption: "Herstel",
-            removeOption: "Verwijder definitief"
+            yesOption: "Ja",
+            noOption: "Nee"
           };
         }
-        proxy.cursor.showIntegrityChoiceDialog( payload ).then( (choice: boolean) => {
+        proxy.cursor.showUserChoiceDialog( payload ).then( (choice: boolean) => {
           proxy.channelId.then( channelId => proxy.port.postMessage(
             { proxyRequest: "resolveUserIntegrityChoice", choice, channelId }
           ));
@@ -1963,9 +1961,9 @@ class Cursor {
     }
   }
 
-  // Show a blocking modal dialog presenting the integrity choice to the end user.
-  // Resolves with true (restore) or false (permanently delete).
-  showIntegrityChoiceDialog( payload: IntegrityChoicePayload ): Promise<boolean> {
+  // Show a blocking modal dialog presenting a yes/no choice to the end user.
+  // Resolves with true (yes) or false (no).
+  showUserChoiceDialog( payload: UserChoicePayload ): Promise<boolean> {
     return new Promise<boolean>( (resolve) => {
       // Build dialog overlay
       const overlay = document.createElement('div');
@@ -1988,11 +1986,11 @@ class Cursor {
 
       const restoreBtn = document.createElement('button');
       restoreBtn.className = 'pdr-integrity-btn pdr-integrity-btn-restore';
-      restoreBtn.textContent = payload.restoreOption;
+      restoreBtn.textContent = payload.yesOption;
 
       const removeBtn = document.createElement('button');
       removeBtn.className = 'pdr-integrity-btn pdr-integrity-btn-remove';
-      removeBtn.textContent = payload.removeOption;
+      removeBtn.textContent = payload.noOption;
 
       const previouslyFocused = document.activeElement as HTMLElement | null;
 
