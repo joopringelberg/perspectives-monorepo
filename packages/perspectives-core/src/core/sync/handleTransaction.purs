@@ -63,7 +63,7 @@ import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.ModelDependencies (rootContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
-import Perspectives.Persistence.DeltaStore (extractDeltaInfo, storeDelta, getDeltasForResource, getDeltasForRoleInstance, updateDeltaApplied, deltaStoreDocId)
+import Perspectives.Persistence.DeltaStore (extractDeltaInfo, storeDelta, getDeltasForResource, getDeltasForRoleInstance, updateDeltaApplied, deltaStoreDocId, safeKey)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, incrementResourceVersion, setResourceVersion)
@@ -477,11 +477,15 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
 
   executeDeltaWithVersionTracking :: SignedDelta -> String -> String -> Int -> PerspectivesUser -> MonadPerspectivesTransaction Unit
   executeDeltaWithVersionTracking s stringified resourceKey resourceVersion author = do
-    -- Extract the deltaType from the stringified delta content for modify-wins-over-delete checks.
+    -- Extract the deltaType and contextKey from the stringified delta content.
     let
-      deltaType = case extractDeltaInfo stringified of
+      mInfo = extractDeltaInfo stringified
+      deltaType = case mInfo of
         Just info -> info.deltaType
         Nothing -> ""
+      contextKey = case mInfo of
+        Just info -> map safeKey info.contextInstance
+        Nothing -> Nothing
     if resourceKey /= "" then do
       localVersion <- lift $ getResourceVersion resourceKey
       if resourceVersion < 0 then do
@@ -497,6 +501,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           , signedDelta: s
           , deltaType
           , applied: true
+          , contextKey
           }
       else if resourceVersion < localVersion then do
         -- Outdated delta: version is behind local version. Store but don't execute.
@@ -510,6 +515,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           , signedDelta: s
           , deltaType
           , applied: false
+          , contextKey
           }
       else if resourceVersion == localVersion then do
         -- Check for existing deltas at this version to distinguish a fresh creation from a genuine conflict.
@@ -530,6 +536,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
             , signedDelta: s
             , deltaType
             , applied: true
+            , contextKey
             }
         else do
           -- Genuine version conflict: two deltas claim the same version from different authors.
@@ -550,6 +557,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               , signedDelta: s
               , deltaType
               , applied: true
+              , contextKey
               }
           else do
             -- Existing author wins: store but don't execute.
@@ -563,6 +571,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               , signedDelta: s
               , deltaType
               , applied: false
+              , contextKey
               }
       else do
         -- resourceVersion > localVersion: normal next expected version.
@@ -584,6 +593,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               , signedDelta: s
               , deltaType
               , applied: false
+              , contextKey
               }
           else do
             -- No concurrent modifications: apply deletion normally.
@@ -598,6 +608,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               , signedDelta: s
               , deltaType
               , applied: true
+              , contextKey
               }
         else if isSubResourceKey resourceKey then do
           -- Incoming is a sub-resource modification (property or binding).
@@ -634,6 +645,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
                 , signedDelta: s
                 , deltaType
                 , applied: true
+                , contextKey
                 }
             Just _ -> do
               -- Role exists: execute normally.
@@ -648,6 +660,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
                 , signedDelta: s
                 , deltaType
                 , applied: true
+                , contextKey
                 }
         else do
           -- Role-level delta that is not a deletion (e.g. ConstructEmptyRole, AddRoleInstancesToContext).
@@ -662,6 +675,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
             , signedDelta: s
             , deltaType
             , applied: true
+            , contextKey
             }
     else
       -- No resourceKey: legacy delta without ordering info, just execute.

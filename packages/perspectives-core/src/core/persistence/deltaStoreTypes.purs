@@ -35,6 +35,14 @@ import Simple.JSON (class ReadForeign, class WriteForeign)
 
 -- | A record stored in the delta-store PouchDB database.
 -- | Document ID: <resourceKey>_<resourceVersion>_<author>
+-- | The `contextKey` field is set (non-Nothing) only for ContextDelta records
+-- | (deltaType ∈ {AddRoleInstancesToContext, AddExternalRole,
+-- | MoveRoleInstancesToAnotherContext}).  It holds the safe-key form of the
+-- | context instance referenced by that delta, enabling an efficient full-table
+-- | scan that filters by `contextKey` without having to deserialise
+-- | `signedDelta.encryptedDelta`.
+-- | Records created before version 3.2.0 will have `contextKey = Nothing`; the
+-- | 3.2.0 data-upgrade fills in the field for all existing ContextDelta records.
 newtype DeltaStoreRecord = DeltaStoreRecord
   { _id :: String
   , _rev :: Maybe String
@@ -44,6 +52,7 @@ newtype DeltaStoreRecord = DeltaStoreRecord
   , signedDelta :: SignedDelta
   , deltaType :: String
   , applied :: Boolean
+  , contextKey :: Maybe String
   }
 
 derive newtype instance WriteForeign DeltaStoreRecord

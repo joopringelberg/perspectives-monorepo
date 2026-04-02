@@ -32,6 +32,7 @@ module Perspectives.Persistence.DeltaStore
   , getDeltasForResource
   , getDeltasForResourceByDeltaType
   , getDeltasForRoleInstance
+  , getDeltasForContextKey
   , getDeltasByDeltaTypes
   , updateDeltaApplied
   , extractDeltaInfo
@@ -368,15 +369,38 @@ getDeltasByDeltaTypes deltaTypes = do
     Left _ -> Nothing
   decodeDoc _ = Nothing
 
+-- | Retrieve all ContextDelta records for the given context instance key.
+-- | The `contextKey` argument must already be in safe-key form (as returned by
+-- | `safeKey`). This performs a full-table scan but avoids the expensive
+-- | `signedDelta` deserialisation that the legacy `getDeltasByDeltaTypes`
+-- | approach requires, because the context key is stored directly on the record.
+-- | Records created before version 3.2.0 will have `contextKey = Nothing`; the
+-- | 3.2.0 data-upgrade fills those in so that after upgrade this function
+-- | returns complete results.
+getDeltasForContextKey :: String -> MonadPerspectives (Array DeltaStoreRecord)
+getDeltasForContextKey contextKey = do
+  dbName <- deltaStoreDatabaseName
+  result <- documentsInRange dbName "" "\xFFFF"
+  let allRecords = Arr.catMaybes $ map decodeDoc result.rows
+  pure $ Arr.filter (\(DeltaStoreRecord r) -> r.contextKey == Just contextKey) allRecords
+  where
+  decodeDoc :: { id :: String, value :: { rev :: String }, doc :: Maybe Foreign } -> Maybe DeltaStoreRecord
+  decodeDoc { doc: Just foreignDoc } = case runExcept $ read' foreignDoc of
+    Right (rec :: DeltaStoreRecord) -> Just rec
+    Left _ -> Nothing
+  decodeDoc _ = Nothing
+
 -----------------------------------------------------------
 -- STORE FROM SIGNED DELTA
 -----------------------------------------------------------
 
 -- | Minimal record extracted from a stringified delta JSON to get ordering info and delta type.
+-- | `contextInstance` is present in ContextDelta JSON and absent (Nothing) in all other delta types.
 type DeltaInfo =
   { resourceKey :: String
   , resourceVersion :: Int
   , deltaType :: String
+  , contextInstance :: Maybe String
   }
 
 -- | Extract ordering info and deltaType from the encrypted/stringified delta JSON.
@@ -387,13 +411,18 @@ extractDeltaInfo stringifiedDelta = case runExcept $ readJSON' stringifiedDelta 
 
 -- | Store a locally-created delta from a SignedDelta.
 -- | Extracts resourceKey, resourceVersion and deltaType from the encryptedDelta string.
+-- | For ContextDelta types (AddRoleInstancesToContext, AddExternalRole,
+-- | MoveRoleInstancesToAnotherContext) the `contextKey` field is populated with the
+-- | safe-key form of the referenced context instance so that
+-- | `getDeltasForContextKey` can filter without deserialising `signedDelta`.
 -- | This is a no-op if the ordering fields cannot be extracted.
 storeDeltaFromSignedDelta :: SignedDelta -> MonadPerspectives Unit
 storeDeltaFromSignedDelta signedDelta@(SignedDelta { author, encryptedDelta }) =
   case extractDeltaInfo encryptedDelta of
     Nothing -> pure unit -- Cannot extract ordering info, skip storage
-    Just { resourceKey, resourceVersion, deltaType } -> do
+    Just { resourceKey, resourceVersion, deltaType, contextInstance } -> do
       let docId = deltaStoreDocId resourceKey resourceVersion author
+      let contextKey = map safeKey contextInstance
       storeDelta $ DeltaStoreRecord
         { _id: docId
         , _rev: Nothing
@@ -403,4 +432,5 @@ storeDeltaFromSignedDelta signedDelta@(SignedDelta { author, encryptedDelta }) =
         , signedDelta
         , deltaType
         , applied: true -- Locally-created deltas are applied immediately
+        , contextKey
         }
