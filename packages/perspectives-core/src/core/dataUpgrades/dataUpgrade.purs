@@ -27,7 +27,6 @@ module Perspectives.DataUpgrade
   ( Entity(..)
   , PDRVersion
   , Upgrade
-  , addContextKeyToDeltas
   , addFixingUpdates
   , addIsSystemModel
   , addSettingsType

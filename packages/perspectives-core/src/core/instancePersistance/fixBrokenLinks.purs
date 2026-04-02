@@ -156,7 +156,7 @@ fixContextReferences cid@(ContextInstance c) = do
                 for_ filledRoles' \filled -> do
                   lift (filled `RA.filledNoLongerPointsTo` roleId)
                   tell [ filled ]
-            ) 
+            )
       -- PERSISTENCE (finally remove the role instance from cache and database).
       void $ removeEntiteit roleId
       pure affectedRoles

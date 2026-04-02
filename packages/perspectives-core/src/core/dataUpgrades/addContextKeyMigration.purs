@@ -78,15 +78,14 @@ processDoc dbName foreignDoc =
     Left _ -> pure unit -- Not a DeltaStoreRecord (e.g. design doc); skip.
     Right (DeltaStoreRecord r) ->
       -- Only process ContextDelta records that are missing contextKey.
-      if isContextDeltaType r.deltaType && r.contextKey == Nothing
-        then do
-          let encDelta = (unwrap r.signedDelta).encryptedDelta
-          case runExcept (readJSON' encDelta) of
-            Right ({ contextInstance } :: { contextInstance :: String }) -> do
-              let updated = DeltaStoreRecord r { contextKey = Just (safeKey contextInstance) }
-              void $ addDocument_ dbName updated r._id
-            Left _ -> pure unit -- Cannot parse; leave contextKey as Nothing.
-        else pure unit
+      if isContextDeltaType r.deltaType && r.contextKey == Nothing then do
+        let encDelta = (unwrap r.signedDelta).encryptedDelta
+        case runExcept (readJSON' encDelta) of
+          Right ({ contextInstance } :: { contextInstance :: String }) -> do
+            let updated = DeltaStoreRecord r { contextKey = Just (safeKey contextInstance) }
+            void $ addDocument_ dbName updated r._id
+          Left _ -> pure unit -- Cannot parse; leave contextKey as Nothing.
+      else pure unit
 
 -----------------------------------------------------------
 -- HELPERS
