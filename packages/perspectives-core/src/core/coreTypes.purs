@@ -257,6 +257,13 @@ type PerspectivesExtraState =
 
   , missingResource :: AVar IntegrityFix
 
+  -- | An AVar used to deliver the end-user's choice when a missing resource is
+  -- | detected.  The integrity-fixer fiber blocks on this AVar after it has sent
+  -- | a "requestUserIntegrityChoice" status message to the frontend.  The
+  -- | frontend puts `true` (restore) or `false` (remove) into this AVar via the
+  -- | `resolveUserIntegrityChoice` API call.
+  , userIntegrityChoice :: AVar Boolean
+
   , currentLanguage :: String
 
   , translations :: Object TranslationTable
@@ -594,7 +601,7 @@ class (Cacheable v i, WriteForeign v, ReadForeign v) <= Persistent v i | i -> v,
   resourceIdToBeStored :: i -> ResourceToBeStored
   typeOfInstance :: i -> ResourceToBeStored
 
-data IntegrityFix = Missing ResourceToBeStored | FixSucceeded | FixFailed String | StopFixing | FixingHotLine (AVar IntegrityFix)
+data IntegrityFix = Missing ResourceToBeStored | FixRestored | FixDeleted | FixFailed String | StopFixing | FixingHotLine (AVar IntegrityFix)
 
 data ResourceToBeStored
   = Ctxt ContextInstance

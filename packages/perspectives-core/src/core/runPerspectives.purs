@@ -50,6 +50,7 @@ runPerspectives userName password perspectivesUser systemId host port mp = do
   indexedResourceToCreate <- empty
   missingResource <- empty
   typeToBeFixed <- empty
+  userIntegrityChoice <- empty
   (rf :: AVar PerspectivesState) <- getCurrentLanguageFromIDB >>= new <<<
     ( ( newPerspectivesState
           { systemIdentifier: systemId
@@ -66,6 +67,7 @@ runPerspectives userName password perspectivesUser systemId host port mp = do
           indexedResourceToCreate
           missingResource
           typeToBeFixed
+          userIntegrityChoice
       )
     )
   runReaderT mp rf

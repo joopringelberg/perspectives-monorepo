@@ -57,9 +57,10 @@ newPerspectivesState
   -> AVar IndexedResource
   -> AVar IntegrityFix
   -> AVar TypeFix
+  -> AVar Boolean
   -> String
   -> PerspectivesState
-newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOptions brokerService indexedResourceToCreate missingResource typeToBeFixed currentLanguage =
+newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOptions brokerService indexedResourceToCreate missingResource typeToBeFixed userIntegrityChoiceAVar currentLanguage =
   { rolInstances: newCache defaultCreateOptions
   , contextInstances: newCache defaultCreateOptions
   , domeinCache: newCache defaultCreateOptions
@@ -96,6 +97,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , entitiesToBeStored: []
   , indexedResourceToCreate
   , missingResource
+  , userIntegrityChoice: userIntegrityChoiceAVar
   , currentLanguage
   , translations: empty
   , setPDRStatus: \_ _ -> unit
@@ -220,6 +222,11 @@ getIndexedResourceToCreate = gets _.indexedResourceToCreate
 
 getMissingResource :: MonadPerspectives (AVar IntegrityFix)
 getMissingResource = gets _.missingResource
+
+-- | Returns the AVar used to deliver the end-user's integrity-choice response
+-- | (true = restore, false = remove permanently).
+getUserIntegrityChoiceAVar :: MonadPerspectives (AVar Boolean)
+getUserIntegrityChoiceAVar = gets _.userIntegrityChoice
 
 -- | The domain argument is the string version of the domain identifier.
 getTranslationTable :: String -> MonadPerspectives (Maybe TranslationTable)

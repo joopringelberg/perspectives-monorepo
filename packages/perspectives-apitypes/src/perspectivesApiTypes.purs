@@ -120,6 +120,7 @@ data RequestType
   | WrongRequest
   | EvaluateRoleInstance
   | RestoreContextForUser
+  | DeleteResource
 
 derive instance genericRequestType :: Generic RequestType _
 
@@ -192,6 +193,7 @@ instance decodeRequestType :: ReadForeign RequestType where
     "Save" -> Save
     "EvaluateRoleInstance" -> EvaluateRoleInstance
     "RestoreContextForUser" -> RestoreContextForUser
+    "DeleteResource" -> DeleteResource
     _ -> WrongRequest
 
 instance showRequestType :: Show RequestType where

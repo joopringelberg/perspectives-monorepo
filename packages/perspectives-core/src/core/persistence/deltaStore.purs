@@ -32,6 +32,7 @@ module Perspectives.Persistence.DeltaStore
   , getDeltasForResource
   , getDeltasForResourceByDeltaType
   , getDeltasForRoleInstance
+  , getDeltasByDeltaTypes
   , updateDeltaApplied
   , extractDeltaInfo
   , deltaStoreDatabaseName
@@ -43,7 +44,7 @@ import Prelude
 
 import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Except (runExcept)
-import Data.Array (catMaybes, filter, head, last, length) as Arr
+import Data.Array (catMaybes, elem, filter, head, last, length) as Arr
 import Data.Either (Either(..))
 import Data.Foldable (traverse_)
 import Data.Maybe (Maybe(..), fromMaybe)
@@ -326,13 +327,12 @@ getDeltasForRoleInstance roleInstanceId = do
   isRoleOrSubResource :: String -> DeltaStoreRecord -> Boolean
   isRoleOrSubResource safeRid (DeltaStoreRecord { resourceKey }) =
     let
-      safeRk = safeKey resourceKey
       ridLen = Str.length safeRid
     in
-      safeRk == safeRid
+      resourceKey == safeRid
         ||
-          ( Str.length safeRk > ridLen + 1
-              && Str.take (ridLen + 1) safeRk == safeRid <> "#"
+          ( Str.length resourceKey > ridLen + 1
+              && Str.take (ridLen + 1) resourceKey == safeRid <> "#"
           )
 
 -- | Update the `applied` flag of an existing delta-store record.
@@ -350,6 +350,23 @@ updateDeltaApplied docId newApplied = do
       cacheInsertDelta docId updated
       -- Evict the stale result-set caches for this resource key.
       invalidateResultCachesForResource r.resourceKey
+
+-- | Scan the entire DeltaStore for records whose `deltaType` matches any of the
+-- | given delta-type strings.  This performs a full-table scan; call sparingly.
+-- | Useful when there is no resource-key index for the desired delta types
+-- | (e.g. ContextDeltas are stored under the role-instance key, not the context key).
+getDeltasByDeltaTypes :: forall f. Array String -> MonadPouchdb f (Array DeltaStoreRecord)
+getDeltasByDeltaTypes deltaTypes = do
+  dbName <- deltaStoreDatabaseName
+  result <- documentsInRange dbName "" "\xFFFF"
+  let allRecords = Arr.catMaybes $ map decodeDoc result.rows
+  pure $ Arr.filter (\(DeltaStoreRecord r) -> Arr.elem r.deltaType deltaTypes) allRecords
+  where
+  decodeDoc :: { id :: String, value :: { rev :: String }, doc :: Maybe Foreign } -> Maybe DeltaStoreRecord
+  decodeDoc { doc: Just foreignDoc } = case runExcept $ read' foreignDoc of
+    Right (rec :: DeltaStoreRecord) -> Just rec
+    Left _ -> Nothing
+  decodeDoc _ = Nothing
 
 -----------------------------------------------------------
 -- STORE FROM SIGNED DELTA

@@ -37,7 +37,7 @@ import Data.Newtype (unwrap)
 import Data.Nullable (Nullable, toMaybe, toNullable)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Effect.Aff (Aff, Error, Fiber, Milliseconds(..), catchError, delay, error, forkAff, joinFiber, runAff, throwError, try)
+import Effect.Aff (Aff, Error, Fiber, Milliseconds(..), catchError, delay, error, forkAff, joinFiber, launchAff_, runAff, throwError, try)
 import Effect.Aff.AVar (AVar, empty, new, put, take, read)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -77,7 +77,7 @@ import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Persistent (entitiesDatabaseName, invertedQueryDatabaseName, postDatabaseName, saveMarkedResources)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, modelsDatabaseName, newPerspectivesState, pushMessage, removeMessage, resetCaches, setModelUris)
-import Perspectives.Proxy (handleClientRequest, receivePDRStatusMessageChannel, pdrStatusMessageChannel) as Proxy
+import Perspectives.Proxy (handleClientRequest, receivePDRStatusMessageChannel, pdrStatusMessageChannel, registerPutUserIntegrityChoice) as Proxy
 import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope, getPropertyFunction, getRoleFunction, getterFromPropertyType)
 import Perspectives.ReferentialIntegrity (fixReferences)
 import Perspectives.Repetition (Duration, fromDuration)
@@ -137,6 +137,7 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
       indexedResourceToCreate <- empty
       missingResource <- empty
       typeToBeFixed <- empty
+      userIntegrityChoice <- empty
       -- Here we retrieve a Promise for a function in the SharedWorker that will send status messages to all clients.
       statusMessageChannel :: Fn2 String String Unit <- toAff Proxy.pdrStatusMessageChannel
 
@@ -154,10 +155,16 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
                 indexedResourceToCreate
                 missingResource
                 typeToBeFixed
+                userIntegrityChoice
                 lang
             )
         -- The status message sending function is stored in PerspectivesState. It is accessed by pushMessage and removeMessage.
         new (state' { setPDRStatus = ((runFn2 statusMessageChannel) :: String -> String -> Unit) })
+
+      -- Register the function that delivers user integrity choices from the frontend.
+      liftEffect $ Proxy.registerPutUserIntegrityChoice \choice -> launchAff_ do
+        s <- read state
+        put choice s.userIntegrityChoice
 
       -- Fork aff to capture transactions to run.
       void $ forkAff $ forkTimedTransactions transactionWithTiming state
@@ -498,7 +505,9 @@ forkReferentialIntegrityFixer missingResourceAVar state = run
             liftAff $ put (FixFailed $ show e) hotline
           -- Report back to the caller on the Aff level, i.e. when the fixing on the level of
           -- MonadPerspectives has been executed.
-          Right _ -> liftAff $ put FixSucceeded hotline
+          Right restored ->
+            if restored then liftAff $ put FixRestored hotline
+            else liftAff $ put (FixDeleted) hotline
         -- and repeat
         run
       -- This we never send, currently.
@@ -524,6 +533,7 @@ createAccount perspectivesUser rawPouchdbUser runtimeOptions nullableIdentityDoc
       indexedResourceToCreate <- empty
       missingResource <- empty
       typeToBeFixed <- empty
+      userIntegrityChoice <- empty
       state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
         pouchdbUser
         transactionFlag
@@ -534,6 +544,7 @@ createAccount perspectivesUser rawPouchdbUser runtimeOptions nullableIdentityDoc
         indexedResourceToCreate
         missingResource
         typeToBeFixed
+        userIntegrityChoice
 
       -- Fork aff to load models just in time.
       void $ forkAff $ forkJustInTimeModelLoader modelToLoad state
@@ -544,6 +555,10 @@ createAccount perspectivesUser rawPouchdbUser runtimeOptions nullableIdentityDoc
       void $ forkAff $ forkCreateIndexedResources indexedResourceToCreate state
       -- Fork aff to restore referential integrity
       void $ forkAff $ forkReferentialIntegrityFixer missingResource state
+      -- Register the function that delivers user integrity choices from the frontend.
+      liftEffect $ Proxy.registerPutUserIntegrityChoice \choice -> launchAff_ do
+        s <- read state
+        put choice s.userIntegrityChoice
 
       -- Set up.
       runPerspectivesWithState
@@ -580,6 +595,7 @@ reCreateInstances rawPouchdbUser options callback = void $ runAff handler
         indexedResourceToCreate <- empty
         missingResource <- empty
         typeToBeFixed <- empty
+        userIntegrityChoice <- empty
         state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
           pouchdbUser
           transactionFlag
@@ -590,10 +606,15 @@ reCreateInstances rawPouchdbUser options callback = void $ runAff handler
           indexedResourceToCreate
           missingResource
           typeToBeFixed
+          userIntegrityChoice
         -- Fork aff to create indexed roles and contexts.
         void $ forkAff $ forkCreateIndexedResources indexedResourceToCreate state
         -- Fork aff to restore referential integrity
         void $ forkAff $ forkReferentialIntegrityFixer missingResource state
+        -- Register the function that delivers user integrity choices from the frontend.
+        liftEffect $ Proxy.registerPutUserIntegrityChoice \choice -> launchAff_ do
+          s <- read state
+          put choice s.userIntegrityChoice
         runPerspectivesWithState
           ( do
               -- Clear the databases.
@@ -632,6 +653,7 @@ resetAccount usr rawPouchdbUser options callback = void $ runAff handler
         indexedResourceToCreate <- empty
         missingResource <- empty
         typeToBeFixed <- empty
+        userIntegrityChoice <- empty
         state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
           pouchdbUser
           transactionFlag
@@ -642,6 +664,7 @@ resetAccount usr rawPouchdbUser options callback = void $ runAff handler
           indexedResourceToCreate
           missingResource
           typeToBeFixed
+          userIntegrityChoice
         runPerspectivesWithState
           ( do
               ( catchError
@@ -739,6 +762,7 @@ removeAccount usr rawPouchdbUser callback = void $ runAff handler
         typeToBeFixed <- empty
         indexedResourceToCreate <- empty
         missingResource <- empty
+        userIntegrityChoice <- empty
         state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
           pouchdbUser
           transactionFlag
@@ -749,6 +773,7 @@ removeAccount usr rawPouchdbUser callback = void $ runAff handler
           indexedResourceToCreate
           missingResource
           typeToBeFixed
+          userIntegrityChoice
         runPerspectivesWithState
           do
             -- remove the databases
@@ -786,6 +811,7 @@ recompileLocalModels rawPouchdbUser callback = void $ runAff handler
         indexedResourceToCreate <- empty
         missingResource <- empty
         typeToBeFixed <- empty
+        userIntegrityChoice <- empty
         state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
           pouchdbUser
           transactionFlag
@@ -796,6 +822,7 @@ recompileLocalModels rawPouchdbUser callback = void $ runAff handler
           indexedResourceToCreate
           missingResource
           typeToBeFixed
+          userIntegrityChoice
         runPerspectivesWithState
           do
             (getinstalledModelCuids fromLocalModels >>= setModelUris)
@@ -850,6 +877,7 @@ recoverFromRecoveryPoint rawPouchdbUser callback = void $ runAff handler
         indexedResourceToCreate <- empty
         missingResource <- empty
         typeToBeFixed <- empty
+        userIntegrityChoice <- empty
         state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
           pouchdbUser
           transactionFlag
@@ -860,6 +888,7 @@ recoverFromRecoveryPoint rawPouchdbUser callback = void $ runAff handler
           indexedResourceToCreate
           missingResource
           typeToBeFixed
+          userIntegrityChoice
         runPerspectivesWithState
           ( do
               entities <- entitiesDatabaseName
