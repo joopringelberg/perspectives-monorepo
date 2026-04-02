@@ -167,6 +167,7 @@ export class EndUserNotifier extends PerspectivesComponent<EndUserNotifierProps,
                     onClick={(e) => {
                       e.preventDefault();
                       document.body.dispatchEvent(new CustomEvent("OpenContext", { detail: link.externalRoleId, bubbles: true }));
+                      acknowledge(true);
                     }}
                   >{link.label}</a></>
                 : null}
