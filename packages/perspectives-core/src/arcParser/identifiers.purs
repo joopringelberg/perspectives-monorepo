@@ -32,14 +32,14 @@ import Data.String.Regex (Regex, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Parsing (fail)
-import Parsing.Combinators (lookAhead, option, try, (<?>))
+import Parsing.Combinators (lookAhead, optional, option, try, (<?>))
 import Parsing.String (string, satisfy)
 import Parsing.String.Basic (oneOf, whiteSpace)
 import Parsing.Token (alphaNum, upper)
 import Perspectives.Parsing.Arc.IndentParser (IP)
 import Perspectives.Parsing.Arc.Token (isReservedName, perspectDef, token)
 import Perspectives.ResourceIdentifiers (hasPublicResourceShape)
-import Prelude (Unit, bind, discard, not, pure, show, ($), (*>), (/=), (<<<), (<>), (<$>))
+import Prelude (Unit, bind, discard, not, pure, show, ($), (*>), (/=), (<<<), (<>))
 
 reserved :: String -> IP Unit
 reserved = token.reserved
@@ -54,7 +54,7 @@ arcIdentifier = qualifiedName <|> prefixedName <|> segmentedName <|> reservedWor
   -- and produce a more helpful error message.
   reservedWordAsIdentifierError :: IP String
   reservedWordAsIdentifierError = do
-    mName <- (Just <$> try (lookAhead rawUpperIdent)) <|> pure Nothing
+    mName <- optional (try (lookAhead rawUpperIdent))
     case mName of
       Just name | isReservedPerspectivesName name ->
         fail (show name <> " is a reserved word in this language. Please use another capitalized name, a prefixed name, or a fully qualified name")
