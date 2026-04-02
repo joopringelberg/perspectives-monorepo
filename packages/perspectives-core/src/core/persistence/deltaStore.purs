@@ -355,7 +355,7 @@ updateDeltaApplied docId newApplied = do
 -- | given delta-type strings.  This performs a full-table scan; call sparingly.
 -- | Useful when there is no resource-key index for the desired delta types
 -- | (e.g. ContextDeltas are stored under the role-instance key, not the context key).
-getDeltasByDeltaTypes :: forall f. Array String -> MonadPouchdb f (Array DeltaStoreRecord)
+getDeltasByDeltaTypes :: Array String -> MonadPerspectives (Array DeltaStoreRecord)
 getDeltasByDeltaTypes deltaTypes = do
   dbName <- deltaStoreDatabaseName
   result <- documentsInRange dbName "" "\xFFFF"

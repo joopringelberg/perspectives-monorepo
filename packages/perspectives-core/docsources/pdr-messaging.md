@@ -5,6 +5,7 @@ This document describes the two complementary mechanisms that the Perspectives D
 > **Source modules (PDR side):**
 > - `packages/perspectives-core/src/core/coreTypes.purs` — `Warning`, `PerspectivesState`
 > - `packages/perspectives-core/src/core/perspectivesState.purs` — `pushMessage`, `removeMessage`, `addWarning`, etc.
+> - `packages/perspectives-core/src/core/userInteraction.purs` — `requestUserChoice` (general yes/no dialog)
 > - `packages/perspectives-core/src/core/Main.purs` — startup wiring
 > - `packages/perspectives-core/src/core/proxy.js` — JS bridge
 > - `packages/perspectives-core/src/core/proxy.purs` — PureScript FFI declarations
@@ -28,7 +29,7 @@ There are two distinct mechanisms:
 | **`setPDRStatus`** (push / remove) | PDR → all clients | Real-time, out-of-band | Show / hide a loading overlay with a status message |
 | **`warnings`** accumulation | PDR → responding client | Piggybacked on API response | Deliver non-fatal diagnostic messages to the modelling user |
 
-A third, specialised extension of `setPDRStatus` — the **`requestUserIntegrityChoice`** dialog — blocks the PDR fiber until the user has made a yes/no choice; it is described separately below.
+A third, generalised extension of `setPDRStatus` — the **`requestUserIntegrityChoice`** dialog — blocks the PDR fiber until the user has made a yes/no choice; it is described separately below.
 
 ---
 
@@ -273,9 +274,9 @@ PDRproxy.then(pproxy =>
 
 ---
 
-## Mechanism 3 — Blocking Integrity-Choice Dialog (`requestUserIntegrityChoice`)
+## Mechanism 3 — Blocking Yes/No Dialog (`requestUserIntegrityChoice`)
 
-This is a specialised extension of Mechanism 1, used when the PDR detects a missing resource and must block the current fiber until the user has decided whether to restore or permanently remove it.
+This is a generalised extension of Mechanism 1, used when the PDR must block the current fiber until the user has answered a yes/no question. The most common use case is asking whether to restore or permanently remove a missing resource, but the mechanism can carry any question via a `PerspectivesWarning` value.
 
 ### Flow overview
 
@@ -290,7 +291,7 @@ PDR fiber
   │                                                                     │               message: jsonPayload})
   │                                                                     │         ──────────────────────────────────► Browser tab
   │                                                                                                                      │
-  │                                                                                                                      ├─ proxy.cursor.showIntegrityChoiceDialog(payload)
+  │                                                                                                                      ├─ proxy.cursor.showUserChoiceDialog(payload)
   │                                                                                                                      │         (blocking modal dialog)
   │                                                                                                                      │
   │  ◄──── port.postMessage({proxyRequest:"resolveUserIntegrityChoice", choice: true|false}) ────────────────────────────┤
@@ -298,34 +299,51 @@ PDR fiber
   ├─ blocks on AVar.take(userIntegrityChoice)
   │         (unblocked when SharedWorker calls putUserIntegrityChoiceFn(choice))
   │
-  └─ continues (restore or remove)
+  └─ continues (yes or no branch)
 ```
 
-### PDR side (PureScript) — `requestIntegrityChoice`
+### PDR side (PureScript) — `requestUserChoice`
 
-Defined in `Perspectives.ReferentialIntegrity` (`fixBrokenLinks.purs`):
+Defined in `Perspectives.UserInteraction` (`userInteraction.purs`):
 
 ```purescript
-requestIntegrityChoice :: String -> MonadPerspectives Boolean
-requestIntegrityChoice message = do
+requestUserChoice :: PerspectivesWarning -> String -> String -> MonadPerspectives Boolean
+requestUserChoice warning yesOption noOption = do
   setPDRStatus <- getPDRStatusSetter
-  _ <- pure $ setPDRStatus "requestUserIntegrityChoice" message
+  let payload = writeJSON { message: show warning, yesOption, noOption }
+  _ <- pure $ setPDRStatus "requestUserIntegrityChoice" payload
   choiceAVar <- getUserIntegrityChoiceAVar
   liftAff $ AVar.take choiceAVar   -- blocks until the frontend responds
 ```
 
-The `message` parameter is a JSON-encoded `IntegrityChoicePayload`:
+Parameters:
+- `warning` — a `PerspectivesWarning` value whose `show` instance provides the question text shown in the dialog.
+- `yesOption` — label for the button that resolves to `true`.
+- `noOption` — label for the button that resolves to `false`.
+
+The `message` parameter sent to the frontend is a JSON-encoded `UserChoicePayload`:
 
 ```json
 {
-  "resourceKind": "rol",
-  "message": "Missing role cuid123 of type My Role",
-  "restoreOption": "Herstel",
-  "removeOption": "Verwijder definitief"
+  "message": "De rol cuid123, een My Role is niet langer beschikbaar...",
+  "yesOption": "Herstel",
+  "noOption": "Verwijder definitief"
 }
 ```
 
-> **Note:** `restoreOption` and `removeOption` are the button labels displayed to the user.  The current implementation uses hardcoded Dutch strings (`"Herstel"` = "Restore", `"Verwijder definitief"` = "Remove permanently").  See `buildIntegrityChoiceMessage` in `fixBrokenLinks.purs` if multi-language support is needed in the future.
+#### Example: missing resource (integrity check)
+
+```purescript
+import Perspectives.UserInteraction (requestUserChoice)
+import Perspectives.Warning (PerspectivesWarning(..))
+
+choice <- requestUserChoice
+  (MissingResource "rol" instanceDisplay typeName)
+  "Herstel"
+  "Verwijder definitief"
+```
+
+The `MissingResource resourceKind instanceDisplay typeName` constructor in `PerspectivesWarning` (module `Perspectives.Warning`) supplies the Dutch question text.
 
 ### Proxy layer — receiving the dialog request
 
@@ -334,8 +352,8 @@ In `SharedWorkerChannel.handleWorkerResponse`:
 ```typescript
 else if (e.data.responseType === "PDRMessage") {
   if (e.data.action === "requestUserIntegrityChoice") {
-    const payload = JSON.parse(e.data.message) as IntegrityChoicePayload;
-    proxy.cursor.showIntegrityChoiceDialog(payload).then((choice: boolean) => {
+    const payload = JSON.parse(e.data.message) as UserChoicePayload;
+    proxy.cursor.showUserChoiceDialog(payload).then((choice: boolean) => {
       proxy.channelId.then(channelId =>
         proxy.port.postMessage({
           proxyRequest: "resolveUserIntegrityChoice",
@@ -349,7 +367,7 @@ else if (e.data.responseType === "PDRMessage") {
 }
 ```
 
-`Cursor.showIntegrityChoiceDialog` renders a modal overlay with the message and two buttons (restore / remove permanently) and resolves the returned `Promise<boolean>` when the user clicks one.
+`Cursor.showUserChoiceDialog` renders a modal overlay with the message and two buttons (`yesOption` / `noOption`) and resolves the returned `Promise<boolean>` when the user clicks one.
 
 ### Proxy layer — delivering the answer back to the PDR
 
@@ -428,10 +446,22 @@ addWarning { message: "Something looks wrong", error: "" }
 
 Warnings are automatically appended to the next API response and then cleared. They arrive at the client as `Warning[]` through the `userMessageChannel` callback registered on `PerspectivesProxy`.
 
+### Ask the end user a yes/no question
+
+```purescript
+import Perspectives.UserInteraction (requestUserChoice)
+import Perspectives.Warning (PerspectivesWarning(..))
+
+-- Block until the user clicks yes (true) or no (false):
+choice <- requestUserChoice SomePerspectivesWarning "Ja" "Nee"
+```
+
+The first argument must be a `PerspectivesWarning` constructor whose `show` instance returns the question text to display. To add a new question, add a constructor to `Perspectives.Warning` and provide a Dutch `show` case for it.
+
 ### Choosing the right mechanism
 
 | You want to… | Use |
 |---|---|
 | Show a spinner / status text while a long operation runs | `pushMessage` / `removeMessage` |
 | Notify the modeller of a non-fatal inconsistency detected during an API call | `addWarning` / `warnModeller` |
-| Block until the end user makes a restore/remove choice | `requestIntegrityChoice` (see `fixBrokenLinks.purs`) |
+| Block until the end user answers a yes/no question | `requestUserChoice` (see `userInteraction.purs`) |

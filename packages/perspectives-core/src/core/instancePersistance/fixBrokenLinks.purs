@@ -48,8 +48,6 @@ import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.String (drop, length) as Str
 import Data.Traversable (for, for_)
-import Effect.Aff.AVar (take) as AVar
-import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign.Object (mapWithKey)
 import Perspectives.Assignment.Update (cacheAndSave)
@@ -63,7 +61,7 @@ import Perspectives.Instances.Clipboard (findItemOnClipboardWithRole)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context2roleFromDatabase_, contextType_, filled2fillerFromDatabase_, filler2filledFromDatabase_, role2contextFromDatabase_, roleType_)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, saveMarkedResources)
-import Perspectives.PerspectivesState (getUserIntegrityChoiceAVar, getPDRStatusSetter, transactionLevel)
+import Perspectives.PerspectivesState (transactionLevel)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RestoreResource (restoreResource)
@@ -72,7 +70,8 @@ import Perspectives.RoleStateCompiler (evaluateRoleState)
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary)
 import Perspectives.SaveUserData (scheduleRoleRemoval)
 import Perspectives.Types.ObjectGetters (contextGroundState, roleGroundState)
-import Simple.JSON (writeJSON)
+import Perspectives.UserInteraction (requestUserChoice)
+import Perspectives.Warning (PerspectivesWarning(..))
 
 -- | Handle a missing resource by first restoring it from the DeltaStore and then
 -- | asking the end user whether to keep the restored resource or permanently remove
@@ -93,9 +92,8 @@ fixReferences resource@(Rle roleId) = do
   let
     typeName = either (const "onbekende rol") identity mTypeName
     instanceDisplay = trailingInstanceId (unwrap roleId)
-    message = buildIntegrityChoiceMessage "rol" instanceDisplay typeName
   -- Ask the user; this call blocks until the frontend puts a value into the AVar.
-  choice <- requestIntegrityChoice message
+  choice <- requestUserChoice (MissingResource "rol" instanceDisplay typeName) "Herstel" "Verwijder definitief"
   if choice then do
     -- User chose "Herstel": the resource is already restored; persist it.
     saveMarkedResources
@@ -113,9 +111,8 @@ fixReferences resource@(Ctxt contextId) = do
   let
     typeName = either (const "onbekende context") identity mTypeName
     instanceDisplay = trailingInstanceId (unwrap contextId)
-    message = buildIntegrityChoiceMessage "context" instanceDisplay typeName
   -- Ask the user; this call blocks until the frontend puts a value into the AVar.
-  choice <- requestIntegrityChoice message
+  choice <- requestUserChoice (MissingResource "context" instanceDisplay typeName) "Herstel" "Verwijder definitief"
   if choice then do
     -- User chose "Herstel": the resource is already restored; persist it.
     saveMarkedResources
@@ -126,39 +123,6 @@ fixReferences resource@(Ctxt contextId) = do
     fixContextReferences contextId
     pure false
 fixReferences (Dfile _) = pure false
-
--- | Send a "requestUserIntegrityChoice" status message to all connected frontend clients
--- | and block this fiber until one of them puts a Boolean into `userIntegrityChoice`.
--- | Returns `true` (restore) or `false` (remove permanently).
-requestIntegrityChoice :: String -> MonadPerspectives Boolean
-requestIntegrityChoice message = do
-  setPDRStatus <- getPDRStatusSetter
-  _ <- pure $ setPDRStatus "requestUserIntegrityChoice" message
-  choiceAVar <- getUserIntegrityChoiceAVar
-  liftAff $ AVar.take choiceAVar
-
--- | The hardcoded Dutch dialog text mirrors the spec agreed with the product owner.
--- | If multi-language support is needed in the future, this string should be moved
--- | to the translation system (see Perspectives.ModelTranslation).
-buildIntegrityChoiceMessage :: String -> String -> String -> String
-buildIntegrityChoiceMessage resourceKind instanceDisplay typeName =
-  writeJSON
-    { resourceKind
-    , message:
-        "De "
-          <> resourceKind
-          <> " "
-          <> instanceDisplay
-          <> ", een "
-          <> typeName
-          <> " is niet langer beschikbaar, maar er wordt nog wel naar verwezen."
-          <> " Dat kan vanuit een andere rol of context zijn, maar ook vanuit het klembord of de vastgeprikte contexten."
-          <> " Wil je deze "
-          <> resourceKind
-          <> " definitief verwijderen of juist herstellen?"
-    , restoreOption: "Herstel"
-    , removeOption: "Verwijder definitief"
-    }
 
 -- | Returns the trailing 30 characters of a string, or the full string if
 -- | shorter than 30 characters.  Used to produce a short instance identifier
