@@ -23,7 +23,6 @@ import { Where } from './where';
 import { NotificationsDisplayer } from './notifications';
 import Settings from './settingsPanel';
 import { subscribeToAllNotifications } from './systemNotifications';
-import { syncWithCouchDB } from './syncWIthCouchdb';
 import { MyRoleTypes } from './myRoleTypes';
 import ConnectedToAMQP from './connectedToAMQP';
 import { InternetConnectivityCheck } from './internetConnectivityCheck';
@@ -175,12 +174,6 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                     }
                   }
               ))
-              // Only sync with CouchDB in development mode
-              if (import.meta.env.DEV) {
-                console.log('Development mode: Syncing with CouchDB');
-                syncWithCouchDB(installationData.perspectivesUserId! + installationData.deviceName! + "_entities")
-                  .then(() => syncWithCouchDB(installationData.perspectivesUserId! + installationData.deviceName! + "_models"));
-              }
               // Subscribe to all notifications
               component.addUnsubscriber(subscribeToAllNotifications(systemIdentifier));
               // Subscribe to language changes
