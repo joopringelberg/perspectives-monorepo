@@ -221,12 +221,14 @@ extractENRsFromCR crMap crt =
 
 -- | Recursively extract EnumeratedRoleTypes from a QueryFunctionDescription.
 -- | Key rules (per design doc):
--- |   * FilterF (UQD _ FilterF inner …)  → drop filter, recurse into `inner`
--- |   * RolGetter (ENR ert)               → [ert]
--- |   * RolGetter (CR crt)                → expand CalculatedRole recursively
--- |   * BinaryCombinator ComposeF         → result type is from right operand
--- |   * BinaryCombinator UnionF / IntersectionF → both operands
--- |   * UnaryCombinator _                 → pass through to inner
+-- |   * UQD _ FilterF inner …                                → drop filter, recurse into `inner`
+-- |   * BQD _ ComposeF source (UQD _ FilterF …)              → role is in LEFT arm (filter is right);
+-- |                                                              `filter X with Y` compiles this way
+-- |   * RolGetter (ENR ert)                                   → [ert]
+-- |   * RolGetter (CR crt)                                    → expand CalculatedRole recursively
+-- |   * BinaryCombinator ComposeF (general)                   → result type is from right operand
+-- |   * BinaryCombinator UnionF / IntersectionF               → both operands
+-- |   * UnaryCombinator _                                     → pass through to inner
 extractENRsFromQFD :: OBJ.Object CalculatedRole -> QT.QueryFunctionDescription -> Array EnumeratedRoleType
 extractENRsFromQFD crMap = go
   where
@@ -234,6 +236,10 @@ extractENRsFromQFD crMap = go
   go (QT.SQD _ (RolGetter (CR crt)) _ _ _) = extractENRsFromCR crMap crt
   go (QT.UQD _ FilterF inner _ _ _) = go inner -- §4.6: peers pre-filter before forwarding to TCP; re-applying filters would yield empty results under the Closed World Assumption
   go (QT.UQD _ (UnaryCombinator _) inner _ _ _) = go inner
+  -- When ComposeF's right arm is a FilterF, the role type comes from the LEFT arm.
+  -- `filter Aanwezigen with X` compiles to makeComposition source (UQD _ FilterF criterium _)
+  -- i.e. BQD _ ComposeF source (UQD _ FilterF ...) — the role is on the left, filter on the right.
+  go (QT.BQD _ (BinaryCombinator ComposeF) left (QT.UQD _ FilterF _ _ _ _) _ _ _) = go left
   go (QT.BQD _ (BinaryCombinator ComposeF) _ right _ _ _) = go right
   go (QT.BQD _ (BinaryCombinator UnionF) left right _ _ _) = go left <> go right
   go (QT.BQD _ (BinaryCombinator IntersectionF) left right _ _ _) = go left <> go right

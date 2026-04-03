@@ -279,6 +279,12 @@ withDomeinFile (ModelUri ns) df mpa = do
   lift2 $ removeDomeinFileFromCache (ModelUri ns :: ModelUri Stable)
   pure r
 
+-- | Temporarily stores a stable `DomeinFile` in the in-memory DomeinFile cache under its
+-- | model namespace, runs the given `MonadPerspectives` computation, then removes it from
+-- | the cache again.  This makes the model's types (roles, properties, etc.) visible to
+-- | functions such as `getEnumeratedRole` and `roleADT` during the computation, even when
+-- | the model has not been loaded from the database into the normal runtime cache.
+-- | Analogous to `withDomeinFile` for `PhaseThree` computations.
 withStableDomeinFile :: forall a. ModelUri Stable -> DomeinFile Stable -> MonadPerspectives a -> MonadPerspectives a
 withStableDomeinFile (ModelUri ns) df mpa = do
   void $ storeDomeinFileInCache (ModelUri ns :: ModelUri Stable) df
