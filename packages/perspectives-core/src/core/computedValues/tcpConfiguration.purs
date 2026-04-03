@@ -39,8 +39,7 @@ module Perspectives.TCP.Configuration where
 
 import Prelude
 
-import Data.Array (any, catMaybes, concat, concatMap, elem, filter, foldl, fromFoldable, last, mapMaybe, nub)
-import Data.Map (values) as MAP
+import Data.Array (catMaybes, concat, concatMap, elem, filter, foldl, last, mapMaybe, nub)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), split)
@@ -58,11 +57,11 @@ import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
 import Perspectives.Representation.Class.Role (completeDeclaredFillerRestriction, rangeOfRoleCalculation, roleADT, toConjunctiveNormalForm_)
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
-import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
-import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..))
+import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), PropertyType(..), RoleKind(..))
 import Perspectives.Sidecar.StableIdMapping (Stable) as Sidecar
+import Perspectives.Types.ObjectGetters (propertiesInPerspective)
 import Simple.JSON (class WriteForeign, write)
 
 -------------------------------------------------------------------------------
@@ -136,23 +135,22 @@ buildTCPConfiguration (DomeinFile dfr) modelUri =
 
     -- 3. For each perspective collect (ENR, perspective-visible-properties) pairs.
     --    perspectiveToENRsWithProps uses rangeOfRoleCalculation to resolve calculated roles
-    --    (e.g. `filter X with Y` → X's ENR), and captures only the properties explicitly
-    --    listed in the perspective's propertyVerbs (ignoring state conditions per spec).
+    --    (e.g. `filter X with Y` → X's ENR), and calls propertiesInPerspective (which
+    --    resolves Universal to actual role properties via allProperties).
     enrWithPropsNested <- traverse perspectiveToENRsWithProps allPerspectives
     let
       allEnrWithProps = concat enrWithPropsNested
 
       -- Merge: for the same ENR appearing in multiple perspectives, union the property sets.
-      -- Nothing means Universal (all properties); merging Universal with anything = Universal.
-      enrPropMap :: OBJ.Object (Maybe (Array PropertyType))
+      enrPropMap :: OBJ.Object (Array PropertyType)
       enrPropMap = foldl
-        ( \acc (Tuple ert mprops) ->
+        ( \acc (Tuple ert props) ->
             let
               key = unwrap ert
             in
               case OBJ.lookup key acc of
-                Nothing -> OBJ.insert key mprops acc
-                Just existing -> OBJ.insert key (mergeProps existing mprops) acc
+                Nothing -> OBJ.insert key props acc
+                Just existing -> OBJ.insert key (nub $ existing <> props) acc
         )
         OBJ.empty
         allEnrWithProps
@@ -161,7 +159,7 @@ buildTCPConfiguration (DomeinFile dfr) modelUri =
     -- 4. Build one role table per ENR, filtering columns to perspective-visible properties only.
     roleTables <- pure $ mapMaybe
       ( \ert -> buildRoleTable dfr.enumeratedRoles dfr.enumeratedProperties
-          (join $ OBJ.lookup (unwrap ert) enrPropMap)
+          (fromMaybe [] $ OBJ.lookup (unwrap ert) enrPropMap)
           ert
       )
       enumeratedRoleTypes
@@ -239,37 +237,16 @@ perspectiveToENRs (Perspective p) = do
   adts <- traverse rangeOfRoleCalculation p.roleTypes
   pure $ nub $ concatMap allLeavesInADT adts
 
--- | Returns `Just (Array PropertyType)` listing only the properties explicitly
--- | enumerated in the perspective's `propertyVerbs`, ignoring state conditions.
--- | Returns `Nothing` when any state entry uses `Universal` (all properties),
--- | which signals that the table should include all role properties.
-perspectiveVisibleProps :: Perspective -> Maybe (Array PropertyType)
-perspectiveVisibleProps (Perspective { propertyVerbs }) =
-  let
-    allPVs = concat $ fromFoldable $ MAP.values $ unwrap propertyVerbs
-  in
-    if any isUniversal allPVs then Nothing
-    else Just $ nub $ concatMap extractPSet allPVs
-  where
-  isUniversal (PropertyVerbs Universal _) = true
-  isUniversal _ = false
-  extractPSet (PropertyVerbs (PSet pts) _) = pts
-  extractPSet _ = []
-
 -- | For each leaf ENR in a perspective, pair it with the perspective's visible
--- | property set (Nothing = Universal / use all role properties).
-perspectiveToENRsWithProps :: Perspective -> MP (Array (Tuple EnumeratedRoleType (Maybe (Array PropertyType))))
+-- | property set, resolved via `propertiesInPerspective` from
+-- | Perspectives.Types.ObjectGetters.  For `Universal` property sets this
+-- | correctly expands to all actual role properties (including aspect-inherited
+-- | ones) by calling `allProperties`.
+perspectiveToENRsWithProps :: Perspective -> MP (Array (Tuple EnumeratedRoleType (Array PropertyType)))
 perspectiveToENRsWithProps p = do
   enrts <- perspectiveToENRs p
-  let mprops = perspectiveVisibleProps p
-  pure $ map (\ert -> Tuple ert mprops) enrts
-
--- | Merge two property sets from different perspectives covering the same ENR.
--- | Universal (Nothing) wins over any explicit set; two explicit sets are unioned.
-mergeProps :: Maybe (Array PropertyType) -> Maybe (Array PropertyType) -> Maybe (Array PropertyType)
-mergeProps Nothing _ = Nothing
-mergeProps _ Nothing = Nothing
-mergeProps (Just a) (Just b) = Just (nub $ a <> b)
+  props <- propertiesInPerspective p
+  pure $ map (\ert -> Tuple ert props) enrts
 
 -------------------------------------------------------------------------------
 ---- TABLE BUILDERS
@@ -288,24 +265,22 @@ buildUniversalContextTable =
   }
 
 -- | Build a role table for a single EnumeratedRoleType.
--- | `mFilteredProps` restricts the columns to perspective-visible properties:
--- |   Nothing   → Universal (include all enumerated properties of the role)
--- |   Just pts  → include only those of the role's properties that appear in pts
+-- | `visibleProps` restricts the columns to perspective-visible properties only
+-- | (as resolved by `propertiesInPerspective`).  Only the role's own properties
+-- | that also appear in `visibleProps` are emitted as columns.
 -- | Calculated properties are always skipped (they are not materialised in SQL).
 buildRoleTable
   :: OBJ.Object EnumeratedRole
   -> OBJ.Object EnumeratedProperty
-  -> Maybe (Array PropertyType)
+  -> Array PropertyType
   -> EnumeratedRoleType
   -> Maybe TCPTableConfig
-buildRoleTable erMap epMap mFilteredProps ert =
+buildRoleTable erMap epMap visibleProps ert =
   case OBJ.lookup (unwrap ert) erMap of
     Nothing -> Nothing
     Just (EnumeratedRole r) ->
       let
-        perspectiveProps = case mFilteredProps of
-          Nothing -> r.properties
-          Just pts -> filter (\pt -> elem pt pts) r.properties
+        perspectiveProps = filter (\pt -> elem pt visibleProps) r.properties
         columns = mapMaybe (buildPropertyColumn epMap) perspectiveProps
         tableName = localName (unwrap r.readableName)
       in
@@ -338,11 +313,12 @@ buildPropertyColumn _ (CP _) = Nothing
 
 -- | Build a map from stable identifiers to readable (model-source) names for
 -- | every EnumeratedRoleType and its perspective-visible EnumeratedPropertyTypes.
--- | `enrPropMap` carries the filtered property set per ENR (Nothing = all, Just pts = filtered).
+-- | `enrPropMap` carries the visible property set per ENR as a plain array
+-- | (resolved by `propertiesInPerspective`).
 buildNameMap
   :: OBJ.Object EnumeratedRole
   -> OBJ.Object EnumeratedProperty
-  -> OBJ.Object (Maybe (Array PropertyType))
+  -> OBJ.Object (Array PropertyType)
   -> Array EnumeratedRoleType
   -> OBJ.Object String
 buildNameMap erMap epMap enrPropMap erts =
@@ -362,11 +338,9 @@ buildNameMap erMap epMap enrPropMap erts =
         Nothing -> []
         Just (EnumeratedRole r) ->
           let
-            mprops = join $ OBJ.lookup (unwrap ert) enrPropMap
+            props = fromMaybe [] $ OBJ.lookup (unwrap ert) enrPropMap
           in
-            case mprops of
-              Nothing -> r.properties
-              Just pts -> filter (\pt -> elem pt pts) r.properties
+            filter (\pt -> elem pt props) r.properties
     )
     erts
 
