@@ -98,6 +98,10 @@ newtype Transaction = Transaction
       , insertionPoint :: Maybe Int
       , transactionNumber :: Int
       , executedStateKeys :: Set.Set String
+      -- When true, addDelta and insertDelta skip storeDeltaFromSignedDelta because the
+      -- deltas being processed were either already stored (executeTransaction path) or
+      -- should not be stored at all (executeDeltas for public roles).
+      , isExecutingIncomingDeltas :: Boolean
       )
   )
 
@@ -169,6 +173,7 @@ instance ReadForeign Transaction where
       , insertionPoint: Nothing
       , transactionNumber: 0
       , executedStateKeys: Set.empty
+      , isExecutingIncomingDeltas: false
       }
 
 derive newtype instance ReadForeign Transaction'
@@ -210,6 +215,7 @@ createTransaction authoringRole =
       , insertionPoint: Nothing
       , transactionNumber: 0
       , executedStateKeys: Set.empty
+      , isExecutingIncomingDeltas: false
       }
 
 -- | We consider a Transaction to be 'empty' when it shows no difference to the clone of the original.
