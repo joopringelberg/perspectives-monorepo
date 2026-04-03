@@ -279,6 +279,13 @@ withDomeinFile (ModelUri ns) df mpa = do
   lift2 $ removeDomeinFileFromCache (ModelUri ns :: ModelUri Stable)
   pure r
 
+withStableDomeinFile :: forall a. ModelUri Stable -> DomeinFile Stable -> MonadPerspectives a -> MonadPerspectives a
+withStableDomeinFile (ModelUri ns) df mpa = do
+  void $ storeDomeinFileInCache (ModelUri ns :: ModelUri Stable) df
+  r <- mpa
+  removeDomeinFileFromCache (ModelUri ns :: ModelUri Stable)
+  pure r
+
 toStableModelUri :: forall f. ModelUri f -> ModelUri Stable
 toStableModelUri (ModelUri s) = ModelUri s
 

@@ -58,12 +58,12 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Extern.Couchdb (retrieveModelFromLocalStore, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
-import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2ModelUrl)
+import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2ModelUrl, unversionedModelUri)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.ModelDependencies (modelURIReadable, sysUser, versionedModelManifestModelCuid) as MD
 import Perspectives.ModelTranslation (augmentModelTranslation, emptyTranslationTable, generateFirstTranslation, generateTranslationTable, parseTranslation_pass1, parseTranslation_pass2, writeReadableTranslationYaml, writeTranslationYaml) as MT
-import Perspectives.TCP.Configuration (buildTCPConfiguration) as TCP
 import Perspectives.ModelTranslation.Representation (ModelTranslation(..))
+import Perspectives.Parsing.Arc.PhaseTwoDefs (withStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, addDocument, deleteDocument, fromBlob, getAttachment, getDocument, retrieveDocumentVersion, toFile, tryGetDocument_)
 import Perspectives.PerspectivesState (addWarning, getModelUris, getWarnings, resetWarnings, setModelUri, setModelUris, setWarnings)
@@ -75,6 +75,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), 
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), StableIdMapping, loadStableMapping, Stable) as Sidecar
 import Perspectives.Sidecar.StableIdMapping (fromRepository)
+import Perspectives.TCP.Configuration (buildTCPConfiguration) as TCP
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_)
 import Simple.JSON (readJSON, readJSON_, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
@@ -451,8 +452,8 @@ generateTCPConfiguration modelUri_ _ = case head modelUri_ of
     case x of
       Left e -> handleExternalFunctionError "model://perspectives.domains#Parsing$GenerateTCPConfiguration"
         (Left e)
-      Right (domeinFile :: DomeinFile Sidecar.Stable) -> do
-        config <- lift $ lift $ TCP.buildTCPConfiguration domeinFile modelUri
+      Right (domeinFile :: DomeinFile Sidecar.Stable) -> lift $ lift $ withStableDomeinFile (Sidecar.ModelUri $ unversionedModelUri modelUri) domeinFile do
+        config <- TCP.buildTCPConfiguration domeinFile modelUri
         pure $ Value (writeJSON config)
 
 -- | Fill a ModelTranslation freshly generated from a DomeinFile, with translations taken from a TranslationTable.

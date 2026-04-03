@@ -189,9 +189,8 @@ toOnlookerCR cr@(CalculatedRole { kindOfRole }) =
   if kindOfRole == UserRole then do
     crCNF <- roleADT cr >>= toConjunctiveNormalForm_
     onlookersCNF <- getEnumeratedRole (EnumeratedRoleType MD.onlookers) >>= roleADT >>= toConjunctiveNormalForm_
-    if crCNF `equalsOrSpecialises_` onlookersCNF
-      then pure $ Just cr
-      else pure Nothing
+    if crCNF `equalsOrSpecialises_` onlookersCNF then pure $ Just cr
+    else pure Nothing
   else pure Nothing
 
 -------------------------------------------------------------------------------
