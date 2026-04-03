@@ -157,7 +157,7 @@ buildTCPConfiguration (DomeinFile dfr) modelUri =
               key = unwrap ert
             in
               case OBJ.lookup key acc of
-                Nothing -> OBJ.insert key props acc
+                Nothing -> OBJ.insert key (nub props) acc
                 Just existing -> OBJ.insert key (nub $ existing <> props) acc
         )
         OBJ.empty
@@ -260,7 +260,10 @@ perspectiveToENRs (Perspective p) = do
 perspectiveToENRsWithProps :: Perspective -> MP (Array (Tuple EnumeratedRoleType (Array PropertyType)))
 perspectiveToENRsWithProps p = do
   enrts <- perspectiveToENRs p
-  props <- propertiesInPerspective p
+  -- Apply nub: propertiesInPerspective accumulates over all states and may
+  -- return the same PropertyType multiple times when a property is declared
+  -- in more than one state of the perspective.
+  props <- nub <$> propertiesInPerspective p
   pure $ map (\ert -> Tuple ert props) enrts
 
 -------------------------------------------------------------------------------
