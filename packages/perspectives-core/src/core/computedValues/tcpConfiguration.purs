@@ -39,7 +39,8 @@ module Perspectives.TCP.Configuration where
 
 import Prelude
 
-import Data.Array (catMaybes, concat, concatMap, elem, filter, foldl, last, mapMaybe, nub)
+import Control.Monad.Error.Class (catchError)
+import Data.Array (catMaybes, concat, concatMap, elem, filter, foldl, head, last, mapMaybe, nub)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), split)
@@ -49,17 +50,17 @@ import Foreign.Object (Object, empty, fromFoldable, insert, lookup, values) as O
 import Perspectives.CoreTypes (MP)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ModelDependencies (onlookers) as MD
-import Perspectives.Query.QueryTypes (RoleInContext) as QT
-import Perspectives.Representation.ADT (allLeavesInADT, equalsOrSpecialises_)
+import Perspectives.Query.QueryTypes (RoleInContext, roleInContext2Role) as QT
+import Perspectives.Representation.ADT (ADT, allLeavesInADT, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
-import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
-import Perspectives.Representation.Class.Role (completeDeclaredFillerRestriction, rangeOfRoleCalculation, roleADT, toConjunctiveNormalForm_)
+import Perspectives.Representation.Class.PersistentType (getEnumeratedProperty, getEnumeratedRole)
+import Perspectives.Representation.Class.Role (allLocallyOnRoleRepresentedProperties, completeDeclaredFillerRestriction, rangeOfRoleCalculation, roleADT, toConjunctiveNormalForm_)
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), PropertyType(..), RoleKind(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..))
 import Perspectives.Sidecar.StableIdMapping (Stable) as Sidecar
 import Perspectives.Types.ObjectGetters (propertiesInPerspective)
 import Simple.JSON (class WriteForeign, write)
@@ -76,6 +77,12 @@ type TCPColumnConfig =
   , sqlType :: String
   , nullable :: Boolean
   , propertyType :: Maybe String
+  -- | When present, the property is not stored directly on this role's table
+  -- | but must be fetched via N filler hops.  Each element is the stable
+  -- | EnumeratedRoleType ID of the role table at that hop; the property is on
+  -- | the LAST role in the chain.  TCP uses this to construct JOIN queries and
+  -- | CREATE VIEW statements.
+  , fillerChain :: Maybe (Array String)
   }
 
 -- | Write TCPColumnConfig as JSON, renaming `sqlType` back to the `type` key
@@ -88,6 +95,7 @@ instance WriteForeign TCPColumnConfigJ where
     , type: c.sqlType
     , nullable: c.nullable
     , propertyType: c.propertyType
+    , fillerChain: c.fillerChain
     }
 
 type TCPTableConfig =
@@ -156,8 +164,10 @@ buildTCPConfiguration (DomeinFile dfr) modelUri =
         allEnrWithProps
       enumeratedRoleTypes = nub $ map (\(Tuple ert _) -> ert) allEnrWithProps
 
-    -- 4. Build one role table per ENR, filtering columns to perspective-visible properties only.
-    roleTables <- pure $ mapMaybe
+    -- 4. Build one role table per ENR.
+    --    buildRoleTable is now monadic: it calls allLocallyOnRoleRepresentedProperties to
+    --    distinguish direct columns from filler-chain columns (§4.5 / §4.7 design).
+    roleTables <- catMaybes <$> traverse
       ( \ert -> buildRoleTable dfr.enumeratedRoles dfr.enumeratedProperties
           (fromMaybe [] $ OBJ.lookup (unwrap ert) enrPropMap)
           ert
@@ -165,10 +175,15 @@ buildTCPConfiguration (DomeinFile dfr) modelUri =
       enumeratedRoleTypes
 
     -- 5. Universal context table (single table, referenced by all role tables)
-    ctxTable <- pure buildUniversalContextTable
+    let ctxTable = buildUniversalContextTable
 
-    -- 6. Name map: stable → readable for every ENR and its perspective-visible properties
-    nameMap <- pure $ buildNameMap dfr.enumeratedRoles dfr.enumeratedProperties enrPropMap enumeratedRoleTypes
+    -- 6. Collect all filler-chain role type IDs from generated columns so they can
+    --    be added to the nameMap for TCP's JOIN / view queries.
+    let fillerChainRoleIds = nub $ concatMap collectFillerChainRoleIds roleTables
+
+    -- 7. Name map: stable → readable for every ENR, its perspective-visible properties,
+    --    and any role types appearing in filler chains (may be from other models).
+    nameMap <- buildNameMap dfr.enumeratedRoles dfr.enumeratedProperties enrPropMap enumeratedRoleTypes fillerChainRoleIds
     pure
       { modelUri
       , nameMap
@@ -265,32 +280,47 @@ buildUniversalContextTable =
   }
 
 -- | Build a role table for a single EnumeratedRoleType.
+-- |
 -- | `visibleProps` restricts the columns to perspective-visible properties only
--- | (as resolved by `propertiesInPerspective`).  Only the role's own properties
--- | that also appear in `visibleProps` are emitted as columns.
--- | Calculated properties are always skipped (they are not materialised in SQL).
+-- | (as resolved by `propertiesInPerspective`).
+-- |
+-- | Properties are split into two groups:
+-- |   1. **Direct columns** — properties in `r.properties` that are also in
+-- |      `visibleProps`.  These are stored on this role's own table row.
+-- |   2. **Filler-chain columns** — properties in `visibleProps` that are NOT
+-- |      locally accessible on the role (not in `allLocallyOnRoleRepresentedProperties`,
+-- |      which covers the role itself and its aspects but excludes the filler chain).
+-- |      These need N JOIN hops through filler tables; `computeFillerChain` locates
+-- |      the destination role and emits the hop list in `fillerChain`.
 buildRoleTable
   :: OBJ.Object EnumeratedRole
   -> OBJ.Object EnumeratedProperty
   -> Array PropertyType
   -> EnumeratedRoleType
-  -> Maybe TCPTableConfig
+  -> MP (Maybe TCPTableConfig)
 buildRoleTable erMap epMap visibleProps ert =
   case OBJ.lookup (unwrap ert) erMap of
-    Nothing -> Nothing
-    Just (EnumeratedRole r) ->
-      let
-        perspectiveProps = filter (\pt -> elem pt visibleProps) r.properties
-        columns = mapMaybe (buildPropertyColumn epMap) perspectiveProps
-        tableName = localName (unwrap r.readableName)
-      in
-        Just
-          { name: tableName
-          , roleType: Just (unwrap ert)
-          , contextType: Nothing
-          , isUniversalContextTable: false
-          , columns
-          }
+    Nothing -> pure Nothing
+    Just er@(EnumeratedRole r) -> do
+      -- Properties locally accessible on the role or its aspects (no filler hops).
+      localProps <- allLocallyOnRoleRepresentedProperties er
+
+      -- Direct columns: in r.properties (directly declared) AND perspective-visible.
+      let directProps = filter (\pt -> elem pt visibleProps) r.properties
+      let directColumns = mapMaybe (buildPropertyColumn epMap) directProps
+
+      -- Filler-chain columns: perspective-visible but NOT locally accessible.
+      let fillerProps = filter (\pt -> not (elem pt localProps)) visibleProps
+      fillerColumns <- catMaybes <$> traverse (\pt -> buildFillerChainColumn pt er) fillerProps
+
+      let tableName = localName (unwrap r.readableName)
+      pure $ Just
+        { name: tableName
+        , roleType: Just (unwrap ert)
+        , contextType: Nothing
+        , isUniversalContextTable: false
+        , columns: directColumns <> fillerColumns
+        }
 
 -- | Build a column config for a single PropertyType.
 -- | CalculatedPropertyTypes are skipped (they are not materialised).
@@ -304,26 +334,119 @@ buildPropertyColumn epMap (ENP ept) =
         , sqlType: rangeToSQLType p.range
         , nullable: true
         , propertyType: Just (unwrap ept)
+        , fillerChain: Nothing
         }
 buildPropertyColumn _ (CP _) = Nothing
+
+-- | Build a filler-chain column for a property that is NOT locally on the role.
+-- |
+-- | Calls `computeFillerChain` to discover the sequence of role type IDs that
+-- | must be joined to reach the property, then looks up the property details via
+-- | `getEnumeratedProperty` (which searches the full PDR cache, not just the
+-- | current DomeinFile, as the property may belong to another model).
+buildFillerChainColumn :: PropertyType -> EnumeratedRole -> MP (Maybe TCPColumnConfigJ)
+buildFillerChainColumn (ENP ept) startRole = do
+  mChain <- computeFillerChain (ENP ept) startRole
+  case mChain of
+    Nothing -> pure Nothing
+    Just chain -> do
+      -- `getEnumeratedProperty` looks in the full PDR cache (cross-model safe).
+      -- If the property is not found, it means the PDR cache is incomplete —
+      -- this should not happen for properties referenced by a valid perspective,
+      -- but we fall back to Nothing to avoid aborting the entire config generation.
+      mprop <- catchError (Just <$> getEnumeratedProperty ept) (const $ pure Nothing)
+      pure $ case mprop of
+        Nothing -> Nothing
+        Just (EnumeratedProperty p) ->
+          Just $ TCPColumnConfigJ
+            { name: localName (unwrap p.readableName)
+            , sqlType: rangeToSQLType p.range
+            , nullable: true
+            , propertyType: Just (unwrap ept)
+            , fillerChain: Just chain
+            }
+buildFillerChainColumn (CP _) _ = pure Nothing
+
+-- | Walk the filler (binding) chain of `startRole` to find which role type carries
+-- | `pt` locally (on the role or one of its aspects, but NOT via a further filler).
+-- |
+-- | Returns `Nothing` when:
+-- |   * The property is already locally on `startRole` (no filler hop needed).
+-- |   * No role within `maxFillerDepth` hops carries the property locally.
+-- |   * The binding chain runs out before the property is found.
+-- |
+-- | Returns `Just chain` where `chain` is the ordered list of
+-- | `EnumeratedRoleType` stable IDs from hop 1 to (and including) the role that
+-- | carries the property.  TCP uses this list to build LEFT JOIN clauses.
+-- |
+-- | When the binding ADT at a hop is a SUM (union), the first leaf is chosen
+-- | (any path works per the §Q1 design decision: the PDR guarantees uniform
+-- | hop count across all union branches).
+computeFillerChain :: PropertyType -> EnumeratedRole -> MP (Maybe (Array String))
+computeFillerChain pt (EnumeratedRole r) = do
+  localProps <- allLocallyOnRoleRepresentedProperties (EnumeratedRole r)
+  if elem pt localProps
+    then pure Nothing
+    else walkBinding maxFillerDepth [] r.binding
+  where
+  walkBinding :: Int -> Array String -> Maybe (ADT QT.RoleInContext) -> MP (Maybe (Array String))
+  walkBinding 0 _ _ = pure Nothing
+  walkBinding _ _ Nothing = pure Nothing
+  walkBinding remaining acc (Just bindingADT) =
+    case head (allLeavesInADT bindingADT) of
+      Nothing -> pure Nothing
+      Just leaf -> do
+        let ert = QT.roleInContext2Role leaf
+        leafRole <- getEnumeratedRole ert
+        localProps <- allLocallyOnRoleRepresentedProperties leafRole
+        let chainWithLeaf = acc <> [ unwrap ert ]
+        if elem pt localProps
+          then pure $ Just chainWithLeaf
+          else do
+            let (EnumeratedRole lr) = leafRole
+            walkBinding (remaining - 1) chainWithLeaf lr.binding
+
+-- | Maximum filler-chain depth for SQL JOIN unrolling.
+-- | Matches the §Q1 design decision (max 5, extendable to 6).
+maxFillerDepth :: Int
+maxFillerDepth = 5
+
+-- | Extract all filler-chain role type IDs from a table's columns.
+-- | Used to collect the complete set of filler-chain role types so their
+-- | readable names can be added to the nameMap.
+collectFillerChainRoleIds :: TCPTableConfig -> Array String
+collectFillerChainRoleIds table =
+  concatMap (\(TCPColumnConfigJ col) -> fromMaybe [] col.fillerChain) table.columns
 
 -------------------------------------------------------------------------------
 ---- NAME MAP
 -------------------------------------------------------------------------------
 
 -- | Build a map from stable identifiers to readable (model-source) names for
--- | every EnumeratedRoleType and its perspective-visible EnumeratedPropertyTypes.
+-- | every EnumeratedRoleType, its perspective-visible EnumeratedPropertyTypes,
+-- | and any role types that appear in filler chains (which may be from other
+-- | models and are needed by TCP to resolve JOIN table names).
+-- |
 -- | `enrPropMap` carries the visible property set per ENR as a plain array
 -- | (resolved by `propertiesInPerspective`).
+-- | `fillerChainRoleIds` is the union of all `fillerChain` arrays from all
+-- | generated columns; these role types are looked up via `getEnumeratedRole`
+-- | (full PDR cache) as they may belong to other models.
 buildNameMap
   :: OBJ.Object EnumeratedRole
   -> OBJ.Object EnumeratedProperty
   -> OBJ.Object (Array PropertyType)
   -> Array EnumeratedRoleType
-  -> OBJ.Object String
-buildNameMap erMap epMap enrPropMap erts =
-  OBJ.fromFoldable $ roleEntries <> propEntries
+  -> Array String
+  -> MP (OBJ.Object String)
+buildNameMap erMap epMap enrPropMap erts fillerChainRoleIds = do
+  fillerEntries <- catMaybes <$> traverse lookupFillerRoleName fillerChainRoleIds
+  pure $ OBJ.fromFoldable $ staticEntries <> fillerEntries
   where
+  -- Static entries: current-model ENRs and their perspective-visible ENPs.
+  staticEntries :: Array (Tuple String String)
+  staticEntries = roleEntries <> propEntries
+
   roleEntries :: Array (Tuple String String)
   roleEntries = catMaybes $ map
     ( \ert -> case OBJ.lookup (unwrap ert) erMap of
@@ -353,6 +476,21 @@ buildNameMap erMap epMap enrPropMap erts =
         CP _ -> Nothing
     )
     allPropertyTypes
+
+  -- Look up a filler-chain role type by its stable ID.  First try the
+  -- current model's erMap (fast path), then fall back to the PDR cache.
+  -- Silent failure is acceptable: roles from other models may not be in the
+  -- cache if they have not been loaded, but in a running PDR the sys model
+  -- is always present and other dependent models are loaded on demand.
+  lookupFillerRoleName :: String -> MP (Maybe (Tuple String String))
+  lookupFillerRoleName ertId =
+    case OBJ.lookup ertId erMap of
+      Just (EnumeratedRole r) -> pure $ Just (Tuple ertId (unwrap r.readableName))
+      Nothing -> do
+        mRole <- catchError (Just <$> getEnumeratedRole (EnumeratedRoleType ertId)) (const $ pure Nothing)
+        pure $ case mRole of
+          Just (EnumeratedRole r) -> Just (Tuple ertId (unwrap r.readableName))
+          Nothing -> Nothing
 
 -------------------------------------------------------------------------------
 ---- HELPERS
