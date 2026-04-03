@@ -39,7 +39,7 @@ module Perspectives.TCP.Configuration where
 
 import Prelude
 
-import Data.Array (catMaybes, concatMap, last, mapMaybe, nub)
+import Data.Array (catMaybes, concat, concatMap, last, mapMaybe, nub)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), split)
@@ -49,18 +49,17 @@ import Foreign.Object (Object, fromFoldable, lookup, values) as OBJ
 import Perspectives.CoreTypes (MP)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ModelDependencies (onlookers) as MD
-import Perspectives.Query.QueryTypes (Calculation(..), QueryFunctionDescription(..), RoleInContext(..)) as QT
-import Perspectives.Representation.ADT (equalsOrSpecialises_)
+import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
+import Perspectives.Representation.ADT (allLeavesInADT, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
-import Perspectives.Representation.Class.Role (completeDeclaredFillerRestriction, roleADT, toConjunctiveNormalForm_)
+import Perspectives.Representation.Class.Role (completeDeclaredFillerRestriction, rangeOfRoleCalculation, roleADT, toConjunctiveNormalForm_)
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.Perspective (Perspective(..))
-import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..))
 import Perspectives.Sidecar.StableIdMapping (Stable) as Sidecar
 import Simple.JSON (class WriteForeign, write)
 
@@ -133,9 +132,13 @@ buildTCPConfiguration (DomeinFile dfr) modelUri =
       concatMap (\(EnumeratedRole r) -> r.perspectives) onlookerERoles
         <> concatMap (\(CalculatedRole r) -> r.perspectives) onlookerCRoles
 
-    -- 3. For each perspective resolve to leaf EnumeratedRoleTypes
-    --    (FilterF steps dropped per §4.6)
-    enumeratedRoleTypes <- pure $ nub $ concatMap (perspectiveToENRs dfr.calculatedRoles) allPerspectives
+    -- 3. For each perspective resolve to leaf EnumeratedRoleTypes.
+    --    Uses rangeOfRoleCalculation to read the already-compiled range type
+    --    from the PDR type system (via withStableDomeinFile cache).  This
+    --    correctly handles calculated roles like `filter X with Y` — the range
+    --    type of such a calculation is X's type, so FilterF is transparent here
+    --    (per §4.6 design decision).
+    enumeratedRoleTypes <- nub <<< concat <$> traverse perspectiveToENRs allPerspectives
 
     -- 4. Build one role table per ENR
     roleTables <- pure $ mapMaybe (buildRoleTable dfr.enumeratedRoles dfr.enumeratedProperties) enumeratedRoleTypes
@@ -198,52 +201,20 @@ toOnlookerCR cr@(CalculatedRole { kindOfRole }) =
 -------------------------------------------------------------------------------
 
 -- | Extract all leaf EnumeratedRoleTypes from a Perspective.
--- | Uses `roleTypes` from the Perspective record as the starting set and
--- | expands any CalculatedRoleType to its underlying ENRs.
-perspectiveToENRs :: OBJ.Object CalculatedRole -> Perspective -> Array EnumeratedRoleType
-perspectiveToENRs crMap (Perspective p) =
-  nub $ concatMap (roleTypeToENRs crMap) p.roleTypes
-
-roleTypeToENRs :: OBJ.Object CalculatedRole -> RoleType -> Array EnumeratedRoleType
-roleTypeToENRs _ (ENR ert) = [ ert ]
-roleTypeToENRs crMap (CR crt) = extractENRsFromCR crMap crt
-
--- | Walk the QueryFunctionDescription of a CalculatedRole, collecting ENRs
--- | and dropping FilterF nodes (per §4.6).
-extractENRsFromCR :: OBJ.Object CalculatedRole -> CalculatedRoleType -> Array EnumeratedRoleType
-extractENRsFromCR crMap crt =
-  case OBJ.lookup (unwrap crt) crMap of
-    Nothing -> []
-    Just (CalculatedRole cr) ->
-      case cr.calculation of
-        QT.Q qfd -> extractENRsFromQFD crMap qfd
-        _ -> []
-
--- | Recursively extract EnumeratedRoleTypes from a QueryFunctionDescription.
--- | Key rules (per design doc):
--- |   * UQD _ FilterF inner …                                → drop filter, recurse into `inner`
--- |   * BQD _ ComposeF source (UQD _ FilterF …)              → role is in LEFT arm (filter is right);
--- |                                                              `filter X with Y` compiles this way
--- |   * RolGetter (ENR ert)                                   → [ert]
--- |   * RolGetter (CR crt)                                    → expand CalculatedRole recursively
--- |   * BinaryCombinator ComposeF (general)                   → result type is from right operand
--- |   * BinaryCombinator UnionF / IntersectionF               → both operands
--- |   * UnaryCombinator _                                     → pass through to inner
-extractENRsFromQFD :: OBJ.Object CalculatedRole -> QT.QueryFunctionDescription -> Array EnumeratedRoleType
-extractENRsFromQFD crMap = go
-  where
-  go (QT.SQD _ (RolGetter (ENR ert)) _ _ _) = [ ert ]
-  go (QT.SQD _ (RolGetter (CR crt)) _ _ _) = extractENRsFromCR crMap crt
-  go (QT.UQD _ FilterF inner _ _ _) = go inner -- §4.6: peers pre-filter before forwarding to TCP; re-applying filters would yield empty results under the Closed World Assumption
-  go (QT.UQD _ (UnaryCombinator _) inner _ _ _) = go inner
-  -- When ComposeF's right arm is a FilterF, the role type comes from the LEFT arm.
-  -- `filter Aanwezigen with X` compiles to makeComposition source (UQD _ FilterF criterium _)
-  -- i.e. BQD _ ComposeF source (UQD _ FilterF ...) — the role is on the left, filter on the right.
-  go (QT.BQD _ (BinaryCombinator ComposeF) left (QT.UQD _ FilterF _ _ _ _) _ _ _) = go left
-  go (QT.BQD _ (BinaryCombinator ComposeF) _ right _ _ _) = go right
-  go (QT.BQD _ (BinaryCombinator UnionF) left right _ _ _) = go left <> go right
-  go (QT.BQD _ (BinaryCombinator IntersectionF) left right _ _ _) = go left <> go right
-  go _ = []
+-- |
+-- | For each RoleType in the perspective, `rangeOfRoleCalculation` fetches the
+-- | compiled range type from the PDR cache (available because we run inside
+-- | `withStableDomeinFile`).  The range is an ADT of EnumeratedRoleType;
+-- | `allLeavesInADT` collects all leaf ENRTs, handling SUM / PROD structures.
+-- |
+-- | Calculated roles such as `filter Aanwezigen with Aanwezig` compile to a
+-- | composition whose range type is still `Aanwezigen` (FilterF preserves
+-- | the output type), so this approach subsumes the old manual QFD-walking
+-- | and is correct per §4.6 design decision.
+perspectiveToENRs :: Perspective -> MP (Array EnumeratedRoleType)
+perspectiveToENRs (Perspective p) = do
+  adts <- traverse rangeOfRoleCalculation p.roleTypes
+  pure $ nub $ concatMap allLeavesInADT adts
 
 -------------------------------------------------------------------------------
 ---- TABLE BUILDERS
