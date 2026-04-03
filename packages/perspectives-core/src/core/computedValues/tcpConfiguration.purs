@@ -41,7 +41,7 @@ import Prelude
 
 import Data.Array (any, catMaybes, concat, concatMap, elem, filter, foldl, fromFoldable, last, mapMaybe, nub)
 import Data.Map (values) as MAP
-import Data.Maybe (Maybe(..), fromMaybe, join)
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), split)
 import Data.Traversable (traverse)
@@ -50,7 +50,7 @@ import Foreign.Object (Object, empty, fromFoldable, insert, lookup, values) as O
 import Perspectives.CoreTypes (MP)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ModelDependencies (onlookers) as MD
-import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
+import Perspectives.Query.QueryTypes (RoleInContext) as QT
 import Perspectives.Representation.ADT (allLeavesInADT, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -61,7 +61,7 @@ import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..))
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), PropertyType(..), RoleKind(..))
 import Perspectives.Sidecar.StableIdMapping (Stable) as Sidecar
 import Simple.JSON (class WriteForeign, write)
 
