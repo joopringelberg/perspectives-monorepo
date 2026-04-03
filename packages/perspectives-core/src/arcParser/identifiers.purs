@@ -25,14 +25,14 @@ module Perspectives.Parsing.Arc.Identifiers where
 import Control.Alt (void, (<|>))
 import Data.Array (cons, elemIndex, intercalate, many)
 import Data.CodePoint.Unicode (isLower, isSpace)
-import Data.Maybe (Maybe(..), isJust)
+import Data.Maybe (isJust)
 import Data.String (codePointFromChar)
 import Data.String.CodeUnits (fromCharArray)
 import Data.String.Regex (Regex, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Parsing (fail)
-import Parsing.Combinators (lookAhead, optional, option, try, (<?>))
+import Parsing.Combinators (lookAhead, option, try, (<?>))
 import Parsing.String (string, satisfy)
 import Parsing.String.Basic (oneOf, whiteSpace)
 import Parsing.Token (alphaNum, upper)
@@ -54,12 +54,9 @@ arcIdentifier = qualifiedName <|> prefixedName <|> segmentedName <|> reservedWor
   -- and produce a more helpful error message.
   reservedWordAsIdentifierError :: IP String
   reservedWordAsIdentifierError = do
-    mName <- optional (try (lookAhead rawUpperIdent))
-    case mName of
-      Just name | isReservedPerspectivesName name ->
-        fail (show name <> " is a reserved word in this language. Please use another capitalized name, a prefixed name, or a fully qualified name")
-      _ ->
-        fail "Expected a capitalized name, a prefixed name, or a fully qualified name, "
+    name <- lookAhead rawUpperIdent
+    if isReservedPerspectivesName name then pure (show name <> " is a reserved word in this language. Please use another capitalized name, a prefixed name, or a fully qualified name")
+    else pure "Expected a capitalized name, a prefixed name, or a fully qualified name, but got an unrecognized token. "
 
   -- Parse an uppercase-starting identifier without checking for reserved words.
   rawUpperIdent :: IP String
