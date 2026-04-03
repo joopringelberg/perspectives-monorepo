@@ -68,7 +68,7 @@ import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), Transactio
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), addToTransactionForPeer, transactieID)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
-import Prelude (Unit, add, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>))
+import Prelude (Unit, add, bind, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>))
 import Simple.JSON (writeJSON)
 
 -- | Splits the transaction in versions specific for each peer and sends them.
@@ -216,8 +216,7 @@ addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
   -- in those paths the delta is either already stored (executeTransaction uses executeDeltaWithVersionTracking)
   -- or must not be stored at all (executeDeltas for public roles uses modified author identifiers).
   isExecuting <- AA.gets (\(Transaction tr) -> tr.isExecutingIncomingDeltas)
-  if isExecuting then pure unit
-  else lift $ storeDeltaFromSignedDelta delta
+  when (not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
   users' <- lift $ filterA notIsMe users
   if null users' then pure unit
@@ -244,8 +243,7 @@ insertDelta (DeltaInTransaction deltarecord@{ users, delta }) i = do
   -- Store locally-created deltas in the DeltaStore for persistent history.
   -- Skip storage when processing incoming deltas (see addDelta for the rationale).
   isExecuting <- AA.gets (\(Transaction tr) -> tr.isExecutingIncomingDeltas)
-  if isExecuting then pure unit
-  else lift $ storeDeltaFromSignedDelta delta
+  when (not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
   users' <- lift $ filterA notIsMe users
   if null users' then pure unit
