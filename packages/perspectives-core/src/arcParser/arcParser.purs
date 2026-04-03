@@ -625,9 +625,20 @@ rolePart = do
     "on", "entry" -> SQP <$> onEntryE
     "on", "exit" -> SQP <$> onExitE
     "state", _ -> ROLESTATE <$> stateE
+    -- When `second` is non-empty, twoReservedWords found a reserved word immediately
+    -- after the keyword. Consume the keyword first so this becomes a committed (consumed)
+    -- error that propagates even through any `try` wrapper around the inner parser.
+    "aspect", second | second /= "" -> void (reserved "aspect") *>
+      fail (show second <> " is a reserved word in this language. Please use another capitalized name, a prefixed name, or a fully qualified name")
     "aspect", _ -> aspectE
+    "indexed", second | second /= "" -> void (reserved "indexed") *>
+      fail (show second <> " is a reserved word in this language. Please use another capitalized name, a prefixed name, or a fully qualified name")
     "indexed", _ -> indexedE
+    "property", second | second /= "" -> void (reserved "property") *>
+      fail (show second <> " is a reserved word in this language. Please use another capitalized name, a prefixed name, or a fully qualified name")
     "property", _ -> propertyE
+    "view", second | second /= "" -> void (reserved "view") *>
+      fail (show second <> " is a reserved word in this language. Please use another capitalized name, a prefixed name, or a fully qualified name")
     "view", _ -> viewE
     "action", _ -> SQP <$> actionE
     "screen", _ -> Screen <$> screenE
