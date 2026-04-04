@@ -1162,7 +1162,13 @@ Reporting tools should query `Aanwezigen_view` rather than the base `Aanwezigen`
 
 #### Union branches
 
-When the binding ADT at a hop is a SUM (union), the PDR picks the **first leaf** of the union. The §Q1 design decision guarantees that the hop count to any named property is the same across all branches of a union, so any single branch correctly represents the depth.
+When the binding ADT at a hop is a SUM (union), the PDR walks **all leaves** of the union. The §Q1 design decision guarantees that the hop count to any named property is the same across all branches of a union, so each branch produces a chain of the same length. `computeFillerChains` returns one chain per branch; `buildFillerChainColumn` produces one `TCPColumnConfigJ` entry per chain. In the generated SQL view, columns from different union branches are merged with `COALESCE`, e.g.:
+
+```sql
+COALESCE("hop_0_2"."FirstName", "hop_1_2"."FirstName") AS "FirstName"
+```
+
+This ensures that role tables are created for **every** union branch (e.g. both `PerspectivesUsers` and `NonPerspectivesUsers`) and that the view returns the correct value regardless of which branch holds the filler instance at runtime.
 
 #### Multiple filler-chain columns with different chains
 

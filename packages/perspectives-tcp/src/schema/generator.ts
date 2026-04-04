@@ -180,7 +180,10 @@ export class SchemaGenerator {
     }
 
     const joinClauses: string[] = [];
-    const fillerSelectExprs: string[] = [];
+    // Map from column name to list of select-expression strings (one per chain branch).
+    // When multiple chains provide the same column name (union endpoint), we emit
+    // COALESCE(<expr0>, <expr1>, …) AS "<name>" in the SELECT list.
+    const colExprsMap = new Map<string, string[]>();
     let chainIndex = 0;
 
     for (const [chainKey, cols] of chainMap.entries()) {
@@ -198,9 +201,20 @@ export class SchemaGenerator {
 
       const lastAlias = `hop_${chainIndex}_${chain.length - 1}`;
       for (const col of cols) {
-        fillerSelectExprs.push(`"${lastAlias}"."${col.name}"`);
+        if (!colExprsMap.has(col.name)) colExprsMap.set(col.name, []);
+        colExprsMap.get(col.name)!.push(`"${lastAlias}"."${col.name}"`);
       }
       chainIndex++;
+    }
+
+    // Build filler-chain SELECT expressions, using COALESCE for union branches.
+    const fillerSelectExprs: string[] = [];
+    for (const [colName, exprs] of colExprsMap.entries()) {
+      if (exprs.length === 1) {
+        fillerSelectExprs.push(exprs[0]);
+      } else {
+        fillerSelectExprs.push(`COALESCE(${exprs.join(', ')}) AS "${colName}"`);
+      }
     }
 
     const selectParts = [directCols, ...fillerSelectExprs].filter(Boolean);

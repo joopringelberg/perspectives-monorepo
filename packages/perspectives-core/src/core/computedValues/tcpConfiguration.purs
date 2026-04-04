@@ -40,7 +40,7 @@ module Perspectives.TCP.Configuration where
 import Prelude
 
 import Control.Monad.Error.Class (catchError)
-import Data.Array (any, catMaybes, concat, concatMap, elem, filter, foldl, head, last, length, mapMaybe, mapWithIndex, nub)
+import Data.Array (any, catMaybes, concat, concatMap, elem, filter, foldl, last, length, mapMaybe, mapWithIndex, null, nub)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), split)
@@ -298,8 +298,8 @@ buildUniversalContextTable =
 -- |   2. **Filler-chain columns** — properties in `visibleProps` that are NOT
 -- |      locally accessible on the role (not in `allLocallyOnRoleRepresentedProperties`,
 -- |      which covers the role itself and its aspects but excludes the filler chain).
--- |      These need N JOIN hops through filler tables; `computeFillerChain` locates
--- |      the destination role and emits the hop list in `fillerChain`.
+-- |      These need N JOIN hops through filler tables; `computeFillerChains` locates
+-- |      all destination roles (one per union branch) and emits the hop lists in `fillerChain`.
 buildRoleTable
   :: OBJ.Object EnumeratedRole
   -> OBJ.Object EnumeratedProperty
@@ -319,7 +319,8 @@ buildRoleTable erMap epMap visibleProps ert =
 
       -- Filler-chain columns: perspective-visible but NOT locally accessible.
       let fillerProps = filter (\pt -> not (elem pt localProps)) visibleProps
-      fillerColumns <- catMaybes <$> traverse (\pt -> buildFillerChainColumn pt er) fillerProps
+      fillerColumnsNested <- traverse (\pt -> buildFillerChainColumn pt er) fillerProps
+      let fillerColumns = concat fillerColumnsNested
 
       let tableName = localName (unwrap r.readableName)
       pure $ Just
@@ -346,73 +347,89 @@ buildPropertyColumn epMap (ENP ept) =
         }
 buildPropertyColumn _ (CP _) = Nothing
 
--- | Build a filler-chain column for a property that is NOT locally on the role.
+-- | Build filler-chain column entries for a property that is NOT locally on the role.
 -- |
--- | Calls `computeFillerChain` to discover the sequence of role type IDs that
--- | must be joined to reach the property, then looks up the property details via
--- | `getEnumeratedProperty` (which searches the full PDR cache, not just the
--- | current DomeinFile, as the property may belong to another model).
-buildFillerChainColumn :: PropertyType -> EnumeratedRole -> MP (Maybe TCPColumnConfigJ)
+-- | Calls `computeFillerChains` to discover ALL possible chains of role type IDs
+-- | (one per union branch in the binding ADT) that must be joined to reach the
+-- | property.  Returns one `TCPColumnConfigJ` per chain.
+-- |
+-- | When the binding ADT has a union at the endpoint hop (e.g. `Persons` can be
+-- | filled by both `PerspectivesUsers` and `NonPerspectivesUsers`), this function
+-- | returns a column entry for EACH branch.  The SQL generator uses COALESCE to
+-- | merge them when building the view.
+buildFillerChainColumn :: PropertyType -> EnumeratedRole -> MP (Array TCPColumnConfigJ)
 buildFillerChainColumn (ENP ept) startRole = do
-  mChain <- computeFillerChain (ENP ept) startRole
-  case mChain of
-    Nothing -> pure Nothing
-    Just chain -> do
+  chains <- computeFillerChains (ENP ept) startRole
+  if null chains
+    then pure []
+    else do
       -- `getEnumeratedProperty` looks in the full PDR cache (cross-model safe).
       -- If the property is not found, it means the PDR cache is incomplete —
       -- this should not happen for properties referenced by a valid perspective,
-      -- but we fall back to Nothing to avoid aborting the entire config generation.
+      -- but we fall back to [] to avoid aborting the entire config generation.
       mprop <- catchError (Just <$> getEnumeratedProperty ept) (const $ pure Nothing)
       pure $ case mprop of
-        Nothing -> Nothing
+        Nothing -> []
         Just (EnumeratedProperty p) ->
-          Just $ TCPColumnConfigJ
-            { name: localName (unwrap p.readableName)
-            , sqlType: rangeToSQLType p.range
-            , nullable: true
-            , propertyType: Just (unwrap ept)
-            , fillerChain: Just chain
-            }
-buildFillerChainColumn (CP _) _ = pure Nothing
+          map
+            ( \chain -> TCPColumnConfigJ
+                { name: localName (unwrap p.readableName)
+                , sqlType: rangeToSQLType p.range
+                , nullable: true
+                , propertyType: Just (unwrap ept)
+                , fillerChain: Just chain
+                }
+            )
+            chains
+buildFillerChainColumn (CP _) _ = pure []
 
--- | Walk the filler (binding) chain of `startRole` to find which role type carries
--- | `pt` locally (on the role or one of its aspects, but NOT via a further filler).
+-- | Walk the filler (binding) chain of `startRole` to find ALL role types that
+-- | carry `pt` locally (on the role or one of its aspects, but NOT via a further
+-- | filler).
 -- |
--- | Returns `Nothing` when:
+-- | Returns an empty array when:
 -- |   * The property is already locally on `startRole` (no filler hop needed).
 -- |   * No role within `maxFillerDepth` hops carries the property locally.
 -- |   * The binding chain runs out before the property is found.
 -- |
--- | Returns `Just chain` where `chain` is the ordered list of
--- | `EnumeratedRoleType` stable IDs from hop 1 to (and including) the role that
--- | carries the property.  TCP uses this list to build LEFT JOIN clauses.
+-- | Returns one element per union branch in the binding ADT at the endpoint hop.
+-- | For example, if `Persons.binding = SUM [PerspectivesUsers, NonPerspectivesUsers]`
+-- | and both carry `FirstName`, this returns two chains:
+-- |   [ ["Deelnemer", "Persons", "PerspectivesUsers"]
+-- |   , ["Deelnemer", "Persons", "NonPerspectivesUsers"] ]
 -- |
--- | When the binding ADT at a hop is a SUM (union), the first leaf is chosen
--- | (any path works per the §Q1 design decision: the PDR guarantees uniform
--- | hop count across all union branches).
-computeFillerChain :: PropertyType -> EnumeratedRole -> MP (Maybe (Array String))
-computeFillerChain pt (EnumeratedRole r) = do
+-- | All returned chains have the same length (guaranteed by the runtime's
+-- | uniform-hop-count invariant, §Q1 design decision).  TCP uses these chains
+-- | to build COALESCE LEFT JOIN clauses in the view SQL.
+computeFillerChains :: PropertyType -> EnumeratedRole -> MP (Array (Array String))
+computeFillerChains pt (EnumeratedRole r) = do
   localProps <- allLocallyOnRoleRepresentedProperties (EnumeratedRole r)
   if elem pt localProps
-    then pure Nothing
+    then pure []
     else walkBinding maxFillerDepth [] r.binding
   where
-  walkBinding :: Int -> Array String -> Maybe (ADT QT.RoleInContext) -> MP (Maybe (Array String))
-  walkBinding 0 _ _ = pure Nothing
-  walkBinding _ _ Nothing = pure Nothing
-  walkBinding remaining acc (Just bindingADT) =
-    case head (allLeavesInADT bindingADT) of
-      Nothing -> pure Nothing
-      Just leaf -> do
-        let ert = QT.roleInContext2Role leaf
-        leafRole <- getEnumeratedRole ert
-        localProps <- allLocallyOnRoleRepresentedProperties leafRole
-        let chainWithLeaf = acc <> [ unwrap ert ]
-        if elem pt localProps
-          then pure $ Just chainWithLeaf
-          else do
-            let (EnumeratedRole lr) = leafRole
-            walkBinding (remaining - 1) chainWithLeaf lr.binding
+  walkBinding :: Int -> Array String -> Maybe (ADT QT.RoleInContext) -> MP (Array (Array String))
+  walkBinding 0 _ _ = pure []
+  walkBinding _ _ Nothing = pure []
+  walkBinding remaining acc (Just bindingADT) = do
+    let leaves = allLeavesInADT bindingADT
+    -- Walk ALL leaves (handles SUM / union: each branch may be a different table).
+    chainsFromAllLeaves <- traverse (processLeaf remaining acc) leaves
+    pure $ concat chainsFromAllLeaves
+
+  processLeaf :: Int -> Array String -> QT.RoleInContext -> MP (Array (Array String))
+  processLeaf remaining acc leaf = do
+    let ert = QT.roleInContext2Role leaf
+    leafRole <- getEnumeratedRole ert
+    localProps <- allLocallyOnRoleRepresentedProperties leafRole
+    let chainWithLeaf = acc <> [ unwrap ert ]
+    if elem pt localProps
+      -- This leaf carries the property: return this complete chain.
+      then pure [ chainWithLeaf ]
+      -- Otherwise recurse deeper (while depth budget remains).
+      else do
+        let (EnumeratedRole lr) = leafRole
+        walkBinding (remaining - 1) chainWithLeaf lr.binding
 
 -- | Maximum filler-chain depth for SQL JOIN unrolling.
 -- | Matches the §Q1 design decision (max 5, extendable to 6).
