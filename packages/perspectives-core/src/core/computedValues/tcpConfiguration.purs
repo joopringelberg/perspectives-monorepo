@@ -40,13 +40,13 @@ module Perspectives.TCP.Configuration where
 import Prelude
 
 import Control.Monad.Error.Class (catchError)
-import Data.Array (catMaybes, concat, concatMap, elem, filter, foldl, head, last, mapMaybe, nub)
+import Data.Array (any, catMaybes, concat, concatMap, elem, filter, foldl, head, last, length, mapMaybe, mapWithIndex, nub)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), split)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (Object, empty, fromFoldable, insert, lookup, values) as OBJ
+import Foreign.Object (Object, empty, fromFoldable, insert, keys, lookup, member, values) as OBJ
 import Perspectives.CoreTypes (MP)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ModelDependencies (onlookers) as MD
@@ -174,6 +174,11 @@ buildTCPConfiguration (DomeinFile dfr) modelUri =
       )
       enumeratedRoleTypes
 
+    -- 4b. Build tables for intermediate and endpoint filler-chain hop roles that are
+    --     not already represented in roleTables.  The TCP schema generator creates
+    --     SQL views that LEFT JOIN through these tables; they must exist in the database.
+    hopTables <- buildHopRoleTables roleTables
+
     -- 5. Universal context table (single table, referenced by all role tables)
     let ctxTable = buildUniversalContextTable
 
@@ -187,7 +192,7 @@ buildTCPConfiguration (DomeinFile dfr) modelUri =
     pure
       { modelUri
       , nameMap
-      , tables: [ ctxTable ] <> roleTables
+      , tables: [ ctxTable ] <> roleTables <> hopTables
       }
 
 -------------------------------------------------------------------------------
@@ -420,6 +425,143 @@ maxFillerDepth = 5
 collectFillerChainRoleIds :: TCPTableConfig -> Array String
 collectFillerChainRoleIds table =
   concatMap (\(TCPColumnConfigJ col) -> fromMaybe [] col.fillerChain) table.columns
+
+-------------------------------------------------------------------------------
+---- HOP ROLE TABLE BUILDERS
+-------------------------------------------------------------------------------
+
+-- | Build TCPTableConfig entries for all intermediate and endpoint filler-chain
+-- | hop roles that are not already represented in the directly-visible role tables.
+-- |
+-- | For each unique role ID appearing in any `fillerChain` array:
+-- |   - If already represented in `existingTables`, skip it.
+-- |   - Otherwise, build a new TableConfig via `buildHopRoleTable`.
+-- |
+-- | Pass-through hops (roles that are neither the direct ENR target nor the
+-- | property bearer for this chain) receive an empty `columns` array; the TCP
+-- | schema generator still adds the required `id`, `context_id`, and `filler_id`
+-- | columns automatically because `roleType` is set.
+-- |
+-- | Endpoint hops (last element in a `fillerChain`) also receive a direct column
+-- | entry for the property stored there.  When the same role is the endpoint for
+-- | more than one property (across different perspectives / chains), all endpoint
+-- | properties are merged and deduplicated.
+buildHopRoleTables :: Array TCPTableConfig -> MP (Array TCPTableConfig)
+buildHopRoleTables existingTables = do
+  let
+    existingRoleIds = catMaybes $ map _.roleType existingTables
+
+    -- Collect all (roleId, Maybe endpointColInfo) from every filler-chain column
+    -- in every existing role table.
+    allHopEntries :: Array
+      { roleId :: String
+      , endpointCol :: Maybe { name :: String, sqlType :: String, nullable :: Boolean, propertyType :: Maybe String }
+      }
+    allHopEntries =
+      concatMap (concatMap extractColHopRoles <<< _.columns) existingTables
+
+    -- Group by roleId: accumulate endpoint column infos per role, deduplicating
+    -- by propertyType so the same property is not listed twice.
+    hopRoleMap :: OBJ.Object
+      (Array { name :: String, sqlType :: String, nullable :: Boolean, propertyType :: Maybe String })
+    hopRoleMap = foldl
+      ( \acc { roleId, endpointCol } ->
+          let existing = fromMaybe [] $ OBJ.lookup roleId acc
+          in case endpointCol of
+            Nothing ->
+              -- Pass-through: ensure the role has an entry even if empty.
+              if OBJ.member roleId acc then acc
+              else OBJ.insert roleId [] acc
+            Just col ->
+              -- Endpoint: add the column if not already present for this prop.
+              if any (\c -> c.propertyType == col.propertyType) existing then acc
+              else OBJ.insert roleId (existing <> [ col ]) acc
+      )
+      OBJ.empty
+      allHopEntries
+
+    -- Only build tables for roles that do not already have a table.
+    newHopRoleIds = filter (\id -> not (elem id existingRoleIds)) (OBJ.keys hopRoleMap)
+
+  catMaybes <$> traverse
+    ( \roleId ->
+        buildHopRoleTable roleId (fromMaybe [] $ OBJ.lookup roleId hopRoleMap)
+    )
+    newHopRoleIds
+
+-- | Extract (roleId, endpointCol) pairs from a single column config.
+-- |
+-- | For a filler-chain column with chain [r0, r1, r2]:
+-- |   r0 → { roleId: r0, endpointCol: Nothing }   (pass-through)
+-- |   r1 → { roleId: r1, endpointCol: Nothing }   (pass-through)
+-- |   r2 → { roleId: r2, endpointCol: Just col }  (endpoint – property stored here)
+extractColHopRoles
+  :: TCPColumnConfigJ
+  -> Array
+       { roleId :: String
+       , endpointCol :: Maybe { name :: String, sqlType :: String, nullable :: Boolean, propertyType :: Maybe String }
+       }
+extractColHopRoles (TCPColumnConfigJ col) = case col.fillerChain of
+  Nothing -> []
+  Just chain ->
+    let
+      len = length chain
+      endpointInfo =
+        { name: col.name
+        , sqlType: col.sqlType
+        , nullable: col.nullable
+        , propertyType: col.propertyType
+        }
+    in
+      mapWithIndex
+        ( \i roleId ->
+            { roleId
+            , endpointCol: if i == len - 1 then Just endpointInfo else Nothing
+            }
+        )
+        chain
+
+-- | Build a single TableConfig for a hop role, looked up via the PDR cache.
+-- |
+-- | `endpointCols` contains the direct-property columns for properties stored
+-- | on this role as the endpoint of one or more filler chains.  Pass-through
+-- | roles have an empty `endpointCols`; the TCP schema generator still creates
+-- | `id`, `context_id`, and `filler_id` columns automatically because `roleType`
+-- | is set to a non-Nothing value.
+-- |
+-- | Silent failure: if the role is not found in the PDR cache (e.g. because the
+-- | model has not been loaded), `Nothing` is returned and the caller silently
+-- | skips the table.  This should not happen for perspectives that compiled
+-- | successfully, but is safe to handle here.
+buildHopRoleTable
+  :: String
+  -> Array { name :: String, sqlType :: String, nullable :: Boolean, propertyType :: Maybe String }
+  -> MP (Maybe TCPTableConfig)
+buildHopRoleTable roleId endpointCols = do
+  mRole <- catchError (Just <$> getEnumeratedRole (EnumeratedRoleType roleId)) (const $ pure Nothing)
+  pure $ case mRole of
+    Nothing -> Nothing
+    Just (EnumeratedRole r) ->
+      let
+        tableName = localName (unwrap r.readableName)
+        columns = map
+          ( \c -> TCPColumnConfigJ
+              { name: c.name
+              , sqlType: c.sqlType
+              , nullable: c.nullable
+              , propertyType: c.propertyType
+              , fillerChain: Nothing
+              }
+          )
+          endpointCols
+      in
+        Just
+          { name: tableName
+          , roleType: Just roleId
+          , contextType: Nothing
+          , isUniversalContextTable: false
+          , columns
+          }
 
 -------------------------------------------------------------------------------
 ---- NAME MAP
