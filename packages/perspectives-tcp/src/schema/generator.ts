@@ -52,10 +52,16 @@ export class SchemaGenerator {
   /**
    * Create all configured tables in the database (skips tables that already
    * exist – safe to call on every startup).
+   *
+   * Filler-chain columns (`fillerChain` is set) are **not** stored in the base
+   * table; their values are derived via LEFT JOINs in the `<table>_view` views
+   * created by `applyViews`.  Passing them to the schema builder would cause
+   * duplicate column names when the same property is reachable via multiple
+   * union branches.
    */
   async applySchema(tables: TableConfig[]): Promise<void> {
     logger.info('Applying schema to database …');
-    const enriched = tables.map(addStandardColumns);
+    const enriched = tables.map((t) => addStandardColumns(stripFillerChainColumns(t)));
     await this.db.applySchema(enriched);
     logger.info('Schema applied.');
   }
@@ -92,9 +98,11 @@ export class SchemaGenerator {
   /**
    * Return the SQL CREATE TABLE statements as a string.
    * Useful for inspection, version-control, or manual execution.
+   *
+   * Filler-chain columns are excluded (they are view-only).
    */
   async generateSQL(tables: TableConfig[]): Promise<string> {
-    const enriched = tables.map(addStandardColumns);
+    const enriched = tables.map((t) => addStandardColumns(stripFillerChainColumns(t)));
     return this.db.generateSchemaSQL(enriched);
   }
 
@@ -273,5 +281,24 @@ function addStandardColumns(table: TableConfig): TableConfig {
   return {
     ...table,
     columns: [...prefix, ...table.columns],
+  };
+}
+
+/**
+ * Return a copy of `table` with all filler-chain columns removed.
+ *
+ * Filler-chain columns (those whose `fillerChain` array is non-empty) are
+ * **not** stored in the base table; their values are materialised via
+ * LEFT JOINs in the `<table>_view` created by `applyViews`.  Stripping them
+ * before calling `addStandardColumns` / `db.applySchema` prevents duplicate
+ * column names in the generated `CREATE TABLE` statement when the same
+ * property is reachable via multiple union branches.
+ */
+function stripFillerChainColumns(table: TableConfig): TableConfig {
+  return {
+    ...table,
+    columns: table.columns.filter(
+      (c) => !c.fillerChain || c.fillerChain.length === 0,
+    ),
   };
 }
