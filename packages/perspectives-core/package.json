@@ -36,9 +36,12 @@
     "transpileDependencies": "node ./scripts/transpile-model-deps.mjs --cache-dir ./.cache/sidecars --in-file ./scripts/modelDependencies_source.purs --out-file ./src/core/modelDependencies.purs || echo '[transpile] skipping (no versions or offline)'",
     "prebuild": "node ./scripts/transpile-model-deps.mjs --cache-dir ./.cache/sidecars --in-file ./scripts/modelDependencies_source.purs --out-file ./src/core/modelDependencies.purs || echo '[transpile] skipping (no versions or offline)'",
     "build": "pnpm run fmt && pnpm exec spago build && rollup -c",
+    "build:node": "pnpm exec spago build && rollup -c rollup.node.config.js",
+    "test:node": "pnpm exec spago test --main Test.Main",
     "modulemap": "node build-module-map.mjs > module-map.json"
   },
   "devDependencies": {
+    "@rollup/plugin-alias": "^5.1.1",
     "@rollup/plugin-commonjs": "^28.0.6",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
