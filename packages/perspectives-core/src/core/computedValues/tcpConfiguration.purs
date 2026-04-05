@@ -360,27 +360,26 @@ buildPropertyColumn _ (CP _) = Nothing
 buildFillerChainColumn :: PropertyType -> EnumeratedRole -> MP (Array TCPColumnConfigJ)
 buildFillerChainColumn (ENP ept) startRole = do
   chains <- computeFillerChains (ENP ept) startRole
-  if null chains
-    then pure []
-    else do
-      -- `getEnumeratedProperty` looks in the full PDR cache (cross-model safe).
-      -- If the property is not found, it means the PDR cache is incomplete —
-      -- this should not happen for properties referenced by a valid perspective,
-      -- but we fall back to [] to avoid aborting the entire config generation.
-      mprop <- catchError (Just <$> getEnumeratedProperty ept) (const $ pure Nothing)
-      pure $ case mprop of
-        Nothing -> []
-        Just (EnumeratedProperty p) ->
-          map
-            ( \chain -> TCPColumnConfigJ
-                { name: localName (unwrap p.readableName)
-                , sqlType: rangeToSQLType p.range
-                , nullable: true
-                , propertyType: Just (unwrap ept)
-                , fillerChain: Just chain
-                }
-            )
-            chains
+  if null chains then pure []
+  else do
+    -- `getEnumeratedProperty` looks in the full PDR cache (cross-model safe).
+    -- If the property is not found, it means the PDR cache is incomplete —
+    -- this should not happen for properties referenced by a valid perspective,
+    -- but we fall back to [] to avoid aborting the entire config generation.
+    mprop <- catchError (Just <$> getEnumeratedProperty ept) (const $ pure Nothing)
+    pure $ case mprop of
+      Nothing -> []
+      Just (EnumeratedProperty p) ->
+        map
+          ( \chain -> TCPColumnConfigJ
+              { name: localName (unwrap p.readableName)
+              , sqlType: rangeToSQLType p.range
+              , nullable: true
+              , propertyType: Just (unwrap ept)
+              , fillerChain: Just chain
+              }
+          )
+          chains
 buildFillerChainColumn (CP _) _ = pure []
 
 -- | Walk the filler (binding) chain of `startRole` to find ALL role types that
@@ -404,9 +403,8 @@ buildFillerChainColumn (CP _) _ = pure []
 computeFillerChains :: PropertyType -> EnumeratedRole -> MP (Array (Array String))
 computeFillerChains pt (EnumeratedRole r) = do
   localProps <- allLocallyOnRoleRepresentedProperties (EnumeratedRole r)
-  if elem pt localProps
-    then pure []
-    else walkBinding maxFillerDepth [] r.binding
+  if elem pt localProps then pure []
+  else walkBinding maxFillerDepth [] r.binding
   where
   walkBinding :: Int -> Array String -> Maybe (ADT QT.RoleInContext) -> MP (Array (Array String))
   walkBinding 0 _ _ = pure []
@@ -424,12 +422,12 @@ computeFillerChains pt (EnumeratedRole r) = do
     localProps <- allLocallyOnRoleRepresentedProperties leafRole
     let chainWithLeaf = acc <> [ unwrap ert ]
     if elem pt localProps
-      -- This leaf carries the property: return this complete chain.
-      then pure [ chainWithLeaf ]
-      -- Otherwise recurse deeper (while depth budget remains).
-      else do
-        let (EnumeratedRole lr) = leafRole
-        walkBinding (remaining - 1) chainWithLeaf lr.binding
+    -- This leaf carries the property: return this complete chain.
+    then pure [ chainWithLeaf ]
+    -- Otherwise recurse deeper (while depth budget remains).
+    else do
+      let (EnumeratedRole lr) = leafRole
+      walkBinding (remaining - 1) chainWithLeaf lr.binding
 
 -- | Maximum filler-chain depth for SQL JOIN unrolling.
 -- | Matches the §Q1 design decision (max 5, extendable to 6).
@@ -470,29 +468,33 @@ buildHopRoleTables existingTables = do
 
     -- Collect all (roleId, Maybe endpointColInfo) from every filler-chain column
     -- in every existing role table.
-    allHopEntries :: Array
-      { roleId :: String
-      , endpointCol :: Maybe { name :: String, sqlType :: String, nullable :: Boolean, propertyType :: Maybe String }
-      }
+    allHopEntries
+      :: Array
+           { roleId :: String
+           , endpointCol :: Maybe { name :: String, sqlType :: String, nullable :: Boolean, propertyType :: Maybe String }
+           }
     allHopEntries =
       concatMap (concatMap extractColHopRoles <<< _.columns) existingTables
 
     -- Group by roleId: accumulate endpoint column infos per role, deduplicating
     -- by propertyType so the same property is not listed twice.
-    hopRoleMap :: OBJ.Object
-      (Array { name :: String, sqlType :: String, nullable :: Boolean, propertyType :: Maybe String })
+    hopRoleMap
+      :: OBJ.Object
+           (Array { name :: String, sqlType :: String, nullable :: Boolean, propertyType :: Maybe String })
     hopRoleMap = foldl
       ( \acc { roleId, endpointCol } ->
-          let existing = fromMaybe [] $ OBJ.lookup roleId acc
-          in case endpointCol of
-            Nothing ->
-              -- Pass-through: ensure the role has an entry even if empty.
-              if OBJ.member roleId acc then acc
-              else OBJ.insert roleId [] acc
-            Just col ->
-              -- Endpoint: add the column if not already present for this prop.
-              if any (\c -> c.propertyType == col.propertyType) existing then acc
-              else OBJ.insert roleId (existing <> [ col ]) acc
+          let
+            existing = fromMaybe [] $ OBJ.lookup roleId acc
+          in
+            case endpointCol of
+              Nothing ->
+                -- Pass-through: ensure the role has an entry even if empty.
+                if OBJ.member roleId acc then acc
+                else OBJ.insert roleId [] acc
+              Just col ->
+                -- Endpoint: add the column if not already present for this prop.
+                if any (\c -> c.propertyType == col.propertyType) existing then acc
+                else OBJ.insert roleId (existing <> [ col ]) acc
       )
       OBJ.empty
       allHopEntries
