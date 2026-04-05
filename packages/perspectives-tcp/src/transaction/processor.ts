@@ -46,6 +46,27 @@ function coerceValue(raw: string | null, colType: ColumnType): unknown {
 }
 
 // ---------------------------------------------------------------------------
+// Name resolution helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a stable type ID to a human-readable two-segment name using the
+ * nameMap.  The readable name from the map has the form
+ * `"model://...#Segment1$Segment2$...$SegmentN"`.  We strip the URI prefix
+ * (up to and including '#') and return the last two '$'-separated segments
+ * joined with '$'.  This gives names like `"Bijeenkomst$Aanwezigen"` that
+ * are collision-resistant and provide context for the end user.
+ *
+ * Falls back to the stable ID itself when the type is not in the map.
+ */
+function stableToTwoSegmentName(stableId: string, nameMap: Record<string, string>): string {
+  const readable = nameMap[stableId] ?? stableId;
+  const afterHash = readable.includes('#') ? readable.split('#')[1]! : readable;
+  const parts = afterHash.split('$');
+  return parts.length >= 2 ? parts.slice(-2).join('$') : parts[parts.length - 1] || readable;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -54,6 +75,8 @@ export interface ProcessorOptions {
   verifySignatures: boolean;
   /** Table configuration from the TCPConfig */
   tables: TableConfig[];
+  /** Stable-ID → readable-name map; used to derive human-readable type names at runtime */
+  nameMap: Record<string, string>;
 }
 
 /**
@@ -96,7 +119,7 @@ export async function processTransaction(
     logger.debug(`  delta[${i}]: ${tagged.kind} from "${signedDelta.author}"`);
 
     try {
-      await dispatchDelta(tagged, db, options.tables);
+      await dispatchDelta(tagged, db, options.tables, options.nameMap);
     } catch (err) {
       logger.error(`Error processing ${tagged.kind} delta:`, err);
       // Continue with remaining deltas rather than aborting the transaction
@@ -172,10 +195,11 @@ async function dispatchDelta(
   tagged: TaggedDelta,
   db: DatabaseAdapter,
   tables: TableConfig[],
+  nameMap: Record<string, string>,
 ): Promise<void> {
   switch (tagged.kind) {
     case 'UniverseContextDelta':
-      return handleUniverseContextDelta(tagged.delta, db, tables);
+      return handleUniverseContextDelta(tagged.delta, db, tables, nameMap);
     case 'UniverseRoleDelta':
       return handleUniverseRoleDelta(tagged.delta, db, tables);
     case 'ContextDelta':
@@ -195,6 +219,7 @@ async function handleUniverseContextDelta(
   delta: TaggedDelta['delta'],
   db: DatabaseAdapter,
   tables: TableConfig[],
+  nameMap: Record<string, string>,
 ): Promise<void> {
   // Narrow to UniverseContextDelta
   if (!('contextType' in delta && 'id' in delta && !('roleInstance' in delta))) {
@@ -216,10 +241,12 @@ async function handleUniverseContextDelta(
   }
 
   switch (d.deltaType) {
-    case 'ConstructEmptyContext':
+    case 'ConstructEmptyContext': {
       logger.debug(`UniverseContextDelta: INSERT context "${d.id}" into "${table.name}"`);
-      await db.insertRow(table.name, { id: d.id, context_type: d.contextType });
+      const contextTypeName = stableToTwoSegmentName(d.contextType, nameMap);
+      await db.insertRow(table.name, { id: d.id, context_type: d.contextType, context_type_name: contextTypeName });
       break;
+    }
     default:
       logger.debug(`UniverseContextDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
       break;
