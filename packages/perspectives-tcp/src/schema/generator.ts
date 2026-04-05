@@ -7,6 +7,7 @@
 import { DatabaseAdapter } from '../database/adapter';
 import { TableConfig, ColumnConfig } from '../config';
 import { logger } from '../logger';
+import { stableToTwoSegmentName } from '../utils/naming';
 
 // ---------------------------------------------------------------------------
 // Schema generator
@@ -164,19 +165,9 @@ export class SchemaGenerator {
     );
     if (fillerColumns.length === 0) return null;
 
-    /** Convert a stable role-type ID to the two-segment SQL table name.
-     *
-     * Strips the model URI prefix (everything up to and including '#'), then
-     * takes the last two '$'-separated segments to give a context-qualified
-     * name (e.g. "SocialEnvironment$Persons") that avoids single-segment
-     * collisions when many role types are in scope.
-     */
-    const stableToTableName = (stableId: string): string => {
-      const readable = nameMap[stableId] ?? stableId;
-      const afterHash = readable.includes('#') ? readable.split('#')[1]! : readable;
-      const parts = afterHash.split('$');
-      return parts.length >= 2 ? parts.slice(-2).join('$') : parts[parts.length - 1] || readable;
-    };
+    /** Resolve a stable role-type ID to the two-segment SQL table name via the nameMap. */
+    const stableToTableName = (stableId: string): string =>
+      stableToTwoSegmentName(stableId, nameMap);
 
     const viewName = `${table.name}_view`;
 

@@ -10,6 +10,7 @@ import { TableConfig, ColumnConfig, ColumnType } from '../config';
 import { DatabaseAdapter, columnForProperty } from '../database/adapter';
 import { parseDelta } from './deltaParser';
 import { logger } from '../logger';
+import { stableToTwoSegmentName } from '../utils/naming';
 
 // ---------------------------------------------------------------------------
 // Value coercion
@@ -43,27 +44,6 @@ function coerceValue(raw: string | null, colType: ColumnType): unknown {
     default:
       return raw;
   }
-}
-
-// ---------------------------------------------------------------------------
-// Name resolution helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve a stable type ID to a human-readable two-segment name using the
- * nameMap.  The readable name from the map has the form
- * `"model://...#Segment1$Segment2$...$SegmentN"`.  We strip the URI prefix
- * (up to and including '#') and return the last two '$'-separated segments
- * joined with '$'.  This gives names like `"Bijeenkomst$Aanwezigen"` that
- * are collision-resistant and provide context for the end user.
- *
- * Falls back to the stable ID itself when the type is not in the map.
- */
-function stableToTwoSegmentName(stableId: string, nameMap: Record<string, string>): string {
-  const readable = nameMap[stableId] ?? stableId;
-  const afterHash = readable.includes('#') ? readable.split('#')[1]! : readable;
-  const parts = afterHash.split('$');
-  return parts.length >= 2 ? parts.slice(-2).join('$') : parts[parts.length - 1] || readable;
 }
 
 // ---------------------------------------------------------------------------
