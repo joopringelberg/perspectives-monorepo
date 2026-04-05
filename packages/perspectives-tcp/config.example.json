@@ -21,82 +21,91 @@
   "logLevel": "info",
 
   "schema": {
+    "nameMap": {
+      "model://stadskamer.org#cuid-bijeenkomst-external": "model://stadskamer.org#Stadskamer$Bijeenkomst$External",
+      "model://stadskamer.org#cuid-aanwezigen":           "model://stadskamer.org#Stadskamer$Bijeenkomst$Aanwezigen",
+      "model://stadskamer.org#cuid-deelnemer":            "model://stadskamer.org#Stadskamer$Bijeenkomst$Deelnemer",
+      "model://perspectives.domains#cuid-persons":        "model://perspectives.domains#System$SocialEnvironment$Persons",
+      "model://perspectives.domains#cuid-pu":             "model://perspectives.domains#System$PerspectivesUsers",
+      "model://perspectives.domains#cuid-npu":            "model://perspectives.domains#System$NonPerspectivesUsers",
+      "model://stadskamer.org#cuid-datum":                "model://stadskamer.org#Stadskamer$Bijeenkomst$External$Datum",
+      "model://stadskamer.org#cuid-aanwezig":             "model://stadskamer.org#Stadskamer$Bijeenkomst$Aanwezigen$Aanwezig",
+      "model://perspectives.domains#cuid-firstname":      "model://perspectives.domains#System$Identifiable$FirstName",
+      "model://perspectives.domains#cuid-lastname":       "model://perspectives.domains#System$Identifiable$LastName",
+      "model://stadskamer.org#cuid-bijeenkomst-ctx":      "model://stadskamer.org#Stadskamer$Bijeenkomst"
+    },
     "tables": [
       {
-        "name": "stadskamer_orgs",
-        "contextType": "model://stadskamer.org#Stadskamer$Stadskamer",
+        "name": "context",
+        "isUniversalContextTable": true,
+        "columns": []
+      },
+      {
+        "name": "Bijeenkomst$External",
+        "roleType": "model://stadskamer.org#cuid-bijeenkomst-external",
         "columns": [
-          { "name": "naam", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Stadskamer$Naam" }
+          {
+            "name": "Datum",
+            "type": "datetime",
+            "nullable": true,
+            "propertyType": "model://stadskamer.org#cuid-datum"
+          }
         ]
       },
       {
-        "name": "lokaties",
-        "roleType": "model://stadskamer.org#Stadskamer$Stadskamer$Lokatie",
+        "name": "Bijeenkomst$Aanwezigen",
+        "roleType": "model://stadskamer.org#cuid-aanwezigen",
         "columns": [
           {
-            "name": "context_id",
-            "type": "text",
+            "name": "Aanwezig",
+            "type": "boolean",
             "nullable": true,
-            "references": { "table": "stadskamer_orgs", "column": "id" }
+            "propertyType": "model://stadskamer.org#cuid-aanwezig"
           },
-          { "name": "naam", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Lokatie$Naam" },
-          { "name": "adres", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Lokatie$Adres" }
-        ]
-      },
-      {
-        "name": "activiteitencentra",
-        "roleType": "model://stadskamer.org#Stadskamer$Lokatie$ActiviteitenCentrum",
-        "columns": [
           {
-            "name": "context_id",
+            "name": "FirstName",
             "type": "text",
             "nullable": true,
-            "references": { "table": "lokaties", "column": "id" }
+            "propertyType": "model://perspectives.domains#cuid-firstname",
+            "fillerChain": [
+              "model://stadskamer.org#cuid-deelnemer",
+              "model://perspectives.domains#cuid-persons",
+              "model://perspectives.domains#cuid-pu"
+            ]
           },
-          { "name": "naam", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$ActiviteitenCentrum$Naam" }
-        ]
-      },
-      {
-        "name": "activiteiten",
-        "roleType": "model://stadskamer.org#Stadskamer$ActiviteitenCentrum$Activiteit",
-        "columns": [
           {
-            "name": "context_id",
+            "name": "LastName",
             "type": "text",
             "nullable": true,
-            "references": { "table": "activiteitencentra", "column": "id" }
+            "propertyType": "model://perspectives.domains#cuid-lastname",
+            "fillerChain": [
+              "model://stadskamer.org#cuid-deelnemer",
+              "model://perspectives.domains#cuid-persons",
+              "model://perspectives.domains#cuid-pu"
+            ]
           },
-          { "name": "naam", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Activiteit$Naam" },
-          { "name": "categorie", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Activiteit$Categorie" }
-        ]
-      },
-      {
-        "name": "bijeenkomsten",
-        "roleType": "model://stadskamer.org#Stadskamer$Activiteit$Bijeenkomst",
-        "columns": [
           {
-            "name": "context_id",
+            "name": "FirstName",
             "type": "text",
             "nullable": true,
-            "references": { "table": "activiteiten", "column": "id" }
+            "propertyType": "model://perspectives.domains#cuid-firstname",
+            "fillerChain": [
+              "model://stadskamer.org#cuid-deelnemer",
+              "model://perspectives.domains#cuid-persons",
+              "model://perspectives.domains#cuid-npu"
+            ]
           },
-          { "name": "datum", "type": "datetime", "propertyType": "model://stadskamer.org#Stadskamer$Bijeenkomst$Datum" },
-          { "name": "locatie_naam", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Bijeenkomst$LocatieNaam" }
-        ]
-      },
-      {
-        "name": "deelnemers",
-        "roleType": "model://stadskamer.org#Stadskamer$Bijeenkomst$Deelnemer",
-        "columns": [
           {
-            "name": "context_id",
+            "name": "LastName",
             "type": "text",
             "nullable": true,
-            "references": { "table": "bijeenkomsten", "column": "id" }
-          },
-          { "name": "naam", "type": "text", "propertyType": "model://stadskamer.org#Stadskamer$Deelnemer$Naam" },
-          { "name": "aankomst", "type": "datetime", "propertyType": "model://stadskamer.org#Stadskamer$Deelnemer$Aankomst" },
-          { "name": "vertrek", "type": "datetime", "propertyType": "model://stadskamer.org#Stadskamer$Deelnemer$Vertrek" }
+            "propertyType": "model://perspectives.domains#cuid-lastname",
+            "fillerChain": [
+              "model://stadskamer.org#cuid-deelnemer",
+              "model://perspectives.domains#cuid-persons",
+              "model://perspectives.domains#cuid-npu"
+            ]
+          }
         ]
       }
     ]

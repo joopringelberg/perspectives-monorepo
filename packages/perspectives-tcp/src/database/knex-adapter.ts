@@ -188,6 +188,19 @@ export class KnexAdapter implements DatabaseAdapter {
   async close(): Promise<void> {
     await this.db.destroy();
   }
+
+  async applyViews(viewDefs: Array<{ name: string; sql: string }>): Promise<void> {
+    for (const view of viewDefs) {
+      logger.info(`Creating view "${view.name}"`);
+      try {
+        await this.db.raw(view.sql);
+      } catch (err) {
+        // Log a warning but continue: views are for reporting convenience;
+        // failure does not affect the core delta-processing pipeline.
+        logger.warn(`Could not create view "${view.name}": ${String(err)}`);
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -91,6 +91,18 @@ export interface DatabaseAdapter {
    */
   upsertRow(table: string, id: string, data: Record<string, unknown>): Promise<void>;
 
+  /**
+   * Apply SQL views (create or replace).
+   * Called once at startup, after `applySchema`.
+   *
+   * Each entry contains the view name and the full `CREATE OR REPLACE VIEW` SQL
+   * statement.  Implementations should skip (or log and continue) if a view
+   * cannot be created; views are non-essential for data persistence.
+   *
+   * @param viewDefs  Array of `{ name, sql }` pairs
+   */
+  applyViews(viewDefs: Array<{ name: string; sql: string }>): Promise<void>;
+
   /** Close the database connection. */
   close(): Promise<void>;
 }
