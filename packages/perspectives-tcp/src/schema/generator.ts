@@ -7,6 +7,7 @@
 import { DatabaseAdapter } from '../database/adapter';
 import { TableConfig, ColumnConfig } from '../config';
 import { logger } from '../logger';
+import { stableToTwoSegmentName } from '../utils/naming';
 
 // ---------------------------------------------------------------------------
 // Schema generator
@@ -164,12 +165,9 @@ export class SchemaGenerator {
     );
     if (fillerColumns.length === 0) return null;
 
-    /** Convert a stable role-type ID to the local SQL table name. */
-    const stableToTableName = (stableId: string): string => {
-      const readable = nameMap[stableId] ?? stableId;
-      const parts = readable.split('$');
-      return parts[parts.length - 1] || readable;
-    };
+    /** Resolve a stable role-type ID to the two-segment SQL table name via the nameMap. */
+    const stableToTableName = (stableId: string): string =>
+      stableToTwoSegmentName(stableId, nameMap);
 
     const viewName = `${table.name}_view`;
 
@@ -242,12 +240,14 @@ export class SchemaGenerator {
 // ---------------------------------------------------------------------------
 
 /**
- * Add the three standard columns that every TCP role/context table requires
+ * Add the standard columns that every TCP role/context table requires
  * unless they are already explicitly declared in the config:
- *   - `id`           TEXT NOT NULL (primary key)
- *   - `context_type` TEXT (only for universal context table)
- *   - `context_id`   TEXT (FK to the owning context table, for role tables)
- *   - `filler_id`    TEXT (FK to the filler role, for role tables)
+ *   - `id`                TEXT NOT NULL (primary key)
+ *   - `context_type`      TEXT NOT NULL (universal context table only)
+ *   - `context_type_name` TEXT (universal context table only — last two segments
+ *                          of the readable context type name, e.g. "Bijeenkomst$Aanwezigen")
+ *   - `context_id`        TEXT (FK to the owning context table, for role tables)
+ *   - `filler_id`         TEXT (FK to the filler role, for role tables)
  *
  * Standard columns are inserted **before** any user-defined columns.
  */
@@ -259,10 +259,16 @@ function addStandardColumns(table: TableConfig): TableConfig {
     prefix.push({ name: 'id', type: 'text', primaryKey: true, nullable: false });
   }
 
-  // Universal context table: add context_type column
+  // Universal context table: add context_type and context_type_name columns
   if (table.isUniversalContextTable && !existing.has('context_type')) {
     // Every context must have a type; nullable: false enforces this invariant.
     prefix.push({ name: 'context_type', type: 'text', nullable: false });
+  }
+
+  // Human-readable context type name (last two segments of the qualified name).
+  // Populated at runtime by the processor using the nameMap.
+  if (table.isUniversalContextTable && !existing.has('context_type_name')) {
+    prefix.push({ name: 'context_type_name', type: 'text', nullable: true });
   }
 
   // Legacy per-type context tables (contextType set, not the universal table)

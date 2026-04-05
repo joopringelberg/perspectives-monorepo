@@ -27,10 +27,12 @@
       "model://stadskamer.org#cuid-deelnemer":            "model://stadskamer.org#Stadskamer$Bijeenkomst$Deelnemer",
       "model://perspectives.domains#cuid-persons":        "model://perspectives.domains#System$SocialEnvironment$Persons",
       "model://perspectives.domains#cuid-pu":             "model://perspectives.domains#System$PerspectivesUsers",
+      "model://perspectives.domains#cuid-npu":            "model://perspectives.domains#System$NonPerspectivesUsers",
       "model://stadskamer.org#cuid-datum":                "model://stadskamer.org#Stadskamer$Bijeenkomst$External$Datum",
       "model://stadskamer.org#cuid-aanwezig":             "model://stadskamer.org#Stadskamer$Bijeenkomst$Aanwezigen$Aanwezig",
       "model://perspectives.domains#cuid-firstname":      "model://perspectives.domains#System$Identifiable$FirstName",
-      "model://perspectives.domains#cuid-lastname":       "model://perspectives.domains#System$Identifiable$LastName"
+      "model://perspectives.domains#cuid-lastname":       "model://perspectives.domains#System$Identifiable$LastName",
+      "model://stadskamer.org#cuid-bijeenkomst-ctx":      "model://stadskamer.org#Stadskamer$Bijeenkomst"
     },
     "tables": [
       {
@@ -39,7 +41,7 @@
         "columns": []
       },
       {
-        "name": "External",
+        "name": "Bijeenkomst$External",
         "roleType": "model://stadskamer.org#cuid-bijeenkomst-external",
         "columns": [
           {
@@ -51,7 +53,7 @@
         ]
       },
       {
-        "name": "Aanwezigen",
+        "name": "Bijeenkomst$Aanwezigen",
         "roleType": "model://stadskamer.org#cuid-aanwezigen",
         "columns": [
           {
@@ -80,6 +82,28 @@
               "model://stadskamer.org#cuid-deelnemer",
               "model://perspectives.domains#cuid-persons",
               "model://perspectives.domains#cuid-pu"
+            ]
+          },
+          {
+            "name": "FirstName",
+            "type": "text",
+            "nullable": true,
+            "propertyType": "model://perspectives.domains#cuid-firstname",
+            "fillerChain": [
+              "model://stadskamer.org#cuid-deelnemer",
+              "model://perspectives.domains#cuid-persons",
+              "model://perspectives.domains#cuid-npu"
+            ]
+          },
+          {
+            "name": "LastName",
+            "type": "text",
+            "nullable": true,
+            "propertyType": "model://perspectives.domains#cuid-lastname",
+            "fillerChain": [
+              "model://stadskamer.org#cuid-deelnemer",
+              "model://perspectives.domains#cuid-persons",
+              "model://perspectives.domains#cuid-npu"
             ]
           }
         ]

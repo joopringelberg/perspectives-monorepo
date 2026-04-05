@@ -10,6 +10,7 @@ import { TableConfig, ColumnConfig, ColumnType } from '../config';
 import { DatabaseAdapter, columnForProperty } from '../database/adapter';
 import { parseDelta } from './deltaParser';
 import { logger } from '../logger';
+import { stableToTwoSegmentName } from '../utils/naming';
 
 // ---------------------------------------------------------------------------
 // Value coercion
@@ -54,6 +55,8 @@ export interface ProcessorOptions {
   verifySignatures: boolean;
   /** Table configuration from the TCPConfig */
   tables: TableConfig[];
+  /** Stable-ID → readable-name map; used to derive human-readable type names at runtime */
+  nameMap: Record<string, string>;
 }
 
 /**
@@ -96,7 +99,7 @@ export async function processTransaction(
     logger.debug(`  delta[${i}]: ${tagged.kind} from "${signedDelta.author}"`);
 
     try {
-      await dispatchDelta(tagged, db, options.tables);
+      await dispatchDelta(tagged, db, options.tables, options.nameMap);
     } catch (err) {
       logger.error(`Error processing ${tagged.kind} delta:`, err);
       // Continue with remaining deltas rather than aborting the transaction
@@ -172,10 +175,11 @@ async function dispatchDelta(
   tagged: TaggedDelta,
   db: DatabaseAdapter,
   tables: TableConfig[],
+  nameMap: Record<string, string>,
 ): Promise<void> {
   switch (tagged.kind) {
     case 'UniverseContextDelta':
-      return handleUniverseContextDelta(tagged.delta, db, tables);
+      return handleUniverseContextDelta(tagged.delta, db, tables, nameMap);
     case 'UniverseRoleDelta':
       return handleUniverseRoleDelta(tagged.delta, db, tables);
     case 'ContextDelta':
@@ -195,6 +199,7 @@ async function handleUniverseContextDelta(
   delta: TaggedDelta['delta'],
   db: DatabaseAdapter,
   tables: TableConfig[],
+  nameMap: Record<string, string>,
 ): Promise<void> {
   // Narrow to UniverseContextDelta
   if (!('contextType' in delta && 'id' in delta && !('roleInstance' in delta))) {
@@ -216,10 +221,12 @@ async function handleUniverseContextDelta(
   }
 
   switch (d.deltaType) {
-    case 'ConstructEmptyContext':
+    case 'ConstructEmptyContext': {
       logger.debug(`UniverseContextDelta: INSERT context "${d.id}" into "${table.name}"`);
-      await db.insertRow(table.name, { id: d.id, context_type: d.contextType });
+      const contextTypeName = stableToTwoSegmentName(d.contextType, nameMap);
+      await db.insertRow(table.name, { id: d.id, context_type: d.contextType, context_type_name: contextTypeName });
       break;
+    }
     default:
       logger.debug(`UniverseContextDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
       break;

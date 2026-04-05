@@ -40,13 +40,13 @@ module Perspectives.TCP.Configuration where
 import Prelude
 
 import Control.Monad.Error.Class (catchError)
-import Data.Array (any, catMaybes, concat, concatMap, elem, filter, foldl, last, length, mapMaybe, mapWithIndex, null, nub)
+import Data.Array (any, catMaybes, concat, concatMap, elem, filter, foldl, index, last, length, mapMaybe, mapWithIndex, null, nub)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), split)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (Object, empty, fromFoldable, insert, keys, lookup, member, values) as OBJ
+import Foreign.Object (Object, empty, fromFoldable, insert, keys, lookup, member, toUnfoldable, values) as OBJ
 import Perspectives.CoreTypes (MP)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ModelDependencies (onlookers) as MD
@@ -56,11 +56,12 @@ import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.PersistentType (getEnumeratedProperty, getEnumeratedRole)
 import Perspectives.Representation.Class.Role (allLocallyOnRoleRepresentedProperties, completeDeclaredFillerRestriction, rangeOfRoleCalculation, roleADT, toConjunctiveNormalForm_)
+import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..))
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..))
 import Perspectives.Sidecar.StableIdMapping (Stable) as Sidecar
 import Perspectives.Types.ObjectGetters (propertiesInPerspective)
 import Simple.JSON (class WriteForeign, write)
@@ -187,8 +188,9 @@ buildTCPConfiguration (DomeinFile dfr) modelUri =
     let fillerChainRoleIds = nub $ concatMap collectFillerChainRoleIds roleTables
 
     -- 7. Name map: stable → readable for every ENR, its perspective-visible properties,
-    --    and any role types appearing in filler chains (may be from other models).
-    nameMap <- buildNameMap dfr.enumeratedRoles dfr.enumeratedProperties enrPropMap enumeratedRoleTypes fillerChainRoleIds
+    --    any role types appearing in filler chains (may be from other models), and
+    --    all context types in the model (for populating context_type_name at runtime).
+    nameMap <- buildNameMap dfr.enumeratedRoles dfr.enumeratedProperties dfr.contexts enrPropMap enumeratedRoleTypes fillerChainRoleIds
     pure
       { modelUri
       , nameMap
@@ -322,7 +324,7 @@ buildRoleTable erMap epMap visibleProps ert =
       fillerColumnsNested <- traverse (\pt -> buildFillerChainColumn pt er) fillerProps
       let fillerColumns = concat fillerColumnsNested
 
-      let tableName = localName (unwrap r.readableName)
+      let tableName = twoSegmentName (unwrap r.readableName)
       pure $ Just
         { name: tableName
         , roleType: Just (unwrap ert)
@@ -562,7 +564,7 @@ buildHopRoleTable roleId endpointCols = do
     Nothing -> Nothing
     Just (EnumeratedRole r) ->
       let
-        tableName = localName (unwrap r.readableName)
+        tableName = twoSegmentName (unwrap r.readableName)
         columns = map
           ( \c -> TCPColumnConfigJ
               { name: c.name
@@ -588,8 +590,9 @@ buildHopRoleTable roleId endpointCols = do
 
 -- | Build a map from stable identifiers to readable (model-source) names for
 -- | every EnumeratedRoleType, its perspective-visible EnumeratedPropertyTypes,
--- | and any role types that appear in filler chains (which may be from other
--- | models and are needed by TCP to resolve JOIN table names).
+-- | all context types in the model (for context_type_name at runtime), and any
+-- | role types that appear in filler chains (which may be from other models and
+-- | are needed by TCP to resolve JOIN table names).
 -- |
 -- | `enrPropMap` carries the visible property set per ENR as a plain array
 -- | (resolved by `propertiesInPerspective`).
@@ -599,14 +602,22 @@ buildHopRoleTable roleId endpointCols = do
 buildNameMap
   :: OBJ.Object EnumeratedRole
   -> OBJ.Object EnumeratedProperty
+  -> OBJ.Object Context
   -> OBJ.Object (Array PropertyType)
   -> Array EnumeratedRoleType
   -> Array String
   -> MP (OBJ.Object String)
-buildNameMap erMap epMap enrPropMap erts fillerChainRoleIds = do
+buildNameMap erMap epMap ctxMap enrPropMap erts fillerChainRoleIds = do
   fillerEntries <- catMaybes <$> traverse lookupFillerRoleName fillerChainRoleIds
-  pure $ OBJ.fromFoldable $ staticEntries <> fillerEntries
+  pure $ OBJ.fromFoldable $ staticEntries <> contextEntries <> fillerEntries
   where
+  -- Context type entries: all context types in the model.
+  contextEntries :: Array (Tuple String String)
+  contextEntries = map
+    ( \(Tuple stableId (Context ctx)) ->
+        Tuple stableId (unwrap ctx.readableName)
+    )
+    (OBJ.toUnfoldable ctxMap)
   -- Static entries: current-model ENRs and their perspective-visible ENPs.
   staticEntries :: Array (Tuple String String)
   staticEntries = roleEntries <> propEntries
@@ -679,3 +690,31 @@ rangeToSQLType (PDuration _) = "text"
 localName :: String -> String
 localName qualifiedName =
   fromMaybe qualifiedName $ last $ split (Pattern "$") qualifiedName
+
+-- | Extract the last two '$'-separated segments of a qualified Perspectives name,
+-- | stripping the model URI prefix first.  Used for SQL table names to provide
+-- | context while avoiding single-segment collisions.
+-- |
+-- | E.g. "model://perspectives.domains#Bijeenkomst$Aanwezigen"
+-- |        → "Bijeenkomst$Aanwezigen"
+-- |      "model://perspectives.domains#System$SocialEnvironment$Persons"
+-- |        → "SocialEnvironment$Persons"
+-- |      "model://perspectives.domains#System$User"
+-- |        → "System$User"
+twoSegmentName :: String -> String
+twoSegmentName qualifiedName =
+  let
+    -- Strip model URI prefix (everything up to and including the first '#')
+    afterHash = fromMaybe qualifiedName $ last $ split (Pattern "#") qualifiedName
+    segs = split (Pattern "$") afterHash
+    n = length segs
+  in
+    if n >= 2
+      then
+        let
+          s1 = fromMaybe "" $ index segs (n - 2)
+          s2 = fromMaybe "" $ last segs
+        in
+          s1 <> "$" <> s2
+      else
+        fromMaybe qualifiedName (last segs)

@@ -102,6 +102,7 @@ export class TCP {
     await processTransaction(transaction, this.db, {
       verifySignatures: this.config.verifySignatures ?? false,
       tables: this.config.schema.tables,
+      nameMap: this.config.schema.nameMap ?? {},
     });
   }
 }
