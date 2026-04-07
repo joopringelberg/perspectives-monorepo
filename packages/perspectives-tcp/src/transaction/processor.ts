@@ -443,10 +443,20 @@ async function handleRolePropertyDelta(
   // Due to "flattening", a property may surface in a table whose roleType differs
   // from d.roleType (e.g. when the table includes properties from bound/filler roles
   // further up the role chain).  We must update every matching table.
+  //
+  // Columns with a `fillerChain` are VIEW-only: they are not present in the base
+  // table (they are stripped by `stripFillerChainColumns` during schema creation)
+  // and are instead materialised by LEFT JOINs in the `<table>_view` SQL view.
+  // Attempting to UPDATE such a column on the base table would cause a
+  // "column does not exist" database error.  The property will be updated via
+  // the endpoint table that owns the direct (no-fillerChain) column, and the
+  // view will reflect that change automatically.
   const matches: Array<{ table: TableConfig; col: ColumnConfig }> = [];
   for (const t of tables) {
     const col = columnForProperty(t, d.property);
-    if (col != null) matches.push({ table: t, col });
+    if (col != null && (!col.fillerChain || col.fillerChain.length === 0)) {
+      matches.push({ table: t, col });
+    }
   }
 
   if (matches.length === 0) {
