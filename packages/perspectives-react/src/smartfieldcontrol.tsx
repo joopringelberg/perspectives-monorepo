@@ -76,6 +76,9 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
   // Tracks whether the default text/date/time control is in an
   // editing session, without involving React state.
   private defaultEditingActive: boolean = false;
+  // Tracks whether the checkbox control is in an editing session,
+  // without involving React state.
+  private checkboxEditingActive: boolean = false;
   // Undo button for the default control path; controlled via DOM
   // to avoid React re-renders while editing.
   private undoRef = React.createRef<HTMLButtonElement>();
@@ -495,6 +498,15 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
       const newvalue = (component.state.value != "true").toString();
       if ( !component.props.disabled )
       {
+        // Optimistic state update so the checkbox visually reflects the
+        // new value immediately, without waiting for the PDR roundtrip.
+        component.setState({ value: newvalue });
+        // Notify parent components that an editing session has started
+        // (analogous to how text/select controls dispatch this event).
+        if (!component.checkboxEditingActive) {
+          component.checkboxEditingActive = true;
+          component.dispatchEditingStarted();
+        }
         component.changeValue(newvalue);
       }
     }
@@ -528,8 +540,13 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               aria-label={ component.props.serialisedProperty.displayName }
               readOnly={ component.props.disabled }
               checked={ component.state.value == "true" }
-              // onChange={ toggleValue }
-              onClick={ toggleValue }
+              onChange={ toggleValue }
+              onBlur={() => {
+                if (component.checkboxEditingActive) {
+                  component.checkboxEditingActive = false;
+                  component.dispatchEditingEnded();
+                }
+              }}
               required={mandatory}
             />
           </div>);
