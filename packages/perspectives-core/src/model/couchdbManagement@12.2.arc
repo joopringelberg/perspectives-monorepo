@@ -760,18 +760,18 @@ domain model://perspectives.domains#CouchdbManagement@12.2
             form "Repository" External
               with props (RepositoryUrl, IsPublic)
         where
-          -- Manifests
-          --   master
-          --     markdown <## Add a manifest
-          --               Add a manifest by opening the menu and creating a new empty role.
-          --               Then enter the *unqualified* name of the model in the column `Local model name`.
-          --               For the domain 'model://perspectives.domains#System' for example, this would be 'System'.
-          --               >
-          --     -- Notice that we will have a table with both LocalModelName and Name. The latter is the ReadableName. 
-          --     -- We cannot omit the readable name. It equals the LocalModelName, but we cannot edit it. 
-          --     -- Hence we need both.
-          --     with props (ModelManifest$External$Name)
-          --   detail
+          Manifests
+            master
+              markdown <## Add a manifest
+                        Add a manifest by opening the menu and creating a new empty role.
+                        Then enter the *unqualified* name of the model in the column `Local model name`.
+                        For the domain 'model://perspectives.domains#System' for example, this would be 'System'.
+                        >
+              -- Notice that we will have a table with both LocalModelName and Name. The latter is the ReadableName. 
+              -- We cannot omit the readable name. It equals the LocalModelName, but we cannot edit it. 
+              -- Hence we need both.
+              with props (ModelManifest$External$Name)
+            detail
       
     -- This role requires credentials for the ServerUrl. It 'inherits' them from its filler.
     -- It also requires credentials for the RepositoryUrl, because it creates and updates Manifests.

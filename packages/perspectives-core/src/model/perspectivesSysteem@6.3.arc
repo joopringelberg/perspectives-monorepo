@@ -226,7 +226,7 @@ domain model://perspectives.domains#System@6.3
       state NonUser = binding >> roleType == [ role sys:TheWorld$NonPerspectivesUsers ]
       state User = binding >> roleType == [ role sys:TheWorld$PerspectivesUsers ]
 
-    user Me = me
+    user Me (default) = me
       perspective on extern
         props (MyIdentity) verbs (Consult, SetPropertyValue)
         action ExportForAnotherInstallation
@@ -303,7 +303,7 @@ domain model://perspectives.domains#System@6.3
 
     user OtherPersons = sys:TheWorld >> NonPerspectivesUsers
 
-    user Peers = sys:TheWorld >> PerspectivesUsers
+    user Peers = filter sys:TheWorld >> PerspectivesUsers with not (callExternal util:RoleIdentifier( this ) returns String == "def:#serializationuser")
 
     -- We construct sys:Me in the PDR; me is constructed by SystemUser.
     user SystemUser = me
