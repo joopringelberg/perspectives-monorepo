@@ -38,7 +38,7 @@ export class KnexAdapter implements DatabaseAdapter {
   // -------------------------------------------------------------------------
 
   async applySchema(tables: TableConfig[]): Promise<void> {
-    // Pass 1: create all tables without foreign key constraints
+    // Pass 1: create new tables or add missing columns to existing ones
     for (const table of tables) {
       const exists = await this.db.schema.hasTable(table.name);
       if (!exists) {
@@ -47,7 +47,19 @@ export class KnexAdapter implements DatabaseAdapter {
           this.buildTable(t, table, false);
         });
       } else {
-        logger.debug(`Table "${table.name}" already exists – skipping`);
+        // Table already exists: add any columns that are missing (additive migration).
+        // This handles schema evolution where new standard columns (e.g.
+        // context_type_name) are added after the table was first created.
+        for (const col of table.columns) {
+          const colExists = await this.db.schema.hasColumn(table.name, col.name);
+          if (!colExists) {
+            logger.info(`Adding missing column "${col.name}" to table "${table.name}"`);
+            await this.db.schema.alterTable(table.name, (t) => {
+              const colBuilder = this.addColumn(t, col);
+              colBuilder.nullable(); // new columns added to existing tables must always be nullable
+            });
+          }
+        }
       }
     }
 
@@ -83,7 +95,7 @@ export class KnexAdapter implements DatabaseAdapter {
     return statements.join('\n\n');
   }
 
-  private buildTable(builder: Knex.CreateTableBuilder, table: TableConfig, includeForeignKeys = true): void {
+  private buildTable(builder: Knex.TableBuilder, table: TableConfig, includeForeignKeys = true): void {
     for (const col of table.columns) {
       const colBuilder = this.addColumn(builder, col);
       if (col.nullable === false) {
@@ -111,7 +123,7 @@ export class KnexAdapter implements DatabaseAdapter {
   }
 
   private addColumn(
-    builder: Knex.CreateTableBuilder,
+    builder: Knex.TableBuilder,
     col: ColumnConfig,
   ): Knex.ColumnBuilder {
     switch (col.type) {
