@@ -24,10 +24,10 @@ module Perspectives.Persistence.Authentication where
 
 import Prelude
 
-import Affjax.Web as AJ
 import Affjax.RequestBody as RequestBody
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.StatusCode (StatusCode(..))
+import Affjax.Web as AJ
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Except (catchJust)
 import Data.Either (Either(..))
@@ -35,9 +35,10 @@ import Data.HTTP.Method (Method(..))
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Error, error, throwError)
 import Effect.Aff.Class (liftAff)
+import Effect.Class (liftEffect)
+import Effect.Class.Console (warn)
 import Foreign.Object (insert, lookup)
 import Perspectives.Couchdb (onAccepted_, toJson)
-import Perspectives.ErrorLogging (logError)
 import Perspectives.Identifiers (url2Authority)
 import Perspectives.Persistence.Types (Credential(..), MonadPouchdb, Password, Url, UserName)
 import Perspectives.ResourceIdentifiers (databaseLocation)
@@ -91,7 +92,7 @@ requestAuthentication authSource = do
             "requestAuthentication"
             \_ -> pure unit
         -- we do not throw an error, because authentication may have been requested in a situation where it was not necessary.
-        Nothing -> logError (error $ "No password found for " <> authority)
+        Nothing -> liftEffect $ warn $ "No password found for " <> authority
     Nothing -> throwError (error $ "Impossible case in requestAuthentication for " <> show authSource)
 
   where

@@ -27,27 +27,17 @@ import Prelude
 import Control.Monad.AvarMonadAsk (modify)
 import Data.Array (cons)
 import Effect.Class (class MonadEffect, liftEffect)
-import Effect.Class.Console (log, warn)
-import Effect.Exception (Error)
-import Perspectives.CoreTypes (LogLevel(..), MonadPerspectives)
+import Effect.Class.Console (log)
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives)
 import Perspectives.Logging (pdrLog)
 import Perspectives.Parsing.Messages (PerspectivesError)
 import Perspectives.Warning (PerspectivesWarning)
 
-logError :: forall m. MonadEffect m => Error -> m Unit
-logError = liftEffect <<< warn <<< show
-
 logPerspectivesError :: forall m. MonadEffect m => PerspectivesError -> m Unit
 logPerspectivesError = liftEffect <<< log <<< show
 
--- TODO. Create a system of warnings to be shared with the modelling user.
--- For now, we just log the warning on screen.
+-- HAS A SINGLE DEPENDENCY IN DOMEINCACHE THAT WE CANNOT REPLACE DUE TO CIRCULARITY ISSUES.
 warnModeller :: PerspectivesWarning -> MonadPerspectives Unit
 warnModeller warning = do
   modify \(s@{ warnings }) -> s { warnings = cons ({ message: show warning, error: "" }) warnings }
-  pdrLog "MODEL" Warn (show warning)
-
-warnModellerWithError :: PerspectivesWarning -> String -> MonadPerspectives Unit
-warnModellerWithError warning error = do
-  modify \(s@{ warnings }) -> s { warnings = cons ({ message: show warning, error: error }) warnings }
-  pdrLog "MODEL" Warn (show warning)
+  pdrLog MODEL Warn (show warning)

@@ -32,7 +32,7 @@ import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, lookup)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Data.EncodableMap (EncodableMap(..))
-import Perspectives.ErrorLogging (warnModeller)
+import Perspectives.Error.Pretty (warnModellerPretty)
 import Perspectives.InvertedQuery (InvertedQuery(..))
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree)
 import Perspectives.Representation.ADT (ADT(..))
@@ -270,7 +270,7 @@ checkSynchronization = do
         projectedGraph <- unsafePartial projectForPropertyDeltas propId roleId
         case checkAllStartpoints projectedGraph of
           none | null none -> pure unit
-          failures -> lift $ lift $ for_ failures \(Tuple source destinations) -> warnModeller (PropertySynchronizationIncomplete propId source destinations)
+          failures -> lift $ lift $ for_ failures \(Tuple source destinations) -> warnModellerPretty (PropertySynchronizationIncomplete propId source destinations)
       otherwise -> pure unit
     pure unit
   for_ contexts \c@(Context { id, roleInvertedQueries }) -> do
@@ -282,10 +282,10 @@ checkSynchronization = do
         projectedGraph <- unsafePartial projectForRoleInstanceDeltas roleId roleInvertedQueries
         case checkAllStartpoints projectedGraph of
           none | null none -> pure unit
-          failures -> lift $ lift $ for_ failures \(Tuple source destinations) -> warnModeller (RoleSynchronizationIncomplete roleId source destinations)
+          failures -> lift $ lift $ for_ failures \(Tuple source destinations) -> warnModellerPretty (RoleSynchronizationIncomplete roleId source destinations)
         -- CHECK INVERTED QUERIES FOR 'BINDING' AND 'BINDER' OPERATORS
         projectedGraph' <- unsafePartial projectForRoleBindingDeltas roleId id
         case checkAllStartpoints projectedGraph' of
           none | null none -> pure unit
-          failures -> lift $ lift $ for_ failures \(Tuple source destinations) -> warnModeller (RoleBindingSynchronizationIncomplete roleId source destinations)
+          failures -> lift $ lift $ for_ failures \(Tuple source destinations) -> warnModellerPretty (RoleBindingSynchronizationIncomplete roleId source destinations)
       otherwise -> pure unit

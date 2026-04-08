@@ -49,7 +49,7 @@ module Perspectives.CoreTypes
   , LibFunc3
   , LogConfig
   , LogLevel(..)
-  , LogTopic
+  , LogTopic(..)
   , MP
   , MPQ
   , MPT
@@ -251,7 +251,25 @@ type Warning = { message :: String, error :: String }
 -----------------------------------------------------------
 -- STRUCTURED LOGGING
 -----------------------------------------------------------
-type LogTopic = String
+data LogTopic = SYNC | BROKER | QUERY | PERSISTENCE | STATE | AUTH | MODEL | UPGRADE | PARSER | COMPILER 
+
+instance Show LogTopic where
+  show SYNC = "SYNC"
+  show BROKER = "BROKER"
+  show QUERY = "QUERY"
+  show PERSISTENCE = "PERSISTENCE"
+  show STATE = "STATE"
+  show AUTH = "AUTH"
+  show MODEL = "MODEL"
+  show UPGRADE = "UPGRADE"
+  show PARSER = "PARSER"
+  show COMPILER = "COMPILER"
+
+instance Eq LogTopic where
+  eq t1 t2 = show t1 `eq` show t2
+
+instance Ord LogTopic where
+  compare t1 t2 = compare (show t1) (show t2)
 
 data LogLevel = Trace | Debug | Info | Warn | Error
 

@@ -37,6 +37,7 @@
 
 module Perspectives.Logging
   ( debugBroker
+  , debugCompiler
   , debugModel
   , debugPersistence
   , debugQuery
@@ -44,6 +45,7 @@ module Perspectives.Logging
   , debugSync
   , debugUpgrade
   , errorBroker
+  , errorCompiler
   , errorModel
   , errorPersistence
   , errorSync
@@ -60,14 +62,15 @@ module Perspectives.Logging
   , warnBroker
   , warnModel
   , warnSync
-  ) where
+  )
+  where
 
 import Control.Monad.AvarMonadAsk (gets)
 import Data.Map (lookup) as Map
 import Data.Maybe (fromMaybe)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log) as Console
-import Perspectives.CoreTypes (LogLevel(..), LogTopic, MonadPerspectives)
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives)
 import Prelude (Unit, bind, show, when, ($), (>=), (<>))
 
 -- | Emit a log message for the given topic at the given level.
@@ -79,98 +82,107 @@ pdrLog topic level message = do
   { defaultLevel, topicLevels } <- gets _.logConfig
   let threshold = fromMaybe defaultLevel (Map.lookup topic topicLevels)
   when (level >= threshold) do
-    let prefix = "[" <> show level <> "] [" <> topic <> "] "
+    let prefix = "[" <> show level <> "] [" <> show topic <> "] "
     liftEffect $ Console.log (prefix <> message)
 
 -----------------------------------------------------------
 -- SYNC
 -----------------------------------------------------------
 traceSync :: String -> MonadPerspectives Unit
-traceSync = pdrLog "SYNC" Trace
+traceSync = pdrLog SYNC Trace
 
 debugSync :: String -> MonadPerspectives Unit
-debugSync = pdrLog "SYNC" Debug
+debugSync = pdrLog SYNC Debug
 
 infoSync :: String -> MonadPerspectives Unit
-infoSync = pdrLog "SYNC" Info
+infoSync = pdrLog SYNC Info
 
 warnSync :: String -> MonadPerspectives Unit
-warnSync = pdrLog "SYNC" Warn
+warnSync = pdrLog SYNC Warn
 
 errorSync :: String -> MonadPerspectives Unit
-errorSync = pdrLog "SYNC" Error
+errorSync = pdrLog SYNC Error
 
 -----------------------------------------------------------
 -- BROKER
 -----------------------------------------------------------
 traceBroker :: String -> MonadPerspectives Unit
-traceBroker = pdrLog "BROKER" Trace
+traceBroker = pdrLog BROKER Trace
 
 debugBroker :: String -> MonadPerspectives Unit
-debugBroker = pdrLog "BROKER" Debug
+debugBroker = pdrLog BROKER Debug
 
 infoBroker :: String -> MonadPerspectives Unit
-infoBroker = pdrLog "BROKER" Info
+infoBroker = pdrLog BROKER Info
 
 warnBroker :: String -> MonadPerspectives Unit
-warnBroker = pdrLog "BROKER" Warn
+warnBroker = pdrLog BROKER Warn
 
 errorBroker :: String -> MonadPerspectives Unit
-errorBroker = pdrLog "BROKER" Error
+errorBroker = pdrLog BROKER Error
 
 -----------------------------------------------------------
 -- QUERY
 -----------------------------------------------------------
 traceQuery :: String -> MonadPerspectives Unit
-traceQuery = pdrLog "QUERY" Trace
+traceQuery = pdrLog QUERY Trace
 
 debugQuery :: String -> MonadPerspectives Unit
-debugQuery = pdrLog "QUERY" Debug
+debugQuery = pdrLog QUERY Debug
 
 -----------------------------------------------------------
 -- PERSISTENCE
 -----------------------------------------------------------
 tracePersistence :: String -> MonadPerspectives Unit
-tracePersistence = pdrLog "PERSISTENCE" Trace
+tracePersistence = pdrLog PERSISTENCE Trace
 
 debugPersistence :: String -> MonadPerspectives Unit
-debugPersistence = pdrLog "PERSISTENCE" Debug
+debugPersistence = pdrLog PERSISTENCE Debug
 
 errorPersistence :: String -> MonadPerspectives Unit
-errorPersistence = pdrLog "PERSISTENCE" Error
+errorPersistence = pdrLog PERSISTENCE Error
 
 -----------------------------------------------------------
 -- STATE
 -----------------------------------------------------------
 traceState :: String -> MonadPerspectives Unit
-traceState = pdrLog "STATE" Trace
+traceState = pdrLog STATE Trace
 
 debugState :: String -> MonadPerspectives Unit
-debugState = pdrLog "STATE" Debug
+debugState = pdrLog STATE Debug
 
 -----------------------------------------------------------
 -- AUTH
 -----------------------------------------------------------
 warnAuth :: String -> MonadPerspectives Unit
-warnAuth = pdrLog "AUTH" Warn
+warnAuth = pdrLog AUTH Warn
 
 -----------------------------------------------------------
 -- MODEL
 -----------------------------------------------------------
 debugModel :: String -> MonadPerspectives Unit
-debugModel = pdrLog "MODEL" Debug
+debugModel = pdrLog MODEL Debug
 
 warnModel :: String -> MonadPerspectives Unit
-warnModel = pdrLog "MODEL" Warn
+warnModel = pdrLog MODEL Warn
 
 infoModel :: String -> MonadPerspectives Unit
-infoModel = pdrLog "MODEL" Info
+infoModel = pdrLog MODEL Info
 
 errorModel :: String -> MonadPerspectives Unit
-errorModel = pdrLog "MODEL" Error
+errorModel = pdrLog MODEL Error
 
 -----------------------------------------------------------
 -- UPGRADE
 -----------------------------------------------------------
 debugUpgrade :: String -> MonadPerspectives Unit
-debugUpgrade = pdrLog "UPGRADE" Debug
+debugUpgrade = pdrLog UPGRADE Debug
+
+-----------------------------------------------------------
+-- COMPILER
+-----------------------------------------------------------
+debugCompiler :: String -> MonadPerspectives Unit
+debugCompiler = pdrLog COMPILER Debug
+
+errorCompiler :: String -> MonadPerspectives Unit
+errorCompiler = pdrLog COMPILER Error
