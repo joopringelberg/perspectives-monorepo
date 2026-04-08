@@ -184,10 +184,13 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     // For non-card cells, a click on the selected cell starts editing.
     // For cards we keep single-click behaviour for selection only, so that
     // double-click behaviours (like opening a context) keep working.
+    // Checkboxes do not need an explicit edit mode: a single click directly
+    // toggles the value via SmartFieldControl, so we skip the editable transition.
     if (this.props.isselected
         && !this.state.editable
         && !this.props.iscard
-        && !this.propertyOnlyConsultable())
+        && !this.propertyOnlyConsultable()
+        && this.inputType !== 'checkbox')
     {
       this.setState({editable: true});
     }
@@ -460,7 +463,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
             propertyValues={component.props.propertyValues}
             roleId={component.props.roleinstance}
             myroletype={component.props.myroletype}
-            disabled={!component.state.editable}
+            disabled={component.inputType === 'checkbox' ? component.propertyOnlyConsultable() : !component.state.editable}
             isselected={component.props.isselected}
             contextinstance={component.props.perspective.contextInstance}
           />
