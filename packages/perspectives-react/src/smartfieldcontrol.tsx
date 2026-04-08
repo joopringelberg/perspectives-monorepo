@@ -278,10 +278,16 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
       {
         // Assuming this code only runs when the field control is active,
         // let it handle the navigation keys locally but do not bubble.
+        // Exception: checkboxes have no internal arrow-key navigation, so
+        // arrow keys must bubble to the table for row/column navigation.
         case "ArrowLeft": // left arrow.
         case "ArrowRight": // right arrow.
         case "ArrowUp": // Up arrow
         case "ArrowDown": // Down arrow
+          if (component.controlType !== "checkbox") {
+            event.stopPropagation();
+          }
+          break;
         case "Control": // Vertical Tab.
         case "Space": // Space
           event.stopPropagation();
