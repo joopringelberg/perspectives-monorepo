@@ -625,9 +625,16 @@ rolePart = do
     "on", "entry" -> SQP <$> onEntryE
     "on", "exit" -> SQP <$> onExitE
     "state", _ -> ROLESTATE <$> stateE
+    -- When `second` is non-empty, twoReservedWords found a reserved word immediately
+    -- after the keyword. Consume the keyword first so this becomes a committed (consumed)
+    -- error that propagates even through any `try` wrapper around the inner parser.
+    "aspect", second | second /= "" -> void (reserved "aspect") *> failReservedWord second
     "aspect", _ -> aspectE
+    "indexed", second | second /= "" -> void (reserved "indexed") *> failReservedWord second
     "indexed", _ -> indexedE
+    "property", second | second /= "" -> void (reserved "property") *> failReservedWord second
     "property", _ -> propertyE
+    "view", second | second /= "" -> void (reserved "view") *> failReservedWord second
     "view", _ -> viewE
     "action", _ -> SQP <$> actionE
     "screen", _ -> Screen <$> screenE
@@ -636,6 +643,12 @@ rolePart = do
         thisWord <- stringUntilNewline
         fail ("Expected: perspective (on/of), in state, on (entry/exit), state, aspect, indexed, property, view (but found '" <> thisWord <> "'), ")
       otherwise -> fail ("Expected: perspective (on/of), in state, on (entry/exit), state, aspect, indexed, property, view (but found '" <> otherwise <> "'), ")
+
+-- | Produce a parse failure whose message names the offending reserved word.
+-- | Used in `rolePart` to surface a clear error when a reserved word is used where
+-- | an identifier is expected (e.g. `property Date (String)`).
+failReservedWord :: String -> IP RolePart
+failReservedWord word = fail (show word <> " is a reserved word in this language. Please use another capitalized name, a prefixed name, or a fully qualified name")
 
 -- | Combine the RolePart elements that result from "on entry", "on exit" and "state" into a root state for the role.
 -- | The elements we combine are: NotificationE, AutomaticEffectE and StateE.
