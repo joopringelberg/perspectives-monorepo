@@ -68,7 +68,7 @@ import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), Transactio
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), addToTransactionForPeer, transactieID)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
-import Prelude (Unit, add, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>))
+import Prelude (Unit, add, bind, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>))
 import Simple.JSON (writeJSON)
 
 -- | Splits the transaction in versions specific for each peer and sends them.
@@ -211,8 +211,12 @@ computeUserRoleBottom rid = ((map ENR <<< roleType_ >=> isPublicProxy) rid) >>=
 -- |    * instances of sys:PerspectivesSystem$User, but not the one that equals the local sys:Me.
 addDelta :: DeltaInTransaction -> MonadPerspectivesTransaction Unit
 addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
-  -- Store all locally-created deltas in the DeltaStore for persistent history.
-  lift $ storeDeltaFromSignedDelta delta
+  -- Store locally-created deltas in the DeltaStore for persistent history.
+  -- Skip storage when processing incoming deltas (executeTransaction / executeDeltas for public roles):
+  -- in those paths the delta is either already stored (executeTransaction uses executeDeltaWithVersionTracking)
+  -- or must not be stored at all (executeDeltas for public roles uses modified author identifiers).
+  isExecuting <- AA.gets (\(Transaction tr) -> tr.isExecutingIncomingDeltas)
+  when (not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
   users' <- lift $ filterA notIsMe users
   if null users' then pure unit
@@ -236,8 +240,10 @@ addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
 -- | Insert the delta at the index, unless it is already in the transaction or there are no users (and ignore the own user).
 insertDelta :: DeltaInTransaction -> Int -> MonadPerspectivesTransaction Unit
 insertDelta (DeltaInTransaction deltarecord@{ users, delta }) i = do
-  -- Store all locally-created deltas in the DeltaStore for persistent history.
-  lift $ storeDeltaFromSignedDelta delta
+  -- Store locally-created deltas in the DeltaStore for persistent history.
+  -- Skip storage when processing incoming deltas (see addDelta for the rationale).
+  isExecuting <- AA.gets (\(Transaction tr) -> tr.isExecutingIncomingDeltas)
+  when (not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
   users' <- lift $ filterA notIsMe users
   if null users' then pure unit

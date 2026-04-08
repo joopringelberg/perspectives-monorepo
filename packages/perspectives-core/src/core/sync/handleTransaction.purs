@@ -22,7 +22,7 @@
 
 module Perspectives.Sync.HandleTransaction where
 
-import Control.Monad.AvarMonadAsk (gets)
+import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
@@ -80,7 +80,7 @@ import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
 import Perspectives.Sync.LegacyDeltas (extractLegacyResourceKey, toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
-import Perspectives.Sync.Transaction (PublicKeyInfo)
+import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
@@ -383,9 +383,14 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, author
 -- | so that keys of authors not yet in the entity store can still be used for
 -- | re-verification during delta execution.
 executeTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
-executeTransaction t = try (verifyTransaction t) >>= case _ of
-  Left e -> lift $ logPerspectivesErrorPretty (IncomingTransactionFailed (show e))
-  Right verifiedKeys -> executeTransaction' verifiedKeys t
+executeTransaction t = do
+  -- Prevent addDelta/insertDelta from storing deltas in the DeltaStore.
+  -- executeDeltaWithVersionTracking handles DeltaStore persistence directly;
+  -- the update functions called via executeDelta must not also store via addDelta.
+  modify (over Transaction \tr -> tr { isExecutingIncomingDeltas = true })
+  try (verifyTransaction t) >>= case _ of
+    Left e -> lift $ logPerspectivesErrorPretty (IncomingTransactionFailed (show e))
+    Right verifiedKeys -> executeTransaction' verifiedKeys t
 
   where
 
@@ -850,12 +855,17 @@ expandDeltas t@(TransactionForPeer { deltas, publicKeys }) storageUrl = do
 
 executeDeltas :: Array Delta -> MonadPerspectivesTransaction Unit
 -- We use `for` rather than `for_` because the latter folds from the right, starting with the last element.
-executeDeltas deltas = void $ for deltas case _ of
-  UCD s d -> executeUniverseContextDelta d s
-  URD s d -> executeUniverseRoleDelta d s
-  CDD s d -> executeContextDelta d s
-  RBD s d -> executeRoleBindingDelta d s
-  RPD s d -> executeRolePropertyDelta d s
+executeDeltas deltas = do
+  -- Prevent addDelta/insertDelta from storing deltas in the DeltaStore.
+  -- These deltas are applied on behalf of a public role; they must not be stored
+  -- (the originating user's installation already stored them under the original author key).
+  modify (over Transaction \tr -> tr { isExecutingIncomingDeltas = true })
+  void $ for deltas case _ of
+    UCD s d -> executeUniverseContextDelta d s
+    URD s d -> executeUniverseRoleDelta d s
+    CDD s d -> executeContextDelta d s
+    RBD s d -> executeRoleBindingDelta d s
+    RPD s d -> executeRolePropertyDelta d s
 
 -----------------------------------------------------------
 -- COLLECTING DELTAS
