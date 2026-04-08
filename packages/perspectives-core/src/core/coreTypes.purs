@@ -262,13 +262,13 @@ derive instance ordLogLevel :: Ord LogLevel
 instance showLogLevel :: Show LogLevel where
   show Trace = "TRACE"
   show Debug = "DEBUG"
-  show Info  = "INFO"
-  show Warn  = "WARN"
+  show Info = "INFO"
+  show Warn = "WARN"
   show Error = "ERROR"
 
 type LogConfig =
   { defaultLevel :: LogLevel
-  , topicLevels  :: Map LogTopic LogLevel
+  , topicLevels :: Map LogTopic LogLevel
   }
 
 -- | These are options that can be provided to the PDR at startup.
