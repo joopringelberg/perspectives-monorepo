@@ -48,6 +48,9 @@ module Perspectives.CoreTypes
   , LibFunc1
   , LibFunc2
   , LibFunc3
+  , LogConfig
+  , LogLevel(..)
+  , LogTopic(..)
   , MP
   , MPQ
   , MPT
@@ -275,9 +278,55 @@ type PerspectivesExtraState =
   , modelUnderCompilation :: Maybe (ModelUri Readable)
 
   , modelUris :: Map (ModelUri Readable) (ModelUri Stable)
+
+  , logConfig :: LogConfig
   )
 
 type Warning = { message :: String, error :: String, externalRoleId :: String, contextName :: String }
+
+-----------------------------------------------------------
+-- STRUCTURED LOGGING
+-----------------------------------------------------------
+data LogTopic = SYNC | BROKER | QUERY | PERSISTENCE | STATE | AUTH | MODEL | UPGRADE | PARSER | COMPILER | INSTALL | OTHER
+
+instance Show LogTopic where
+  show SYNC = "SYNC"
+  show BROKER = "BROKER"
+  show QUERY = "QUERY"
+  show PERSISTENCE = "PERSISTENCE"
+  show STATE = "STATE"
+  show AUTH = "AUTH"
+  show MODEL = "MODEL"
+  show UPGRADE = "UPGRADE"
+  show PARSER = "PARSER"
+  show COMPILER = "COMPILER"
+  show INSTALL = "INSTALL"
+  show OTHER = "OTHER"
+
+instance Eq LogTopic where
+  eq t1 t2 = show t1 `eq` show t2
+
+instance Ord LogTopic where
+  compare t1 t2 = compare (show t1) (show t2)
+
+data LogLevel = Trace | Debug | Info | Warn | Error | Silent
+
+derive instance eqLogLevel :: Eq LogLevel
+
+derive instance ordLogLevel :: Ord LogLevel
+
+instance showLogLevel :: Show LogLevel where
+  show Trace = "TRACE"
+  show Debug = "DEBUG"
+  show Info = "INFO"
+  show Warn = "WARN"
+  show Error = "ERROR"
+  show Silent = "SILENT"
+
+type LogConfig =
+  { defaultLevel :: LogLevel
+  , topicLevels :: Map LogTopic LogLevel
+  }
 
 -- | These are options that can be provided to the PDR at startup.
 type RuntimeOptions =

@@ -9,8 +9,7 @@ import Data.Traversable (for, for_)
 import Foreign.Object (Object, lookup)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..))
 import Perspectives.CoreTypes (MonadPerspectives)
-import Perspectives.ErrorLogging (logPerspectivesError)
-import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.Logging (errorUpgrade)
 import Perspectives.Persistence.API (addDocument_, documentsInDatabase, includeDocs)
 import Perspectives.PerspectivesState (modelsDatabaseName)
 import Perspectives.ResourceIdentifiers (resourceIdentifier2WriteDocLocator)
@@ -26,8 +25,8 @@ patchModels replacements = do
   -- As doc is still uninterpreted, we can only rely on the rows.id member of the PouchdbAllDocs record. These, however, are DomeinFileIdentifiers.
   -- We do not have a useful test on the form of such identifiers.
   uninterpretedDomeinFiles <- for allModels \({ id, doc }) -> case JSON.read <$> doc of
-    Just (Left errs) -> (logPerspectivesError (Custom ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs))) *> pure Nothing
-    Nothing -> logPerspectivesError (Custom ("No document retrieved for model '" <> id <> "'.")) *> pure Nothing
+    Just (Left errs) -> (errorUpgrade ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs)) *> pure Nothing
+    Nothing -> errorUpgrade ("No document retrieved for model '" <> id <> "'.") *> pure Nothing
     Just (Right (df :: UninterpretedDomeinFile)) -> pure $ Just df
   for_ (catMaybes uninterpretedDomeinFiles) \(UninterpretedDomeinFile dfr@{ namespace }) -> case lookup namespace replacements of
     Nothing -> pure unit

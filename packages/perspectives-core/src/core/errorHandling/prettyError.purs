@@ -7,7 +7,6 @@
 module Perspectives.Error.Pretty
   ( renderPerspectivesError
   , humanizePerspectivesError
-  , logPerspectivesErrorPretty
   , humanizePerspectivesWarning
   , renderPerspectivesWarning
   , warnModellerPretty
@@ -17,10 +16,10 @@ module Perspectives.Error.Pretty
 import Prelude
 
 import Data.Maybe (Maybe(..))
-import Effect.Class.Console (log, warn)
 import Data.Traversable (for, traverse)
-import Perspectives.CoreTypes (MonadPerspectives)
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives)
 import Perspectives.Identifiers (typeUri2ModelUri, typeUri2LocalName_)
+import Perspectives.Logging (pdrLog)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
@@ -31,10 +30,6 @@ import Perspectives.Warning (PerspectivesWarning(..))
 -- | Falls back to `show` if a constructor isn't handled specially.
 renderPerspectivesError :: PerspectivesError -> MonadPerspectives String
 renderPerspectivesError e = humanizePerspectivesError e >>= pure <<< show
-
--- | Log a PerspectivesError to the console with human-readable type names.
-logPerspectivesErrorPretty :: PerspectivesError -> MonadPerspectives Unit
-logPerspectivesErrorPretty e = renderPerspectivesError e >>= log
 
 -- | Map typed identifiers inside an error to their readable counterparts.
 -- | Keep everything else unchanged. This allows using the existing Show instance
@@ -174,7 +169,7 @@ warnModellerPretty warning = do
   humanized <- humanizePerspectivesWarning warning
   let msg = show humanized
   -- modify \(s@{ warnings }) -> s { warnings = cons ({ message: msg, error: "" }) warnings }
-  warn msg
+  pdrLog MODEL Warn (show warning)
 
 -- | Log a PerspectivesWarning with associated error detail, with human-readable
 -- | type names, and accumulate it in the warnings list.
@@ -183,4 +178,4 @@ warnModellerWithErrorPretty warning err = do
   humanized <- humanizePerspectivesWarning warning
   let msg = show humanized
   -- modify \(s@{ warnings }) -> s { warnings = cons ({ message: msg, error: err }) warnings }
-  warn msg
+  pdrLog MODEL Warn (show warning)

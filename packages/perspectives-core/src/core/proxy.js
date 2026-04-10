@@ -270,6 +270,19 @@ export function handleClientRequest( pdr, channels, request )
       case "unsubscribe":
         internalChannelPromise.then( ic => ic.unsubscribe( req.request ) );
         break;
+      // Log-configuration requests (fire-and-forget; no response sent back).
+      case "setLogLevelForTopic":
+        // setLogLevelForTopic :: String -> String -> Effect Unit
+        pdr.setLogLevelForTopic(req.topic)(req.level)();
+        break;
+      case "disableLogTopic":
+        // disableLogTopic :: String -> Effect Unit
+        pdr.disableLogTopic(req.topic)();
+        break;
+      case "disableLogging":
+        // disableLogging :: Effect Unit
+        pdr.disableLogging()();
+        break;
       case "resolveUserIntegrityChoice":
         // Deliver the end-user's choice to the PDR's userIntegrityChoice AVar.
         // choice === true  → restore the missing resource.

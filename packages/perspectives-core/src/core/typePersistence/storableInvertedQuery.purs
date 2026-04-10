@@ -44,11 +44,10 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import LRUCache (defaultGetOptions, get, set)
 import Perspectives.CoreTypes (MonadPerspectives, QueryInstances)
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (warnSync)
 import Perspectives.Identifiers (unversionedModelUri)
 import Perspectives.InvertedQuery (InvertedQuery)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey, serializeInvertedQueryKey)
-import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (Keys(..), addDocuments, deleteDocuments, documentsInDatabase, excludeDocs, fromBlob, getAttachment, getViewWithDocs)
 import Perspectives.Persistent (invertedQueryDatabaseName)
 import Perspectives.PerspectivesState (queryCache)
@@ -128,7 +127,7 @@ getInvertedQueriesOfModel database documentName = do
     Just f -> do
       x <- liftAff $ fromBlob f
       case readJSON x of
-        Left e -> logPerspectivesError (Custom $ "getInvertedQueriesOfModel" <> show e) *> pure []
+        Left e -> warnSync ("getInvertedQueriesOfModel" <> show e) *> pure []
         Right sq -> pure $ sq
     Nothing -> pure []
 

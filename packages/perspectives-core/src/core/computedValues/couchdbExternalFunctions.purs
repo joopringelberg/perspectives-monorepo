@@ -50,7 +50,6 @@ import Decacheable (decache)
 import Effect.Aff.AVar (tryRead)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
-import Effect.Class.Console (log)
 import Effect.Exception (error)
 import Foreign.Object (empty, fromFoldable, singleton)
 import JS.Iterable (toArray)
@@ -69,7 +68,7 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError, handleExternalFunctionError, handleExternalStatementError)
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (debugInstall, errorInstall, infoInstall)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance, createAndAddRoleInstance_)
@@ -78,7 +77,6 @@ import Perspectives.Instances.Me (computeMe_)
 import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesDatabase, getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries)
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Names (getMySystem)
-import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addDocument_, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, splitRepositoryFileUrl, tryGetDocument_, withDatabase)
 import Perspectives.Persistence.API (deleteDocument, documentsInDatabase, excludeDocs) as Persistence
 import Perspectives.Persistence.Authentication (addCredentials) as Authentication
@@ -221,7 +219,7 @@ updateModelForUpgrade modelUri@(ModelUri modelName) = do
           Nothing -> ModelUri stableModelUri
           Just v -> ModelUri (stableModelUri <> "@" <> v)
         updateModel' stableModelUriWithVersion false false
-      Nothing -> log ("This model isn't available locally: " <> unversionedModelName <> ". No update performed.")
+      Nothing -> lift $ debugInstall ("This model isn't available locally: " <> unversionedModelName <> ". No update performed.")
   else throwError (error $ "This is not a well-formed domain name: " <> modelName)
 
 -- | Takes care of inverted queries in Couchdb.
@@ -247,7 +245,7 @@ updateModel_ arrWithModelName arrWithDependencies _ =
             -- This lookup is based on the Readable ModelUri (when called from upgrade). However, when called from ARC, it will be a Stable ModelUri.
             isInstalled <- lift $ isInstalledModel (ModelUri unversionedModelName)
             if isInstalled then updateModel' (ModelUri modelName) (maybe false (eq "true") (head arrWithDependencies)) false
-            else log ("This model isn't available locally: " <> unversionedModelName <> ". No update performed.")
+            else lift $ debugInstall ("This model isn't available locally: " <> unversionedModelName <> ". No update performed.")
           else throwError (error $ "This is not a well-formed domain name: " <> modelName)
     )
     >>= handleExternalStatementError "model://perspectives.domains#UpdateModel"
@@ -271,9 +269,9 @@ updateModel withDependencies install dfid@(ModelUri modelName) domeinFileAndAtta
     Nothing ->
       if install
       -- Not installed, but want to install: install it.
-      then installModelLocally domeinFileAndAttachents isInitialLoad storedQueries *> log ("Installed new model " <> modelName)
+      then installModelLocally domeinFileAndAttachents isInitialLoad storedQueries *> (lift $ infoInstall ("Installed new model " <> modelName))
       -- Not installed, and do not want to install: do nothing.
-      else log ("Model " <> modelName <> " is not installed locally, and 'install' flag is false. No action taken.")
+      else lift $ debugInstall ("Model " <> modelName <> " is not installed locally, and 'install' flag is false. No action taken.")
     Just (DomeinFile { upstreamStateNotifications, upstreamAutomaticEffects, referredModels, namespace }) -> do
       -- Remove the inverted queries, upstream notifications and automatic effects of the OLD version of the model!
       if withDependencies then for_ referredModels \dependency -> updateModel' dependency withDependencies false
@@ -303,7 +301,7 @@ updateModel withDependencies install dfid@(ModelUri modelName) domeinFileAndAtta
       -- It will be loaded when a new type lookup is performed.
       lift $ removeTranslationTable unversionedModelname
       lift $ fetchTranslations dfid
-      log $ "Model updated: " <> show namespace
+      lift $ infoInstall $ "Model updated: " <> show namespace
 
 -- | Retrieve the model(s) from the modelName(s) and add them to the local couchdb installation.
 -- | The modelName(s) may be UNVERSIONED or VERSIONED.
@@ -450,12 +448,10 @@ createInitialInstances unversionedModelname versionedModelName patch build versi
     (PropertySerialization empty)
     Nothing
   case r of
-    Left e -> logPerspectivesError (Custom (show e))
+    Left e -> lift $ errorInstall (show e)
     Right { context: ctxt } -> do
       lift $ void $ saveEntiteit_ (identifier ctxt) ctxt
       addCreatedContextToTransaction (identifier ctxt)
-
-  -- Now create the Installer user role IN THE MODEL INSTANCE.
   me <- lift $ getPerspectivesUser
   minstallerId <- createAndAddRoleInstance (EnumeratedRoleType DEP.installer) cid
     ( RolSerialization
@@ -560,7 +556,7 @@ initSystem = do
               }
           )
         case worldresult of
-          Left e -> logPerspectivesError (Custom (show e))
+          Left e -> lift $ errorInstall (show e)
           Right world@(ContextInstance worldId) -> do
             -- Is with a storage scheme right from the start.
             PerspectivesUser perspectivesUser <- lift getPerspectivesUser
@@ -584,7 +580,7 @@ initSystem = do
                   }
               )
             case socialEnvResult of
-              Left e -> logPerspectivesError (Custom (show e))
+              Left e -> lift $ errorInstall (show e)
               Right socialEnv@(ContextInstance socialEnvId) -> do
                 -- Then create a Persons instance and fill it with puser.
                 void $ withAuthoringRole (CR $ CalculatedRoleType DEP.socialEnvironmentSystemUser) do
@@ -605,7 +601,7 @@ initSystem = do
                       }
                   )
                   false
-      Nothing -> logPerspectivesError (Custom "No public key found on setting up!")
+      Nothing -> lift $ errorInstall "No public key found on setting up!"
 
   createSystem :: MonadPerspectivesTransaction Unit
   createSystem = do
@@ -623,7 +619,7 @@ initSystem = do
           }
       )
     case sysresult of
-      Left se -> logPerspectivesError (Custom (show se))
+      Left se -> lift $ errorInstall (show se)
       _ -> pure unit
 
   createSystemUser :: MonadPerspectivesTransaction Unit

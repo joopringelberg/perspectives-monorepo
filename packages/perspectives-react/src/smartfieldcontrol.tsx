@@ -634,7 +634,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
                 />
               </div>);
               }
-      default:
+      default: {
         // For the default text/date/time-like control we avoid using
         // React state in onChange. The undo button is always shown
         // for relevant types; its handler restores the previous
@@ -728,6 +728,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               </button>
             )}
           </div>);
+      }
     }
   }
 }

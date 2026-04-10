@@ -59,7 +59,7 @@ class UserMessaging
       // A function that accepts a message and that somehow notifies the end user.
       // The function should return a promise whose fulfillment signals that the user has acknowledged the message.
       this.notifyEndUser = notifyEndUser;
-      notifyDeveloper ? this.notifyDeveloper = notifyDeveloper : null;
+      if (notifyDeveloper) { this.notifyDeveloper = notifyDeveloper; }
       // A state variable. If true, showMessages is still waiting for the acknowledgement of the user of a message.
       this.showing = false;
     }

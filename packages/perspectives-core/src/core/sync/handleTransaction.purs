@@ -54,12 +54,13 @@ import Perspectives.Data.EncodableMap as ENCMAP
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, addCreatedRoleToTransaction)
 import Perspectives.DependencyTracking.Dependency (findRoleRequests)
 import Perspectives.DomeinCache (retrieveDomeinFile)
-import Perspectives.Error.Pretty (logPerspectivesErrorPretty, warnModellerPretty)
+import Perspectives.Error.Pretty (renderPerspectivesError, renderPerspectivesWarning)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, typeUri2LocalName_, typeUri2ModelUri_)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.Builders (lookupOrCreateContextInstance, lookupOrCreateRoleInstance, createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (getProperty, roleType)
 import Perspectives.Instances.Values (parsePerspectivesFile)
+import Perspectives.Logging (traceSync, warnSync)
 import Perspectives.ModelDependencies (rootContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
@@ -85,7 +86,7 @@ import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||))
+import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -98,7 +99,7 @@ import Simple.JSON (readJSON')
 
 executeContextDelta :: ContextDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeContextDelta (ContextDelta { deltaType, contextInstance, contextType, roleType, roleInstance, destinationContext, subject }) signedDelta = do
-  lift $ warnModellerPretty (ExecutingContextDelta (show deltaType) (show contextInstance) (show roleInstance))
+  lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingContextDelta (show deltaType) (show contextInstance) (show roleInstance))
   case deltaType of
     -- The subject must be allowed to change the role: they must have a perspective on it that includes:
     --  * the verb CreateAndFill, in case a context role is created;
@@ -117,7 +118,7 @@ executeContextDelta (ContextDelta { deltaType, contextInstance, contextType, rol
 
 executeRoleBindingDelta :: RoleBindingDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeRoleBindingDelta (RoleBindingDelta { filled, filler, deltaType, subject }) signedDelta = do
-  lift $ warnModellerPretty (ExecutingRoleBindingDelta (show deltaType) (show filled) (show filler))
+  lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingRoleBindingDelta (show deltaType) (show filled) (show filler))
   roleType' <- lift (filled ##>> roleType)
   (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType' [ Verbs.Fill, Verbs.CreateAndFill ] Nothing Nothing) >>= case _ of
     Left e -> handleError e
@@ -129,7 +130,7 @@ executeRoleBindingDelta (RoleBindingDelta { filled, filler, deltaType, subject }
 -- TODO. Wat met SetPropertyValue?
 executeRolePropertyDelta :: RolePropertyDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeRolePropertyDelta d@(RolePropertyDelta { id, roleType, deltaType, values, property, subject }) signedDelta = do
-  lift $ toReadable property >>= \readableProperty -> warnModellerPretty (ExecutingRolePropertyDelta (show deltaType) (show id) (show readableProperty))
+  lift $ toReadable property >>= \readableProperty -> renderPerspectivesWarning >=> traceSync $ (ExecutingRolePropertyDelta (show deltaType) (show id) (show readableProperty))
   case deltaType of
     AddProperty -> do
       -- we need not check whether the model is known if we assume valid transactions:
@@ -193,7 +194,7 @@ executeRolePropertyDelta d@(RolePropertyDelta { id, roleType, deltaType, values,
 -- fouten en waarschuwingen kunnen sturen.
 -- Totdat we dat hebben, zetten we een waarschuwing op de console.
 handleError :: PerspectivesError -> MonadPerspectivesTransaction Unit
-handleError e = lift $ logPerspectivesErrorPretty e
+handleError e = lift $ renderPerspectivesError >=> warnSync $ e
 
 -----------------------------------------------------------
 -- DELTA ORDERING TYPES AND HELPERS
@@ -229,7 +230,7 @@ checkForGaps deltaInfos = do
 -- | role for. Hence we only have to check whether the external role exists.
 executeUniverseContextDelta :: UniverseContextDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, subject }) signedDelta = do
-  lift $ toReadable contextType >>= \readableContextType -> warnModellerPretty (ExecutingUniverseContextDelta (show deltaType) (show id) (show readableContextType))
+  lift $ toReadable contextType >>= \readableContextType -> renderPerspectivesWarning >=> traceSync $ (ExecutingUniverseContextDelta (show deltaType) (show id) (show readableContextType))
   allTypes <- lift (contextType ###= contextAspectsClosure)
   externalRoleExists <- lift $ entityExists (RoleInstance $ buitenRol $ unwrap id)
   if externalRoleExists then case deltaType of
@@ -269,14 +270,14 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
           else pure unit
           pure id
       )
-  else lift $ logPerspectivesErrorPretty $ UnauthorizedForContext "auteur" subject contextType
+  else lift $ renderPerspectivesError >=> warnSync $ UnauthorizedForContext "auteur" subject contextType
 
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 executeUniverseRoleDelta :: UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, authorizedRole, deltaType, subject }) s = do
   readableRoleType <- lift $ toReadable roleType
   readableSubject <- lift $ toReadable subject
-  lift $ warnModellerPretty (ExecutingUniverseRoleDelta (show deltaType) (show id) (show roleInstance) (show readableRoleType) (show readableSubject))
+  lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingUniverseRoleDelta (show deltaType) (show id) (show roleInstance) (show readableRoleType) (show readableSubject))
   void $ lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ $ unwrap roleType)
   case deltaType of
     ConstructEmptyRole -> do
@@ -362,7 +363,7 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, author
   -- PERSISTENCE
   constructExternalRole :: MonadPerspectivesTransaction RoleInstance
   constructExternalRole = do
-    lift $ warnModellerPretty (ConstructingExternalRole (show id))
+    lift $ renderPerspectivesWarning >=> traceSync $ (ConstructingExternalRole (show id))
     -- Here we make constructing an external role idempotent. Nothing happens if it already exists.
     constructEmptyRole_ id 0 roleInstance >>=
       if _ then lift $ void $ saveEntiteit roleInstance
@@ -389,7 +390,7 @@ executeTransaction t = do
   -- the update functions called via executeDelta must not also store via addDelta.
   modify (over Transaction \tr -> tr { isExecutingIncomingDeltas = true })
   try (verifyTransaction t) >>= case _ of
-    Left e -> lift $ logPerspectivesErrorPretty (IncomingTransactionFailed (show e))
+    Left e -> lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
     Right verifiedKeys -> executeTransaction' verifiedKeys t
 
   where
@@ -476,7 +477,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
         executeDeltaWithVersionTracking signedDelta stringified resourceKey resourceVersion author
     _ -> do
       -- Gaps detected: block the entire transaction.
-      lift $ warnModellerPretty TransactionBlockedByVersionGaps
+      lift $ renderPerspectivesWarning >=> traceSync $ TransactionBlockedByVersionGaps
       lift $ storePendingTransaction t gaps
   where
 
@@ -510,7 +511,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           }
       else if resourceVersion < localVersion then do
         -- Outdated delta: version is behind local version. Store but don't execute.
-        lift $ warnModellerPretty (SkippingOutdatedDelta resourceKey resourceVersion localVersion)
+        lift $ renderPerspectivesWarning >=> traceSync $ (SkippingOutdatedDelta resourceKey resourceVersion localVersion)
         lift $ storeDelta $ DeltaStoreRecord
           { _id: deltaStoreDocId resourceKey resourceVersion author
           , _rev: Nothing
@@ -551,7 +552,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           let incomingAuthorWins = not (hasAuthorGreaterOrEqual author sameVersionDeltas)
           if incomingAuthorWins then do
             -- Incoming author wins: execute the delta (overwriting the current value).
-            lift $ warnModellerPretty (VersionConflictIncomingWins resourceKey resourceVersion (show author))
+            lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingWins resourceKey resourceVersion (show author))
             executeDelta s (Just stringified)
             lift $ storeDelta $ DeltaStoreRecord
               { _id: deltaStoreDocId resourceKey resourceVersion author
@@ -566,7 +567,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               }
           else do
             -- Existing author wins: store but don't execute.
-            lift $ warnModellerPretty (VersionConflictIncomingLoses resourceKey resourceVersion (show author))
+            lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingLoses resourceKey resourceVersion (show author))
             lift $ storeDelta $ DeltaStoreRecord
               { _id: deltaStoreDocId resourceKey resourceVersion author
               , _rev: Nothing
@@ -587,7 +588,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           suppressedByModify <- isDeletionSuppressedByModifyWins resourceKey
           if suppressedByModify then do
             -- Modify wins over delete: suppress the deletion.
-            lift $ warnModellerPretty (ModifyWinsOverDeleteSuppressed resourceKey)
+            lift $ renderPerspectivesWarning >=> traceSync $ (ModifyWinsOverDeleteSuppressed resourceKey)
             lift $ setResourceVersion resourceKey resourceVersion
             lift $ storeDelta $ DeltaStoreRecord
               { _id: deltaStoreDocId resourceKey resourceVersion author
@@ -635,7 +636,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               localRoleVersion <- lift $ getResourceVersion roleInstanceId
               if localRoleVersion > 0 then do
                 -- Modify wins over delete: restore the role from the delta-store.
-                lift $ warnModellerPretty (ModifyWinsOverDeleteRestoring roleInstanceId)
+                lift $ renderPerspectivesWarning >=> traceSync $ (ModifyWinsOverDeleteRestoring roleInstanceId)
                 restoreRoleFromDeltaStore roleInstanceId
               else pure unit
               -- Execute the modification (role should now exist if restored).
@@ -812,9 +813,9 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
                           Right ld4 -> lift (addResourceSchemes storageSchemes (toUniverseRoleDelta ld4)) >>= flip executeUniverseRoleDelta s
                           Left _ -> case runExcept $ readJSON' stringifiedDelta of
                             Right ld5 -> lift (addResourceSchemes storageSchemes (toUniverseContextDelta ld5)) >>= flip executeUniverseContextDelta s
-                            Left _ -> lift $ logPerspectivesErrorPretty (UnparseableIncomingDelta stringifiedDelta)
+                            Left _ -> lift $ renderPerspectivesError >=> warnSync $ (UnparseableIncomingDelta stringifiedDelta)
       )
-      (\e -> lift $ logPerspectivesErrorPretty (DeltaExecutionError (show e)))
+      (\e -> lift $ renderPerspectivesError >=> warnSync $ (DeltaExecutionError (show e)))
 
 -- | All identifiers in deltas in a transaction have been stripped from their storage schemes, except for those with the pub: scheme.
 -- | This function adds public resource schemes for the given storageUrl or, when a different publishing point is found for an identifier,
@@ -847,7 +848,7 @@ expandDeltas t@(TransactionForPeer { deltas, publicKeys }) storageUrl = do
             Right (d4 :: UniverseRoleDelta) -> notWhenPublicSubject (unwrap d4) (lift $ (Just <<< URD s' <$> addPublicResourceScheme storageUrl d4))
             Left _ -> case runExcept $ readJSON' encryptedDelta of
               Right (d5 :: UniverseContextDelta) -> notWhenPublicSubject (unwrap d5) (lift $ (Just <<< UCD s' <$> addPublicResourceScheme storageUrl d5))
-              Left _ -> (lift $ logPerspectivesErrorPretty (UnparseableIncomingDelta encryptedDelta)) *> pure Nothing
+              Left _ -> (lift $ renderPerspectivesError >=> warnSync $ (UnparseableIncomingDelta encryptedDelta)) *> pure Nothing
 
     where
     notWhenPublicSubject :: forall f. DeltaRecord f -> MonadPerspectivesTransaction (Maybe Delta) -> MonadPerspectivesTransaction (Maybe Delta)

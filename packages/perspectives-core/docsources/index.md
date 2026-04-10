@@ -13,6 +13,7 @@ This index provides an overview of the technical documentation in `packages/pers
 | [Installation Initialization](installation-initialization.md) | What happens when a new Perspectives installation is created — covers both the PDR (PureScript) side and the Perspectives Language (PL) side, including the shared contexts that are bootstrapped on first run. |
 | [PDR → Frontend Messaging](pdr-messaging.md) | The two mechanisms the PDR uses to push messages to the browser frontend: the status-message channel (`setPDRStatus`) and the reactive warning queue, plus how a developer wires up each one. |
 | [PDR Client Data Structures](pdr-client-data-structures.md) | All data structures the PDR serialises and sends to its clients (`mycontexts` / `perspectives-react`). Starting from `ScreenDefinition` the document descends into `Perspective`, `Roleinstancewithprops`, and every referenced type, including the developer-tool types `InspectableContext` and `InspectableRole`. |
+| [Structured Logging](structured-logging.md) | The runtime-configurable logging layer: `LogLevel`, `LogTopic`, and `LogConfig` types; the `pdrLog` entry point and its pre-bound convenience aliases; `MonadPerspectives` helpers for changing thresholds at runtime; and three JavaScript-callable functions (`setLogLevelForTopic`, `disableLogTopic`, `disableLogging`) that allow reconfiguring the log from the browser DevTools console without restarting. Also includes a migration guide for replacing legacy `log`/`logPerspectivesError` call sites and instructions for adding new topics. |
 
 ### Query System
 
@@ -49,8 +50,9 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.Checking.PerspectivesTypeChecker` | [Type Comparison](type-comparison.md) |
 | `Perspectives.CollectAffectedContexts` | [Query Inversion](query-inversion.md) |
 | `Perspectives.ContextStateCompiler` | [Transaction Execution Process](transaction-execution.md) |
-| `Perspectives.CoreTypes` | [The Query Subsystem](query-subsystem.md) |
+| `Perspectives.CoreTypes` | [The Query Subsystem](query-subsystem.md), [Structured Logging](structured-logging.md) |
 | `Perspectives.ErrorLogging` | [PDR → Frontend Messaging](pdr-messaging.md) |
+| `Perspectives.Logging` | [Structured Logging](structured-logging.md) |
 | `Perspectives.External.HiddenFunctionCache` | [The Query Subsystem](query-subsystem.md) |
 | `Perspectives.Inspector.InspectableResources` | [PDR Client Data Structures](pdr-client-data-structures.md) |
 | `Perspectives.Instances.Me` | [Installation Initialization](installation-initialization.md) |
@@ -64,7 +66,7 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.Persistence.DeltaStore` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
 | `Perspectives.Persistence.PendingTransactionStore` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
 | `Perspectives.Persistence.ResourceVersionStore` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
-| `Perspectives.PerspectivesState` | [PDR → Frontend Messaging](pdr-messaging.md) |
+| `Perspectives.PerspectivesState` | [PDR → Frontend Messaging](pdr-messaging.md), [Structured Logging](structured-logging.md) |
 | `Perspectives.Query.ExpressionCompiler` | [The Query Subsystem](query-subsystem.md) |
 | `Perspectives.Query.Interpreter` | [The Query Subsystem](query-subsystem.md) |
 | `Perspectives.Query.Interpreter.Dependencies` | [The Query Subsystem](query-subsystem.md) |

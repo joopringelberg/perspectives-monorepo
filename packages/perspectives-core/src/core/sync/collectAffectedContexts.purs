@@ -41,7 +41,7 @@ import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssu
 import Perspectives.Data.EncodableMap (EncodableMap, filterKeys, lookup)
 import Perspectives.Deltas (addDelta)
 import Perspectives.Error.Boundaries (handlePerspectContextError)
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (errorSync)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.Me (notIsMe)
 import Perspectives.Instances.ObjectGetters (allFillers, binding, context, context', contextIsInState, contextType, contextType_, getActiveRoleStates_, getFilledRoles, getRecursivelyAllFilledRoles, roleIsInState, roleType_)
@@ -198,7 +198,7 @@ handleBackwardQuery :: RoleInstance -> InvertedQuery -> MonadPerspectivesTransac
 handleBackwardQuery roleInstance iq@(InvertedQuery { description, backwardsCompiled, users: userTypes, states, forwardsCompiled }) = catchError
   ( case backwardsCompiled of
       Nothing -> do
-        logPerspectivesError (Custom $ "Backwards is not compiled on " <> prettyPrint description)
+        lift $ errorSync ("Backwards is not compiled on " <> prettyPrint description)
         pure []
       _ -> do
         if unsafePartial shouldResultInContextStateQuery iq then createContextStateQuery *> pure []
@@ -206,7 +206,7 @@ handleBackwardQuery roleInstance iq@(InvertedQuery { description, backwardsCompi
         else usersWithAnActivePerspective roleInstance iq
   )
   ( \e -> do
-      logPerspectivesError (Custom $ show e)
+      lift $ errorSync (show e)
       pure []
   )
   where
@@ -939,7 +939,7 @@ compileBoth ac@(InvertedQuery iqr@{ description, backwardsCompiled, forwardsComp
     backwards' <- traverse getHiddenFunction (backwards description)
     forwards' <- traverse getHiddenFunction (forwards description)
     -- It is an error if backwards' is Nothing.
-    if isNothing backwards' then logPerspectivesError (Custom $ "compileBoth: backwards is nothing for \n" <> prettyPrint description)
+    if isNothing backwards' then errorSync ("compileBoth: backwards is nothing for \n" <> prettyPrint description)
     else pure unit
     pure $ InvertedQuery iqr { backwardsCompiled = backwards', forwardsCompiled = forwards' }
 
