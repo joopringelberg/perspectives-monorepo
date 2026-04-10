@@ -34,12 +34,14 @@ module Perspectives.Persistence.ResourceVersionStore
 
 import Prelude
 
+import Control.Monad.AvarMonadAsk (gets)
 import Data.Maybe (Maybe(..))
-import Effect.Aff (error, throwError)
+import Effect.Class (liftEffect)
+import LRUCache (defaultGetOptions, get, set) as LRU
+import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Persistence.API (addDocument_, tryGetDocument_)
 import Perspectives.Persistence.DeltaStore (safeKey)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistence.Types (MonadPouchdb)
 import Simple.JSON (class ReadForeign, class WriteForeign)
 
 -----------------------------------------------------------
@@ -72,27 +74,50 @@ derive newtype instance ReadForeign ResourceVersionDoc
 
 -- | The name of the PouchDB database for resource versions.
 -- | Convention: {systemIdentifier}_resourceversions
-resourceVersionDatabaseName :: forall f. MonadPouchdb f String
+resourceVersionDatabaseName :: MonadPerspectives String
 resourceVersionDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_resourceversions")
+
+-----------------------------------------------------------
+-- CACHE HELPERS
+-----------------------------------------------------------
+
+-- | Insert a resource version into the in-memory cache.
+cacheInsertVersion :: String -> Int -> MonadPerspectives Unit
+cacheInsertVersion key v = do
+  cache <- gets _.resourceVersionCache
+  void $ liftEffect $ LRU.set key v Nothing cache
+
+-- | Look up a resource version in the in-memory cache.
+cacheLookupVersion :: String -> MonadPerspectives (Maybe Int)
+cacheLookupVersion key = do
+  cache <- gets _.resourceVersionCache
+  liftEffect $ LRU.get key LRU.defaultGetOptions cache
 
 -----------------------------------------------------------
 -- OPERATIONS
 -----------------------------------------------------------
 
 -- | Get the current version number for a resource-key.
+-- | Checks the in-memory cache first; falls back to PouchDB on a miss.
 -- | Returns 0 if the resource-key is not yet tracked (i.e., a newly created resource).
-getResourceVersion :: forall f. ResourceKey -> MonadPouchdb f Int
+getResourceVersion :: ResourceKey -> MonadPerspectives Int
 getResourceVersion key = do
-  dbName <- resourceVersionDatabaseName
   let sk = safeKey key
-  (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
-  case mDoc of
-    Nothing -> pure 0
-    Just (ResourceVersionDoc { resourceVersion }) -> pure resourceVersion
+  mCached <- cacheLookupVersion sk
+  case mCached of
+    Just v -> pure v
+    Nothing -> do
+      dbName <- resourceVersionDatabaseName
+      (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
+      case mDoc of
+        Nothing -> pure 0
+        Just (ResourceVersionDoc { resourceVersion }) -> do
+          cacheInsertVersion sk resourceVersion
+          pure resourceVersion
 
 -- | Initialise the version for a resource-key to 0.
 -- | This is a no-op if the key already exists.
-initResourceVersion :: forall f. ResourceKey -> MonadPouchdb f Unit
+initResourceVersion :: ResourceKey -> MonadPerspectives Unit
 initResourceVersion key = do
   dbName <- resourceVersionDatabaseName
   let sk = safeKey key
@@ -100,12 +125,13 @@ initResourceVersion key = do
   case mDoc of
     Nothing -> do
       _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev: Nothing, resourceVersion: 0 }) sk
-      pure unit
+      cacheInsertVersion sk 0
     Just _ -> pure unit
 
 -- | Set the version for a resource-key to a specific value.
 -- | Creates the document if it does not exist; updates it otherwise.
-setResourceVersion :: forall f. ResourceKey -> Int -> MonadPouchdb f Unit
+-- | Also updates the in-memory cache after a successful database write.
+setResourceVersion :: ResourceKey -> Int -> MonadPerspectives Unit
 setResourceVersion key version = do
   dbName <- resourceVersionDatabaseName
   let sk = safeKey key
@@ -113,17 +139,18 @@ setResourceVersion key version = do
   case mDoc of
     Nothing -> do
       _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev: Nothing, resourceVersion: version }) sk
-      pure unit
+      cacheInsertVersion sk version
     Just (ResourceVersionDoc { _rev }) -> do
       _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev, resourceVersion: version }) sk
-      pure unit
+      cacheInsertVersion sk version
 
 -- | Increment the version for a resource-key by 1 and return the new version.
 -- | If the key does not exist yet, it is created with version 1.
 -- | This is the function to call when constructing a local delta:
 -- |   1. Call incrementResourceVersion to get the new version
 -- |   2. Stamp the delta with that version
-incrementResourceVersion :: forall f. ResourceKey -> MonadPouchdb f Int
+-- | Also updates the in-memory cache with the new version.
+incrementResourceVersion :: ResourceKey -> MonadPerspectives Int
 incrementResourceVersion key = do
   dbName <- resourceVersionDatabaseName
   let sk = safeKey key
@@ -131,8 +158,10 @@ incrementResourceVersion key = do
   case mDoc of
     Nothing -> do
       _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev: Nothing, resourceVersion: 1 }) sk
+      cacheInsertVersion sk 1
       pure 1
     Just (ResourceVersionDoc { _rev, resourceVersion }) -> do
       let newVersion = resourceVersion + 1
       _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev, resourceVersion: newVersion }) sk
+      cacheInsertVersion sk newVersion
       pure newVersion

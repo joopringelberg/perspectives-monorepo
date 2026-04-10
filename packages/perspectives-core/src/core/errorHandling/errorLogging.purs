@@ -27,7 +27,7 @@ import Prelude
 import Control.Monad.AvarMonadAsk (modify)
 import Data.Array (cons)
 import Effect.Class (class MonadEffect, liftEffect)
-import Effect.Class.Console (log)
+import Effect.Class.Console (log, warn)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives)
 import Perspectives.Logging (pdrLog)
 import Perspectives.Parsing.Messages (PerspectivesError)
@@ -39,5 +39,10 @@ logPerspectivesError = liftEffect <<< log <<< show
 -- HAS A SINGLE DEPENDENCY IN DOMEINCACHE THAT WE CANNOT REPLACE DUE TO CIRCULARITY ISSUES.
 warnModeller :: PerspectivesWarning -> MonadPerspectives Unit
 warnModeller warning = do
-  modify \(s@{ warnings }) -> s { warnings = cons ({ message: show warning, error: "" }) warnings }
+  modify \(s@{ warnings }) -> s { warnings = cons ({ message: show warning, error: "", externalRoleId: "", contextName: "" }) warnings }
   pdrLog MODEL Warn (show warning)
+
+warnModellerWithError :: PerspectivesWarning -> String -> MonadPerspectives Unit
+warnModellerWithError warning error = do
+  modify \(s@{ warnings }) -> s { warnings = cons ({ message: show warning, error: error, externalRoleId: "", contextName: "" }) warnings }
+  warn $ show warning

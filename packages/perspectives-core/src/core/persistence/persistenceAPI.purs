@@ -55,6 +55,7 @@ import Effect.Aff (Aff, catchError, error, throwError)
 import Effect.Aff.Class (liftAff)
 import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
 import Effect.Class (liftEffect)
+import Effect.Class.Console (log)
 import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn6, runEffectFn1, runEffectFn2, runEffectFn3)
 import Foreign (F, Foreign, unsafeToForeign)
 import Foreign.Object (Object, delete, empty, insert, lookup)
@@ -404,6 +405,10 @@ addDocument dbName doc docName = withDatabase dbName
           -- there are multiple users that contribute to that perspective, and they may not agree on the version.
           -- However, we resolve that here by just overwriting the document.
           Just 409 -> resolveDocumentConflict dbName doc docName
+          -- A missing revision: the _rev provided does not exist in the database. This can happen when the
+          -- entity in cache has a stale revision from before the document was deleted (e.g. after manual
+          -- IndexedDB removal or incomplete deletion). Recover by purging the document history and re-creating.
+          Just 404 -> forceCleanSave dbName doc docName
           -- Promise rejected otherwise. Convert the incoming message to a PouchError type.
           _ -> handlePouchError "addDocument" docName e
 
@@ -424,26 +429,32 @@ foreign import addDocumentImpl :: EffectFn3 PouchdbDatabase Foreign Boolean Fore
 resolveDocumentConflict :: forall d f. WriteForeign d => Revision d => DatabaseName -> d -> DocumentName -> MonadPouchdb f Revision_
 resolveDocumentConflict dbName doc docName = withDatabase dbName
   \db -> do
-    -- Get all document revisions (including conflicts)
-    conflicts <- lift $ fromEffectFnAff $ runEffectFnAff3 getDocumentWithConflictsImpl db docName true
-
-    -- Delete all conflict revisions
-    case read conflicts of
-      Right ({ _conflicts } :: DocumentConflicts) -> do
-        _ <- traverse
-          (\rev -> lift $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName rev)
-          _conflicts
-        pure unit
-      _ -> pure unit
-
-    -- Now try to add the document
+    -- Get all document revisions (including conflicts).
+    -- If the document data is gone (e.g. manual IndexedDB deletion), fall back to forceCleanSave.
     catchError
       do
-        f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
-        case PutCouchdbDocument <$> (read f) of
-          Left e -> throwError $ error ("resolveDocumentConflict: error: " <> show e)
-          Right (PutCouchdbDocument { rev }) -> pure rev
-      (handlePouchError "resolveDocumentConflict" docName)
+        conflicts <- lift $ fromEffectFnAff $ runEffectFnAff3 getDocumentWithConflictsImpl db docName true
+
+        -- Delete all conflict revisions
+        case read conflicts of
+          Right ({ _conflicts } :: DocumentConflicts) -> do
+            _ <- traverse
+              (\rev -> lift $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName rev)
+              _conflicts
+            pure unit
+          _ -> pure unit
+
+        -- Now try to add the document
+        catchError
+          do
+            f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
+            case PutCouchdbDocument <$> (read f) of
+              Left e -> throwError $ error ("resolveDocumentConflict: error: " <> show e)
+              Right (PutCouchdbDocument { rev }) -> pure rev
+          (handlePouchError "resolveDocumentConflict" docName)
+      \e -> do
+        log ("resolveDocumentConflict: getDocumentWithConflicts failed for '" <> docName <> "', falling back to forceCleanSave. Error: " <> show e)
+        forceCleanSave dbName doc docName
 
 withForce :: Boolean
 withForce = true
@@ -460,23 +471,27 @@ foreign import getDocumentWithConflictsImpl :: EffectFn3 PouchdbDatabase Documen
 forceCleanSave :: forall d f. WriteForeign d => DatabaseName -> d -> DocumentName -> MonadPouchdb f Revision_
 forceCleanSave dbName doc docName = withDatabase dbName
   \db -> do
+    log ("forceCleanSave: starting for '" <> docName <> "' in database '" <> dbName <> "'")
     -- First, explicitly try to delete any existing document, ignoring errors
     _ <- catchError
       (lift $ void $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName "")
-      (\_ -> pure unit)
+      (\e -> log ("forceCleanSave: deleteDocument failed for '" <> docName <> "' (ignored): " <> show e))
 
     -- Use PouchDB's internal purge functionality to completely remove document history
     _ <- catchError
       (lift $ void $ fromEffectFnAff $ runEffectFnAff3 purgeDocumentImpl db docName Nothing)
-      (\_ -> pure unit)
+      (\e -> log ("forceCleanSave: purgeDocument failed for '" <> docName <> "' (ignored): " <> show e))
 
     -- Then add the document as new
+    log ("forceCleanSave: adding document '" <> docName <> "' with force")
     catchError
       do
         f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
         case PutCouchdbDocument <$> (read f) of
           Left e -> throwError $ error ("forceCleanSave: error in decoding result: " <> show e)
-          Right (PutCouchdbDocument { rev }) -> pure rev
+          Right (PutCouchdbDocument { rev }) -> do
+            log ("forceCleanSave: successfully saved '" <> docName <> "' with rev " <> show rev)
+            pure rev
       (handlePouchError "forceCleanSave" docName)
 
 -- https://pouchdb.com/api.html#purge

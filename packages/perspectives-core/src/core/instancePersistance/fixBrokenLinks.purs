@@ -18,18 +18,17 @@
 --
 -- Full text of this license can be found in the LICENSE directory in the projects root.
 
--- | The functions exported by this module claim to result in a resource (Context or Role), but actually
--- | never do so. Instead, they throw an exception that will have to be handled elsewhere.
--- | They do, however, take away the **cause** of that exception. 
--- | In essence that means that the end user can retry her action and the problem will have gone away.
--- | We fix by removing 'broken links'; that is, references to resources that cannot be found, will be removed.
--- | As a consequence, of course, the end user may not be able to re-execute her action. 
--- | The good thing is that the referential integrity of her representation of the part of the 
--- | Perspectives Universe that is visible to her, has been restored.
--- | Each installation must fix its own referential integrity problems. Results of this fixing
--- | will not be synchronized.
--- | This again is a good thing, as it may (but need not) happen that a peer will later send a transaction
--- | that restores the resource that went missing.
+-- | This module handles missing resources (roles or contexts for which the local
+-- | entities database has no document) by automatically restoring them from the
+-- | DeltaStore and notifying the end user via a piggybacked warning message.
+-- |
+-- | The warning carries the external role ID of the restored context and the
+-- | context's display name so that the frontend can render a hyperlink that
+-- | dispatches an `OpenContext` event, allowing the user to navigate directly to
+-- | the restored context.
+-- |
+-- | See `packages/perspectives-core/docsources/pdr-messaging.md` for a full
+-- | description of the warning piggybacking mechanism.
 
 -- END LICENSE
 module Perspectives.ReferentialIntegrity
@@ -40,35 +39,93 @@ import Prelude
 
 import Control.Monad.Error.Class (try)
 import Control.Monad.Writer (execWriterT, lift, tell)
-import Data.Array (concat, delete)
+import Data.Array (concat, delete, head)
+import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
+import Data.String (drop, length) as Str
 import Data.Traversable (for, for_)
 import Effect.Class.Console (log)
 import Foreign.Object (mapWithKey)
 import Perspectives.Assignment.Update (cacheAndSave)
-import Perspectives.ContextAndRole (changeContext_me, context_me, removeRol_gevuldeRollen, rol_binding, rol_gevuldeRollen, setRol_gevuldeRollen)
+import Perspectives.ContextAndRole (changeContext_me, context_buitenRol, context_displayName, context_me, removeRol_gevuldeRollen, rol_binding, rol_gevuldeRollen, setRol_gevuldeRollen)
 import Perspectives.ContextStateCompiler (evaluateContextState)
-import Perspectives.CoreTypes (MonadPerspectives, ResourceToBeStored(..), MonadPerspectivesTransaction)
+import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, ResourceToBeStored(..))
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError')
+import Perspectives.Identifiers (buitenRol)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol)
 import Perspectives.Instances.Clipboard (findItemOnClipboardWithRole)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context2roleFromDatabase_, contextType_, filled2fillerFromDatabase_, filler2filledFromDatabase_, role2contextFromDatabase_, roleType_)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, saveMarkedResources)
-import Perspectives.PerspectivesState (transactionLevel)
+import Perspectives.PerspectivesState (addWarning, transactionLevel)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType(..), RoleType(..))
+import Perspectives.RestoreResource (restoreResource)
 import Perspectives.RoleAssignment (filledNoLongerPointsTo) as RA
 import Perspectives.RoleStateCompiler (evaluateRoleState)
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary)
 import Perspectives.SaveUserData (scheduleRoleRemoval)
 import Perspectives.Types.ObjectGetters (contextGroundState, roleGroundState)
 
-fixReferences :: ResourceToBeStored -> MonadPerspectives Unit
-fixReferences (Ctxt cid) = fixContextReferences cid
-fixReferences (Rle rid) = fixRoleReferences rid
-fixReferences (Dfile did) = pure unit
+-- | Handle a missing resource by restoring it from the DeltaStore and notifying
+-- | the end user via a piggybacked warning message.
+-- |
+-- | The warning includes the external role ID and display name of the restored
+-- | context so that the frontend can offer a navigation hyperlink.
+-- |
+-- | Domain-file resources are silently ignored.
+fixReferences :: ResourceToBeStored -> MonadPerspectives Boolean
+fixReferences resource@(Rle roleId) = do
+  -- Restore the resource so that it is available in the database.
+  restoreResource resource
+  -- Find the context of this role to determine the external role for navigation.
+  contextIds <- role2contextFromDatabase_ roleId
+  { displayName, extRole } <- case head contextIds of
+    Nothing -> pure { displayName: "", extRole: "" }
+    Just contextId -> do
+      mCtxt <- try $ getPerspectContext contextId
+      pure $ case mCtxt of
+        Left _ -> { displayName: "", extRole: buitenRol (unwrap contextId) }
+        Right ctxt -> { displayName: context_displayName ctxt, extRole: unwrap (context_buitenRol ctxt) }
+  -- Notify the user that the resource has been restored, via the piggybacked warning mechanism.
+  -- The message field serves as a stable identifier; the frontend uses i18n keys for the
+  -- user-facing text when externalRoleId is non-empty (see www.tsx restorationPanel_message).
+  addWarning
+    { message: "RestoredMissingResource"
+    , error: ""
+    , externalRoleId: extRole
+    , contextName: displayName
+    }
+  -- Persist the restored resource.
+  saveMarkedResources
+  pure true
+fixReferences resource@(Ctxt contextId) = do
+  -- Restore the resource so that it is available in the database.
+  restoreResource resource
+  -- Get the external role and display name of the restored context for navigation.
+  mCtxt <- try $ getPerspectContext contextId
+  let
+    { displayName, extRole } = case mCtxt of
+      Left _ -> { displayName: "", extRole: buitenRol (unwrap contextId) }
+      Right ctxt -> { displayName: context_displayName ctxt, extRole: unwrap (context_buitenRol ctxt) }
+  -- Notify the user that the context has been restored, via the piggybacked warning mechanism.
+  -- The message field serves as a stable identifier; the frontend uses i18n keys for the
+  -- user-facing text when externalRoleId is non-empty (see www.tsx restorationPanel_message).
+  addWarning
+    { message: "RestoredMissingResource"
+    , error: ""
+    , externalRoleId: extRole
+    , contextName: displayName
+    }
+  -- Persist the restored context.
+  saveMarkedResources
+  pure true
+fixReferences (Dfile _) = pure false
 
+----------------------------------------------------------------------------
+---- I've kept this mechanism. We might want to use it later.
+----------------------------------------------------------------------------
 -- | Apply this function when a reference to a context has been found that cannot be retrieved.
 -- | We want all references to this context to be removed.
 -- | Only roles refer to contexts.

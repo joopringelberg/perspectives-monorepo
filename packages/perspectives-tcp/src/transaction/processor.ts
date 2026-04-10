@@ -6,10 +6,45 @@
 
 import { createVerify, createPublicKey } from 'crypto';
 import { TransactionForPeer, SignedDelta, TaggedDelta } from '../types';
-import { TableConfig } from '../config';
+import { TableConfig, ColumnConfig, ColumnType } from '../config';
 import { DatabaseAdapter, columnForProperty } from '../database/adapter';
 import { parseDelta } from './deltaParser';
 import { logger } from '../logger';
+import { stableToTwoSegmentName } from '../utils/naming';
+
+// ---------------------------------------------------------------------------
+// Value coercion
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a raw string value (as delivered by Perspectives) to the JS type
+ * that Knex / the database driver expects for the given column type.
+ */
+function coerceValue(raw: string | null, colType: ColumnType): unknown {
+  if (raw === null || raw === undefined) return null;
+  switch (colType) {
+    case 'datetime': {
+      // Perspectives sends epoch milliseconds as a string
+      const n = Number(raw);
+      if (!isNaN(n)) return new Date(n);
+      // Fall back: let the driver try to parse whatever string was sent
+      return raw;
+    }
+    case 'integer': {
+      const n = parseInt(raw, 10);
+      return isNaN(n) ? null : n;
+    }
+    case 'real': {
+      const n = parseFloat(raw);
+      return isNaN(n) ? null : n;
+    }
+    case 'boolean':
+      return raw === 'true' || raw === '1';
+    case 'text':
+    default:
+      return raw;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -20,6 +55,8 @@ export interface ProcessorOptions {
   verifySignatures: boolean;
   /** Table configuration from the TCPConfig */
   tables: TableConfig[];
+  /** Stable-ID → readable-name map; used to derive human-readable type names at runtime */
+  nameMap: Record<string, string>;
 }
 
 /**
@@ -39,7 +76,8 @@ export async function processTransaction(
     `Processing transaction from "${author}" at ${timeStamp} (${deltas.length} deltas)`,
   );
 
-  for (const signedDelta of deltas) {
+  for (let i = 0; i < deltas.length; i++) {
+    const signedDelta = deltas[i];
     if (options.verifySignatures) {
       const valid = await verifySignature(signedDelta, publicKeys);
       if (!valid) {
@@ -58,8 +96,10 @@ export async function processTransaction(
       continue;
     }
 
+    logger.debug(`  delta[${i}]: ${tagged.kind} from "${signedDelta.author}"`);
+
     try {
-      await dispatchDelta(tagged, db, options.tables);
+      await dispatchDelta(tagged, db, options.tables, options.nameMap);
     } catch (err) {
       logger.error(`Error processing ${tagged.kind} delta:`, err);
       // Continue with remaining deltas rather than aborting the transaction
@@ -135,10 +175,11 @@ async function dispatchDelta(
   tagged: TaggedDelta,
   db: DatabaseAdapter,
   tables: TableConfig[],
+  nameMap: Record<string, string>,
 ): Promise<void> {
   switch (tagged.kind) {
     case 'UniverseContextDelta':
-      return handleUniverseContextDelta(tagged.delta, db, tables);
+      return handleUniverseContextDelta(tagged.delta, db, tables, nameMap);
     case 'UniverseRoleDelta':
       return handleUniverseRoleDelta(tagged.delta, db, tables);
     case 'ContextDelta':
@@ -158,21 +199,36 @@ async function handleUniverseContextDelta(
   delta: TaggedDelta['delta'],
   db: DatabaseAdapter,
   tables: TableConfig[],
+  nameMap: Record<string, string>,
 ): Promise<void> {
   // Narrow to UniverseContextDelta
-  if (!('contextType' in delta && 'id' in delta && !('roleInstance' in delta))) return;
+  if (!('contextType' in delta && 'id' in delta && !('roleInstance' in delta))) {
+    logger.debug(`UniverseContextDelta: unexpected delta shape (fields: ${Object.keys(delta).join(', ')}) – skipping`);
+    return;
+  }
   const d = delta as import('../types').UniverseContextDelta;
 
-  const table = tables.find((t) => t.contextType === d.contextType);
+  // Prefer the single universal context table (isUniversalContextTable === true).
+  // Fall back to a per-type context table for backwards compatibility with hand-
+  // crafted configs that do not use the universal context table.
+  const table =
+    tables.find((t) => t.isUniversalContextTable === true) ??
+    tables.find((t) => t.contextType === d.contextType);
+
   if (!table) {
-    logger.debug(`No table configured for contextType "${d.contextType}" – ignoring`);
+    logger.debug(`No context table configured for contextType "${d.contextType}" – ignoring`);
     return;
   }
 
   switch (d.deltaType) {
-    case 'ConstructEmptyContext':
+    case 'ConstructEmptyContext': {
       logger.debug(`UniverseContextDelta: INSERT context "${d.id}" into "${table.name}"`);
-      await db.insertRow(table.name, { id: d.id, context_type: d.contextType });
+      const contextTypeName = stableToTwoSegmentName(d.contextType, nameMap);
+      await db.insertRow(table.name, { id: d.id, context_type: d.contextType, context_type_name: contextTypeName });
+      break;
+    }
+    default:
+      logger.debug(`UniverseContextDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
       break;
   }
 }
@@ -182,12 +238,27 @@ async function handleUniverseRoleDelta(
   db: DatabaseAdapter,
   tables: TableConfig[],
 ): Promise<void> {
-  if (!('roleType' in delta && 'roleInstance' in delta)) return;
+  if (!('roleType' in delta && 'roleInstance' in delta)) {
+    logger.debug(`UniverseRoleDelta: unexpected delta shape (fields: ${Object.keys(delta).join(', ')}) – skipping`);
+    return;
+  }
   const d = delta as import('../types').UniverseRoleDelta;
+
+  // RemoveExternalRoleInstance cascades: remove all role rows for the context,
+  // then remove the context row itself.
+  if (d.deltaType === 'RemoveExternalRoleInstance') {
+    await handleRemoveExternalRoleInstance(d, db, tables);
+    return;
+  }
 
   const table = tables.find((t) => t.roleType === d.roleType);
   if (!table) {
-    logger.debug(`No table configured for roleType "${d.roleType}" – ignoring`);
+    // External roles never have a dedicated table (their properties are stored
+    // in the context table).  Suppress the "not found" log for these types.
+    // Note: RemoveExternalRoleInstance is already handled above and never reaches here.
+    if (d.deltaType !== 'ConstructExternalRole' && d.deltaType !== 'RemoveUnboundExternalRoleInstance') {
+      logger.debug(`No table configured for roleType "${d.roleType}" – ignoring`);
+    }
     return;
   }
 
@@ -203,10 +274,72 @@ async function handleUniverseRoleDelta(
 
     case 'RemoveRoleInstance':
     case 'RemoveUnboundExternalRoleInstance':
-    case 'RemoveExternalRoleInstance':
       logger.debug(`UniverseRoleDelta: DELETE role "${d.roleInstance}" from "${table.name}"`);
       await db.deleteRow(table.name, d.roleInstance);
       break;
+
+    default:
+      logger.debug(`UniverseRoleDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
+      break;
+  }
+}
+
+/**
+ * Handle a RemoveExternalRoleInstance delta by cascade-deleting all role rows
+ * that belong to the context, then deleting the context row itself.
+ */
+async function handleRemoveExternalRoleInstance(
+  d: import('../types').UniverseRoleDelta,
+  db: DatabaseAdapter,
+  tables: TableConfig[],
+): Promise<void> {
+  const contextId = d.id;
+  const contextType = d.contextType;
+
+  // Find the context table for this context type (needed for FK cross-reference).
+  const contextTable = tables.find((t) => t.contextType === contextType);
+
+  // Collect role tables that belong to this context.  There are two ways a role
+  // table can be associated with a context type:
+  //
+  // 1. Standard roles: roleType starts with "<contextType>$" (the role is
+  //    lexically defined inside this context).
+  //
+  // 2. Aspect roles: the role is lexically defined in another context but
+  //    "adopted" by this context.  In that case roleType does NOT start with
+  //    "<contextType>$", but the table has a column that carries a foreign-key
+  //    reference to the context table (references.table === contextTable.name).
+  //
+  // Using the FK reference as the authoritative signal covers both cases.
+  const contextTypePrefix = contextType + '$';
+  const roleTables = tables.filter((t) => {
+    if (!t.roleType) return false;
+    // Case 1: standard role – roleType prefix match
+    if (t.roleType.startsWith(contextTypePrefix)) return true;
+    // Case 2: aspect role – a column references the context table
+    if (contextTable) {
+      return t.columns.some((c) => c.references?.table === contextTable.name);
+    }
+    return false;
+  });
+
+  for (const roleTable of roleTables) {
+    logger.debug(
+      `RemoveExternalRoleInstance: DELETE all roles with context_id "${contextId}" from "${roleTable.name}"`,
+    );
+    await db.deleteRowsByContextId(roleTable.name, contextId);
+  }
+
+  // Delete the context row itself.
+  if (contextTable) {
+    logger.debug(
+      `RemoveExternalRoleInstance: DELETE context "${contextId}" from "${contextTable.name}"`,
+    );
+    await db.deleteRow(contextTable.name, contextId);
+  } else {
+    logger.debug(
+      `RemoveExternalRoleInstance: no context table configured for "${contextType}" – skipping context row deletion`,
+    );
   }
 }
 
@@ -215,7 +348,10 @@ async function handleContextDelta(
   db: DatabaseAdapter,
   tables: TableConfig[],
 ): Promise<void> {
-  if (!('contextInstance' in delta)) return;
+  if (!('contextInstance' in delta)) {
+    logger.debug(`ContextDelta: unexpected delta shape (fields: ${Object.keys(delta).join(', ')}) – skipping`);
+    return;
+  }
   const d = delta as import('../types').ContextDelta;
 
   const table = tables.find((t) => t.roleType === d.roleType);
@@ -226,6 +362,9 @@ async function handleContextDelta(
 
   switch (d.deltaType) {
     case 'AddRoleInstancesToContext':
+    case 'AddExternalRole':
+      // Per design decision (§2): external roles are stored as dedicated role tables.
+      // AddExternalRole is treated identically to AddRoleInstancesToContext.
       logger.debug(
         `ContextDelta: UPSERT role "${d.roleInstance}" in "${table.name}" (context_id = "${d.contextInstance}")`,
       );
@@ -246,9 +385,8 @@ async function handleContextDelta(
       }
       break;
 
-    case 'AddExternalRole':
-      // External roles link a context to its external role instance.
-      // No separate table operation needed beyond what UniverseRoleDelta provides.
+    default:
+      logger.debug(`ContextDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
       break;
   }
 }
@@ -258,7 +396,10 @@ async function handleRoleBindingDelta(
   db: DatabaseAdapter,
   tables: TableConfig[],
 ): Promise<void> {
-  if (!('filled' in delta)) return;
+  if (!('filled' in delta)) {
+    logger.debug(`RoleBindingDelta: unexpected delta shape (fields: ${Object.keys(delta).join(', ')}) – skipping`);
+    return;
+  }
   const d = delta as import('../types').RoleBindingDelta;
 
   const table = tables.find((t) => t.roleType === d.filledType);
@@ -280,6 +421,10 @@ async function handleRoleBindingDelta(
       logger.debug(`RoleBindingDelta: CLEAR filler_id for "${d.filled}"`);
       await db.updateRow(table.name, d.filled, { filler_id: null });
       break;
+
+    default:
+      logger.debug(`RoleBindingDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
+      break;
   }
 }
 
@@ -288,46 +433,99 @@ async function handleRolePropertyDelta(
   db: DatabaseAdapter,
   tables: TableConfig[],
 ): Promise<void> {
-  if (!('property' in delta && 'id' in delta)) return;
+  if (!('property' in delta && 'id' in delta)) {
+    logger.debug(`RolePropertyDelta: unexpected delta shape (fields: ${Object.keys(delta).join(', ')}) – skipping`);
+    return;
+  }
   const d = delta as import('../types').RolePropertyDelta;
 
-  const table = tables.find((t) => t.roleType === d.roleType);
-  if (!table) {
-    logger.debug(`No table configured for roleType "${d.roleType}" – ignoring`);
-    return;
-  }
-
-  const col = columnForProperty(table, d.property);
-  if (!col) {
-    logger.debug(
-      `No column configured for property "${d.property}" in table "${table.name}" – ignoring`,
-    );
-    return;
-  }
-
-  switch (d.deltaType) {
-    case 'AddProperty':
-    case 'SetProperty': {
-      const value = d.values.length > 0 ? d.values[0] : null;
-      logger.debug(
-        `RolePropertyDelta: UPDATE ${table.name}.${col.name} for "${d.id}" → ${JSON.stringify(value)}`,
-      );
-      await db.updateRow(table.name, d.id, { [col.name]: value });
-      break;
+  // Search ALL tables for any column that is configured to store this property.
+  // Due to "flattening", a property may surface in a table whose roleType differs
+  // from d.roleType (e.g. when the table includes properties from bound/filler roles
+  // further up the role chain).  We must update every matching table.
+  //
+  // Columns with a `fillerChain` are VIEW-only: they are not present in the base
+  // table (they are stripped by `stripFillerChainColumns` during schema creation)
+  // and are instead materialised by LEFT JOINs in the `<table>_view` SQL view.
+  // Attempting to UPDATE such a column on the base table would cause a
+  // "column does not exist" database error.  The property will be updated via
+  // the endpoint table that owns the direct (no-fillerChain) column, and the
+  // view will reflect that change automatically.
+  const matches: Array<{ table: TableConfig; col: ColumnConfig }> = [];
+  for (const t of tables) {
+    const col = columnForProperty(t, d.property);
+    if (col != null && (!col.fillerChain || col.fillerChain.length === 0)) {
+      matches.push({ table: t, col });
     }
-    case 'RemoveProperty':
-    case 'DeleteProperty':
-      logger.debug(
-        `RolePropertyDelta: SET NULL ${table.name}.${col.name} for "${d.id}"`,
-      );
-      await db.updateRow(table.name, d.id, { [col.name]: null });
-      break;
+  }
 
-    case 'UploadFile':
-      // File uploads are tracked as a URL/path stored in the property value
-      if (d.values.length > 0) {
-        await db.updateRow(table.name, d.id, { [col.name]: d.values[0] });
+  if (matches.length === 0) {
+    logger.debug(`No column configured for property "${d.property}" – ignoring`);
+    return;
+  }
+
+  for (const { table, col } of matches) {
+    // Determine how to identify the row to update:
+    //
+    //  a) Same roleType → the row IS the role instance: update by primary key (d.id).
+    //
+    //  b) Context table (has contextType) → this is an External role property stored
+    //     in the context table; the external role instance id carries a "$External"
+    //     suffix that must be stripped to obtain the context row id.
+    //
+    //  c) Different roleType (flattened) → the role whose property changed is a filler
+    //     of this table's role; the row's filler_id column holds d.id.
+    const isSameRoleType = table.roleType === d.roleType;
+    const isContextTable = !!table.contextType;
+    const isFlattened = !isSameRoleType && !isContextTable;
+
+    const rowId = isContextTable ? d.id.replace(/\$External$/, '') : d.id;
+
+    switch (d.deltaType) {
+      case 'AddProperty':
+      case 'SetProperty': {
+        const rawValue = d.values.length > 0 ? d.values[0] : null;
+        const value = coerceValue(rawValue, col.type);
+        logger.debug(
+          `RolePropertyDelta: UPDATE ${table.name}.${col.name} for ${isFlattened ? 'filler' : 'row'} "${rowId}" → ${JSON.stringify(value)}`,
+        );
+        if (isFlattened) {
+          await db.updateRowByFillerId(table.name, rowId, { [col.name]: value });
+        } else {
+          await db.updateRow(table.name, rowId, { [col.name]: value });
+        }
+        break;
       }
-      break;
+      case 'RemoveProperty':
+      case 'DeleteProperty':
+        logger.debug(
+          `RolePropertyDelta: SET NULL ${table.name}.${col.name} for ${isFlattened ? 'filler' : 'row'} "${rowId}"`,
+        );
+        if (isFlattened) {
+          await db.updateRowByFillerId(table.name, rowId, { [col.name]: null });
+        } else {
+          await db.updateRow(table.name, rowId, { [col.name]: null });
+        }
+        break;
+
+      case 'UploadFile':
+        if (d.values.length > 0) {
+          logger.debug(
+            `RolePropertyDelta: UploadFile – UPDATE ${table.name}.${col.name} for ${isFlattened ? 'filler' : 'row'} "${rowId}" → ${JSON.stringify(d.values[0])}`,
+          );
+          if (isFlattened) {
+            await db.updateRowByFillerId(table.name, rowId, { [col.name]: d.values[0] });
+          } else {
+            await db.updateRow(table.name, rowId, { [col.name]: d.values[0] });
+          }
+        } else {
+          logger.debug(`RolePropertyDelta: UploadFile – no value provided for "${d.id}", ignoring`);
+        }
+        break;
+
+      default:
+        logger.debug(`RolePropertyDelta: unhandled deltaType "${d.deltaType}" – ignoring`);
+        break;
+    }
   }
 }

@@ -720,24 +720,24 @@ domain model://perspectives.domains#CouchdbManagement@12.2
 
       -- The design pattern for nested public contexts requires that Admin has write access
       -- to both the cw_servers_and_repositories and to the Repository database.
-      -- perspective on Manifests
-      --   only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
-      --   props (DomeinFileName, LocalModelName) verbs (SetPropertyValue, Consult)
-      --   props (Description, ModelCuid) verbs (Consult)
-      --   in object state ReadyToMake
-      --     props (ModelCuid) verbs (SetPropertyValue)
+      perspective on Manifests
+        only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
+        props (DomeinFileName, LocalModelName) verbs (SetPropertyValue, Consult)
+        props (Description, ModelCuid) verbs (Consult)
+        in object state ReadyToMake
+          props (ModelCuid) verbs (SetPropertyValue)
       
-      -- action CreateManifest
-      --   create role Manifests
+      action CreateManifest
+        create role Manifests
       
-      -- perspective on Manifests >> binding >> context >> Author
-      --   only (Create, Fill)
+      perspective on Manifests >> binding >> context >> Author
+        only (Create, Fill)
 
       perspective on Visitor
         props (FirstName, LastName) verbs (Consult)
 
       -- Moet in staat zijn om een instantie toe te voegen aan Accounts.
-      -- perspective on Accounts
+      perspective on Accounts
 
       screen
         who
@@ -760,18 +760,18 @@ domain model://perspectives.domains#CouchdbManagement@12.2
             form "Repository" External
               with props (RepositoryUrl, IsPublic)
         where
-          -- Manifests
-          --   master
-          --     markdown <## Add a manifest
-          --               Add a manifest by opening the menu and creating a new empty role.
-          --               Then enter the *unqualified* name of the model in the column `Local model name`.
-          --               For the domain 'model://perspectives.domains#System' for example, this would be 'System'.
-          --               >
-          --     -- Notice that we will have a table with both LocalModelName and Name. The latter is the ReadableName. 
-          --     -- We cannot omit the readable name. It equals the LocalModelName, but we cannot edit it. 
-          --     -- Hence we need both.
-          --     with props (ModelManifest$External$Name)
-          --   detail
+          Manifests
+            master
+              markdown <## Add a manifest
+                        Add a manifest by opening the menu and creating a new empty role.
+                        Then enter the *unqualified* name of the model in the column `Local model name`.
+                        For the domain 'model://perspectives.domains#System' for example, this would be 'System'.
+                        >
+              -- Notice that we will have a table with both LocalModelName and Name. The latter is the ReadableName. 
+              -- We cannot omit the readable name. It equals the LocalModelName, but we cannot edit it. 
+              -- Hence we need both.
+              with props (ModelManifest$External$Name)
+            detail
       
     -- This role requires credentials for the ServerUrl. It 'inherits' them from its filler.
     -- It also requires credentials for the RepositoryUrl, because it creates and updates Manifests.
@@ -1265,6 +1265,11 @@ domain model://perspectives.domains#CouchdbManagement@12.2
               callEffect p:GenerateTranslationTable( modeltranslation, context >> extern >> VersionedModelURI)
               LastYamlChangeDT = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime
 
+    thing TCPConfiguration
+      property FileName = context >> extern >> (ModelURIReadable + "@" + External$Version  + "-tcp.json")
+        readableName
+      property TCPConfigFile (File)
+        pattern = "application/json" "Only .json files for TCP configuration are allowed, so use `application/json`."
 
     user Author (relational) filledBy cm:ModelManifest$Author
       aspect sys:ContextWithNotification$NotifiedUser
@@ -1281,6 +1286,17 @@ domain model://perspectives.domains#CouchdbManagement@12.2
           in
             callEffect p:GenerateTranslationTable( modeltranslation, context >> extern >> VersionedModelURI)
             LastYamlChangeDT = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime for context >> Translation
+      
+      perspective on TCPConfiguration
+        only (Create, Remove, Delete)
+        props (FileName, TCPConfigFile) verbs (Consult)
+        props (TCPConfigFile) verbs (SetPropertyValue)
+        action GenerateTCPConfiguration
+          letA
+            config <- callExternal p:GenerateTCPConfiguration( context >> extern >> VersionedModelURI ) returns String
+          in 
+            create file FileName as "application/json" in TCPConfigFile
+              config
 
       perspective on Manifest
         props (VersionToInstall) verbs (Consult, SetPropertyValue)
@@ -1349,6 +1365,15 @@ domain model://perspectives.domains#CouchdbManagement@12.2
             row
               form Translation
                 without props (ModelTranslation)
+          tab "TCP Configuration"
+            row
+              markdown <## Generate TCP configuration
+                        You can generate a Transaction Collection Point (TCP) configuration file for your model. This file can be used to configure the TCP for your organisation.
+                        Create an instance of this role first, then generate a configuration file.
+                        The form controls have an action.
+                        >
+            row
+              form TCPConfiguration
         where
     
     public Visitor at (extern >> PublicUrl) = sys:Me

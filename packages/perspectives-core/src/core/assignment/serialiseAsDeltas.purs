@@ -53,7 +53,8 @@ import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..)
 import Perspectives.Instances.ObjectGetters (binding_, roleType_)
 import Perspectives.ModelDependencies (perspectivesUsersPublicKey, sysUser)
 import Perspectives.Names (getMySystem, getUserIdentifier)
-import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), getDeltasForResource)
+import Perspectives.Persistence.DeltaStore (getDeltasForResource)
+import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (getPerspectContext, getPerspectRol)
 import Perspectives.PerspectivesState (getPerspectivesUser, transactionLevel)
 import Perspectives.Query.Interpreter (interpret)
@@ -66,11 +67,12 @@ import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
+import Perspectives.ResourceIdentifiers (isInPublicScheme)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (perspectivesClosure_, propertiesInPerspective)
-import Prelude (Unit, bind, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=))
+import Prelude (Unit, bind, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
 import Simple.JSON (unsafeStringify, write)
 
 serialisedAsDeltasFor :: ContextInstance -> RoleInstance -> MonadPerspectivesTransaction Unit
@@ -80,6 +82,7 @@ serialisedAsDeltasFor cid userId = do
 
 -- | Construct a Transaction that represents a context for a particular user role.
 -- | Serialise the Transaction as a string.
+-- NOTE: this function is only called from `serialiseFor` (module Perspectives.Instances.SerialiseAsJson), which is itself never called. This function might therefore be dead code.
 serialisedAsDeltasForUserType :: ContextInstance -> RoleType -> MonadPerspectives Value
 serialisedAsDeltasForUserType cid userType = do
   me <- getUserIdentifier
@@ -253,23 +256,31 @@ serialiseDependency
   -> StateT (Array Dependency) MonadPerspectivesTransaction (Maybe Dependency)
 serialiseDependency users mpreviousDependency currentDependency = do
   -- We serialise a role dependency as soon as we see it, hence we analyse the currentDependency.
+  -- Public resources are not serialised as deltas: the receiving peer will fetch them directly
+  -- from the public endpoint.
   case currentDependency of
     (R roleId) -> do
-      seenBefore <- gets \depsSeenBefore -> isJust $ elemIndex currentDependency depsSeenBefore
-      if seenBefore then pure unit
-      else lift $ addDeltasForRole roleId
+      if isInPublicScheme (unwrap roleId) then pure unit
+      else do
+        seenBefore <- gets \depsSeenBefore -> isJust $ elemIndex currentDependency depsSeenBefore
+        if seenBefore then pure unit
+        else lift $ addDeltasForRole roleId
     otherwise -> pure unit
 
   case mpreviousDependency, currentDependency of
     Just first@(R roleId1), (R roleId2) -> do
-      lift $ addBindingDelta roleId1 roleId2 >>=
-        if _ then pure unit
-        else addBindingDelta roleId2 roleId1 >>=
+      if isInPublicScheme (unwrap roleId1) || isInPublicScheme (unwrap roleId2) then pure unit
+      else
+        lift $ addBindingDelta roleId1 roleId2 >>=
           if _ then pure unit
-          else do
-            padding <- lift transactionLevel
-            log (padding <> "serialiseDependency finds two role dependencies without binding: " <> show mpreviousDependency <> ", " <> show currentDependency)
-    Just (V ptypeString (Value val)), (R roleId) -> lift $ addPropertyDelta roleId ptypeString val
+          else addBindingDelta roleId2 roleId1 >>=
+            if _ then pure unit
+            else do
+              padding <- lift transactionLevel
+              log (padding <> "serialiseDependency finds two role dependencies without binding: " <> show mpreviousDependency <> ", " <> show currentDependency)
+    Just (V ptypeString (Value val)), (R roleId) ->
+      if isInPublicScheme (unwrap roleId) then pure unit
+      else lift $ addPropertyDelta roleId ptypeString val
     _, _ -> pure unit
   pure $ Just currentDependency
 

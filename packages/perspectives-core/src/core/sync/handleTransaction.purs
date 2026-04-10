@@ -22,7 +22,7 @@
 
 module Perspectives.Sync.HandleTransaction where
 
-import Control.Monad.AvarMonadAsk (gets)
+import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
@@ -64,7 +64,8 @@ import Perspectives.Logging (traceSync, warnSync)
 import Perspectives.ModelDependencies (rootContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
-import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), extractDeltaInfo, storeDelta, getDeltasForResource, getDeltasForRoleInstance, updateDeltaApplied, deltaStoreDocId)
+import Perspectives.Persistence.DeltaStore (extractDeltaInfo, storeDelta, getDeltasForResource, getDeltasForRoleInstance, updateDeltaApplied, deltaStoreDocId, safeKey)
+import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, incrementResourceVersion, setResourceVersion)
 import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit, tryGetPerspectRol)
@@ -80,7 +81,7 @@ import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
 import Perspectives.Sync.LegacyDeltas (extractLegacyResourceKey, toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
-import Perspectives.Sync.Transaction (PublicKeyInfo)
+import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
@@ -383,9 +384,14 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, author
 -- | so that keys of authors not yet in the entity store can still be used for
 -- | re-verification during delta execution.
 executeTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
-executeTransaction t = try (verifyTransaction t) >>= case _ of
-  Left e -> lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
-  Right verifiedKeys -> executeTransaction' verifiedKeys t
+executeTransaction t = do
+  -- Prevent addDelta/insertDelta from storing deltas in the DeltaStore.
+  -- executeDeltaWithVersionTracking handles DeltaStore persistence directly;
+  -- the update functions called via executeDelta must not also store via addDelta.
+  modify (over Transaction \tr -> tr { isExecutingIncomingDeltas = true })
+  try (verifyTransaction t) >>= case _ of
+    Left e -> lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
+    Right verifiedKeys -> executeTransaction' verifiedKeys t
 
   where
 
@@ -477,11 +483,15 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
 
   executeDeltaWithVersionTracking :: SignedDelta -> String -> String -> Int -> PerspectivesUser -> MonadPerspectivesTransaction Unit
   executeDeltaWithVersionTracking s stringified resourceKey resourceVersion author = do
-    -- Extract the deltaType from the stringified delta content for modify-wins-over-delete checks.
+    -- Extract the deltaType and contextKey from the stringified delta content.
     let
-      deltaType = case extractDeltaInfo stringified of
+      mInfo = extractDeltaInfo stringified
+      deltaType = case mInfo of
         Just info -> info.deltaType
         Nothing -> ""
+      contextKey = case mInfo of
+        Just info -> map safeKey info.contextInstance
+        Nothing -> Nothing
     if resourceKey /= "" then do
       localVersion <- lift $ getResourceVersion resourceKey
       if resourceVersion < 0 then do
@@ -497,6 +507,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           , signedDelta: s
           , deltaType
           , applied: true
+          , contextKey
           }
       else if resourceVersion < localVersion then do
         -- Outdated delta: version is behind local version. Store but don't execute.
@@ -510,6 +521,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           , signedDelta: s
           , deltaType
           , applied: false
+          , contextKey
           }
       else if resourceVersion == localVersion then do
         -- Check for existing deltas at this version to distinguish a fresh creation from a genuine conflict.
@@ -530,6 +542,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
             , signedDelta: s
             , deltaType
             , applied: true
+            , contextKey
             }
         else do
           -- Genuine version conflict: two deltas claim the same version from different authors.
@@ -550,6 +563,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               , signedDelta: s
               , deltaType
               , applied: true
+              , contextKey
               }
           else do
             -- Existing author wins: store but don't execute.
@@ -563,6 +577,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               , signedDelta: s
               , deltaType
               , applied: false
+              , contextKey
               }
       else do
         -- resourceVersion > localVersion: normal next expected version.
@@ -584,6 +599,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               , signedDelta: s
               , deltaType
               , applied: false
+              , contextKey
               }
           else do
             -- No concurrent modifications: apply deletion normally.
@@ -598,6 +614,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               , signedDelta: s
               , deltaType
               , applied: true
+              , contextKey
               }
         else if isSubResourceKey resourceKey then do
           -- Incoming is a sub-resource modification (property or binding).
@@ -634,6 +651,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
                 , signedDelta: s
                 , deltaType
                 , applied: true
+                , contextKey
                 }
             Just _ -> do
               -- Role exists: execute normally.
@@ -648,6 +666,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
                 , signedDelta: s
                 , deltaType
                 , applied: true
+                , contextKey
                 }
         else do
           -- Role-level delta that is not a deletion (e.g. ConstructEmptyRole, AddRoleInstancesToContext).
@@ -662,6 +681,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
             , signedDelta: s
             , deltaType
             , applied: true
+            , contextKey
             }
     else
       -- No resourceKey: legacy delta without ordering info, just execute.
@@ -836,12 +856,17 @@ expandDeltas t@(TransactionForPeer { deltas, publicKeys }) storageUrl = do
 
 executeDeltas :: Array Delta -> MonadPerspectivesTransaction Unit
 -- We use `for` rather than `for_` because the latter folds from the right, starting with the last element.
-executeDeltas deltas = void $ for deltas case _ of
-  UCD s d -> executeUniverseContextDelta d s
-  URD s d -> executeUniverseRoleDelta d s
-  CDD s d -> executeContextDelta d s
-  RBD s d -> executeRoleBindingDelta d s
-  RPD s d -> executeRolePropertyDelta d s
+executeDeltas deltas = do
+  -- Prevent addDelta/insertDelta from storing deltas in the DeltaStore.
+  -- These deltas are applied on behalf of a public role; they must not be stored
+  -- (the originating user's installation already stored them under the original author key).
+  modify (over Transaction \tr -> tr { isExecutingIncomingDeltas = true })
+  void $ for deltas case _ of
+    UCD s d -> executeUniverseContextDelta d s
+    URD s d -> executeUniverseRoleDelta d s
+    CDD s d -> executeContextDelta d s
+    RBD s d -> executeRoleBindingDelta d s
+    RPD s d -> executeRolePropertyDelta d s
 
 -----------------------------------------------------------
 -- COLLECTING DELTAS

@@ -59,7 +59,8 @@ import Foreign.Object as F
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
 import Perspectives.Persistence.API (documentsInDatabase, includeDocs)
-import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), deltaStoreDocId, safeKey, storeDelta)
+import Perspectives.Persistence.DeltaStore (deltaStoreDocId, safeKey, storeDelta)
+import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.ResourceVersionStore (setResourceVersion)
 import Perspectives.Persistent (entitiesDatabaseName, saveEntiteit_)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
@@ -188,6 +189,7 @@ migrateContextDeltas { id: contextId, universeContextDelta } = do
     , signedDelta: universeContextDelta
     , deltaType
     , applied: true
+    , contextKey: Nothing
     }
   setResourceVersion resourceKey 0
 
@@ -215,6 +217,7 @@ migrateRolDeltas { id: roleId, universeRoleDelta, contextDelta, bindingDelta, pr
     , signedDelta: universeRoleDelta
     , deltaType: extractDeltaType urd.encryptedDelta
     , applied: true
+    , contextKey: Nothing
     }
 
   -- 2. ContextDelta at version 1 (if not a sentinel)
@@ -229,6 +232,7 @@ migrateRolDeltas { id: roleId, universeRoleDelta, contextDelta, bindingDelta, pr
       , signedDelta: contextDelta
       , deltaType: extractDeltaType cd.encryptedDelta
       , applied: true
+      , contextKey: Nothing
       }
 
   -- Set the resource version for the role (highest assigned = 1 if contextDelta was stored, else 0)
@@ -251,6 +255,7 @@ migrateRolDeltas { id: roleId, universeRoleDelta, contextDelta, bindingDelta, pr
         , signedDelta: bd
         , deltaType: extractDeltaType bdr.encryptedDelta
         , applied: true
+        , contextKey: Nothing
         }
       setResourceVersion bindingResourceKey 0
 
@@ -282,6 +287,7 @@ migratePropertyDeltas propResourceKey deltas = do
         , signedDelta: sd
         , deltaType: extractDeltaType encryptedDelta
         , applied: true
+        , contextKey: Nothing
         }
   let maxVersion = if length deltas > 0 then length deltas - 1 else 0
   setResourceVersion propResourceKey maxVersion

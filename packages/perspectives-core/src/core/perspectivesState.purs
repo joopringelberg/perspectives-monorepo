@@ -36,7 +36,7 @@ import Foreign.Object (empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
 import Perspectives.AMQP.Stomp (StompClient)
-import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, RolInstances, RuntimeOptions, TranslationTable, TypeFix, Warning)
+import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceDeltasCache, ResourceVersionCache, RolInstances, RoleInstanceDeltasCache, RuntimeOptions, TranslationTable, TypeFix, Warning)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, empty, lookup) as ENV
 import Perspectives.Persistence.API (PouchdbUser)
@@ -57,13 +57,18 @@ newPerspectivesState
   -> AVar IndexedResource
   -> AVar IntegrityFix
   -> AVar TypeFix
+  -> AVar Boolean
   -> String
   -> PerspectivesState
-newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOptions brokerService indexedResourceToCreate missingResource typeToBeFixed currentLanguage =
+newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOptions brokerService indexedResourceToCreate missingResource typeToBeFixed userIntegrityChoiceAVar currentLanguage =
   { rolInstances: newCache defaultCreateOptions
   , contextInstances: newCache defaultCreateOptions
   , domeinCache: newCache defaultCreateOptions
   , queryCache: newCache defaultCreateOptions
+  , deltaCache: newCache defaultCreateOptions
+  , resourceVersionCache: newCache defaultCreateOptions
+  , resourceDeltasCache: newCache defaultCreateOptions
+  , roleInstanceDeltasCache: newCache defaultCreateOptions
   , queryAssumptionRegister: empty
   , variableBindings: ENV.empty
   , systemIdentifier: uinfo.systemIdentifier
@@ -92,6 +97,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , entitiesToBeStored: []
   , indexedResourceToCreate
   , missingResource
+  , userIntegrityChoice: userIntegrityChoiceAVar
   , currentLanguage
   , translations: empty
   , setPDRStatus: \_ _ -> unit
@@ -127,6 +133,18 @@ queryCache = gets _.queryCache
 
 clearQueryCache :: MonadPerspectives Unit
 clearQueryCache = queryCache >>= liftEffect <<< clear
+
+deltaCache :: MonadPerspectives DeltaCache
+deltaCache = gets _.deltaCache
+
+resourceVersionCache :: MonadPerspectives ResourceVersionCache
+resourceVersionCache = gets _.resourceVersionCache
+
+resourceDeltasCache :: MonadPerspectives ResourceDeltasCache
+resourceDeltasCache = gets _.resourceDeltasCache
+
+roleInstanceDeltasCache :: MonadPerspectives RoleInstanceDeltasCache
+roleInstanceDeltasCache = gets _.roleInstanceDeltasCache
 
 domeinCacheLookup :: String -> MonadPerspectives (Maybe (AVar (DomeinFile Stable)))
 domeinCacheLookup = lookup domeinCache
@@ -205,6 +223,11 @@ getIndexedResourceToCreate = gets _.indexedResourceToCreate
 
 getMissingResource :: MonadPerspectives (AVar IntegrityFix)
 getMissingResource = gets _.missingResource
+
+-- | Returns the AVar used to deliver the end-user's integrity-choice response
+-- | (true = restore, false = remove permanently).
+getUserIntegrityChoiceAVar :: MonadPerspectives (AVar Boolean)
+getUserIntegrityChoiceAVar = gets _.userIntegrityChoice
 
 -- | The domain argument is the string version of the domain identifier.
 getTranslationTable :: String -> MonadPerspectives (Maybe TranslationTable)

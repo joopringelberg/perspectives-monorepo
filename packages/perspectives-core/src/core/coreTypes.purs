@@ -36,6 +36,7 @@ module Perspectives.CoreTypes
   , ContextPropertyValueGetter
   , CryptoKey'
   , DbName
+  , DeltaCache
   , DomeinCache
   , IndexedResource(..)
   , InformedAssumption(..)
@@ -63,9 +64,12 @@ module Perspectives.CoreTypes
   , PropertyValueGetter
   , QueryInstances
   , RepeatingTransaction(..)
+  , ResourceDeltasCache
   , ResourceToBeStored(..)
+  , ResourceVersionCache
   , RolInstances
   , RoleGetter
+  , RoleInstanceDeltasCache
   , RuntimeOptions
   , StorageScheme(..)
   , TrackingObjectsGetter
@@ -145,6 +149,7 @@ import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
 import Perspectives.Instances.Environment (Environment)
 import Perspectives.InvertedQuery (InvertedQuery)
+import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (PouchdbState)
 import Perspectives.Persistent.ChangesFeed (EventSource)
@@ -169,6 +174,18 @@ type DomeinCache = Cache (AVar (DomeinFile Stable))
 
 type QueryInstances = Cache (Array InvertedQuery)
 
+-- | In-memory cache for individual DeltaStoreRecord values, keyed by document ID.
+type DeltaCache = Cache DeltaStoreRecord
+
+-- | In-memory cache for resource version numbers, keyed by safe resource key.
+type ResourceVersionCache = Cache Int
+
+-- | In-memory cache for getDeltasForResource results, keyed by safe resource key.
+type ResourceDeltasCache = Cache (Array DeltaStoreRecord)
+
+-- | In-memory cache for getDeltasForRoleInstance results, keyed by safe role instance ID.
+type RoleInstanceDeltasCache = Cache (Array DeltaStoreRecord)
+
 type BrokerService = ConnectAndSubscriptionParameters (url :: String)
 
 type PerspectivesState = PouchdbState PerspectivesExtraState
@@ -183,6 +200,18 @@ type PerspectivesExtraState =
   , domeinCache :: DomeinCache
 
   , queryCache :: QueryInstances
+
+  -- Caching individual deltas by document ID
+  , deltaCache :: DeltaCache
+
+  -- Caching resource version numbers by safe resource key
+  , resourceVersionCache :: ResourceVersionCache
+
+  -- Caching getDeltasForResource results by safe resource key
+  , resourceDeltasCache :: ResourceDeltasCache
+
+  -- Caching getDeltasForRoleInstance results by safe role instance ID
+  , roleInstanceDeltasCache :: RoleInstanceDeltasCache
 
   , queryAssumptionRegister :: AssumptionRegister
 
@@ -231,6 +260,13 @@ type PerspectivesExtraState =
 
   , missingResource :: AVar IntegrityFix
 
+  -- | An AVar used to deliver the end-user's choice when a missing resource is
+  -- | detected.  The integrity-fixer fiber blocks on this AVar after it has sent
+  -- | a "requestUserIntegrityChoice" status message to the frontend.  The
+  -- | frontend puts `true` (restore) or `false` (remove) into this AVar via the
+  -- | `resolveUserIntegrityChoice` API call.
+  , userIntegrityChoice :: AVar Boolean
+
   , currentLanguage :: String
 
   , translations :: Object TranslationTable
@@ -246,7 +282,7 @@ type PerspectivesExtraState =
   , logConfig :: LogConfig
   )
 
-type Warning = { message :: String, error :: String }
+type Warning = { message :: String, error :: String, externalRoleId :: String, contextName :: String }
 
 -----------------------------------------------------------
 -- STRUCTURED LOGGING
@@ -614,7 +650,7 @@ class (Cacheable v i, WriteForeign v, ReadForeign v) <= Persistent v i | i -> v,
   resourceIdToBeStored :: i -> ResourceToBeStored
   typeOfInstance :: i -> ResourceToBeStored
 
-data IntegrityFix = Missing ResourceToBeStored | FixSucceeded | FixFailed String | StopFixing | FixingHotLine (AVar IntegrityFix)
+data IntegrityFix = Missing ResourceToBeStored | FixRestored | FixDeleted | FixFailed String | StopFixing | FixingHotLine (AVar IntegrityFix)
 
 data ResourceToBeStored
   = Ctxt ContextInstance

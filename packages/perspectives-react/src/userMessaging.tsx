@@ -39,6 +39,7 @@ export interface UserMessagingMessage {
   message?: string;
   acknowledge?: (value: boolean) => void;
   error?: string;
+  link?: { label: string; externalRoleId: string };
 }
 
 export type NotifyFunction = (message: UserMessagingMessage) => Promise<void>;
@@ -58,7 +59,7 @@ class UserMessaging
       // A function that accepts a message and that somehow notifies the end user.
       // The function should return a promise whose fulfillment signals that the user has acknowledged the message.
       this.notifyEndUser = notifyEndUser;
-      notifyDeveloper ? this.notifyDeveloper = notifyDeveloper : null;
+      if (notifyDeveloper) { this.notifyDeveloper = notifyDeveloper; }
       // A state variable. If true, showMessages is still waiting for the acknowledgement of the user of a message.
       this.showing = false;
     }
@@ -148,8 +149,9 @@ export class EndUserNotifier extends PerspectivesComponent<EndUserNotifierProps,
   {
     const component = this;
     const acknowledge = component.props.message.acknowledge ? component.props.message.acknowledge : () => undefined;
+    const link = component.props.message.link;
     return <Modal
-      show={component.props.message.message !== undefined}
+      show={component.props.message.message !== undefined || link !== undefined}
       onHide={ () => acknowledge( true )}>
       <Modal.Header closeButton>
         <Modal.Title>{component.props.message.title || "A message"}</Modal.Title>
@@ -159,6 +161,16 @@ export class EndUserNotifier extends PerspectivesComponent<EndUserNotifierProps,
           <Card.Body>
             <Card.Text>
               {component.props.message.message}
+              {link
+                ? <> {" "}<a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      document.body.dispatchEvent(new CustomEvent("OpenContext", { detail: link.externalRoleId, bubbles: true }));
+                      acknowledge(true);
+                    }}
+                  >{link.label}</a></>
+                : null}
             </Card.Text>
           </Card.Body>
         </Card>

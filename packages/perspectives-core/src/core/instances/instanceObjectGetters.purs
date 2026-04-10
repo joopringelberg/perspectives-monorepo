@@ -54,7 +54,7 @@ import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..), ex
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.InstanceRepresentation.PublicUrl (PublicUrl)
 import Perspectives.Instances.Combinators (orElse)
-import Perspectives.ModelDependencies (perspectivesUsers)
+import Perspectives.ModelDependencies (nonPerspectivesUsers, perspectivesUsers)
 import Perspectives.Persistence.API (Keys(..))
 import Perspectives.Persistent (entitiesDatabaseName, getPerspectContext, getPerspectRol)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase, getSafeViewOnDatabase_)
@@ -264,7 +264,13 @@ bottom_ r = do
     Nothing -> pure r
     Just b -> bottom_ b
 
--- | The TheWorld$PerspectivesUsers bottom in the chain, or nothing
+-- | Traverses the binding chain to find a valid AMQP peer at the bottom.
+-- | Returns:
+-- |   (1) Just a PerspectivesUser when TheWorld$PerspectivesUsers is found,
+-- |   (2) Just a PerspectivesUser (coerced) when any other UserRole that is NOT
+-- |       TheWorld$NonPerspectivesUsers is found at the chain bottom (e.g. Onlookers,
+-- |       which represents a TCP subscriber reached via RabbitMQ),
+-- |   (3) Nothing if no valid AMQP peer is found (NonPerspectivesUsers, non-UserRole, or empty chain).
 perspectivesUsersRole_ :: RoleInstance -> MP (Maybe PerspectivesUser)
 perspectivesUsersRole_ r = do
   EnumeratedRoleType rt <- roleType_ r
@@ -272,7 +278,16 @@ perspectivesUsersRole_ r = do
   else do
     (mbinding :: Maybe RoleInstance) <- binding_ r
     case mbinding of
-      Nothing -> pure Nothing
+      Nothing ->
+        -- Bottom of the chain. NonPerspectivesUsers have no AMQP account and are excluded.
+        -- Other UserRole types (e.g. Onlookers) are recognised as valid AMQP peers.
+        -- The isUserRole guard protects against non-UserRole instances (e.g. ExternalRole)
+        -- accidentally appearing at the bottom of a binding chain.
+        if rt == nonPerspectivesUsers then pure Nothing
+        else do
+          isUser <- isUserRole r
+          if isUser then pure $ Just (roleInstance2PerspectivesUser r)
+          else pure Nothing
       Just b -> perspectivesUsersRole_ b
 
 -- | From the instance of a Role (fillerId) of any kind, find the instances of the Role of the given

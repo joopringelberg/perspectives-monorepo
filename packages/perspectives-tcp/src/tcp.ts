@@ -51,6 +51,10 @@ export class TCP {
     logger.info(`Starting TCP with CUID "${this.config.cuid}"`);
 
     await this.schemaGenerator.applySchema(this.config.schema.tables);
+    await this.schemaGenerator.applyViews(
+      this.config.schema.tables,
+      this.config.schema.nameMap ?? {},
+    );
     await this.amqp.start();
 
     logger.info('TCP is running and waiting for transactions');
@@ -69,11 +73,16 @@ export class TCP {
   // -------------------------------------------------------------------------
 
   /**
-   * Print the SQL CREATE TABLE statements for the configured schema.
+   * Print the SQL CREATE TABLE and CREATE VIEW statements for the configured schema.
    * Does NOT apply them to the database.
    */
   async printSchema(): Promise<string> {
-    return this.schemaGenerator.generateSQL(this.config.schema.tables);
+    const tableSQL = await this.schemaGenerator.generateSQL(this.config.schema.tables);
+    const viewSQL = this.schemaGenerator.generateViewsSQL(
+      this.config.schema.tables,
+      this.config.schema.nameMap ?? {},
+    );
+    return viewSQL ? `${tableSQL}\n\n${viewSQL}` : tableSQL;
   }
 
   // -------------------------------------------------------------------------
@@ -93,6 +102,7 @@ export class TCP {
     await processTransaction(transaction, this.db, {
       verifySignatures: this.config.verifySignatures ?? false,
       tables: this.config.schema.tables,
+      nameMap: this.config.schema.nameMap ?? {},
     });
   }
 }

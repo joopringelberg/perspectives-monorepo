@@ -58,11 +58,12 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Extern.Couchdb (retrieveModelFromLocalStore, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
-import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2ModelUrl)
+import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2ModelUrl, unversionedModelUri)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.ModelDependencies (modelURIReadable, sysUser, versionedModelManifestModelCuid) as MD
 import Perspectives.ModelTranslation (augmentModelTranslation, emptyTranslationTable, generateFirstTranslation, generateTranslationTable, parseTranslation_pass1, parseTranslation_pass2, writeReadableTranslationYaml, writeTranslationYaml) as MT
 import Perspectives.ModelTranslation.Representation (ModelTranslation(..))
+import Perspectives.Parsing.Arc.PhaseTwoDefs (withStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, addDocument, deleteDocument, fromBlob, getAttachment, getDocument, retrieveDocumentVersion, toFile, tryGetDocument_)
 import Perspectives.PerspectivesState (addWarning, getModelUris, getWarnings, resetWarnings, setModelUri, setModelUris, setWarnings)
@@ -74,6 +75,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), 
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), StableIdMapping, loadStableMapping, Stable) as Sidecar
 import Perspectives.Sidecar.StableIdMapping (fromRepository)
+import Perspectives.TCP.Configuration (buildTCPConfiguration) as TCP
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_)
 import Simple.JSON (readJSON, readJSON_, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
@@ -115,22 +117,22 @@ applyImmediately :: Array ModelUriString -> Array ArcSource -> Array ModelUriStr
 applyImmediately modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
   try
     ( case head modelUri_, head arcSource_, head basedOnVersion_ of
-        Nothing, _, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model name given!", error: "" }
-        _, Nothing, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no arc source given!", error: "" }
+        Nothing, _, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model name given!", error: "", externalRoleId: "", contextName: "" }
+        _, Nothing, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no arc source given!", error: "", externalRoleId: "", contextName: "" }
         Just modelUri, Just arcSource, mbasedOnVersion -> catchError
           do
             mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
             mmodelUriReadable <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.modelURIReadable))
             case mmodelCuid, mmodelUriReadable of
-              Nothing, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model CUID given!", error: "" }
-              _, Nothing -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model URI Readable given!", error: "" }
+              Nothing, _ -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model CUID given!", error: "", externalRoleId: "", contextName: "" }
+              _, Nothing -> lift $ addWarning { message: "Parsing$ApplyImmediately: no model URI Readable given!", error: "", externalRoleId: "", contextName: "" }
               Just (Value modelCuid), Just (Value modelUriReadable) -> do
                 r <- lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType MD.sysUser)
                   (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource true modelCuid modelUriReadable mbasedOnVersion)
                 case r of
-                  Left errs -> lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: show errs })
+                  Left errs -> lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: show errs, externalRoleId: "", contextName: "" })
                   Right _ -> pure unit
-          \e -> lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: show e })
+          \e -> lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: show e, externalRoleId: "", contextName: "" })
     )
     >>= handleExternalStatementError "model://perspectives.domains#Parsing$ApplyImmediately"
 
@@ -154,8 +156,8 @@ uploadToRepository modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           mmodelUriReadable <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.modelURIReadable))
           case mmodelCuid, mmodelUriReadable of
-            Nothing, _ -> lift $ addWarning { message: "Parsing$UploadToRepository: no model CUID given!", error: "" }
-            _, Nothing -> lift $ addWarning { message: "Parsing$UploadToRepository: no model URI Readable given!", error: "" }
+            Nothing, _ -> lift $ addWarning { message: "Parsing$UploadToRepository: no model CUID given!", error: "", externalRoleId: "", contextName: "" }
+            _, Nothing -> lift $ addWarning { message: "Parsing$UploadToRepository: no model URI Readable given!", error: "", externalRoleId: "", contextName: "" }
             Just (Value modelCuid), Just (Value modelUriReadable) -> do
               r <- loadAndCompileArcFile_ ((Sidecar.ModelUri modelUri) :: Sidecar.ModelUri Sidecar.Stable) arcSource false modelCuid modelUriReadable mbasedOnVersion
               case r of
@@ -303,8 +305,8 @@ storeModelLocally_ modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
           mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
           mmodelUriReadable <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.modelURIReadable))
           case mmodelCuid, mmodelUriReadable of
-            Nothing, _ -> lift $ addWarning { message: "Parsing$StoreModelLocally: no model CUID given!", error: "" }
-            _, Nothing -> lift $ addWarning { message: "Parsing$StoreModelLocally: no model URI Readable given!", error: "" }
+            Nothing, _ -> lift $ addWarning { message: "Parsing$StoreModelLocally: no model CUID given!", error: "", externalRoleId: "", contextName: "" }
+            _, Nothing -> lift $ addWarning { message: "Parsing$StoreModelLocally: no model URI Readable given!", error: "", externalRoleId: "", contextName: "" }
             Just (Value modelCuid), Just (Value modelUriReadable) -> do
               r <- loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource false modelCuid modelUriReadable mbasedOnVersion
               case r of
@@ -431,6 +433,29 @@ generateTranslationTable translation_ modelUri_ _ = case head translation_, head
           theFile
           (MediaType "text/json")
 
+-- | Generate a TCP configuration (a JSON query plan) from the DomeinFile identified by the
+-- | versioned model URI. The TCP uses this plan to create SQL views that materialise all
+-- | Onlooker perspectives in the model, enabling direct SQL reporting without PDR involvement.
+-- | The ModelUriString should be versioned (e.g. model://perspectives.domains#MyApp@1.0).
+-- |
+-- | NOTE: This is currently a stub. Full implementation follows the design in
+-- |       packages/perspectives-tcp/docs/pl-query-to-sql-design.md
+generateTCPConfiguration :: Array ModelUriString -> (RoleInstance ~~> Value)
+generateTCPConfiguration modelUri_ _ = case head modelUri_ of
+  Nothing -> handleExternalFunctionError "model://perspectives.domains#Parsing$GenerateTCPConfiguration"
+    (Left (error "A versioned model URI should be provided (e.g. model://perspectives.domains#MyApp@1.0)."))
+  Just modelUri -> do
+    -- unsafePartial is safe here: the ARC runtime only passes well-formed model URIs to
+    -- external functions; malformed URIs are rejected at parse time.
+    let { repositoryUrl, documentName } = unsafePartial modelUri2ModelUrl modelUri
+    x <- try $ lift $ lift $ getDocument repositoryUrl documentName
+    case x of
+      Left e -> handleExternalFunctionError "model://perspectives.domains#Parsing$GenerateTCPConfiguration"
+        (Left e)
+      Right (domeinFile :: DomeinFile Sidecar.Stable) -> lift $ lift $ withStableDomeinFile (Sidecar.ModelUri $ unversionedModelUri modelUri) domeinFile do
+        config <- TCP.buildTCPConfiguration domeinFile modelUri
+        pure $ Value (writeJSON config)
+
 -- | Fill a ModelTranslation freshly generated from a DomeinFile, with translations taken from a TranslationTable.
 -- | NOTE: the TranslationTable must be available on the versioned model in the repository. It is not a property value.
 -- | The ModelTranslation must be passed in as a string.
@@ -474,4 +499,5 @@ externalFunctions =
   , mkLibFunc1 "model://perspectives.domains#Parsing$ParseYamlTranslation" True parseYamlTranslation
   , mkLibEffect2 "model://perspectives.domains#Parsing$GenerateTranslationTable" True generateTranslationTable
   , mkLibFunc2 "model://perspectives.domains#Parsing$AugmentModelTranslation" True augmentModelTranslation
+  , mkLibFunc1 "model://perspectives.domains#Parsing$GenerateTCPConfiguration" True generateTCPConfiguration
   ]

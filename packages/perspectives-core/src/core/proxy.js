@@ -5,6 +5,9 @@
 
 let internalChannel, internalChannelResolver, internalChannelRejecter;
 
+// Registered by the PDR during startup; delivers user integrity choices to the PDR AVar.
+let putUserIntegrityChoiceFn = null;
+
 // This promise will resolve to an instance of the InternalChannel.
 // It is used by function / module handleClientRequest that runs in the same execution context as the core.
 const internalChannelPromise = new Promise(
@@ -267,6 +270,19 @@ export function handleClientRequest( pdr, channels, request )
       case "unsubscribe":
         internalChannelPromise.then( ic => ic.unsubscribe( req.request ) );
         break;
+      case "resolveUserIntegrityChoice":
+        // Deliver the end-user's choice to the PDR's userIntegrityChoice AVar.
+        // choice === true  → restore the missing resource.
+        // choice === false → permanently remove all dangling references.
+        if (putUserIntegrityChoiceFn !== null) {
+          putUserIntegrityChoiceFn(req.choice)();
+        }
+        channels[corrId2ChannelId(req.channelId)].postMessage({
+          responseType: "WorkerResponse",
+          serviceWorkerMessage: "resolveUserIntegrityChoice",
+          success: true
+        });
+        break;
     }
   }
   else
@@ -301,4 +317,11 @@ export const pdrStatusMessageChannel = new Promise(function( resolver, rejecter)
 export function receivePDRStatusMessageChannel( channel )
 {
   receivePDRStatusMessageChannelResolver( channel );
+}
+
+// Called from the PDR during startup to register a function that delivers the user's
+// integrity-choice (Boolean) into the userIntegrityChoice AVar inside PerspectivesState.
+export function registerPutUserIntegrityChoice_( fn )
+{
+  putUserIntegrityChoiceFn = fn;
 }

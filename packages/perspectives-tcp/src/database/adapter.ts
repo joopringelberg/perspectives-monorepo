@@ -60,6 +60,29 @@ export interface DatabaseAdapter {
   deleteRow(table: string, id: string): Promise<void>;
 
   /**
+   * Delete all rows whose `context_id` column equals the given context identifier.
+   * Used to cascade-delete all role instances when a context is removed.
+   * Has no effect if no matching rows exist.
+   *
+   * @param table      SQL table name
+   * @param contextId  Value to match against the `context_id` column
+   */
+  deleteRowsByContextId(table: string, contextId: string): Promise<void>;
+
+  /**
+   * Update all rows whose `filler_id` column equals the given filler identifier.
+   * Used for "flattened" role tables that include properties from bound/filler roles.
+   * Has no effect if no matching rows exist.  Multiple rows may be updated if more
+   * than one row shares the same filler_id (which is expected for flattened tables
+   * where several role instances share a common filler).
+   *
+   * @param table     SQL table name
+   * @param fillerId  Value to match against the `filler_id` column
+   * @param data      Column → value map of fields to update
+   */
+  updateRowByFillerId(table: string, fillerId: string, data: Record<string, unknown>): Promise<void>;
+
+  /**
    * Upsert: insert the row if absent, otherwise update the specified columns.
    *
    * @param table  SQL table name
@@ -67,6 +90,18 @@ export interface DatabaseAdapter {
    * @param data   Full column → value map (including `id`)
    */
   upsertRow(table: string, id: string, data: Record<string, unknown>): Promise<void>;
+
+  /**
+   * Apply SQL views (create or replace).
+   * Called once at startup, after `applySchema`.
+   *
+   * Each entry contains the view name and the full `CREATE OR REPLACE VIEW` SQL
+   * statement.  Implementations should skip (or log and continue) if a view
+   * cannot be created; views are non-essential for data persistence.
+   *
+   * @param viewDefs  Array of `{ name, sql }` pairs
+   */
+  applyViews(viewDefs: Array<{ name: string; sql: string }>): Promise<void>;
 
   /** Close the database connection. */
   close(): Promise<void>;

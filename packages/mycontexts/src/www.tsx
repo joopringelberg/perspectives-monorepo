@@ -23,7 +23,6 @@ import { Where } from './where';
 import { NotificationsDisplayer } from './notifications';
 import Settings from './settingsPanel';
 import { subscribeToAllNotifications } from './systemNotifications';
-import { syncWithCouchDB } from './syncWIthCouchdb';
 import { MyRoleTypes } from './myRoleTypes';
 import ConnectedToAMQP from './connectedToAMQP';
 import { InternetConnectivityCheck } from './internetConnectivityCheck';
@@ -120,10 +119,22 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         });
         // Add a way for the proxy to inform the user of warnings that consist of caught errors that did not lead to a crash.
     PDRproxy.then( pproxy => pproxy.setUserMessageChannel( (warnings: Warning[]) => UserMessagingPromise.then( um => 
-      warnings.forEach( warning => um.addMessageForEndUser(
-        { title: i18next.t("userMessagingPanel_title", { ns: 'mycontexts' })
-        , message: i18next.t("userMessagingPanel_message", { ns: 'mycontexts', warning: warning.message }) 
-        , error: warning.error }) ) ) ) );
+      warnings.forEach( warning => {
+        if (warning.externalRoleId) {
+          // Restoration notification: the PDR automatically restored a missing resource.
+          // Show a message with a navigation hyperlink to the restored context.
+          um.addMessageForEndUser(
+            { title: i18next.t("restorationPanel_title", { ns: 'mycontexts' })
+            , message: i18next.t("restorationPanel_message", { ns: 'mycontexts' })
+            , link: { label: warning.contextName || warning.externalRoleId, externalRoleId: warning.externalRoleId }
+            });
+        } else {
+          um.addMessageForEndUser(
+            { title: i18next.t("userMessagingPanel_title", { ns: 'mycontexts' })
+            , message: i18next.t("userMessagingPanel_message", { ns: 'mycontexts', warning: warning.message }) 
+            , error: warning.error });
+        }
+      }) ) ) );
   }
 
   componentDidMount() {
@@ -175,12 +186,6 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                     }
                   }
               ))
-              // Only sync with CouchDB in development mode
-              if (import.meta.env.DEV) {
-                console.log('Development mode: Syncing with CouchDB');
-                syncWithCouchDB(installationData.perspectivesUserId! + installationData.deviceName! + "_entities")
-                  .then(() => syncWithCouchDB(installationData.perspectivesUserId! + installationData.deviceName! + "_models"));
-              }
               // Subscribe to all notifications
               component.addUnsubscriber(subscribeToAllNotifications(systemIdentifier));
               // Subscribe to language changes
@@ -527,7 +532,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                     , openContextType: contextType
                     , openContextUserType: userRoleType
                     , actions
-                    , title: screens[0].title ? screens[0].title : "MyContexts"}))
+                    , title: screens[0]?.title || "MyContexts"}))
                 .catch(e => UserMessagingPromise.then( um => 
                   um.addMessageForEndUser(
                     { title: i18next.t("app_contextactions_title", { ns: 'mycontexts' }) 

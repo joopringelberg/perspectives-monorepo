@@ -103,7 +103,8 @@ export class AMQPClient {
 
         // Bind to the topic exchange (the RabbitMQ STOMP plugin routes Perspectives
         // transactions to `amq.topic` with the recipient's CUID as routing key)
-        await ch.assertExchange(exchange, 'topic', { durable: true });
+        // NOTE commented this out because the default exchange is sufficient for direct routing to queues named after the CUID, and it avoids the need for exchange declaration and binding permissions in RabbitMQ.
+        // await ch.assertExchange(exchange, 'topic', { durable: true });
         await ch.bindQueue(queueName, exchange, routingKey);
 
         logger.info(

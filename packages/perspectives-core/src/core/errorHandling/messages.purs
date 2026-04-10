@@ -130,6 +130,8 @@ data PerspectivesError
   | UnauthorizedForRole String RoleType RoleType (Array RoleVerb) (Maybe ArcPosition) (Maybe ArcPosition)
   | UnauthorizedForContext String RoleType ContextType
 
+  | NoPublicKeyForAuthor String
+
   | MissingPerspective
   | UserHasNoPerspective RoleType RoleType ArcPosition ArcPosition
   | PerspectiveCannotBeAuthorOnly String ArcPosition EnumeratedRoleType ArcPosition EnumeratedPropertyType
@@ -261,6 +263,7 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (UnauthorizedForProperty author userRole role property verb start end) = "(UnauthorizedForProperty) User " <> author <> " in role " <> show userRole <> " has no perspective on role " <> show role <> " that includes " <> show verb <> " for property " <> show property <> maybeShowPosition start end
   show (UnauthorizedForRole author userRole role verbs mstart mend) = "(UnauthorizedForRole) User " <> author <> " in role " <> show userRole <> " has no perspective on role " <> show role <> " that includes at least one of " <> show verbs <> maybeShowPosition mstart mend
   show (UnauthorizedForContext author userRole contextType) = "(UnauthorizedForContext) User " <> author <> " in role " <> show userRole <> " has no perspective on context " <> show contextType
+  show (NoPublicKeyForAuthor author) = "(NoPublicKeyForAuthor) This PerspectivesUsers instance " <> author <> " should have a public key, but does not."
 
   show MissingPerspective = "(MissingPerspective) This should be inside a perspective expression."
   show (UserHasNoPerspective subject object start end) = "(UserHasNoPerspective) User " <> roletype2string subject <> " has no perspective on " <> roletype2string object <> " (between " <> show start <> " and " <> show end <> ")."

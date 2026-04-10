@@ -215,6 +215,7 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
                   roleRepresentation={component.props.roleRepresentation}
                   perspective={component.props.perspective}
                   readableName={roleInstanceWithProps.readableName}
+                  cancelled={roleInstanceWithProps.cancelled}
                 /> )
             }</tr>;
   }

@@ -25,20 +25,21 @@ module Perspectives.Parsing.Arc.Identifiers where
 import Control.Alt (void, (<|>))
 import Data.Array (cons, elemIndex, intercalate, many)
 import Data.CodePoint.Unicode (isLower, isSpace)
-import Data.Maybe (isJust)
+import Data.Maybe (Maybe(..), isJust)
 import Data.String (codePointFromChar)
 import Data.String.CodeUnits (fromCharArray)
 import Data.String.Regex (Regex, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Parsing (fail)
-import Parsing.Combinators (option, try, (<?>))
+import Parsing.Combinators (lookAhead, option, optionMaybe, try, (<?>))
 import Parsing.String (string, satisfy)
-import Parsing.String.Basic (whiteSpace)
+import Parsing.String.Basic (oneOf, whiteSpace)
+import Parsing.Token (alphaNum, upper)
 import Perspectives.Parsing.Arc.IndentParser (IP)
-import Perspectives.Parsing.Arc.Token (token)
+import Perspectives.Parsing.Arc.Token (isReservedName, perspectDef, token)
 import Perspectives.ResourceIdentifiers (hasPublicResourceShape)
-import Prelude (Unit, bind, discard, not, pure, ($), (*>), (/=), (<<<), (<>))
+import Prelude (Unit, bind, discard, not, pure, show, ($), (*>), (/=), (<<<), (<>))
 
 reserved :: String -> IP Unit
 reserved = token.reserved
@@ -47,7 +48,28 @@ colon :: IP String
 colon = token.colon
 
 arcIdentifier :: IP String
-arcIdentifier = (qualifiedName <|> prefixedName <|> segmentedName) <?> "a capitalized name, a prefixed name, or a fully qualified name, "
+arcIdentifier = qualifiedName <|> prefixedName <|> segmentedName <|> reservedWordAsIdentifierError
+  where
+  -- When all normal alternatives fail, check whether the offending token is a reserved word
+  -- and produce a more helpful error message.
+  reservedWordAsIdentifierError :: IP String
+  reservedWordAsIdentifierError = do
+    mName <- optionMaybe (try (lookAhead rawUpperIdent))
+    case mName of
+      Just name | isReservedPerspectivesName name ->
+        fail (show name <> " is a reserved word in this language. Please use another capitalized name, a prefixed name, or a fully qualified name")
+      _ ->
+        fail "Expected a capitalized name, a prefixed name, or a fully qualified name, "
+
+  -- Parse an uppercase-starting identifier without checking for reserved words.
+  rawUpperIdent :: IP String
+  rawUpperIdent = do
+    f <- upper
+    r <- many (alphaNum <|> oneOf [ '_' ])
+    pure $ fromCharArray (cons f r)
+
+  isReservedPerspectivesName :: String -> Boolean
+  isReservedPerspectivesName = isReservedName perspectDef
 
 -- Parses model://perspectives.domains#System
 qualifiedName :: IP String

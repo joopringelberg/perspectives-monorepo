@@ -123,6 +123,7 @@ domain model://perspectives.domains#Disconnect@1.1
       state ActionsCanBeTaken = exists binding
         on entry
           do
+            -- NOTE: Disconnecter has no perspective on Chat. This won't happen.
             create role sys:Chat
           notify "You can now start a chat with the peer."
       perspective on Disconnecter
@@ -151,14 +152,16 @@ domain model://perspectives.domains#Disconnect@1.1
             detail
               markdown <### Disconnect and reconnect
                         If the *Disconnected* property is set to *true*, you are disconnected from the peer.
-                        Restore contact by choosing the *Reconnect* action in the main menu (top left corner).
+                        Do so by choosing the *Disconnect* action in the main menu (top left corner). Or press [[action:Disconnect|Disconnect]].
+                        Restore contact by choosing the *Reconnect* action in the main menu (top left corner). Or press [[action:Reconnect|Reconnect]].
                         >
-              without props (Reconnect)
-              props (Cancelled, Reconnect) without (SetPropertyValue)
+              -- without props (Reconnect)
+              props (Cancelled, Reconnect)-- without (SetPropertyValue)
         what
           markdown <### Disconnect from or reconnect to a peer
                     Disconnect from this peer by choosing the *Disconnect* action from the main menu (top left corner).
-                    Reconnect by choosing the *Reconnect* action.
+                    Reconnect by choosing the *Reconnect* action. Or press [[action:Reconnect|Reconnect]].
+                    Disconnecting is bilateral: if you disconnect from a peer, the peer is also disconnected from you. Reconnecting is unilateral: if you reconnect to a peer, the peer is not automatically reconnected to you. The peer has to choose to reconnect to you as well.
                     
                     As long as you are connected, you can chat with the peer (see the chat under *Who*).
                     >
@@ -211,6 +214,7 @@ domain model://perspectives.domains#Disconnect@1.1
                     Your peer has severed the connection with you.
                     Your installation automatically stops sending information to the peer.
                     You can reconnect to your peer by choosing the *Reconnect* item from the main menu (top left corner).
+                    Or press [[action:Reconnect|Reconnect]].
                     This will e.g. allow you to send chat messages to the peer again.
                     However, it is up to the peer to restore her/his side of the connection.
                     >

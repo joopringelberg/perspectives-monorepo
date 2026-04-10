@@ -553,6 +553,12 @@ domain model://perspectives.domains#BrokerServices@6.1
                 AccountName,
                 AccountPassword,
                 queueid)
+              callEffect rabbit:SetBindingKey(
+                context >> extern >> ManagementEndpoint,
+                context >> Administrator >> AdminUserName,
+                context >> Administrator >> AdminPassword,
+                queueid,
+                context >> extern >> Exchange)
       
       -- state StartService = (exists binding) and context >> extern >> Registered
       --   on entry

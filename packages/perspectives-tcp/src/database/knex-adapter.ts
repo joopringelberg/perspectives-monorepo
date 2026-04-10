@@ -38,15 +38,46 @@ export class KnexAdapter implements DatabaseAdapter {
   // -------------------------------------------------------------------------
 
   async applySchema(tables: TableConfig[]): Promise<void> {
+    // Pass 1: create new tables or add missing columns to existing ones
     for (const table of tables) {
       const exists = await this.db.schema.hasTable(table.name);
       if (!exists) {
         logger.info(`Creating table "${table.name}"`);
         await this.db.schema.createTable(table.name, (t) => {
-          this.buildTable(t, table);
+          this.buildTable(t, table, false);
         });
       } else {
-        logger.debug(`Table "${table.name}" already exists – skipping`);
+        // Table already exists: add any columns that are missing (additive migration).
+        // This handles schema evolution where new standard columns (e.g.
+        // context_type_name) are added after the table was first created.
+        for (const col of table.columns) {
+          const colExists = await this.db.schema.hasColumn(table.name, col.name);
+          if (!colExists) {
+            logger.info(`Adding missing column "${col.name}" to table "${table.name}"`);
+            await this.db.schema.alterTable(table.name, (t) => {
+              const colBuilder = this.addColumn(t, col);
+              colBuilder.nullable(); // new columns added to existing tables must always be nullable
+            });
+          }
+        }
+      }
+    }
+
+    // Pass 2: add foreign key constraints now that all tables exist
+    for (const table of tables) {
+      const fkCols = table.columns.filter((c) => c.references);
+      for (const col of fkCols) {
+        try {
+          await this.db.schema.alterTable(table.name, (t) => {
+            t.foreign(col.name)
+              .references(col.references!.column)
+              .inTable(col.references!.table)
+              .onDelete('SET NULL');
+          });
+        } catch {
+          // Constraint may already exist from a previous run
+          logger.debug(`FK constraint on "${table.name}"."${col.name}" already exists – skipping`);
+        }
       }
     }
   }
@@ -64,7 +95,7 @@ export class KnexAdapter implements DatabaseAdapter {
     return statements.join('\n\n');
   }
 
-  private buildTable(builder: Knex.CreateTableBuilder, table: TableConfig): void {
+  private buildTable(builder: Knex.TableBuilder, table: TableConfig, includeForeignKeys = true): void {
     for (const col of table.columns) {
       const colBuilder = this.addColumn(builder, col);
       if (col.nullable === false) {
@@ -78,19 +109,21 @@ export class KnexAdapter implements DatabaseAdapter {
     }
 
     // Add foreign key constraints separately (after all columns are defined)
-    for (const col of table.columns) {
-      if (col.references) {
-        builder
-          .foreign(col.name)
-          .references(col.references.column)
-          .inTable(col.references.table)
-          .onDelete('SET NULL');
+    if (includeForeignKeys) {
+      for (const col of table.columns) {
+        if (col.references) {
+          builder
+            .foreign(col.name)
+            .references(col.references.column)
+            .inTable(col.references.table)
+            .onDelete('SET NULL');
+        }
       }
     }
   }
 
   private addColumn(
-    builder: Knex.CreateTableBuilder,
+    builder: Knex.TableBuilder,
     col: ColumnConfig,
   ): Knex.ColumnBuilder {
     switch (col.type) {
@@ -137,6 +170,18 @@ export class KnexAdapter implements DatabaseAdapter {
     await this.db(table).where({ id }).delete();
   }
 
+  async deleteRowsByContextId(table: string, contextId: string): Promise<void> {
+    await this.db(table).where({ context_id: contextId }).delete();
+  }
+
+  async updateRowByFillerId(
+    table: string,
+    fillerId: string,
+    data: Record<string, unknown>,
+  ): Promise<void> {
+    await this.db(table).where({ filler_id: fillerId }).update(data);
+  }
+
   async upsertRow(
     table: string,
     id: string,
@@ -154,6 +199,19 @@ export class KnexAdapter implements DatabaseAdapter {
 
   async close(): Promise<void> {
     await this.db.destroy();
+  }
+
+  async applyViews(viewDefs: Array<{ name: string; sql: string }>): Promise<void> {
+    for (const view of viewDefs) {
+      logger.info(`Creating view "${view.name}"`);
+      try {
+        await this.db.raw(view.sql);
+      } catch (err) {
+        // Log a warning but continue: views are for reporting convenience;
+        // failure does not affect the core delta-processing pipeline.
+        logger.warn(`Could not create view "${view.name}": ${String(err)}`);
+      }
+    }
   }
 }
 

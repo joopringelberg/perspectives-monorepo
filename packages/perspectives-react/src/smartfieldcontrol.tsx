@@ -76,6 +76,9 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
   // Tracks whether the default text/date/time control is in an
   // editing session, without involving React state.
   private defaultEditingActive: boolean = false;
+  // Tracks whether the checkbox control is in an editing session,
+  // without involving React state.
+  private checkboxEditingActive: boolean = false;
   // Undo button for the default control path; controlled via DOM
   // to avoid React re-renders while editing.
   private undoRef = React.createRef<HTMLButtonElement>();
@@ -275,10 +278,16 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
       {
         // Assuming this code only runs when the field control is active,
         // let it handle the navigation keys locally but do not bubble.
+        // Exception: checkboxes have no internal arrow-key navigation, so
+        // arrow keys must bubble to the table for row/column navigation.
         case "ArrowLeft": // left arrow.
         case "ArrowRight": // right arrow.
         case "ArrowUp": // Up arrow
         case "ArrowDown": // Down arrow
+          if (component.controlType !== "checkbox") {
+            event.stopPropagation();
+          }
+          break;
         case "Control": // Vertical Tab.
         case "Space": // Space
           event.stopPropagation();
@@ -495,6 +504,15 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
       const newvalue = (component.state.value != "true").toString();
       if ( !component.props.disabled )
       {
+        // Optimistic state update so the checkbox visually reflects the
+        // new value immediately, without waiting for the PDR roundtrip.
+        component.setState({ value: newvalue });
+        // Notify parent components that an editing session has started
+        // (analogous to how text/select controls dispatch this event).
+        if (!component.checkboxEditingActive) {
+          component.checkboxEditingActive = true;
+          component.dispatchEditingStarted();
+        }
         component.changeValue(newvalue);
       }
     }
@@ -528,8 +546,13 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               aria-label={ component.props.serialisedProperty.displayName }
               readOnly={ component.props.disabled }
               checked={ component.state.value == "true" }
-              // onChange={ toggleValue }
-              onClick={ toggleValue }
+              onChange={ toggleValue }
+              onBlur={() => {
+                if (component.checkboxEditingActive) {
+                  component.checkboxEditingActive = false;
+                  component.dispatchEditingEnded();
+                }
+              }}
               required={mandatory}
             />
           </div>);
@@ -611,7 +634,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
                 />
               </div>);
               }
-      default:
+      default: {
         // For the default text/date/time-like control we avoid using
         // React state in onChange. The undo button is always shown
         // for relevant types; its handler restores the previous
@@ -705,6 +728,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               </button>
             )}
           </div>);
+      }
     }
   }
 }

@@ -127,6 +127,8 @@ type RoleInstanceWithProperties =
   , objectStateBasedProperties :: Array PropertyType
   , filler :: Maybe RoleInstance
   , readableName :: String
+  -- True iff this role instance represents a peer that has been cancelled (disconnected).
+  , cancelled :: Boolean
   }
 
 type ValuesWithVerbs =

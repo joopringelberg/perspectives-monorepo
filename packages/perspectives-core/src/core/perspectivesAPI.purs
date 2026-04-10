@@ -71,7 +71,7 @@ import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.ModelDependencies (actualSharedFileServer, allSettings, fileShareCredentials, identifiableFirstName, identifiableLastName, itemOnClipboardClipboardData, itemsOnClipboard, mySharedFileServices, selectedClipboardItem, sharedFileServices, sysUser)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, getUserIdentifier, lookupIndexedContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (getAttachment, toFile)
+import Perspectives.Persistence.API (deleteDocument, getAttachment, toFile)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, saveMarkedResources)
 import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getWarnings, pushFrame, resetWarnings, restoreFrame)
@@ -928,6 +928,14 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
       ( do
           roleType <- roleType_ (RoleInstance subject)
           void $ runMonadPerspectivesTransaction authoringRole (evaluateRoleState (RoleInstance subject) (StateIdentifier $ unwrap roleType))
+      )
+      \e -> sendResponse (Error corrId (show e)) setter
+
+    Api.DeleteResource -> catchError
+      ( do
+          { database, documentName } <- resourceIdentifier2DocLocator subject
+          success <- deleteDocument database documentName Nothing
+          sendResponse (Result corrId [ show success ]) setter
       )
       \e -> sendResponse (Error corrId (show e)) setter
 

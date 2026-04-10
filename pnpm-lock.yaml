@@ -532,7 +532,7 @@ importers:
         version: 11.10.0
       knex:
         specifier: ^3.1.0
-        version: 3.1.0(better-sqlite3@11.10.0)(mysql2@3.19.1(@types/node@22.19.15))(pg@8.20.0)(tedious@19.2.1(@azure/core-client@1.10.1))
+        version: 3.1.0
       mysql2:
         specifier: '>=3.0.0'
         version: 3.19.1(@types/node@22.19.15)
@@ -549,6 +549,9 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.15
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.34.1
         version: 8.34.1(@typescript-eslint/parser@8.34.1(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3)
@@ -2395,6 +2398,9 @@ packages:
 
   '@types/normalize-package-data@2.4.4':
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
+
+  '@types/pg@8.20.0':
+    resolution: {integrity: sha512-bEPFOaMAHTEP1EzpvHTbmwR8UsFyHSKsRisLIHVMXnpNefSbGA1bD6CVy+qKjGSqmZqNqBDV2azOBo8TgkcVow==}
 
   '@types/pouchdb-adapter-http@6.1.6':
     resolution: {integrity: sha512-DJur1mt07GJXwGb5K+MOILoCOSgoQpsi7hybcTzRLeR3IO8Y8eq7TnhTkftAJdx9VHJGOiOXFjO+8BYM69j5yA==}
@@ -9009,6 +9015,12 @@ snapshots:
 
   '@types/normalize-package-data@2.4.4': {}
 
+  '@types/pg@8.20.0':
+    dependencies:
+      '@types/node': 22.19.15
+      pg-protocol: 1.13.0
+      pg-types: 2.2.0
+
   '@types/pouchdb-adapter-http@6.1.6':
     dependencies:
       '@types/pouchdb-core': 7.0.15
@@ -11471,7 +11483,7 @@ snapshots:
 
   kind-of@6.0.3: {}
 
-  knex@3.1.0(better-sqlite3@11.10.0)(mysql2@3.19.1(@types/node@22.19.15))(pg@8.20.0)(tedious@19.2.1(@azure/core-client@1.10.1)):
+  knex@3.1.0:
     dependencies:
       colorette: 2.0.19
       commander: 10.0.1
@@ -11487,11 +11499,6 @@ snapshots:
       resolve-from: 5.0.0
       tarn: 3.0.2
       tildify: 2.0.0
-    optionalDependencies:
-      better-sqlite3: 11.10.0
-      mysql2: 3.19.1(@types/node@22.19.15)
-      pg: 8.20.0
-      tedious: 19.2.1(@azure/core-client@1.10.1)
     transitivePeerDependencies:
       - supports-color
 

@@ -14,6 +14,12 @@ module Perspectives.ModelDependencies where
 perspectivesUsers :: String
 perspectivesUsers = "model://perspectives.domains#tiodn6tcyc$xzummxis57$v8palo8w28"
 
+nonPerspectivesUsers :: String
+nonPerspectivesUsers = "model://perspectives.domains#tiodn6tcyc$xzummxis57$hs8prklioh"
+
+onlookers :: String
+onlookers = "model://perspectives.domains#tiodn6tcyc$xzummxis57$vycnk9go0o"
+
 identifiableLastName :: String
 identifiableLastName = "model://perspectives.domains#tiodn6tcyc$xku8d2dtb7$xdi1iix1mm"
 

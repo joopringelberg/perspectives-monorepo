@@ -42,14 +42,17 @@ import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, 
 import Perspectives.Data.EncodableMap as ENCMAP
 import Perspectives.DomeinCache (saveCachedDomeinFile)
 import Perspectives.EntiteitAndRDFAliases (ID)
+import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Me (notIsMe)
 import Perspectives.Instances.ObjectGetters (deltaAuthor2ResourceIdentifier, getProperty, perspectivesUsersRole_, roleType_)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, userChannel) as DEP
 import Perspectives.ModelDependencies (perspectivesUsersCancelled, perspectivesUsersPublicKey)
 import Perspectives.Names (getMySystem)
+import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (Url, addDocument)
-import Perspectives.Persistence.DeltaStore (DeltaStoreRecord(..), getDeltasForResource, storeDeltaFromSignedDelta)
+import Perspectives.Persistence.DeltaStore (getDeltasForResource, storeDeltaFromSignedDelta)
+import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (getPerspectRol, postDatabaseName)
 import Perspectives.PerspectivesState (nextTransactionNumber, stompClient)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter)
@@ -65,7 +68,7 @@ import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), Transactio
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), addToTransactionForPeer, transactieID)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
-import Prelude (Unit, add, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>))
+import Prelude (Unit, add, bind, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>))
 import Simple.JSON (writeJSON)
 
 -- | Splits the transaction in versions specific for each peer and sends them.
@@ -189,6 +192,8 @@ addDomeinFileToTransactie dfId = AA.modify
 
 -- | If we have a public role instance, return [Tuple rid [PublicDestination rid]].
 -- | If the role chain bottoms out in an instance of TheWorld$PerspectivesUsers, return Tuple rid <<the other PerspectivesSystem$Users>>.
+-- | If the role chain bottoms out in another UserRole that is not TheWorld$NonPerspectivesUsers (e.g. Onlookers), return Tuple rid <<that role instance>>.
+-- | Onlookers instances represent TCP subscribers (Transaction Collection Points) reached via RabbitMQ.
 -- | Otherwise return an empty array.
 -- | Also return an empty array if the PerspectivesUser has been cancelled.
 computeUserRoleBottom :: RoleInstance -> MonadPerspectives (Array (Tuple RoleInstance TransactionDestination))
@@ -206,8 +211,12 @@ computeUserRoleBottom rid = ((map ENR <<< roleType_ >=> isPublicProxy) rid) >>=
 -- |    * instances of sys:PerspectivesSystem$User, but not the one that equals the local sys:Me.
 addDelta :: DeltaInTransaction -> MonadPerspectivesTransaction Unit
 addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
-  -- Store all locally-created deltas in the DeltaStore for persistent history.
-  lift $ storeDeltaFromSignedDelta delta
+  -- Store locally-created deltas in the DeltaStore for persistent history.
+  -- Skip storage when processing incoming deltas (executeTransaction / executeDeltas for public roles):
+  -- in those paths the delta is either already stored (executeTransaction uses executeDeltaWithVersionTracking)
+  -- or must not be stored at all (executeDeltas for public roles uses modified author identifiers).
+  isExecuting <- AA.gets (\(Transaction tr) -> tr.isExecutingIncomingDeltas)
+  when (not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
   users' <- lift $ filterA notIsMe users
   if null users' then pure unit
@@ -231,8 +240,10 @@ addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
 -- | Insert the delta at the index, unless it is already in the transaction or there are no users (and ignore the own user).
 insertDelta :: DeltaInTransaction -> Int -> MonadPerspectivesTransaction Unit
 insertDelta (DeltaInTransaction deltarecord@{ users, delta }) i = do
-  -- Store all locally-created deltas in the DeltaStore for persistent history.
-  lift $ storeDeltaFromSignedDelta delta
+  -- Store locally-created deltas in the DeltaStore for persistent history.
+  -- Skip storage when processing incoming deltas (see addDelta for the rationale).
+  isExecuting <- AA.gets (\(Transaction tr) -> tr.isExecutingIncomingDeltas)
+  when (not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
   users' <- lift $ filterA notIsMe users
   if null users' then pure unit
@@ -291,13 +302,15 @@ addPublicKeysToTransaction (Transaction tr@{ deltas }) = do
       case Map.lookup author keys of
         Just _ -> pure unit
         Nothing -> do
-          pkInfo <- lift $ getPkInfo author
-          void $ modify (\keys' -> Map.insert author pkInfo keys')
+          mpkInfo <- lift $ getPkInfo author
+          case mpkInfo of
+            Nothing -> pure unit
+            Just pkInfo -> void $ modify (\keys' -> Map.insert author pkInfo keys')
 
   -- This is built on the assumption that the argument is the string value of the RoleInstance of type TheWorld$PerspectivesUser
   -- that fills SocialEnvironment$Me
   -- Queries the DeltaStore for the creation deltas and public key property delta of this PerspectivesUser role instance.
-  getPkInfo :: PerspectivesUser -> MonadPerspectives PublicKeyInfo
+  getPkInfo :: PerspectivesUser -> MonadPerspectives (Maybe PublicKeyInfo)
   getPkInfo perspectivesUser = do
     -- The perspectivesUser is taken from the SignedDelta and is schemaless.
     let roleInstanceId = perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier perspectivesUser
@@ -307,11 +320,7 @@ addPublicKeysToTransaction (Transaction tr@{ deltas }) = do
     -- Get property deltas for the public key property.
     pkPropertyDeltas <- getDeltasForResource (unwrap roleInstanceId <> "#" <> unwrap (EnumeratedPropertyType perspectivesUsersPublicKey))
     let allDeltas = map (\(DeltaStoreRecord { signedDelta }) -> signedDelta) (creationDeltas <> pkPropertyDeltas)
-    pure
-      let
-        k@(Value key) = unsafePartial fromJust $ head $ rol_property authorRole (EnumeratedPropertyType perspectivesUsersPublicKey)
-      in
-        { key
-        , deltas: allDeltas
-        }
+    case head $ rol_property authorRole (EnumeratedPropertyType perspectivesUsersPublicKey) of
+      Nothing -> logPerspectivesError (NoPublicKeyForAuthor (unwrap roleInstanceId)) *> pure Nothing
+      Just (Value key) -> pure $ Just { key, deltas: allDeltas }
 
