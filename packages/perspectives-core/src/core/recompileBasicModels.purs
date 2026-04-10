@@ -48,7 +48,6 @@ import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..), fst)
 import Effect.Aff (try)
 import Effect.Class (liftEffect)
-import Effect.Class.Console (log)
 import Foreign (unsafeToForeign)
 import Foreign.Object (empty)
 import Partial.Unsafe (unsafePartial)
@@ -59,14 +58,14 @@ import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (addAttachments, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..), addDownStreamAutomaticEffect, addDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError)
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (debugUpgrade, errorUpgrade, infoUpgrade)
 import Perspectives.ExecuteInTopologicalOrder (executeInTopologicalOrder) as TOP
 import Perspectives.Extern.Couchdb (roleInstancesFromCouchdb)
 import Perspectives.Identifiers (domeinFileVersion, modelUri2LocalName, modelUriVersion)
 import Perspectives.Instances.Indexed (indexedContexts_, indexedRoles_)
 import Perspectives.InvertedQuery.Storable (saveInvertedQueries)
 import Perspectives.ModelDependencies (domeinFileName, indexedContext, indexedRole, modelManifest, versionToInstall)
-import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
+import Perspectives.Parsing.Messages (MultiplePerspectivesErrors)
 import Perspectives.Persistence.API (Keys(..), addAttachment, addDocument, documentsInDatabase, getAttachment, includeDocs, retrieveDocumentVersion, toFile)
 import Perspectives.Persistence.Types (Url)
 import Perspectives.Persistent (getDomeinFile, getPerspectRol, modelDatabaseName)
@@ -86,12 +85,12 @@ recompileModelsAtUrl modelsDb manifestsDb = do
   versionsToCompile <- traverse getVersionedDomeinFileName manifests >>= pure <<< catMaybes
   { rows: allModels } <- lift $ documentsInDatabase modelsDb includeDocs
   uninterpretedDomeinFiles <- for (filter (isJust <<< (flip elemIndex versionsToCompile) <<< _.id) allModels) \({ id, doc }) -> case read <$> doc of
-    Just (Left errs) -> (logPerspectivesError (Custom ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs))) *> pure Nothing
-    Nothing -> logPerspectivesError (Custom ("No document retrieved for model '" <> id <> "'.")) *> pure Nothing
+    Just (Left errs) -> (lift $ errorUpgrade ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs)) *> pure Nothing
+    Nothing -> (lift $ errorUpgrade ("No document retrieved for model '" <> id <> "'.")) *> pure Nothing
     Just (Right (df :: UninterpretedDomeinFile)) -> pure $ Just df
   r <- runExceptT (executeInTopologicalOrder (catMaybes uninterpretedDomeinFiles) recompileModelAtUrl)
   case r of
-    Left errors -> logPerspectivesError (Custom ("recompileModelsAtUrl: " <> show errors))
+    Left errors -> lift $ errorUpgrade ("recompileModelsAtUrl: " <> show errors)
     _ -> pure unit
   where
   -- This function is similar to recompileModel, but it does not distribute the state notifications and automatic effects over the other models.
@@ -99,18 +98,18 @@ recompileModelsAtUrl modelsDb manifestsDb = do
   recompileModelAtUrl :: UninterpretedDomeinFile -> ExceptT MultiplePerspectivesErrors MonadPerspectivesTransaction UninterpretedDomeinFile
   recompileModelAtUrl model@(UninterpretedDomeinFile { id, namespace, _id, _rev, arc, _attachments }) =
     do
-      log ("Recompiling " <> namespace)
+      lift $ lift $ debugUpgrade ("Recompiling " <> namespace)
       case domeinFileVersion $ _id of
-        Nothing -> lift $ logPerspectivesError (Custom ("recompileModelAtUrl: no version found in model id '" <> unwrap id <> "'.")) *> pure model
+        Nothing -> lift $ (lift $ errorUpgrade ("recompileModelAtUrl: no version found in model id '" <> unwrap id <> "'.")) *> pure model
         Just version -> do
           -- Load sidecar from repository DB and compile with it. We need the version to take the right sidecar.
           mRepoMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id <> "@" <> version) fromRepository
           -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
           r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> "@" <> version) version
           case r of
-            Left m -> logPerspectivesError $ Custom ("recompileModelsAtUrl: " <> show m)
+            Left m -> lift $ lift $ errorUpgrade ("recompileModelsAtUrl: " <> show m)
             Right (Tuple df@(DomeinFile dfr@{ id: id' }) (Tuple invertedQueries mapping')) -> lift $ lift do
-              log $ "Recompiled '" <> namespace <> "' succesfully (" <> namespace <> ")!"
+              infoUpgrade $ "Recompiled '" <> namespace <> "' succesfully (" <> namespace <> ")!"
               df' <- pure $ DomeinFile dfr { _id = _id, _rev = Just _rev, _attachments = _attachments }
               _rev' <- addDocument modelsDb df' namespace
               attachments <- case _attachments of
@@ -138,16 +137,16 @@ recompileModelsAtUrl modelsDb manifestsDb = do
 recompileModel :: UninterpretedDomeinFile -> ExceptT MultiplePerspectivesErrors MonadPerspectivesTransaction UninterpretedDomeinFile
 recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _attachments }) =
   do
-    log ("Recompiling " <> namespace)
+    lift $ lift $ debugUpgrade ("Recompiling " <> namespace)
     -- Load sidecar from local DB and compile with it
     mlocalMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id) fromLocalModels
     -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
     -- It should also be the local part of the id.
     r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc true mlocalMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> "@" <> (unsafePartial fromJust $ modelUriVersion _id)) (unsafePartial fromJust $ modelUriVersion _id)
     case r of
-      Left m -> logPerspectivesError $ Custom ("recompileModel: " <> show m)
+      Left m -> lift $ lift $ errorUpgrade ("recompileModel: " <> show m)
       Right (Tuple df@(DomeinFile drf@{ invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects }) (Tuple invertedQueries mapping')) -> lift $ lift do
-        log $ "Recompiled '" <> namespace <> "' succesfully!"
+        infoUpgrade $ "Recompiled '" <> namespace <> "' succesfully!"
         -- We have to add the _id here manually.
         df' <- pure $ DomeinFile drf { _id = _id, _attachments = _attachments }
         storeDomeinFileInCouchdbPreservingAttachments df'
@@ -157,7 +156,7 @@ recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _
         -- retrieving them requires access to the System model. We typically recompile when DomeinFile shape has changed.
         -- In that case, no indexed resources are present and we rely on them on compiling models that import this model.
         if namespace == "model://perspectives.domains#System" then do
-          log "Adding indexed resources after recompiling System model."
+          infoUpgrade "Adding indexed resources after recompiling System model."
           addIndexedNames
         else pure unit
         -- Persist updated sidecar mapping back to local DB

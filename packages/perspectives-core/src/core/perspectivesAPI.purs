@@ -57,7 +57,7 @@ import Perspectives.CoreTypes (MP, MonadPerspectives, MonadPerspectivesTransacti
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DependencyTracking.Dependency (registerSupportedEffect, unregisterSupportedEffect)
 import Perspectives.DomeinCache (retrieveDomeinFile)
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (errorOther)
 import Perspectives.Fuzzysort (matchIndexedContextNames)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, isTypeUri, typeUri2ModelUri_, typeUri2couchdbFilename)
@@ -157,7 +157,7 @@ consumeRequest = forever do
             detectPublicStateChanges
         )
         ( \e -> do
-            logPerspectivesError (ApiErrorBoundary ((showRequestRecord request) <> ": " <> (show e)))
+            errorOther (show (ApiErrorBoundary ((showRequestRecord request) <> ": " <> (show e))))
             sendResponse (Error corrId ("Request could not be handled, because: " <> (show e))) (mkApiEffect reactStateSetter)
         )
     )
@@ -205,13 +205,13 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     Api.GetRoleBinders -> (try $ getPerspectRol (RoleInstance subject)) >>=
       case _ of
         Left err -> do
-          logPerspectivesError $ RolErrorBoundary "Api.GetRoleBinders" (show err)
+          errorOther (show $ RolErrorBoundary "Api.GetRoleBinders" (show err))
           sendResponse (Error corrId (show $ RolErrorBoundary "Api.GetRoleBinders" (show err))) setter
         Right (PerspectRol { pspType: fillerType }) -> case object of
           "" -> (try $ getPerspectType (EnumeratedRoleType predicate)) >>=
             case _ of
               Left err -> do
-                logPerspectivesError $ TypeErrorBoundary "Api.GetRoleBinders" (show err)
+                errorOther (show $ TypeErrorBoundary "Api.GetRoleBinders" (show err))
                 sendResponse (Error corrId (show $ TypeErrorBoundary "Api.GetRoleBinders" (show err))) setter
               Right (EnumeratedRole { context: filledContextType }) -> do
                 void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap fillerType)))
@@ -219,7 +219,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
           filledContextType -> (try $ getContext (ContextType filledContextType)) >>=
             case _ of
               Left err -> do
-                logPerspectivesError $ ContextErrorBoundary "Api.GetRoleBinders" (show err)
+                errorOther (show $ ContextErrorBoundary "Api.GetRoleBinders" (show err))
                 sendResponse (Error corrId (show $ ContextErrorBoundary "Api.GetRoleBinders" (show err))) setter
               Right _ -> do
                 void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap fillerType)))
@@ -770,7 +770,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
       (try $ getPerspectRol (RoleInstance object)) >>=
         case _ of
           Left err -> do
-            logPerspectivesError $ RolErrorBoundary "Api.CheckBinding" (show err)
+            errorOther (show $ RolErrorBoundary "Api.CheckBinding" (show err))
             sendResponse (Error corrId (show $ RolErrorBoundary "Api.CheckBinding" (show err))) setter
           Right (PerspectRol { pspType }) -> do
             void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap pspType)))

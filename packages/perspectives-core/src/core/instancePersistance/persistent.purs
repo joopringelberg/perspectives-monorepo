@@ -76,15 +76,13 @@ import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect.Aff.AVar (AVar, put, read, take)
 import Effect.Aff.Class (liftAff)
-import Effect.Class.Console (log)
 import Effect.Exception (error)
 import Persistence.Attachment (class Attachment)
 import Perspectives.CoreTypes (class Persistent, IntegrityFix(..), MP, MonadPerspectives, ResourceToBeStored(..), addPublicResource, removeInternally, representInternally, resourceToBeStored, retrieveInternally, typeOfInstance)
 import Perspectives.Couchdb (DeleteCouchdbDocument(..))
 import Perspectives.DomeinFile (DomeinFile)
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (warnPersistence)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
-import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (AttachmentName, AuthoritySource(..), MonadPouchdb, addDocument, deleteDocument, ensureAuthentication, getDocument, isOffLine, retrieveDocumentVersion)
 import Perspectives.Persistence.API (addAttachment) as P
 import Perspectives.Persistence.State (getSystemIdentifier)
@@ -197,13 +195,13 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
       pure doc
 
     \e -> do
-      if test decodingErrorRegex (show e) then logPerspectivesError (Custom ("fetchEntiteit: failed to decode resource " <> unwrap id <> ". Parser message: " <> show e))
+      if test decodingErrorRegex (show e) then warnPersistence ("fetchEntiteit: failed to decode resource " <> unwrap id <> ". Parser message: " <> show e)
       -- Try to fix referential integrity
       else if tryToFix then internetRequiredButMissing (unwrap id) >>=
-        if _ then log ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> ", but there is no internet. Will not try to fix links.")
+        if _ then warnPersistence ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> ", but there is no internet. Will not try to fix links.")
         else do
-          logPerspectivesError
-            (Custom ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb: " <> show e))
+          warnPersistence
+            ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb: " <> show e)
           missingResourceAVar <- getMissingResource
           liftAff $ put (Missing $ typeOfInstance id) missingResourceAVar
           response <- liftAff $ take missingResourceAVar
@@ -211,10 +209,10 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
             FixingHotLine av -> do
               result <- liftAff $ take av
               case result of
-                FixFailed s -> logPerspectivesError (Custom "fetchEntiteit: cannot fix references.")
-                FixSucceeded -> logPerspectivesError (Custom "fetchEntiteit: succesfully removed all references to missing resource.")
-                _ -> logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
-            _ -> logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
+                FixFailed s -> warnPersistence "fetchEntiteit: cannot fix references."
+                FixSucceeded -> warnPersistence "fetchEntiteit: succesfully removed all references to missing resource."
+                _ -> warnPersistence "fetchEntiteit: received unexpected message from fixer."
+            _ -> warnPersistence "fetchEntiteit: received unexpected message from fixer."
       else pure unit
       throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
   where
@@ -297,7 +295,7 @@ saveMarkedResources = do
           Dfile d -> void $ saveCachedEntiteit rs (d :: ModelUri Stable)
       ) >>= case _ of
       Left e -> do
-        logPerspectivesError (Custom ("Could not save resource " <> show rs <> " because: " <> show e))
+        warnPersistence ("Could not save resource " <> show rs <> " because: " <> show e)
         modify \s -> s { entitiesToBeStored = delete rs s.entitiesToBeStored }
       _ -> pure unit
 

@@ -38,6 +38,7 @@
 module Perspectives.Logging
   ( debugBroker
   , debugCompiler
+  , debugInstall
   , debugModel
   , debugPersistence
   , debugQuery
@@ -54,6 +55,7 @@ module Perspectives.Logging
   , errorSync
   , errorUpgrade
   , infoBroker
+  , infoInstall
   , infoModel
   , infoSync
   , infoUpgrade
