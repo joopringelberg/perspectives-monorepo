@@ -1791,6 +1791,39 @@ export class PerspectivesProxy
   }
 
   /**
+   * Set the log threshold for a specific PDR topic.
+   * Messages at this level or above will be emitted; messages below will be suppressed.
+   * Call from browser console: pdr.setLogLevelForTopic("SYNC", "DEBUG")
+   *
+   * @param topic - One of "SYNC", "BROKER", "QUERY", "PERSISTENCE", "STATE", "AUTH", "MODEL", "UPGRADE", "PARSER", "COMPILER", "INSTALL", "OTHER"
+   * @param level - One of "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "SILENT"
+   */
+  setLogLevelForTopic(topic: string, level: string): void
+  {
+    this.channel.port.postMessage({ proxyRequest: "setLogLevelForTopic", topic, level });
+  }
+
+  /**
+   * Suppress all log output for a specific PDR topic.
+   * Call from browser console: pdr.disableLogTopic("QUERY")
+   *
+   * @param topic - One of "SYNC", "BROKER", "QUERY", "PERSISTENCE", "STATE", "AUTH", "MODEL", "UPGRADE", "PARSER", "COMPILER", "INSTALL", "OTHER"
+   */
+  disableLogTopic(topic: string): void
+  {
+    this.channel.port.postMessage({ proxyRequest: "disableLogTopic", topic });
+  }
+
+  /**
+   * Suppress all log output from every PDR topic.
+   * Call from browser console: pdr.disableLogging()
+   */
+  disableLogging(): void
+  {
+    this.channel.port.postMessage({ proxyRequest: "disableLogging" });
+  }
+
+  /**
    * TESTING ONLY. Deletes a resource document from PouchDB by its Perspectives resource identifier.
    * This performs a proper PouchDB delete (not a raw IndexedDB removal), so PouchDB metadata stays consistent.
    * Call from browser console: pdr.deleteResource("model://perspect.it/...")

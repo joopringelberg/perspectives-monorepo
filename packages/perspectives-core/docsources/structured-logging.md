@@ -203,17 +203,18 @@ setLogConfig :: LogConfig -> MonadPerspectives Unit
 
 ---
 
-## 5. Calling the API from JavaScript (`Main.purs`)
+## 5. Calling the API from the browser console (`perspectives-proxy.ts`)
 
-A module-level `globalStateRef` (a `Ref (Maybe (AVar PerspectivesState))`)
-stores the active state AVar after `runPDR` initialises it.  Three `Effect Unit`
-functions are compiled into the PDR bundle and callable from JavaScript via the
-`pdr` object available in the SharedWorker.
+The three log-configuration functions are exposed as regular methods on the
+`PerspectivesProxy` instance that is stored on `window.pdr` in the browser
+page. They work by sending fire-and-forget `proxyRequest` messages to the
+SharedWorker (or page worker), which forwards the call to the PDR's compiled
+functions.
 
 ### 5.1 `setLogLevelForTopic`
 
-```typescript
-pdr.setLogLevelForTopic(topic: string)(level: string)(): void
+```javascript
+pdr.setLogLevelForTopic(topic, level)
 ```
 
 Sets the per-topic log threshold.
@@ -226,47 +227,44 @@ Sets the per-topic log threshold.
 
 Unknown strings are ignored silently.
 
-**Example** (browser DevTools console, while the SharedWorker is running):
+**Example** (browser DevTools console):
 
 ```javascript
 // Show all SYNC messages from this moment on:
-pdr.setLogLevelForTopic("SYNC")("TRACE")();
+pdr.setLogLevelForTopic("SYNC", "TRACE");
 ```
 
 ### 5.2 `disableLogTopic`
 
-```typescript
-pdr.disableLogTopic(topic: string)(): void
+```javascript
+pdr.disableLogTopic(topic)
 ```
 
 Suppresses all output for the given topic.
 
 ```javascript
-pdr.disableLogTopic("QUERY")();
+pdr.disableLogTopic("QUERY");
 ```
 
 ### 5.3 `disableLogging`
 
-```typescript
-pdr.disableLogging(): void
+```javascript
+pdr.disableLogging()
 ```
 
 Suppresses all log output from every topic.  Useful when a verbose subsystem is
 drowning out the console during production troubleshooting.
 
 ```javascript
-pdr.disableLogging()();
+pdr.disableLogging();
 ```
 
-> **Note on PureScript calling convention**
-> All three functions are exported as curried PureScript `Effect Unit` values.
-> In JavaScript, `Effect Unit` compiles to a zero-argument function, so each
-> call must be terminated with `()`.  Curried string arguments each also require
-> their own `()`:
-> ```javascript
-> pdr.setLogLevelForTopic("SYNC")("DEBUG")();
-> //                     ^topic  ^level  ^Effect
-> ```
+> **Implementation note**
+> These methods call `this.channel.port.postMessage({ proxyRequest: "..." })`
+> directly on the `SharedWorkerChannel` port.  The message is handled by
+> `handleClientRequest` in `proxy.js`, which calls the corresponding compiled
+> PureScript `Effect Unit` function (`pdr.setLogLevelForTopic`, etc.) in the
+> worker context.  No response is sent back.
 
 ---
 
