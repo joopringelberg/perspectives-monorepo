@@ -618,6 +618,7 @@ buildNameMap erMap epMap ctxMap enrPropMap erts fillerChainRoleIds = do
         Tuple stableId (unwrap ctx.readableName)
     )
     (OBJ.toUnfoldable ctxMap)
+
   -- Static entries: current-model ENRs and their perspective-visible ENPs.
   staticEntries :: Array (Tuple String String)
   staticEntries = roleEntries <> propEntries
@@ -709,12 +710,11 @@ twoSegmentName qualifiedName =
     segs = split (Pattern "$") afterHash
     n = length segs
   in
-    if n >= 2
-      then
-        let
-          s1 = fromMaybe "" $ index segs (n - 2)
-          s2 = fromMaybe "" $ last segs
-        in
-          s1 <> "$" <> s2
-      else
-        fromMaybe qualifiedName (last segs)
+    if n >= 2 then
+      let
+        s1 = fromMaybe "" $ index segs (n - 2)
+        s2 = fromMaybe "" $ last segs
+      in
+        s1 <> "$" <> s2
+    else
+      fromMaybe qualifiedName (last segs)

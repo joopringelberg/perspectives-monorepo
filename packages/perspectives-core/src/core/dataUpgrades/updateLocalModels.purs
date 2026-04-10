@@ -36,7 +36,7 @@ import Perspectives.Extern.Couchdb (updateModel')
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (modelUriVersion)
 import Perspectives.ModelDependencies (sysUser)
-import Perspectives.Parsing.Messages (PerspectivesError(..), MultiplePerspectivesErrors)
+import Perspectives.Parsing.Messages (MultiplePerspectivesErrors)
 import Perspectives.Persistence.API (databaseInfo, deleteDatabase, documentsInDatabase, includeDocs)
 import Perspectives.Persistent (invertedQueryDatabaseName, saveMarkedResources)
 import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage)
@@ -87,5 +87,5 @@ updateLocalModels =
           Just v -> v
           Nothing -> "unknown"
       )
-    infoUpgrade ("Model updated: " <> show namespace <> " at version " <> show version)
+    lift $ lift $ infoUpgrade ("Model updated: " <> show namespace <> " at version " <> show version)
     pure df

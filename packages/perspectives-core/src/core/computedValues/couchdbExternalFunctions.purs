@@ -301,7 +301,7 @@ updateModel withDependencies install dfid@(ModelUri modelName) domeinFileAndAtta
       -- It will be loaded when a new type lookup is performed.
       lift $ removeTranslationTable unversionedModelname
       lift $ fetchTranslations dfid
-      log $ "Model updated: " <> show namespace
+      lift $ infoInstall $ "Model updated: " <> show namespace
 
 -- | Retrieve the model(s) from the modelName(s) and add them to the local couchdb installation.
 -- | The modelName(s) may be UNVERSIONED or VERSIONED.

@@ -72,8 +72,7 @@ module Perspectives.Logging
   , warnPersistence
   , warnState
   , warnSync
-  )
-  where
+  ) where
 
 import Control.Monad.AvarMonadAsk (gets)
 import Data.Map (lookup) as Map
@@ -208,6 +207,12 @@ errorCompiler = pdrLog COMPILER Error
 -----------------------------------------------------------
 errorInstall :: String -> MonadPerspectives Unit
 errorInstall = pdrLog INSTALL Error
+
+debugInstall :: String -> MonadPerspectives Unit
+debugInstall = pdrLog INSTALL Debug
+
+infoInstall :: String -> MonadPerspectives Unit
+infoInstall = pdrLog INSTALL Info
 
 -----------------------------------------------------------
 -- OTHER

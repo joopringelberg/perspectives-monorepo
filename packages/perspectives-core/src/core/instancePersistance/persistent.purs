@@ -76,13 +76,15 @@ import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect.Aff.AVar (AVar, put, read, take)
 import Effect.Aff.Class (liftAff)
+import Effect.Class.Console (log)
 import Effect.Exception (error)
 import Persistence.Attachment (class Attachment)
 import Perspectives.CoreTypes (class Persistent, IntegrityFix(..), MP, MonadPerspectives, ResourceToBeStored(..), addPublicResource, removeInternally, representInternally, resourceToBeStored, retrieveInternally, typeOfInstance)
 import Perspectives.Couchdb (DeleteCouchdbDocument(..))
 import Perspectives.DomeinFile (DomeinFile)
-import Perspectives.Logging (warnPersistence)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
+import Perspectives.Logging (errorPersistence, warnPersistence)
+import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (AttachmentName, AuthoritySource(..), MonadPouchdb, addDocument, deleteDocument, ensureAuthentication, getDocument, isOffLine, retrieveDocumentVersion)
 import Perspectives.Persistence.API (addAttachment) as P
 import Perspectives.Persistence.State (getSystemIdentifier)
@@ -196,13 +198,13 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
 
     \e -> do
       if test decodingErrorRegex (show e) then do
-        logPerspectivesError (Custom ("fetchEntiteit: failed to decode resource " <> unwrap id <> ". Parser message: " <> show e))
+        errorPersistence (show $ Custom ("fetchEntiteit: failed to decode resource " <> unwrap id <> ". Parser message: " <> show e))
         throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
       -- Try to fix by restoring the resource
       else if tryToFix then do
         offLine <- internetRequiredButMissing (unwrap id)
         if offLine then do
-          log ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> ", but there is no internet. Will not try to fix.")
+          errorPersistence (show $ Custom ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> ", but there is no internet. Will not try to fix."))
           throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
         else do
           warnPersistence
@@ -222,13 +224,13 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
                   log ("fetchEntiteit: resource " <> unwrap id <> " was deleted during fixing, so cannot be retrieved.")
                   throwError $ error ("fetchEntiteit: user deleted resource " <> unwrap id <> " from couchdb.")
                 FixFailed s -> do
-                  logPerspectivesError (Custom ("fetchEntiteit: cannot fix resource " <> unwrap id <> ": " <> s))
+                  errorPersistence (show $ Custom ("fetchEntiteit: cannot fix resource " <> unwrap id <> ": " <> s))
                   throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
                 _ -> do
-                  logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
+                  errorPersistence (show $ Custom "fetchEntiteit: received unexpected message from fixer.")
                   throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
             _ -> do
-              logPerspectivesError (Custom "fetchEntiteit: received unexpected message from fixer.")
+              errorPersistence (show $ Custom "fetchEntiteit: received unexpected message from fixer.")
               throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
       else
         throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")

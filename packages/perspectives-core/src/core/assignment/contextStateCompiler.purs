@@ -44,7 +44,6 @@ import Data.Traversable (for_, traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
 import Effect.Aff (error, killFiber)
-import Effect.Class.Console (log)
 import Foreign.Object (singleton)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
@@ -59,6 +58,7 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter, not') as COMB
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), contextType, filledBy, getActiveStates_)
+import Perspectives.Logging (traceState)
 import Perspectives.ModelDependencies (contextWithNotification, notificationMessage, notifications)
 import Perspectives.Names (getMySystem)
 import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, pushFrame, restoreFrame, transactionLevel)
@@ -133,7 +133,7 @@ evaluateContextState contextId stateId = do
         contextWasInState <- lift $ isActive stateId contextId
         if contextWasInState then do
           padding <- lift transactionLevel
-          lift $ toReadable stateId >>= \readableStateId -> log (padding <> "Already in context state " <> unwrap readableStateId <> ": " <> unwrap contextId)
+          lift $ toReadable stateId >>= \readableStateId -> traceState (padding <> "Already in context state " <> unwrap readableStateId <> ": " <> unwrap contextId)
           subStates <- lift $ subStates_ stateId
           for_ subStates (evaluateContextState contextId)
         else enteringState contextId stateId
@@ -158,7 +158,7 @@ evaluateContextState contextId stateId = do
 enteringState :: ContextInstance -> StateIdentifier -> MonadPerspectivesTransaction Unit
 enteringState contextId stateId = do
   padding <- lift transactionLevel
-  lift $ toReadable stateId >>= \readableStateId -> log (padding <> "Entering context state " <> unwrap readableStateId <> " for context " <> unwrap contextId)
+  lift $ toReadable stateId >>= \readableStateId -> traceState (padding <> "Entering context state " <> unwrap readableStateId <> " for context " <> unwrap contextId)
   -- Add the state identifier to the path of states in the context instance, triggering query updates
   -- just before running the current Transaction is finished.
   setActiveContextState stateId contextId
@@ -255,7 +255,7 @@ notify compiledSentence contextId = do
 exitingState :: ContextInstance -> StateIdentifier -> MonadPerspectivesTransaction Unit
 exitingState contextId stateId = do
   padding <- lift transactionLevel
-  log (padding <> "Exiting context state " <> unwrap stateId <> " for context " <> unwrap contextId)
+  lift $ traceState (padding <> "Exiting context state " <> unwrap stateId <> " for context " <> unwrap contextId)
   -- Recur. We do this first, because we have to exit the deepest nested substate first.
   subStates <- lift $ subStates_ stateId
   for_ subStates \subStateId -> do

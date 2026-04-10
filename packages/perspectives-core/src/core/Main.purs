@@ -33,9 +33,6 @@ import Data.Foldable (for_)
 import Data.Function.Uncurried (Fn2, runFn2)
 import Data.Map (insert)
 import Data.Maybe (Maybe(..))
-import Effect.Ref (Ref)
-import Effect.Ref (new, read, write) as Ref
-import Effect.Unsafe (unsafePerformEffect)
 import Data.Newtype (unwrap)
 import Data.Nullable (Nullable, toMaybe, toNullable)
 import Data.Tuple (Tuple(..))
@@ -46,6 +43,9 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Effect.Now (now, nowDate, nowDateTime)
+import Effect.Ref (Ref)
+import Effect.Ref (new, read, write) as Ref
+import Effect.Unsafe (unsafePerformEffect)
 import Foreign (Foreign)
 import Foreign.Object (fromFoldable, singleton)
 import IDBKeyVal (clear, idbGet, idbSet)
@@ -79,7 +79,7 @@ import Perspectives.Persistence.State (getSystemIdentifier, withCouchdbUrl)
 import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Persistent (entitiesDatabaseName, invertedQueryDatabaseName, postDatabaseName, saveMarkedResources)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (defaultRuntimeOptions, modelsDatabaseName, newPerspectivesState, pushMessage, removeMessage, resetCaches, setModelUris)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, disableAllLogging, disableTopicLogging, modelsDatabaseName, newPerspectivesState, pushMessage, removeMessage, resetCaches, setModelUris, setTopicLogLevel)
 import Perspectives.Proxy (handleClientRequest, receivePDRStatusMessageChannel, pdrStatusMessageChannel, registerPutUserIntegrityChoice) as Proxy
 import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope, getPropertyFunction, getRoleFunction, getterFromPropertyType)
 import Perspectives.ReferentialIntegrity (fixReferences)
@@ -914,29 +914,29 @@ disableLogging = runWithGlobalState disableAllLogging
 
 -- | Parse a String into a LogTopic.
 parseLogTopic :: String -> Maybe LogTopic
-parseLogTopic "SYNC"        = Just SYNC
-parseLogTopic "BROKER"      = Just BROKER
-parseLogTopic "QUERY"       = Just QUERY
+parseLogTopic "SYNC" = Just SYNC
+parseLogTopic "BROKER" = Just BROKER
+parseLogTopic "QUERY" = Just QUERY
 parseLogTopic "PERSISTENCE" = Just PERSISTENCE
-parseLogTopic "STATE"       = Just STATE
-parseLogTopic "AUTH"        = Just AUTH
-parseLogTopic "MODEL"       = Just MODEL
-parseLogTopic "UPGRADE"     = Just UPGRADE
-parseLogTopic "PARSER"      = Just PARSER
-parseLogTopic "COMPILER"    = Just COMPILER
-parseLogTopic "INSTALL"     = Just INSTALL
-parseLogTopic "OTHER"       = Just OTHER
-parseLogTopic _             = Nothing
+parseLogTopic "STATE" = Just STATE
+parseLogTopic "AUTH" = Just AUTH
+parseLogTopic "MODEL" = Just MODEL
+parseLogTopic "UPGRADE" = Just UPGRADE
+parseLogTopic "PARSER" = Just PARSER
+parseLogTopic "COMPILER" = Just COMPILER
+parseLogTopic "INSTALL" = Just INSTALL
+parseLogTopic "OTHER" = Just OTHER
+parseLogTopic _ = Nothing
 
 -- | Parse a String into a LogLevel.
 parseLogLevel :: String -> Maybe LogLevel
-parseLogLevel "TRACE"  = Just Trace
-parseLogLevel "DEBUG"  = Just Debug
-parseLogLevel "INFO"   = Just Info
-parseLogLevel "WARN"   = Just Warn
-parseLogLevel "ERROR"  = Just Error
+parseLogLevel "TRACE" = Just Trace
+parseLogLevel "DEBUG" = Just Debug
+parseLogLevel "INFO" = Just Info
+parseLogLevel "WARN" = Just Warn
+parseLogLevel "ERROR" = Just Error
 parseLogLevel "SILENT" = Just Silent
-parseLogLevel _        = Nothing
+parseLogLevel _ = Nothing
 
 recoverFromRecoveryPoint :: Foreign -> (Boolean -> Effect Unit) -> Effect Unit
 recoverFromRecoveryPoint rawPouchdbUser callback = void $ runAff handler

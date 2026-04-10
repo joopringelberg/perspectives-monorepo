@@ -2,20 +2,19 @@ module Test.Parsing.Arc where
 
 import Prelude
 
-import Control.Alternative (class Alternative)
 import Control.Monad.Error.Class (try)
 import Control.Monad.Free (Free)
 import Data.Either (Either(..))
 import Data.List (List(..), filter, findIndex, head, index, length, (:))
 import Data.List.NonEmpty (length) as LNE
 import Data.Maybe (Maybe(..), isJust)
-import Effect.Class.Console (log, logShow)
+import Effect.Class.Console (logShow)
 import Effect.Exception (message)
 import Node.Encoding as ENC
 import Node.FS.Aff (readTextFile)
 import Node.Path as Path
 import Perspectives.Parsing.Arc (automaticEffectE, contextE, domain, propertyE, thingRoleE, userRoleE, viewE)
-import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FilledBySpecification(..), PropertyE(..), PropertyPart(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), StateQualifiedPart, StateSpecification(..), ViewE(..))
+import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FilledBySpecification(..), PropertyE(..), PropertyPart(..), PropsOrView(..), RoleE(..), RolePart(..), StateQualifiedPart, StateSpecification(..), ViewE(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier)
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
@@ -25,7 +24,7 @@ import Perspectives.Representation.TypeIdentifiers (ContextType(..), RoleKind(..
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerbList(..))
 import Perspectives.Representation.Verbs (RoleVerb(..), PropertyVerb(..)) as RV
 import Test.Parsing.ArcAstSelectors (actionExists, allPropertyVerbs, ensureAction, ensureContext, ensureOnEntry, ensureOnExit, ensurePerspectiveOf, ensurePerspectiveOn, ensurePropertyVerbsForPropsOrView, ensureRoleVerbs, ensureStateInContext, ensureStateInRole, ensureSubState, ensureUserRole, failure, hasAutomaticAction, isImplicitRoleOnIdentifier, isIndexed, isNotified, isStateWithContext, isStateWithExplicitRole, isStateWithExplicitRole_, perspectiveExists, stateExists, stateParts)
-import Test.Unit (TestF, suite, suiteOnly, suiteSkip, test, testOnly, testSkip)
+import Test.Unit (TestF, suite, test)
 import Test.Unit.Assert (assert)
 import Parsing (ParseError(..))
 import Unsafe.Coerce (unsafeCoerce)
