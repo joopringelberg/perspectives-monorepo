@@ -33,6 +33,9 @@ import Data.Foldable (for_)
 import Data.Function.Uncurried (Fn2, runFn2)
 import Data.Map (insert)
 import Data.Maybe (Maybe(..))
+import Effect.Ref (Ref)
+import Effect.Ref (new, read, write) as Ref
+import Effect.Unsafe (unsafePerformEffect)
 import Data.Newtype (unwrap)
 import Data.Nullable (Nullable, toMaybe, toNullable)
 import Data.Tuple (Tuple(..))
@@ -52,7 +55,7 @@ import Perspectives.Api (resumeApi, setupApi) as API
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (getPrivateKey)
-import Perspectives.CoreTypes (IndexedResource(..), IntegrityFix(..), JustInTimeModelLoad(..), MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction(..), RuntimeOptions, MonadPerspectives, (##=), (##>>))
+import Perspectives.CoreTypes (IndexedResource(..), IntegrityFix(..), JustInTimeModelLoad(..), LogLevel(..), LogTopic(..), MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction(..), RuntimeOptions, MonadPerspectives, (##=), (##>>))
 import Perspectives.Couchdb (SecurityDocument(..))
 import Perspectives.DataUpgrade (runDataUpgrades)
 import Perspectives.DataUpgrade.RecompileLocalModels as RECOMPILE
@@ -76,7 +79,7 @@ import Perspectives.Persistence.State (getSystemIdentifier, withCouchdbUrl)
 import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Persistent (entitiesDatabaseName, invertedQueryDatabaseName, postDatabaseName, saveMarkedResources)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (defaultRuntimeOptions, modelsDatabaseName, newPerspectivesState, pushMessage, removeMessage, resetCaches, setModelUris)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, disableAllLogging, disableTopicLogging, modelsDatabaseName, newPerspectivesState, pushMessage, removeMessage, resetCaches, setModelUris, setTopicLogLevel)
 import Perspectives.Proxy (handleClientRequest, receivePDRStatusMessageChannel, pdrStatusMessageChannel) as Proxy
 import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope, getPropertyFunction, getRoleFunction, getterFromPropertyType)
 import Perspectives.ReferentialIntegrity (fixReferences)
@@ -97,6 +100,14 @@ import Perspectives.SystemClocks (forkedSystemClocks)
 import Prelude (Unit, bind, discard, pure, show, unit, void, ($), (+), (-), (<), (<$>), (<<<), (<>), (>), (>=>), (>>=))
 import Simple.JSON (read, write) as JSON
 import Unsafe.Coerce (unsafeCoerce)
+
+-- | A module-level reference to the active PerspectivesState AVar.
+-- | It is set when runPDR creates the state so that the log-configuration
+-- | helper functions (setLogLevelForTopic, disableLogTopic, disableLogging)
+-- | can be called from JavaScript without needing access to the state AVar
+-- | directly.
+globalStateRef :: Ref (Maybe (AVar PerspectivesState))
+globalStateRef = unsafePerformEffect (Ref.new Nothing)
 
 -- | Don't do anything. runPDR will actually start the core.
 main :: Effect Unit
@@ -158,6 +169,9 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
             )
         -- The status message sending function is stored in PerspectivesState. It is accessed by pushMessage and removeMessage.
         new (state' { setPDRStatus = ((runFn2 statusMessageChannel) :: String -> String -> Unit) })
+
+      -- Store state globally so log-configuration helpers can be called from JavaScript.
+      liftEffect $ Ref.write (Just state) globalStateRef
 
       -- Fork aff to capture transactions to run.
       void $ forkAff $ forkTimedTransactions transactionWithTiming state
@@ -836,6 +850,67 @@ handleClientRequest = Proxy.handleClientRequest
 
 receivePDRStatusMessageChannel :: Foreign
 receivePDRStatusMessageChannel = Proxy.receivePDRStatusMessageChannel
+
+-----------------------------------------------------------
+-- LOG CONFIGURATION HELPERS (callable from JavaScript)
+-----------------------------------------------------------
+
+-- | Run a MonadPerspectives action against the globally stored state AVar.
+-- | Silently does nothing if the PDR has not yet started.
+runWithGlobalState :: MonadPerspectives Unit -> Effect Unit
+runWithGlobalState action = do
+  mState <- Ref.read globalStateRef
+  case mState of
+    Nothing -> pure unit
+    Just state -> void $ runAff (\_ -> pure unit) (runPerspectivesWithState action state)
+
+-- | Set the log threshold for a topic.
+-- | `topic` must match one of the `LogTopic` constructor names (e.g. `"SYNC"`, `"MODEL"`).
+-- | `level` must match one of the `LogLevel` constructor names (e.g. `"DEBUG"`, `"WARN"`, `"SILENT"`).
+-- | Unknown names are ignored silently.
+setLogLevelForTopic :: String -> String -> Effect Unit
+setLogLevelForTopic topicStr levelStr =
+  runWithGlobalState $ case parseLogTopic topicStr, parseLogLevel levelStr of
+    Just topic, Just level -> setTopicLogLevel topic level
+    _, _ -> pure unit
+
+-- | Suppress all log output for a specific topic.
+-- | `topic` must match one of the `LogTopic` constructor names (e.g. `"SYNC"`).
+disableLogTopic :: String -> Effect Unit
+disableLogTopic topicStr =
+  runWithGlobalState $ case parseLogTopic topicStr of
+    Just topic -> disableTopicLogging topic
+    Nothing -> pure unit
+
+-- | Suppress all log output from every topic.
+disableLogging :: Effect Unit
+disableLogging = runWithGlobalState disableAllLogging
+
+-- | Parse a String into a LogTopic.
+parseLogTopic :: String -> Maybe LogTopic
+parseLogTopic "SYNC"        = Just SYNC
+parseLogTopic "BROKER"      = Just BROKER
+parseLogTopic "QUERY"       = Just QUERY
+parseLogTopic "PERSISTENCE" = Just PERSISTENCE
+parseLogTopic "STATE"       = Just STATE
+parseLogTopic "AUTH"        = Just AUTH
+parseLogTopic "MODEL"       = Just MODEL
+parseLogTopic "UPGRADE"     = Just UPGRADE
+parseLogTopic "PARSER"      = Just PARSER
+parseLogTopic "COMPILER"    = Just COMPILER
+parseLogTopic "INSTALL"     = Just INSTALL
+parseLogTopic "OTHER"       = Just OTHER
+parseLogTopic _             = Nothing
+
+-- | Parse a String into a LogLevel.
+parseLogLevel :: String -> Maybe LogLevel
+parseLogLevel "TRACE"  = Just Trace
+parseLogLevel "DEBUG"  = Just Debug
+parseLogLevel "INFO"   = Just Info
+parseLogLevel "WARN"   = Just Warn
+parseLogLevel "ERROR"  = Just Error
+parseLogLevel "SILENT" = Just Silent
+parseLogLevel _        = Nothing
 
 recoverFromRecoveryPoint :: Foreign -> (Boolean -> Effect Unit) -> Effect Unit
 recoverFromRecoveryPoint rawPouchdbUser callback = void $ runAff handler

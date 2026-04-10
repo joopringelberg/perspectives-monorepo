@@ -273,7 +273,7 @@ instance Eq LogTopic where
 instance Ord LogTopic where
   compare t1 t2 = compare (show t1) (show t2)
 
-data LogLevel = Trace | Debug | Info | Warn | Error
+data LogLevel = Trace | Debug | Info | Warn | Error | Silent
 
 derive instance eqLogLevel :: Eq LogLevel
 
@@ -285,6 +285,7 @@ instance showLogLevel :: Show LogLevel where
   show Info = "INFO"
   show Warn = "WARN"
   show Error = "ERROR"
+  show Silent = "SILENT"
 
 type LogConfig =
   { defaultLevel :: LogLevel

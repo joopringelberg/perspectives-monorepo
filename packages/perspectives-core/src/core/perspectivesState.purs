@@ -36,7 +36,7 @@ import Foreign.Object (empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
 import Perspectives.AMQP.Stomp (StompClient)
-import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, RolInstances, RuntimeOptions, TranslationTable, TypeFix, Warning)
+import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, RolInstances, RuntimeOptions, TranslationTable, TypeFix, Warning)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, empty, lookup) as ENV
 import Perspectives.Persistence.API (PouchdbUser)
@@ -380,3 +380,20 @@ getLogConfig = gets _.logConfig
 
 setLogConfig :: LogConfig -> MonadPerspectives Unit
 setLogConfig config = modify \s -> s { logConfig = config }
+
+-- | Set the log threshold for a specific topic. Messages at this level or
+-- | above will be emitted; messages below will be suppressed.
+setTopicLogLevel :: LogTopic -> LogLevel -> MonadPerspectives Unit
+setTopicLogLevel topic level =
+  modify \s -> s { logConfig = s.logConfig { topicLevels = Map.insert topic level s.logConfig.topicLevels } }
+
+-- | Suppress all log output for a specific topic by raising its threshold to
+-- | `Silent` (above `Error`).
+disableTopicLogging :: LogTopic -> MonadPerspectives Unit
+disableTopicLogging topic = setTopicLogLevel topic Silent
+
+-- | Suppress all log output from every topic by raising the default threshold
+-- | to `Silent` and clearing all per-topic overrides.
+disableAllLogging :: MonadPerspectives Unit
+disableAllLogging =
+  modify \s -> s { logConfig = { defaultLevel: Silent, topicLevels: Map.empty } }
