@@ -29,10 +29,9 @@ import Data.Array (catMaybes)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Traversable (for)
-import Effect.Class.Console (log)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..), executeInTopologicalOrder)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (errorUpgrade, infoUpgrade)
 import Perspectives.Extern.Couchdb (updateModel')
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (modelUriVersion)
@@ -56,8 +55,8 @@ updateLocalModels =
     -- As doc is still uninterpreted, we can only rely on the rows.id member of the PouchdbAllDocs record. These, however, are DomeinFileIdentifiers.
     -- We do not have a useful test on the form of such identifiers.
     uninterpretedDomeinFiles <- for allModels \({ id, doc }) -> case JSON.read <$> doc of
-      Just (Left errs) -> (logPerspectivesError (Custom ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs))) *> pure Nothing
-      Nothing -> logPerspectivesError (Custom ("No document retrieved for model '" <> id <> "'.")) *> pure Nothing
+      Just (Left errs) -> (errorUpgrade ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs)) *> pure Nothing
+      Nothing -> errorUpgrade ("No document retrieved for model '" <> id <> "'.") *> pure Nothing
       Just (Right (df :: UninterpretedDomeinFile)) -> pure $ Just df
     clearInvertedQueriesDatabase
     pushMessage "Updating local models..."
@@ -67,7 +66,7 @@ updateLocalModels =
       (runExceptT (executeInTopologicalOrder (catMaybes uninterpretedDomeinFiles) updateLocalModel))
     void $ removeMessage "Updating local models..."
     case r of
-      Left errors -> logPerspectivesError (Custom ("updateLocalModels: " <> show errors)) *> pure false
+      Left errors -> errorUpgrade ("updateLocalModels: " <> show errors) *> pure false
       Right success -> do
         saveMarkedResources
         pure success
@@ -88,5 +87,5 @@ updateLocalModels =
           Just v -> v
           Nothing -> "unknown"
       )
-    log ("Model updated: " <> show namespace <> " at version " <> show version)
+    infoUpgrade ("Model updated: " <> show namespace <> " at version " <> show version)
     pure df

@@ -32,7 +32,7 @@ import Main.RecompileBasicModels (UninterpretedDomeinFile, executeInTopologicalO
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinCache (lookupStableModelUri_)
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (errorUpgrade)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (modelUri2ModelUrl)
 import Perspectives.ModelDependencies (sysUser)
@@ -56,8 +56,8 @@ recompileLocalModels =
     -- As doc is still uninterpreted, we can only rely on the rows.id member of the PouchdbAllDocs record. These, however, are DomeinFileIdentifiers.
     -- We do not have a useful test on the form of such identifiers.
     uninterpretedDomeinFiles <- for allModels \({ id, doc }) -> case JSON.read <$> doc of
-      Just (Left errs) -> (logPerspectivesError (Custom ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs))) *> pure Nothing
-      Nothing -> logPerspectivesError (Custom ("No document retrieved for model '" <> id <> "'.")) *> pure Nothing
+      Just (Left errs) -> (errorUpgrade ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs)) *> pure Nothing
+      Nothing -> errorUpgrade ("No document retrieved for model '" <> id <> "'.") *> pure Nothing
       Just (Right (df :: UninterpretedDomeinFile)) -> pure $ Just df
     clearInvertedQueriesDatabase
     pushMessage "Updating local models..."
@@ -67,7 +67,7 @@ recompileLocalModels =
       (runExceptT (executeInTopologicalOrder (catMaybes uninterpretedDomeinFiles) recompileModel))
     void $ removeMessage "Updating local models..."
     case r of
-      Left errors -> logPerspectivesError (Custom ("recompileLocalModels: " <> show errors)) *> pure false
+      Left errors -> errorUpgrade ("recompileLocalModels: " <> show errors) *> pure false
       Right success -> do
         saveMarkedResources
         pure success
@@ -84,7 +84,7 @@ recompileLocalModel :: ModelUri Readable -> MonadPerspectives Boolean
 recompileLocalModel modelUri = do
   mstableModelUri <- lookupStableModelUri_ modelUri
   case mstableModelUri of
-    Nothing -> logPerspectivesError (Custom ("Cannot find stable model URI for model URI: " <> show modelUri)) *> pure false
+    Nothing -> errorUpgrade ("Cannot find stable model URI for model URI: " <> show modelUri) *> pure false
     Just (ModelUri stableModelUri) -> do
       { repositoryUrl, documentName } <- pure $ unsafePartial modelUri2ModelUrl stableModelUri
       modelsdb <- modelsDatabaseName
@@ -94,7 +94,7 @@ recompileLocalModel modelUri = do
         (ENR $ EnumeratedRoleType sysUser)
         (runExceptT (recompileModel udf))
       case r of
-        Left errors -> logPerspectivesError (Custom ("recompileLocalModel: " <> show errors)) *> pure false
+        Left errors -> errorUpgrade ("recompileLocalModel: " <> show errors) *> pure false
         Right success -> do
           saveMarkedResources
           pure true

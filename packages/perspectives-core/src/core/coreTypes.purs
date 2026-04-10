@@ -251,7 +251,7 @@ type Warning = { message :: String, error :: String }
 -----------------------------------------------------------
 -- STRUCTURED LOGGING
 -----------------------------------------------------------
-data LogTopic = SYNC | BROKER | QUERY | PERSISTENCE | STATE | AUTH | MODEL | UPGRADE | PARSER | COMPILER 
+data LogTopic = SYNC | BROKER | QUERY | PERSISTENCE | STATE | AUTH | MODEL | UPGRADE | PARSER | COMPILER | INSTALL | OTHER
 
 instance Show LogTopic where
   show SYNC = "SYNC"
@@ -264,6 +264,8 @@ instance Show LogTopic where
   show UPGRADE = "UPGRADE"
   show PARSER = "PARSER"
   show COMPILER = "COMPILER"
+  show INSTALL = "INSTALL"
+  show OTHER = "OTHER"
 
 instance Eq LogTopic where
   eq t1 t2 = show t1 `eq` show t2

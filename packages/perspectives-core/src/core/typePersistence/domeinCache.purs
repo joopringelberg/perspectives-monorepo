@@ -48,11 +48,11 @@ import Perspectives.CoreTypes (JustInTimeModelLoad(..), MonadPerspectives, retri
 import Perspectives.Couchdb (DeleteCouchdbDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.DomeinFile (DomeinFile(..))
-import Perspectives.ErrorLogging (logPerspectivesError, warnModeller)
+import Perspectives.ErrorLogging (warnModeller)
+import Perspectives.Logging (warnModel)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.ModelDependencies (build, patch, versionToInstall)
-import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, fromBlob, getAttachment, tryGetDocument)
 import Perspectives.Persistent (forceSaveDomeinFile, getDomeinFile, getPerspectRol, modelDatabaseName, removeEntiteit, saveEntiteit, tryGetPerspectEntiteit, tryRemoveEntiteit, updateRevision)
 import Perspectives.PerspectivesState (domeinCacheRemove, getModelToLoad, getModelUnderCompilation, getTranslationTable, lookupModelUri, setTranslationTable)
@@ -194,7 +194,7 @@ fetchTranslations (ModelUri namespace) = do
         Just f -> do
           x <- liftAff $ fromBlob f
           case readJSON x of
-            Left e -> logPerspectivesError (Custom $ "retrieveDomeinFile. Cannot parse translations table: " <> show e)
+            Left e -> warnModel ("retrieveDomeinFile. Cannot parse translations table: " <> show e)
             Right translations -> setTranslationTable namespace translations
 
 -- | Retrieves a string that is a Semantic Version Number. Also returns the external role of the VersionedModelManifest.

@@ -44,7 +44,7 @@ import Perspectives.ContextStateCompiler (enteringState, evaluateContextState, e
 import Perspectives.CoreTypes (MPT, MonadPerspectives, MonadPerspectivesTransaction, liftToInstanceLevel, (##=), (##>), (##>>))
 import Perspectives.Deltas (TransactionPerUser, distributeTransaction)
 import Perspectives.DependencyTracking.Dependency (lookupActiveSupportedEffect)
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (debugState, warnState)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionNArgs)
 import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.Identifiers (hasLocalName)
@@ -110,18 +110,18 @@ runMonadPerspectivesTransaction' share authoringRole a = (lift $ createTransacti
     transactionNumber <- lift $ nextTransactionNumber
     AA.modify \trns -> over Transaction (\tr -> tr { transactionNumber = transactionNumber }) trns
     padding <- lift transactionLevel
-    log (padding <> "Starting " <> (if share then "" else "non-") <> "sharing transaction " <> show transactionNumber)
+    lift $ debugState (padding <> "Starting " <> (if share then "" else "non-") <> "sharing transaction " <> show transactionNumber)
     catchError
       do
         -- Execute the value that accumulates Deltas in a Transaction.
         r <- a >>= phase1 share authoringRole
         -- 5. Raise the flag
-        log (padding <> "Ending transaction " <> show transactionNumber)
+        lift $ debugState (padding <> "Ending transaction " <> show transactionNumber)
         _ <- lift $ lift $ put true t
         pure r
       \e -> do
         -- 5. Raise the flag
-        log (padding <> "Ending transaction " <> show transactionNumber)
+        lift $ debugState (padding <> "Ending transaction " <> show transactionNumber)
         _ <- lift $ lift $ put true t
         throwError e
 
@@ -132,7 +132,7 @@ phase1 :: forall o. Boolean -> RoleType -> o -> MonadPerspectivesTransaction o
 phase1 share authoringRole r = do
   padding <- lift transactionLevel
   transactionNumber <- AA.gets (\(Transaction tr) -> tr.transactionNumber)
-  log $ padding <> "Entering phase1 of transaction " <> show transactionNumber
+  lift $ debugState $ padding <> "Entering phase1 of transaction " <> show transactionNumber
   -- Run monotonic actions, after
   --  * adding all ContextRemovals to the untouchableContexts and
   --  * adding rolesToExit to the untouchableRoles.
@@ -212,7 +212,7 @@ phase1 share authoringRole r = do
             catchError (void $ for states (exitingRoleState rid))
               \e -> do
                 lift $ addWarning { message: show NonCriticalError, error: (show e) }
-                logPerspectivesError $ Custom ("Cannot exit role state for " <> show rid <> ", because " <> show e)
+                lift $ warnState ("Cannot exit role state for " <> show rid <> ", because " <> show e)
                 lift $ restoreFrame oldFrame
                 throwError e
             lift $ restoreFrame oldFrame
@@ -449,7 +449,7 @@ exitContext (ContextRemoval ctxt authorizedRole) = do
     catchError (void $ for states (exitingState ctxt))
       \e -> do
         lift $ addWarning { message: show NonCriticalError, error: (show e) }
-        logPerspectivesError $ Custom ("Cannot exit state, because " <> show e)
+        lift $ warnState ("Cannot exit state, because " <> show e)
     lift $ restoreFrame oldFrame
     -- Remove executed keys for these context states
     AA.modify \t -> over Transaction

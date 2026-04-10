@@ -8,9 +8,8 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Data.EncodableMap as EM
 import Perspectives.DomeinFile (DomeinFile(..))
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (warnModel)
 import Perspectives.Identifiers (typeUri2ModelUri_)
-import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistent (getDomeinFile)
 import Perspectives.Query.QueryTypes (Domain(..), RoleInContext(..))
 import Perspectives.Representation.ADT (ADT)
@@ -36,7 +35,7 @@ instance ToReadable IndexedContext where
     getDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ stableId) >>= \(DomeinFile { toReadableContextIndividuals }) -> case EM.lookup ic toReadableContextIndividuals of
       Just readableId -> pure readableId
       Nothing -> do
-        logPerspectivesError (Custom $ "Failed to convert IndexedContext from stable to readable: no mapping found for stable id " <> stableId)
+        warnModel ("Failed to convert IndexedContext from stable to readable: no mapping found for stable id " <> stableId)
         pure (IndexedContext stableId)
 
 instance ToReadable ContextType where

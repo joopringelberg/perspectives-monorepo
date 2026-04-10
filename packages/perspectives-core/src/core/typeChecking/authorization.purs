@@ -30,10 +30,9 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), isJust)
 import Data.Monoid.Disj (Disj(..))
 import Data.Newtype (ala)
-import Effect.Class (liftEffect)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (##>>), (###=))
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (warnAuth)
 import Perspectives.Instances.ObjectGetters (roleType)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -76,7 +75,7 @@ roleHasPerspectiveOnRoleWithVerb subject roleType verbs mstart mend = do
 roleHasPerspectiveOnExternalRoleWithVerbs :: RoleType -> Maybe RoleType -> Array RoleVerb -> Maybe ArcPosition -> Maybe ArcPosition -> MonadPerspectives (Either PerspectivesError Boolean)
 roleHasPerspectiveOnExternalRoleWithVerbs subject mroleType verbs mstart mend = case mroleType of
   Nothing -> do
-    liftEffect $ logPerspectivesError $ Custom "roleHasPerspectiveOnExternalRoleWithVerb: no authorizedRole provided to construct external role"
+    warnAuth "roleHasPerspectiveOnExternalRoleWithVerb: no authorizedRole provided to construct external role"
     pure $ Left $ Custom "roleHasPerspectiveOnExternalRoleWithVerb: no authorizedRole provided to construct external role"
   Just rt -> do
     (hasPerspectiveWithVerb subject rt) >>=

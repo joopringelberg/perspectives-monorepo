@@ -47,9 +47,8 @@ import Foreign.Object (Object, empty)
 import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (warnModel)
 import Perspectives.Identifiers (modelUri2ModelUrl, typeUri2LocalName_, typeUri2typeNameSpace_)
-import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (fromBlob, getAttachment)
 import Perspectives.Persistent (modelDatabaseName)
 import Perspectives.SideCar.PhantomTypedNewtypes (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StateUri(..), ViewUri(..))
@@ -392,7 +391,7 @@ loadStableMapping_ database documentName = do
     Just f -> do
       x <- liftAff $ fromBlob f
       case readJSON x of
-        Left e -> logPerspectivesError (Custom $ "loadStableMapping_" <> show e) *> pure Nothing
+        Left e -> warnModel ("loadStableMapping_" <> show e) *> pure Nothing
         Right sq -> pure $ Just sq
     Nothing -> pure Nothing
 

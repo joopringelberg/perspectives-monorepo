@@ -46,12 +46,17 @@ module Perspectives.Logging
   , debugUpgrade
   , errorBroker
   , errorCompiler
+  , errorInstall
   , errorModel
+  , errorOther
+  , errorParser
   , errorPersistence
   , errorSync
+  , errorUpgrade
   , infoBroker
   , infoModel
   , infoSync
+  , infoUpgrade
   , pdrLog
   , traceBroker
   , tracePersistence
@@ -61,6 +66,9 @@ module Perspectives.Logging
   , warnAuth
   , warnBroker
   , warnModel
+  , warnOther
+  , warnPersistence
+  , warnState
   , warnSync
   )
   where
@@ -178,6 +186,12 @@ errorModel = pdrLog MODEL Error
 debugUpgrade :: String -> MonadPerspectives Unit
 debugUpgrade = pdrLog UPGRADE Debug
 
+infoUpgrade :: String -> MonadPerspectives Unit
+infoUpgrade = pdrLog UPGRADE Info
+
+errorUpgrade :: String -> MonadPerspectives Unit
+errorUpgrade = pdrLog UPGRADE Error
+
 -----------------------------------------------------------
 -- COMPILER
 -----------------------------------------------------------
@@ -186,3 +200,36 @@ debugCompiler = pdrLog COMPILER Debug
 
 errorCompiler :: String -> MonadPerspectives Unit
 errorCompiler = pdrLog COMPILER Error
+
+-----------------------------------------------------------
+-- INSTALL
+-----------------------------------------------------------
+errorInstall :: String -> MonadPerspectives Unit
+errorInstall = pdrLog INSTALL Error
+
+-----------------------------------------------------------
+-- OTHER
+-----------------------------------------------------------
+warnOther :: String -> MonadPerspectives Unit
+warnOther = pdrLog OTHER Warn
+
+errorOther :: String -> MonadPerspectives Unit
+errorOther = pdrLog OTHER Error
+
+-----------------------------------------------------------
+-- PARSER (additional levels)
+-----------------------------------------------------------
+errorParser :: String -> MonadPerspectives Unit
+errorParser = pdrLog PARSER Error
+
+-----------------------------------------------------------
+-- PERSISTENCE (additional levels)
+-----------------------------------------------------------
+warnPersistence :: String -> MonadPerspectives Unit
+warnPersistence = pdrLog PERSISTENCE Warn
+
+-----------------------------------------------------------
+-- STATE (additional levels)
+-----------------------------------------------------------
+warnState :: String -> MonadPerspectives Unit
+warnState = pdrLog STATE Warn
