@@ -41,28 +41,47 @@ import path from 'path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Allow overriding input/output via environment variables so this config can
+// also be used to bundle the test entry point:
+//   ROLLUP_INPUT=./output/Test.Main/index.js \
+//   ROLLUP_OUTPUT=./dist/test.node.js \
+//   rollup -c rollup.node.config.js
+const inputFile  = process.env.ROLLUP_INPUT  ?? './output/Main/index.js';
+const outputFile = process.env.ROLLUP_OUTPUT ?? './dist/perspectives-core.node.js';
+// When building the test bundle, PureScript only *exports* main() — it does not
+// call it.  Appending `main();` via outro ensures Node.js actually runs the tests
+// when the bundle is loaded with `node dist/test.node.js`.
+const isTestBuild = !!process.env.ROLLUP_INPUT;
+
 export default async function() {
   const packageJson = JSON.parse(await fs.readFile(new URL('./package.json', import.meta.url)));
 
   return {
-    input: './output/Main/index.js',
+    input: inputFile,
     output: {
-      file: './dist/perspectives-core.node.js',
+      file: outputFile,
       format: 'es',
       sourcemap: true,
       name: 'perspectivesCoreNode',
+      outro: isTestBuild ? 'main();' : '',
     },
     plugins: [
       alias({
         entries: [
-          // Redirect the browser PouchDB FFI to the Node.js version.
+          // Redirect pouchdb-browser to pouchdb-core (memory adapter, no native LevelDB).
+          // The compiled output/Perspectives.Persistence.API/foreign.js imports
+          // `pouchdb-browser` as a bare specifier; pouchdb-core is a drop-in that
+          // exposes the same PouchDB constructor and is plugin-extended in
+          // persistenceAPI.node.js with the memory + http adapters.
           {
-            find: /persistenceAPI\.js$/,
-            replacement: path.join(__dirname, 'src/core/persistence/persistenceAPI.node.js'),
+            find: 'pouchdb-browser',
+            replacement: 'pouchdb-core',
           },
           // Redirect the browser idb-keyval FFI to the Node.js file-backed stub.
+          // The FFI is copied to output/*/foreign.js by spago, but the idb-keyval
+          // import inside it is a bare npm specifier that we can intercept here.
           {
-            find: /idb-keyval\.js$/,
+            find: 'idb-keyval',
             replacement: path.join(__dirname, 'src/core/idb-keyval.node.js'),
           },
           // Redirect affjax-web compiled output to affjax-node compiled output.
@@ -91,7 +110,6 @@ export default async function() {
       }),
     ],
     // Keep eventsource external (same as the browser build).
-    // In Node.js the eventsource package is available as a CommonJS module.
     external: ['eventsource'],
   };
 }

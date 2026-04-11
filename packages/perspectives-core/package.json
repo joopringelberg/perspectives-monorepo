@@ -37,7 +37,7 @@
     "prebuild": "node ./scripts/transpile-model-deps.mjs --cache-dir ./.cache/sidecars --in-file ./scripts/modelDependencies_source.purs --out-file ./src/core/modelDependencies.purs || echo '[transpile] skipping (no versions or offline)'",
     "build": "pnpm run fmt && pnpm exec spago build && rollup -c",
     "build:node": "pnpm exec spago build && rollup -c rollup.node.config.js",
-    "test:node": "pnpm exec spago test --main Test.Main",
+    "test:node": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Main/index.js ROLLUP_OUTPUT=./dist/test.node.js rollup -c rollup.node.config.js && node dist/test.node.js",
     "modulemap": "node build-module-map.mjs > module-map.json"
   },
   "devDependencies": {
@@ -48,6 +48,9 @@
     "@rollup/plugin-replace": "^6.0.2",
     "@rollup/plugin-url": "^8.0.2",
     "pouchdb": "^9.0.0",
+    "pouchdb-adapter-http": "^9.0.0",
+    "pouchdb-adapter-memory": "^9.0.0",
+    "pouchdb-core": "^9.0.0",
     "rollup-plugin-delete": "^3.0.1",
     "xhr2": "^0.2.1"
   }

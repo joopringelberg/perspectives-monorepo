@@ -44,27 +44,22 @@ function save() {
   }
 }
 
-// EffectFn1 String (Promise (Nullable Foreign))
-// The idb-keyval `get` function is called as an EffectFn1 from PureScript.
-// It must return an Effect that produces a Promise.
-export const getValueByKeyImpl = function(key) {
-  return function() {
-    return Promise.resolve(store.has(key) ? store.get(key) : null);
-  };
-};
+// These exports match the idb-keyval npm package API so that the compiled
+// output/IDBKeyVal/foreign.js (which does `import * as idbKeyval from 'idb-keyval'`
+// and re-exports idbKeyval.get / idbKeyval.set) works when the alias redirects
+// 'idb-keyval' to this file.
+export function get(key) {
+  return Promise.resolve(store.has(key) ? store.get(key) : undefined);
+}
 
-// EffectFn2 String Foreign Unit
-// The idb-keyval `set` function is called as an EffectFn2 from PureScript.
-// It must return an Effect that produces Unit.
-export const setKeyValueImpl = function(key, value) {
-  return function() {
-    store.set(key, value);
-    save();
-  };
-};
+export function set(key, value) {
+  store.set(key, value);
+  save();
+  return Promise.resolve();
+}
 
-// Effect Unit
 export function clear() {
   store.clear();
   save();
+  return Promise.resolve();
 }

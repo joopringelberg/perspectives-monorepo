@@ -7,28 +7,21 @@
 // environment (e.g. for automated testing with `spago test`).
 //
 // Key differences from the browser version:
-//   1. Uses the `pouchdb` package (LevelDB-backed) instead of `pouchdb-browser`.
+//   1. Uses pouchdb-core + pouchdb-adapter-memory (no native LevelDB bindings).
+//      Databases are in-memory only — sufficient for unit/integration testing.
+//      Remote CouchDB replication still works via pouchdb-adapter-http.
 //   2. Does NOT wrap the fetch call with a CORS-mode override — Node.js is not
-//      subject to browser CORS restrictions; plain `node-fetch` (bundled with
-//      pouchdb) is used instead.
-//   3. `isOffLineImpl` does not rely on `navigator.onLine`; it always returns
-//      `false` (assume online) because Node.js has no built-in offline detection.
-//   4. `toFileImpl` / `fromBlobImpl` are replaced with Buffer-based equivalents
-//      because the browser `File` and `Blob` constructors are not available in
-//      Node.js.
-//
-// To enable Node.js testing:
-//   1. Install the pouchdb package:
-//        pnpm add --save-dev pouchdb
-//   2. In the spago-generated test bundle (or your rollup/esbuild config) replace
-//      the import of persistenceAPI.js with persistenceAPI.node.js.
-//   3. Disable Node.js TLS verification when connecting to a self-signed CouchDB:
-//        export NODE_TLS_REJECT_UNAUTHORIZED="0"
-//      Or point at a local mkcert CA:
-//        export NODE_EXTRA_CA_CERTS="$(mkcert -CAROOT)/rootCA.pem"
-//   See also: test/test instructions.md
+//      subject to browser CORS restrictions.
+//   3. `isOffLineImpl` always returns `false` (Node.js has no navigator.onLine).
+//   4. `toFileImpl` / `fromBlobImpl` use Buffer because the browser File/Blob
+//      constructors are not available in Node.js.
 
-import PouchDB from "pouchdb";
+import PouchDB from "pouchdb-core";
+import PouchDBMemoryAdapter from "pouchdb-adapter-memory";
+import PouchDBHttpAdapter from "pouchdb-adapter-http";
+
+PouchDB.plugin(PouchDBMemoryAdapter);
+PouchDB.plugin(PouchDBHttpAdapter);
 
 function convertPouchError( originalE )
 {
@@ -62,7 +55,7 @@ function convertPouchError( originalE )
 // the fetch implementation.  PouchDB's default fetch (node-fetch) is used as-is.
 export function createDatabaseImpl( databaseName )
 {
-  return new PouchDB( databaseName );
+  return new PouchDB( databaseName, { adapter: 'memory' } );
 }
 
 export function createRemoteDatabaseImpl( databaseName, couchdbUrl )
