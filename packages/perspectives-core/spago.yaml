@@ -4,6 +4,7 @@ package:
     - aff
     - aff-coroutines
     - aff-promise
+    - affjax-node
     - affjax-web
     - apitypes
     - argonaut

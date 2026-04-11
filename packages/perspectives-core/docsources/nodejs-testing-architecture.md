@@ -91,7 +91,7 @@ The PDR is written in PureScript and compiled to ES modules.  Most of the PureSc
 | Offline detection | `navigator.onLine` | Always-online assumption or `dns.lookup` probe |
 | File / Blob API | `new File(...)`, `blob.text()` | `Buffer` API |
 | Base64 encoding | `btoa` | `Buffer.from(...).toString('base64')` |
-| AffJax / XHR | `affjax-web` (uses XHR2) | Use `affjax-node` or switch `affjax-web` to use `node-fetch` |
+| AffJax / XHR | `affjax-web` (uses browser XHR) | Use `affjax-node` (uses `xhr2` npm package); aliased via Rollup — no source changes needed |
 | IndexedDB key-value store (`idb-keyval`) | Browser IndexedDB | Replace with `keyv` or a simple JSON file |
 | SharedWorker shell | `perspectives-sharedworker` | Not needed; use InternalChannel directly |
 
@@ -115,13 +115,41 @@ pnpm add --save-dev pouchdb
 
 #### 2. AffJax
 
-`affjax-web` depends on the browser XHR2 API.  For Node.js, switch to the [`affjax-node`](https://pursuit.purescript.org/packages/purescript-affjax-node) package, which uses `node-fetch`.
+`affjax-web` depends on the browser XHR API.  For Node.js, use [`affjax-node`](https://pursuit.purescript.org/packages/purescript-affjax-node) instead, which uses the [`xhr2`](https://www.npmjs.com/package/xhr2) npm package (a Node.js XHR polyfill).  `Affjax.Node` provides **exactly the same API surface** as `Affjax.Web`: `request`, `printError`, `Request`, `Response`, `Error`.
 
-In `spago.yaml`, replace `affjax-web` with `affjax-node` for the test build target, or create a dedicated `spago.test.yaml` / `spago.node.yaml` that overrides this dependency.
+**Implementation (no PureScript source changes required):**
 
-The modules that import `Affjax.Web` must conditionally import `Affjax.Node` (or use a thin compatibility shim).  The required API surface is:
-- `Affjax.request` / `Affjax.get` / `Affjax.post`
-- `Affjax.ResponseFormat.string`
+The five PureScript source files that import `Affjax.Web as AJ` do **not** need to change.  Instead:
+
+1. Add `affjax-node` alongside `affjax-web` in `spago.yaml` so spago compiles both modules:
+
+   ```yaml
+   dependencies:
+     - affjax-node   # added for Node.js build
+     - affjax-web    # kept for browser build
+   ```
+
+2. Add `xhr2` to `devDependencies` in `package.json` (required by the `affjax-node` FFI):
+
+   ```bash
+   pnpm add --save-dev xhr2@^0.2.1
+   ```
+
+3. In `rollup.node.config.js`, the alias plugin transparently redirects the compiled
+   `output/Affjax.Web/index.js` module to `output/Affjax.Node/index.js` at bundle time:
+
+   ```js
+   {
+     find: /^.*[/\\]Affjax\.Web[/\\]index\.js$/,
+     replacement: path.join(__dirname, 'output/Affjax.Node/index.js'),
+   }
+   ```
+
+   This works because `@rollup/plugin-alias` intercepts module IDs before path resolution.
+   Since the compiled PureScript modules reference `../Affjax.Web/index.js`, the regex
+   matches the entire import string and substitutes the Node.js driver.
+
+**All three changes are already applied in this branch.**  After running `pnpm install` and `pnpm exec spago build`, the `build:node` script will produce a fully Node.js-compatible bundle.
 
 #### 3. `idb-keyval` (IndexedDB key-value store)
 
@@ -395,44 +423,39 @@ The short answer to all three questions is: **keep `perspectives-core` as a sing
 
 **How Rollup aliasing works in practice:**
 
-Rollup's `@rollup/plugin-alias` can transparently redirect a module import:
+Rollup's `@rollup/plugin-alias` can transparently redirect a module import.  All three aliases are now in `rollup.node.config.js`:
 
 ```js
-// rollup.node.config.js
-import alias from '@rollup/plugin-alias';
-
-export default {
-  input: './output/Main/index.js',
-  output: { file: './dist/perspectives-core.node.js', format: 'es' },
-  plugins: [
-    alias({
-      entries: [
-        // Replace the browser PouchDB FFI file with the Node.js version
-        { find: /(.*)persistenceAPI\.js$/, replacement: '$1persistenceAPI.node.js' },
-        // Replace the browser idb-keyval FFI file with a Node.js stub
-        { find: /(.*)idb-keyval\.js$/, replacement: '$1idb-keyval.node.js' },
-      ]
-    }),
-    resolve({ preferBuiltins: true }),
-    commonjs(),
-    json(),
-  ],
-  external: ['eventsource'],
-};
+alias({
+  entries: [
+    // Replace the browser PouchDB FFI file with the Node.js version
+    { find: /persistenceAPI\.js$/, replacement: path.join(__dirname, 'src/core/persistence/persistenceAPI.node.js') },
+    // Replace the browser idb-keyval FFI file with a Node.js stub
+    { find: /idb-keyval\.js$/, replacement: path.join(__dirname, 'src/core/idb-keyval.node.js') },
+    // Redirect affjax-web compiled output to affjax-node compiled output
+    { find: /^.*[/\\]Affjax\.Web[/\\]index\.js$/, replacement: path.join(__dirname, 'output/Affjax.Node/index.js') },
+  ]
+}),
 ```
 
-**AffJax — how to switch at the PureScript level:**
+**AffJax — switch implemented via Rollup alias (no PureScript source changes):**
 
-PureScript does not have conditional imports, but spago supports alternate dependency sets through `extraPackages` overrides.  For the Node.js build, create a second spago workspace target or a `spago.node.yaml` that lists `affjax-node` instead of `affjax-web`.
+`affjax-node@1.0.0` uses the [`xhr2`](https://www.npmjs.com/package/xhr2) npm package (a Node.js XHR polyfill) and provides `Affjax.Node` — an exact drop-in replacement for `Affjax.Web` with the same `request`, `printError`, `Request`, `Response`, `Error` API surface.
 
-The five PureScript files that import `Affjax.Web` are:
-- `src/core/persistence/persistenceAPI.purs`
-- `src/core/persistence/couchdbFunctions.purs`
-- `src/core/persistence/authentication.purs`
-- `src/core/computedValues/utilities.purs`
-- `src/core/amqpTransport/managementAPI.purs`
+The switch is fully implemented in this branch:
+- `spago.yaml`: `affjax-node` added alongside `affjax-web` (both compile; only one is bundled per target)
+- `package.json`: `xhr2@^0.2.1` added to `devDependencies`
+- `rollup.node.config.js`: adds the alias entry that redirects the compiled `output/Affjax.Web/index.js` to `output/Affjax.Node/index.js` at Rollup bundle time
 
-In all five files the import is `Affjax.Web as AJ`.  The `affjax-node` package exposes exactly the same `Affjax.Node as AJ` interface.  A one-line sed substitution in the spago pre-build step (or a pair of module aliases in a `spago.node.yaml` `extraPackages` override) is sufficient.  No logic changes are needed.
+```js
+// rollup.node.config.js — alias entry for AffJax
+{
+  find: /^.*[/\\]Affjax\.Web[/\\]index\.js$/,
+  replacement: path.join(__dirname, 'output/Affjax.Node/index.js'),
+}
+```
+
+The five PureScript files (`persistenceAPI.purs`, `couchdbFunctions.purs`, `authentication.purs`, `utilities.purs`, `managementAPI.purs`) continue to import `Affjax.Web as AJ` unchanged.  The alias is completely transparent.
 
 **`idb-keyval` Node.js stub:**
 
