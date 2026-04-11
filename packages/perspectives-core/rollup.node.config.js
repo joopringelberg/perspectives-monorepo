@@ -11,18 +11,23 @@
 // Key differences from rollup.config.js (the browser / PDR-B build):
 //   1. persistenceAPI.js  → persistenceAPI.node.js  (pouchdb instead of pouchdb-browser)
 //   2. idb-keyval.js      → idb-keyval.node.js      (file-backed Map stub)
-//   3. preferBuiltins: true  (use Node.js built-ins as-is)
-//   4. Output file: dist/perspectives-core.node.js
+//   3. Affjax.Web/index.js → Affjax.Node/index.js   (xhr2-backed HTTP instead of XHR browser)
+//   4. preferBuiltins: true  (use Node.js built-ins as-is)
+//   5. Output file: dist/perspectives-core.node.js
 //
-// To add this build to the normal workflow, add to package.json:
-//   "build:node": "pnpm exec spago build && rollup -c rollup.node.config.js"
+// Prerequisites (run once after adding these to spago.yaml / package.json):
+//   pnpm install                   # installs xhr2 (required by affjax-node FFI)
+//   pnpm exec spago build          # compiles both affjax-web and affjax-node to output/
+//   rollup -c rollup.node.config.js
 //
-// AffJax note:
-//   The PureScript source imports Affjax.Web.  For a real Node.js deployment that
-//   needs HTTP, replace affjax-web with affjax-node in spago.yaml and change the
-//   five source files that import "Affjax.Web as AJ" to "Affjax.Node as AJ".
-//   For testing purposes (Layer 1 and 2 as described in nodejs-testing-architecture.md)
-//   the HTTP layer is not exercised, so this is not required immediately.
+// AffJax implementation note:
+//   The five PureScript source files that import "Affjax.Web as AJ" do NOT need to
+//   change.  This config aliases the compiled output/Affjax.Web/index.js module to
+//   output/Affjax.Node/index.js at bundle time.  The Affjax.Node module is a drop-in
+//   replacement: it provides the same request/printError/Request/Response/Error
+//   surface but uses the xhr2 npm package instead of the browser XHR API.
+//   Both affjax-node and affjax-web are declared as spago dependencies so that spago
+//   compiles both; only one is included in each Rollup output.
 
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
@@ -59,6 +64,15 @@ export default async function() {
           {
             find: /idb-keyval\.js$/,
             replacement: path.join(__dirname, 'src/core/idb-keyval.node.js'),
+          },
+          // Redirect affjax-web compiled output to affjax-node compiled output.
+          // The five PureScript files that import Affjax.Web as AJ do not need to change;
+          // Rollup transparently substitutes Affjax.Node (xhr2-backed) at bundle time.
+          // The Affjax.Node module provides the same API surface: request, printError,
+          // Request, Response, Error.
+          {
+            find: /^.*[/\\]Affjax\.Web[/\\]index\.js$/,
+            replacement: path.join(__dirname, 'output/Affjax.Node/index.js'),
           },
         ],
       }),
