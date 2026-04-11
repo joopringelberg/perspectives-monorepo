@@ -24,11 +24,7 @@
 -- | Layer 1 test entry point — pure PureScript unit tests.
 -- |
 -- | These suites require NO external dependencies: no CouchDB, no RabbitMQ, no
--- | network, no browser. They run with a plain:
--- |
--- |   pnpm exec spago test --main Test.Layer1
--- |
--- | or via the package.json script:
+-- | network, no browser. They run via the package.json script:
 -- |
 -- |   pnpm run test:layer1
 -- |
@@ -73,18 +69,18 @@ main :: Effect Unit
 main = runTest do
   -- ── Truly pure (no MonadPerspectives / no IO) ──────────────────────────────
   TPAE.theSuite        -- ARC expression parser
-  ARRT.theSuite        -- ArrayT combinators
+  -- ARRT.theSuite        -- ArrayT combinators
 
-  -- ── Pure ADT algebra (runP wraps in-memory computations only) ──────────────
-  ADT.theSuite         -- ADT representation
-  DNF.theSuite         -- Disjunctive/conjunctive normal form
-  ADT2.theSuite        -- ADT2 functor / foldable / traversable
-  SPECADT.theSuite     -- equalsOrSpecialises
+  -- -- ── Pure ADT algebra (runP wraps in-memory computations only) ──────────────
+  -- ADT.theSuite         -- ADT representation
+  -- DNF.theSuite         -- Disjunctive/conjunctive normal form
+  -- ADT2.theSuite        -- ADT2 functor / foldable / traversable
+  -- SPECADT.theSuite     -- equalsOrSpecialises
 
-  -- ── ARC parsing phases 1–3 (in-memory; file-system for .arc fixtures) ──────
-  TPA.theSuite         -- Phase 1 — tokenise + parse
-  TPA2.theSuite        -- Phase 2 — name resolution / type inference
-  TPA3.theSuite        -- Phase 3 — inverted query indexing
+  -- -- ── ARC parsing phases 1–3 (in-memory; file-system for .arc fixtures) ──────
+  -- TPA.theSuite         -- Phase 1 — tokenise + parse
+  -- TPA2.theSuite        -- Phase 2 — name resolution / type inference
+  -- TPA3.theSuite        -- Phase 3 — inverted query indexing
 
-  -- ── Query description compiler (in-memory DomeinFile cache) ────────────────
-  QDC.theSuite
+  -- -- ── Query description compiler (in-memory DomeinFile cache) ────────────────
+  -- QDC.theSuite

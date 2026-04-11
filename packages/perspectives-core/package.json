@@ -37,9 +37,9 @@
     "prebuild": "node ./scripts/transpile-model-deps.mjs --cache-dir ./.cache/sidecars --in-file ./scripts/modelDependencies_source.purs --out-file ./src/core/modelDependencies.purs || echo '[transpile] skipping (no versions or offline)'",
     "build": "pnpm run fmt && pnpm exec spago build && rollup -c",
     "build:node": "pnpm exec spago build && rollup -c rollup.node.config.js",
-    "test:layer1": "pnpm exec spago test --main Test.Layer1",
-    "test:layer2": "pnpm exec spago test --main Test.Layer2",
-    "test:layer3": "pnpm exec spago test --main Test.Layer3",
+    "test:layer1": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Layer1/index.js ROLLUP_OUTPUT=./dist/test.layer1.node.js rollup -c rollup.node.config.js && node dist/test.layer1.node.js",
+    "test:layer2": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Layer2/index.js ROLLUP_OUTPUT=./dist/test.layer2.node.js rollup -c rollup.node.config.js && node dist/test.layer2.node.js",
+    "test:layer3": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Layer3/index.js ROLLUP_OUTPUT=./dist/test.layer3.node.js rollup -c rollup.node.config.js && node dist/test.layer3.node.js",
     "test:node": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Main/index.js ROLLUP_OUTPUT=./dist/test.node.js rollup -c rollup.node.config.js && node dist/test.node.js",
     "modulemap": "node build-module-map.mjs > module-map.json"
   },
