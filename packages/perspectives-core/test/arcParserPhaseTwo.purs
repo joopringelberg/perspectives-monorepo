@@ -39,7 +39,7 @@ import Test.Unit.Assert (assert)
 import Parsing (ParseError)
 
 testDirectory :: String
-testDirectory = "/Users/joopringelberg/Code/perspectives-core/test"
+testDirectory = "test"
 
 evalPhaseTwo :: forall a. PhaseTwo a -> Aff (Either PerspectivesError a)
 -- evalPhaseTwo = unwrap <<< evalPhaseTwo'

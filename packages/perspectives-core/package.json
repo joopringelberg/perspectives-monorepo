@@ -37,6 +37,9 @@
     "prebuild": "node ./scripts/transpile-model-deps.mjs --cache-dir ./.cache/sidecars --in-file ./scripts/modelDependencies_source.purs --out-file ./src/core/modelDependencies.purs || echo '[transpile] skipping (no versions or offline)'",
     "build": "pnpm run fmt && pnpm exec spago build && rollup -c",
     "build:node": "pnpm exec spago build && rollup -c rollup.node.config.js",
+    "test:layer1": "pnpm exec spago test --main Test.Layer1",
+    "test:layer2": "pnpm exec spago test --main Test.Layer2",
+    "test:layer3": "pnpm exec spago test --main Test.Layer3",
     "test:node": "pnpm exec spago test --main Test.Main",
     "modulemap": "node build-module-map.mjs > module-map.json"
   },
