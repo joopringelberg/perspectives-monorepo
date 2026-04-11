@@ -1,0 +1,175 @@
+
+> perspectives-core@3.1.5 test:layer1 /Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core
+> pnpm exec spago build && ROLLUP_INPUT=./output/Test.Layer1/index.js ROLLUP_OUTPUT=./dist/test.layer1.node.js rollup -c rollup.node.config.js && node dist/test.layer1.node.js CHANGELOG.md LICENSES README.md accounts build-module-map.mjs commits.txt createPerspectivesLinks.sh design dist docs docsources excluded gendocs.sh module-map.json node_modules output package.json projectsetup.txt removeCouchdb rollup.config.js rollup.node.config.js scripts setupCouchdb spago.lock spago.yaml src 'stableIdMapping test.json' stableIdMapping.json 'technical readme.md' test test1.json test2.json
+
+- Suite: Perspectives.Parsing.Arc.Expression
+  ✓ Passed: SimpleStep: ArcIdentifier
+  ✓ Passed: SimpleStep: Binding
+  ✓ Passed: SimpleStep: Variable
+  ✓ Passed: UnaryStep: LogicalNot
+  ✓ Passed: FilterStep
+  ✓ Passed: CompoundStep on filter with parens
+  ✓ Passed: BinaryStep with ==
+  ✓ Passed: BinaryStep with different SimpleSteps
+  ✓ Passed: BinaryStep that fails on operator
+  ☠ Failed: Step on == with nested filter expression left because '(filter MyRole with ItsBooleanProp) == MyOtherRole' should be parsed as a a binary step with operator 'Equals'
+  ✓ Passed: Filter with compound criterium
+  ✓ Passed: Step on recursive binaryStep
+  ☠ Failed: Step on recursive binaryStep with last subexpression as filter because 'MyRole >> MyProp == filter MyRole with MyProp' should be parsed as a a binary step with operator 'Equals'
+  ✓ Passed: Step on unneccasary parens
+  ✓ Passed: Operator precedence on 'MyProp1 + MyProp2 * MyProp3'
+  ✓ Passed: Operator precedence on '(MyProp1 + MyProp2) * MyProp3'
+  ✓ Passed: number in equation
+  ✓ Passed: boolean
+  ✓ Passed: string
+  ☠ Failed: date because "1995-12-17T03:24:00" should be parsed as a (Date _ PDate ...)
+  ☠ Failed: date because '1995-12-17' should be parsed as a (Date _ PDate ...)
+  ☠ Failed: date in comparison because The right term should be '(Simple (Value _ PDate "1995-12-17"))'
+  ✓ Passed: SimpleStep: sum
+  ✓ Passed: Operator: >>=
+  ✓ Passed: sequenceStep
+  ✓ Passed: sequenceStep with non-existing sequenceFunction
+  ☠ Failed: sequenceStep with complex left side because 'MyRole >> binding >> MyProp >>= sum' should be parsed as a a Sequence
+  ✓ Passed: sequenceStep with complex left side
+  ☠ Failed: Assignment: remove because (ParseError "Expected 'role' or 'context' after 'remove'. " (Position { column: 1, index: 0, line: 1 }))
+  ☠ Failed: Assignment: createRole because (ParseError "Expected Expected remove, create, create_, move, bind, bind_, unbind, unbind_, delete, callEffect or callDestructiveEffect. " (Position { column: 1, index: 0, line: 1 }))
+  ☠ Failed: Assignment: createRole in an embedded context because (ParseError "Expected Expected remove, create, create_, move, bind, bind_, unbind, unbind_, delete, callEffect or callDestructiveEffect. " (Position { column: 1, index: 0, line: 1 }))
+  ✓ Passed: Assignment: move
+  ✓ Passed: Assignment: move to an embedded context
+  ✓ Passed: Assignment: bind
+  ✓ Passed: Assignment: bind in an embedded context
+  ✓ Passed: Assignment: bind with path as second term should fail
+  ✓ Passed: Assignment: propertyAssignment
+  ✓ Passed: Assignment: propertyAssignment for another role
+  ✓ Passed: Assignment: callEffect
+  ✓ Passed: callExternal
+
+9 tests failed:
+
+In "Perspectives.Parsing.Arc.Expression":
+  In "Assignment: createRole in an embedded context":
+Error: Error: (ParseError "Expected Expected remove, create, create_, move, bind, bind_, unbind, unbind_, delete, callEffect or callDestructiveEffect. " (Position { column: 1, index: 0, line: 1 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3257:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32529:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32583:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32946:160
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2447:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2791:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2267:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2502:22)
+
+In "Perspectives.Parsing.Arc.Expression":
+  In "Assignment: createRole":
+Error: Error: (ParseError "Expected Expected remove, create, create_, move, bind, bind_, unbind, unbind_, delete, callEffect or callDestructiveEffect. " (Position { column: 1, index: 0, line: 1 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3257:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32529:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32583:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32939:156
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2447:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2791:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2267:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2502:22)
+
+In "Perspectives.Parsing.Arc.Expression":
+  In "Assignment: remove":
+Error: Error: (ParseError "Expected 'role' or 'context' after 'remove'. " (Position { column: 1, index: 0, line: 1 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3257:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32529:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32583:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32932:152
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2447:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2791:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2267:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2502:22)
+
+In "Perspectives.Parsing.Arc.Expression":
+  In "sequenceStep with complex left side":
+Error: Error: 'MyRole >> binding >> MyProp >>= sum' should be parsed as a a Sequence
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3257:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32529:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32583:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32916:313
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2447:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2791:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2267:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2502:22)
+
+In "Perspectives.Parsing.Arc.Expression":
+  In "date in comparison":
+Error: Error: The right term should be '(Simple (Value _ PDate "1995-12-17"))'
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3257:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32529:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32583:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32856:180
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2447:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2791:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2267:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2502:22)
+
+In "Perspectives.Parsing.Arc.Expression":
+  In "date":
+Error: Error: '1995-12-17' should be parsed as a (Date _ PDate ...)
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3257:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32529:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32583:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32845:240
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2447:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2791:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2267:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2502:22)
+
+In "Perspectives.Parsing.Arc.Expression":
+  In "date":
+Error: Error: "1995-12-17T03:24:00" should be parsed as a (Date _ PDate ...)
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3257:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32529:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32583:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32838:243
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2447:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2791:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2267:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2502:22)
+
+In "Perspectives.Parsing.Arc.Expression":
+  In "Step on recursive binaryStep with last subexpression as filter":
+Error: Error: 'MyRole >> MyProp == filter MyRole with MyProp' should be parsed as a a binary step with operator 'Equals'
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3257:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32529:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32583:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32754:180
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2447:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2791:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2267:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2502:22)
+
+In "Perspectives.Parsing.Arc.Expression":
+  In "Step on == with nested filter expression left":
+Error: Error: '(filter MyRole with ItsBooleanProp) == MyOtherRole' should be parsed as a a binary step with operator 'Equals'
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3257:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32529:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32583:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:32715:173
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2447:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2791:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:864:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2267:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2502:22)
+
+ ELIFECYCLE  Command failed with exit code 1.

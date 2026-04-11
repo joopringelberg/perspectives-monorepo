@@ -30,7 +30,7 @@ import Parsing (ParseError(..))
 import Unsafe.Coerce (unsafeCoerce)
 
 testDirectory :: String
-testDirectory = "/Users/joopringelberg/Code/perspectives-core/test" 
+testDirectory = "test"
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc" do
