@@ -5,8 +5,9 @@ import Prelude
 import Control.Monad.Free (Free)
 import Data.Array (length)
 import Data.Either (Either(..))
-import Data.Maybe (isJust, isNothing)
+import Data.Maybe (Maybe(..), isJust, isNothing)
 import Effect.Class.Console (log, logShow)
+import Parsing (ParseError(..))
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Parsing.Arc.Expression (computationStep, operator, simpleStep, step, unaryStep)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), UnaryStep(..))
@@ -20,7 +21,6 @@ import Perspectives.Representation.Range (Range(..))
 import Perspectives.Utilities (prettyPrint)
 import Test.Unit (TestF, suite, suiteOnly, suiteSkip, test, testOnly, testSkip)
 import Test.Unit.Assert (assert)
-import Parsing (ParseError(..))
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.Expression" do
