@@ -69,10 +69,10 @@ main :: Effect Unit
 main = runTest do
   -- ── Truly pure (no MonadPerspectives / no IO) ──────────────────────────────
   TPAE.theSuite        -- ARC expression parser
-  -- ARRT.theSuite        -- ArrayT combinators
+  ARRT.theSuite        -- ArrayT combinators
 
   -- -- ── Pure ADT algebra (runP wraps in-memory computations only) ──────────────
-  -- ADT.theSuite         -- ADT representation
+  ADT.theSuite         -- ADT representation
   -- DNF.theSuite         -- Disjunctive/conjunctive normal form
   -- ADT2.theSuite        -- ADT2 functor / foldable / traversable
   -- SPECADT.theSuite     -- equalsOrSpecialises
