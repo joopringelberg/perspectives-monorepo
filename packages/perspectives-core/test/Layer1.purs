@@ -50,11 +50,6 @@ import Test.Parsing.Arc.Expression (theSuite) as TPAE
 -- Pure ArrayT combinator tests (no MonadPerspectives)
 import Test.ArrayT (theSuite) as ARRT
 
--- ADT algebra tests — use runP but only exercise pure in-memory computations
-import Test.Perspectives.Representation.ADT.DisjunctiveNormalForm (theSuite) as DNF
-import Test.Perspectives.Representation.ADT2 (theSuite) as ADT2
-import Test.Perspectives.Representation.ADT.SpecialisesADT (theSuite) as SPECADT
-
 -- Comprehensive unit tests for ExpandedADT, CNF, and ADT (with real assertions)
 import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTTESTS
 
@@ -73,14 +68,11 @@ main = runTest do
   TPAE.theSuite        -- ARC expression parser
   ARRT.theSuite        -- ArrayT combinators
 
-  -- -- ── Pure ADT algebra (runP wraps in-memory computations only) ──────────────
+  -- ── Pure ADT algebra (runP wraps in-memory computations only) ──────────────
   ADTTESTS.theSuite    -- ExpandedADT / CNF / ADT unit tests (with assertions)
-  -- DNF.theSuite         -- Disjunctive/conjunctive normal form
-  -- ADT2.theSuite        -- ADT2 functor / foldable / traversable
-  -- SPECADT.theSuite     -- equalsOrSpecialises
 
-  -- -- ── ARC parsing phases 1–3 (in-memory; file-system for .arc fixtures) ──────
-  -- TPA.theSuite         -- Phase 1 — tokenise + parse
+  -- ── ARC parsing phases 1–3 (in-memory; file-system for .arc fixtures) ──────
+  TPA.theSuite         -- Phase 1 — tokenise + parse
   -- TPA2.theSuite        -- Phase 2 — name resolution / type inference
   -- TPA3.theSuite        -- Phase 3 — inverted query indexing
 
