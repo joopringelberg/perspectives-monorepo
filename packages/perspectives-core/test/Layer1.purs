@@ -51,10 +51,12 @@ import Test.Parsing.Arc.Expression (theSuite) as TPAE
 import Test.ArrayT (theSuite) as ARRT
 
 -- ADT algebra tests — use runP but only exercise pure in-memory computations
-import Test.Representation.ADT (theSuite) as ADT
 import Test.Perspectives.Representation.ADT.DisjunctiveNormalForm (theSuite) as DNF
 import Test.Perspectives.Representation.ADT2 (theSuite) as ADT2
 import Test.Perspectives.Representation.ADT.SpecialisesADT (theSuite) as SPECADT
+
+-- Comprehensive unit tests for ExpandedADT, CNF, and ADT (with real assertions)
+import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTTESTS
 
 -- ARC parser phases 1–3 — use runP / runPhaseTwo' / runPhaseThree' but only
 -- perform in-memory AST transformations; no database access
@@ -72,7 +74,7 @@ main = runTest do
   ARRT.theSuite        -- ArrayT combinators
 
   -- -- ── Pure ADT algebra (runP wraps in-memory computations only) ──────────────
-  ADT.theSuite         -- ADT representation
+  ADTTESTS.theSuite    -- ExpandedADT / CNF / ADT unit tests (with assertions)
   -- DNF.theSuite         -- Disjunctive/conjunctive normal form
   -- ADT2.theSuite        -- ADT2 functor / foldable / traversable
   -- SPECADT.theSuite     -- equalsOrSpecialises
