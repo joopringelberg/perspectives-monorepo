@@ -61,6 +61,7 @@ import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTT
 -- ARC parser phases 1–3 — use runP / runPhaseTwo' / runPhaseThree' but only
 -- perform in-memory AST transformations; no database access
 import Test.Parsing.Arc (theSuite) as TPA
+import Test.Parsing.Arc.Syntax (theSuite) as TPAS
 import Test.Parsing.Arc.PhaseTwo (theSuite) as TPA2
 import Test.Parsing.Arc.PhaseThree (theSuite) as TPA3
 
@@ -80,7 +81,8 @@ main = runTest do
   -- SPECADT.theSuite     -- equalsOrSpecialises
 
   -- -- ── ARC parsing phases 1–3 (in-memory; file-system for .arc fixtures) ──────
-  -- TPA.theSuite         -- Phase 1 — tokenise + parse
+  TPAS.theSuite        -- Phase 1 — comprehensive non-expression syntax tests
+  -- TPA.theSuite         -- Phase 1 — tokenise + parse (older, mostly out of date)
   -- TPA2.theSuite        -- Phase 2 — name resolution / type inference
   -- TPA3.theSuite        -- Phase 3 — inverted query indexing
 
