@@ -1,0 +1,274 @@
+[[perspectives]]
+= Perspectives
+
+A _perspective_ defines what a user role can see and do with respect to other roles and their properties. Every perspective has a _subject_ (the user role that holds the perspective) and an _object_ (the role being observed). Perspectives are declared inside role declarations or inside <<state_declarations,state declarations>>.
+
+[[perspectives-declaration]]
+== Declaration syntax
+
+There are two forms of a perspective declaration.
+
+=== `perspective on`
+
+[source]
+----
+perspective on <expression>
+  [<perspectivePart>]*
+----
+
+The `perspective on` form specifies the *object* of the perspective: the role (or computed set of roles) that the current user role can see and act upon. The subject of the perspective is the enclosing user role.
+
+`<expression>` is a query expression that yields the object role instances. It may be a simple role name or a more complex path expression.
+
+Example:
+[source, arc]
+----
+user Manager = sys:Me
+  perspective on Meeting
+    only (Create, Fill)
+    props (Title, Date) verbs (Consult, SetPropertyValue)
+----
+
+=== `perspective of`
+
+[source]
+----
+perspective of <SubjectRoleName>
+  [<perspectivePart>]*
+----
+
+The `perspective of` form specifies the *subject* of the perspective. It is used inside <<state_declarations,state declarations>> and <<action-declaration,actions>> to name the user role for which the perspective applies, when that role is not the directly enclosing role.
+
+Example:
+[source, arc]
+----
+state Active = exists Participant
+  perspective of Participant
+    perspective on Tasks
+      props (Description) verbs (Consult)
+----
+
+[[perspectives-parts]]
+== Perspective parts
+
+Each perspective declaration may contain zero or more _perspective parts_, each on its own indented line.
+
+=== `defaults`
+
+[source]
+----
+defaults
+----
+
+Shorthand for granting all role verbs (`all roleverbs`) and all property verbs (`props verbs (Consult, SetPropertyValue, AddPropertyValue, RemovePropertyValue, DeleteProperty)`) on all properties. Equivalent to combining `all roleverbs` and `props`.
+
+Example:
+[source, arc]
+----
+perspective on Thingrole
+  defaults
+----
+
+=== Role verbs
+
+Role verbs control the structural operations a user role may perform on the object role's instances.
+
+[source]
+----
+only (<RoleVerb> {, <RoleVerb>}+)
+except (<RoleVerb> {, <RoleVerb>}+)
+all roleverbs
+no roleverbs
+----
+
+`only (...)` grants exactly the listed verbs. `except (...)` grants all verbs _except_ the listed ones. `all roleverbs` grants every role verb. `no roleverbs` grants none.
+
+[[role-verbs-table]]
+.Available role verbs
+[cols="1,3"]
+|===
+| Verb | Meaning
+
+| `Create`
+| Create a new instance of the object role.
+
+| `Fill`
+| Fill an existing (unfilled) instance of the object role with a filler role.
+
+| `CreateAndFill`
+| Create a new object role instance and fill it in a single operation.
+
+| `Remove`
+| Remove an instance from the object role (removes it from its context, but does not delete the underlying resource).
+
+| `RemoveFiller`
+| Detach the filler from an object role instance, without deleting either.
+
+| `RemoveContext`
+| Remove a context role instance together with the context it represents.
+
+| `Delete`
+| Permanently delete an object role instance and its underlying resource.
+
+| `DeleteContext`
+| Permanently delete a context role instance together with the context it represents.
+
+| `Unbind`
+| Detach a role from being bound as filler in another role.
+
+| `Move`
+| Move a role instance from one context to another.
+|===
+
+Example:
+[source, arc]
+----
+perspective on Tasks
+  only (Create, Fill, Remove)
+----
+
+=== Property verbs
+
+Property verbs determine what the user role may do with the object role's properties.
+
+[source]
+----
+props [(<PropertyName> {, <PropertyName>}+)] [verbs (<PropertyVerb> {, <PropertyVerb>}+)]
+view <ViewName> [verbs (<PropertyVerb> {, <PropertyVerb>}+)]
+all props [verbs (<PropertyVerb> {, <PropertyVerb>}+)]
+----
+
+When `props` is written without a list of property names, it applies to _all_ properties of the object role. `view <ViewName>` restricts the set of accessible properties to those in the named view.
+
+[[property-verbs-table]]
+.Available property verbs
+[cols="1,3"]
+|===
+| Verb | Meaning
+
+| `Consult`
+| Read the current value of the property.
+
+| `SetPropertyValue`
+| Replace the current value with a new value (overwrites).
+
+| `AddPropertyValue`
+| Add a value to a relational (multi-valued) property.
+
+| `RemovePropertyValue`
+| Remove a specific value from a relational property.
+
+| `DeleteProperty`
+| Delete all values of the property from the role instance.
+|===
+
+Multiple `props` clauses may appear in a single perspective to grant different verbs to different properties:
+
+[source, arc]
+----
+perspective on Task
+  props (Title) verbs (Consult, SetPropertyValue)
+  props (AssignedTo) verbs (Consult)
+----
+
+=== `selfonly`
+
+[source]
+----
+selfonly
+----
+
+Restricts the object role so that each instance can only see (and act upon) _its own_ instance. Prevents synchronisation with peers.
+
+Example:
+[source, arc]
+----
+perspective on MyData
+  selfonly
+  props (PrivateNote) verbs (Consult, SetPropertyValue)
+----
+
+=== `authoronly`
+
+[source]
+----
+authoronly
+----
+
+Restricts property access so that only the author of a property value can see that value.
+
+=== State-qualified perspective parts
+
+Perspective parts may be restricted to apply only within a specific <<state_declarations,state>> using `in state`:
+
+[source]
+----
+in [subject | object | context] state [<StateName>]
+  [<perspectivePart>]*
+----
+
+When no qualifier (`subject`, `object`, `context`) is given, the state is looked up from the most recently entered state context. When a qualifier is given, the state is resolved relative to the subject role, object role, or containing context respectively.
+
+Example:
+[source, arc]
+----
+perspective on Order
+  props (Status) verbs (Consult)
+  in state Processing
+    props (TrackingNumber) verbs (Consult)
+  in object state Delivered
+    props (DeliveryDate) verbs (Consult)
+----
+
+=== `on entry` and `on exit` within a perspective
+
+See <<state_declarations-transitions,State transitions>> for the full syntax of `on entry` and `on exit`. When used inside a perspective, they attach automatic effects or notifications to state transitions of the subject, object, or context.
+
+=== Nested perspectives
+
+A `perspective on` or `perspective of` may appear nested inside another `perspective on` block, allowing a user role to hold perspectives on multiple objects within a single declaration block.
+
+[source, arc]
+----
+user Manager = sys:Me
+  perspective on Team
+    only (Create, Fill)
+    props (Name) verbs (Consult)
+    perspective on Team >> Tasks
+      props (Title, Status) verbs (Consult, SetPropertyValue)
+----
+
+=== `action` within a perspective
+
+User-triggered <<action-declaration,actions>> may be declared inside a perspective block. The action applies to the perspective's current subject and object:
+
+[source, arc]
+----
+perspective on Reports
+  props (Title) verbs (Consult, SetPropertyValue)
+  action MarkComplete
+    Status = "complete" for origin
+----
+
+See <<action-declaration>> for the full action declaration syntax.
+
+[[perspectives-context-perspective]]
+== Context perspectives (perspective of)
+
+When a perspective block contains no object (`perspective of <SubjectRole>` at the top level of a context's state), the action applies to the _context_ rather than a specific object role. This is called a _context action_.
+
+[source, arc]
+----
+user Organiser = sys:Me
+  action CloseEvent
+    Status = "closed" for extern
+----
+
+[[perspectives-placement]]
+== Where perspectives may appear
+
+Perspectives may be declared:
+
+* Directly inside a `user` role declaration.
+* Inside a <<state_declarations,state declaration>> nested in a role or context, using `perspective of` to specify the subject.
+* Inside an `in state` block nested in an existing `perspective on` block.
