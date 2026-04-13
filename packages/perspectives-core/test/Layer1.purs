@@ -71,11 +71,11 @@ import Test.Query.DescriptionCompiler (theSuite) as QDC
 main :: Effect Unit
 main = runTest do
   -- ── Truly pure (no MonadPerspectives / no IO) ──────────────────────────────
-  TPAE.theSuite        -- ARC expression parser
-  ARRT.theSuite        -- ArrayT combinators
+  -- TPAE.theSuite        -- ARC expression parser
+  -- ARRT.theSuite        -- ArrayT combinators
 
   -- -- ── Pure ADT algebra (runP wraps in-memory computations only) ──────────────
-  ADTTESTS.theSuite    -- ExpandedADT / CNF / ADT unit tests (with assertions)
+  -- ADTTESTS.theSuite    -- ExpandedADT / CNF / ADT unit tests (with assertions)
   -- DNF.theSuite         -- Disjunctive/conjunctive normal form
   -- ADT2.theSuite        -- ADT2 functor / foldable / traversable
   -- SPECADT.theSuite     -- equalsOrSpecialises

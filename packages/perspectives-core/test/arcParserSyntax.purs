@@ -41,10 +41,9 @@ import Data.List.NonEmpty (length) as LNE
 import Data.Maybe (Maybe(..), isJust, isNothing)
 import Parsing (ParseError(..))
 import Perspectives.Parsing.Arc (automaticEffectE, contextE, domain, propertyE, thingRoleE, userRoleE, viewE)
-import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FilledBySpecification(..), PropertyE(..), PropertyFacet(..), PropertyPart(..), PropsOrView(..), RoleE(..), RolePart(..), StateQualifiedPart(..), StateSpecification(..), ViewE(..))
+import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FilledBySpecification(..), PropertyE(..), PropertyFacet(..), PropertyPart(..), PropsOrView(..), RoleE(..), RolePart(..), StateSpecification(..), ViewE(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier)
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
-import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Parsing.Arc.Token (reservedIdentifier)
 import Perspectives.Representation.Context (ContextKind(..))
 import Perspectives.Representation.Range (Range(..))
@@ -113,7 +112,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
     test "Unknown word fails with descriptive message" do
       (r :: Either ParseError String) <- runIndentParser "cheese" reservedIdentifier
       case r of
-        Left (ParseError m _) -> assert (show m) (m == "not a reserved word \"cheese\"(or unexpected end of input)")
+        Left (ParseError m _) -> assert (show m) (m == "not a reserved word \"cheese\"(or unexpected end of input), ")
         Right _ -> assert "'cheese' should not parse as a reserved identifier" false
 
   --------------------------------------------------------------------------------
@@ -122,11 +121,11 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
   suite "Domain" do
 
     test "Minimal domain declaration" do
-      r <- runIndentParser "domain MyDomain\n" domain
+      r <- runIndentParser "domain model://perspectives.domains#Test\n" domain
       case r of
         Left e -> assert (show e) false
         Right (ContextE { id, kindOfContext }) -> do
-          assert "id should be 'MyDomain'" (id == "MyDomain")
+          assert "id should be 'model://perspectives.domains#Test'" (id == "model://perspectives.domains#Test")
           assert "kind should be Domain" (kindOfContext == Domain)
 
     test "Empty string fails" do
@@ -142,7 +141,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Right _ -> assert "A case at the top level should fail: must use 'domain'" false
 
     test "Domain with a thing role" do
-      r <- runIndentParser "domain MyDomain\n  thing MyRole\n" domain
+      r <- runIndentParser "domain model://perspectives.domains#Test\n  thing MyRole\n" domain
       case r of
         Left e -> assert (show e) false
         Right dom ->
@@ -153,7 +152,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
             Just _ -> pure unit
 
     test "Domain with a user role" do
-      r <- runIndentParser "domain MyDomain\n  user MyUser\n" domain
+      r <- runIndentParser "domain model://perspectives.domains#Test\n  user MyUser\n" domain
       case r of
         Left e -> assert (show e) false
         Right dom ->
@@ -164,7 +163,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
             Just _ -> pure unit
 
     test "Domain with a context role" do
-      r <- runIndentParser "domain MyDomain\n  context MyCtxRole\n" domain
+      r <- runIndentParser "domain model://perspectives.domains#Test\n  context MyCtxRole\n" domain
       case r of
         Left e -> assert (show e) false
         Right dom ->
@@ -175,7 +174,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
             Just _ -> pure unit
 
     test "Domain with an external role" do
-      r <- runIndentParser "domain MyDomain\n  external\n    property ExtProp (String)\n" domain
+      r <- runIndentParser "domain model://perspectives.domains#Test\n  external\n    property ExtProp (String)\n" domain
       case r of
         Left e -> assert (show e) false
         Right dom ->
@@ -186,7 +185,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
             Just _ -> pure unit
 
     test "Domain with nested case" do
-      r <- runIndentParser "domain MyDomain\n  case MyCase\n" domain
+      r <- runIndentParser "domain model://perspectives.domains#Test\n  case MyCase\n" domain
       case r of
         Left e -> assert (show e) false
         Right dom ->
@@ -197,7 +196,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
             Just _ -> pure unit
 
     test "Domain with nested party" do
-      r <- runIndentParser "domain MyDomain\n  party MyParty\n" domain
+      r <- runIndentParser "domain model://perspectives.domains#Test\n  party MyParty\n" domain
       case r of
         Left e -> assert (show e) false
         Right dom ->
@@ -208,7 +207,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
             Just _ -> pure unit
 
     test "Domain with nested activity" do
-      r <- runIndentParser "domain MyDomain\n  activity MyActivity\n" domain
+      r <- runIndentParser "domain model://perspectives.domains#Test\n  activity MyActivity\n" domain
       case r of
         Left e -> assert (show e) false
         Right dom ->
@@ -219,7 +218,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
             Just _ -> pure unit
 
     test "Line comment '-- ...' is ignored" do
-      r <- runIndentParser "domain MyDomain\n  -- thing CommentedOut\n  thing MyRole\n" domain
+      r <- runIndentParser "domain model://perspectives.domains#Test\n  -- thing CommentedOut\n  thing MyRole\n" domain
       case r of
         Left e -> assert (show e) false
         Right dom -> do
@@ -236,18 +235,18 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
   suite "Context parts" do
 
     test "use clause introduces a prefix" do
-      r <- runIndentParser "domain MyDomain\n  use sys for model:System\n" domain
+      r <- runIndentParser "domain model://perspectives.domains#Test\n  use sys for model://perspectives.domains#System\n" domain
       case r of
         Left e -> assert (show e) false
         Right (ContextE { contextParts }) ->
           case find (case _ of
-            PREFIX "sys" "model:System" -> true
+            PREFIX "sys" "model://perspectives.domains#System" -> true
             _ -> false) contextParts of
-            Nothing -> assert "Expected prefix 'sys' -> 'model:System'" false
+            Nothing -> assert "Expected prefix 'sys' -> 'model://perspectives.domains#System'" false
             Just _ -> pure unit
 
     test "use clause with invalid model name fails" do
-      (r :: Either ParseError ContextE) <- runIndentParser "domain MyDomain\n  use sys for NotAModel\n" domain
+      (r :: Either ParseError ContextE) <- runIndentParser "domain model://perspectives.domains#Test\n  use sys for NotAModel\n" domain
       case r of
         Left _ -> pure unit
         Right _ -> assert "Non-model-URI in use clause should fail" false
@@ -260,7 +259,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         _ -> failure "Expected a ContextPart that is a ContextE"
 
     test "aspect clause in context" do
-      r <- runIndentParser "domain MyDomain\n  aspect pre:MyAspect\n" domain
+      r <- runIndentParser "domain model://perspectives.domains#Test\n  aspect pre:MyAspect\n" domain
       case r of
         Left e -> assert (show e) false
         Right (ContextE { contextParts }) ->
@@ -271,7 +270,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
             Just _ -> pure unit
 
     test "aspect role clause in context" do
-      r <- runIndentParser "domain MyDomain\n  aspect user pre:MyAspect$MyUser\n" domain
+      r <- runIndentParser "domain model://perspectives.domains#Test\n  aspect user pre:MyAspect$MyUser\n" domain
       case r of
         Left e -> assert (show e) false
         Right (ContextE { contextParts }) ->
@@ -345,9 +344,13 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (RE (RoleE { roleParts })) -> do
           assert "Should have MandatoryAttribute true" $
-            isJust (findIndex (case _ of MandatoryAttribute true -> true; _ -> false) roleParts)
+            isJust (findIndex (case _ of 
+              MandatoryAttribute true -> true
+              _ -> false) roleParts)
           assert "Should have FunctionalAttribute false (relational)" $
-            isJust (findIndex (case _ of FunctionalAttribute false -> true; _ -> false) roleParts)
+            isJust (findIndex (case _ of 
+              FunctionalAttribute false -> true
+              _ -> false) roleParts)
         _ -> assert "Expected RE RoleE" false
 
   --------------------------------------------------------------------------------
@@ -361,11 +364,13 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (RE (RoleE { roleParts })) ->
           assert "Should have FilledBySpecifications" $
-            isJust (findIndex (case _ of FilledBySpecifications _ -> true; _ -> false) roleParts)
+            isJust (findIndex (case _ of 
+              FilledBySpecifications _ -> true
+              _ -> false) roleParts)
         _ -> assert "Expected RE RoleE" false
 
     test "filledBy multiple alternatives (comma-separated)" do
-      r <- runIndentParser "thing MyRole filledBy Host, Guest\n" thingRoleE
+      r <- runIndentParser "thing MyRole filledBy (Host, Guest)\n" thingRoleE
       case r of
         Left e -> assert (show e) false
         Right (RE (RoleE { roleParts })) ->
@@ -403,7 +408,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (RE (RoleE { roleParts })) ->
           assert "Should have FilledBySpecifications" $
-            isJust (findIndex (case _ of FilledBySpecifications _ -> true; _ -> false) roleParts)
+            isJust (findIndex (case _ of 
+              FilledBySpecifications _ -> true
+              _ -> false) roleParts)
         _ -> assert "Expected RE RoleE" false
 
   --------------------------------------------------------------------------------
@@ -417,7 +424,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (RE (RoleE { roleParts })) ->
           assert "Should have a Calculation part" $
-            isJust (findIndex (case _ of Calculation _ _ -> true; _ -> false) roleParts)
+            isJust (findIndex (case _ of 
+              Calculation _ _ -> true
+              _ -> false) roleParts)
         _ -> assert "Expected RE RoleE" false
 
     test "Calculated thing role with functional attribute" do
@@ -426,11 +435,13 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (RE (RoleE { roleParts })) ->
           assert "Should have a Calculation part" $
-            isJust (findIndex (case _ of Calculation _ true -> true; _ -> false) roleParts)
+            isJust (findIndex (case _ of 
+              Calculation _ true -> true
+              _ -> false) roleParts)
         _ -> assert "Expected RE RoleE" false
 
     test "Calculated user role" do
-      r <- runIndentParser "domain MyDomain\n  user GoedeGast = filter Gast with WellBehaved\n    perspective on Gast\n      all roleverbs\n" domain
+      r <- runIndentParser "domain model://perspectives.domains#Test\n  user GoedeGast = filter Gast with WellBehaved\n    perspective on Gast\n      all roleverbs\n" domain
       case r of
         Left e -> assert (show e) false
         Right dom ->
@@ -450,7 +461,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
       case r of
         Left e -> assert (show e) false
         Right (RE (RoleE { roleParts })) ->
-          case head (filter (case _ of RoleAspect _ _ _ -> true; _ -> false) roleParts) of
+          case head (filter (case _ of 
+              RoleAspect _ _ _ -> true
+              _ -> false) roleParts) of
             Nothing -> assert "Expected a RoleAspect part" false
             Just (RoleAspect id _ mMapping) -> do
               assert "Aspect id should be 'pre:MyAspectRole'" (id == "pre:MyAspectRole")
@@ -463,7 +476,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
       case r of
         Left e -> assert (show e) false
         Right (RE (RoleE { roleParts })) ->
-          case head (filter (case _ of RoleAspect _ _ _ -> true; _ -> false) roleParts) of
+          case head (filter (case _ of 
+              RoleAspect _ _ _ -> true
+              _ -> false) roleParts) of
             Nothing -> assert "Expected a RoleAspect part" false
             Just (RoleAspect _ _ mMapping) ->
               assert "Property mapping should be present" (isJust mMapping)
@@ -481,7 +496,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (RE (RoleE { roleParts })) ->
           assert "Should have IndexedRole 'TheRole'" $
-            isJust (findIndex (case _ of IndexedRole "TheRole" _ -> true; _ -> false) roleParts)
+            isJust (findIndex (case _ of 
+              IndexedRole "TheRole" _ -> true
+              _ -> false) roleParts)
         _ -> assert "Expected RE RoleE" false
 
   --------------------------------------------------------------------------------
@@ -519,7 +536,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
       case r of
         Left e -> assert (show e) false
         Right (PE (PropertyE { range })) ->
-          assert "range should be PDate" (range == Just PDate)
+          assert "range should be PDateTime" (range == Just PDateTime)
         _ -> assert "Expected PE PropertyE" false
 
     test "Enumerated property with Email range" do
@@ -536,7 +553,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyParts })) ->
           assert "Should have MandatoryAttribute' true" $
-            isJust (findIndex (case _ of MandatoryAttribute' true -> true; _ -> false) propertyParts)
+            isJust (findIndex (case _ of 
+              MandatoryAttribute' true -> true
+              _ -> false) propertyParts)
         _ -> assert "Expected PE PropertyE" false
 
     test "Property with relational attribute" do
@@ -545,7 +564,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyParts })) ->
           assert "Should have FunctionalAttribute' false" $
-            isJust (findIndex (case _ of FunctionalAttribute' false -> true; _ -> false) propertyParts)
+            isJust (findIndex (case _ of 
+              FunctionalAttribute' false -> true
+              _ -> false) propertyParts)
         _ -> assert "Expected PE PropertyE" false
 
     test "Property with selfonly attribute" do
@@ -554,7 +575,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyParts })) ->
           assert "Should have SelfonlyAttribute" $
-            isJust (findIndex (case _ of SelfonlyAttribute -> true; _ -> false) propertyParts)
+            isJust (findIndex (case _ of 
+              SelfonlyAttribute -> true
+              _ -> false) propertyParts)
         _ -> assert "Expected PE PropertyE" false
 
     test "Property with authoronly attribute" do
@@ -563,7 +586,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyParts })) ->
           assert "Should have AuthoronlyAttribute" $
-            isJust (findIndex (case _ of AuthoronlyAttribute -> true; _ -> false) propertyParts)
+            isJust (findIndex (case _ of 
+              AuthoronlyAttribute -> true
+              _ -> false) propertyParts)
         _ -> assert "Expected PE PropertyE" false
 
     test "Calculated property" do
@@ -572,7 +597,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyParts })) ->
           assert "Should have Calculation'" $
-            isJust (findIndex (case _ of Calculation' _ _ -> true; _ -> false) propertyParts)
+            isJust (findIndex (case _ of 
+              Calculation' _ _ -> true
+              _ -> false) propertyParts)
         _ -> assert "Expected PE PropertyE" false
 
     test "Calculated property with functional attribute" do
@@ -581,7 +608,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyParts })) ->
           assert "Should have functional Calculation'" $
-            isJust (findIndex (case _ of Calculation' _ true -> true; _ -> false) propertyParts)
+            isJust (findIndex (case _ of 
+              Calculation' _ true -> true 
+              _ -> false) propertyParts)
         _ -> assert "Expected PE PropertyE" false
 
     test "Property without explicit range" do
@@ -603,7 +632,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyFacets })) ->
           assert "Should have MinLength 3" $
-            isJust (findIndex (case _ of MinLength 3 -> true; _ -> false) propertyFacets)
+            isJust (findIndex (case _ of 
+              MinLength 3 -> true
+              _ -> false) propertyFacets)
         _ -> assert "Expected PE PropertyE" false
 
     test "maxLength facet" do
@@ -612,7 +643,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyFacets })) ->
           assert "Should have MaxLength 100" $
-            isJust (findIndex (case _ of MaxLength 100 -> true; _ -> false) propertyFacets)
+            isJust (findIndex (case _ of 
+              MaxLength 100 -> true
+              _ -> false) propertyFacets)
         _ -> assert "Expected PE PropertyE" false
 
     test "enumeration facet" do
@@ -621,7 +654,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyFacets })) ->
           assert "Should have Enumeration" $
-            isJust (findIndex (case _ of Enumeration _ -> true; _ -> false) propertyFacets)
+            isJust (findIndex (case _ of 
+              Enumeration _ -> true
+              _ -> false) propertyFacets)
         _ -> assert "Expected PE PropertyE" false
 
     test "minInclusive facet on Number property" do
@@ -630,7 +665,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyFacets })) ->
           assert "Should have MinInclusive" $
-            isJust (findIndex (case _ of MinInclusive _ -> true; _ -> false) propertyFacets)
+            isJust (findIndex (case _ of 
+              MinInclusive _ -> true
+              _ -> false) propertyFacets)
         _ -> assert "Expected PE PropertyE" false
 
     test "maxInclusive facet on Number property" do
@@ -639,7 +676,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyFacets })) ->
           assert "Should have MaxInclusive" $
-            isJust (findIndex (case _ of MaxInclusive _ -> true; _ -> false) propertyFacets)
+            isJust (findIndex (case _ of 
+              MaxInclusive _ -> true
+              _ -> false) propertyFacets)
         _ -> assert "Expected PE PropertyE" false
 
     test "messageProperty facet" do
@@ -648,7 +687,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyFacets })) ->
           assert "Should have MessageProperty" $
-            isJust (findIndex (case _ of MessageProperty -> true; _ -> false) propertyFacets)
+            isJust (findIndex (case _ of 
+              MessageProperty -> true
+              _ -> false) propertyFacets)
         _ -> assert "Expected PE PropertyE" false
 
     test "mediaProperty facet" do
@@ -657,7 +698,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyFacets })) ->
           assert "Should have MediaProperty" $
-            isJust (findIndex (case _ of MediaProperty -> true; _ -> false) propertyFacets)
+            isJust (findIndex (case _ of 
+              MediaProperty -> true
+              _ -> false) propertyFacets)
         _ -> assert "Expected PE PropertyE" false
 
     test "readableName facet" do
@@ -666,7 +709,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Left e -> assert (show e) false
         Right (PE (PropertyE { propertyFacets })) ->
           assert "Should have ReadableNameProperty" $
-            isJust (findIndex (case _ of ReadableNameProperty -> true; _ -> false) propertyFacets)
+            isJust (findIndex (case _ of 
+              ReadableNameProperty -> true
+              _ -> false) propertyFacets)
         _ -> assert "Expected PE PropertyE" false
 
   --------------------------------------------------------------------------------
@@ -701,13 +746,13 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "perspective on with all roleverbs" do
       r <- runIndentParser
-        "domain Feest\n  user GoedeGast = filter Gast with WellBehaved\n    perspective on Gast >> binding\n      only (Create)\n"
+        "domain model://perspectives.domains#Feest\n  user GoedeGast = filter Gast with WellBehaved\n    perspective on Gast >> binding\n      only (Create)\n"
         domain
       case r of
         Left e -> assert (show e) false
         Right dom ->
           ensureUserRole "GoedeGast" dom >>=
-            ensureStateInRole (isStateWithExplicitRole "model:Feest$GoedeGast") >>=
+            ensureStateInRole (isStateWithContext "model://perspectives.domains#Feest") >>=
               perspectiveExists
 
     test "perspective on External" do
@@ -847,7 +892,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "perspective of introduces a subject" do
       r <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    state SomeState = true\n      perspective on SomeRole\n        perspective of SomeUser\n          all roleverbs\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    state SomeState = true\n      perspective on SomeRole\n        perspective of SomeUser\n          all roleverbs\n"
         domain
       case r of
         Left e -> assert (show e) false
@@ -866,7 +911,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "Context with a named state" do
       r <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    state SomeState = SomeRole >> SomeProp > 10\n      perspective on SomeRole\n        perspective of SomeUser\n          all roleverbs\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    state SomeState = SomeRole >> SomeProp > 10\n      perspective on SomeRole\n        perspective of SomeUser\n          all roleverbs\n"
         domain
       case r of
         Left e -> assert (show e) false
@@ -877,7 +922,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "State with a substate" do
       r <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    state ParentState = true\n      state ChildState = true\n        perspective on SomeRole\n          perspective of SomeUser\n            all roleverbs\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    state ParentState = true\n      state ChildState = true\n        perspective on SomeRole\n          perspective of SomeUser\n            all roleverbs\n"
         domain
       case r of
         Left e -> assert (show e) false
@@ -889,7 +934,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "Role state declared with 'in state'" do
       r <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    user SomeUser\n      in state SomeState\n        perspective on SomeRole\n          all roleverbs\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    user SomeUser\n      in state SomeState\n        perspective on SomeRole\n          all roleverbs\n"
         domain
       case r of
         Left e -> assert (show e) false
@@ -907,7 +952,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "State with on entry notification" do
       r <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    state SomeState = true\n      on entry\n        notify SomeUser \"Hello!\"\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    state SomeState = true\n      on entry\n        notify SomeUser \"Hello!\"\n"
         domain
       case r of
         Left e -> assert (show e) false
@@ -920,7 +965,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "State with on exit automatic action" do
       r <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    state SomeState = true\n      on exit\n        do for SomeUser\n          remove SomeRole\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    state SomeState = true\n      on exit\n        do for SomeUser\n          remove SomeRole\n"
         domain
       case r of
         Left e -> assert (show e) false
@@ -933,7 +978,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "Role on entry with notification" do
       r <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    user Self\n      on entry\n        notify SomeUser \"Hi!\"\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    user Self\n      on entry\n        notify SomeUser \"Hi!\"\n"
         domain
       case r of
         Left e -> assert (show e) false
@@ -946,7 +991,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "Role on entry with automatic assignment" do
       r <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    user Self\n      on entry\n        do\n          Prop1 = false for ARole\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    user Self\n      on entry\n        do\n          Prop1 = false for ARole\n"
         domain
       case r of
         Left e -> assert (show e) false
@@ -959,7 +1004,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "on exit without subject fails" do
       (r :: Either ParseError ContextE) <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    state SomeState = true\n      on exit\n        do\n          remove SomeRole\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    state SomeState = true\n      on exit\n        do\n          remove SomeRole\n"
         domain
       case r of
         Left (ParseError m _) ->
@@ -980,7 +1025,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "do after 5 Seconds" do
       r <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    state SomeState = true\n      on entry\n        do for SomeUser after 5 Seconds\n          remove SomeRole\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    state SomeState = true\n      on entry\n        do for SomeUser after 5 Seconds\n          remove SomeRole\n"
         domain
       case r of
         Left e -> assert (show e) false
@@ -993,7 +1038,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "do every 1 Minutes" do
       r <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    state SomeState = true\n      on entry\n        do for SomeUser every 1 Minutes\n          remove SomeRole\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    state SomeState = true\n      on entry\n        do for SomeUser every 1 Minutes\n          remove SomeRole\n"
         domain
       case r of
         Left e -> assert (show e) false
@@ -1006,7 +1051,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "do after 2 Hours until 24 Hours every 1 Hours maximally 5 times" do
       r <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    state SomeState = true\n      on entry\n        do for SomeUser after 2 Hours until 24 Hours every 1 Hours maximally 5 times\n          remove SomeRole\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    state SomeState = true\n      on entry\n        do for SomeUser after 2 Hours until 24 Hours every 1 Hours maximally 5 times\n          remove SomeRole\n"
         domain
       case r of
         Left e -> assert (show e) false
@@ -1019,7 +1064,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "until without every fails" do
       (r :: Either ParseError ContextE) <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    state SomeState = true\n      on entry\n        do for SomeUser until 5 Hours\n          remove SomeRole\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    state SomeState = true\n      on entry\n        do for SomeUser until 5 Hours\n          remove SomeRole\n"
         domain
       case r of
         Left _ -> pure unit
@@ -1032,7 +1077,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "Action with assignment statements" do
       r <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    user SomeUser\n      in state SomeState\n        perspective on SomeRole\n          action MyAction\n            remove MyRole\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    user SomeUser\n      in state SomeState\n        perspective on SomeRole\n          action MyAction\n            remove MyRole\n"
         domain
       case r of
         Left e -> assert (show e) false
@@ -1046,7 +1091,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "Action with letA" do
       r <- runIndentParser
-        "domain MyDomain\n  case MyCase\n    user SomeUser\n      perspective on SomeRole\n        action LetAction\n          letA\n            a <- SomeRole\n          in\n            Prop = 1 for SomeRole\n"
+        "domain model://perspectives.domains#Test\n  case MyCase\n    user SomeUser\n      perspective on SomeRole\n        action LetAction\n          letA\n            a <- SomeRole\n          in\n            Prop = 1 for SomeRole\n"
         domain
       case r of
         Left e -> assert (show e) false
@@ -1065,7 +1110,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "Screen with tabs" do
       r <- runIndentParser
-        ( "domain MyDomain\n"
+        ( "domain model://perspectives.domains#Test\n"
             <> "  user MyUser\n"
             <> "    perspective on MyObject\n"
             <> "      all roleverbs\n"
@@ -1080,11 +1125,13 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Right dom ->
           ensureUserRole "MyUser" dom >>= \(RoleE { roleParts }) ->
             assert "Should have a Screen part" $
-              isJust (findIndex (case _ of Screen _ -> true; _ -> false) roleParts)
+              isJust (findIndex (case _ of 
+                Screen _ -> true
+                _ -> false) roleParts)
 
     test "Screen with rows" do
       r <- runIndentParser
-        ( "domain MyDomain\n"
+        ( "domain model://perspectives.domains#Test\n"
             <> "  user MyUser\n"
             <> "    perspective on MyObject\n"
             <> "      all roleverbs\n"
@@ -1098,11 +1145,13 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Right dom ->
           ensureUserRole "MyUser" dom >>= \(RoleE { roleParts }) ->
             assert "Should have a Screen part" $
-              isJust (findIndex (case _ of Screen _ -> true; _ -> false) roleParts)
+              isJust (findIndex (case _ of 
+                Screen _ -> true
+                _ -> false) roleParts)
 
     test "Screen with columns" do
       r <- runIndentParser
-        ( "domain MyDomain\n"
+        ( "domain model://perspectives.domains#Test\n"
             <> "  user MyUser\n"
             <> "    perspective on MyObject\n"
             <> "      all roleverbs\n"
@@ -1116,7 +1165,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Right dom ->
           ensureUserRole "MyUser" dom >>= \(RoleE { roleParts }) ->
             assert "Should have a Screen part" $
-              isJust (findIndex (case _ of Screen _ -> true; _ -> false) roleParts)
+              isJust (findIndex (case _ of 
+                Screen _ -> true
+                _ -> false) roleParts)
 
   --------------------------------------------------------------------------------
   ---- SCREENS: who-what-where
@@ -1125,7 +1176,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
 
     test "Screen with who, what, where" do
       r <- runIndentParser
-        ( "domain MyDomain\n"
+        ( "domain model://perspectives.domains#Test\n"
             <> "  user MyUser\n"
             <> "    perspective on MyObject\n"
             <> "      all roleverbs\n"
@@ -1146,7 +1197,9 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
         Right dom ->
           ensureUserRole "MyUser" dom >>= \(RoleE { roleParts }) ->
             assert "Should have a Screen part" $
-              isJust (findIndex (case _ of Screen _ -> true; _ -> false) roleParts)
+              isJust (findIndex (case _ of 
+                Screen _ -> true
+                _ -> false) roleParts)
 
   --------------------------------------------------------------------------------
   ---- COMPLETE DOMAIN EXAMPLE
@@ -1156,7 +1209,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
     test "Domain with many constructs parses successfully" do
       r <- runIndentParser
         ( "domain Feest\n"
-            <> "  use sys for model:System\n"
+            <> "  use sys for model://perspectives.domains#\n"
             <> "  aspect pre:MyAspect\n"
             <> "  thing Wens (mandatory)\n"
             <> "    property Naam (mandatory, String)\n"

@@ -11,10 +11,13 @@
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "runtimeArgs": ["-e", "require('./output/Test.Main/index.js').main()"],
+      "runtimeArgs": [
+        "-e",
+        "require('./output/Test.Layer1/index.js').main()"
+      ],
       "sourceMaps": true,
       "outFiles": [
-        "${workspaceFolder}/output/*.map",
+        "${workspaceFolder}/output/**/*.js",
         "!**/node_modules/**"
       ],
       "env": {

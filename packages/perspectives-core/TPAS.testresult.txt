@@ -1,0 +1,607 @@
+
+> perspectives-core@3.2.0 test:layer1 /Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core
+> pnpm exec spago build && ROLLUP_INPUT=./output/Test.Layer1/index.js ROLLUP_OUTPUT=./dist/test.layer1.node.js rollup -c rollup.node.config.js && node dist/test.layer1.node.js CHANGELOG.md LICENSES README.md accounts build-module-map.mjs commits.txt createPerspectivesLinks.sh design dist docs docsources excluded gendocs.sh module-map.json node_modules output package.json projectsetup.txt removeCouchdb rollup.config.js rollup.node.config.js scripts setupCouchdb spago.lock spago.yaml src 'stableIdMapping test.json' stableIdMapping.json 'technical readme.md' test test1.json test2.json
+
+- Suite: Perspectives.Parsing.Arc.Syntax
+  - Suite: ArcIdentifier
+    ✓ Passed: Simple capitalised name
+    ✓ Passed: Uncapitalised name fails
+    ✓ Passed: Segmented name
+    ✓ Passed: Prefixed name
+    ✓ Passed: Prefixed segmented name
+    ✓ Passed: Fully qualified model URI
+  - Suite: ReservedIdentifier
+    ✓ Passed: Known reserved word succeeds
+    ☠ Failed: Unknown word fails with descriptive message because "not a reserved word \"cheese\"(or unexpected end of input), "
+  - Suite: Domain
+    ✓ Passed: Minimal domain declaration
+    ✓ Passed: Empty string fails
+    ✓ Passed: Case context at top level fails (must be domain)
+    ✓ Passed: Domain with a thing role
+    ✓ Passed: Domain with a user role
+    ✓ Passed: Domain with a context role
+    ✓ Passed: Domain with an external role
+    ✓ Passed: Domain with nested case
+    ✓ Passed: Domain with nested party
+    ✓ Passed: Domain with nested activity
+    ✓ Passed: Line comment '-- ...' is ignored
+  - Suite: Context parts
+    ☠ Failed: use clause introduces a prefix because (ParseError "(NotWellFormedName) The name 'model:System' is not well-formed (it cannot be expanded to a fully qualified name), " (Position { column: 1, index: 43, line: 3 }))
+    ✓ Passed: use clause with invalid model name fails
+    ✓ Passed: indexed clause in context
+    ✓ Passed: aspect clause in context
+    ☠ Failed: aspect role clause in context because (ParseError "Expected \":\"" (Position { column: 15, index: 30, line: 2 }))
+  - Suite: Enumerated roles
+    ✓ Passed: Minimal thing role
+    ✓ Passed: Thing role with mandatory attribute
+    ☠ Failed: Thing role with functional attribute because (ParseError "Expected \"=\"" (Position { column: 1, index: 26, line: 2 }))
+    ✓ Passed: Thing role with relational attribute
+    ✓ Passed: Thing role with unlinked attribute
+    ✓ Passed: Thing role with mandatory and relational attributes
+  - Suite: FilledBy
+    ✓ Passed: filledBy single filler
+    ☠ Failed: filledBy multiple alternatives (comma-separated) because Should have 2 alternatives
+    ✓ Passed: filledBy combination (plus-separated)
+    ✓ Passed: filledBy disjunction of conjunctions
+    ✓ Passed: filledBy filler in a named context
+  - Suite: Calculated roles
+    ✓ Passed: Calculated thing role
+    ✓ Passed: Calculated thing role with functional attribute
+    ✓ Passed: Calculated user role
+  - Suite: Role aspects
+    ✓ Passed: Role aspect (simple)
+    ✓ Passed: Role aspect with property mapping
+  - Suite: Role indexed
+    ✓ Passed: Indexed role
+  - Suite: Properties
+    ✓ Passed: Enumerated property with String range
+    ✓ Passed: Enumerated property with Number range
+    ✓ Passed: Enumerated property with Boolean range
+    ☠ Failed: Enumerated property with DateTime range because range should be PDate
+    ✓ Passed: Enumerated property with Email range
+    ✓ Passed: Property with mandatory attribute
+    ✓ Passed: Property with relational attribute
+    ✓ Passed: Property with selfonly attribute
+    ✓ Passed: Property with authoronly attribute
+    ✓ Passed: Calculated property
+    ✓ Passed: Calculated property with functional attribute
+    ✓ Passed: Property without explicit range
+  - Suite: Property facets
+    ✓ Passed: minLength facet
+    ✓ Passed: maxLength facet
+    ✓ Passed: enumeration facet
+    ✓ Passed: minInclusive facet on Number property
+    ✓ Passed: maxInclusive facet on Number property
+    ✓ Passed: messageProperty facet
+    ✓ Passed: mediaProperty facet
+    ✓ Passed: readableName facet
+  - Suite: Views
+    ✓ Passed: View with two property references
+    ✓ Passed: View with one property reference
+  - Suite: Perspective on
+    ☠ Failed: perspective on with all roleverbs because No perspective
+    ☠ Failed: perspective on External because No perspective on '(Simple (ArcIdentifier line 0, column 0 "External"))'.
+  - Suite: Role verbs
+    ☠ Failed: only (Create, Remove) because No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+    ☠ Failed: except (Delete) because No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+    ☠ Failed: all roleverbs because No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+    ☠ Failed: no roleverbs because (ParseError "Expected: view, props, verbs, only, except, all, in, on, action, perspective, selfonly, authoronly (but found 'no roleverbs'.) " (Position { column: 1, index: 55, line: 4 }))
+  - Suite: Property verbs
+    ☠ Failed: view MyView (Consult) because (ParseError "Expected the line to end at this position and then continue in the same column on the next line, or indented, or that we have reached the end of the file. Maybe could not parse the rest of the line? At " (Position { column: 17, index: 54, line: 3 }))
+    ☠ Failed: all props because No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+    ☠ Failed: props (P1) verbs (SetPropertyValue) because No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+    ☠ Failed: props (P1, P2) verbs (AddPropertyValue, RemovePropertyValue) because No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+    ☠ Failed: defaults yields all role verbs and all property verbs because No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+  - Suite: Perspective of
+    ☠ Failed: perspective of introduces a subject because No state 'context state model:MyDomain$MyCase$SomeState'.
+  - Suite: States
+    ☠ Failed: Context with a named state because No state 'context state model:MyDomain$MyCase$SomeState'.
+    ☠ Failed: State with a substate because No state 'context state model:MyDomain$MyCase$ParentState'.
+    ☠ Failed: Role state declared with 'in state' because No perspective on '(Simple (ArcIdentifier line 0, column 0 "SomeRole"))'.
+  - Suite: On entry / on exit
+    ☠ Failed: State with on entry notification because No state 'context state model:MyDomain$MyCase$SomeState'.
+    ☠ Failed: State with on exit automatic action because (ParseError "Expected 'role' or 'context' after 'remove'. " (Position { column: 11, index: 105, line: 6 }))
+    ☠ Failed: Role on entry with notification because No on entry clause.
+    ☠ Failed: Role on entry with automatic assignment because No on entry clause.
+    ☠ Failed: on exit without subject fails because Should fail with 'A subject is required', got: Expected 'role' or 'context' after 'remove'. 
+    ✓ Passed: automaticEffectE without subject fails
+  - Suite: Automatic effect timing
+    ☠ Failed: do after 5 Seconds because (ParseError "Expected 'role' or 'context' after 'remove'. " (Position { column: 11, index: 122, line: 6 }))
+    ☠ Failed: do every 1 Minutes because (ParseError "Expected 'role' or 'context' after 'remove'. " (Position { column: 11, index: 122, line: 6 }))
+    ☠ Failed: do after 2 Hours until 24 Hours every 1 Hours maximally 5 times because (ParseError "Expected 'role' or 'context' after 'remove'. " (Position { column: 11, index: 167, line: 6 }))
+    ✓ Passed: until without every fails
+  - Suite: Actions
+    ☠ Failed: Action with assignment statements because (ParseError "Expected 'role' or 'context' after 'remove'. " (Position { column: 13, index: 143, line: 7 }))
+    ☠ Failed: Action with letA because No perspective on '(Simple (ArcIdentifier line 0, column 0 "SomeRole"))'.
+  - Suite: Classic screens
+    ✓ Passed: Screen with tabs
+    ✓ Passed: Screen with rows
+    ✓ Passed: Screen with columns
+  - Suite: Who-what-where screens
+    ✓ Passed: Screen with who, what, where
+  - Suite: Complete domain example
+    ☠ Failed: Domain with many constructs parses successfully because (ParseError "(NotWellFormedName) The name 'model:System' is not well-formed (it cannot be expanded to a fully qualified name), " (Position { column: 3, index: 42, line: 3 }))
+
+32 tests failed:
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Complete domain example":
+    In "Domain with many constructs parses successfully":
+Error: Error: (ParseError "(NotWellFormedName) The name 'model:System' is not well-formed (it cannot be expanded to a fully qualified name), " (Position { column: 3, index: 42, line: 3 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:38746:128
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Actions":
+    In "Action with letA":
+Error: Error: No perspective on '(Simple (ArcIdentifier line 0, column 0 "SomeRole"))'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37322:20
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Actions":
+    In "Action with assignment statements":
+Error: Error: (ParseError "Expected 'role' or 'context' after 'remove'. " (Position { column: 13, index: 143, line: 7 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:38677:116
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Automatic effect timing":
+    In "do after 2 Hours until 24 Hours every 1 Hours maximally 5 times":
+Error: Error: (ParseError "Expected 'role' or 'context' after 'remove'. " (Position { column: 11, index: 167, line: 6 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:38660:120
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Automatic effect timing":
+    In "do every 1 Minutes":
+Error: Error: (ParseError "Expected 'role' or 'context' after 'remove'. " (Position { column: 11, index: 122, line: 6 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:38653:116
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Automatic effect timing":
+    In "do after 5 Seconds":
+Error: Error: (ParseError "Expected 'role' or 'context' after 'remove'. " (Position { column: 11, index: 122, line: 6 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:38646:112
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "On entry / on exit":
+    In "on exit without subject fails":
+Error: Error: Should fail with 'A subject is required', got: Expected 'role' or 'context' after 'remove'. 
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:38627:175
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "On entry / on exit":
+    In "Role on entry with automatic assignment":
+Error: Error: No on entry clause.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at ensureOnEntry (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37377:16)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "On entry / on exit":
+    In "Role on entry with notification":
+Error: Error: No on entry clause.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at ensureOnEntry (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37377:16)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "On entry / on exit":
+    In "State with on exit automatic action":
+Error: Error: (ParseError "Expected 'role' or 'context' after 'remove'. " (Position { column: 11, index: 105, line: 6 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:38606:112
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "On entry / on exit":
+    In "State with on entry notification":
+Error: Error: No state 'context state model:MyDomain$MyCase$SomeState'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37268:25
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "States":
+    In "Role state declared with 'in state'":
+Error: Error: No perspective on '(Simple (ArcIdentifier line 0, column 0 "SomeRole"))'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37322:20
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "States":
+    In "State with a substate":
+Error: Error: No state 'context state model:MyDomain$MyCase$ParentState'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37268:25
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "States":
+    In "Context with a named state":
+Error: Error: No state 'context state model:MyDomain$MyCase$SomeState'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37268:25
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Perspective of":
+    In "perspective of introduces a subject":
+Error: Error: No state 'context state model:MyDomain$MyCase$SomeState'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37268:25
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Property verbs":
+    In "defaults yields all role verbs and all property verbs":
+Error: Error: No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37322:20
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Property verbs":
+    In "props (P1, P2) verbs (AddPropertyValue, RemovePropertyValue)":
+Error: Error: No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37322:20
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Property verbs":
+    In "props (P1) verbs (SetPropertyValue)":
+Error: Error: No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37322:20
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Property verbs":
+    In "all props":
+Error: Error: No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37322:20
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Property verbs":
+    In "view MyView (Consult)":
+Error: Error: (ParseError "Expected the line to end at this position and then continue in the same column on the next line, or indented, or that we have reached the end of the file. Maybe could not parse the rest of the line? At " (Position { column: 17, index: 54, line: 3 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:38528:96
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Role verbs":
+    In "no roleverbs":
+Error: Error: (ParseError "Expected: view, props, verbs, only, except, all, in, on, action, perspective, selfonly, authoronly (but found 'no roleverbs'.) " (Position { column: 1, index: 55, line: 4 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:38518:104
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Role verbs":
+    In "all roleverbs":
+Error: Error: No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37322:20
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Role verbs":
+    In "except (Delete)":
+Error: Error: No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37322:20
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Role verbs":
+    In "only (Create, Remove)":
+Error: Error: No perspective on '(Simple (ArcIdentifier line 0, column 0 "MyObject"))'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37322:20
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Perspective on":
+    In "perspective on External":
+Error: Error: No perspective on '(Simple (ArcIdentifier line 0, column 0 "External"))'.
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37322:20
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Perspective on":
+    In "perspective on with all roleverbs":
+Error: Error: No perspective
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37167:21
+    at perspectiveExists (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37213:16)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2587:19
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Properties":
+    In "Enumerated property with DateTime range":
+Error: Error: range should be PDate
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:38268:95
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "FilledBy":
+    In "filledBy multiple alternatives (comma-separated)":
+Error: Error: Should have 2 alternatives
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:38112:76
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Enumerated roles":
+    In "Thing role with functional attribute":
+Error: Error: (ParseError "Expected \"=\"" (Position { column: 1, index: 26, line: 2 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:38044:64
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Context parts":
+    In "aspect role clause in context":
+Error: Error: (ParseError "Expected \":\"" (Position { column: 15, index: 30, line: 2 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:38004:68
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "Context parts":
+    In "use clause introduces a prefix":
+Error: Error: (ParseError "(NotWellFormedName) The name 'model:System' is not well-formed (it cannot be expanded to a fully qualified name), " (Position { column: 1, index: 43, line: 3 }))
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37958:52
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+In "Perspectives.Parsing.Arc.Syntax":
+  In "ReservedIdentifier":
+    In "Unknown word fails with descriptive message":
+Error: Error: "not a reserved word \"cheese\"(or unexpected end of input), "
+    at error (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:3327:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37645:23)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37699:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:37772:54
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2517:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2861:11
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:16
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:883:20
+    at runAsync (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2337:20)
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.layer1.node.js:2572:22)
+
+ ELIFECYCLE  Command failed with exit code 1.
