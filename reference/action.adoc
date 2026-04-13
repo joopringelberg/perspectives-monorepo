@@ -1,0 +1,179 @@
+[[action-declaration]]
+= Actions
+
+An _action_ is a named set of <<assignments,assignment statements>> that a user role can trigger manually. Actions appear inside <<perspectives,perspective>> blocks and are presented to the user as buttons or menu items in the user interface.
+
+[[action-declaration-syntax]]
+== Declaration syntax
+
+[source]
+----
+action <ActionName>
+  <statements>
+  |
+  letA
+    {<name> <- <expression>}*
+  in
+    <statements>
+----
+
+`<ActionName>` is a simple identifier (no spaces, starting with an uppercase letter by convention).
+
+The body is either:
+
+* A sequence of <<assignments,assignment statements>>, indented relative to the `action` keyword.
+* A `letA` block that binds intermediate values and then executes assignment statements in its `in` section.
+
+[[action-declaration-placement]]
+== Where actions are declared
+
+An action is always declared inside a perspective block. The _subject_ and _object_ of the enclosing perspective determine the context in which the action runs.
+
+[source, arc]
+----
+user Manager = sys:Me
+  perspective on Reports
+    props (Title) verbs (Consult, SetPropertyValue)
+    action MarkDone
+      Status = "done" for origin
+----
+
+When the perspective has an object (a `perspective on` block), the action is a _role action_: the `origin` pseudo-variable inside the action body refers to the object role instance on which the user clicked.
+
+When there is no object role (an action declared inside a `perspective of` block without a nested `perspective on`), the action is a _context action_ that modifies the containing context.
+
+[[action-declaration-context-actions]]
+== Context actions
+
+A context action appears at the top level of a user role's perspective block, without a `perspective on` object:
+
+[source, arc]
+----
+user Organiser = sys:Me
+  action CloseEvent
+    Status = "closed" for extern
+  perspective on Attendees
+    only (Create, Fill)
+----
+
+Context actions are visible regardless of which object role is selected.
+
+[[action-declaration-role-actions]]
+== Role actions
+
+A role action is declared inside a `perspective on` block:
+
+[source, arc]
+----
+user Manager = sys:Me
+  perspective on Tasks
+    only (Create, Remove)
+    props (Title, Status) verbs (Consult, SetPropertyValue)
+    action Approve
+      Status = "approved" for origin
+    action Reject
+      Status = "rejected" for origin
+----
+
+Role actions operate on the currently selected instance of the object role. Within the action body, the implicit `origin` variable refers to that instance.
+
+[[action-declaration-state-qualified]]
+== State-qualified actions
+
+An action may be placed inside an `in state` block within a perspective, making it available only when the specified state is active:
+
+[source, arc]
+----
+perspective on Order
+  props (Status) verbs (Consult)
+  in state Pending
+    props (DueDate) verbs (SetPropertyValue)
+    action Confirm
+      Status = "confirmed" for origin
+  in state Confirmed
+    action Dispatch
+      ShippedAt = now
+      Status = "dispatched" for origin
+----
+
+[[action-declaration-let]]
+== Actions with `letA`
+
+For actions that need to compute intermediate values, use a `letA` block:
+
+[source, arc]
+----
+action CreateAndLinkProject
+  letA
+    newProject <- create context Project
+    link <- create role ProjectLinks
+  in
+    bind_ newProject >> extern to link
+    Name = "New Project" for newProject >> extern
+----
+
+[[action-declaration-verbs]]
+== Relation to role verbs
+
+The assignments in an action body must be consistent with the role verbs and property verbs granted in the enclosing perspective. The system checks that:
+
+* Role-creation assignments (`create role`, `create context`) require `Create` or `CreateAndFill`.
+* Role-removal assignments (`remove role`, `remove context`) require `Remove` or `RemoveContext`.
+* Role-deletion assignments (`delete role`, `delete context`) require `Delete` or `DeleteContext`.
+* Binding assignments (`bind`, `bind_`) require `Fill` or `CreateAndFill`.
+* Unbinding assignments (`unbind`, `unbind_`) require `RemoveFiller` or `Unbind`.
+* Property value assignments require the corresponding property verb (`SetPropertyValue`, `AddPropertyValue`, `RemovePropertyValue`, or `DeleteProperty`).
+
+[[action-declaration-examples]]
+== Examples
+
+=== Simple property mutation
+
+[source, arc]
+----
+user Editor = sys:Me
+  perspective on Document
+    props (Title, Body) verbs (Consult, SetPropertyValue)
+    action Publish
+      Published = true for origin
+      PublishedAt = now for origin
+----
+
+=== Creating and binding
+
+[source, arc]
+----
+user Owner = sys:Me
+  perspective on Items
+    only (Create, Fill, Remove)
+    props (Name) verbs (Consult, SetPropertyValue)
+    action AddItem
+      create role Items
+----
+
+=== Context action with letA
+
+[source, arc]
+----
+user Me (default) = me
+  action ExportIdentity
+    letA
+      text <- callExternal ser:SerialiseFor( [role SomeContext$Me], context >> extern ) returns String
+    in
+      create file ("identity.json") as "text/json" in MyExport
+        text
+----
+
+=== Removing entries
+
+[source, arc]
+----
+user Manager = sys:Me
+  perspective on StartContexts
+    only (Remove)
+    action CleanUp
+      letA
+        oldEntries <- filter StartContexts with Expired
+      in
+        remove role oldEntries
+----

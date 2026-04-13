@@ -1,0 +1,242 @@
+[[state_declarations]]
+= State Declarations
+
+A _state_ in the Perspectives Language (ARC) represents a named condition associated with a context, a user role (subject state), or an object role (object state). States are used to make <<perspectives,perspectives>>, <<action-declaration,actions>>, automatic effects, and notifications conditional on runtime circumstances.
+
+[[state_declarations-syntax]]
+== Declaration syntax
+
+[source]
+----
+state <StateName> = <condition>
+  [<statePart>]*
+----
+
+`<StateName>` is a simple identifier. The fully qualified name of the state is constructed by appending `$<StateName>` to the name of the enclosing context or role type.
+
+`<condition>` is a query expression that evaluates to a `Boolean` value. The state is _active_ when the condition is `true`.
+
+[[state_declarations-parts]]
+== State parts
+
+Inside a state block the following constructs are allowed:
+
+* Nested `state` declarations (sub-states).
+* `on entry` handlers.
+* `on exit` handlers.
+* `perspective on` / `perspective of` declarations.
+* `action` declarations.
+
+=== Sub-states
+
+[source]
+----
+state <StateName> = <condition>
+  state <SubStateName> = <condition>
+    [<statePart>]*
+----
+
+Sub-states are evaluated only while their enclosing (parent) state is active. A sub-state inherits the activation context of its parent. Sub-state names are appended to the parent state's qualified name with `$`.
+
+Example:
+[source, arc]
+----
+thing Order
+  state Open = not Done
+    state AwaitingPayment = not PaymentReceived
+      on entry
+        notify Buyer "Your order is awaiting payment."
+    state Paid = PaymentReceived
+----
+
+[[state_declarations-transitions]]
+== State transitions
+
+=== `on entry`
+
+[source]
+----
+on entry [of {subject | object | context} state [<StateName>]]
+  {<automaticEffect> | <notification>}*
+----
+
+Executed when the specified state becomes active. If no `of` qualifier is given, the transition refers to the immediately enclosing state. When a qualifier is given, the transition is scoped to the subject role state, object role state, or the context state respectively.
+
+Each `on entry` block may contain one or more `do` (automatic effect) or `notify` (notification) clauses.
+
+Example:
+[source, arc]
+----
+state ReadyToShip = Packed and AddressVerified
+  on entry
+    do for Dispatcher
+      ShippingDate = today
+    notify Buyer "Your order has been dispatched."
+----
+
+=== `on exit`
+
+[source]
+----
+on exit [of {subject | object | context} state [<StateName>]]
+  {<automaticEffect> | <notification>}*
+----
+
+Executed when the specified state becomes inactive (i.e. when the condition transitions from `true` to `false`, or the containing context or role is removed).
+
+[[state_declarations-automatic-effects]]
+== Automatic effects (`do`)
+
+[source]
+----
+do [for <RoleName>]
+  [after <Duration>] [until <Duration>] [every <Duration> [maximally <N> times]]
+  <statements>
+  |
+  letA
+    {<name> <- <expression>}*
+  in
+    <statements>
+----
+
+An automatic effect is a set of <<assignments,assignment statements>> that are executed automatically when the state transition fires. The optional `for <RoleName>` clause names the user role on whose behalf the effect is executed; when omitted, the subject role of the enclosing perspective is used.
+
+The optional timing modifiers control _when_ and _how often_ the effect fires:
+
+[cols="1,3"]
+|===
+| Modifier | Meaning
+
+| `after <Duration>`
+| Delay the first execution by the given duration after the state becomes active.
+
+| `until <Duration>`
+| Stop executing after the given duration has elapsed from state activation.
+
+| `every <Duration>`
+| Repeat the effect at the given interval.
+
+| `maximally <N> times`
+| Limit the number of repetitions. Must be combined with `every`.
+|===
+
+[[state_declarations-duration]]
+=== Durations
+
+A duration is written as an integer followed by a time unit:
+
+[source]
+----
+<integer> { Milliseconds | Seconds | Minutes | Hours | Days }
+----
+
+Example:
+[source, arc]
+----
+state Idle = not Active
+  on entry
+    do for Worker
+      every 5 Minutes maximally 3 times
+        LastPing = now
+----
+
+=== letA expressions
+
+When the effect requires computing intermediate values, use a `letA` block:
+
+[source]
+----
+letA
+  <varname> <- <expression>
+  ...
+in
+  <assignment>*
+----
+
+Variables bound in `letA` may be used in subsequent bindings and in the assignment statements.
+
+Example:
+[source, arc]
+----
+on entry
+  do for sys:PerspectivesSystem$Installer
+    letA
+      app <- create context MyApp
+      start <- create role StartContexts in sys:MySystem
+    in
+      bind_ app >> extern to start
+      Name = "My Application" for start
+----
+
+[[state_declarations-notifications]]
+== Notifications (`notify`)
+
+[source]
+----
+notify [<RoleName>] "<message>"
+----
+
+Sends a notification message to the named user role (or to the enclosing subject role when `<RoleName>` is omitted). The message is a sentence that may contain embedded expressions enclosed in `{` and `}`:
+
+[source, arc]
+----
+state Overdue = DueDate < today
+  on entry
+    notify Assignee "Task {Title} is overdue."
+----
+
+The message text is a double-quoted string. Computed parts are written as `{<expression>}` and will be evaluated at notification time.
+
+[[state_declarations-context-state]]
+== Context states
+
+A context state is declared directly inside a `domain` block or a `case` block:
+
+[source, arc]
+----
+case Invoice
+  state Unpaid = not PaymentReceived
+    on entry
+      notify Issuer "Invoice {extern >> InvoiceNumber} has not been paid."
+    perspective of Issuer
+      perspective on extern
+        props (PaymentDate) verbs (Consult)
+----
+
+[[state_declarations-role-state]]
+== Role states
+
+A role state is declared inside a `user`, `thing`, or `context` role declaration, using the keyword `state`:
+
+[source, arc]
+----
+thing ShoppingItem
+  state LowStock = Quantity < ReorderThreshold
+    on entry
+      notify StoreManager "Reorder {Name}."
+    on exit
+      notify StoreManager "{Name} is restocked."
+----
+
+[[state_declarations-root-state]]
+== Root state
+
+Every context and every role has an implicit _root state_ whose condition is always `true`. Constructs placed directly inside a context or role body (outside any named `state` block) belong to this root state.
+
+[[state_declarations-state-spec]]
+== State references
+
+When referring to a state from within an `in state` clause (see <<perspectives,Perspectives>>), `on entry of`, or `on exit of`, the state may be identified by:
+
+* Its simple local name, resolved relative to the current context or role.
+* A qualified name, prefixed with the enclosing context or role name separated by `$`.
+* A qualified name with a namespace prefix, when referencing an aspect state.
+
+Example:
+[source, arc]
+----
+perspective on Payment
+  props (Amount) verbs (Consult)
+  in state Pending
+    props (DueDate) verbs (Consult, SetPropertyValue)
+----

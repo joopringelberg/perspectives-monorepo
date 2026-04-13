@@ -1,0 +1,395 @@
+[[screens]]
+= Screens
+
+A _screen_ defines the user interface layout that is presented to a user role when that user opens a context. Screens are declared inside `user` role declarations, after the role's perspectives.
+
+There are two kinds of screens:
+
+* *Who-What-Where screens* — structured layout with three named sections: `who`, `what`, and `where`.
+* *Classic (free-form) screens* — flexible layout composed of tabs, rows, columns, tables, forms, markdown, chat, and conditional blocks.
+
+[[screens-declaration]]
+== Declaration syntax
+
+[source]
+----
+screen [<title>]
+  <who-what-where-body>
+  |
+  <classic-body>
+----
+
+The optional `<title>` is a double-quoted string that names the screen.
+
+[[screens-who-what-where]]
+== Who-What-Where screens
+
+A who-what-where screen is identified by the presence of the `who` keyword as the first section inside `screen`. It divides the interface into three standard areas:
+
+* *who* — user roles and persons involved in the context (left panel).
+* *what* — the main content area showing the current context's roles (centre).
+* *where* — navigation links to related contexts (right panel).
+
+[source]
+----
+screen
+  who
+    [markdown <...>]
+    [<tableFormItem>]*
+  what
+    [markdown <...>]
+    [<tableFormItem>]*
+    |
+    <classicBody>
+  where
+    [markdown <...>]
+    [<tableFormItem>]*
+----
+
+Each of `who`, `what`, and `where` may contain:
+
+* An optional `markdown` block (shown above the table-form items).
+* Zero or more _table-form items_, each describing a master-detail panel (table + form) for a specific role.
+* `when` conditional guards (see <<screens-when>>).
+
+=== Table-form items
+
+A table-form item describes a role with a master (table) and a detail (form) view:
+
+[source]
+----
+<RoleName>
+  master
+    [markdown <...>]
+    [props (<PropertyName>{, <PropertyName>}*) [verbs (<PropertyVerb>{, <PropertyVerb>}*)]]
+    [without props (<PropertyName>{, <PropertyName>}*)]
+    [with props (<PropertyName>{, <PropertyName>}*)]
+    [only (<RoleVerb>{, <RoleVerb>}*)]
+    [no roleverbs]
+  detail
+    [same sub-clauses as master]
+----
+
+The `master` section configures the table (list view); `detail` configures the form (single-item view). Both sections support:
+
+* `props (...)` with optional `verbs (...)` — selects which properties to display and which operations are allowed.
+* `without props (...)` — excludes specific properties from the display.
+* `with props (...)` — limits the display to specific properties.
+* `only (...)` — restricts available role-level operations.
+* `no roleverbs` — hides all role-level buttons.
+* `markdown <...>` — inserts a static or computed markdown block above the table or form.
+
+Example:
+[source, arc]
+----
+screen
+  who
+    Manager
+      master
+        props (FirstName, LastName) verbs (Consult)
+      detail
+        props (FirstName, LastName, Email) verbs (Consult)
+  what
+    markdown <### Introductions
+               Select an introduction below to view details.
+              >
+    Introductions
+      master
+        props (Title) verbs (Consult, SetPropertyValue)
+      detail
+        props (Title, Description) verbs (Consult, SetPropertyValue)
+  where
+----
+
+=== The `what` section as a free-form area
+
+The `what` section of a who-what-where screen may alternatively contain a _free-form_ sub-screen (using `tab`, `row`, or `column`) instead of table-form items:
+
+[source, arc]
+----
+screen
+  who
+  what
+    column
+      row
+        form Settings
+      row
+        table Items
+  where
+----
+
+[[screens-classic]]
+== Classic (free-form) screens
+
+A classic screen is introduced by `screen` followed by `tab`, `row`, or `column` (not `who`). It offers a grid-based layout.
+
+=== Tabs
+
+[source]
+----
+screen [<title>]
+  tab "<TabTitle>" [default]
+    <screenElement>*
+  [tab "<TabTitle>" ...]*
+----
+
+Each `tab` receives a quoted string label. The optional `default` keyword marks the tab that is shown first. Tabs contain screen elements.
+
+Example:
+[source, arc]
+----
+screen "Project"
+  tab "Overview" default
+    row
+      form extern
+  tab "Tasks"
+    row
+      table Tasks
+----
+
+=== Rows and columns
+
+[source]
+----
+row
+  <screenElement>*
+
+column
+  <screenElement>*
+----
+
+`row` lays out its children horizontally; `column` lays them out vertically. Rows and columns may be nested.
+
+[[screens-elements]]
+== Screen elements
+
+The following elements may appear inside `row`, `column`, or `tab` blocks.
+
+=== `table`
+
+[source]
+----
+table <RoleName>
+  [fillfrom <expression>]
+  [with props (<PropertyName>{, <PropertyName>}*)]
+  [without props (<PropertyName>{, <PropertyName>}*)]
+  [props (<PropertyName>{, <PropertyName>}*) [verbs (<PropertyVerb>{, <PropertyVerb>}*)]]
+  [only (<RoleVerb>{, <RoleVerb>}*)]
+  [no roleverbs]
+  [fields
+    <PropertyName>
+      [minLines = <N>]
+      [maxLines = <N>]]
+----
+
+Displays the instances of `<RoleName>` in a table. The optional sub-clauses restrict which properties and operations are visible:
+
+* `with props (...)` — show only the listed properties.
+* `without props (...)` — show all properties _except_ the listed ones.
+* `props (...) verbs (...)` — suppress specific verbs for specific properties.
+* `only (...)` / `no roleverbs` — limit or remove role-level buttons.
+* `fillfrom <expression>` — automatically fill new role instances with the result of `<expression>`.
+* `fields` — set display constraints (minimum and maximum number of text lines) for individual properties.
+
+Example:
+[source, arc]
+----
+table Tasks
+  with props (Title, Status)
+  only (Create, Remove)
+----
+
+=== `form`
+
+[source]
+----
+form <RoleName>
+  [fillfrom <expression>]
+  [with props (<PropertyName>{, <PropertyName>}*)]
+  [without props (<PropertyName>{, <PropertyName>}*)]
+  [props (<PropertyName>{, <PropertyName>}*) [verbs (<PropertyVerb>{, <PropertyVerb>}*)]]
+  [only (<RoleVerb>{, <RoleVerb>}*)]
+  [no roleverbs]
+  [fields
+    <PropertyName>
+      [minLines = <N>]
+      [maxLines = <N>]]
+----
+
+Displays the (first) instance of `<RoleName>` as an editable form. The same sub-clauses as `table` are available.
+
+Example:
+[source, arc]
+----
+form extern
+  without props (InternalId)
+----
+
+=== `markdown`
+
+[source]
+----
+markdown <text>
+----
+
+Inserts a static Markdown text block. The content is enclosed between `<` and `>`. The opening `<` immediately follows the `markdown` keyword; the closing `>` ends the block. Any amount of whitespace, including newlines, may appear between them — indentation is automatically stripped.
+
+Markdown content supports standard Markdown syntax (headings, bold, italic, links, lists). Action links may be embedded using `[[action: <ActionName> | <label>]]`.
+
+Example:
+[source, arc]
+----
+markdown <### Welcome
+           Select a task from the table to view its details.
+           Click [[action: AddTask | Add Task]] to create a new task.
+          >
+----
+
+A markdown block can also carry a run-time condition:
+
+[source]
+----
+markdown <text> [when <expression>]
+----
+
+When the condition is present, the block is only shown when the expression evaluates to `true`.
+
+=== `chat`
+
+[source]
+----
+chat <RoleName> messages <MessagesPropertyName> media <MediaPropertyName>
+----
+
+Displays a chat interface bound to the named role. The `messages` keyword names the property that stores text messages (must be a relational `String` property with `messageProperty` facet); the `media` keyword names the property that stores media attachments (must be a relational `String` property with `mediaProperty` facet).
+
+Example:
+[source, arc]
+----
+chat Conversation messages Messages media Media
+----
+
+NOTE: The role used with `chat` typically has `aspect sys:Chat`, which provides the required `Messages` and `Media` properties.
+
+[[screens-when]]
+=== `when` — conditional elements
+
+[source]
+----
+when <condition>
+  <screenElement>*
+----
+
+The `when` construct makes one or more screen elements conditional. The `<condition>` is a query expression evaluated against the current context. When the condition evaluates to `true`, the enclosed elements are rendered; otherwise they are hidden.
+
+`when` may appear:
+
+* Inside `row`, `column`, or `tab` blocks (classic screen).
+* Inside `who`, `what`, or `where` sections (who-what-where screen), wrapping table-form items.
+
+Example — classic screen:
+[source, arc]
+----
+row
+  when Settings >> ShowDetails
+    form Details
+----
+
+Example — who-what-where screen:
+[source, arc]
+----
+what
+  when IsManager
+    Projects
+      master
+        props (Name) verbs (Consult, SetPropertyValue)
+      detail
+  Tasks
+    master
+    detail
+----
+
+[[screens-markdown-properties]]
+== Markdown in widget fields
+
+Both `table` and `form` can include a `markdown` block _above_ the widget (inside the widget declaration, before any property sub-clauses). This inserts descriptive text directly above the widget:
+
+[source, arc]
+----
+table Peers
+  markdown <### Your peers
+             These people are connected to you on MyContexts.
+            >
+  with props (FirstName, LastName)
+----
+
+[[screens-examples]]
+== Complete examples
+
+=== Simple who-what-where screen
+
+[source, arc]
+----
+user Manager = sys:Me
+  perspective on Meetings
+    only (CreateAndFill, Remove)
+    props (Title, Date) verbs (Consult, SetPropertyValue)
+
+  screen
+    who
+      Manager
+        master
+          props (FirstName) verbs (Consult)
+        detail
+          props (FirstName, LastName) verbs (Consult)
+    what
+      Meetings
+        master
+          props (Title, Date) verbs (Consult)
+        detail
+          props (Title, Date, Agenda) verbs (Consult, SetPropertyValue)
+    where
+----
+
+=== Classic tabbed screen
+
+[source, arc]
+----
+user Admin = sys:Me
+  perspective on Users
+    props (Name, Role) verbs (Consult, SetPropertyValue)
+  perspective on Settings
+    props (MaxUsers, AllowGuests) verbs (Consult, SetPropertyValue)
+
+  screen "Administration"
+    tab "Users" default
+      row
+        table Users
+    tab "Settings"
+      row
+        form Settings
+----
+
+=== Free-form screen with conditional elements
+
+[source, arc]
+----
+user Participant = sys:Me
+  perspective on Tasks
+    only (Create, Remove)
+    props (Title, Done) verbs (Consult, SetPropertyValue)
+  perspective on Config
+    props (ShowArchived) verbs (Consult, SetPropertyValue)
+
+  screen "Tasks"
+    row
+      form Config
+    row
+      table Tasks
+        with props (Title, Done)
+    row
+      when Config >> ShowArchived
+        table ArchivedTasks
+          with props (Title)
+          no roleverbs
+----
