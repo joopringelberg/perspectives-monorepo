@@ -1,10 +1,11 @@
 # Architecture for Testing and Mobile
 
-This document responds to the architectural questions raised in GitHub issue *"Architectuur voor testen en mobiel"*.  It covers three topics:
+This document responds to the architectural questions raised in GitHub issue *"Architectuur voor testen en mobiel"*.  It covers four topics:
 
 1. **Converting MyContexts to a native mobile (and desktop) app.**
 2. **Running the PDR as a Node.js application.**
 3. **Automated testing strategy.**
+4. **Version updates for installable applications (Capacitor and Tauri).**
 
 ---
 
@@ -319,6 +320,246 @@ Based on the issue, the three highest-priority test areas are:
 
 ---
 
+## Part 4 — Version Updates for Installable Applications
+
+### Current behaviour (PWA)
+
+The existing MyContexts web app uses the browser's [Service Worker API](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API) to manage caching and updates.  The service worker in `src/perspectives-serviceworker.js` is versioned with `__MYCONTEXTS_VERSION__` and `__BUILD__` tokens that are substituted at build time.  When the browser detects that a new service worker file has been deployed, it:
+
+1. Downloads and installs the new worker in the background.
+2. Notifies the running app (via a `postMessage` from the service worker to its clients).
+3. The app prompts the user and, upon acknowledgement, calls `skipWaiting()` + `clients.claim()` so that the new worker activates immediately.
+
+This gives users a near-seamless, server-controlled update path: deploy a new build, and all open PWA clients receive the update within a few hours (or immediately on next reload).
+
+The central question raised in the issue is: **can this update flow be preserved in native Capacitor and Tauri installations?**
+
+---
+
+### Option A — Capacitor: two independent update channels
+
+Capacitor apps consist of two independent layers that are updated through completely different channels.
+
+#### Native shell updates (app store)
+
+The Capacitor native shell (the iOS `.ipa` or Android `.apk`/`.aab`) must be submitted to the Apple App Store or Google Play Store whenever:
+- A Capacitor plugin is added, removed, or updated.
+- The target iOS/Android SDK version changes.
+- Any native Swift/Kotlin code changes.
+
+App store submissions go through review (hours for Google Play, up to a few days for Apple).  For the Perspectives use case this path is only needed when the native plumbing changes — not for every new MyContexts feature release.
+
+#### Web layer updates (over-the-air)
+
+Because all MyContexts logic runs in the WebView as web content, the web bundle can be replaced without touching the native shell.  There are three approaches:
+
+**A1. Remote web app (simplest)**
+
+Configure Capacitor to load the web app from a remote URL instead of bundling it locally:
+
+```typescript
+// capacitor.config.ts
+const config: CapacitorConfig = {
+  appId: 'nl.perspectivesdesign.mycontexts',
+  appName: 'MyContexts',
+  server: {
+    // In production, load from your deployment server
+    url: 'https://mycontexts.com',
+    cleartext: false,
+  },
+};
+```
+
+With this setup, every time the user opens the app the WebView loads the latest deployed web content — exactly like a browser.  The existing service worker update mechanism continues to work unchanged inside the WebView.
+
+**Caveat**: The app must have network access on launch.  For fully offline-capable apps, this approach is not suitable.
+
+**A2. Capacitor Live Updates plugin (`@capacitor/live-updates`)**
+
+The `@capacitor/live-updates` plugin (part of Ionic's Appflow platform, but the core plugin is open source) provides a structured OTA update flow:
+
+1. At app startup, the plugin checks a configured endpoint for the latest bundle version.
+2. If a newer bundle is available, it downloads and stores it in the app's local storage.
+3. On the next app restart the new bundle is loaded from local storage.
+
+```typescript
+import { LiveUpdates } from '@capacitor/live-updates';
+
+// Check for update on app resume
+App.addListener('resume', async () => {
+  const result = await LiveUpdates.sync();
+  if (result.activeApplicationPathChanged) {
+    await LiveUpdates.reload();   // restart to apply update
+  }
+});
+```
+
+This mirrors the behaviour of the existing PWA service worker: the update is downloaded in the background, and the user sees the new version on next open (or immediately, if a reload is triggered).
+
+**Bundle server**: The bundle server is simply a static file host that serves versioned Vite build output.  The endpoint can be a GitHub Release asset, an S3 bucket, or any HTTPS server.
+
+**A3. Self-hosted OTA using the existing service worker**
+
+Inside a Capacitor WebView the browser's service worker API is available on both Android (Chrome WebView) and iOS (WKWebView, iOS 16+).  This means the **existing `perspectives-serviceworker.js` update logic continues to work unchanged** when the Capacitor app loads from a remote URL (approach A1) or when the bundle is replaced via a custom mechanism.
+
+For a local-bundle Capacitor app (no remote URL), the service worker caches assets from the local filesystem, so it cannot self-update — option A2 is required in that case.
+
+#### Update flow comparison for Capacitor
+
+| | Remote URL (A1) | Live Updates plugin (A2) | Service worker in WebView (A3) |
+|---|---|---|---|
+| Requires network on launch | Yes | No (uses cached bundle) | No |
+| App store submission required | Never (web changes only) | Never (web changes only) | Never |
+| Update visible to user | On every open | After background download + restart | On next reload (same as PWA) |
+| Code changes in MyContexts | `capacitor.config.ts` only | Add `@capacitor/live-updates` | None (service worker already present) |
+| Works fully offline | No | Yes | Yes (with existing service worker caching) |
+
+---
+
+### Option B — Tauri: built-in updater
+
+Tauri v2 ships a first-party updater plugin (`tauri-plugin-updater`) that handles both the Rust backend and the bundled web assets in a single update package.
+
+#### How the Tauri updater works
+
+1. The running app periodically checks a JSON endpoint (configurable in `tauri.conf.json`) for a new version.
+2. The endpoint returns a version string and download URLs for the target platform (e.g. `.dmg` for macOS, `.msi` for Windows, `.AppImage` for Linux).
+3. The updater downloads the update bundle (which contains both the new Rust binary and the new web assets).
+4. The update is applied on the next app restart.
+
+```json
+// src-tauri/tauri.conf.json (relevant section)
+{
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://mycontexts.com/releases/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "dialog": true,
+      "pubkey": "<base64-encoded-public-key>"
+    }
+  }
+}
+```
+
+All update bundles must be **cryptographically signed** with a key pair generated by `tauri signer generate`.  The public key is embedded in `tauri.conf.json`; the private key is kept secret (e.g. in a CI secret) and used at release time.
+
+#### Triggering the update check in code
+
+```rust
+// src-tauri/src/main.rs
+use tauri_plugin_updater::UpdaterExt;
+
+fn main() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                update(handle).await.ok();
+            });
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .unwrap();
+}
+
+async fn update(app: tauri::AppHandle) -> tauri_plugin_updater::Result<()> {
+    if let Some(update) = app.updater()?.check().await? {
+        let mut downloaded = 0;
+        update.download_and_install(
+            |chunk_length, content_length| {
+                downloaded += chunk_length;
+            },
+            || { /* on finish */ },
+        ).await?;
+        app.restart();
+    }
+    Ok(())
+}
+```
+
+The TypeScript side can also trigger and display the update UI using the `@tauri-apps/plugin-updater` JavaScript package:
+
+```typescript
+import { check } from '@tauri-apps/plugin-updater';
+import { ask, message } from '@tauri-apps/plugin-dialog';
+
+async function checkForUpdates() {
+  const update = await check();
+  if (update?.available) {
+    const yes = await ask(
+      `Version ${update.version} is available.\nRelease notes: ${update.body}\n\nInstall now?`,
+      { title: 'MyContexts Update', kind: 'info' }
+    );
+    if (yes) {
+      await update.downloadAndInstall();
+      // app will restart automatically
+    }
+  }
+}
+```
+
+This closely mirrors the existing PWA update notification flow in MyContexts.
+
+#### Update endpoint
+
+The endpoint can be a static JSON file hosted on GitHub Releases (using the [Tauri action](https://github.com/tauri-apps/tauri-action) to generate update artefacts automatically):
+
+```json
+// Example update manifest served at the endpoint
+{
+  "version": "1.2.3",
+  "notes": "Bug fixes and performance improvements",
+  "pub_date": "2025-06-01T00:00:00Z",
+  "platforms": {
+    "darwin-x86_64": {
+      "url": "https://github.com/org/mycontexts/releases/download/v1.2.3/mycontexts_1.2.3_x64.dmg",
+      "signature": "<signature>"
+    },
+    "windows-x86_64": {
+      "url": "https://github.com/org/mycontexts/releases/download/v1.2.3/mycontexts_1.2.3_x64-setup.exe",
+      "signature": "<signature>"
+    },
+    "linux-x86_64": {
+      "url": "https://github.com/org/mycontexts/releases/download/v1.2.3/mycontexts_1.2.3_amd64.AppImage",
+      "signature": "<signature>"
+    }
+  }
+}
+```
+
+The [Tauri GitHub Action](https://github.com/tauri-apps/tauri-action) can generate this manifest and sign the artefacts automatically as part of a CI/CD release workflow.
+
+#### Delta updates (partial updates)
+
+Tauri v2's updater supports **NSIS-based delta updates** on Windows (only the changed files are downloaded).  On macOS and Linux, full bundle updates are used.  For MyContexts the bundles are small enough that delta updates are not a priority.
+
+---
+
+### Comparison: update mechanisms across deployment targets
+
+| Deployment target | Update mechanism | User prompt? | Requires app store? | Code changes in MyContexts |
+|---|---|---|---|---|
+| **PWA (current)** | Service worker (`perspectives-serviceworker.js`) | Yes (existing flow) | No | None |
+| **Capacitor — web changes** | Remote URL or Live Updates plugin | Configurable | No | `capacitor.config.ts` or add plugin |
+| **Capacitor — native shell changes** | App Store / Play Store | No (OS-managed) | Yes | None |
+| **Tauri desktop** | `tauri-plugin-updater` + signed bundle | Yes (dialog) | No (self-distributed) | Add `@tauri-apps/plugin-updater` |
+| **Electron (legacy)** | `electron-updater` (from `electron-builder`) | Yes (dialog) | No | Add `electron-updater` |
+
+### Key findings
+
+1. **The existing service worker update logic is fully reusable in Capacitor** when the app loads its web content from a remote URL (approach A1).  The update experience is identical to the current PWA.
+
+2. **For a locally-bundled Capacitor app**, the `@capacitor/live-updates` plugin provides an equivalent OTA mechanism without requiring app store submissions for web-layer changes.
+
+3. **Tauri's built-in updater** provides a polished, cryptographically secure update flow for desktop apps.  The user-facing update dialog can be driven from TypeScript and closely mirrors the existing PWA notification pattern.
+
+4. **In all three cases**, updates to the web layer (TypeScript, PureScript, React components, ARC models) do **not** require app store review or distribution through a third party.  Only changes to the native shell (Capacitor plugins, Tauri Rust backend) require a traditional release process.
+
+---
+
 ## Summary
 
 | Topic | Recommended action |
@@ -328,6 +569,8 @@ Based on the issue, the three highest-priority test areas are:
 | PDR on Node.js | Replace `pouchdb-browser` → `pouchdb`, `affjax-web` → `affjax-node`, stub `idb-keyval`; entry point via `InternalChannel` |
 | Automated testing (parser) | Enable pure PureScript test suites in CI immediately; no external deps |
 | Automated testing (sync) | Stub AMQP transport; run two PDR instances in-process with in-memory PouchDB |
+| **Version updates (Capacitor)** | Load web app from remote URL (service worker update works unchanged) or use `@capacitor/live-updates` for locally-bundled OTA |
+| **Version updates (Tauri)** | Use `tauri-plugin-updater`; serve signed update manifests from GitHub Releases via Tauri GitHub Action |
 
 ---
 
@@ -561,3 +804,146 @@ A Copilot agent session is triggered by a labelled issue.  The agent reads the i
 2. Write a `rollup.node.config.js` and the `idb-keyval.node.js` stub (as described in Part 2) so that Layer 2 integration tests can run in CI.
 3. Create the `test-suite-request.md` issue template and try generating a new test suite via Copilot for one high-priority area (e.g. ARC parser phases 2–3).
 4. After a first round of CI-driven failures, evaluate whether the issue-creation automation in step (b) is worth implementing.
+
+
+---
+
+### Part 4 — Version updates in practice
+
+#### 4.1 Capacitor — recommended update strategy
+
+For a MyContexts Capacitor app the recommended strategy is a **two-tier update model**:
+
+| Tier | What changes | Update path | Review required |
+|---|---|---|---|
+| Web layer | React/TypeScript code, PureScript PDR, ARC models, CSS | OTA (remote URL or Live Updates plugin) | None |
+| Native shell | Capacitor plugins, iOS/Android SDK target, permissions | App Store / Play Store submission | Yes (Apple/Google) |
+
+In practice, 95 % of MyContexts releases are web-layer-only changes.  Only plugin upgrades or OS-SDK changes require an app store release.
+
+**Recommended approach: remote URL loading**
+
+For MyContexts the simplest and most maintainable approach is to configure Capacitor to load the web app from the existing deployment server:
+
+```typescript
+// capacitor.config.ts
+const config: CapacitorConfig = {
+  appId: 'nl.perspectivesdesign.mycontexts',
+  appName: 'MyContexts',
+  server: {
+    url: 'https://mycontexts.com',
+    cleartext: false,
+    allowNavigation: ['*.perspectives.domains'],
+  },
+};
+```
+
+With this configuration:
+- The existing service worker (`perspectives-serviceworker.js`) handles update detection and notification — **no new code required**.
+- The existing version-bump mechanism (`build.json`, `__MYCONTEXTS_VERSION__` token) is the only release trigger needed.
+- The app requires network access to load initially but caches assets via the service worker for subsequent offline use.
+
+**Alternative: Live Updates plugin for fully offline apps**
+
+If the app must be fully usable without a network connection on first launch, the `@capacitor/live-updates` plugin can be added:
+
+```bash
+pnpm add @capacitor/live-updates
+npx cap sync
+```
+
+The plugin fetches update bundles from a custom endpoint (or Ionic Appflow) and applies them on next restart, independently of the network state at launch time.
+
+#### 4.2 Tauri — recommended update strategy
+
+For a MyContexts Tauri desktop app, use the built-in `tauri-plugin-updater`:
+
+**Setup (once per project):**
+
+```bash
+# Generate a key pair for signing updates
+tauri signer generate -w ~/.tauri/mycontexts.key
+
+# Add the updater plugin
+cargo add tauri-plugin-updater
+pnpm add @tauri-apps/plugin-updater
+```
+
+Add the public key to `tauri.conf.json`:
+
+```json
+{
+  "plugins": {
+    "updater": {
+      "pubkey": "<paste public key here>",
+      "endpoints": ["https://mycontexts.com/releases/{{target}}/{{arch}}/{{current_version}}"],
+      "dialog": true
+    }
+  }
+}
+```
+
+**Release workflow (GitHub Actions):**
+
+The [tauri-action](https://github.com/tauri-apps/tauri-action) GitHub Action can be used to:
+1. Build signed release bundles for all three desktop platforms in parallel.
+2. Upload artefacts to a GitHub Release.
+3. Update the update manifest JSON served at the endpoint URL.
+
+```yaml
+# .github/workflows/release-tauri.yml (excerpt)
+- uses: tauri-apps/tauri-action@v0
+  with:
+    tagName: v__VERSION__
+    releaseName: 'MyContexts v__VERSION__'
+    releaseBody: 'See the assets to download this version and install.'
+    releaseDraft: true
+    prerelease: false
+  env:
+    TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+    TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+```
+
+**User experience:**
+
+The update check is triggered at startup (Rust side) and can also be triggered from the TypeScript side via the `@tauri-apps/plugin-updater` package.  This allows reusing the existing "new version available" notification in the MyContexts React UI:
+
+```typescript
+// In MyContexts startup code (mycontexts/src/App.tsx or equivalent)
+import { check } from '@tauri-apps/plugin-updater';
+
+async function checkTauriUpdate() {
+  const update = await check();
+  if (update?.available) {
+    // Reuse the existing "update available" notification UI
+    notifyUserOfUpdate(update.version, update.body ?? '', async () => {
+      await update.downloadAndInstall();
+      // The app restarts automatically after install
+    });
+  }
+}
+```
+
+#### 4.3 Keeping parity between PWA and native update flows
+
+To maintain a consistent update experience across all deployment targets:
+
+1. **Single version source of truth**: the `version` field in `packages/mycontexts/package.json` is the canonical version.  The service worker, Capacitor config, and `tauri.conf.json` all derive from it.
+
+2. **Unified release script**: a single `pnpm run release` script (at the `mycontexts` package level) should:
+   - Bump the version in `package.json`.
+   - Build the Vite web output.
+   - Build the Capacitor bundles and push to the OTA endpoint.
+   - Build the Tauri desktop bundles and publish a GitHub Release.
+   - Deploy the updated web app (triggering the service worker update for PWA users).
+
+3. **Notification parity**: the React-side "update available" notification component can be triggered by all three update mechanisms:
+   - Service worker → existing `message` event from `perspectives-serviceworker.js`.
+   - Capacitor Live Updates → custom event after `LiveUpdates.sync()` returns `activeApplicationPathChanged: true`.
+   - Tauri updater → call `checkTauriUpdate()` at startup, described in §4.2 above.
+
+#### 4.4 Summary of immediate next steps (update-related)
+
+1. **For a Capacitor MVP**: add `server.url` to `capacitor.config.ts` pointing to the production deployment.  The existing service worker handles all update logic automatically.
+2. **For a Tauri MVP**: run `tauri signer generate`, add the public key to `tauri.conf.json`, and add the `tauri-action` release workflow to `.github/workflows/`.
+3. **For production Capacitor (offline-capable)**: add `@capacitor/live-updates`, configure the bundle endpoint, and trigger `LiveUpdates.sync()` on app resume.
