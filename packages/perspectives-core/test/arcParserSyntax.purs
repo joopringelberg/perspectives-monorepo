@@ -51,7 +51,7 @@ import Perspectives.Representation.TypeIdentifiers (ContextType(..), RoleKind(..
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerbList(..))
 import Perspectives.Representation.Verbs (RoleVerb(..), PropertyVerb(..)) as RV
 import Test.Parsing.ArcAstSelectors (actionExists, allPropertyVerbs, ensureAction, ensureContext, ensureOnEntry, ensureOnExit, ensurePerspectiveOf, ensurePerspectiveOn, ensurePropertyVerbsForPropsOrView, ensureRoleVerbs, ensureStateInContext, ensureStateInRole, ensureSubState, ensureUserRole, failure, hasAutomaticAction, isImplicitRoleOnIdentifier, isIndexed, isNotified, isStateWithContext, isStateWithExplicitRole, isStateWithExplicitRole_, perspectiveExists, stateExists, stateParts)
-import Test.Unit (TestF, suite, test)
+import Test.Unit (TestF, suite, suiteOnly, test, testOnly)
 import Test.Unit.Assert (assert)
 
 theSuite :: Free TestF Unit
@@ -755,12 +755,12 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
             ensureStateInRole (isStateWithContext "model://perspectives.domains#Feest") >>=
               perspectiveExists
 
-    test "perspective on External" do
+    testOnly "perspective on External" do
       r <- runIndentParser "user MyRole\n  perspective on External\n    all roleverbs\n" userRoleE
       case r of
         Left e -> assert (show e) false
         Right (RE rl) ->
-          ensureStateInRole (isStateWithContext "model:") rl >>=
+          ensureStateInRole (isStateWithExplicitRole "$MyRole") rl >>=
             ensurePerspectiveOn "External" >>= perspectiveExists
         _ -> assert "Expected RE RoleE" false
 

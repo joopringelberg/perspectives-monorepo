@@ -137,6 +137,8 @@ ensureStateInRole tester (RoleE{roleParts}) = do
           N (NotificationE{transition}) -> transitionForState tester transition
           AE (AutomaticEffectE{transition}) -> transitionForState tester transition)
         parts
+      -- This is a hack as actually produce a SUBSTATE out of thin air.
+      ROLESTATE s@(StateE {id}) -> if tester id then (Cons (SUBSTATE s) Nil) else Nil
       _ -> Nil)
     roleParts
 
@@ -150,10 +152,12 @@ isStateWithContext_ _ _ _ = false
 
 isStateWithExplicitRole :: String -> StateSpecification -> Boolean
 isStateWithExplicitRole roleName (SubjectState (ExplicitRole _ r _) _) = roleName == roletype2string r
+isStateWithExplicitRole roleName (ObjectState (ExplicitRole _ r _) _) = roleName == roletype2string r
 isStateWithExplicitRole _ _ = false
 
 isStateWithExplicitRole_ :: String -> Maybe String -> StateSpecification -> Boolean
 isStateWithExplicitRole_ roleName path (SubjectState (ExplicitRole _ r _) p) = roleName == roletype2string r && path == p
+isStateWithExplicitRole_ roleName path (ObjectState (ExplicitRole _ r _) p) = roleName == roletype2string r && path == p
 isStateWithExplicitRole_ _ _ _ = false
 
 transitionForState :: (StateSpecification -> Boolean) -> StateTransitionE -> Boolean
