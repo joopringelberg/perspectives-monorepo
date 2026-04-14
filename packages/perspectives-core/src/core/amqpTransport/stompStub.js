@@ -142,11 +142,9 @@ export function makeStompClientFactory(bus) {
       },
 
       // Called by connectAndSubscribeImpl
-      watchForReceipt(receiptId, callback) {
+      watchForReceipt(_receiptId, _callback) {
         // Receipts are handled synchronously in bus.publish, so this is a no-op.
         // The receipt is emitted directly by bus.publish via emitToPurescript.
-        void receiptId;
-        void callback;
       },
 
       unsubscribe(queueId) {
