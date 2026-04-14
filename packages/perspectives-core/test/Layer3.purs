@@ -43,20 +43,19 @@
 -- |
 -- |   pnpm run test:layer3
 -- |
--- | TODO: Enable suites below once the stub AMQP transport is implemented.
--- |       See docsources/nodejs-testing-architecture.md §3 for the design.
+-- | The suites below are currently `suiteSkip`-ped inside their own modules
+-- | because they depend on the Layer 2 in-memory PouchDB setup and full
+-- | model loading, which are not yet wired.  Uncomment and enable them as
+-- | those prerequisites land.
+-- | See `design/layer3-sync-tests.md` for the step-by-step enablement guide.
 
 module Test.Layer3 where
 
 import Prelude
 import Effect (Effect)
 import Test.Unit.Main (runTest)
-
--- TODO: uncomment once the stub AMQP transport is available
--- import Test.Sync.Channel (theSuite) as CHA
--- import Test.Sync.HandleTransaction (theSuite) as HTA  -- advanced sync scenarios
+import Test.Sync.SetPropertyGetProperty (theSuite) as SPG
 
 main :: Effect Unit
 main = runTest do
-  -- TODO: add Layer 3 suites here.  None are enabled yet — see module comment.
-  pure unit
+  SPG.theSuite
