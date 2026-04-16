@@ -11,6 +11,7 @@ This index provides an overview of the technical documentation in `packages/pers
 | Document | Description |
 |---|---|
 | [Installation Initialization](installation-initialization.md) | What happens when a new Perspectives installation is created — covers both the PDR (PureScript) side and the Perspectives Language (PL) side, including the shared contexts that are bootstrapped on first run. |
+| [Model URI resolution](model-uri-resolution.md) | How `ModelUri` values are deterministically mapped to `models_*` and `cw_*` URLs (`modelUri2ModelUrl`, `modelUri2ManifestUrl`), including naming conventions, assumptions, and the reason tests may need an alternate mapping. |
 | [PDR → Frontend Messaging](pdr-messaging.md) | The two mechanisms the PDR uses to push messages to the browser frontend: the status-message channel (`setPDRStatus`) and the reactive warning queue, plus how a developer wires up each one. |
 | [PDR Client Data Structures](pdr-client-data-structures.md) | All data structures the PDR serialises and sends to its clients (`mycontexts` / `perspectives-react`). Starting from `ScreenDefinition` the document descends into `Perspective`, `Roleinstancewithprops`, and every referenced type, including the developer-tool types `InspectableContext` and `InspectableRole`. |
 | [Structured Logging](structured-logging.md) | The runtime-configurable logging layer: `LogLevel`, `LogTopic`, and `LogConfig` types; the `pdrLog` entry point and its pre-bound convenience aliases; `MonadPerspectives` helpers for changing thresholds at runtime; and three JavaScript-callable functions (`setLogLevelForTopic`, `disableLogTopic`, `disableLogging`) that allow reconfiguring the log from the browser DevTools console without restarting. Also includes a migration guide for replacing legacy `log`/`logPerspectivesError` call sites and instructions for adding new topics. |
@@ -54,6 +55,7 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.ErrorLogging` | [PDR → Frontend Messaging](pdr-messaging.md) |
 | `Perspectives.Logging` | [Structured Logging](structured-logging.md) |
 | `Perspectives.External.HiddenFunctionCache` | [The Query Subsystem](query-subsystem.md) |
+| `Perspectives.Identifiers` | [Model URI resolution](model-uri-resolution.md) |
 | `Perspectives.Inspector.InspectableResources` | [PDR Client Data Structures](pdr-client-data-structures.md) |
 | `Perspectives.Instances.Me` | [Installation Initialization](installation-initialization.md) |
 | `Perspectives.Instances.ObjectGetters` | [Type Comparison](type-comparison.md) |
@@ -89,6 +91,7 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.Sync.HandleTransaction` | [Delta Ordering and Conflict Resolution](delta-ordering.md), [Transaction Execution Process](transaction-execution.md) |
 | `Perspectives.Sync.LegacyDeltas` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
 | `Perspectives.Sync.Transaction` | [Transaction Execution Process](transaction-execution.md) |
+| `Perspectives.SideCar.PhantomTypedNewtypes` | [Model URI resolution](model-uri-resolution.md) |
 | `Perspectives.TypePersistence.PerspectiveSerialisation.Data` | [PDR Client Data Structures](pdr-client-data-structures.md) |
 | `Perspectives.Types.ObjectGetters` | [Type Comparison](type-comparison.md) |
 | `Perspectives.TypesForDeltas` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
