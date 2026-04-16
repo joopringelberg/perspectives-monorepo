@@ -25,7 +25,7 @@ Voor Perspectives zijn vooral deze functies relevant:
 - koper schrijft dat in een Perspectives-property;
 - verkoper valideert de status bij de PSP via API.
 
-Dat geeft functioneel hetzelfde resultaat als webhook-terugkoppeling, zonder publiek bereikbaar verkopersendpoint.
+Dat geeft functioneel hetzelfde resultaat als webhook-terugkoppeling, zonder publiek bereikbaar verkoperendpoint.
 Als de PSP API tijdelijk niet bereikbaar is, blijft `PaymentStatus` op `Pending` staan en moet de
 verificatie herhaalbaar zijn (retry/backoff), zonder dienstvrijgave.
 
@@ -77,7 +77,7 @@ en ranges in ARC-termen:
   - props: `provider`, `amount`, `currency`, `reference`, `receiver`,
     callbacks voor `onPending`, `onReturn`, `onError`, `onTimeout`.
 - **`mycontexts`**: provider-keuze en config (per deployment), plus schermcompositie.
-  - providerconfig bij voorkeur via bestaande globale configuratie (`perspectivesGlobals`)
+  - provider-config bij voorkeur via bestaande globale configuratie (`perspectivesGlobals`)
     of een vergelijkbaar centraal configuratiepunt, zodat secrets en endpoints niet hardcoded raken.
 - **Geen afhankelijkheid van webhook** voor domeinlogica; webhook blijft optioneel voor versnelling.
 
