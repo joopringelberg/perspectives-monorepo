@@ -18,12 +18,8 @@
       "../../node_modules/@types",
       "./src/types"
     ],
-    "baseUrl": "./",
-    "moduleResolution": "node",
-    "resolveJsonModule": true,
-    "paths": {
-      "*": ["node_modules/*"]
-    }
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true
   },
   "include": [
     "src/**/*",
