@@ -15,7 +15,7 @@ In `externalFunctions` worden 8 functies gebruikt:
 
 1. `PrepareAMQPaccount`
 2. `SetBindingKey`
-3. `SetPassword` (nu nog no-op)
+3. `SetPassword`
 4. `DeleteAMQPaccount`
 5. `DeleteQueue`
 6. `SetPermissionsForAMQPaccount`
@@ -47,7 +47,7 @@ Bron: `packages/perspectives-core/src/core/amqpTransport/managementAPI.purs`.
 | `StartListening` | STOMP/consume op broker | **Ondersteund** zolang plan/protocol dit toelaat; technisch geen API-gap aangetoond |
 | `SelfRegisterWithRabbitMQ` | Server-side registratie-endpoint | **Niet door CloudAMQP geleverd als kant-en-klare feature.** Blijft eigen servicepatroon (`/rbsr/`). |
 
-Belangrijke aanwijzing: CloudAMQP-documentatie vermeldt expliciet dat je voor user/vhost-beheer de onderliggende broker HTTP API gebruikt met credentials uit `cloudamqp_instance` (en bv. de `cyrilgdn/rabbitmq` provider).
+Belangrijke aanwijzing: CloudAMQP-documentatie vermeldt expliciet dat je voor user/vhost-beheer de onderliggende broker HTTP API gebruikt met credentials uit `cloudamqp_instance` (bijv. via de Terraform RabbitMQ provider `cyrilgdn/rabbitmq`, dus niet via alleen de CloudAMQP customer API).
 
 ## Sub-accounts / user-model
 
