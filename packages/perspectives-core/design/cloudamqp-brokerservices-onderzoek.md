@@ -45,7 +45,7 @@ Bron: `packages/perspectives-core/src/core/amqpTransport/managementAPI.purs`.
 | `DeleteQueue` | Queue verwijderen | **Ondersteund** via RabbitMQ broker HTTP API |
 | `SetPermissionsForAMQPaccount` | Rechten per user/vhost zetten | **Ondersteund** via RabbitMQ broker HTTP API |
 | `StartListening` | STOMP/consume op broker | **Ondersteund** zolang plan/protocol dit toelaat; technisch geen API-gap aangetoond |
-| `SelfRegisterWithRabbitMQ` | Server-side registratie-endpoint | **Niet door CloudAMQP geleverd als kant-en-klare feature**; blijft eigen servicepatroon (`/rbsr/`) |
+| `SelfRegisterWithRabbitMQ` | Server-side registratie-endpoint | **Niet door CloudAMQP geleverd als kant-en-klare feature.** Blijft eigen servicepatroon (`/rbsr/`). |
 
 Belangrijke aanwijzing: CloudAMQP-documentatie vermeldt expliciet dat je voor user/vhost-beheer de onderliggende broker HTTP API gebruikt met credentials uit `cloudamqp_instance` (en bv. de `cyrilgdn/rabbitmq` provider).
 
@@ -79,7 +79,7 @@ Daarmee is **metering op queue/vhost-niveau** praktisch haalbaar.
 ### Per-user metering
 
 - In de gevonden CloudAMQP Customer/Instance API-documentatie is geen expliciete “billing/metering per RabbitMQ user”-feature aangetoond.
-- Praktisch advies: fair-use baseren op queue/vhost-metrics (met ons model: 1 user ↔ 1 queue) of zelf afleiden via broker management-statistieken.
+- Praktisch advies: fair-use baseren op queue/vhost-metrics (met ons model: 1 user : 1 queue) of zelf afleiden via broker management-statistieken.
 
 ## Europa / datalokatie
 
