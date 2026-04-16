@@ -26,6 +26,8 @@ Voor Perspectives zijn vooral deze functies relevant:
 - verkoper valideert de status bij de PSP via API.
 
 Dat geeft functioneel hetzelfde resultaat als webhook-terugkoppeling, zonder publiek bereikbaar verkopersendpoint.
+Als de PSP API tijdelijk niet bereikbaar is, blijft `PaymentStatus` op `Pending` staan en moet de
+verificatie herhaalbaar zijn (retry/backoff), zonder dienstvrijgave.
 
 ## 2) Functioneel ontwerp voor inbedding in Perspectives
 
@@ -72,7 +74,8 @@ en ranges in ARC-termen:
 - **`perspectives-react`**: nieuw herbruikbaar `PaymentWidget` component
   - als `PerspectivesComponent` met dezelfde reactieve subscription-stijl als bestaande componenten;
   - communiceert via `PDRproxy` voor lezen/schrijven van payment-properties;
-  - props: `provider`, `amount`, `currency`, `reference`, `receiver`, callbacks voor `onPending`, `onReturn`.
+  - props: `provider`, `amount`, `currency`, `reference`, `receiver`,
+    callbacks voor `onPending`, `onReturn`, `onError`, `onTimeout`.
 - **`mycontexts`**: provider-keuze en config (per deployment), plus schermcompositie.
   - providerconfig bij voorkeur via bestaande globale configuratie (`perspectivesGlobals`)
     of een vergelijkbaar centraal configuratiepunt, zodat secrets en endpoints niet hardcoded raken.
@@ -84,6 +87,9 @@ en ranges in ARC-termen:
 2. Vertrouw niet blind op ruwe `PspReturnPayload` uit de koper-client.
 3. Vergelijk altijd: `amount`, `currency`, `reference`, `merchant account`.
 4. Registreer idempotent op `PspPaymentId` (herhaalde sync of retries).
+   - Als dezelfde `PspPaymentId` terugkomt met afwijkende `amount/reference`: markeer als
+     inconsistent en blokkeer automatische vrijgave.
+   - Als dezelfde `PspPaymentId` exact gelijk terugkomt: beschouw als duplicate delivery en negeer.
 
 ### Advies voor eerste implementatiefase
 
