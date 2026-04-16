@@ -41,16 +41,20 @@ Volledig client-side flow (in `perspectives-react` en/of `mycontexts`) waarbij:
 
 ### Voorstel datamodel (in context met koper + verkoper)
 
-- `Amount` (Decimal)
-- `Currency` (String, default EUR)
-- `ReceiverAccount` (IBAN of PSP merchant account id)
-- `PaymentReference` (UUID/CUID, door verkoper gegenereerd)
-- `PspProvider` (String, bv. mollie/adyen)
-- `PspPaymentId` (String)
-- `PspReturnPayload` (String/JSON; wat de PSP teruggeeft aan koper)
-- `PaymentStatus` (Enum: `Requested | Pending | Paid | Failed | Expired | Cancelled`)
-- `PaidAt` (DateTime)
-- `VerificationDetails` (String/JSON; samenvatting validatie-resultaat)
+Modelleer dit als een expliciete rol, bijvoorbeeld `Payment`, met onderstaande properties
+en ranges in ARC-termen:
+
+- `Amount` (`Number`)
+- `Currency` (`String`, default EUR)
+- `ReceiverAccount` (`String`, IBAN of PSP merchant account id)
+- `PaymentReference` (`String`, UUID/CUID door verkoper gegenereerd)
+- `PspProvider` (`String`, bv. mollie/adyen)
+- `PspPaymentId` (`String`)
+- `PspReturnPayload` (`String`, JSON als string opgeslagen)
+- `PaymentStatus` (`EnumeratedPropertyValue`, waarden:
+  `Requested | Pending | Paid | Failed | Expired | Cancelled`)
+- `PaidAt` (`DateTime`)
+- `VerificationDetails` (`String`, JSON of samenvatting validatie)
 
 ### UX/flow
 
@@ -66,8 +70,12 @@ Volledig client-side flow (in `perspectives-react` en/of `mycontexts`) waarbij:
 ### Integratiepunten in code
 
 - **`perspectives-react`**: nieuw herbruikbaar `PaymentWidget` component
+  - als `PerspectivesComponent` met dezelfde reactieve subscription-stijl als bestaande componenten;
+  - communiceert via `PDRproxy` voor lezen/schrijven van payment-properties;
   - props: `provider`, `amount`, `currency`, `reference`, `receiver`, callbacks voor `onPending`, `onReturn`.
 - **`mycontexts`**: provider-keuze en config (per deployment), plus schermcompositie.
+  - providerconfig bij voorkeur via bestaande globale configuratie (`perspectivesGlobals`)
+    of een vergelijkbaar centraal configuratiepunt, zodat secrets en endpoints niet hardcoded raken.
 - **Geen afhankelijkheid van webhook** voor domeinlogica; webhook blijft optioneel voor versnelling.
 
 ### Veiligheids- en integriteitsregels
