@@ -29,7 +29,7 @@ Dat geeft functioneel hetzelfde resultaat als webhook-terugkoppeling, zonder pub
 
 ## 2) Functioneel ontwerp voor inbedding in Perspectives
 
-## Doel
+### Doel
 
 Volledig client-side flow (in `perspectives-react` en/of `mycontexts`) waarbij:
 
@@ -39,7 +39,7 @@ Volledig client-side flow (in `perspectives-react` en/of `mycontexts`) waarbij:
 4. PDR synchroniseert naar Aanbieder;
 5. Aanbieder valideert en activeert automatisch de dienst.
 
-## Voorstel datamodel (in context met koper + verkoper)
+### Voorstel datamodel (in context met koper + verkoper)
 
 - `Amount` (Decimal)
 - `Currency` (String, default EUR)
@@ -52,7 +52,7 @@ Volledig client-side flow (in `perspectives-react` en/of `mycontexts`) waarbij:
 - `PaidAt` (DateTime)
 - `VerificationDetails` (String/JSON; samenvatting validatie-resultaat)
 
-## UX/flow
+### UX/flow
 
 1. **Aanbieder** kiest “Breng in rekening” → zet `Amount`, `ReceiverAccount`, `PaymentReference`.
 2. **Afnemer** ziet “Betaal”-sectie met PSP-knop/component.
@@ -63,21 +63,21 @@ Volledig client-side flow (in `perspectives-react` en/of `mycontexts`) waarbij:
    - via PSP API op `PspPaymentId` (en optioneel check op `PaymentReference`, amount, currency);
    - bij succes: `PaymentStatus = Paid`, `PaidAt = now`, service vrijgeven.
 
-## Integratiepunten in code
+### Integratiepunten in code
 
 - **`perspectives-react`**: nieuw herbruikbaar `PaymentWidget` component
   - props: `provider`, `amount`, `currency`, `reference`, `receiver`, callbacks voor `onPending`, `onReturn`.
 - **`mycontexts`**: provider-keuze en config (per deployment), plus schermcompositie.
 - **Geen afhankelijkheid van webhook** voor domeinlogica; webhook blijft optioneel voor versnelling.
 
-## Veiligheids- en integriteitsregels
+### Veiligheids- en integriteitsregels
 
 1. Verleen dienst **alleen** na verificatie door verkoper op PSP-status.
 2. Vertrouw niet blind op ruwe `PspReturnPayload` uit de koper-client.
 3. Vergelijk altijd: `amount`, `currency`, `reference`, `merchant account`.
 4. Registreer idempotent op `PspPaymentId` (herhaalde sync of retries).
 
-## Advies voor eerste implementatiefase
+### Advies voor eerste implementatiefase
 
 1. Start met één provider-adapter (bijv. Mollie of Adyen) en het generieke datamodel hierboven.
 2. Bouw provider-agnostische interface (`createPayment`, `resumePayment`, `verifyPayment`).
