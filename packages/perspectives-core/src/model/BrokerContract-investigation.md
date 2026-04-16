@@ -1,5 +1,9 @@
 # BrokerContract model investigation
 
+> Note: this analysis described the situation before commit updates on 2026-04-16.
+> The model now includes `Suspended`, `ExtensionPending`, and `RestoreAccount`
+> transitions, while intentionally leaving permission toggling unchanged.
+
 This note compares the desired BrokerContract state machine in:
 
 - `src/model/BrokerContract.smcat`

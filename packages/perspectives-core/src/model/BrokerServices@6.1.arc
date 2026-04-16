@@ -395,7 +395,7 @@ domain model://perspectives.domains#BrokerServices@6.1
             bind_ (sys:MySystem >> extern) to EmptyQueue
             callEffect rabbit:StartListening()
 
-    state Terminated = (extern >> Registered) and (sys:MySystem >> extern >> CurrentDate) > (extern >> TerminatesOn) or (extern >> ContractTerminated)
+    state Terminated = ((extern >> Registered) and ((sys:MySystem >> extern >> CurrentDate) > (extern >> TerminatesOn)) and not (extern >> ExtensionRequested)) or (extern >> ContractTerminated)
       on entry
         do for BrokerContract$Administrator
           callEffect rabbit:DeleteAMQPaccount(
@@ -440,6 +440,7 @@ domain model://perspectives.domains#BrokerServices@6.1
       property TerminatesOn (Date)
 
       property ContractTerminated (Boolean)
+      property ExtensionRequested (Boolean)
 
       state Terminated = ContractTerminated
 
@@ -453,15 +454,24 @@ domain model://perspectives.domains#BrokerServices@6.1
             UseExpiresOn = (now + context >> Service >> ContractPeriod)
             GracePeriodExpiresOn = (UseExpiresOn + context >> Service >> GracePeriod)
             TerminatesOn = (GracePeriodExpiresOn + context >> Service >> TerminationPeriod)
+            ExtensionRequested = false
 
       state Active = Registered
         on entry
           notify AccountHolder
             "You now have an account at the BrokerService { Name }"
-        state ExpiresSoon = Registered and (sys:MySystem >> extern >> CurrentDate) > UseExpiresOn
+        state ExpiresSoon = Registered and ((sys:MySystem >> extern >> CurrentDate) > UseExpiresOn) and ((sys:MySystem >> extern >> CurrentDate) <= GracePeriodExpiresOn) and not ExtensionRequested
           on entry
             notify AccountHolder
               "Your lease of the BrokerService has ended. Within {context >> Service >> GracePeriod} days, you will no longer be able to receive information from peers."
+        state Suspended = Registered and ((sys:MySystem >> extern >> CurrentDate) > GracePeriodExpiresOn) and ((sys:MySystem >> extern >> CurrentDate) <= TerminatesOn) and not ExtensionRequested
+          on entry
+            notify AccountHolder
+              "Your account at the BrokerService { Name } is suspended until your extension request is handled."
+        state ExtensionPending = Registered and ExtensionRequested
+          on exit
+            do for Administrator
+              ExtensionRequested = false
               
     -----------------
     ---- DATA UPGRADE
@@ -568,10 +578,16 @@ domain model://perspectives.domains#BrokerServices@6.1
 
       perspective on extern
         props (Url, Exchange, CurrentQueueName) verbs (Consult)
-        props (Registered, UseExpiresOn, GracePeriodExpiresOn, TerminatesOn, ContractTerminated, IsInUse) verbs (SetPropertyValue)
+        props (Registered, UseExpiresOn, GracePeriodExpiresOn, TerminatesOn, ContractTerminated, IsInUse, ExtensionRequested) verbs (SetPropertyValue)
         in object state Active
           action TerminateContract
             ContractTerminated = true
+        in object state ExpiresSoon
+          action RequestExtension
+            ExtensionRequested = true
+        in object state Suspended
+          action RequestExtension
+            ExtensionRequested = true
       perspective on AccountHolder
         all roleverbs
         props (AccountName, AccountPassword) verbs (Consult, SetPropertyValue)
@@ -636,9 +652,36 @@ domain model://perspectives.domains#BrokerServices@6.1
       -- fills an Accounts role in the service
       perspective on extern
         props (Name, ContractTerminated, ManagementEndpoint) verbs (Consult)
-        props (Registered, ContractTerminated, TerminatesOn, IsInUse) verbs (SetPropertyValue)
+        props (Registered, ContractTerminated, TerminatesOn, IsInUse, ExtensionRequested) verbs (SetPropertyValue)
         action TerminateContract
           ContractTerminated = true
+        in object state ExtensionPending
+          action ContinueContract
+            ExtensionRequested = false
+        in object state Terminated
+          action RestoreAccount
+            letA
+              queue <- create role Queues
+              queueid <- callExternal util:GenSym() returns String
+            in
+              QueueName = queueid for queue
+              callEffect rabbit:PrepareAMQPaccount(
+                context >> extern >> ManagementEndpoint,
+                context >> Administrator >> AdminUserName,
+                context >> Administrator >> AdminPassword,
+                context >> AccountHolder >> AccountName,
+                context >> AccountHolder >> AccountPassword,
+                queueid)
+              callEffect rabbit:SetBindingKey(
+                context >> extern >> ManagementEndpoint,
+                context >> Administrator >> AdminUserName,
+                context >> Administrator >> AdminPassword,
+                queueid,
+                context >> extern >> Exchange)
+              Registered = true for extern
+              ContractTerminated = false for extern
+              IsInUse = true for extern
+              ExtensionRequested = false for extern
       
       perspective on TCPManager
         only (Create, Fill, Remove)
