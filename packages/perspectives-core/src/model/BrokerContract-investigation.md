@@ -2,11 +2,11 @@
 
 This note compares the desired BrokerContract state machine in:
 
-- `/home/runner/work/perspectives-monorepo/perspectives-monorepo/packages/perspectives-core/src/model/BrokerContract.smcat`
+- `src/model/BrokerContract.smcat`
 
 with the current model implementation in:
 
-- `/home/runner/work/perspectives-monorepo/perspectives-monorepo/packages/perspectives-core/src/model/BrokerServices@6.1.arc`
+- `src/model/BrokerServices@6.1.arc`
 
 ## Main mismatches
 
