@@ -76,6 +76,7 @@ en ranges in ARC-termen:
   - communiceert via `PDRproxy` voor lezen/schrijven van payment-properties;
   - props: `provider`, `amount`, `currency`, `reference`, `receiver`,
     callbacks voor `onPending`, `onReturn`, `onError`, `onTimeout`.
+  - `onTimeout` moet de status op `Pending` laten en een expliciete herprobeer-actie aanbieden.
 - **`mycontexts`**: provider-keuze en config (per deployment), plus schermcompositie.
   - provider-config bij voorkeur via bestaande globale configuratie (`perspectivesGlobals`)
     of een vergelijkbaar centraal configuratiepunt, zodat secrets en endpoints niet hardcoded raken.
