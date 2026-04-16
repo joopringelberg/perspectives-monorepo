@@ -4,7 +4,7 @@
 
 Dit document onderzoekt of `model://perspectives.domains#BrokerServices` met de huidige externe functies uit `Perspectives.Extern.RabbitMQ` kan werken op CloudAMQP.
 
-Omdat `www.cloudamqp.com` en `docs.cloudamqp.com` vanuit deze CI-omgeving niet direct resolvebaar waren, is de analyse gebaseerd op:
+Omdat `www.cloudamqp.com` en `docs.cloudamqp.com` vanuit deze CI-omgeving niet direct resolveerbaar waren, is de analyse gebaseerd op:
 
 1. De huidige PDR-implementatie (`rabbitmq.purs` en `managementAPI.purs`).
 2. Publieke, door CloudAMQP onderhouden documentatie in de `cloudamqp/terraform-provider-cloudamqp` repository (README en docs).
@@ -32,7 +32,7 @@ Bron: `packages/perspectives-core/src/core/amqpTransport/managementAPI.purs`.
 
 ### Conclusie (kort)
 
-**Ja, grotendeels wel**, mits we op CloudAMQP-instance niveau met broker-credentials werken (de credentials van de instance) en voor self-registration een eigen service (`/rbsr/`) blijven aanbieden.
+**Ja, grotendeels wel**, mits we op CloudAMQP-instance niveau met broker-credentials werken (de credentials van de instance) en voor self-registration een eigen service (`/rbsr/`, Rabbit Broker Self Registration endpoint) blijven aanbieden.
 
 ### Mapping op functie-niveau
 
