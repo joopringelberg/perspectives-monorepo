@@ -29,6 +29,28 @@ Dat geeft functioneel hetzelfde resultaat als webhook-terugkoppeling, zonder pub
 Als de PSP API tijdelijk niet bereikbaar is, blijft `PaymentStatus` op `Pending` staan en moet de
 verificatie herhaalbaar zijn (retry/backoff), zonder dienstvrijgave.
 
+### Keuze eerste provider: Adyen
+
+Voor de eerste implementatie kiezen we **Adyen**.
+
+### Is Adyen-integratie mogelijk zonder webhook?
+
+Ja, voor een eerste versie wel:
+
+1. de koper rondt de betaling af in de Adyen component (drop-in/card);
+2. de koper-installatie slaat `PspPaymentId` en return-payload op in het betaalverzoek;
+3. de verkoper valideert de status via Adyen API (`payments/details` of session-resultaatcontrole).
+
+Daarmee kan de kernflow werken zonder publiek webhook-endpoint aan verkoperszijde.
+Webhook blijft optioneel als versnelling voor snellere statusupdates, maar is geen harde voorwaarde.
+
+### Verschil tussen `PaymentReference` en `PspPaymentId`
+
+- `PaymentReference`: eigen business-ID van het Perspectives betaalverzoek (door Aanbieder gemaakt).
+  Deze gebruik je voor idempotentie, matching en domeinlogica.
+- `PspPaymentId`: transactiereferentie die door de PSP (Adyen) wordt uitgegeven.
+  Deze gebruik je om de feitelijke PSP-status op te vragen/te valideren.
+
 ## 2) Functioneel ontwerp voor inbedding in Perspectives
 
 ### Doel
