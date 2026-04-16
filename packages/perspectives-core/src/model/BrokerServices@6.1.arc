@@ -395,7 +395,7 @@ domain model://perspectives.domains#BrokerServices@6.1
             bind_ (sys:MySystem >> extern) to EmptyQueue
             callEffect rabbit:StartListening()
 
-    state Terminated = ((extern >> Registered) and ((sys:MySystem >> extern >> CurrentDate) > (extern >> TerminatesOn)) and not (extern >> ExtensionRequested)) or (extern >> ContractTerminated)
+    state Terminated = ((extern >> Registered) and ((extern >> CurrentDate) > (extern >> TerminatesOn)) and not (extern >> ExtensionRequested)) or (extern >> ContractTerminated)
       on entry
         do for BrokerContract$Administrator
           callEffect rabbit:DeleteAMQPaccount(
@@ -433,6 +433,7 @@ domain model://perspectives.domains#BrokerServices@6.1
       -- We use this on system startup.
       -- PDRDEPENDENCY
       property CurrentQueueName = sys:MySystem >> extern >> binder Queues >> QueueName
+      property CurrentDate = sys:MySystem >> extern >> CurrentDate
       property Registered (Boolean)
       property IsInUse (Boolean)
       property UseExpiresOn (Date)
@@ -460,15 +461,18 @@ domain model://perspectives.domains#BrokerServices@6.1
         on entry
           notify AccountHolder
             "You now have an account at the BrokerService { Name }"
-        state ExpiresSoon = Registered and ((sys:MySystem >> extern >> CurrentDate) > UseExpiresOn) and ((sys:MySystem >> extern >> CurrentDate) <= GracePeriodExpiresOn) and not ExtensionRequested
+        state ExpiresSoon = Registered and (CurrentDate > UseExpiresOn) and (CurrentDate <= GracePeriodExpiresOn) and not ExtensionRequested
           on entry
             notify AccountHolder
               "Your lease of the BrokerService has ended. Within {context >> Service >> GracePeriod} days, you will no longer be able to receive information from peers."
-        state Suspended = Registered and ((sys:MySystem >> extern >> CurrentDate) > GracePeriodExpiresOn) and ((sys:MySystem >> extern >> CurrentDate) <= TerminatesOn) and not ExtensionRequested
+        state Suspended = Registered and (CurrentDate > GracePeriodExpiresOn) and (CurrentDate <= TerminatesOn) and not ExtensionRequested
           on entry
             notify AccountHolder
               "Your account at the BrokerService { Name } is suspended until your extension request is handled."
         state ExtensionPending = Registered and ExtensionRequested
+          on entry
+            notify Administrator
+              "The AccountHolder requested an extension for BrokerService { Name }."
           on exit
             do for Administrator
               ExtensionRequested = false
@@ -661,6 +665,7 @@ domain model://perspectives.domains#BrokerServices@6.1
         in object state Terminated
           action RestoreAccount
             letA
+              -- The queue and AMQP account are deleted on entering Terminated, so we recreate them here.
               queue <- create role Queues
               queueid <- callExternal util:GenSym() returns String
             in
