@@ -468,14 +468,11 @@ domain model://perspectives.domains#BrokerServices@6.1
         state Suspended = Registered and (CurrentDate > GracePeriodExpiresOn) and (CurrentDate <= TerminatesOn) and not ExtensionRequested
           on entry
             notify AccountHolder
-              "Your account at the BrokerService { Name } is suspended until your extension request is handled."
+              "Your account at the BrokerService { Name } is suspended because the grace period has ended."
         state ExtensionPending = Registered and ExtensionRequested
           on entry
             notify Administrator
               "The AccountHolder requested an extension for BrokerService { Name }."
-          on exit
-            do for Administrator
-              ExtensionRequested = false
               
     -----------------
     ---- DATA UPGRADE
@@ -661,13 +658,20 @@ domain model://perspectives.domains#BrokerServices@6.1
           ContractTerminated = true
         in object state ExtensionPending
           action ContinueContract
-            ExtensionRequested = false
+            letA 
+              now <- callExternal sensor:ReadSensor("clock", "now") returns Date
+            in
+              UseExpiresOn = (now + context >> Service >> ContractPeriod)
+              GracePeriodExpiresOn = (UseExpiresOn + context >> Service >> GracePeriod)
+              TerminatesOn = (GracePeriodExpiresOn + context >> Service >> TerminationPeriod)
+              ExtensionRequested = false
         in object state Terminated
           action RestoreAccount
             letA
               -- The queue and AMQP account are deleted on entering Terminated, so we recreate them here.
               queue <- create role Queues
               queueid <- callExternal util:GenSym() returns String
+              now <- callExternal sensor:ReadSensor("clock", "now") returns Date
             in
               QueueName = queueid for queue
               callEffect rabbit:PrepareAMQPaccount(
@@ -683,6 +687,9 @@ domain model://perspectives.domains#BrokerServices@6.1
                 context >> Administrator >> AdminPassword,
                 queueid,
                 context >> extern >> Exchange)
+              UseExpiresOn = (now + context >> Service >> ContractPeriod) for extern
+              GracePeriodExpiresOn = (UseExpiresOn + context >> Service >> GracePeriod) for extern
+              TerminatesOn = (GracePeriodExpiresOn + context >> Service >> TerminationPeriod) for extern
               Registered = true for extern
               ContractTerminated = false for extern
               IsInUse = true for extern
