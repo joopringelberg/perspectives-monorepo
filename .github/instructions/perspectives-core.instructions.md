@@ -196,3 +196,6 @@ When publishing a standalone version, switch `path:` to `git: + ref:` (commented
 4. **`DeltaStoreRecord` is in `deltaStoreTypes.purs`**, not `deltaStore.purs`, to avoid circular imports with `coreTypes.purs`.
 5. **Inverted queries** must be re-indexed whenever query structure changes. Phase 3 of the ARC parser handles this.
 6. **`populateScreen` must call `contextualiseScreen`** (not `addPerspectives`) for screens with `when` conditions; otherwise `WhenTableFormItemDef` wrappers survive to serialisation as `{ tag: "WhenTableFormDef" }`.
+
+## Documentation language
+The codebase is documented in English, and all comments and documentation should be written in English to maintain consistency and accessibility for the global developer community.
