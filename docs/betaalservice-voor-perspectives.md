@@ -47,7 +47,7 @@ Modelleer dit als een expliciete rol, bijvoorbeeld `Payment`, met onderstaande p
 en ranges in ARC-termen:
 
 - `Amount` (`Number`)
-- `Currency` (`String`, default EUR)
+- `Currency` (`String`, in ARC bij voorkeur met expliciete default zoals `= "EUR"`)
 - `ReceiverAccount` (`String`, IBAN of PSP merchant account id)
 - `PaymentReference` (`String`, UUID/CUID door verkoper gegenereerd)
 - `PspProvider` (`String`, bv. mollie/adyen)
@@ -76,10 +76,13 @@ en ranges in ARC-termen:
   - communiceert via `PDRproxy` voor lezen/schrijven van payment-properties;
   - props: `provider`, `amount`, `currency`, `reference`, `receiver`,
     callbacks voor `onPending`, `onReturn`, `onError`, `onTimeout`.
-  - `onTimeout` moet de status op `Pending` laten en een expliciete herprobeer-actie aanbieden.
+  - `onTimeout` moet de status op `Pending` laten en een expliciete herprobeer-actie aanbieden;
+    afhandeling volgt dezelfde foutmeldingslijn als andere `PerspectivesComponent`-componenten
+    (via bestaande user messaging patronen), met retry op componentniveau.
 - **`mycontexts`**: provider-keuze en config (per deployment), plus schermcompositie.
   - provider-config bij voorkeur via bestaande globale configuratie (`perspectivesGlobals`)
     of een vergelijkbaar centraal configuratiepunt, zodat secrets en endpoints niet hardcoded raken.
+    Deze globale config blijft caller-provided, net als de bestaande `host`-configuratie.
 - **Geen afhankelijkheid van webhook** voor domeinlogica; webhook blijft optioneel voor versnelling.
 
 ### Veiligheids- en integriteitsregels
