@@ -202,7 +202,9 @@ withPDR pouchdbUser runtimeOptions =
 -- | Start two PDR instances, run `f`, then shut down both — even if `f` throws.
 -- |
 -- | The two instances are started sequentially.  Each has its own separate
--- | in-memory databases and user identity.
+-- | in-memory databases and user identity.  Both instances are guaranteed to
+-- | shut down cleanly even if startup or `f` throws: instance 2 shuts down
+-- | before instance 1 (innermost bracket first).
 withTwoPDRs
   :: forall a
    . PouchdbUser
@@ -212,12 +214,6 @@ withTwoPDRs
   -> (PDRInstance -> PDRInstance -> Aff a)
   -> Aff a
 withTwoPDRs user1 opts1 user2 opts2 f =
-  bracket
-    (do
-      pdr1 <- startPDRInstance user1 opts1
-      pdr2 <- startPDRInstance user2 opts2
-      pure { pdr1, pdr2 })
-    (\{ pdr1, pdr2 } -> do
-      pdr1.shutdown
-      pdr2.shutdown)
-    (\{ pdr1, pdr2 } -> f pdr1 pdr2)
+  withPDR user1 opts1 \pdr1 ->
+    withPDR user2 opts2 \pdr2 ->
+      f pdr1 pdr2

@@ -44,8 +44,12 @@
 -- |   pnpm run test:layer3
 -- |
 -- | Smoke tests for the PDR instance scaffold are included below.
--- | They use `testOnly` so they only run when selected explicitly
--- | (e.g. `pnpm run test:layer3 -- --only "PDRInstance"`).
+-- | They deliberately use `testOnly` so that they do NOT run automatically in CI:
+-- | each test calls `startPDRInstance`, which invokes `setupUser` and downloads
+-- | essential Perspectives models from https://perspectives.domains — this requires
+-- | network access that is not available in the standard CI environment.
+-- | To run these tests manually, pass `--only` to the test runner or select them
+-- | from the test menu.
 -- |
 -- | TODO: Enable sync suites below once the stub AMQP transport is implemented.
 -- |       See docsources/nodejs-testing-architecture.md §3 for the design.
