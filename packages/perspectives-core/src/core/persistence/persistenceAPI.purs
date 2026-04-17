@@ -27,7 +27,6 @@ module Perspectives.Persistence.API
   , module Perspectives.Persistence.API
   , module Perspectives.Persistence.Authentication
   , module Perspectives.Persistence.Types
-  , resetViewIndex
   ) where
 
 import Prelude

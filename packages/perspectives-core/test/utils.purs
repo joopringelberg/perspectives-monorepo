@@ -9,6 +9,7 @@ import Effect.Aff (Aff, error, throwError, try)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
 import Perspectives.DomeinCache (cascadeDeleteDomeinFile)
 import Perspectives.Extern.Couchdb (addModelToLocalStore, isInitialLoad)
+import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistence.API (createDatabase, deleteDatabase)
 import Perspectives.Persistence.State (getCouchdbBaseURL)
 import Perspectives.Persistent (entitiesDatabaseName, postDatabaseName)
@@ -104,27 +105,20 @@ withModel_ m@(ModelUri id) clear a = do
 -- | Load the model, compute the value in MonadPerspectives, unload the model.
 -- | Leaves instances from the computation in the database.
 withModel' :: forall a f. ModelUri f -> MonadPerspectives a -> MonadPerspectives a
-withModel' m@(ModelUri id) a = do
-  mcdbUrl <- getCouchdbBaseURL
-  case mcdbUrl of
-    Just cdbUrl -> do
-      void $ runSterileTransaction (addModelToLocalStore (ModelUri $ cdbUrl <> "repository/" <> id) isInitialLoad)
-      result <- try a
-      void $ cascadeDeleteDomeinFile (ModelUri id)
-      case result of
-        Left e -> throwError e
-        Right r -> pure r
-    Nothing -> throwError $ error "Expected a couchdb url"
+withModel' (ModelUri modelUri) a = do
+  void $ runSterileTransaction (addModelToLocalStore (ModelUri modelUri) isInitialLoad)
+  result <- try a
+  void $ cascadeDeleteDomeinFile (ModelUri modelUri)
+  case result of
+    Left e -> throwError e
+    Right r -> pure r
 
 withSystem :: forall a. MonadPerspectives a -> MonadPerspectives a
-withSystem = withModel (ModelUri "model:System")
-
-withSimpleChat :: forall a. MonadPerspectives a -> MonadPerspectives a
-withSimpleChat = withModel (ModelUri "model:SimpleChat")
+withSystem = withModel (ModelUri "model://perspectives.domains#System")
 
 -- | Runs an update function (a function in MonadPerspectivesTransaction that produces deltas),
 -- | runs actions as long as they are triggered, sends deltas to other participants and re-runs active queries
 runMonadPerspectivesTransaction :: forall o.
   MonadPerspectivesTransaction o
   -> (MonadPerspectives (Array o))
-runMonadPerspectivesTransaction a = singleton <$> runMonadPerspectivesTransaction' true (ENR $ EnumeratedRoleType "model:Perspectives$PerspectivesSystem$User") a
+runMonadPerspectivesTransaction a = singleton <$> runMonadPerspectivesTransaction' true (ENR $ EnumeratedRoleType sysUser) a

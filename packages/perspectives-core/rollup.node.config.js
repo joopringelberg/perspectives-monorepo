@@ -35,7 +35,8 @@ import json from '@rollup/plugin-json';
 import alias from '@rollup/plugin-alias';
 import url from '@rollup/plugin-url';
 import replace from '@rollup/plugin-replace';
-import { promises as fs } from 'fs';
+import sourcemaps from 'rollup-plugin-sourcemaps';
+import { promises as fs, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
@@ -66,6 +67,19 @@ export default async function () {
       outro: isTestBuild ? 'main();' : '',
     },
     plugins: [
+      // Handle .arc model files FIRST — before sourcemaps() loads them verbatim as
+      // JavaScript and causes a parse error.  url() intercepts them via its load hook
+      // and replaces each import with a URL string pointing to the emitted asset file.
+      url({
+        include: ['**/*.arc'],
+        limit: 0,
+        fileName: '[name][extname]',
+      }),
+      // Read existing source maps from spago-compiled output/**/*.js files and attach
+      // them to the module before any other plugin processes it.  Without this, Rollup
+      // stops the source-map chain at the intermediate .js file and PureScript (.purs)
+      // breakpoints cannot be resolved in the VS Code debugger.
+      sourcemaps(),
       alias({
         entries: [
           // pouchdb-browser → pouchdb-core as a safety net for any direct bare imports.
@@ -92,10 +106,11 @@ export default async function () {
           },
         ],
       }),
-      // Redirect Perspectives.Persistence.API/foreign.js to the Node.js-compatible
-      // persistence module.  The import specifier inside the generated index.js is the
-      // relative "./foreign.js", so @rollup/plugin-alias cannot match it by path alone —
-      // we need a custom resolveId that also checks the importer context.
+      // Redirect output/Perspectives.Persistence.API/foreign.js to the Node.js-compatible
+      // persistence module so that pouchdb-adapter-memory and pouchdb-adapter-http are
+      // registered.  Two hooks provide belt-and-suspenders reliability:
+      //   resolveId – changes the module ID so source maps point to persistenceAPI.node.js
+      //   load      – fallback that intercepts by absolute path if resolveId is bypassed
       {
         name: 'persistence-api-node',
         resolveId(source, importer) {
@@ -108,15 +123,19 @@ export default async function () {
           }
           return null;
         },
+        load(id) {
+          if (id.includes('Perspectives.Persistence.API') && id.endsWith('foreign.js')) {
+            return readFileSync(
+              path.join(__dirname, 'src/core/persistence/persistenceAPI.node.js'),
+              'utf8'
+            );
+          }
+          return null;
+        },
       },
       resolve({ preferBuiltins: true }),
       commonjs(),
       json(),
-      url({
-        include: ['**/*.arc'],
-        limit: 0,
-        fileName: '[name][extname]',
-      }),
       replace({
         preventAssignment: true,
         __PDRVersion__: JSON.stringify(packageJson.version ? packageJson.version : 'no version'),
