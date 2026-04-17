@@ -267,6 +267,9 @@ importers:
       pouchdb-core:
         specifier: ^9.0.0
         version: 9.0.0(encoding@0.1.13)
+      pouchdb-mapreduce:
+        specifier: ^9.0.0
+        version: 9.0.0(encoding@0.1.13)
       rollup-plugin-delete:
         specifier: ^3.0.1
         version: 3.0.1(rollup@4.44.0)
@@ -5885,6 +5888,9 @@ packages:
     resolution: {integrity: sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==}
     engines: {node: '>=0.10.0'}
 
+  pouchdb-abstract-mapreduce@9.0.0:
+    resolution: {integrity: sha512-SnTtqwAEiAa3uxKbc1J7LfiBViwEkKe2xkK92zxyTXPqWBvMnh4UU3GXxx7GrXTM4L9llsQ3lSjpbH4CNqG1Mw==}
+
   pouchdb-adapter-http@9.0.0:
     resolution: {integrity: sha512-2eL008XeRZkdyp3hMHHOhdIPqK9H6Mn4SLlQvit4zCbqnOFfAswzPjUmHULGMbDUCrQBTu6y82FnV6NHXv9kgw==}
 
@@ -5920,6 +5926,12 @@ packages:
 
   pouchdb-json@9.0.0:
     resolution: {integrity: sha512-aI41mYVyI195GXuT1Ys7mLIB/Mvrz11ihoTP6km6hYqVgSuaUxuZcFUozlyTJiZXr7H5kdhNgclhlVnjir4JAA==}
+
+  pouchdb-mapreduce-utils@9.0.0:
+    resolution: {integrity: sha512-Bjh8W6QXqp1j7MKmHhYYp5cYlcQsm5drD8Jd/F+ZlfNt18uiD2SQXWzGM5797+tiW/LszFGb8ttw0uHWjxufCQ==}
+
+  pouchdb-mapreduce@9.0.0:
+    resolution: {integrity: sha512-ZD8PleQ9atzQAzT2LZWsvooUVEfsen5QGv/SDfci20IleCaFW2A2q7OERrqY0YWKDCCNRsWhPWPmsFvZC9K8DQ==}
 
   pouchdb-md5@9.0.0:
     resolution: {integrity: sha512-58xUYBvW3/s+aH0j4uOhhN8yCk0LQ254cxBzI/gbKA9PrfwHpe4zrr0L/ia5ml3A30oH1f8aTnuVMwWDkFcuww==}
@@ -13282,6 +13294,18 @@ snapshots:
     dependencies:
       xtend: 4.0.2
 
+  pouchdb-abstract-mapreduce@9.0.0(encoding@0.1.13):
+    dependencies:
+      pouchdb-binary-utils: 9.0.0
+      pouchdb-collate: 9.0.0
+      pouchdb-errors: 9.0.0
+      pouchdb-fetch: 9.0.0(encoding@0.1.13)
+      pouchdb-mapreduce-utils: 9.0.0
+      pouchdb-md5: 9.0.0
+      pouchdb-utils: 9.0.0
+    transitivePeerDependencies:
+      - encoding
+
   pouchdb-adapter-http@9.0.0(encoding@0.1.13):
     dependencies:
       pouchdb-binary-utils: 9.0.0
@@ -13362,6 +13386,18 @@ snapshots:
   pouchdb-json@9.0.0:
     dependencies:
       vuvuzela: 1.0.3
+
+  pouchdb-mapreduce-utils@9.0.0:
+    dependencies:
+      pouchdb-utils: 9.0.0
+
+  pouchdb-mapreduce@9.0.0(encoding@0.1.13):
+    dependencies:
+      pouchdb-abstract-mapreduce: 9.0.0(encoding@0.1.13)
+      pouchdb-mapreduce-utils: 9.0.0
+      pouchdb-utils: 9.0.0
+    transitivePeerDependencies:
+      - encoding
 
   pouchdb-md5@9.0.0:
     dependencies:

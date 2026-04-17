@@ -106,6 +106,30 @@ export default async function () {
           },
         ],
       }),
+      // Redirect output/Perspectives.Authenticate/foreign.js to the Node.js-compatible
+      // version that replaces FileReader/File (browser-only) with Buffer-based equivalents.
+      {
+        name: 'authenticate-node',
+        resolveId(source, importer) {
+          if (
+            source === './foreign.js' &&
+            importer &&
+            importer.includes('Perspectives.Authenticate')
+          ) {
+            return path.join(__dirname, 'src/core/authentication/authenticate.node.js');
+          }
+          return null;
+        },
+        load(id) {
+          if (id.includes('Perspectives.Authenticate') && id.endsWith('foreign.js')) {
+            return readFileSync(
+              path.join(__dirname, 'src/core/authentication/authenticate.node.js'),
+              'utf8'
+            );
+          }
+          return null;
+        },
+      },
       // Redirect output/Perspectives.Persistence.API/foreign.js to the Node.js-compatible
       // persistence module so that pouchdb-adapter-memory and pouchdb-adapter-http are
       // registered.  Two hooks provide belt-and-suspenders reliability:
