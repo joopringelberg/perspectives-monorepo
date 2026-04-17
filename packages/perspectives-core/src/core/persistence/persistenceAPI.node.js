@@ -19,9 +19,11 @@
 import PouchDB from "pouchdb-core";
 import PouchDBMemoryAdapter from "pouchdb-adapter-memory";
 import PouchDBHttpAdapter from "pouchdb-adapter-http";
+import PouchDBMapReduce from "pouchdb-mapreduce";
 
 PouchDB.plugin(PouchDBMemoryAdapter);
 PouchDB.plugin(PouchDBHttpAdapter);
+PouchDB.plugin(PouchDBMapReduce);
 
 function convertPouchError( originalE )
 {

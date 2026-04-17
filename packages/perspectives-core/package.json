@@ -54,6 +54,7 @@
     "pouchdb-adapter-http": "^9.0.0",
     "pouchdb-adapter-memory": "^9.0.0",
     "pouchdb-core": "^9.0.0",
+    "pouchdb-mapreduce": "^9.0.0",
     "rollup-plugin-delete": "^3.0.1",
     "rollup-plugin-sourcemaps": "^0.6.3",
     "xhr2": "^0.2.1"
