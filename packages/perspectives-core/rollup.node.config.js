@@ -35,7 +35,8 @@ import json from '@rollup/plugin-json';
 import alias from '@rollup/plugin-alias';
 import url from '@rollup/plugin-url';
 import replace from '@rollup/plugin-replace';
-import { promises as fs } from 'fs';
+import sourcemaps from 'rollup-plugin-sourcemaps';
+import { promises as fs, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
@@ -66,6 +67,11 @@ export default async function() {
       outro: isTestBuild ? 'main();' : '',
     },
     plugins: [
+      // Read existing source maps from spago-compiled output/**/*.js files and attach
+      // them to the module before any other plugin processes it.  Without this, Rollup
+      // stops the source-map chain at the intermediate .js file and PureScript (.purs)
+      // breakpoints cannot be resolved in the VS Code debugger.
+      sourcemaps(),
       alias({
         entries: [
           // Redirect pouchdb-browser to pouchdb-core (memory adapter, no native LevelDB).
@@ -95,6 +101,33 @@ export default async function() {
           },
         ],
       }),
+      // Redirect output/Perspectives.Persistence.API/foreign.js to the Node.js-compatible
+      // persistence module so that pouchdb-adapter-memory and pouchdb-adapter-http are
+      // registered.  Two hooks provide belt-and-suspenders reliability:
+      //   resolveId – changes the module ID so source maps point to persistenceAPI.node.js
+      //   load      – fallback that intercepts by absolute path if resolveId is bypassed
+      {
+        name: 'persistence-api-node',
+        resolveId(source, importer) {
+          if (
+            source === './foreign.js' &&
+            importer &&
+            importer.includes('Perspectives.Persistence.API')
+          ) {
+            return path.join(__dirname, 'src/core/persistence/persistenceAPI.node.js');
+          }
+          return null;
+        },
+        load(id) {
+          if (id.includes('Perspectives.Persistence.API') && id.endsWith('foreign.js')) {
+            return readFileSync(
+              path.join(__dirname, 'src/core/persistence/persistenceAPI.node.js'),
+              'utf8'
+            );
+          }
+          return null;
+        },
+      },
       resolve({ preferBuiltins: true }),
       commonjs(),
       json(),
