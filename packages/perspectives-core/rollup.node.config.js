@@ -47,14 +47,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 //   ROLLUP_INPUT=./output/Test.Main/index.js \
 //   ROLLUP_OUTPUT=./dist/test.node.js \
 //   rollup -c rollup.node.config.js
-const inputFile  = process.env.ROLLUP_INPUT  ?? './output/Main/index.js';
+const inputFile = process.env.ROLLUP_INPUT ?? './output/Main/index.js';
 const outputFile = process.env.ROLLUP_OUTPUT ?? './dist/perspectives-core.node.js';
 // When building the test bundle, PureScript only *exports* main() — it does not
 // call it.  Appending `main();` via outro ensures Node.js actually runs the tests
 // when the bundle is loaded with `node dist/test.node.js`.
 const isTestBuild = !!process.env.ROLLUP_INPUT;
 
-export default async function() {
+export default async function () {
   const packageJson = JSON.parse(await fs.readFile(new URL('./package.json', import.meta.url)));
 
   return {
@@ -82,11 +82,8 @@ export default async function() {
       sourcemaps(),
       alias({
         entries: [
-          // Redirect pouchdb-browser to pouchdb-core (memory adapter, no native LevelDB).
-          // The compiled output/Perspectives.Persistence.API/foreign.js imports
-          // `pouchdb-browser` as a bare specifier; pouchdb-core is a drop-in that
-          // exposes the same PouchDB constructor and is plugin-extended in
-          // persistenceAPI.node.js with the memory + http adapters.
+          // pouchdb-browser → pouchdb-core as a safety net for any direct bare imports.
+          // Perspectives.Persistence.API/foreign.js is redirected via a custom plugin below.
           {
             find: 'pouchdb-browser',
             replacement: 'pouchdb-core',
