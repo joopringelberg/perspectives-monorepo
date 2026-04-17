@@ -43,13 +43,23 @@
 -- |
 -- |   pnpm run test:layer3
 -- |
--- | TODO: Enable suites below once the stub AMQP transport is implemented.
+-- | Smoke tests for the PDR instance scaffold are included below.
+-- | They use `testOnly` so they only run when selected explicitly
+-- | (e.g. `pnpm run test:layer3 -- --only "PDRInstance"`).
+-- |
+-- | TODO: Enable sync suites below once the stub AMQP transport is implemented.
 -- |       See docsources/nodejs-testing-architecture.md §3 for the design.
 
 module Test.Layer3 where
 
 import Prelude
+
 import Effect (Effect)
+import Perspectives.Persistence.State (getSystemIdentifier)
+import Perspectives.PerspectivesState (defaultRuntimeOptions)
+import Test.PDRInstance (runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
+import Test.Unit (suite, testOnly)
+import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
 
 -- TODO: uncomment once the stub AMQP transport is available
@@ -58,5 +68,25 @@ import Test.Unit.Main (runTest)
 
 main :: Effect Unit
 main = runTest do
-  -- TODO: add Layer 3 suites here.  None are enabled yet — see module comment.
-  pure unit
+  suite "PDRInstance scaffold" do
+
+    -- | Smoke test: start one PDR instance, verify the system identifier matches
+    -- | the value we passed in, then shut down.
+    testOnly "start a single PDR instance and read its system identifier" do
+      let user = testPouchdbUser "alice"
+      withPDR user defaultRuntimeOptions \pdr -> do
+        sysId <- runInPDR pdr getSystemIdentifier
+        assert "system identifier should equal alice_macbook" (sysId == "alice_macbook")
+
+    -- | Smoke test: start two PDR instances in the same process, verify that
+    -- | they have distinct system identifiers.
+    testOnly "start two PDR instances with distinct identifiers" do
+      withTwoPDRs
+        (testPouchdbUser "alice") defaultRuntimeOptions
+        (testPouchdbUser "bob")   defaultRuntimeOptions
+        \pdrA pdrB -> do
+          sysA <- runInPDR pdrA getSystemIdentifier
+          sysB <- runInPDR pdrB getSystemIdentifier
+          assert "PDR-A system identifier should equal alice_macbook" (sysA == "alice_macbook")
+          assert "PDR-B system identifier should equal bob_macbook"   (sysB == "bob_macbook")
+          assert "PDR-A and PDR-B should have distinct identifiers"   (sysA /= sysB)
