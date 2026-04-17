@@ -24,7 +24,7 @@ module Perspectives.Names where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (throwError)
-import Data.Array (head)
+import Data.Array (head, mapMaybe)
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Effect.Exception (error)
@@ -119,6 +119,22 @@ defaultReadableNamespaces = OBJ.fromFoldable
 
 defaultModelReadableNames :: Array String
 defaultModelReadableNames = values defaultReadableNamespaces
+
+-- | A lookup table mapping each readable model URI to its stable counterpart.
+-- | Built by joining `defaultReadableNamespaces` and `defaultNamespaces` on their
+-- | shared prefix keys, e.g.
+-- |   "model://perspectives.domains#System" → "model://perspectives.domains#tiodn6tcyc"
+readableToStableModelUri :: OBJ.Object String
+readableToStableModelUri = OBJ.fromFoldable $ mapMaybe f (OBJ.keys defaultReadableNamespaces)
+  where
+  f prefix = do
+    readable <- OBJ.lookup prefix defaultReadableNamespaces
+    stable <- OBJ.lookup prefix defaultNamespaces
+    pure (Tuple readable stable)
+
+-- | Map a readable model URI to its stable counterpart, if known.
+lookupStableFromReadable :: String -> Maybe String
+lookupStableFromReadable readable = OBJ.lookup readable readableToStableModelUri
 
 defaultIndexedNames :: MonadPerspectives (OBJ.Object String)
 defaultIndexedNames = do
