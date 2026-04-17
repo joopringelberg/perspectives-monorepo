@@ -49,7 +49,7 @@ import Effect (Effect)
 import Test.Unit.Main (runTest)
 
 -- TODO: uncomment once persistenceAPI.node.js uses pouchdb-adapter-memory
--- import Test.LoadArc (theSuite) as LARC
+import Test.LoadArc (theSuite) as LARC
 -- import Test.ContextAndRole (theSuite) as CAR
 -- import Test.Queries (theSuite) as QR
 -- import Test.Sync.HandleTransaction (theSuite) as HTA
@@ -57,4 +57,5 @@ import Test.Unit.Main (runTest)
 main :: Effect Unit
 main = runTest do
   -- TODO: add Layer 2 suites here.  None are enabled yet — see module comment.
+  LARC.theSuite
   pure unit

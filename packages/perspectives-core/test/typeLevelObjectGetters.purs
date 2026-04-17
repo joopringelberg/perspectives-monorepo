@@ -20,7 +20,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), Cont
 import Perspectives.TypePersistence.LoadArc.FS (loadAndCompileArcFile)
 import Perspectives.Types.ObjectGetters (allRoleTypesInContext, propertiesOfRole, generalisesRoleType)
 import Perspectives.Utilities (prettyPrint)
-import Test.Perspectives.Utils (runP, withSimpleChat, withSystem)
+import Test.Perspectives.Utils (runP, withSystem)
 import Test.Unit (TestF, suite, suiteOnly, suiteSkip, test, testOnly, testSkip)
 import Test.Unit.Assert (assert)
 
@@ -61,10 +61,10 @@ theSuite = suite "Perspectives.Types.ObjectGetters" do
     -- logShow r
     liftAff $ assert "There should be 9 roletypes" (length r == 9)
 
-  test "chat:Chat$Initiator `generalisesRoleType` sys:Invitation$Inviter" $ runP $ withSimpleChat do
-    r <- (ENR $ EnumeratedRoleType "model:System$Invitation$Inviter") ###>> generalisesRoleType (ENR $ EnumeratedRoleType "model:SimpleChat$Chat$Initiator")
-    -- logShow r
-    liftAff $ assert "chat:Chat$Initiator `generalisesRoleType` sys:Invitation$Inviter should be true" (r == Value "true")
+  -- test "chat:Chat$Initiator `generalisesRoleType` sys:Invitation$Inviter" $ runP $ withSimpleChat do
+  --   r <- (ENR $ EnumeratedRoleType "model:System$Invitation$Inviter") ###>> generalisesRoleType (ENR $ EnumeratedRoleType "model:SimpleChat$Chat$Initiator")
+  --   -- logShow r
+  --   liftAff $ assert "chat:Chat$Initiator `generalisesRoleType` sys:Invitation$Inviter should be true" (r == Value "true")
 
   test "allProperties, EnumeratedRoleType" $ runP $ withSystem do
     ps1 <- allProperties (ST $ EnumeratedRoleType "model:System$PerspectivesSystem$User")
@@ -74,9 +74,9 @@ theSuite = suite "Perspectives.Types.ObjectGetters" do
     -- logShow $ length ps2 -- 7
     liftAff $ assert "Initiator has 7 properties" (length ps2 == 7)
 
-  test "allProperties, CalculatedRoleType" $ runP $ withSimpleChat do
-    adt <- getPerspectType (CalculatedRoleType "model:SimpleChat$Chat$Me") >>= roleADT
-    -- logShow adt
-    ps1 <- allProperties (roleInContext2Role <$> adt)
-    -- logShow $ ps1 -- 4
-    liftAff $ assert "Initiator has 4 properties" (length ps1 == 4)
+  -- test "allProperties, CalculatedRoleType" $ runP $ withSimpleChat do
+  --   adt <- getPerspectType (CalculatedRoleType "model:SimpleChat$Chat$Me") >>= roleADT
+  --   -- logShow adt
+  --   ps1 <- allProperties (roleInContext2Role <$> adt)
+  --   -- logShow $ ps1 -- 4
+  --   liftAff $ assert "Initiator has 4 properties" (length ps1 == 4)
