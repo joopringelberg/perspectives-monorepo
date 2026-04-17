@@ -67,6 +67,14 @@ export default async function() {
       outro: isTestBuild ? 'main();' : '',
     },
     plugins: [
+      // Handle .arc model files FIRST — before sourcemaps() loads them verbatim as
+      // JavaScript and causes a parse error.  url() intercepts them via its load hook
+      // and replaces each import with a URL string pointing to the emitted asset file.
+      url({
+        include: ['**/*.arc'],
+        limit: 0,
+        fileName: '[name][extname]',
+      }),
       // Read existing source maps from spago-compiled output/**/*.js files and attach
       // them to the module before any other plugin processes it.  Without this, Rollup
       // stops the source-map chain at the intermediate .js file and PureScript (.purs)
@@ -131,11 +139,6 @@ export default async function() {
       resolve({ preferBuiltins: true }),
       commonjs(),
       json(),
-      url({
-        include: ['**/*.arc'],
-        limit: 0,
-        fileName: '[name][extname]',
-      }),
       replace({
         preventAssignment: true,
         __PDRVersion__: JSON.stringify(packageJson.version ? packageJson.version : 'no version'),
