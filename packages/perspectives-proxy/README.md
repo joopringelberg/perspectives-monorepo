@@ -29,7 +29,8 @@ Client page (MyContexts / perspectives-react)
                          └─ InternalChannel.send(...)
 ```
 
-The key interface boundary is `handleClientRequest` (`packages/perspectives-core/src/core/proxy.js`):
+The key interface boundary is `handleClientRequest` (implemented in
+`packages/perspectives-core/src/core/proxy.js` and invoked by the worker shells):
 it receives client messages over `MessagePort`, handles worker/control messages itself, and forwards API calls into the PDR API pipeline via the internal coroutine channel.
 
 ## 2. How a connection is established
@@ -42,6 +43,7 @@ it receives client messages over `MessagePort`, handles worker/control messages 
    `{ responseType: "WorkerResponse", serviceWorkerMessage: "channelId", channelId: 1000000 * pageIndex }`.
 4. The worker wires `port.onmessage` to `pdr.handleClientRequest(...)`.
 5. The worker passes `sendPDRStatusMessage` into the PDR through `receivePDRStatusMessageChannel`.
+   This wires the callback used by the PDR to push runtime status updates back to connected clients.
 
 ### 2.2 Host-page flow (Safari fallback)
 
@@ -88,7 +90,7 @@ At runtime, four message families are exchanged:
 ### Infrastructure / worker-control functions (non-API)
 
 - `configurePDRproxy`, `SharedWorkerChannel`, `pageHostingPDRPort`.
-- `handleClientRequest` switch branch on `proxyRequest` (e.g. `runPDR`, `createAccount`, `unsubscribe`, logging controls).
+- `handleClientRequest` switches on `proxyRequest` (e.g. `runPDR`, `createAccount`, `unsubscribe`, logging controls).
 - `createRequestEmitter` / `retrieveRequestEmitter`: connect PDR coroutine producer/consumer to the internal channel.
 - `receivePDRStatusMessageChannel` / `pdrStatusMessageChannel`: wire status push messages from PDR to all connected clients.
 
