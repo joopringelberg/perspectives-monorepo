@@ -579,7 +579,7 @@ withFrame_ computation ctxt = ArrayT do
 lookup :: String -> String ~~> String
 lookup varName _ = ArrayT do
   mv <- lift (lookupVariableBinding varName)
-  pure $ (unsafePartial (fromJust mv))
+  pure $ maybe [] identity mv
 
 ---------------------------------------------------------------------------------------------------
 -- ORDERING

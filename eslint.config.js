@@ -73,7 +73,23 @@ export default [
         fetch: 'readonly',
         console: 'readonly',
         btoa: 'readonly',
-        Buffer: 'readonly'
+        Buffer: 'readonly',
+        crypto: 'readonly'
+      }
+    },
+    rules: {
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'no-undef': 'warn'
+    }
+  },
+  // perspectives-core test FFI files configuration
+  {
+    files: ['**/packages/perspectives-core/test/**/*.js'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        crypto: 'readonly',
       }
     },
     rules: {

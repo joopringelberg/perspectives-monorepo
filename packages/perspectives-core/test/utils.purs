@@ -4,18 +4,19 @@ import Prelude
 
 import Data.Array (singleton)
 import Data.Either (Either(..))
-import Data.Maybe (Maybe(..))
-import Effect.Aff (Aff, error, throwError, try)
+import Data.Maybe (fromMaybe)
+import Effect.Aff (Aff, throwError, try)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
 import Perspectives.DomeinCache (cascadeDeleteDomeinFile)
 import Perspectives.Extern.Couchdb (addModelToLocalStore, isInitialLoad)
+import Perspectives.ModelDependencies (sysUser)
+import Perspectives.Names (lookupStableFromReadable)
 import Perspectives.Persistence.API (createDatabase, deleteDatabase)
-import Perspectives.Persistence.State (getCouchdbBaseURL)
 import Perspectives.Persistent (entitiesDatabaseName, postDatabaseName)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runSterileTransaction, runMonadPerspectivesTransaction')
 import Perspectives.RunPerspectives (runPerspectives)
-import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Test.Unit.Assert as Assert
 
 developmentRepository :: MonadPerspectives String
@@ -25,13 +26,14 @@ developmentRepository_ :: String
 developmentRepository_ = "http://localhost:5984/repository"
 
 couchdbHost :: String
-couchdbHost = "https://localhost"
+couchdbHost = "http://localhost"
 
 couchdbPort :: Int
 couchdbPort = 5984
 
 runP_ :: forall a. String -> MonadPerspectives a -> Aff a
 runP_ username = runPerspectives username "geheim" username username couchdbHost couchdbPort
+
 -- "http://joopringelberg.nl/cbd/repository"
 
 runP :: forall a. MonadPerspectives a -> Aff a
@@ -60,18 +62,25 @@ shouldEqual a = \b -> pure (a == b)
 
 type Message = String
 
-assertEqual :: forall a. Eq a => Show a =>
-  Message ->
-  MonadPerspectives a ->
-  a ->
-  Aff Unit
+assertEqual
+  :: forall a
+   . Eq a
+  => Show a
+  => Message
+  -> MonadPerspectives a
+  -> a
+  -> Aff Unit
 assertEqual message test result = do
   r <- runP test
   case result == r of
     true -> Assert.assert message true
-    false -> Assert.assert (message <> "\nExpected: " <>
-      show result <> "\nReceived: " <>
-      show r)
+    false -> Assert.assert
+      ( message <> "\nExpected: "
+          <> show result
+          <> "\nReceived: "
+          <>
+            show r
+      )
       false
 
 clearUserDatabase :: MonadPerspectives Unit
@@ -88,12 +97,12 @@ clearPostDatabase = do
 
 -- | Load the model, compute the value in MonadPerspectives, unload the model and remove the instances.
 -- | Notice: dependencies of the model are not automatically removed!
-withModel :: forall a f. ModelUri f -> MonadPerspectives a -> MonadPerspectives a
+withModel :: forall a. ModelUri Readable -> MonadPerspectives a -> MonadPerspectives a
 withModel m@(ModelUri id) a = withModel_ m true a
 
 -- | Load the model, compute the value in MonadPerspectives, unload the model.
 -- | Either removes instances, or lets them sit in the database.
-withModel_ :: forall a f. ModelUri f -> Boolean -> MonadPerspectives a -> MonadPerspectives a
+withModel_ :: forall a. ModelUri Readable -> Boolean -> MonadPerspectives a -> MonadPerspectives a
 withModel_ m@(ModelUri id) clear a = do
   result <- try $ withModel' m a
   if clear then clearUserDatabase else pure unit
@@ -103,28 +112,22 @@ withModel_ m@(ModelUri id) clear a = do
 
 -- | Load the model, compute the value in MonadPerspectives, unload the model.
 -- | Leaves instances from the computation in the database.
-withModel' :: forall a f. ModelUri f -> MonadPerspectives a -> MonadPerspectives a
-withModel' m@(ModelUri id) a = do
-  mcdbUrl <- getCouchdbBaseURL
-  case mcdbUrl of
-    Just cdbUrl -> do
-      void $ runSterileTransaction (addModelToLocalStore (ModelUri $ cdbUrl <> "repository/" <> id) isInitialLoad)
-      result <- try a
-      void $ cascadeDeleteDomeinFile (ModelUri id)
-      case result of
-        Left e -> throwError e
-        Right r -> pure r
-    Nothing -> throwError $ error "Expected a couchdb url"
+withModel' :: forall a. ModelUri Readable -> MonadPerspectives a -> MonadPerspectives a
+withModel' (ModelUri modelUri) a = do
+  void $ runSterileTransaction (addModelToLocalStore (ModelUri $ fromMaybe modelUri (lookupStableFromReadable modelUri)) isInitialLoad)
+  result <- try a
+  void $ cascadeDeleteDomeinFile (ModelUri modelUri)
+  case result of
+    Left e -> throwError e
+    Right r -> pure r
 
 withSystem :: forall a. MonadPerspectives a -> MonadPerspectives a
-withSystem = withModel (ModelUri "model:System")
-
-withSimpleChat :: forall a. MonadPerspectives a -> MonadPerspectives a
-withSimpleChat = withModel (ModelUri "model:SimpleChat")
+withSystem = withModel (ModelUri "model://perspectives.domains#System")
 
 -- | Runs an update function (a function in MonadPerspectivesTransaction that produces deltas),
 -- | runs actions as long as they are triggered, sends deltas to other participants and re-runs active queries
-runMonadPerspectivesTransaction :: forall o.
-  MonadPerspectivesTransaction o
+runMonadPerspectivesTransaction
+  :: forall o
+   . MonadPerspectivesTransaction o
   -> (MonadPerspectives (Array o))
-runMonadPerspectivesTransaction a = singleton <$> runMonadPerspectivesTransaction' true (ENR $ EnumeratedRoleType "model:Perspectives$PerspectivesSystem$User") a
+runMonadPerspectivesTransaction a = singleton <$> runMonadPerspectivesTransaction' true (ENR $ EnumeratedRoleType sysUser) a

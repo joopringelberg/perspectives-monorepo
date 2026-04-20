@@ -70,7 +70,8 @@ jobs:
               '4. **Notable patterns** or concerns',
               '5. **Recommended focus areas** for next week',
               '',
-              'Please provide a concise summary suitable for management review.'
+              'Please provide a concise summary suitable for management review.',
+              'Try to keep the report under 2000 words.',
             ].join('\n');
             
             await github.rest.issues.create({

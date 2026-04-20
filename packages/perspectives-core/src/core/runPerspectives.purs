@@ -74,3 +74,36 @@ runPerspectives userName password perspectivesUser systemId host port mp = do
 
 runPerspectivesWithState :: forall a. MonadPerspectives a -> (AVar PerspectivesState) -> Aff a
 runPerspectivesWithState = runReaderT
+
+runPerspectivesWithoutCouchdb
+  :: forall a
+   . String -> MonadPerspectives a -> Aff a
+runPerspectivesWithoutCouchdb userName mp = do
+  transactionFlag <- new true
+  brokerService <- empty
+  transactionWithTiming <- empty
+  modelToLoad <- empty
+  indexedResourceToCreate <- empty
+  missingResource <- empty
+  typeToBeFixed <- empty
+  userIntegrityChoice <- empty
+  (rf :: AVar PerspectivesState) <- getCurrentLanguageFromIDB >>= new <<<
+    ( ( newPerspectivesState
+          { systemIdentifier: userName <> "macbook"
+          , perspectivesUser: userName
+          , userName: Nothing
+          , password: Nothing
+          , couchdbUrl: Nothing
+          }
+          transactionFlag
+          transactionWithTiming
+          modelToLoad
+          defaultRuntimeOptions
+          brokerService
+          indexedResourceToCreate
+          missingResource
+          typeToBeFixed
+          userIntegrityChoice
+      )
+    )
+  runReaderT mp rf

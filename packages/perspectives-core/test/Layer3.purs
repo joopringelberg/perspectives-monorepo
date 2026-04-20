@@ -43,19 +43,53 @@
 -- |
 -- |   pnpm run test:layer3
 -- |
--- | The suites below are currently `suiteSkip`-ped inside their own modules
--- | because they depend on the Layer 2 in-memory PouchDB setup and full
--- | model loading, which are not yet wired.  Uncomment and enable them as
--- | those prerequisites land.
--- | See `design/layer3-sync-tests.md` for the step-by-step enablement guide.
+-- | Smoke tests for the PDR instance scaffold are included below.
+-- | They deliberately use `testOnly` so that they do NOT run automatically in CI:
+-- | each test calls `startPDRInstance`, which invokes `setupUser` and downloads
+-- | essential Perspectives models from https://perspectives.domains — this requires
+-- | network access that is not available in the standard CI environment.
+-- | To run these tests manually, pass `--only` to the test runner or select them
+-- | from the test menu.
+-- |
+-- | TODO: Enable sync suites below once the stub AMQP transport is implemented.
+-- |       See docsources/nodejs-testing-architecture.md §3 for the design.
 
 module Test.Layer3 where
 
 import Prelude
+
 import Effect (Effect)
+import Perspectives.Persistence.State (getSystemIdentifier)
+import Perspectives.PerspectivesState (defaultRuntimeOptions)
+import Test.PDRInstance (runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
+import Test.Unit (suite, test, testOnly)
+import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
 import Test.Sync.SetPropertyGetProperty (theSuite) as SPG
 
 main :: Effect Unit
 main = runTest do
-  SPG.theSuite
+  suite "PDRInstance scaffold" do
+
+    -- | Smoke test: start one PDR instance, verify the system identifier matches
+    -- | the value we passed in, then shut down.
+    test "start a single PDR instance and read its system identifier" do
+      let user = testPouchdbUser "alice"
+      withPDR user defaultRuntimeOptions \pdr -> do
+        sysId <- runInPDR pdr getSystemIdentifier
+        assert "system identifier should equal alice_macbook" (sysId == "alice_macbook")
+
+    -- | Smoke test: start two PDR instances in the same process, verify that
+    -- | they have distinct system identifiers.
+    testOnly "start two PDR instances with distinct identifiers" do
+      withTwoPDRs
+        (testPouchdbUser "alice")
+        defaultRuntimeOptions
+        (testPouchdbUser "bob")
+        defaultRuntimeOptions
+        \pdrA pdrB -> do
+          sysA <- runInPDR pdrA getSystemIdentifier
+          sysB <- runInPDR pdrB getSystemIdentifier
+          assert "PDR-A system identifier should equal alice_macbook" (sysA == "alice_macbook")
+          assert "PDR-B system identifier should equal bob_macbook" (sysB == "bob_macbook")
+          assert "PDR-A and PDR-B should have distinct identifiers" (sysA /= sysB)

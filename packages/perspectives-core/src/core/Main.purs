@@ -37,7 +37,7 @@ import Data.Newtype (unwrap)
 import Data.Nullable (Nullable, toMaybe, toNullable)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Effect.Aff (Aff, Error, Fiber, Milliseconds(..), catchError, delay, error, forkAff, joinFiber, launchAff_, runAff, throwError, try)
+import Effect.Aff (Aff, Error, Fiber, Milliseconds(..), catchError, delay, error, forkAff, joinFiber, killFiber, launchAff_, runAff, throwError, try)
 import Effect.Aff.AVar (AVar, empty, new, put, take, read)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -137,7 +137,18 @@ main = pure unit
 -- | Execute the Perspectives Distributed Runtime by creating a listener to the internal channel.
 -- | Implementation note: the PouchdbUser should have a couchdbUrl that terminates on a forward slash.
 runPDR :: UserName -> Foreign -> RuntimeOptions -> (Boolean -> Effect Unit) -> Effect Unit
-runPDR usr rawPouchdbUser options callback = void $ runAff handler do
+runPDR usr rawPouchdbUser options callback = void $ runAff handler (runPDR_ usr rawPouchdbUser options callback)
+  where
+  handler :: Either Error Unit -> Effect Unit
+  handler (Left e) = do
+    logPerspectivesError $ Custom $ "An error condition in runPDR: " <> (show e)
+    callback false
+  handler (Right _) = do
+    logPerspectivesError $ Custom $ "Started the PDR for: " <> usr
+    callback true
+
+runPDR_ :: UserName -> Foreign -> RuntimeOptions -> (Boolean -> Effect Unit) -> Aff Unit
+runPDR_ usr rawPouchdbUser options callback = do
   case decodePouchdbUser' rawPouchdbUser of
     Left _ -> throwError (error "Wrong format for parameter 'rawPouchdbUser' in runPDR")
     Right (pouchdbUser :: PouchdbUser) -> do
@@ -396,14 +407,6 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
     s@{ transactionFibers } <- take stateAVar
     put s { transactionFibers = insert (Tuple instanceId stateId) f transactionFibers } stateAVar
 
-  handler :: Either Error Unit -> Effect Unit
-  handler (Left e) = do
-    logPerspectivesError $ Custom $ "An error condition in runPDR: " <> (show e)
-    callback false
-  handler (Right _) = do
-    logPerspectivesError $ Custom $ "Started the PDR for: " <> usr
-    callback true
-
 forkDatabasePersistence :: AVar PerspectivesState -> Aff Unit
 forkDatabasePersistence state = do
   -- TODO. Read this from state.
@@ -535,57 +538,8 @@ createAccount :: UserName -> Foreign -> RuntimeOptions -> Nullable Foreign -> ({
 createAccount perspectivesUser rawPouchdbUser runtimeOptions nullableIdentityDocument callback = void $ runAff handler
   case decodePouchdbUser' rawPouchdbUser of
     Left e -> throwError (error $ "Wrong format for parameter 'rawPouchdbUser' in createAccount: " <> (show e))
-    Right (pouchdbUser :: PouchdbUser) -> do
-      -- Set the current PDR version.
-      idbSet "CurrentPDRVersion" (unsafeCoerce pdrVersion)
+    Right (pouchdbUser :: PouchdbUser) -> createAccount_ pouchdbUser runtimeOptions (toMaybe nullableIdentityDocument)
 
-      transactionFlag <- new true
-      brokerService <- empty
-      transactionWithTiming <- empty
-      modelToLoad <- empty
-      indexedResourceToCreate <- empty
-      missingResource <- empty
-      typeToBeFixed <- empty
-      userIntegrityChoice <- empty
-      state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
-        pouchdbUser
-        transactionFlag
-        transactionWithTiming
-        modelToLoad
-        runtimeOptions
-        brokerService
-        indexedResourceToCreate
-        missingResource
-        typeToBeFixed
-        userIntegrityChoice
-
-      -- Fork aff to load models just in time.
-      void $ forkAff $ forkJustInTimeModelLoader modelToLoad state
-      -- Fork aff to save to the database
-      -- TODO: beeindig database persistence.
-      void $ forkAff $ forkDatabasePersistence state
-      -- Fork aff to create indexed roles and contexts.
-      void $ forkAff $ forkCreateIndexedResources indexedResourceToCreate state
-      -- Fork aff to restore referential integrity
-      void $ forkAff $ forkReferentialIntegrityFixer missingResource state
-      -- Register the function that delivers user integrity choices from the frontend.
-      liftEffect $ Proxy.registerPutUserIntegrityChoice \choice -> launchAff_ do
-        s <- read state
-        put choice s.userIntegrityChoice
-
-      -- Set up.
-      runPerspectivesWithState
-        ( do
-            addAllExternalFunctions
-            key <- getPrivateKey
-            modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce key } }
-            getSystemIdentifier >>= createUserDatabases
-            setupUser (UninterpretedTransactionForPeer <$> (toMaybe nullableIdentityDocument))
-            saveMarkedResources
-        )
-        state
-      -- and stop
-      put Stop modelToLoad
   where
   handler :: Either Error Unit -> Effect Unit
   handler (Left e) = do
@@ -594,6 +548,64 @@ createAccount perspectivesUser rawPouchdbUser runtimeOptions nullableIdentityDoc
   handler (Right _) = do
     logPerspectivesError $ Custom $ "Created an account " <> perspectivesUser
     callback { success: true, reason: toNullable Nothing }
+
+createAccount_ :: PouchdbUser -> RuntimeOptions -> Maybe Foreign -> Aff Unit
+createAccount_ pouchdbUser runtimeOptions maybeIdentityDocument = do
+  -- Set the current PDR version.
+  idbSet "CurrentPDRVersion" (unsafeCoerce pdrVersion)
+
+  transactionFlag <- new true
+  brokerService <- empty
+  transactionWithTiming <- empty
+  modelToLoad <- empty
+  indexedResourceToCreate <- empty
+  missingResource <- empty
+  typeToBeFixed <- empty
+  userIntegrityChoice <- empty
+  state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
+    pouchdbUser
+    transactionFlag
+    transactionWithTiming
+    modelToLoad
+    runtimeOptions
+    brokerService
+    indexedResourceToCreate
+    missingResource
+    typeToBeFixed
+    userIntegrityChoice
+
+  -- Register the function that delivers user integrity choices from the frontend.
+  liftEffect $ Proxy.registerPutUserIntegrityChoice \choice -> launchAff_ do
+    s <- read state
+    put choice s.userIntegrityChoice
+
+  -- Fork aff to load models just in time.
+  void $ forkAff $ forkJustInTimeModelLoader modelToLoad state
+  -- Fork aff to restore referential integrity (captured so we can kill it when done).
+  integrityFiber <- forkAff $ forkReferentialIntegrityFixer missingResource state
+  -- Fork aff to save to the database (captured so we can kill it when done).
+  persistenceFiber <- forkAff $ forkDatabasePersistence state
+  -- Fork aff to create indexed roles and contexts (captured so we can kill it when done).
+  indexedResourceFiber <- forkAff $ forkCreateIndexedResources indexedResourceToCreate state
+
+  -- Set up.
+  runPerspectivesWithState
+    ( do
+        addAllExternalFunctions
+        key <- getPrivateKey
+        modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce key } }
+        getSystemIdentifier >>= createUserDatabases
+        setupUser (UninterpretedTransactionForPeer <$> maybeIdentityDocument)
+        saveMarkedResources
+    )
+    state
+  -- Stop the JIT model loader (it handles Stop gracefully).
+  put Stop modelToLoad
+  -- Kill the daemon fibers that have no stop signal of their own.
+  let done = error "createAccount_ complete"
+  killFiber done integrityFiber
+  killFiber done persistenceFiber
+  killFiber done indexedResourceFiber
 
 reCreateInstances :: Foreign -> RuntimeOptions -> (Boolean -> Effect Unit) -> Effect Unit
 reCreateInstances rawPouchdbUser options callback = void $ runAff handler

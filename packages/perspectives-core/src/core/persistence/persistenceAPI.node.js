@@ -19,9 +19,11 @@
 import PouchDB from "pouchdb-core";
 import PouchDBMemoryAdapter from "pouchdb-adapter-memory";
 import PouchDBHttpAdapter from "pouchdb-adapter-http";
+import PouchDBMapReduce from "pouchdb-mapreduce";
 
 PouchDB.plugin(PouchDBMemoryAdapter);
 PouchDB.plugin(PouchDBHttpAdapter);
+PouchDB.plugin(PouchDBMapReduce);
 
 function convertPouchError( originalE )
 {
@@ -53,8 +55,19 @@ function convertPouchError( originalE )
 
 // In the Node.js context there are no CORS restrictions, so we do not override
 // the fetch implementation.  PouchDB's default fetch (node-fetch) is used as-is.
+//
+// When databaseName is a URL (http:// or https://) we create a remote PouchDB
+// instance backed by pouchdb-adapter-http.  This happens e.g. when the PDR opens
+// a read-only view on a public repository such as
+// "https://perspectives.domains/cw_perspectives_domains".
+// For all other names (plain identifiers) we use the in-memory adapter, which is
+// appropriate for unit/integration tests that should not touch the filesystem.
 export function createDatabaseImpl( databaseName )
 {
+  if (databaseName.startsWith('http://') || databaseName.startsWith('https://'))
+  {
+    return new PouchDB( databaseName );
+  }
   return new PouchDB( databaseName, { adapter: 'memory' } );
 }
 

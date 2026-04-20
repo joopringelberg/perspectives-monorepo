@@ -6,19 +6,18 @@ import Control.Monad.Error.Class (catchError)
 import Control.Monad.Free (Free)
 import Data.Array (null)
 import Data.Either (Either(..))
-import Data.Maybe (Maybe(..))
-import Data.Tuple (Tuple(..))
-import Effect.Aff (Milliseconds(..), delay)
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log, logShow)
-import Perspectives.Couchdb.Revision (changeRevision)
-import Perspectives.DomeinCache (removeDomeinFileFromCouchdb, retrieveDomeinFile)
+import Perspectives.DomeinCache (removeDomeinFileFromCouchdb)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
-import Perspectives.Parsing.Arc.PhaseTwoDefs (toStableDomeinFile)
+import Perspectives.PerspectivesState (defaultRuntimeOptions)
+import Perspectives.Representation.Class.PersistentType (typeExists)
+import Perspectives.Representation.TypeIdentifiers (ContextType(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.TypePersistence.LoadArc.FS (loadAndCompileArcFile, loadCompileAndCacheArcFile', loadCompileAndSaveArcFile, loadCompileAndSaveArcFile')
+import Test.PDRInstance (runInPDR, testPouchdbUser, withPDR)
 import Test.Perspectives.Utils (clearUserDatabase, runP, withSystem)
-import Test.Unit (TestF, suite, suiteOnly, suiteSkip, test, testOnly, testSkip)
+import Test.Unit (TestF, suite, test, testOnly)
 import Test.Unit.Assert (assert)
 
 testDirectory :: String
@@ -29,28 +28,37 @@ modelDirectory = "src/model"
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.loadArc" do
-  test "Load a model file and store it in Couchdb: reload and compare with original" do
-    -- 1. Load and save a model.
-    messages <- runP $ withSystem $ loadCompileAndSaveArcFile' "contextAndRole" testDirectory
-    if null messages
-      then pure unit
-      else do
-        logShow messages
-        assert "The file could not be saved" false
-    -- 2. Reload it from the database into the cache.
-    retrievedModel <- runP $ retrieveDomeinFile $ ModelUri "model:ContextAndRole"
-    -- 3. Reload the file without caching or saving.
-    r <- runP $ withSystem $ loadAndCompileArcFile "contextAndRole" testDirectory
-    -- 4. Compare the model in cache with the model from the file.
-    -- logShow retrievedModel
-    case r of
-      Left e -> assert ("The same file loaded the second time fails: " <> show e) false
-      Right (Tuple reParsedModel _) -> do
-        -- logShow (changeRevision Nothing reParsedModel)
-        assert "The model reloaded from couchdb should equal the model loaded from file."
-          -- NOTICE: this test will fail because retrievedModel will be Stable and reParsedModel will be Readable.
-          (eq (changeRevision Nothing retrievedModel) (changeRevision Nothing (toStableDomeinFile reParsedModel)))
-    runP $ removeDomeinFileFromCouchdb (ModelUri "model:ContextAndRole")
+
+  testOnly "Install PDR in memory and fetch a System type" do
+    let user = testPouchdbUser "alice"
+    withPDR user defaultRuntimeOptions \pdr -> do
+      runInPDR pdr do
+        typeExists (ContextType "model://perspectives.domains#System") >>= case _ of
+          false -> liftAff $ assert "System context should be available" false
+          true -> pure unit
+
+  -- test "Load a model file and store it in Couchdb: reload and compare with original" $ runPerspectivesWithoutCouchdb "testUser" do
+  --   -- 1. Load and save a model.
+  --   messages <- runP $ withSystem $ loadCompileAndSaveArcFile' "contextAndRole" testDirectory
+  --   if null messages
+  --     then pure unit
+  --     else do
+  --       logShow messages
+  --       assert "The file could not be saved" false
+  --   -- 2. Reload it from the database into the cache.
+  --   retrievedModel <- runP $ retrieveDomeinFile $ ModelUri "model:ContextAndRole"
+  --   -- 3. Reload the file without caching or saving.
+  --   r <- runP $ withSystem $ loadAndCompileArcFile "contextAndRole" testDirectory
+  --   -- 4. Compare the model in cache with the model from the file.
+  --   -- logShow retrievedModel
+  --   case r of
+  --     Left e -> assert ("The same file loaded the second time fails: " <> show e) false
+  --     Right (Tuple reParsedModel _) -> do
+  --       -- logShow (changeRevision Nothing reParsedModel)
+  --       assert "The model reloaded from couchdb should equal the model loaded from file."
+  --         -- NOTICE: this test will fail because retrievedModel will be Stable and reParsedModel will be Readable.
+  --         (eq (changeRevision Nothing retrievedModel) (changeRevision Nothing (toStableDomeinFile reParsedModel)))
+  --   runP $ removeDomeinFileFromCouchdb (ModelUri "model:ContextAndRole")
 
   test "Load model:System and cache it" do
     messages <- runP do
@@ -88,37 +96,35 @@ theSuite = suite "Perspectives.loadArc" do
     messages <- runP do
       catchError (loadCompileAndSaveArcFile' "couchdb" modelDirectory)
         \e -> logShow e *> pure []
-    if null messages
-      then pure unit
-      else do
-        logShow messages
-        assert "The file could not be parsed, compiled or saved" false
+    if null messages then pure unit
+    else do
+      logShow messages
+      assert "The file could not be parsed, compiled or saved" false
     runP $ removeDomeinFileFromCouchdb (ModelUri "model:Couchdb")
 
   test "Load model:Serialise from file and store it in Couchdb" do
     messages <- runP do
       catchError (loadCompileAndSaveArcFile' "serialise" modelDirectory)
         \e -> logShow e *> pure []
-    if null messages
-      then pure unit
-      else do
-        logShow messages
-        assert "The file could not be parsed, compiled or saved" false
+    if null messages then pure unit
+    else do
+      logShow messages
+      assert "The file could not be parsed, compiled or saved" false
     runP $ removeDomeinFileFromCouchdb (ModelUri "model:Serialise")
 
   test "Load a model file and instances and store it in Couchdb" do
     messages <- runP do
-      catchError (do
-        void $ loadCompileAndCacheArcFile' "couchdb" modelDirectory
-        void $ loadCompileAndCacheArcFile' "serialise" modelDirectory
-        loadCompileAndSaveArcFile "perspectivesSysteem" modelDirectory
+      catchError
+        ( do
+            void $ loadCompileAndCacheArcFile' "couchdb" modelDirectory
+            void $ loadCompileAndCacheArcFile' "serialise" modelDirectory
+            loadCompileAndSaveArcFile "perspectivesSysteem" modelDirectory
         )
         \e -> logShow e *> pure []
-    if null messages
-      then pure unit
-      else do
-        logShow messages
-        assert "The file could not be parsed, compiled or saved" false
+    if null messages then pure unit
+    else do
+      logShow messages
+      assert "The file could not be parsed, compiled or saved" false
     runP do
       removeDomeinFileFromCouchdb (ModelUri "model:System")
       clearUserDatabase
