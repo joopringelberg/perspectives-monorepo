@@ -48,11 +48,10 @@ import Foreign.Object (empty, fromFoldable)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ApiEffect, RequestType(..)) as Api
 import Perspectives.ApiTypes (ContextSerialization(..), ContextsSerialisation(..), PropertySerialization(..), RecordWithCorrelationidentifier(..), Request(..), RequestRecord, Response(..), ResponseWithWarnings(..), RolSerialization(..), ApiEffect, mkApiEffect, showRequestRecord)
+import Perspectives.Assignment.RunAction (runAction, runContextAction)
 import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor_)
 import Perspectives.Assignment.Update (RoleProp(..), addProperty, deleteProperty, getPropertyBearingRoleInstance, saveFile, setPreferredUserRoleType, setProperty)
 import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
-import Perspectives.CompileAssignment (compileAssignment)
-import Perspectives.CompileRoleAssignment (compileAssignmentFromRole)
 import Perspectives.CoreTypes (MP, MonadPerspectives, MonadPerspectivesTransaction, PropertyValueGetter, RoleGetter, liftToInstanceLevel, (##=), (##>), (##>>), (###=))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DependencyTracking.Dependency (registerSupportedEffect, unregisterSupportedEffect)
@@ -65,7 +64,7 @@ import Perspectives.Inspector.Factories (makeInspectableContext, makeInspectable
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
 import Perspectives.Instances.Combinators (filter)
-import Perspectives.Instances.Me (getAllMyRoleTypes, getMeInRoleAndContext, getMyType, isMe)
+import Perspectives.Instances.Me (getAllMyRoleTypes, getMyType, isMe)
 import Perspectives.Instances.ObjectGetters (binding, context, contextType, contextType_, externalRole, getAllFilledRoles, getContextActions, getFilledRoles, getMe, getProperty, roleType, roleType_, siblings)
 import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.ModelDependencies (actualSharedFileServer, allSettings, fileShareCredentials, identifiableFirstName, identifiableLastName, itemOnClipboardClipboardData, itemsOnClipboard, mySharedFileServices, selectedClipboardItem, sharedFileServices, sysUser)
@@ -74,17 +73,15 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (deleteDocument, getAttachment, toFile)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, saveMarkedResources)
-import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getWarnings, pushFrame, resetWarnings, restoreFrame)
+import Perspectives.PerspectivesState (getPerspectivesUser, getWarnings, resetWarnings)
 import Perspectives.Proxy (createRequestEmitter, retrieveRequestEmitter)
 import Perspectives.Query.QueryTypes (roleInContext2Role)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter, getDynamicPropertyGetterFromLocalName, getPropertyFromTelescope, getPropertyValues, getPublicUrl, getRoleFunction, getRoleInstances)
 import Perspectives.Representation.ADT (ADT, allLeavesInADT)
-import Perspectives.Representation.Action (Action(..)) as ACTION
 import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getContext, getEnumeratedRole, getPerspectType)
 import Perspectives.Representation.Class.Role (getRoleType, kindOfRole, perspectivesOfRoleType, rangeOfRoleCalculation, roleKindOfRoleType, completeDeclaredFillerRestriction, displayNameOfRoleType)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
-import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), StateIdentifier(..), ViewType, propertytype2string, roletype2string, toRoleType_)
 import Perspectives.Representation.View (View, propertyReferences)
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, guid, resourceIdentifier2DocLocator)
@@ -96,7 +93,7 @@ import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUser, serialisedTableFormForContextAndUser)
 import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableName, perspectiveForContextAndUser, perspectivesForContextAndUser, settingsPerspective)
-import Perspectives.Types.ObjectGetters (findPerspective, getAction, getContextAction, getContextActionFromUnqualifiedName, isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
+import Perspectives.Types.ObjectGetters (isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
 import Prelude (Unit, bind, discard, eq, identity, map, negate, pure, show, unit, void, ($), (&&), (/=), (<$>), (<<<), (<>), (==), (>=>), (>>=))
 import Simple.JSON (read, readJSON_, unsafeStringify, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
@@ -841,7 +838,6 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
       )
       (\e -> sendResponse (Error corrId (show e)) setter)
     -- { request: Action
-    -- , subject: <user role instance>
     -- , predicate: <object of perspective role instance>
     -- , object: <context instance>
     -- , contextDescription:
@@ -853,21 +849,9 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
       ( case read contextDescription of
           Left err -> sendResponse (Error corrId ("Incorrectly formed description of Action on applying an action in context instance '" <> object <> "' and object role instance '" <> predicate <> "'. Errors: " <> show err)) setter
           Right ({ perspectiveId, actionName } :: { perspectiveId :: String, actionName :: String }) -> do
-            -- Find the action from the authoringRole, the perspective id, the Action name.
-            maction <- (map $ getAction actionName) <$> (findPerspective authoringRole (\(Perspective { id }) -> pure $ id `eq` perspectiveId))
-            mauthoringRoleInstance <- (ContextInstance object) ##> getMeInRoleAndContext authoringRole
-            case mauthoringRoleInstance, maction of
-              Just author, Just (Just (ACTION.Action { qfd: action })) -> do
-                void $ runMonadPerspectivesTransaction authoringRole
-                  do
-                    oldFrame <- lift $ pushFrame
-                    lift $ addBinding "currentcontext" [ object ]
-                    lift $ addBinding "currentactor" [ unwrap author ]
-                    updater <- lift $ compileAssignmentFromRole action
-                    updater (RoleInstance predicate)
-                    lift $ restoreFrame oldFrame
-                sendResponse (Result corrId []) setter
-              _, _ -> sendResponse (Error corrId $ "cannot identify Action with role type '" <> show authoringRole <> "', perspectiveId '" <> perspectiveId <> "' and action name '" <> actionName <> "'.") setter
+            void $ runMonadPerspectivesTransaction authoringRole
+              (runAction authoringRole perspectiveId actionName object predicate)
+            sendResponse (Result corrId []) setter
       )
       (\e -> sendResponse (Error corrId (show e)) setter)
 
@@ -878,28 +862,10 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     -- }
     Api.ContextAction -> catchError
       ( do
-          -- Find the action from the subject type and the Action name.
           userRoleType <- getRoleType subject
-          maction <- if isTypeUri predicate then getContextAction predicate userRoleType else getContextActionFromUnqualifiedName predicate userRoleType
-          muserRoleInstance <- (ContextInstance object) ##> getMeInRoleAndContext userRoleType
-          case muserRoleInstance, maction of
-            Just user, Just (ACTION.Action { qfd: action }) -> do
-              void $ runMonadPerspectivesTransaction userRoleType
-                do
-                  oldFrame <- lift $ pushFrame
-                  lift $ addBinding "currentcontext" [ object ]
-                  lift $ addBinding "currentactor" [ unwrap user ]
-                  updater <- lift $ compileAssignment action
-                  updater (ContextInstance object)
-                  lift $ restoreFrame oldFrame
-              sendResponse (Result corrId []) setter
-            _, _ -> sendResponse
-              ( Error corrId $ "cannot identify Action with role type '" <> show userRoleType
-                  <> "' and action name '"
-                  <> predicate
-                  <> "'."
-              )
-              setter
+          void $ runMonadPerspectivesTransaction userRoleType
+            (runContextAction subject predicate object)
+          sendResponse (Result corrId []) setter
       )
       (\e -> sendResponse (Error corrId (show e)) setter)
 
