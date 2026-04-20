@@ -52,7 +52,9 @@ module Test.PDRInstance where
 import Prelude
 
 import Control.Monad.AvarMonadAsk (modify)
+import Control.Promise (Promise, toAffE)
 import Data.Maybe (Maybe(..))
+import Effect (Effect)
 import Effect.Aff (Aff, Error, bracket, error, forkAff, killFiber)
 import Effect.Aff.AVar (AVar, empty, new, put)
 import Main (forkCreateIndexedResources, forkDatabasePersistence, forkJustInTimeModelLoader, forkReferentialIntegrityFixer)
@@ -71,6 +73,16 @@ import Perspectives.RunPerspectives (runPerspectivesWithState)
 import Perspectives.SetupCouchdb (createUserDatabases)
 import Perspectives.SetupUser (setupUser)
 import Unsafe.Coerce (unsafeCoerce)
+
+-----------------------------------------------------------
+-- CRYPTOGRAPHIC KEY LOADING
+-----------------------------------------------------------
+-- | Reads accounts/orn2j1nh3q_test3_keypair.json, imports both keys via SubtleCrypto
+-- | (ECDSA P-384), and stores them in IDB under <guid>_privateKey / <guid>_publicKey.
+foreign import loadKeypairImpl :: String -> Effect (Promise Unit)
+
+loadKeypair :: String -> Aff Unit
+loadKeypair = loadKeypairImpl >>> toAffE
 
 -----------------------------------------------------------
 -- PDR INSTANCE
@@ -141,6 +153,11 @@ startPDRInstance pouchdbUser runtimeOptions = do
   integrityFiber <- forkAff $ forkReferentialIntegrityFixer missingResource state
   persistenceFiber <- forkAff $ forkDatabasePersistence state
   indexedResourceFiber <- forkAff $ forkCreateIndexedResources indexedResourceToCreate state
+
+  -- Load the keypair from file into IDB before calling createAccount_.
+  -- The key names follow authenticate.purs: takeGuid(perspectivesUser) <> "_privateKey" / "_publicKey".
+  -- For perspectivesUser "testuser", takeGuid returns "testuser" unchanged (no '#' present).
+  loadKeypair pouchdbUser.perspectivesUser
 
   -- Set up user databases and install the essential models.
   runPerspectivesWithState
