@@ -39,11 +39,14 @@ module Perspectives.DataUpgrade.AddContextKeyMigration
 import Prelude
 
 import Control.Monad.Except (runExcept)
-import Data.Array (length)
+import Control.Monad.Rec.Class (Step(..), tailRecM)
+import Data.Array (length, null, splitAt)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Effect.Aff (Milliseconds(..), delay)
+import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign (Foreign)
 import Perspectives.CoreTypes (MonadPerspectives)
@@ -64,9 +67,19 @@ addContextKeyToDeltas _ = do
   dbName <- deltaStoreDatabaseName
   { rows } <- documentsInDatabase dbName includeDocs
   log ("AddContextKeyMigration: processing " <> show (length rows) <> " delta-store documents")
-  for_ rows \{ doc } -> case doc of
+  void $ tailRecM (processChunk dbName 200) rows
+
+processChunk :: forall r. String -> Int -> Array { doc :: Maybe Foreign | r } -> MonadPerspectives (Step (Array { doc :: Maybe Foreign | r }) Unit)
+processChunk dbName chunkSize remaining = do
+  let { before: batch, after: rest } = splitAt chunkSize remaining
+  for_ batch \{ doc } -> case doc of
     Nothing -> pure unit
     Just foreignDoc -> processDoc dbName foreignDoc
+  if null rest then pure (Done unit)
+  else do
+    -- Yield to Aff between batches to avoid deep synchronous call chains.
+    liftAff $ delay (Milliseconds 0.0)
+    pure (Loop rest)
 
 -----------------------------------------------------------
 -- PER-DOCUMENT PROCESSING
