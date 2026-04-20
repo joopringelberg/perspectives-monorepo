@@ -181,30 +181,32 @@ export function compactDatabaseImpl(db) {
   };
 }
 
-// Create a utility function that:
-// 1. Creates a new temporary database
-// 2. Copies only non-deleted documents to it
-// 3. Destroys the original and renames the new one
+function copyableDoc(doc)
+{
+  const { _rev, _revisions, _conflicts, _deleted_conflicts, _local_seq, ...rest } = doc;
+  return rest;
+}
+
+// Rebuild the database with only live documents, avoiding the replication API.
 export function cleanupDeletedDocsImpl (dbName) {
-  const origDb = new PouchDB(dbName);
-  const tempDb = new PouchDB(`${dbName}_temp`);
+  const origDb = createDatabaseImpl(dbName);
   let docsToKeep = [];
   
-  return origDb.allDocs({include_docs: true})
+  return origDb.allDocs({ include_docs: true, attachments: true })
     .then(result => {
-      // Filter out deleted documents
       docsToKeep = result.rows
-        .filter(row => !row.doc._deleted)
-        .map(row => row.doc);
-      if (docsToKeep.length) {
-        return tempDb.bulkDocs(docsToKeep);
-      } else {
-        return Promise.resolve();
-      }
+        .map(row => row.doc)
+        .filter(doc => doc && !doc._deleted)
+        .map(copyableDoc);
     })
     .then(() => origDb.destroy())
-    .then(() => tempDb.replicate.to(new PouchDB(dbName)))
-    .then(() => tempDb.destroy())
+    .then(() => {
+      const rebuiltDb = createDatabaseImpl(dbName);
+      if (!docsToKeep.length) {
+        return Promise.resolve({});
+      }
+      return rebuiltDb.bulkDocs(docsToKeep);
+    })
     .then(() => {
       console.log(`Cleanup complete. Kept ${docsToKeep.length} non-deleted documents.`);
       return {};
