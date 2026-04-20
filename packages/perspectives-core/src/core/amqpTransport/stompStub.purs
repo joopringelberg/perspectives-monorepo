@@ -41,7 +41,7 @@
 -- | runPerspectivesWithState (setStompClientFactory factoryB) stateB
 -- | ```
 -- |
--- | See `Test.Sync.TestUtils` for the full two-PDR scaffold.
+-- | See `Test.PDRInstance` for the full two-PDR scaffold.
 
 module Perspectives.AMQP.Stomp.Stub
   ( InProcessBus

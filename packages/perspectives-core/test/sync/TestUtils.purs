@@ -39,7 +39,7 @@
 -- | 4. Running `AMQP.IncomingPost.incomingPost` in a background `Aff` fiber
 -- |    for each PDR, so each PDR continuously processes incoming transactions.
 -- |
--- | ## Running a test
+-- | ## Running a test    NOTICE: THIS MODULE IS OBSOLETE.
 -- |
 -- | ```purescript
 -- | myTest :: Aff Unit
@@ -77,6 +77,7 @@ module Test.Sync.TestUtils
 import Prelude
 
 import Control.Monad.Reader (runReaderT)
+import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
 import Effect.Aff.AVar (AVar, empty, new)
 import Effect.Class (liftEffect)
@@ -109,20 +110,20 @@ setupPDRState
   -> InProcessBus
   -> Aff (AVar PerspectivesState)
 setupPDRState userName perspectivesUser systemId bus = do
-  transactionFlag       <- new true
-  brokerService         <- empty
+  transactionFlag <- new true
+  brokerService <- empty
   transactionWithTiming <- empty
-  modelToLoad           <- empty
+  modelToLoad <- empty
   indexedResourceToCreate <- empty
-  missingResource       <- empty
-  typeToBeFixed         <- empty
-  userIntegrityChoice   <- empty
-  language              <- getCurrentLanguageFromIDB
+  missingResource <- empty
+  typeToBeFixed <- empty
+  userIntegrityChoice <- empty
+  language <- getCurrentLanguageFromIDB
   stateAVar <- new
     ( newPerspectivesState
         { systemIdentifier: systemId
         , perspectivesUser
-        , userName: Nothing   -- no real CouchDB credentials needed
+        , userName: Nothing -- no real CouchDB credentials needed
         , password: Nothing
         , couchdbUrl: Nothing -- in-memory PouchDB, no CouchDB server
         }
@@ -157,7 +158,7 @@ withTwoPDRs
   :: (AVar PerspectivesState -> AVar PerspectivesState -> Aff Unit)
   -> Aff Unit
 withTwoPDRs action = do
-  bus    <- liftEffect createInProcessBus
+  bus <- liftEffect createInProcessBus
   stateA <- setupPDRState "userA" "userA" "userA_system" bus
   stateB <- setupPDRState "userB" "userB" "userB_system" bus
   action stateA stateB

@@ -66,16 +66,18 @@ module Test.Sync.SetPropertyGetProperty where
 import Prelude
 
 import Control.Monad.Free (Free)
+import Data.Maybe (Maybe(..))
 import Effect.Aff (Milliseconds(..), delay)
 import Effect.Aff.Class (liftAff)
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.CoreTypes ((##>))
 import Perspectives.Instances.ObjectGetters (getProperty)
 import Perspectives.ModelDependencies (sysUser)
+import Perspectives.PerspectivesState (defaultRuntimeOptions)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
-import Test.Sync.TestUtils (runInPDR, withTwoPDRs)
+import Test.PDRInstance (runInPDR, testPouchdbUser, withTwoPDRs)
 import Test.Unit (TestF, suiteSkip, test)
 import Test.Unit.Assert (assert)
 
@@ -113,66 +115,72 @@ theSuite = suiteSkip "SetProperty (PDR-A) → GetProperty (PDR-B)" do
   -- |  * `connectedToAMQPBroker` is `"true"` in both instances.
   -- |  * Both PDR instances run `incomingPost` in background fibers.
   test "property set on PDR-A is visible on PDR-B after synchronisation" do
-    withTwoPDRs \stateA stateB -> do
+    withTwoPDRs
+      (testPouchdbUser "userA")
+      defaultRuntimeOptions
+      (testPouchdbUser "userB")
+      defaultRuntimeOptions
+      \pdrA pdrB -> do
 
-      -- -----------------------------------------------------------------------
-      -- Set up: load models and seed shared state in both PDR instances.
-      -- -----------------------------------------------------------------------
-      -- TODO: replace `pure unit` with `withSystem` once Layer 2 PouchDB is wired.
-      -- runInPDR stateA (withSystem (pure unit))
-      -- runInPDR stateB (withSystem (pure unit))
-      --
-      -- TODO: set connectedToAMQPBroker = "true" in both PDRs.
-      -- TODO: start incomingPost in background fibers for both PDRs.
+        -- -----------------------------------------------------------------------
+        -- Set up: load models and seed shared state in both PDR instances.
+        -- -----------------------------------------------------------------------
+        -- TODO: set connectedToAMQPBroker = "true" in both PDRs.
+        -- TODO: start incomingPost in background fibers for both PDRs.
 
-      -- -----------------------------------------------------------------------
-      -- Step 1 — Apply mutation in PDR-A.
-      -- -----------------------------------------------------------------------
-      runInPDR stateA do
-        runMonadPerspectivesTransaction' false authoringRole do
-          setProperty [ sharedRoleId ] testPropertyType Nothing [ Value "hello" ]
+        -- -----------------------------------------------------------------------
+        -- Step 1 — Apply mutation in PDR-A.
+        -- -----------------------------------------------------------------------
+        runInPDR pdrA do
+          runMonadPerspectivesTransaction' false authoringRole do
+            setProperty [ sharedRoleId ] testPropertyType Nothing [ Value "hello" ]
 
-      -- -----------------------------------------------------------------------
-      -- Step 2 — Wait for the transaction to be delivered and applied in PDR-B.
-      -- -----------------------------------------------------------------------
-      -- The in-process bus delivers messages synchronously in the same tick,
-      -- but `executeTransaction` runs in MonadPerspectives (Aff), so we wait
-      -- a short while for the fiber to complete.
-      liftAff $ delay (Milliseconds 200.0)
+        -- -----------------------------------------------------------------------
+        -- Step 2 — Wait for the transaction to be delivered and applied in PDR-B.
+        -- -----------------------------------------------------------------------
+        -- The in-process bus delivers messages synchronously in the same tick,
+        -- but `executeTransaction` runs in MonadPerspectives (Aff), so we wait
+        -- a short while for the fiber to complete.
+        liftAff $ delay (Milliseconds 200.0)
 
-      -- -----------------------------------------------------------------------
-      -- Step 3 — Query PDR-B and assert the value arrived.
-      -- -----------------------------------------------------------------------
-      mval <- runInPDR stateB (sharedRoleId ##> getProperty testPropertyType)
-      liftAff $ assert
-        "PDR-B: property value should be 'hello' after synchronisation from PDR-A"
-        (mval == Just (Value "hello"))
+        -- -----------------------------------------------------------------------
+        -- Step 3 — Query PDR-B and assert the value arrived.
+        -- -----------------------------------------------------------------------
+        mval <- runInPDR pdrB (sharedRoleId ##> getProperty testPropertyType)
+        liftAff $ assert
+          "PDR-B: property value should be 'hello' after synchronisation from PDR-A"
+          (mval == Just (Value "hello"))
 
   -- -------------------------------------------------------------------------
   -- Test 2: Bi-directional synchronisation
   -- -------------------------------------------------------------------------
   -- | Verify that mutations flow in both directions: A→B and B→A.
   test "mutations flow in both directions (A→B and B→A)" do
-    withTwoPDRs \stateA stateB -> do
+    withTwoPDRs
+      (testPouchdbUser "userA")
+      defaultRuntimeOptions
+      (testPouchdbUser "userB")
+      defaultRuntimeOptions
+      \pdrA pdrB -> do
 
-      -- TODO: prerequisite setup (see Test 1 above).
+        -- TODO: prerequisite setup (see Test 1 above).
 
-      -- A sets the property.
-      runInPDR stateA do
-        runMonadPerspectivesTransaction' false authoringRole do
-          setProperty [ sharedRoleId ] testPropertyType Nothing [ Value "from-A" ]
+        -- A sets the property.
+        runInPDR pdrA do
+          runMonadPerspectivesTransaction' false authoringRole do
+            setProperty [ sharedRoleId ] testPropertyType Nothing [ Value "from-A" ]
 
-      liftAff $ delay (Milliseconds 200.0)
+        liftAff $ delay (Milliseconds 200.0)
 
-      mvalB <- runInPDR stateB (sharedRoleId ##> getProperty testPropertyType)
-      liftAff $ assert "B sees A's mutation" (mvalB == Just (Value "from-A"))
+        mvalB <- runInPDR pdrB (sharedRoleId ##> getProperty testPropertyType)
+        liftAff $ assert "B sees A's mutation" (mvalB == Just (Value "from-A"))
 
-      -- B updates the property.
-      runInPDR stateB do
-        runMonadPerspectivesTransaction' false authoringRole do
-          setProperty [ sharedRoleId ] testPropertyType Nothing [ Value "from-B" ]
+        -- B updates the property.
+        runInPDR pdrB do
+          runMonadPerspectivesTransaction' false authoringRole do
+            setProperty [ sharedRoleId ] testPropertyType Nothing [ Value "from-B" ]
 
-      liftAff $ delay (Milliseconds 200.0)
+        liftAff $ delay (Milliseconds 200.0)
 
-      mvalA <- runInPDR stateA (sharedRoleId ##> getProperty testPropertyType)
-      liftAff $ assert "A sees B's mutation" (mvalA == Just (Value "from-B"))
+        mvalA <- runInPDR pdrA (sharedRoleId ##> getProperty testPropertyType)
+        liftAff $ assert "A sees B's mutation" (mvalA == Just (Value "from-B"))

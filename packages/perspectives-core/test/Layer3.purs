@@ -61,11 +61,11 @@ import Prelude
 import Effect (Effect)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.PerspectivesState (defaultRuntimeOptions)
-import Test.PDRInstance (runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
+import Test.PDRInstance (noBus, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
+import Test.Sync.SetPropertyGetProperty (theSuite) as SPG
 import Test.Unit (suite, test, testOnly)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
-import Test.Sync.SetPropertyGetProperty (theSuite) as SPG
 
 main :: Effect Unit
 main = runTest do
@@ -75,7 +75,7 @@ main = runTest do
     -- | the value we passed in, then shut down.
     test "start a single PDR instance and read its system identifier" do
       let user = testPouchdbUser "alice"
-      withPDR user defaultRuntimeOptions \pdr -> do
+      withPDR user defaultRuntimeOptions noBus \pdr -> do
         sysId <- runInPDR pdr getSystemIdentifier
         assert "system identifier should equal alice_macbook" (sysId == "alice_macbook")
 

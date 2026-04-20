@@ -54,20 +54,29 @@ import Prelude
 import Control.Monad.AvarMonadAsk (modify)
 import Control.Promise (Promise, toAffE)
 import Data.Maybe (Maybe(..))
+import Data.Traversable (traverse_)
 import Effect (Effect)
 import Effect.Aff (Aff, Error, bracket, error, forkAff, killFiber)
 import Effect.Aff.AVar (AVar, empty, new, put)
+import Effect.Class (liftEffect)
 import Main (forkCreateIndexedResources, forkDatabasePersistence, forkJustInTimeModelLoader, forkReferentialIntegrityFixer)
+import Perspectives.AMQP.IncomingPost (incomingPost)
+import Perspectives.AMQP.Stomp.Stub (InProcessBus, createInProcessBus, makeStompClientFactory)
+import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (getPrivateKey)
 import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), MonadPerspectives, MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction, RuntimeOptions, TypeFix)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
-import Perspectives.ModelDependencies (sysUser)
+import Perspectives.Identifiers (buitenRol)
+import Perspectives.ModelDependencies (connectedToAMQPBroker, sysUser)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (saveMarkedResources)
-import Perspectives.PerspectivesState (newPerspectivesState)
+import Perspectives.PerspectivesState (newPerspectivesState, setStompClientFactory)
+import Perspectives.Representation.Class.PersistentType (EnumeratedPropertyType(..))
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
+import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
 import Perspectives.RunPerspectives (runPerspectivesWithState)
 import Perspectives.SetupCouchdb (createUserDatabases)
@@ -121,8 +130,8 @@ testPouchdbUser userName =
 -- |
 -- | The caller is responsible for calling `shutdown` when the instance is no
 -- | longer needed.  Use `withPDR` / `withTwoPDRs` to get automatic cleanup.
-startPDRInstance :: PouchdbUser -> RuntimeOptions -> Aff PDRInstance
-startPDRInstance pouchdbUser runtimeOptions = do
+startPDRInstance :: PouchdbUser -> RuntimeOptions -> Maybe InProcessBus -> Aff PDRInstance
+startPDRInstance pouchdbUser runtimeOptions bus = do
   -- AVars required by PerspectivesState.
   transactionFlag <- new true
   brokerService <- (empty :: Aff (AVar BrokerService))
@@ -146,6 +155,12 @@ startPDRInstance pouchdbUser runtimeOptions = do
     typeToBeFixed
     userIntegrityChoice
 
+  -- If we have a bus, replace the default real StompClient factory with the in-process stub.
+  case bus of
+    Just b -> do
+      runPerspectivesWithState (setStompClientFactory (makeStompClientFactory b)) state
+    Nothing -> pure unit
+
   -- Start background service fibers.
   -- The JIT model loader is stopped gracefully via `put Stop modelToLoad`;
   -- the remaining fibers are killed directly on shutdown.
@@ -168,8 +183,22 @@ startPDRInstance pouchdbUser runtimeOptions = do
         getSystemIdentifier >>= createUserDatabases
         setupUser Nothing
         saveMarkedResources
+        case bus of
+          Just b -> runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+            ( setProperty
+                [ RoleInstance $ createDefaultIdentifier $ buitenRol pouchdbUser.systemIdentifier ]
+                (EnumeratedPropertyType connectedToAMQPBroker)
+                Nothing
+                [ Value "true" ]
+            )
+          Nothing -> pure unit
     )
     state
+
+  -- If we have a bus, start the incomingPost fiber to receive transactions.
+  postFiber <- case bus of
+    Just _ -> Just <$> (forkAff $ runPerspectivesWithState incomingPost state)
+    Nothing -> pure Nothing
 
   let
     done :: Error
@@ -183,13 +212,19 @@ startPDRInstance pouchdbUser runtimeOptions = do
       killFiber done integrityFiber
       killFiber done persistenceFiber
       killFiber done indexedResourceFiber
+      traverse_ (killFiber done) postFiber
 
   pure { stateAVar: state, shutdown }
+
+noBus :: Maybe InProcessBus
+noBus = Nothing
 
 -----------------------------------------------------------
 -- INTERACTION HELPERS
 -----------------------------------------------------------
 
+-- TODO: een functie met dezelfde naam bestaat in TestUtils.purs (Test.Sync.Utils).
+-- Deze versie moet prevaleren.
 -- | Run a `MonadPerspectives` action against a PDR instance.
 runInPDR :: forall a. PDRInstance -> MonadPerspectives a -> Aff a
 runInPDR pdr mp = runPerspectivesWithState mp pdr.stateAVar
@@ -211,11 +246,13 @@ withPDR
   :: forall a
    . PouchdbUser
   -> RuntimeOptions
+  -> Maybe InProcessBus
   -> (PDRInstance -> Aff a)
   -> Aff a
-withPDR pouchdbUser runtimeOptions =
-  bracket (startPDRInstance pouchdbUser runtimeOptions) _.shutdown
+withPDR pouchdbUser runtimeOptions mbus =
+  bracket (startPDRInstance pouchdbUser runtimeOptions mbus) _.shutdown
 
+-- TODO. Een functie met dezelfde naam bestaat in TestUtils.purs (Test.Sync.Utils). Deze versie moet prevaleren.
 -- | Start two PDR instances, run `f`, then shut down both — even if `f` throws.
 -- |
 -- | The two instances are started sequentially.  Each has its own separate
@@ -230,7 +267,8 @@ withTwoPDRs
   -> RuntimeOptions
   -> (PDRInstance -> PDRInstance -> Aff a)
   -> Aff a
-withTwoPDRs user1 opts1 user2 opts2 f =
-  withPDR user1 opts1 \pdr1 ->
-    withPDR user2 opts2 \pdr2 ->
+withTwoPDRs user1 opts1 user2 opts2 f = do
+  bus <- liftEffect createInProcessBus
+  withPDR user1 opts1 (Just bus) \pdr1 ->
+    withPDR user2 opts2 (Just bus) \pdr2 ->
       f pdr1 pdr2
