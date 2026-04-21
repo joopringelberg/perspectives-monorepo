@@ -701,8 +701,8 @@ compileRoleTypeExpression stp = case stp of
   Binary (BinaryStep { operator, left, right }) -> case operator of
     Union _ -> SUM <$> (fromFoldable <$> traverse compileRoleTypeExpression [ left, right ])
     Intersection _ -> PROD <$> (fromFoldable <$> traverse compileRoleTypeExpression [ left, right ])
-    _ -> throwError $ Custom "The type expression in typeFilter must use role type names combined with `union` or `intersection`."
-  _ -> throwError $ Custom "The type expression in typeFilter must use role type names combined with `union` or `intersection`."
+    _ -> throwError $ Custom "Type expression must use role type names combined with `union` or `intersection`."
+  _ -> throwError $ Custom "Type expression must use role type names combined with `union` or `intersection`."
   where
   toRoleInContextADT :: ArcPosition -> String -> PhaseThree (ADT RoleInContext)
   toRoleInContextADT pos ident = do
@@ -733,8 +733,8 @@ compileContextTypeExpression stp = case stp of
   Binary (BinaryStep { operator, left, right }) -> case operator of
     Union _ -> SUM <$> (fromFoldable <$> traverse compileContextTypeExpression [ left, right ])
     Intersection _ -> PROD <$> (fromFoldable <$> traverse compileContextTypeExpression [ left, right ])
-    _ -> throwError $ Custom "The type expression in typeFilter must use context type names combined with `union` or `intersection`."
-  _ -> throwError $ Custom "The type expression in typeFilter must use context type names combined with `union` or `intersection`."
+    _ -> throwError $ Custom "Type expression must use context type names combined with `union` or `intersection`."
+  _ -> throwError $ Custom "Type expression must use context type names combined with `union` or `intersection`."
   where
   qualifyContextTypeExpressionIdentifier :: ArcPosition -> String -> PhaseThree ContextType
   qualifyContextTypeExpressionIdentifier pos ident = do

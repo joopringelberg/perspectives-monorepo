@@ -131,9 +131,11 @@ step_ parenthesised = do
       "typeFilter" -> do
         reserved "typeFilter"
         candidate <- step_ parenthesised
+        -- We reuse regular filter parsing (`with` is parsed as Filter) and then
+        -- retag the operator to TypeFilter.
         case candidate of
           Binary (BinaryStep bs@{ operator: Filter pos }) -> pure $ Binary (BinaryStep (bs { operator = TypeFilter pos }))
-          _ -> fail "typeFilter syntax error: expected `with` keyword followed by a type expression."
+          _ -> fail "Expected `typeFilter <query> with <type-expression>`."
       "letE" -> pureLetStep
       "callExternal" -> computationStep
       u | isUnaryKeyword u -> unaryStep
