@@ -701,8 +701,8 @@ compileRoleTypeExpression stp = case stp of
   Binary (BinaryStep { operator, left, right }) -> case operator of
     Union _ -> SUM <$> (fromFoldable <$> traverse compileRoleTypeExpression [ left, right ])
     Intersection _ -> PROD <$> (fromFoldable <$> traverse compileRoleTypeExpression [ left, right ])
-    _ -> throwError $ Custom "typeFilter expects type names combined with `union` or `intersection`."
-  _ -> throwError $ Custom "typeFilter expects type names combined with `union` or `intersection`."
+    _ -> throwError $ Custom "typeFilter on a role query expects role type names combined with `union` or `intersection`."
+  _ -> throwError $ Custom "typeFilter on a role query expects role type names combined with `union` or `intersection`."
   where
   toRoleInContextADT :: ArcPosition -> String -> PhaseThree (ADT RoleInContext)
   toRoleInContextADT pos ident = do
@@ -733,8 +733,8 @@ compileContextTypeExpression stp = case stp of
   Binary (BinaryStep { operator, left, right }) -> case operator of
     Union _ -> SUM <$> (fromFoldable <$> traverse compileContextTypeExpression [ left, right ])
     Intersection _ -> PROD <$> (fromFoldable <$> traverse compileContextTypeExpression [ left, right ])
-    _ -> throwError $ Custom "typeFilter expects type names combined with `union` or `intersection`."
-  _ -> throwError $ Custom "typeFilter expects type names combined with `union` or `intersection`."
+    _ -> throwError $ Custom "typeFilter on a context query expects context type names combined with `union` or `intersection`."
+  _ -> throwError $ Custom "typeFilter on a context query expects context type names combined with `union` or `intersection`."
   where
   qualifyContextTypeExpressionIdentifier :: ArcPosition -> String -> PhaseThree ContextType
   qualifyContextTypeExpressionIdentifier pos ident = do
@@ -772,7 +772,9 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
           typeExpression <- compileContextTypeExpression right
           pure $ CDOM typeExpression
         _ -> throwError $ ValueExpressionNotAllowed (range source) (startOf left) (endOf left)
-      if equalDomainKinds (range source) narrowedRange then pure $ replaceRange source (unsafePartial $ fromJust $ productOfDomains (range source) narrowedRange)
+      if equalDomainKinds (range source) narrowedRange then case productOfDomains (range source) narrowedRange of
+        Just narrowed -> pure $ replaceRange source narrowed
+        Nothing -> throwError $ IncompatibleDomains (startOf left) (endOf right)
       else throwError $ IncompatibleDomains (startOf left) (endOf right)
     Compose pos -> do
       f1 <- compileStep currentDomain left
