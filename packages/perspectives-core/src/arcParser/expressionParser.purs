@@ -133,7 +133,7 @@ step_ parenthesised = do
         candidate <- step_ parenthesised
         case candidate of
           Binary (BinaryStep bs@{ operator: Filter pos }) -> pure $ Binary (BinaryStep (bs { operator = TypeFilter pos }))
-          _ -> fail "typeFilter requires a `with` clause: expected `typeFilter <query> with <type-expression>`."
+          _ -> fail "typeFilter syntax error: expected `with` keyword followed by a type expression."
       "letE" -> pureLetStep
       "callExternal" -> computationStep
       u | isUnaryKeyword u -> unaryStep
