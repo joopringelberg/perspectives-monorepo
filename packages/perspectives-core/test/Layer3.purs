@@ -58,11 +58,14 @@ module Test.Layer3 where
 
 import Prelude
 
+import Data.Maybe (Maybe(..))
 import Effect (Effect)
+import Perspectives.ModelDependencies (sysMe)
+import Perspectives.Names (lookupIndexedRole)
 import Perspectives.Persistence.State (getSystemIdentifier)
+import Perspectives.Persistent (tryGetPerspectRol)
 import Perspectives.PerspectivesState (defaultRuntimeOptions)
-import Test.PDRInstance (noBus, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
-import Test.Sync.SetPropertyGetProperty (theSuite) as SPG
+import Test.PDRInstance (connectPDRs, noBus, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
 import Test.Unit (suite, test, testOnly)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -81,7 +84,7 @@ main = runTest do
 
     -- | Smoke test: start two PDR instances in the same process, verify that
     -- | they have distinct system identifiers.
-    testOnly "start two PDR instances with distinct identifiers" do
+    test "start two PDR instances with distinct identifiers" do
       withTwoPDRs
         (testPouchdbUser "alice")
         defaultRuntimeOptions
@@ -93,3 +96,23 @@ main = runTest do
           assert "PDR-A system identifier should equal alice_macbook" (sysA == "alice_macbook")
           assert "PDR-B system identifier should equal bob_macbook" (sysB == "bob_macbook")
           assert "PDR-A and PDR-B should have distinct identifiers" (sysA /= sysB)
+
+    testOnly "start two PDR instances with distinct identifiers" do
+      withTwoPDRs
+        (testPouchdbUser "alice")
+        defaultRuntimeOptions
+        (testPouchdbUser "bob")
+        defaultRuntimeOptions
+        \pdrA pdrB -> do
+          connectPDRs pdrA pdrB
+          -- Two Persons instances.
+          mMe1 <- runInPDR pdrA $ lookupIndexedRole sysMe
+          mMe2 <- runInPDR pdrB $ lookupIndexedRole sysMe
+          case mMe1, mMe2 of
+            Just me1, Just me2 -> do
+              mMe1InB <- runInPDR pdrB $ tryGetPerspectRol me1
+              mMe2InA <- runInPDR pdrA $ tryGetPerspectRol me2
+              case mMe1InB, mMe2InA of
+                Just me1InB, Just me2InA -> assert "Both PDRs should have each others' Person instance" true
+                _, _ -> assert "Both PDRs should have each others' Person instance" false
+            _, _ -> assert "Both PDRs should have a `me` instance" false

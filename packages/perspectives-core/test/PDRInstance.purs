@@ -250,6 +250,29 @@ runTransactionInPDR pdr mpt =
     (runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser) mpt)
     pdr.stateAVar
 
+-- | Poll `action` every `interval` until it returns `Just a`, or throw an error
+-- | after `maxAttempts` attempts.  Use this to wait for asynchronous PDR
+-- | side-effects (state-entry bots, persistence fibers) to complete before
+-- | proceeding to the next test step.
+pollUntil
+  :: forall a
+   . Int
+  -> Milliseconds
+  -> String
+  -> Aff (Maybe a)
+  -> Aff a
+pollUntil maxAttempts interval description action = go maxAttempts
+  where
+  go 0 = throwError $ error $
+    "pollUntil timed out after " <> show maxAttempts <> " attempts waiting for: " <> description
+  go n = do
+    result <- action
+    case result of
+      Just a -> pure a
+      Nothing -> do
+        delay interval
+        go (n - 1)
+
 -----------------------------------------------------------
 -- BRACKET UTILITIES
 -----------------------------------------------------------
@@ -340,72 +363,66 @@ connectPDRs pdr1 pdr2 = do
   -- -----------------------------------------------------------------------
   mySystem1 <- runInPDR pdr1 getMySystem
 
-  runInPDR pdr1 $
-    runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser) $
+  runInPDR pdr1
+    $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+    $
       runContextAction sysUser "CreateInvitation" mySystem1
-
-  delay (Milliseconds 100.0)
 
   -- -----------------------------------------------------------------------
   -- PDR1: Step 2 — obtain the new Invitation context instance
+  -- Poll until the state-entry bot has created and stored it.
   -- -----------------------------------------------------------------------
-  mInvCtx <- runInPDR pdr1 $
-    (ContextInstance mySystem1) ##>
-      ( getEnumeratedRoleInstances (EnumeratedRoleType outgoingInvitationsType)
-          >=> binding
-          >=> context
-      )
-
-  invCtx <- case mInvCtx of
-    Nothing -> throwError $ error
-      "connectPDRs: no Invitation found in PerspectivesSystem$OutgoingInvitations"
-    Just ctx -> pure ctx
+  invCtx <- pollUntil 100 (Milliseconds 100.0)
+    "Invitation context to appear in PerspectivesSystem$OutgoingInvitations"
+    ( runInPDR pdr1
+        ( (ContextInstance mySystem1) ##>
+            ( getEnumeratedRoleInstances (EnumeratedRoleType outgoingInvitationsType)
+                >=> binding
+                >=> context
+            )
+        )
+    )
 
   let invExternal = externalRole invCtx
 
   -- -----------------------------------------------------------------------
   -- PDR1: Step 3 — set the Message property on Invitation$External
   -- -----------------------------------------------------------------------
-  runInPDR pdr1 $
-    runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser) $
+  runInPDR pdr1
+    $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+    $
       setProperty
         [ invExternal ]
         (EnumeratedPropertyType invitationMessageProp)
         Nothing
         [ Value "Hello there" ]
 
-  delay (Milliseconds 100.0)
-
   -- -----------------------------------------------------------------------
   -- PDR1: Step 4 — run the Inviter's CreateInvitation object action
   -- (sets ConfirmationCode → bot creates SerialisedInvitation file)
   -- -----------------------------------------------------------------------
-  runInPDR pdr1 $
-    runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType inviterType) $
+  runInPDR pdr1
+    $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType inviterType)
+    $
       runActionForObject
         (ENR $ EnumeratedRoleType inviterType)
         "CreateInvitation"
         (unwrap invCtx)
         (unwrap invExternal)
 
-  -- The state-entry bot runs asynchronously in the Aff runtime; wait for it.
-  delay (Milliseconds 500.0)
-
   -- -----------------------------------------------------------------------
   -- PDR1: Step 5 — read the SerialisedInvitation file content
+  -- Poll until the state-entry bot has set the property and written the file.
   -- -----------------------------------------------------------------------
-  mPFileStr <- runInPDR pdr1 $
-    invExternal ##> getProperty (EnumeratedPropertyType serialisedInvitationProp)
-
-  invText <- case mPFileStr of
-    Nothing -> throwError $ error
-      "connectPDRs: Invitation$External$SerialisedInvitation property not found"
-    Just (Value v) -> do
-      mText <- runInPDR pdr1 $ getPFileTextValue v
-      case mText of
-        Nothing -> throwError $ error
-          "connectPDRs: SerialisedInvitation file content is empty or not a text type"
-        Just text -> pure text
+  invText <- pollUntil 30 (Milliseconds 200.0)
+    "SerialisedInvitation property and file content to be set"
+    ( do
+        mPFileStr <- runInPDR pdr1
+          (invExternal ##> getProperty (EnumeratedPropertyType serialisedInvitationProp))
+        case mPFileStr of
+          Nothing -> pure Nothing
+          Just (Value v) -> runInPDR pdr1 $ getPFileTextValue v
+    )
 
   -- -----------------------------------------------------------------------
   -- PDR2: Step 6 — parse invitation JSON and execute the transaction
@@ -422,11 +439,18 @@ connectPDRs pdr1 pdr2 = do
       "connectPDRs: failed to parse TransactionForPeer: " <> show err
     Right x -> pure x
 
-  runInPDR pdr2 $
-    runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser) $
+  runInPDR pdr2
+    $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+    $
       executeTransaction tfp
 
-  delay (Milliseconds 200.0)
+  -- Poll until the Inviter role is accessible in PDR2, confirming that the
+  -- transaction and any state-entry bots have completed.
+  void $ pollUntil 30 (Milliseconds 100.0)
+    "Inviter role to be accessible in PDR2 after executeTransaction"
+    ( runInPDR pdr2
+        (invCtx ##> getEnumeratedRoleInstances (EnumeratedRoleType inviterType))
+    )
 
   -- -----------------------------------------------------------------------
   -- PDR2: Step 7 — create Invitee role filled with PDR2's me
@@ -437,9 +461,10 @@ connectPDRs pdr1 pdr2 = do
     Nothing -> throwError $ error
       "connectPDRs: cannot find indexed role 'me' in PDR2"
     Just me2 ->
-      runInPDR pdr2 $
-        runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser) $
-          void $ createAndAddRoleInstance
+      runInPDR pdr2
+        $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+        $ void
+        $ createAndAddRoleInstance
             (EnumeratedRoleType inviteeType)
             (unwrap invCtx)
             ( RolSerialization
