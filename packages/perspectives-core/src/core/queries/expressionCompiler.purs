@@ -693,6 +693,64 @@ compileUnaryStep currentDomain st@(RoleIndividual pos qualifiedIdentifier s) = d
           pure $ UQD currentDomain (QF.UnaryCombinator RoleIndividualF) descriptionOfs (RDOM $ UET $ RoleInContext { role: EnumeratedRoleType qualifiedIdentifier, context: contextOfRepresentation role }) True True
     otherwise -> throwError $ DomainTypeRequired "string" (range descriptionOfs) pos (endOf s)
 
+compileRoleTypeExpression :: Step -> PhaseThree (ADT RoleInContext)
+compileRoleTypeExpression stp = case stp of
+  Simple (ArcIdentifier pos ident) -> toRoleInContextADT pos ident
+  Simple (RoleTypeIndividual pos ident) -> toRoleInContextADT pos ident
+  Simple (ContextTypeIndividual pos _) -> throwError $ IncompatibleDomains (startOf stp) (endOf stp)
+  Binary (BinaryStep { operator, left, right }) -> case operator of
+    Union _ -> SUM <$> (fromFoldable <$> traverse compileRoleTypeExpression [ left, right ])
+    Intersection _ -> PROD <$> (fromFoldable <$> traverse compileRoleTypeExpression [ left, right ])
+    _ -> throwError $ Custom "typeFilter expects type names combined with `union` or `intersection`."
+  _ -> throwError $ Custom "typeFilter expects type names combined with `union` or `intersection`."
+  where
+  toRoleInContextADT :: ArcPosition -> String -> PhaseThree (ADT RoleInContext)
+  toRoleInContextADT pos ident = do
+    qRole <- qualifyRoleTypeExpressionIdentifier pos ident
+    context <- lift2 $ enumeratedRoleContextType qRole
+    pure $ UET $ RoleInContext { role: qRole, context }
+
+  qualifyRoleTypeExpressionIdentifier :: ArcPosition -> String -> PhaseThree EnumeratedRoleType
+  qualifyRoleTypeExpressionIdentifier pos ident = do
+    { enumeratedRoles, contexts } <- lift $ gets _.dfr
+    if isTypeUri ident then
+      case lookup ident enumeratedRoles of
+        Just _ -> pure $ EnumeratedRoleType ident
+        Nothing -> case lookup ident contexts of
+          Just _ -> throwError $ IncompatibleDomains pos pos
+          Nothing -> throwError $ UnknownRole pos ident
+    else (try $ qualifyLocalEnumeratedRoleName pos ident (keys enumeratedRoles)) >>= case _ of
+      Right qRole -> pure qRole
+      Left roleErr -> (try $ qualifyLocalContextName pos ident (keys contexts)) >>= case _ of
+        Right _ -> throwError $ IncompatibleDomains pos pos
+        Left _ -> throwError roleErr
+
+compileContextTypeExpression :: Step -> PhaseThree (ADT ContextType)
+compileContextTypeExpression stp = case stp of
+  Simple (ArcIdentifier pos ident) -> UET <$> qualifyContextTypeExpressionIdentifier pos ident
+  Simple (ContextTypeIndividual pos ident) -> UET <$> qualifyContextTypeExpressionIdentifier pos ident
+  Simple (RoleTypeIndividual _ _) -> throwError $ IncompatibleDomains (startOf stp) (endOf stp)
+  Binary (BinaryStep { operator, left, right }) -> case operator of
+    Union _ -> SUM <$> (fromFoldable <$> traverse compileContextTypeExpression [ left, right ])
+    Intersection _ -> PROD <$> (fromFoldable <$> traverse compileContextTypeExpression [ left, right ])
+    _ -> throwError $ Custom "typeFilter expects type names combined with `union` or `intersection`."
+  _ -> throwError $ Custom "typeFilter expects type names combined with `union` or `intersection`."
+  where
+  qualifyContextTypeExpressionIdentifier :: ArcPosition -> String -> PhaseThree ContextType
+  qualifyContextTypeExpressionIdentifier pos ident = do
+    { enumeratedRoles, contexts } <- lift $ gets _.dfr
+    if isTypeUri ident then
+      case lookup ident contexts of
+        Just _ -> pure $ ContextType ident
+        Nothing -> case lookup ident enumeratedRoles of
+          Just _ -> throwError $ IncompatibleDomains pos pos
+          Nothing -> throwError $ UnknownContext pos (ContextType ident)
+    else (try $ qualifyLocalContextName pos ident (keys contexts)) >>= case _ of
+      Right qContext -> pure qContext
+      Left contextErr -> (try $ qualifyLocalEnumeratedRoleName pos ident (keys enumeratedRoles)) >>= case _ of
+        Right _ -> throwError $ IncompatibleDomains pos pos
+        Left _ -> throwError contextErr
+
 compileBinaryStep :: Domain -> BinaryStep -> FD
 compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
   case operator of
@@ -704,6 +762,18 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
           if pessimistic $ functional criterium then pure $ makeComposition source (UQD (range source) QF.FilterF criterium (range source) (functional source) False)
           else throwError $ NotFunctional (startOf right) (endOf right) right
         otherwise -> throwError $ NotABoolean (startOf right)
+    TypeFilter pos -> do
+      source <- compileStep currentDomain left
+      narrowedRange <- case range source of
+        RDOM _ -> do
+          typeExpression <- compileRoleTypeExpression right
+          pure $ RDOM typeExpression
+        CDOM _ -> do
+          typeExpression <- compileContextTypeExpression right
+          pure $ CDOM typeExpression
+        _ -> throwError $ ValueExpressionNotAllowed (range source) (startOf left) (endOf left)
+      if equalDomainKinds (range source) narrowedRange then pure $ replaceRange source (unsafePartial $ fromJust $ productOfDomains (range source) narrowedRange)
+      else throwError $ IncompatibleDomains (startOf left) (endOf right)
     Compose pos -> do
       f1 <- compileStep currentDomain left
       f2 <- compileStep (range f1) right
@@ -807,6 +877,7 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
 
         Compose _ -> throwError $ Custom "This case in compileBinaryStep should never be reached: Compose"
         Filter _ -> throwError $ Custom "This case in compileBinaryStep should never be reached: Filter"
+        TypeFilter _ -> throwError $ Custom "This case in compileBinaryStep should never be reached: TypeFilter"
         Union _ -> throwError $ Custom "This case in compileBinaryStep should never be reached: Union"
         Intersection _ -> throwError $ Custom "This case in compileBinaryStep should never be reached: Intersection"
         OrElse _ -> throwError $ Custom "This case in compileBinaryStep should never be reached: OrElse"
