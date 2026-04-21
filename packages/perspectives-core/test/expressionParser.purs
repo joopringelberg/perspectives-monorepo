@@ -94,7 +94,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
-        assert "'typeFilter MyRole with RoleA union RoleB' should be parsed as a a binary step with operator 'TypeFilter'"
+        assert "'typeFilter MyRole with RoleA union RoleB' should be parsed as a binary step with operator 'TypeFilter'"
           case id of
             (Binary (BinaryStep {operator})) -> case operator of
               (TypeFilter _) -> true
