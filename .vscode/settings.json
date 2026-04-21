@@ -1,4 +1,5 @@
 {
+  "typescript.tsdk": "node_modules/typescript/lib",
   "purescript.addSpagoSources": true,
   "purescript.addNpmPath": true,
   "purescript.pursExe": "purs",

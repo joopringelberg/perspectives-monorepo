@@ -4,14 +4,13 @@
     "target": "ES2023",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "bundler",
     "skipLibCheck": true,
     "strict": true,
     "jsx": "react",
     "jsxFactory": "React.createElement",
     "jsxFragmentFactory": "React.Fragment",
     "forceConsistentCasingInFileNames": true,
-    "baseUrl": ".",
     "outDir": "dist",
     "allowImportingTsExtensions": true,
     "noEmit": true,
@@ -22,8 +21,7 @@
       "perspectives-core": ["../perspectives-core/dist/perspectives-core.js"],
       "/perspectives-core.js": ["../perspectives-core/dist/perspectives-core.js"],
       "perspectives-pageworker": ["../perspectives-pageworker/dist/perspectives-pageworker.d.ts"],
-      "perspectives-sharedworker": ["../perspectives-sharedworker/dist/perspectives-sharedworker.js"],
-      "*": ["node_modules/*", "../../node_modules/*"]
+      "perspectives-sharedworker": ["../perspectives-sharedworker/dist/perspectives-sharedworker.js"]
     }
   },
   "include": ["src"],
