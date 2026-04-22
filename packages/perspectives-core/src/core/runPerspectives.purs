@@ -77,7 +77,9 @@ runPerspectivesWithState = runReaderT
 
 runPerspectivesWithoutCouchdb
   :: forall a
-   . String -> MonadPerspectives a -> Aff a
+   . String
+  -> MonadPerspectives a
+  -> Aff a
 runPerspectivesWithoutCouchdb userName mp = do
   transactionFlag <- new true
   brokerService <- empty

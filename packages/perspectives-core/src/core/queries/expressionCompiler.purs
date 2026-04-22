@@ -32,6 +32,7 @@ module Perspectives.Query.ExpressionCompiler where
 
 import Control.Monad.Error.Class (catchError, try)
 import Control.Monad.Except (lift)
+import Control.Monad.Except (throwError) as EXCEPT
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (gets)
 import Data.Array (elemIndex, filter, foldM, foldMap, fromFoldable, head, length, null, uncons)
@@ -723,7 +724,7 @@ compileRoleTypeExpression stp = case stp of
       Right qRole -> pure qRole
       Left roleErr -> (try $ qualifyLocalContextName pos ident (keys contexts)) >>= case _ of
         Right _ -> throwError $ IncompatibleDomains pos pos
-        Left _ -> throwError roleErr
+        Left _ -> EXCEPT.throwError roleErr
 
 compileContextTypeExpression :: Step -> PhaseThree (ADT ContextType)
 compileContextTypeExpression stp = case stp of
@@ -749,7 +750,7 @@ compileContextTypeExpression stp = case stp of
       Right qContext -> pure qContext
       Left contextErr -> (try $ qualifyLocalEnumeratedRoleName pos ident (keys enumeratedRoles)) >>= case _ of
         Right _ -> throwError $ IncompatibleDomains pos pos
-        Left _ -> throwError contextErr
+        Left _ -> EXCEPT.throwError contextErr
 
 compileBinaryStep :: Domain -> BinaryStep -> FD
 compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =

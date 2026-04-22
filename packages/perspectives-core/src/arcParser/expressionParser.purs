@@ -51,7 +51,7 @@ import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
 import Perspectives.Representation.QueryFunction (FunctionName(..))
 import Perspectives.Representation.Range (Duration_(..), Range(..))
 import Perspectives.Time (date2String, dateTime2String, time2String)
-import Prelude (bind, not, pure, show, ($), (&&), (*>), (+), (<$>), (<*), (<*>), (<<<), (>), (>>=), (<>), eq, (/=))
+import Prelude (bind, not, pure, show, ($), (&&), (*>), (+), (<$>), (<*), (<*>), (<<<), (>), (>>=), (<>), eq, (/=), discard)
 
 step :: IP Step
 step = defer \_ -> step_ false
