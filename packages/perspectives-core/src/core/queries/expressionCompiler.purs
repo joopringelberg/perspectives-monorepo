@@ -63,7 +63,7 @@ import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), context2RoleInContextADT, domain, domain2roleType, equalDomainKinds, functional, makeComposition, mandatory, productOfDomains, range, replaceContext, replaceRange, roleInContext2Role, setCardinality, sumOfDomains, traverseQfd)
 import Perspectives.Query.QueryTypes (Range) as QT
-import Perspectives.Representation.ADT (ADT(..))
+import Perspectives.Representation.ADT (ADT(..), commonLeavesInADT)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole, typeExists)
@@ -774,7 +774,9 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
           pure $ CDOM typeExpression
         _ -> throwError $ ValueExpressionNotAllowed (range source) (startOf left) (endOf left)
       if equalDomainKinds (range source) narrowedRange then case productOfDomains (range source) narrowedRange of
-        Just narrowed -> pure $ replaceRange source narrowed
+        Just narrowed -> case simplifyTypeFilterRange narrowed of
+          Just simplified -> pure $ replaceRange source simplified
+          Nothing -> throwError $ IncompatibleDomains (startOf left) (endOf right)
         Nothing -> throwError $ IncompatibleDomains (startOf left) (endOf right)
       else throwError $ IncompatibleDomains (startOf left) (endOf right)
     Compose pos -> do
@@ -930,6 +932,19 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
     then fd
     else throwError $ WrongTypeForOperator pos allowedRangeConstructors d
   ensureDomainIsRange d allowedRangeConstructors pos _ = throwError $ WrongTypeForOperator pos allowedRangeConstructors d
+
+  simplifyTypeFilterRange :: Domain -> Maybe Domain
+  simplifyTypeFilterRange (RDOM adt) = case uncons (commonLeavesInADT adt) of
+    Nothing -> Nothing
+    Just { head, tail } ->
+      if null tail then Just $ RDOM (UET head)
+      else Just $ RDOM (SUM (UET <$> ([ head ] <> tail)))
+  simplifyTypeFilterRange (CDOM adt) = case uncons (commonLeavesInADT adt) of
+    Nothing -> Nothing
+    Just { head, tail } ->
+      if null tail then Just $ CDOM (UET head)
+      else Just $ CDOM (SUM (UET <$> ([ head ] <> tail)))
+  simplifyTypeFilterRange d = Just d
 
   comparison :: ArcPosition -> QueryFunctionDescription -> QueryFunctionDescription -> FunctionName -> PhaseThree QueryFunctionDescription
   comparison pos left' right' functionName = do
