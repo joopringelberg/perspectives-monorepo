@@ -188,6 +188,43 @@ When publishing a standalone version, switch `path:` to `git: + ref:` (commented
 
 ---
 
+## Type comparison guidance (must use existing helpers)
+
+When an issue touches role types, filler restrictions, aspects, subtype/supertype checks, or binding validation, **do not implement custom type-comparison logic**. Reuse the existing type-comparison and normalisation functions documented in:
+
+- `docsources/type-comparison.md`
+
+Prefer these functions (and their direct wrappers in the same modules) over new ad-hoc comparisons:
+
+- `toConjunctiveNormalForm_` / `toConjunctiveNormalForm`
+- `equalsOrSpecialises_`, `specialises_`
+- `equalsOrGeneralises_`, `generalises_`
+- `equals_`
+- Monadic wrappers in `src/core/typerepresentation/typeLevelObjectGetters.purs`:
+  - `equalsOrSpecialisesRoleInContext`
+  - `equalsOrGeneralisesRoleInContext`
+  - `equals`
+  - `generalisesRoleType_`
+  - `specialisesRoleType_`
+  - `equalsOrGeneralisesRoleType_`
+  - `equalsOrSpecialisesRoleType_`
+
+Before adding or changing type checks:
+
+1. Identify whether inputs are `ADT`, `ExpandedADT`, or `CNF`.
+2. Normalise with the existing pipeline instead of creating new conversion logic.
+3. Use the existing predicates with the documented direction semantics (`left -> right` means "left specialises right").
+
+### Issue keywords (signal words)
+
+If a future issue should explicitly signal that this guidance applies, include one or more of these keywords in the issue text:
+
+- `TYPE-COMPARISON`
+- `TYPE-LATTICE`
+- `CNF-NORMALISATION`
+
+---
+
 ## Common Pitfalls
 
 1. **Never edit `output/`** — this is spago's generated output, overwritten on every build.
