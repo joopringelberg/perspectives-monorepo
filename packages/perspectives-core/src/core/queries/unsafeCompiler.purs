@@ -35,6 +35,7 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, tell)
 import Control.Plus (empty)
 import Data.Array (catMaybes, elemIndex, filterA, findIndex, foldl, head, index, length, null, singleton, unsafeIndex)
+import Data.Either (Either(..))
 import Data.Foldable (any)
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
@@ -327,14 +328,14 @@ compileFunction (UQD _ FilterF criterium _ _ _) = do
 compileFunction (SQD _ (RoleTypeFilter adtString) _ _ _) = case readJSON adtString of
   Left e -> throwError (error $ "Cannot read RoleTypeFilter ADT: " <> show e)
   Right adt -> pure \roleId -> do
-    passes <- lift $ lift $ roleMatchesTypeFilter roleId adt
+    passes <- lift $ lift $ roleMatchesTypeFilter (RoleInstance roleId) adt
     guard passes
     pure roleId
 
 compileFunction (SQD _ (ContextTypeFilter adtString) _ _ _) = case readJSON adtString of
   Left e -> throwError (error $ "Cannot read ContextTypeFilter ADT: " <> show e)
   Right adt -> pure \contextId -> do
-    passes <- lift $ lift $ contextMatchesTypeFilter contextId adt
+    passes <- lift $ lift $ contextMatchesTypeFilter (ContextInstance contextId) adt
     guard passes
     pure contextId
 
