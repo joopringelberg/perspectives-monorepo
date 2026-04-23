@@ -42,7 +42,7 @@ const focusable = -1;
 // 0 means that the element should be focusable and reachable via sequential keyboard navigation,
 // but its relative order is defined by the platform convention;
 const receiveFocusByKeyboard = 0;
-const selectCompatibleControlTypes = ["text", "number", "date", "time", "datetime-local", "email"];
+const SELECT_SUPPORTED_CONTROL_TYPES = ["text", "number", "date", "time", "datetime-local", "email"];
 
 // Assumed line height in em units, used for computing max-height of textareas from maxLines.
 const LINE_HEIGHT_EM = 1.5;
@@ -171,7 +171,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     {
       return "checkbox";
     }
-    if (this.referenceValues().length > 0 && selectCompatibleControlTypes.indexOf(controlType) >= 0)
+    if (this.referenceValues().length > 0 && SELECT_SUPPORTED_CONTROL_TYPES.indexOf(controlType) >= 0)
     {
       return "select";
     }
