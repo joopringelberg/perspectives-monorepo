@@ -35,8 +35,10 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, tell)
 import Control.Plus (empty)
 import Data.Array (catMaybes, elemIndex, filterA, findIndex, foldl, head, index, length, null, singleton, unsafeIndex)
+import Data.Foldable (any)
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
+import Data.Set (fromFoldable, member) as SET
 import Data.String (Pattern(..), lastIndexOf, stripSuffix, length) as STRING
 import Data.String.Regex (Regex, match, test)
 import Data.String.Regex.Flags (noFlags)
@@ -1065,14 +1067,15 @@ bindingInContext cType adt r = ArrayT do
 roleMatchesTypeFilter :: RoleInstance -> ADT RoleInContext -> MonadPerspectives Boolean
 roleMatchesTypeFilter roleId roleFilter = do
   role <- getPerspectRol roleId
-  contextType <- (rol_context role) ##>> contextType
-  ST (RoleInContext { context: contextType, role: rol_pspType role }) `equalsOrSpecialisesRoleInContext` roleFilter
+  roleContextType <- (rol_context role) ##>> contextType
+  ST (RoleInContext { context: roleContextType, role: rol_pspType role }) `equalsOrSpecialisesRoleInContext` roleFilter
 
 contextMatchesTypeFilter :: ContextInstance -> ADT ContextType -> MonadPerspectives Boolean
 contextMatchesTypeFilter contextId contextFilter = do
-  contextType <- contextType_ contextId
-  contextAspects <- contextType ###= contextAspectsClosure
-  pure $ isJust $ findIndex (\candidate -> isJust $ elemIndex candidate contextAspects) (commonLeavesInADT contextFilter)
+  instanceContextType <- contextType_ contextId
+  contextAspects <- instanceContextType ###= contextAspectsClosure
+  let contextAspectSet = SET.fromFoldable contextAspects
+  pure $ any (\candidate -> SET.member candidate contextAspectSet) (commonLeavesInADT contextFilter)
 
 -- | We look for a public role in the (type of the) ContextInstance.
 -- | We then arbitrarily take the publicUrl of the first public role to have one.

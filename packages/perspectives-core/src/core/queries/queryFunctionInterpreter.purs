@@ -41,17 +41,19 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
 import Control.Plus (empty)
 import Data.Array (concat, elemIndex, foldl, head, index, length, null, union, unsafeIndex)
+import Data.Foldable (any)
 import Data.List (List(..))
 import Data.List.NonEmpty (fromList, singleton, tail)
 import Data.List.Types (List, NonEmptyList)
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (unwrap)
+import Data.Set (fromFoldable, member) as SET
 import Data.Traversable (for_, maximum, minimum, traverse)
 import Effect.Exception (error)
 import Foreign.Object (empty, lookup) as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ContextAndRole (rol_binding, rol_id, rol_pspType)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MPQ, AssumptionTracking, liftToInstanceLevel, (##=), (##>>))
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MPQ, AssumptionTracking, liftToInstanceLevel, (###=), (##>>))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Error.Boundaries (handlePerspectRolError')
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionNArgs)
@@ -688,14 +690,15 @@ getFillerTypeRecursively adt r = do
 roleMatchesTypeFilter :: RoleInstance -> ADT RoleInContext -> MP Boolean
 roleMatchesTypeFilter roleId roleFilter = do
   role <- getPerspectRol roleId
-  contextType <- (rol_context role) ##>> contextType
-  ST (RoleInContext { context: contextType, role: rol_pspType role }) `equalsOrSpecialisesRoleInContext` roleFilter
+  roleContextType <- (rol_context role) ##>> contextType
+  ST (RoleInContext { context: roleContextType, role: rol_pspType role }) `equalsOrSpecialisesRoleInContext` roleFilter
 
 contextMatchesTypeFilter :: ContextInstance -> ADT ContextType -> MP Boolean
 contextMatchesTypeFilter contextId contextFilter = do
-  contextType <- contextType_ contextId
-  contextAspects <- contextType ##= contextAspectsClosure
-  pure $ isJust $ elemIndex true ((\candidate -> isJust $ elemIndex candidate contextAspects) <$> commonLeavesInADT contextFilter)
+  instanceContextType <- contextType_ contextId
+  contextAspects <- instanceContextType ###= contextAspectsClosure
+  let contextAspectSet = SET.fromFoldable contextAspects
+  pure $ any (\candidate -> SET.member candidate contextAspectSet) (commonLeavesInADT contextFilter)
 
 toBool :: List Dependency -> Boolean
 toBool (Cons (V _ (Value s)) _) = s == "true"

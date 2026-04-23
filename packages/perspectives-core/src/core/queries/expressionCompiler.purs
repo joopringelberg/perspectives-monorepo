@@ -780,7 +780,7 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
             typeFilterTest <- case simplified of
               RDOM roleAdt -> pure $ SQD (range source) (QF.RoleTypeFilter (writeJSON roleAdt)) (VDOM PBool Nothing) True True
               CDOM contextAdt -> pure $ SQD (range source) (QF.ContextTypeFilter (writeJSON contextAdt)) (VDOM PBool Nothing) True True
-              _ -> throwError $ IncompatibleDomains (startOf left) (endOf right)
+              _ -> throwError $ Custom "typeFilter simplification yielded a non-role/context domain"
             pure $ makeComposition source (UQD (range source) QF.FilterF typeFilterTest simplified (functional source) False)
           Nothing -> throwError $ IncompatibleDomains (startOf left) (endOf right)
         Nothing -> throwError $ IncompatibleDomains (startOf left) (endOf right)
