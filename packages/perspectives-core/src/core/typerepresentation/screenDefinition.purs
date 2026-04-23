@@ -116,6 +116,7 @@ type WidgetCommonFieldsDefWithoutPerspective f =
   -- By construction, a screen can only be specified for Perspectives that have a Just value for RoleType.
   , perspectiveId :: PerspectiveId
   , fillFrom :: Maybe QueryFunctionDescription
+  , fillPropertyFrom :: Maybe PropertyValueFillers
   -- The runtime  has a perspective serialisation.
   -- These three fields are not serialised runtime; they are used to
   -- create the restricted serialised perspective.
@@ -131,6 +132,7 @@ type WidgetCommonFieldsDefWithoutPerspective f =
 -- | The keys are the string representations of PropertyTypes.
 -- | The values are the PropertyVerbs that are EXCLUDED for that property.
 type PropertyRestrictions = EncodableMap PropertyType (Array PropertyVerb)
+type PropertyValueFillers = EncodableMap PropertyType QueryFunctionDescription
 
 -- For en- and decoding. This discharges us from implementing a lot of instances for
 -- SerialisedPerspective'.

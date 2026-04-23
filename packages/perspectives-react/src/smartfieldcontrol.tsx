@@ -58,6 +58,7 @@ interface SmartFieldControlProps
   contextinstance: ContextInstanceT;
   minLines?: number;
   maxLines?: number;
+  referenceValues?: string[];
 }
 
 interface SmartFieldControlState
@@ -168,6 +169,10 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     if (controlType == "checkbox")
     {
       return "checkbox";
+    }
+    if (this.referenceValues().length > 0 && controlType != "file" && controlType != "markdown")
+    {
+      return "select";
     }
     if (controlType == "text")
     {
@@ -485,6 +490,21 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     return this.props.serialisedProperty.constrainingFacets.enumeration || [];
   }
 
+  referenceValues()
+  {
+    return this.props.referenceValues || [];
+  }
+
+  selectableValues()
+  {
+    const facetValues = this.enumeration();
+    if (facetValues.length > 0)
+    {
+      return facetValues;
+    }
+    return this.referenceValues();
+  }
+
   // Returns object of this shape:
   // { regex: string.isRequired
   // , label: string.isRequired}
@@ -581,7 +601,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               required={mandatory}
             >
             {
-              component.enumeration().map( value => <option key={value}>{value}</option>)
+              component.selectableValues().map( value => <option key={value}>{value}</option>)
             }
             </Form.Control>
           </div>);

@@ -399,6 +399,7 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
                       disabled={ propertyOnlyConsultable(roleInstance) || !roleInstance.roleId }
                       isselected={true}
                       contextinstance={component.props.contextinstance}
+                      referenceValues={perspective.possiblePropertyValues?.[markDownProperty]}
                     />
                   </Col>
                 </Row>
@@ -451,6 +452,5 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
     }
   }
 }
-
 
 

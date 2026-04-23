@@ -973,8 +973,17 @@ normalizeWidgetCommonFields w = do
       Nothing -> w.perspectiveId
       Just stable -> stable
   fillFrom' <- traverse normalize w.fillFrom
+  fillPropertyFrom' <- traverse normalize w.fillPropertyFrom
   fieldConstraints' <- traverse (traverse normalizeFieldConstraintDef) w.fieldConstraints
-  pure $ w { propertyRestrictions = propertyRestrictions', withoutProperties = withoutProperties', userRole = userRole', perspectiveId = perspectiveId', fillFrom = fillFrom', fieldConstraints = fieldConstraints' }
+  pure $ w
+    { propertyRestrictions = propertyRestrictions'
+    , withoutProperties = withoutProperties'
+    , userRole = userRole'
+    , perspectiveId = perspectiveId'
+    , fillFrom = fillFrom'
+    , fillPropertyFrom = fillPropertyFrom'
+    , fieldConstraints = fieldConstraints'
+    }
 
 normalizeFieldConstraintDef :: FieldConstraintDef -> WithSideCars FieldConstraintDef
 normalizeFieldConstraintDef fc = do
@@ -1018,4 +1027,3 @@ buildPerspectiveIdMap (DomeinFile dfr) env0 =
           mkTuples ownerTid cr.perspectives
   in
     OBJ.fromFoldable (erTuples <> crTuples)
-

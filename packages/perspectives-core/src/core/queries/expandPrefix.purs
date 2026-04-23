@@ -384,10 +384,15 @@ instance ScanSymbols MarkDownE where
     pure $ MarkDownPerspective { widgetFields: widgetFields', condition: condition', start, end }
 
 expandPrefixWidgetCommonFields :: forall m. Monad m => WidgetCommonFields -> ReaderT (SymbolHandler m) m WidgetCommonFields
-expandPrefixWidgetCommonFields cf@{ perspective, fillFrom } = do
+expandPrefixWidgetCommonFields cf@{ perspective, fillFrom, fillPropertyValues } = do
   perspective' <- scan perspective
   fillFrom' <- traverse scan fillFrom
-  pure cf { perspective = perspective', fillFrom = fillFrom' }
+  fillPropertyValues' <- traverse scanFillPropertyValue fillPropertyValues
+  pure cf { perspective = perspective', fillFrom = fillFrom', fillPropertyValues = fillPropertyValues' }
+  where
+  scanFillPropertyValue fpv = do
+    valuesQuery' <- scan fpv.valuesQuery
+    pure fpv { valuesQuery = valuesQuery' }
 
 instance containsPrefixesRowE :: ScanSymbols RowE where
   scan (RowE scrEls) = RowE <$> (traverse scan scrEls)

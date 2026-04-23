@@ -519,11 +519,19 @@ type FieldConstraintE =
   , end :: ArcPosition
   }
 
+type FillPropertyValueE =
+  { propertyName :: String
+  , valuesQuery :: Step
+  , start :: ArcPosition
+  , end :: ArcPosition
+  }
+
 type WidgetCommonFields =
   { title :: Maybe String
   -- Only the ExplicitRole constructor is allowed!
   , perspective :: RoleIdentification
   , fillFrom :: Maybe Step
+  , fillPropertyValues :: List FillPropertyValueE
   -- Alternative to withoutProps: explicitly include properties/views
   , withProps :: Maybe PropsOrView
   , withoutProps :: Maybe PropsOrView

@@ -307,6 +307,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
                       contextinstance={component.props.perspective.contextInstance}
                       minLines={constraint?.minLines}
                       maxLines={constraint?.maxLines}
+                      referenceValues={component.props.perspective.possiblePropertyValues?.[serialisedProperty.id]}
                     />
                   </div>
                 );
