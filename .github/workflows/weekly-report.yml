@@ -2,7 +2,7 @@ name: Weekly Progress Report
 
 on:
   schedule:
-    - cron: '0 15 * * 2'
+    - cron: '0 15 * * 2'  # Tuesday 3 PM UTC
   workflow_dispatch:
 
 jobs:
@@ -62,21 +62,43 @@ jobs:
               '',
               '---',
               '',
-              '@copilot Please analyze these merged PRs and create a management-level progress report covering:',
+              '@copilot Please analyze these merged PRs and create a **brief executive summary**.',
               '',
-              '1. **Key achievements** this week',
-              '2. **Features added** or **bugs fixed**',
-              '3. **Impact** on the project',
-              '4. **Notable patterns** or concerns',
-              '5. **Recommended focus areas** for next week',
+              '## Required Format:',
               '',
-              'Please provide a concise summary suitable for management review.',
-              'Try to keep the report under 2000 words.',
+              '### 🎯 Top Achievements (Max 5)',
+              '- [Achievement 1]',
+              '- [Achievement 2]',
+              '- ...',
+              '',
+              '### 🐛 Key Bugs Fixed (Max 3)',
+              '- [Bug 1]',
+              '- ...',
+              '',
+              '### 📊 Impact (2-3 sentences)',
+              '[Brief impact summary]',
+              '',
+              '### ⚠️ Concerns (If any, max 3)',
+              '- [Concern 1]',
+              '- ...',
+              '',
+              '### 🎯 Focus for Next Week (Max 3)',
+              '- [Focus area 1]',
+              '- ...',
+              '',
+              '**Guidelines:**',
+              '- Skip minor/trivial changes',
+              '- One sentence per bullet point',
+              '- Prioritize business impact over technical details',
+              '- Keep total length under 500 words',
             ].join('\n');
             
-            await github.rest.issues.create({
+            const issue = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `📊 Weekly Progress Report - ${today}`,
               body: issueBody,
+              labels: ['report', 'weekly'],
             });
+            
+            console.log(`Created issue #${issue.data.number}`);
