@@ -170,7 +170,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     {
       return "checkbox";
     }
-    if (this.referenceValues().length > 0 && controlType != "file" && controlType != "markdown")
+    if (this.referenceValues().length > 0 && controlType !== "file" && controlType !== "markdown")
     {
       return "select";
     }

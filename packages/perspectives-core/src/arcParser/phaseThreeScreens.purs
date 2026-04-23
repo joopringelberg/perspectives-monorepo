@@ -426,10 +426,10 @@ handleScreens screenEs = do
 
     compileFillPropertyValues :: LIST.List AST.FillPropertyValueE -> RoleType -> RoleIdentification -> PhaseThree (Maybe PropertyValueFillers)
     compileFillPropertyValues fillProperties objectRoleType perspectiveIdentification = do
-      compiled <- for (fromFoldable fillProperties) \(fpv@{ propertyName, valuesQuery }) -> do
-        p <- qualifyProperty objectRoleType fpv
+      compiled <- for (fromFoldable fillProperties) \(fillPropertyValue@{ propertyName, valuesQuery }) -> do
+        qualifiedPropertyType <- qualifyProperty objectRoleType fillPropertyValue
         qfd <- compileStep (CDOM $ ST (roleIdentification2context perspectiveIdentification)) valuesQuery
-        pure $ Tuple p qfd
+        pure $ Tuple qualifiedPropertyType qfd
       if null compiled then pure Nothing else pure $ Just $ EM.fromFoldable compiled
 
     qualifyProperty :: RoleType -> AST.FillPropertyValueE -> PhaseThree PropertyType
