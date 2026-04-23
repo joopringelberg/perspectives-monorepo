@@ -70,9 +70,9 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistent (getPerspectRol)
 import Perspectives.PerspectivesState (addBinding, getVariableBindings, pushFrame, restoreFrame)
 import Perspectives.Query.Interpreter.Dependencies (Dependency(..), DependencyPath, addAsSupportingPaths, allPaths, appendPaths, applyValueFunction, composePaths, consOnMainPath, dependencyToValue, domain2Dependency, functionOnBooleans, functionOnStrings, singletonPath, snocOnMainPath, (#>>))
-import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext, domain2PropertyRange, domain2roleType, range)
+import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain2PropertyRange, domain2roleType, range)
 import Perspectives.Query.UnsafeCompiler (lookup, mapDurationOperator, mapNumericOperator, orderFunction, performNumericOperation')
-import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
+import Perspectives.Representation.ADT (ADT(..), commonLeavesInADT, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty)
 import Perspectives.Representation.CalculatedRole (CalculatedRole)
@@ -84,8 +84,9 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Rol
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..), isDateOrTime, isPDuration)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string)
-import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextTypeModelName', propertyAliases, roleTypeModelName', generalisesRoleType)
+import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextAspectsClosure, contextTypeModelName', equalsOrSpecialisesRoleInContext, propertyAliases, roleTypeModelName', generalisesRoleType)
 import Prelude (Unit, bind, discard, eq, flip, map, notEq, pure, show, unit, ($), (&&), (+), (<#>), (<$>), (<<<), (<=), (<>), (==), (>=>), (>>=), (||), void)
+import Simple.JSON (readJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
 lift2MPQ :: forall a. MP a -> MPQ a
@@ -555,6 +556,12 @@ interpretSQD qfd a = case a.head of
       (lift $ lift $ calculation ct) >>= flip interpret a
     (SQD _ (DataTypeGetter ExternalRoleF) _ _ _) -> (flip consOnMainPath a) <<< R <$> externalRole cid
     (SQD _ (TypeGetter TypeOfContextF) _ _ _) -> (flip consOnMainPath a) <<< CT <$> contextType cid
+    (SQD _ (ContextTypeFilter adtString) _ _ _) ->
+      case readJSON adtString of
+        Left e -> throwError (error $ "Cannot read ContextTypeFilter ADT: " <> show e)
+        Right adt -> do
+          result <- lift $ lift $ contextMatchesTypeFilter cid adt
+          pure $ consOnMainPath (V "ContextTypeFilter" (bool2Value result)) a
     (SQD _ (DataTypeGetter IndexedContextName) _ _ _) -> (flip consOnMainPath a) <<< V "IndexedContextName" <$> (indexedContextName cid)
     (SQD _ TranslateContextType _ _ _) -> (flip consOnMainPath a) <<< V "translation" <<< Value <$> (lift $ lift $ (contextType_ cid >>= translateType))
     (SQD _ (DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeName) _ _ _) -> (flip consOnMainPath a) <<< R <$> getUnlinkedRoleInstances (EnumeratedRoleType roleTypeName) cid
@@ -589,6 +596,12 @@ interpretSQD qfd a = case a.head of
       (lift2MPQ $ PC.calculation cp) >>= flip interpret a
     (SQD _ (DataTypeGetter ContextF) _ _ _) -> (flip consOnMainPath a) <<< C <$> context rid
     (SQD _ (DataTypeGetter TypeOfRoleF) _ _ _) -> (flip consOnMainPath a) <<< RT <<< ENR <$> roleType rid
+    (SQD _ (RoleTypeFilter adtString) _ _ _) ->
+      case readJSON adtString of
+        Left e -> throwError (error $ "Cannot read RoleTypeFilter ADT: " <> show e)
+        Right adt -> do
+          result <- lift $ lift $ roleMatchesTypeFilter rid adt
+          pure $ consOnMainPath (V "RoleTypeFilter" (bool2Value result)) a
     (SQD _ TranslateRoleType _ _ _) -> (flip consOnMainPath a) <<< V "translation" <<< Value <$> (lift $ lift $ (roleType_ rid >>= translateType))
     (SQD _ (DataTypeGetter IndexedRoleName) _ _ _) -> (flip consOnMainPath a) <<< V "IndexedRoleName" <$> (indexedRoleName rid)
     (SQD _ (DataTypeGetter FillerF) ran _ _) -> composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
@@ -671,6 +684,18 @@ getFillerTypeRecursively adt r = do
         roleCnf <- lift (getEnumeratedRole (rol_pspType bRole) >>= pure <<< _.completeType <<< unwrap)
         if roleCnf `equalsOrSpecialises_` adtCnf then pure [ snocOnMainPath (singletonPath (R b)) (R $ rol_id role) ]
         else map (flip snocOnMainPath (R $ rol_id role)) <$> depthFirst adtCnf bRole
+
+roleMatchesTypeFilter :: RoleInstance -> ADT RoleInContext -> MP Boolean
+roleMatchesTypeFilter roleId roleFilter = do
+  role <- getPerspectRol roleId
+  contextType <- (rol_context role) ##>> contextType
+  ST (RoleInContext { context: contextType, role: rol_pspType role }) `equalsOrSpecialisesRoleInContext` roleFilter
+
+contextMatchesTypeFilter :: ContextInstance -> ADT ContextType -> MP Boolean
+contextMatchesTypeFilter contextId contextFilter = do
+  contextType <- contextType_ contextId
+  contextAspects <- contextType ##= contextAspectsClosure
+  pure $ isJust $ elemIndex true ((\candidate -> isJust $ elemIndex candidate contextAspects) <$> commonLeavesInADT contextFilter)
 
 toBool :: List Dependency -> Boolean
 toBool (Cons (V _ (Value s)) _) = s == "true"

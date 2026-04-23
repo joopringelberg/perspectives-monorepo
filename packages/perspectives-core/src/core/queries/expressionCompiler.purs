@@ -82,6 +82,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Types.ObjectGetters (allTypesInContextADT, allTypesInRoleADT, enumeratedRoleContextType, equalsOrGeneralisesRoleInContext, equalsOrSpecialisesRoleInContext, isUnlinked_, qualifyContextInDomain, qualifyEnumeratedRoleInDomain, qualifyRoleInDomain)
 import Prelude (bind, discard, eq, map, pure, show, unit, void, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>>=), (||))
+import Simple.JSON (writeJSON)
 
 ------------------------------------------------------------------------------------
 ------ MONAD TYPE FOR DESCRIPTIONCOMPILER
@@ -775,7 +776,12 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
         _ -> throwError $ ValueExpressionNotAllowed (range source) (startOf left) (endOf left)
       if equalDomainKinds (range source) narrowedRange then case productOfDomains (range source) narrowedRange of
         Just narrowed -> case simplifyTypeFilterRange narrowed of
-          Just simplified -> pure $ replaceRange source simplified
+          Just simplified -> do
+            typeFilterTest <- case simplified of
+              RDOM roleAdt -> pure $ SQD (range source) (QF.RoleTypeFilter (writeJSON roleAdt)) (VDOM PBool Nothing) True True
+              CDOM contextAdt -> pure $ SQD (range source) (QF.ContextTypeFilter (writeJSON contextAdt)) (VDOM PBool Nothing) True True
+              _ -> throwError $ IncompatibleDomains (startOf left) (endOf right)
+            pure $ makeComposition source (UQD (range source) QF.FilterF typeFilterTest simplified (functional source) False)
           Nothing -> throwError $ IncompatibleDomains (startOf left) (endOf right)
         Nothing -> throwError $ IncompatibleDomains (startOf left) (endOf right)
       else throwError $ IncompatibleDomains (startOf left) (endOf right)
