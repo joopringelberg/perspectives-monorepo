@@ -2,8 +2,11 @@ name: Weekly Progress Report
 
 on:
   schedule:
-    - cron: '0 15 * * 2'  # Tuesday 3 PM UTC
+    - cron: '0 15 * * 2'
   workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   create-report-issue:
@@ -67,30 +70,25 @@ jobs:
               '## Required Format:',
               '',
               '### 🎯 Top Achievements (Max 5)',
-              '- [Achievement 1]',
-              '- [Achievement 2]',
-              '- ...',
+              '- [One sentence per achievement]',
               '',
               '### 🐛 Key Bugs Fixed (Max 3)',
-              '- [Bug 1]',
-              '- ...',
+              '- [One sentence per bug]',
               '',
-              '### 📊 Impact (2-3 sentences)',
+              '### 📊 Impact (2-3 sentences total)',
               '[Brief impact summary]',
               '',
               '### ⚠️ Concerns (If any, max 3)',
-              '- [Concern 1]',
-              '- ...',
+              '- [One sentence per concern]',
               '',
               '### 🎯 Focus for Next Week (Max 3)',
-              '- [Focus area 1]',
-              '- ...',
+              '- [One sentence per focus area]',
               '',
               '**Guidelines:**',
               '- Skip minor/trivial changes',
               '- One sentence per bullet point',
               '- Prioritize business impact over technical details',
-              '- Keep total length under 500 words',
+              '- Keep total report under 500 words',
             ].join('\n');
             
             const issue = await github.rest.issues.create({
