@@ -24,7 +24,7 @@
 module Perspectives.TypePersistence.PerspectiveSerialisation where
 
 import Control.Category (identity)
-import Control.Monad.Error.Class (throwError)
+import Control.Monad.Error.Class (catchError, throwError)
 import Control.Monad.State (StateT, evalStateT, get, put)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (catMaybes, concat, cons, difference, elemIndex, filter, filterA, findIndex, foldl, head, intersect, modifyAt, nub, null, uncons, union)
@@ -256,7 +256,7 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyRestri
     Just propertyFillers -> lift do
       tuples <- for (EM.toUnfoldable propertyFillers :: Array (Tuple PropertyType QueryFunctionDescription)) \(Tuple propertyType qfd) -> do
         f <- getPropertyValues qfd
-        values <- cid ##= f
+        values <- catchError (cid ##= f) (const (pure []))
         pure $ Tuple (propertytype2string propertyType) (unwrap <$> values)
       pure $ fromFoldable tuples
   -- Apply it to the context instance to get the possible fillers.
