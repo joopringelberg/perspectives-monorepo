@@ -132,6 +132,7 @@ import Data.Nullable (Nullable)
 import Data.Ord.Generic (genericCompare)
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple(..))
+import Effect (Effect)
 import Effect.Aff (Aff, Fiber, throwError)
 import Effect.Aff.AVar (AVar, empty)
 import Effect.Aff.Class (liftAff)
@@ -234,6 +235,12 @@ type PerspectivesExtraState =
   , brokerService :: AVar BrokerService
 
   , stompClient :: Maybe StompClient
+
+  -- | Factory used to create a Stomp client for the given broker URL.
+  -- | Defaults to the real `createStompClient` implementation.
+  -- | In tests this field can be replaced with a stub factory that creates an
+  -- | in-process message-bus client, so no real RabbitMQ connection is required.
+  , stompClientFactory :: String -> Effect StompClient
 
   , warnings :: Array Warning
 

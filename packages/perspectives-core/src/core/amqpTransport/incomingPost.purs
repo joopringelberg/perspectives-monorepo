@@ -36,7 +36,7 @@ import Data.Traversable (for, traverse)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Foreign (ForeignError(..), MultipleErrors)
-import Perspectives.AMQP.Stomp (StructuredMessage, acknowledge, createStompClient, messageProducer, sendToTopic)
+import Perspectives.AMQP.Stomp (StructuredMessage, acknowledge, messageProducer, sendToTopic)
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.CoreTypes (BrokerService, MonadPerspectives, MonadPerspectivesQuery, (##>))
 import Perspectives.Identifiers (buitenRol)
@@ -45,7 +45,7 @@ import Perspectives.ModelDependencies (accountHolder, accountHolderName, account
 import Perspectives.Names (getMySystem, lookupIndexedContext)
 import Perspectives.Persistence.API (cleanupDeletedDocs, deleteDocument, documentsInDatabase, excludeDocs, getDocument_)
 import Perspectives.Persistent (postDatabaseName)
-import Perspectives.PerspectivesState (getBrokerService, getPerspectivesUser, pushMessage, removeMessage, setBrokerService, setStompClient, stompClient, transactionLevel)
+import Perspectives.PerspectivesState (getBrokerService, getPerspectivesUser, getStompClientFactory, pushMessage, removeMessage, setBrokerService, setStompClient, stompClient, transactionLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyFunction, getRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
@@ -65,8 +65,9 @@ incomingPost = do
   removeMessage "Cleaning up post database"
   setConnectionState false
   { topic, queueId, login, passcode, vhost, url } <- getBrokerService
-  -- Create a Stomp Client: url
-  stpClient <- liftEffect $ createStompClient (url)
+  -- Create a Stomp Client using the factory stored in state (real or test stub).
+  factory <- getStompClientFactory
+  stpClient <- liftEffect $ factory url
   -- Save the client in state.
   setStompClient stpClient
   -- Create a messageProducer: ConnectAndSubscriptionParameters

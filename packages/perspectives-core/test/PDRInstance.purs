@@ -52,26 +52,48 @@ module Test.PDRInstance where
 import Prelude
 
 import Control.Monad.AvarMonadAsk (modify)
+import Control.Monad.Error.Class (throwError)
 import Control.Promise (Promise, toAffE)
+import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
+import Data.Traversable (traverse_)
 import Effect (Effect)
-import Effect.Aff (Aff, Error, bracket, error, forkAff, killFiber)
+import Effect.Aff (Aff, Error, Milliseconds(..), bracket, delay, error, forkAff, killFiber)
 import Effect.Aff.AVar (AVar, empty, new, put)
+import Effect.Class (liftEffect)
+import Foreign.Object (empty) as OBJ
 import Main (forkCreateIndexedResources, forkDatabasePersistence, forkJustInTimeModelLoader, forkReferentialIntegrityFixer)
+import Perspectives.AMQP.IncomingPost (incomingPost)
+import Perspectives.AMQP.Stomp.Stub (InProcessBus, createInProcessBus, makeStompClientFactory)
+import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
+import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
+import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (getPrivateKey)
-import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), MonadPerspectives, MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction, RuntimeOptions, TypeFix)
+import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), MonadPerspectives, MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction, RuntimeOptions, TypeFix, (##>))
+import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
-import Perspectives.ModelDependencies (sysUser)
+import Perspectives.Identifiers (buitenRol)
+import Perspectives.Instances.Builders (createAndAddRoleInstance)
+import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getProperty)
+import Perspectives.ModelDependencies (connectedToAMQPBroker, sysMe, sysUser)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
+import Perspectives.Names (getMySystem, lookupIndexedRole)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (saveMarkedResources)
-import Perspectives.PerspectivesState (newPerspectivesState)
+import Perspectives.PerspectivesState (newPerspectivesState, setStompClientFactory)
+import Perspectives.Representation.Class.PersistentType (EnumeratedPropertyType(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
+import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
 import Perspectives.RunPerspectives (runPerspectivesWithState)
 import Perspectives.SetupCouchdb (createUserDatabases)
 import Perspectives.SetupUser (setupUser)
+import Perspectives.Sync.HandleTransaction (executeTransaction)
+import Perspectives.Sync.TransactionForPeer (TransactionForPeer)
+import Simple.JSON (readJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -121,8 +143,8 @@ testPouchdbUser userName =
 -- |
 -- | The caller is responsible for calling `shutdown` when the instance is no
 -- | longer needed.  Use `withPDR` / `withTwoPDRs` to get automatic cleanup.
-startPDRInstance :: PouchdbUser -> RuntimeOptions -> Aff PDRInstance
-startPDRInstance pouchdbUser runtimeOptions = do
+startPDRInstance :: PouchdbUser -> RuntimeOptions -> Maybe InProcessBus -> Aff PDRInstance
+startPDRInstance pouchdbUser runtimeOptions bus = do
   -- AVars required by PerspectivesState.
   transactionFlag <- new true
   brokerService <- (empty :: Aff (AVar BrokerService))
@@ -146,6 +168,12 @@ startPDRInstance pouchdbUser runtimeOptions = do
     typeToBeFixed
     userIntegrityChoice
 
+  -- If we have a bus, replace the default real StompClient factory with the in-process stub.
+  case bus of
+    Just b -> do
+      runPerspectivesWithState (setStompClientFactory (makeStompClientFactory b)) state
+    Nothing -> pure unit
+
   -- Start background service fibers.
   -- The JIT model loader is stopped gracefully via `put Stop modelToLoad`;
   -- the remaining fibers are killed directly on shutdown.
@@ -168,8 +196,22 @@ startPDRInstance pouchdbUser runtimeOptions = do
         getSystemIdentifier >>= createUserDatabases
         setupUser Nothing
         saveMarkedResources
+        case bus of
+          Just b -> runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+            ( setProperty
+                [ RoleInstance $ createDefaultIdentifier $ buitenRol pouchdbUser.systemIdentifier ]
+                (EnumeratedPropertyType connectedToAMQPBroker)
+                Nothing
+                [ Value "true" ]
+            )
+          Nothing -> pure unit
     )
     state
+
+  -- If we have a bus, start the incomingPost fiber to receive transactions.
+  postFiber <- case bus of
+    Just _ -> Just <$> (forkAff $ runPerspectivesWithState incomingPost state)
+    Nothing -> pure Nothing
 
   let
     done :: Error
@@ -183,13 +225,19 @@ startPDRInstance pouchdbUser runtimeOptions = do
       killFiber done integrityFiber
       killFiber done persistenceFiber
       killFiber done indexedResourceFiber
+      traverse_ (killFiber done) postFiber
 
   pure { stateAVar: state, shutdown }
+
+noBus :: Maybe InProcessBus
+noBus = Nothing
 
 -----------------------------------------------------------
 -- INTERACTION HELPERS
 -----------------------------------------------------------
 
+-- TODO: een functie met dezelfde naam bestaat in TestUtils.purs (Test.Sync.Utils).
+-- Deze versie moet prevaleren.
 -- | Run a `MonadPerspectives` action against a PDR instance.
 runInPDR :: forall a. PDRInstance -> MonadPerspectives a -> Aff a
 runInPDR pdr mp = runPerspectivesWithState mp pdr.stateAVar
@@ -202,6 +250,29 @@ runTransactionInPDR pdr mpt =
     (runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser) mpt)
     pdr.stateAVar
 
+-- | Poll `action` every `interval` until it returns `Just a`, or throw an error
+-- | after `maxAttempts` attempts.  Use this to wait for asynchronous PDR
+-- | side-effects (state-entry bots, persistence fibers) to complete before
+-- | proceeding to the next test step.
+pollUntil
+  :: forall a
+   . Int
+  -> Milliseconds
+  -> String
+  -> Aff (Maybe a)
+  -> Aff a
+pollUntil maxAttempts interval description action = go maxAttempts
+  where
+  go 0 = throwError $ error $
+    "pollUntil timed out after " <> show maxAttempts <> " attempts waiting for: " <> description
+  go n = do
+    result <- action
+    case result of
+      Just a -> pure a
+      Nothing -> do
+        delay interval
+        go (n - 1)
+
 -----------------------------------------------------------
 -- BRACKET UTILITIES
 -----------------------------------------------------------
@@ -211,11 +282,13 @@ withPDR
   :: forall a
    . PouchdbUser
   -> RuntimeOptions
+  -> Maybe InProcessBus
   -> (PDRInstance -> Aff a)
   -> Aff a
-withPDR pouchdbUser runtimeOptions =
-  bracket (startPDRInstance pouchdbUser runtimeOptions) _.shutdown
+withPDR pouchdbUser runtimeOptions mbus =
+  bracket (startPDRInstance pouchdbUser runtimeOptions mbus) _.shutdown
 
+-- TODO. Een functie met dezelfde naam bestaat in TestUtils.purs (Test.Sync.Utils). Deze versie moet prevaleren.
 -- | Start two PDR instances, run `f`, then shut down both — even if `f` throws.
 -- |
 -- | The two instances are started sequentially.  Each has its own separate
@@ -230,7 +303,173 @@ withTwoPDRs
   -> RuntimeOptions
   -> (PDRInstance -> PDRInstance -> Aff a)
   -> Aff a
-withTwoPDRs user1 opts1 user2 opts2 f =
-  withPDR user1 opts1 \pdr1 ->
-    withPDR user2 opts2 \pdr2 ->
+withTwoPDRs user1 opts1 user2 opts2 f = do
+  bus <- liftEffect createInProcessBus
+  withPDR user1 opts1 (Just bus) \pdr1 ->
+    withPDR user2 opts2 (Just bus) \pdr2 ->
       f pdr1 pdr2
+
+-----------------------------------------------------------
+-- CONNECT TWO PDR INSTANCES VIA INVITATION
+-----------------------------------------------------------
+
+-- | Role and property type identifiers for the Invitation mechanism.
+-- | Human-readable form; the PDR translates these to stable CUIDs via `toStable`.
+outgoingInvitationsType :: String
+outgoingInvitationsType = "model://perspectives.domains#System$PerspectivesSystem$OutgoingInvitations"
+
+inviterType :: String
+inviterType = "model://perspectives.domains#System$Invitation$Inviter"
+
+inviteeType :: String
+inviteeType = "model://perspectives.domains#System$Invitation$Invitee"
+
+invitationMessageProp :: String
+invitationMessageProp = "model://perspectives.domains#System$Invitation$External$Message"
+
+serialisedInvitationProp :: String
+serialisedInvitationProp = "model://perspectives.domains#System$Invitation$External$SerialisedInvitation"
+
+-- | Connect two PDR instances using the Invitation mechanism from
+-- | `model://perspectives.domains#System`.
+-- |
+-- | Steps performed:
+-- |
+-- |   PDR1 side:
+-- |   1. Run the `CreateInvitation` context action as `PerspectivesSystem$User`
+-- |      in PDR1's `PerspectivesSystem` context.  This creates an `Invitation`
+-- |      context and binds PDR1's `me` to the `Inviter` role.
+-- |   2. Set `Invitation$External$Message` to `"Hello there"`.
+-- |   3. Run the `CreateInvitation` object action as `Inviter` on the
+-- |      `Invitation$External` role.  This sets `ConfirmationCode`, which
+-- |      triggers the state-entry bot to serialise the invitation and store
+-- |      it as `Invitation$External$SerialisedInvitation`.
+-- |   4. Read the file content of `SerialisedInvitation`.
+-- |
+-- |   PDR2 side:
+-- |   5. Parse the invitation JSON to obtain the embedded `TransactionForPeer`.
+-- |   6. Execute that transaction in PDR2; this installs the `Invitation`
+-- |      context in PDR2's database and registers PDR1's user as `Inviter`.
+-- |   7. Create an `Invitation$Invitee` role instance in the same `Invitation`
+-- |      context, filled with PDR2's own `me`.
+-- |
+-- | Both PDR instances must have been started with `startPDRInstance` (or via
+-- | `withTwoPDRs`) so that `setupUser` has already loaded `model:System`.
+connectPDRs :: PDRInstance -> PDRInstance -> Aff Unit
+connectPDRs pdr1 pdr2 = do
+
+  -- -----------------------------------------------------------------------
+  -- PDR1: Step 1 — create the Invitation via context action
+  -- -----------------------------------------------------------------------
+  mySystem1 <- runInPDR pdr1 getMySystem
+
+  runInPDR pdr1
+    $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+    $
+      runContextAction sysUser "CreateInvitation" mySystem1
+
+  -- -----------------------------------------------------------------------
+  -- PDR1: Step 2 — obtain the new Invitation context instance
+  -- Poll until the state-entry bot has created and stored it.
+  -- -----------------------------------------------------------------------
+  invCtx <- pollUntil 100 (Milliseconds 100.0)
+    "Invitation context to appear in PerspectivesSystem$OutgoingInvitations"
+    ( runInPDR pdr1
+        ( (ContextInstance mySystem1) ##>
+            ( getEnumeratedRoleInstances (EnumeratedRoleType outgoingInvitationsType)
+                >=> binding
+                >=> context
+            )
+        )
+    )
+
+  let invExternal = externalRole invCtx
+
+  -- -----------------------------------------------------------------------
+  -- PDR1: Step 3 — set the Message property on Invitation$External
+  -- -----------------------------------------------------------------------
+  runInPDR pdr1
+    $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+    $
+      setProperty
+        [ invExternal ]
+        (EnumeratedPropertyType invitationMessageProp)
+        Nothing
+        [ Value "Hello there" ]
+
+  -- -----------------------------------------------------------------------
+  -- PDR1: Step 4 — run the Inviter's CreateInvitation object action
+  -- (sets ConfirmationCode → bot creates SerialisedInvitation file)
+  -- -----------------------------------------------------------------------
+  runInPDR pdr1
+    $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType inviterType)
+    $
+      runActionForObject
+        (ENR $ EnumeratedRoleType inviterType)
+        "CreateInvitation"
+        (unwrap invCtx)
+        (unwrap invExternal)
+
+  -- -----------------------------------------------------------------------
+  -- PDR1: Step 5 — read the SerialisedInvitation file content
+  -- Poll until the state-entry bot has set the property and written the file.
+  -- -----------------------------------------------------------------------
+  invText <- pollUntil 30 (Milliseconds 200.0)
+    "SerialisedInvitation property and file content to be set"
+    ( do
+        mPFileStr <- runInPDR pdr1
+          (invExternal ##> getProperty (EnumeratedPropertyType serialisedInvitationProp))
+        case mPFileStr of
+          Nothing -> pure Nothing
+          Just (Value v) -> runInPDR pdr1 $ getPFileTextValue v
+    )
+
+  -- -----------------------------------------------------------------------
+  -- PDR2: Step 6 — parse invitation JSON and execute the transaction
+  -- -----------------------------------------------------------------------
+  -- The invitation file is JSON: { message, transaction, confirmation }
+  -- where `transaction` is itself a JSON-encoded TransactionForPeer.
+  (invData :: { transaction :: String }) <- case readJSON invText of
+    Left err -> throwError $ error $
+      "connectPDRs: failed to parse invitation JSON: " <> show err
+    Right x -> pure x
+
+  (tfp :: TransactionForPeer) <- case readJSON invData.transaction of
+    Left err -> throwError $ error $
+      "connectPDRs: failed to parse TransactionForPeer: " <> show err
+    Right x -> pure x
+
+  runInPDR pdr2
+    $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+    $
+      executeTransaction tfp
+
+  -- Poll until the Inviter role is accessible in PDR2, confirming that the
+  -- transaction and any state-entry bots have completed.
+  void $ pollUntil 30 (Milliseconds 100.0)
+    "Inviter role to be accessible in PDR2 after executeTransaction"
+    ( runInPDR pdr2
+        (invCtx ##> getEnumeratedRoleInstances (EnumeratedRoleType inviterType))
+    )
+
+  -- -----------------------------------------------------------------------
+  -- PDR2: Step 7 — create Invitee role filled with PDR2's me
+  -- -----------------------------------------------------------------------
+  mMe2 <- runInPDR pdr2 $ lookupIndexedRole sysMe
+
+  case mMe2 of
+    Nothing -> throwError $ error
+      "connectPDRs: cannot find indexed role 'me' in PDR2"
+    Just me2 ->
+      runInPDR pdr2
+        $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+        $ void
+        $ createAndAddRoleInstance
+            (EnumeratedRoleType inviteeType)
+            (unwrap invCtx)
+            ( RolSerialization
+                { id: Nothing
+                , properties: PropertySerialization OBJ.empty
+                , binding: Just (unwrap me2)
+                }
+            )

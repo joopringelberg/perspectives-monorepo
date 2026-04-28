@@ -710,6 +710,13 @@ findPerspective subjectType criterium = execStateT f Nothing
   hasBeenFound :: StateT (Maybe Perspective) MonadPerspectives Boolean
   hasBeenFound = get >>= pure <<< isJust
 
+-- | Returns just the first perspective for the given (user) RoleType that has the given
+-- | object RoleType as its perspective object (or a generalisation of it), or Nothing.
+-- | Includes aspects of the subject type in the search.
+-- | PARTIAL: can only be used after object of Perspective has been compiled in PhaseThree.
+findPerspectiveForObject :: Partial => RoleType -> RoleType -> MonadPerspectives (Maybe Perspective)
+findPerspectiveForObject subjectType objectType = findPerspective subjectType (flip isPerspectiveOnRoleType objectType)
+
 -- | True iff the subject type has a perspective that includes the property,
 -- | qualified with the given PropertyVerb.
 

@@ -30,12 +30,13 @@ import Data.Map (Map, empty, insert, lookup, values) as Map
 import Data.Maybe (Maybe(..))
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
+import Effect (Effect)
 import Effect.Aff.AVar (AVar, put, read)
 import Effect.Class (liftEffect)
 import Foreign.Object (empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
-import Perspectives.AMQP.Stomp (StompClient)
+import Perspectives.AMQP.Stomp (StompClient, createStompClient)
 import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceDeltasCache, ResourceVersionCache, RolInstances, RoleInstanceDeltasCache, RuntimeOptions, TranslationTable, TypeFix, Warning)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, empty, lookup) as ENV
@@ -86,6 +87,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , transactionLevel: ""
   , brokerService
   , stompClient: Nothing
+  , stompClientFactory: createStompClient
   , databases: empty
   , warnings: []
   , transactionFlag: transFlag
@@ -206,6 +208,15 @@ stompClient = gets _.stompClient
 
 setStompClient :: StompClient -> MonadPerspectives Unit
 setStompClient bs = modify \s -> s { stompClient = Just bs }
+
+-- | Return the factory used to create a Stomp client for a given broker URL.
+getStompClientFactory :: MonadPerspectives (String -> Effect StompClient)
+getStompClientFactory = gets _.stompClientFactory
+
+-- | Replace the Stomp client factory stored in state.
+-- | Call this before `incomingPost` to inject a test stub.
+setStompClientFactory :: (String -> Effect StompClient) -> MonadPerspectives Unit
+setStompClientFactory f = modify \s -> s { stompClientFactory = f }
 
 getWarnings :: MonadPerspectives (Array Warning)
 getWarnings = gets _.warnings

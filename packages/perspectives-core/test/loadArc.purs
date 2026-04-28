@@ -6,16 +6,21 @@ import Control.Monad.Error.Class (catchError)
 import Control.Monad.Free (Free)
 import Data.Array (null)
 import Data.Either (Either(..))
+import Data.Maybe (Maybe(..))
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log, logShow)
 import Perspectives.DomeinCache (removeDomeinFileFromCouchdb)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
+import Perspectives.Identifiers (buitenRol)
+import Perspectives.Persistent (tryGetPerspectRol)
 import Perspectives.PerspectivesState (defaultRuntimeOptions)
 import Perspectives.Representation.Class.PersistentType (typeExists)
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..))
+import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.TypePersistence.LoadArc.FS (loadAndCompileArcFile, loadCompileAndCacheArcFile', loadCompileAndSaveArcFile, loadCompileAndSaveArcFile')
-import Test.PDRInstance (runInPDR, testPouchdbUser, withPDR)
+import Test.PDRInstance (noBus, runInPDR, testPouchdbUser, withPDR)
 import Test.Perspectives.Utils (clearUserDatabase, runP, withSystem)
 import Test.Unit (TestF, suite, test, testOnly)
 import Test.Unit.Assert (assert)
@@ -29,13 +34,21 @@ modelDirectory = "src/model"
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.loadArc" do
 
-  testOnly "Install PDR in memory and fetch a System type" do
+  test "Install PDR in memory and fetch a System type" do
     let user = testPouchdbUser "alice"
-    withPDR user defaultRuntimeOptions \pdr -> do
+    withPDR user defaultRuntimeOptions noBus \pdr -> do
       runInPDR pdr do
         typeExists (ContextType "model://perspectives.domains#System") >>= case _ of
           false -> liftAff $ assert "System context should be available" false
           true -> pure unit
+
+  testOnly "Install PDR in memory and fetch a System type" do
+    let user = testPouchdbUser "alice"
+    withPDR user defaultRuntimeOptions noBus \pdr -> do
+      runInPDR pdr do
+        tryGetPerspectRol (RoleInstance $ createDefaultIdentifier $ buitenRol user.systemIdentifier) >>= case _ of
+          Nothing -> liftAff $ assert "The perspect rol for the user should be available" false
+          Just _ -> pure unit
 
   -- test "Load a model file and store it in Couchdb: reload and compare with original" $ runPerspectivesWithoutCouchdb "testUser" do
   --   -- 1. Load and save a model.
