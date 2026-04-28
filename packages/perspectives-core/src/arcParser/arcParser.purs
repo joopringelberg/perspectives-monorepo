@@ -48,7 +48,7 @@ import Parsing.Indent.Monadic (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FillPropertyValueE, FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -1824,6 +1824,7 @@ widgetCommonFields = do
       case keyword of
         "with" -> do
           withProps <- reserved "with" *> withoutProperties
+          fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
           -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
           (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
           mroleVerbs <- optionMaybe roleVerbs
@@ -1833,6 +1834,7 @@ widgetCommonFields = do
             { title
             , perspective
             , fillFrom: mFillFrom
+            , fillPropertyValues
             , withProps: Just withProps
             , withoutProps: Nothing
             , withoutVerbs
@@ -1843,6 +1845,7 @@ widgetCommonFields = do
             }
         "without" -> do
           withoutProps <- reserved "without" *> withoutProperties
+          fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
           -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
           (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
           mroleVerbs <- optionMaybe roleVerbs
@@ -1852,6 +1855,7 @@ widgetCommonFields = do
             { title
             , perspective
             , fillFrom: mFillFrom
+            , fillPropertyValues
             , withProps: Nothing
             , withoutProps: Just withoutProps
             , withoutVerbs
@@ -1861,6 +1865,7 @@ widgetCommonFields = do
             , end
             }
         _ -> do
+          fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
           (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
           mroleVerbs <- optionMaybe roleVerbs
           fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
@@ -1869,6 +1874,7 @@ widgetCommonFields = do
             { title
             , perspective
             , fillFrom: mFillFrom
+            , fillPropertyValues
             , withProps: Nothing
             , withoutProps: Nothing
             , withoutVerbs
@@ -1883,6 +1889,7 @@ widgetCommonFields = do
         { title
         , perspective
         , fillFrom: Nothing
+        , fillPropertyValues: Nil
         , withProps: Nothing
         , withoutProps: Nothing
         , withoutVerbs: Nil
@@ -1914,6 +1921,16 @@ fieldConstraintE = do
   findConstraintValue :: String -> List (Tuple String Int) -> Maybe Int
   findConstraintValue key = foldl (\acc (Tuple k v) -> if k == key then Just v else acc) Nothing
 
+fillPropertyValueE :: IP FillPropertyValueE
+fillPropertyValueE = do
+  start <- getPosition
+  void $ reserved "fillproperty"
+  propertyName <- arcIdentifier
+  void $ reserved "from"
+  valuesQuery <- step
+  end <- getPosition
+  pure { propertyName, valuesQuery, start, end }
+
 tableFormFields :: RoleIdentification -> IP WidgetCommonFields
 tableFormFields perspective = do
   start <- getPosition
@@ -1938,6 +1955,7 @@ tableFormFields perspective = do
         withoutProps = case mSelection of
           Just (Left p) -> Just p
           _ -> Nothing
+      fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
       -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
       -- entireBlock expects the same indentation, i.e. the position taken up after parsing the optional 'without' clause.
       -- This may be outdented! 
@@ -1950,6 +1968,7 @@ tableFormFields perspective = do
         { title
         , perspective
         , fillFrom: mFillFrom
+        , fillPropertyValues
         , withProps
         , withoutProps
         , withoutVerbs
@@ -1964,6 +1983,7 @@ tableFormFields perspective = do
         { title
         , perspective
         , fillFrom: Nothing
+        , fillPropertyValues: Nil
         , withProps: Nothing
         , withoutProps: Nothing
         , withoutVerbs: Nil

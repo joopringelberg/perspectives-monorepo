@@ -187,7 +187,7 @@ contextualiseChatDef (ChatDef r@{ chatRole, title }) = do
   pure $ Just $ ChatDef r { chatInstance = head chatRoleInstances, title = Just title' }
 
 contextualiseWidgetCommonFields :: WidgetCommonFieldsDef -> InContext (Maybe WidgetCommonFieldsDef)
-contextualiseWidgetCommonFields wc@{ title, perspectiveId, fillFrom, propertyRestrictions, withoutProperties, roleVerbs, userRole } = do
+contextualiseWidgetCommonFields wc@{ title, perspectiveId, fillFrom, fillPropertyFrom, propertyRestrictions, withoutProperties, roleVerbs, userRole } = do
   { contextInstance, userRoleInstance, contextType } <- ask
   contextStates <- lift $ lift (map ContextState <$> (runArrayT $ getActiveStates contextInstance))
   subjectStates <- lift $ lift (map SubjectState <$> (runArrayT $ getActiveRoleStates userRoleInstance))
@@ -204,7 +204,7 @@ contextualiseWidgetCommonFields wc@{ title, perspectiveId, fillFrom, propertyRes
   serialise :: Maybe String -> Array StateSpec -> Array StateSpec -> Perspective -> InContext WidgetCommonFieldsDef
   serialise translatedTitle contextStates subjectStates perspective = do
     { contextInstance } <- ask
-    serialisedPerspective <- lift $ lift $ serialisePerspective contextStates subjectStates contextInstance userRole propertyRestrictions withoutProperties roleVerbs fillFrom perspective
+    serialisedPerspective <- lift $ lift $ serialisePerspective contextStates subjectStates contextInstance userRole propertyRestrictions withoutProperties roleVerbs fillFrom fillPropertyFrom perspective
     pure $ wc { perspective = Just serialisedPerspective, title = translatedTitle }
 
 contextualisePerspective :: Perspective -> InContext (Maybe Perspective)

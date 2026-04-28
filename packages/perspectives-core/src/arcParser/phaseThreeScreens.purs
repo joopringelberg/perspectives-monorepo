@@ -37,12 +37,12 @@ import Data.Tuple (Tuple(..), fst, snd)
 import Foreign.Object (Object, keys, lookup)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
-import Perspectives.Data.EncodableMap (empty, insert, singleton) as EM
+import Perspectives.Data.EncodableMap (empty, fromFoldable, insert, singleton) as EM
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_)
 import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), PropertyVerbE(..), PropsOrView, RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..), roleIdentification2context)
-import Perspectives.Parsing.Arc.AST (ColumnE(..), FieldConstraintE, FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WidgetCommonFields) as AST
+import Perspectives.Parsing.Arc.AST (ColumnE(..), FieldConstraintE, FillPropertyValueE, FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WidgetCommonFields) as AST
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
@@ -58,7 +58,7 @@ import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.Class.Role (allProperties, displayName, perspectivesOfRoleType, roleADTOfRoleType, roleTypeIsFunctional)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..), elements_)
 import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsRoleVerbs)
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyRestrictions)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), PropertyRestrictions, PropertyValueFillers, RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optimistic, pessimistic)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), roletype2string)
 import Perspectives.Representation.Verbs (allPropertyVerbs, roleVerbList2Verbs)
@@ -314,7 +314,7 @@ handleScreens screenEs = do
             otherwise -> throwError $ NotUniquelyIdentifyingPropertyType start' (ENP $ EnumeratedPropertyType prop) candidates
 
   widgetCommonFields :: RoleType -> AST.WidgetCommonFields -> ThreeValuedLogic -> PhaseThree WidgetCommonFieldsDef
-  widgetCommonFields subjectRoleType { title: title', perspective, fillFrom, withProps, withoutProps, withoutVerbs, roleVerbs, fieldConstraints: fieldConstraints', start: start', end: end' } isFunctionalWidget = do
+  widgetCommonFields subjectRoleType { title: title', perspective, fillFrom, fillPropertyValues, withProps, withoutProps, withoutVerbs, roleVerbs, fieldConstraints: fieldConstraints', start: start', end: end' } isFunctionalWidget = do
     -- From a RoleIdentification that represents the object,
     -- find the relevant Perspective.
     -- A ScreenElement can only be defined for a named Enumerated or Calculated Role. This means that `perspective` is constructed with the
@@ -349,6 +349,7 @@ handleScreens screenEs = do
     -- So we fetch the user role, get its Perspectives, and find the one that refers to the objectRoleType.
     perspectives <- lift2 $ perspectivesOfRoleType subjectRoleType
     fillFrom' <- traverse (compileStep (CDOM $ ST (roleIdentification2context perspective))) fillFrom
+    fillPropertyFrom' <- compileFillPropertyValues fillPropertyValues objectRoleType perspective
     stableObjectRoleType <- lift2 $ toReadable objectRoleType
     case find (\(Perspective { roleTypes }) -> isJust $ elemIndex stableObjectRoleType roleTypes) perspectives of
       -- This case is probably that the object and user exist, but the latter
@@ -403,6 +404,7 @@ handleScreens screenEs = do
           , perspectiveId
           , perspective: Nothing
           , fillFrom: fillFrom'
+          , fillPropertyFrom: fillPropertyFrom'
           , propertyRestrictions
           , withoutProperties
           , roleVerbs: maybe Nothing (Just <<< roleVerbList2Verbs) roleVerbs
@@ -421,6 +423,24 @@ handleScreens screenEs = do
           CR r -> lift2 (roleADTOfRoleType objectRoleType >>= allProperties <<< map roleInContext2Role)
         Empty -> pure []
         PSet as -> pure as
+
+    compileFillPropertyValues :: LIST.List AST.FillPropertyValueE -> RoleType -> RoleIdentification -> PhaseThree (Maybe PropertyValueFillers)
+    compileFillPropertyValues fillProperties objectRoleType perspectiveIdentification = do
+      compiled <- for (fromFoldable fillProperties) \(fillPropertyValue@{ propertyName, valuesQuery }) -> do
+        qualifiedPropertyType <- qualifyProperty objectRoleType fillPropertyValue
+        qfd <- compileStep (CDOM $ ST (roleIdentification2context perspectiveIdentification)) valuesQuery
+        pure $ Tuple qualifiedPropertyType qfd
+      if null compiled then pure Nothing else pure $ Just $ EM.fromFoldable compiled
+
+    qualifyProperty :: RoleType -> AST.FillPropertyValueE -> PhaseThree PropertyType
+    qualifyProperty roleType { propertyName, start: pstart, end: pend } = do
+      candidates <- lookForUnqualifiedPropertyType_ propertyName roleType
+      case head candidates of
+        Nothing -> throwError $ UnknownProperty pstart (ENP $ EnumeratedPropertyType propertyName) (ST roleType)
+        (Just t) | length candidates == 1 -> case t of
+          ENP p -> pure (ENP p)
+          CP _ -> throwError $ PropertyCannotBeCalculated propertyName pstart pend
+        otherwise -> throwError $ NotUniquelyIdentifyingPropertyType pstart (ENP $ EnumeratedPropertyType propertyName) candidates
 
     -- NOTE: previously unused helper that referenced subjectRoleType; keep commented to avoid unused / scope issues.
     -- checkVerbsAndProps :: Array PropertyType -> ExplicitSet PropertyType -> Array PropertyVerb -> Perspective -> RoleType -> PhaseThree Unit

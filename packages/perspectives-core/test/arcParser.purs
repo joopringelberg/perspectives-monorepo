@@ -100,6 +100,13 @@ theSuite = suite "Perspectives.Parsing.Arc" do
       (Right id) -> do
         assert "'entry' should be parsed as a valid reserved identifier" (id == "entry")
 
+  test "reservedIdentifier, fillproperty keyword" do
+    (r :: Either ParseError String) <- runIndentParser "fillproperty" reservedIdentifier
+    case r of
+      (Left e) -> assert (show e) false
+      (Right id) -> do
+        assert "'fillproperty' should be parsed as a valid reserved identifier" (id == "fillproperty")
+
   test "reservedIdentifier, failing" do
     (r :: Either ParseError String) <- {-pure $ unwrap $-} runIndentParser "cheese" reservedIdentifier
     case r of
@@ -271,6 +278,14 @@ theSuite = suite "Perspectives.Parsing.Arc" do
         ensureUserRole "GoedeGast" dom >>=
           ensureStateInRole (isStateWithExplicitRole "model:Feest$GoedeGast") >>=
             perspectiveExists
+
+  test "Screen parser accepts fillproperty clauses" do
+    let
+      src = "domain MyTestDomain\n  thing ReferenceValues (relational)\n    property Value (String)\n  user Doorverwijzer\n    perspective on ReferenceValues\n      all roleverbs\n      props (Value) verbs (Consult, SetPropertyValue)\n  screen\n    who\n      Doorverwijzer\n        master\n          with props (Value)\n          fillproperty Value from ReferenceValues >> Value\n        detail\n          with props (Value)"
+    (r :: Either ParseError ContextE) <- runIndentParser src domain
+    case r of
+      Left e -> assert (show e) false
+      Right _ -> assert "The domain parser should accept fillproperty clauses in screens." true
 
   --------------------------------------------------------------------------------
   ---- DOMAIN

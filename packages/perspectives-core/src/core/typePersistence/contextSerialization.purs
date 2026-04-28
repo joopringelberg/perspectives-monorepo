@@ -196,6 +196,7 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
         , roleVerbs: Nothing
         , userRole: userRoleType
         , fillFrom: Nothing
+        , fillPropertyFrom: Nothing
         , fieldConstraints: Nothing
         }
       element =
@@ -222,6 +223,7 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
         , roleVerbs: Nothing
         , userRole: userRoleType
         , fillFrom: Nothing
+        , fillPropertyFrom: Nothing
         , fieldConstraints: Nothing
         }
     in
@@ -263,6 +265,7 @@ makeTableFormDef userRoleType p@{ id, displayName } =
       , roleVerbs: Nothing
       , userRole: userRoleType
       , fillFrom: Nothing
+      , fillPropertyFrom: Nothing
       , fieldConstraints: Nothing
       }
   in
@@ -581,6 +584,7 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               , roleVerbs: Nothing
               , userRole: userRoleType
               , fillFrom: Nothing
+              , fillPropertyFrom: Nothing
               , fieldConstraints: Nothing
               }
           }
@@ -595,6 +599,7 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               , roleVerbs: Nothing
               , userRole: userRoleType
               , fillFrom: Nothing
+              , fillPropertyFrom: Nothing
               , fieldConstraints: Nothing
               }
           }

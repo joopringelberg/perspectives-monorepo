@@ -247,6 +247,7 @@ perspectDef = LanguageDef
       , "detail"
       , "without"
       , "fillfrom"
+      , "fillproperty"
       , "fields"
       , "minLines"
       , "maxLines"
