@@ -51,7 +51,7 @@ import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
 import Perspectives.Representation.QueryFunction (FunctionName(..))
 import Perspectives.Representation.Range (Duration_(..), Range(..))
 import Perspectives.Time (date2String, dateTime2String, time2String)
-import Prelude (bind, not, pure, show, ($), (&&), (*>), (+), (<$>), (<*), (<*>), (<<<), (>), (>>=), (<>), eq, (/=))
+import Prelude (bind, not, pure, show, ($), (&&), (*>), (+), (<$>), (<*), (<*>), (<<<), (>), (>>=), (<>), eq, (/=), discard)
 
 step :: IP Step
 step = defer \_ -> step_ false
@@ -128,6 +128,14 @@ step_ parenthesised = do
     keyword <- option "" (lookAhead reservedIdentifier)
     case keyword of
       "filter" -> reserved "filter" *> step_ parenthesised
+      "typeFilter" -> do
+        reserved "typeFilter"
+        candidate <- step_ parenthesised
+        -- We reuse regular filter parsing (`with` is parsed as Filter) and then
+        -- retag the operator to TypeFilter.
+        case candidate of
+          Binary (BinaryStep bs@{ operator: Filter pos }) -> pure $ Binary (BinaryStep (bs { operator = TypeFilter pos }))
+          _ -> fail "Expected `typeFilter <query> with <type-expression>`."
       "letE" -> pureLetStep
       "callExternal" -> computationStep
       u | isUnaryKeyword u -> unaryStep
@@ -422,6 +430,7 @@ operatorPrecedence (LogicalOr _) = 2
 -- not, exists, available, filledBy, fills 1
 
 operatorPrecedence (Filter _) = 0
+operatorPrecedence (TypeFilter _) = 0
 
 startOf :: Step -> ArcPosition
 startOf stp = case stp of
@@ -586,4 +595,3 @@ markDownLiteral = (go <?> "MarkDown") <* token.whiteSpace
 
   whiteSpaceRegex :: Regex
   whiteSpaceRegex = unsafeRegex "\\s*\\n+\\s*" global
-

@@ -122,6 +122,7 @@ data Operator
   | Divide ArcPosition
   | Multiply ArcPosition
   | Filter ArcPosition
+  | TypeFilter ArcPosition
   | Sequence ArcPosition
   | Union ArcPosition
   | Intersection ArcPosition
@@ -273,6 +274,7 @@ instance prettyPrintOperator :: PrettyPrint Operator where
   prettyPrint' t (Divide _) = "Divide"
   prettyPrint' t (Multiply _) = "Multiply"
   prettyPrint' t (Filter _) = "Filter"
+  prettyPrint' t (TypeFilter _) = "TypeFilter"
   prettyPrint' t (Sequence _) = "Sequence"
   prettyPrint' t (Union _) = "Union"
   prettyPrint' t (Intersection _) = "Intersection"
