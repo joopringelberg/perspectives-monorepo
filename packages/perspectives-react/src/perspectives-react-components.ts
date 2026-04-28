@@ -31,6 +31,7 @@ export { default as StandardScreen } from "./standardscreen";
 export { default as PerspectiveBasedForm } from "./perspectivebasedform";
 export { default as PerspectiveForm } from "./perspectiveform";
 export { default as PerspectiveTable } from "./perspectivetable";
+export { default as PaymentWidget } from "./paymentWidget";
 export { default as ActionDropDown } from "./actiondropdown";
 export { default as Alert } from "./alert";
 export { default as BinaryModal } from "./binarymodal";
