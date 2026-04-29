@@ -748,11 +748,11 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   renderTopNavBar() {
     const component = this;
     return (<header> {/* Add header landmark */}
-      <Navbar bg="primary" expand="xs" className="py-0 ps-2" id="top-navbar" role="navigation" aria-label="Main navigation">
+      <Navbar bg="body" expand="xs" className="py-0 ps-2 border-bottom" id="top-navbar" role="navigation" aria-label="Main navigation">
       <NavDropdown 
         title={
           <>
-            <i className="bi bi-list text-light fs-2" aria-hidden="true"></i>
+            <i className="bi bi-list text-body fs-2" aria-hidden="true"></i>
             <span className="visually-hidden">{i18next.t("mainMenu", {ns: "mycontexts"})}</span>
           </>
         } 
@@ -776,7 +776,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.copyContext( component.state.openContext! ) }>{ i18next.t("www_copycontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
-      <Navbar.Brand href="#home" className='me-auto text-light navbar-title'>
+      <Navbar.Brand href="#home" className='me-auto text-body navbar-title'>
         {/* TODO If the available width is large enough, display both context- and role name. */}
         <FlippingTitle
           title={this.state.title} 
@@ -974,14 +974,14 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
     return (
       <nav aria-label="History navigation"> {/* Add nav landmark */}
-        <Navbar id="bottom-navbar" fixed="bottom" bg="primary" expand="xs" className="justify-content-between py-0 px-3">
+        <Navbar id="bottom-navbar" fixed="bottom" bg="body" expand="xs" className="justify-content-between py-0 px-3 border-top">
           <Navbar.Brand 
             onClick={e => {window.history.back(); e.stopPropagation();}} 
             onKeyDown={(e) => {if (e.key === ' ' || e.key === 'Enter') window.history.back(); e.stopPropagation();}} 
             role="button" 
             tabIndex={0} 
             aria-label={i18next.t("bottom_goBack", {ns: 'mycontexts'})}>
-              <i className="bi bi-arrow-left text-light"></i>
+              <i className="bi bi-arrow-left text-body"></i>
           </Navbar.Brand>
           <Navbar.Brand 
             onClick={e => { component.setState({ showNotifications: true }); e.stopPropagation(); }} 
@@ -989,7 +989,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
             role="button" 
             tabIndex={0} 
             aria-label={i18next.t("bottom_showNotifications", {ns: 'mycontexts'})}>
-              <i className="bi bi-arrow-up text-light"></i>
+              <i className="bi bi-arrow-up text-body"></i>
           </Navbar.Brand>
           <Navbar.Brand 
             onClick={e => {window.history.forward(); e.stopPropagation();}} 
@@ -997,7 +997,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
             role="button" 
             tabIndex={0} 
             aria-label={i18next.t("bottom_goForward", {ns: 'mycontexts'})}>
-              <i className="bi bi-arrow-right text-light"></i>
+              <i className="bi bi-arrow-right text-body"></i>
           </Navbar.Brand>
         </Navbar>
       </nav>
