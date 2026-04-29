@@ -58,6 +58,7 @@ import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
 import Perspectives.Parsing.Arc.PhaseThree.SetInvertedQueries (setInvertedQueries)
 import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForPropertyType, lookForRoleTypeOfADT, lookForUnqualifiedPropertyType, lookForUnqualifiedRoleTypeOfADT)
+import Perspectives.Parsing.Arc.PhaseTwo.TypeCombination (compileContextTypeCombination, compileRoleTypeCombination)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (CurrentlyCalculated(..), PhaseThree, addBinding, getsDF, isBeingCalculated, isIndexedContextInCurrentCompilation, isIndexedRoleInCurrentCompilation, lift2, lookupVariableBinding, loopErrorMessage, throwError, withCurrentCalculation, withFrame)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -161,6 +162,15 @@ qualifyReturnsClause pos qfd@(MQD dom' (QF.ExternalCoreContextGetter f) args (CD
 qualifyReturnsClause pos qfd@(MQD dom' (QF.ForeignRoleGetter f) args ran isF isM) = throwError $ Custom "qualifyReturnsClause: implement case ForeignRoleGetter"
 qualifyReturnsClause pos qfd = pure qfd
 
+qualifyRoleInContext :: ArcPosition -> RoleInContext -> PhaseThree RoleInContext
+qualifyRoleInContext pos ric@(RoleInContext { context, role }) = do
+  contextIdentifiers <- keys <$> getsDF _.contexts
+  qualifiedContext <- qualifyLocalContextName pos (unwrap context) contextIdentifiers
+  qualifiedRole <- qualifyLocalRoleName pos (unwrap role)
+  case qualifiedRole of
+    ENR er -> pure $ RoleInContext { context: qualifiedContext, role: er }
+    CR cr -> throwError $ Custom ("qualifyRoleInContext: the role in a RoleInContext cannot be a CalculatedRoleType. This should have been caught earlier in the compilation process. At " <> show pos <> ".")
+
 -- | Finds a RoleType defined in the model we're compiling whose string value ends with the given segments,
 -- | or throws an error.
 -- | If the name happens to be fully qualified, we check whether it occurs in the model we're compiling or
@@ -194,11 +204,11 @@ qualifyLocalRoleName_ pos ident roleIdentifiers = do
     otherwise -> throwError $ NotUniquelyIdentifyingPropertyType pos (ENP $ EnumeratedPropertyType ident) (ENP <<< EnumeratedPropertyType <$> candidates)
 
 qualifyLocalContextName :: ArcPosition -> String -> Array String -> PhaseThree ContextType
-qualifyLocalContextName pos ident roleIdentifiers = ContextType <$> (qualifyLocalContextName_ pos ident roleIdentifiers)
+qualifyLocalContextName pos ident contextIdentifiers = ContextType <$> (qualifyLocalContextName_ pos ident contextIdentifiers)
 
 qualifyLocalContextName_ :: ArcPosition -> String -> Array String -> PhaseThree String
-qualifyLocalContextName_ pos ident roleIdentifiers = do
-  (candidates :: Array String) <- pure $ filter (\id -> id `endsWithSegments` ident) roleIdentifiers
+qualifyLocalContextName_ pos ident contextIdentifiers = do
+  (candidates :: Array String) <- pure $ filter (\id -> id `endsWithSegments` ident) contextIdentifiers
   case head candidates of
     Nothing -> throwError $ UnknownContext pos (ContextType ident)
     (Just qname) | length candidates == 1 -> pure qname
@@ -695,63 +705,29 @@ compileUnaryStep currentDomain st@(RoleIndividual pos qualifiedIdentifier s) = d
           pure $ UQD currentDomain (QF.UnaryCombinator RoleIndividualF) descriptionOfs (RDOM $ UET $ RoleInContext { role: EnumeratedRoleType qualifiedIdentifier, context: contextOfRepresentation role }) True True
     otherwise -> throwError $ DomainTypeRequired "string" (range descriptionOfs) pos (endOf s)
 
-compileRoleTypeExpression :: Step -> PhaseThree (ADT RoleInContext)
-compileRoleTypeExpression stp = case stp of
-  Simple (ArcIdentifier pos ident) -> toRoleInContextADT pos ident
-  Simple (RoleTypeIndividual pos ident) -> toRoleInContextADT pos ident
-  Simple (ContextTypeIndividual pos _) -> throwError $ IncompatibleDomains (startOf stp) (endOf stp)
-  Binary (BinaryStep { operator, left, right }) -> case operator of
-    Union _ -> SUM <$> (fromFoldable <$> traverse compileRoleTypeExpression [ left, right ])
-    Intersection _ -> PROD <$> (fromFoldable <$> traverse compileRoleTypeExpression [ left, right ])
-    _ -> throwError $ Custom "Type expression binary operators must be `union` or `intersection`."
-  _ -> throwError $ Custom "Type expression must be a role type identifier or a binary combination with `union`/`intersection`."
-  where
-  toRoleInContextADT :: ArcPosition -> String -> PhaseThree (ADT RoleInContext)
-  toRoleInContextADT pos ident = do
-    qRole <- qualifyRoleTypeExpressionIdentifier pos ident
-    context <- lift2 $ enumeratedRoleContextType qRole
-    pure $ UET $ RoleInContext { role: qRole, context }
-
-  qualifyRoleTypeExpressionIdentifier :: ArcPosition -> String -> PhaseThree EnumeratedRoleType
-  qualifyRoleTypeExpressionIdentifier pos ident = do
-    { enumeratedRoles, contexts } <- lift $ gets _.dfr
-    if isTypeUri ident then
-      case lookup ident enumeratedRoles of
-        Just _ -> pure $ EnumeratedRoleType ident
-        Nothing -> case lookup ident contexts of
-          Just _ -> throwError $ IncompatibleDomains pos pos
-          Nothing -> throwError $ UnknownRole pos ident
-    else (try $ qualifyLocalEnumeratedRoleName pos ident (keys enumeratedRoles)) >>= case _ of
-      Right qRole -> pure qRole
-      Left roleErr -> (try $ qualifyLocalContextName pos ident (keys contexts)) >>= case _ of
-        Right _ -> throwError $ IncompatibleDomains pos pos
-        Left _ -> EXCEPT.throwError roleErr
-
-compileContextTypeExpression :: Step -> PhaseThree (ADT ContextType)
-compileContextTypeExpression stp = case stp of
-  Simple (ArcIdentifier pos ident) -> UET <$> qualifyContextTypeExpressionIdentifier pos ident
-  Simple (ContextTypeIndividual pos ident) -> UET <$> qualifyContextTypeExpressionIdentifier pos ident
-  Simple (RoleTypeIndividual _ _) -> throwError $ IncompatibleDomains (startOf stp) (endOf stp)
-  Binary (BinaryStep { operator, left, right }) -> case operator of
-    Union _ -> SUM <$> (fromFoldable <$> traverse compileContextTypeExpression [ left, right ])
-    Intersection _ -> PROD <$> (fromFoldable <$> traverse compileContextTypeExpression [ left, right ])
-    _ -> throwError $ Custom "Type expression binary operators must be `union` or `intersection`."
-  _ -> throwError $ Custom "Type expression must be a context type identifier or a binary combination with `union`/`intersection`."
-  where
-  qualifyContextTypeExpressionIdentifier :: ArcPosition -> String -> PhaseThree ContextType
-  qualifyContextTypeExpressionIdentifier pos ident = do
-    { enumeratedRoles, contexts } <- lift $ gets _.dfr
-    if isTypeUri ident then
-      case lookup ident contexts of
-        Just _ -> pure $ ContextType ident
-        Nothing -> case lookup ident enumeratedRoles of
-          Just _ -> throwError $ IncompatibleDomains pos pos
-          Nothing -> throwError $ UnknownContext pos (ContextType ident)
-    else (try $ qualifyLocalContextName pos ident (keys contexts)) >>= case _ of
-      Right qContext -> pure qContext
-      Left contextErr -> (try $ qualifyLocalEnumeratedRoleName pos ident (keys enumeratedRoles)) >>= case _ of
-        Right _ -> throwError $ IncompatibleDomains pos pos
-        Left _ -> EXCEPT.throwError contextErr
+compileUnaryStep currentDomain (TypeFilterStep start end candidateStep typeExpression) = do
+  source <- compileStep currentDomain candidateStep
+  case range source of
+    RDOM _ -> do
+      -- In this context of use, we will never have to deal with "None". Hence we supply an arbitrary EnumeratedRoleType.
+      narrowedRange :: ADT RoleInContext <- compileRoleTypeCombination (EnumeratedRoleType "Ignored") typeExpression
+      qualifiedNarrowedRange <- traverse (qualifyRoleInContext start) narrowedRange
+      case productOfDomains (range source) (RDOM qualifiedNarrowedRange) of
+        Just narrowed -> do
+          typeFilterTest <- pure $ SQD (range source) (QF.RoleTypeFilter (writeJSON qualifiedNarrowedRange)) (VDOM PBool Nothing) True True
+          pure (makeComposition source (UQD (range source) QF.FilterF typeFilterTest (RDOM qualifiedNarrowedRange) (functional source) False))
+        Nothing -> throwError $ IncompatibleDomains start end
+    -- TODO: in de copilot code werd not `simplifyTypeFilterRange` toegepast op narrowed. Het is mij onduidelijk of dat nodig is, maar ik vermoed van niet. 
+    CDOM _ -> do
+      narrowedRange :: ADT ContextType <- compileContextTypeCombination typeExpression
+      (candidates :: Array String) <- keys <$> getsDF _.contexts
+      qualifiedNarrowedRange <- traverse (\(ContextType ctxt) -> qualifyLocalContextName start ctxt candidates) narrowedRange
+      case productOfDomains (range source) (CDOM qualifiedNarrowedRange) of
+        Just narrowed -> do
+          typeFilterTest <- pure $ SQD (range source) (QF.ContextTypeFilter (writeJSON qualifiedNarrowedRange)) (VDOM PBool Nothing) True True
+          pure (makeComposition source (UQD (range source) QF.FilterF typeFilterTest (CDOM qualifiedNarrowedRange) (functional source) False))
+        Nothing -> throwError $ IncompatibleDomains start end
+    otherwise -> throwError $ ValueExpressionNotAllowed (range source) start end
 
 compileBinaryStep :: Domain -> BinaryStep -> FD
 compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
@@ -764,27 +740,6 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
           if pessimistic $ functional criterium then pure $ makeComposition source (UQD (range source) QF.FilterF criterium (range source) (functional source) False)
           else throwError $ NotFunctional (startOf right) (endOf right) right
         otherwise -> throwError $ NotABoolean (startOf right)
-    TypeFilter pos -> do
-      source <- compileStep currentDomain left
-      narrowedRange <- case range source of
-        RDOM _ -> do
-          typeExpression <- compileRoleTypeExpression right
-          pure $ RDOM typeExpression
-        CDOM _ -> do
-          typeExpression <- compileContextTypeExpression right
-          pure $ CDOM typeExpression
-        _ -> throwError $ ValueExpressionNotAllowed (range source) (startOf left) (endOf left)
-      if equalDomainKinds (range source) narrowedRange then case productOfDomains (range source) narrowedRange of
-        Just narrowed -> case simplifyTypeFilterRange narrowed of
-          Just simplified -> do
-            typeFilterTest <- case simplified of
-              RDOM roleAdt -> pure $ SQD (range source) (QF.RoleTypeFilter (writeJSON roleAdt)) (VDOM PBool Nothing) True True
-              CDOM contextAdt -> pure $ SQD (range source) (QF.ContextTypeFilter (writeJSON contextAdt)) (VDOM PBool Nothing) True True
-              _ -> throwError $ Custom "typeFilter simplification yielded a non-role/context domain"
-            pure $ makeComposition source (UQD (range source) QF.FilterF typeFilterTest simplified (functional source) False)
-          Nothing -> throwError $ IncompatibleDomains (startOf left) (endOf right)
-        Nothing -> throwError $ IncompatibleDomains (startOf left) (endOf right)
-      else throwError $ IncompatibleDomains (startOf left) (endOf right)
     Compose pos -> do
       f1 <- compileStep currentDomain left
       f2 <- compileStep (range f1) right

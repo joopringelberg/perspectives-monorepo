@@ -179,7 +179,8 @@ perspectDef = LanguageDef
 
       -- Queries
       , "filter"
-      , "typeFilter"
+      , "selectFrom"
+      , "just"
 
       -- Expressions
       , "remove"

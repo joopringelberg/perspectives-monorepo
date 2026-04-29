@@ -27,12 +27,14 @@ import Prelude
 import Data.Eq.Generic (genericEq)
 import Data.Foldable (intercalate)
 import Data.Generic.Rep (class Generic)
+import Data.List.Types (NonEmptyList)
 import Data.Maybe (Maybe(..))
 import Data.Show.Generic (genericShow)
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Representation.QueryFunction (FunctionName) as QF
 import Perspectives.Representation.Range (Range)
+import Perspectives.Representation.TypeIdentifiers (ContextType)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 
 -- | Step represents an Expression conforming to the grammar given above.
@@ -82,6 +84,14 @@ data UnaryStep
   | DurationOperator ArcPosition Operator Step
   | ContextIndividual ArcPosition String Step
   | RoleIndividual ArcPosition String Step
+  | TypeFilterStep ArcPosition ArcPosition Step TypeCombination
+
+data TypeCombination
+  = Alternatives (NonEmptyList FilledByAttribute)
+  | Combination (NonEmptyList FilledByAttribute)
+  | DisjunctionOfConjunctions (NonEmptyList (NonEmptyList FilledByAttribute))
+
+data FilledByAttribute = FilledByAttribute String ContextType
 
 newtype BinaryStep = BinaryStep { start :: ArcPosition, end :: ArcPosition, operator :: Operator, left :: Step, right :: Step, parenthesised :: Boolean }
 
@@ -200,6 +210,25 @@ instance prettyPrintSimpleStep :: PrettyPrint SimpleStep where
   prettyPrint' t (PublicRole _ u) = "PublicRole " <> u
   prettyPrint' t (PublicContext _ u) = "PublicContext " <> u
 
+derive instance Generic TypeCombination _
+instance Show TypeCombination where
+  show = genericShow
+
+derive instance Ord TypeCombination
+
+instance Eq TypeCombination where
+  eq tc1 tc2 = genericEq tc1 tc2
+
+derive instance Generic FilledByAttribute _
+
+instance Show FilledByAttribute where
+  show = genericShow
+
+derive instance Ord FilledByAttribute
+
+instance Eq FilledByAttribute where
+  eq f1 f2 = genericEq f1 f2
+
 derive instance genericBinaryStep :: Generic BinaryStep _
 instance showBinaryStep :: Show BinaryStep where
   show = genericShow
@@ -228,6 +257,7 @@ instance prettyPrintUnaryStep :: PrettyPrint UnaryStep where
   prettyPrint' t (DurationOperator _ op s) = show op <> " " <> prettyPrint' t s
   prettyPrint' t (ContextIndividual _ tp s) = "contextindividual (" <> tp <> ") " <> prettyPrint' t s
   prettyPrint' t (RoleIndividual _ tp s) = "roleindividual (" <> tp <> ") " <> prettyPrint' t s
+  prettyPrint' t (TypeFilterStep _ _ s tc) = "TypeFilterStep " <> prettyPrint' t s <> " " <> show tc
 
 derive instance genericPureLetStep :: Generic PureLetStep _
 instance showPureLetStep :: Show PureLetStep where

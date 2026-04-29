@@ -28,8 +28,10 @@ import Data.Array (elemIndex, fromFoldable, many)
 import Data.DateTime (Date, DateTime(..), Hour, Time(..))
 import Data.Either (Either(..))
 import Data.Enum (toEnum)
+import Data.Foldable (all)
 import Data.JSDate (JSDate, parse, toDateTime)
 import Data.List (List(..))
+import Data.List.NonEmpty (NonEmptyList, head, length, singleton) as LNE
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.String (length, trim)
 import Data.String.CodeUnits as SCU
@@ -38,20 +40,21 @@ import Data.String.Regex.Flags (global)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect.Unsafe (unsafePerformEffect)
 import Parsing (fail)
-import Parsing.Combinators (between, lookAhead, manyTill, notFollowedBy, option, optionMaybe, try, (<?>))
+import Parsing.Combinators (between, lookAhead, manyTill, notFollowedBy, option, optionMaybe, sepBy1, try, (<?>))
 import Parsing.String (char, satisfy)
 import Parsing.Token (alphaNum)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), UnaryStep(..), VarBinding(..))
+import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), FilledByAttribute(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), TypeCombination(..), UnaryStep(..), VarBinding(..))
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseName, pubParser, regexFlags', reserved)
 import Perspectives.Parsing.Arc.IndentParser (IP, entireBlock, getPosition)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
+import Perspectives.Representation.Class.PersistentType (ContextType(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..))
 import Perspectives.Representation.Range (Duration_(..), Range(..))
 import Perspectives.Time (date2String, dateTime2String, time2String)
-import Prelude (bind, not, pure, show, ($), (&&), (*>), (+), (<$>), (<*), (<*>), (<<<), (>), (>>=), (<>), eq, (/=), discard)
+import Prelude (bind, not, pure, show, ($), (&&), (*>), (+), (<$>), (<*), (<*>), (<<<), (>), (>>=), (<>), eq, (/=), discard, (==))
 
 step :: IP Step
 step = defer \_ -> step_ false
@@ -128,14 +131,6 @@ step_ parenthesised = do
     keyword <- option "" (lookAhead reservedIdentifier)
     case keyword of
       "filter" -> reserved "filter" *> step_ parenthesised
-      "typeFilter" -> do
-        reserved "typeFilter"
-        candidate <- step_ parenthesised
-        -- We reuse regular filter parsing (`with` is parsed as Filter) and then
-        -- retag the operator to TypeFilter.
-        case candidate of
-          Binary (BinaryStep bs@{ operator: Filter pos }) -> pure $ Binary (BinaryStep (bs { operator = TypeFilter pos }))
-          _ -> fail "Expected `typeFilter <query> with <type-expression>`."
       "letE" -> pureLetStep
       "callExternal" -> computationStep
       u | isUnaryKeyword u -> unaryStep
@@ -307,11 +302,11 @@ parseJSDate = try do
   pure $ unsafePerformEffect $ parse s
 
 isUnaryKeyword :: String -> Boolean
-isUnaryKeyword kw = isJust $ elemIndex kw [ "not", "exists", "filledBy", "fills", "available", "roleinstance", "contextinstance" ]
+isUnaryKeyword kw = isJust $ elemIndex kw [ "not", "exists", "filledBy", "fills", "available", "roleinstance", "contextinstance", "selectFrom" ]
 
 unaryStep :: IP Step
 unaryStep = do
-  keyword <- lookAhead reservedIdentifier <?> "not, exists, filledBy, fills, available, contextinstance, roleinstance. "
+  keyword <- lookAhead reservedIdentifier <?> "not, exists, filledBy, fills, available, contextinstance, roleinstance, selectFrom. "
   case keyword of
     "not" -> (Unary <$> (LogicalNot <$> getPosition <*> (reserved "not" *> (defer \_ -> step))))
     "exists" -> Unary <$> (Exists <$> getPosition <*> (reserved "exists" *> (defer \_ -> step)))
@@ -320,7 +315,15 @@ unaryStep = do
     "available" -> Unary <$> (Available <$> getPosition <*> (reserved "available" *> (defer \_ -> step)))
     "contextinstance" -> Unary <$> (ContextIndividual <$> getPosition <*> (reserved "contextinstance" *> token.parens arcIdentifier) <*> (defer \_ -> step))
     "roleinstance" -> Unary <$> (RoleIndividual <$> getPosition <*> (reserved "roleinstance" *> token.parens arcIdentifier) <*> (defer \_ -> step))
-    s -> fail ("Expected not, exists, filledBy, fills or available, contextinstance or roleinstance, but found: '" <> s <> "'. ")
+    "selectFrom" -> do
+      start <- getPosition
+      reserved "selectFrom"
+      candidate <- step
+      reserved "just"
+      typeExpr <- typeCombinations
+      end <- getPosition
+      pure $ Unary (TypeFilterStep start end candidate typeExpr)
+    s -> fail ("Expected not, exists, filledBy, fills, available, contextinstance, roleinstance or selectFrom, but found: '" <> s <> "'. ")
 
 operator :: Partial => IP Operator
 operator =
@@ -478,6 +481,7 @@ startOf stp = case stp of
   startOfUnary (DurationOperator p _ _) = p
   startOfUnary (ContextIndividual p _ _) = p
   startOfUnary (RoleIndividual p _ _) = p
+  startOfUnary (TypeFilterStep p _ _ _) = p
 
 endOf :: Step -> ArcPosition
 endOf stp = case stp of
@@ -526,6 +530,7 @@ endOf stp = case stp of
   endOfUnary (DurationOperator _ _ step') = endOf step'
   endOfUnary (ContextIndividual _ _ step') = endOf step'
   endOfUnary (RoleIndividual _ _ step') = endOf step'
+  endOfUnary (TypeFilterStep _ end _ _) = end
 
   col_ :: ArcPosition -> Int
   col_ (ArcPosition { column }) = column
@@ -595,3 +600,55 @@ markDownLiteral = (go <?> "MarkDown") <* token.whiteSpace
 
   whiteSpaceRegex :: Regex
   whiteSpaceRegex = unsafeRegex "\\s*\\n+\\s*" global
+
+-- | This parser always succeeds. It should be preceded by `reserved filledBy` or `reserved selectFrom`.
+-- | filledBy SomeRole, AnotherRole
+-- | Here `SomeRole` and `AnotherRole` are alternatives.
+-- | filledBy SomeRole + AnotherRole
+-- | Here both are required: that is, only instances that have both types are allowed to fill this role.
+-- | filledBy (SomeRole + AnotherRole), ThirdRole
+-- | Here `SomeRole + AnotherRole` is a combination (conjunction) and `ThirdRole` is a single alternative;
+-- | the result is a disjunction of conjunctions.
+-- Implementation note: we cannot know, here, whether the filler is Calculated or
+-- Enumerated. This will be fixed in PhaseThree.
+typeCombinations :: IP TypeCombination
+typeCombinations = (try (token.parens (makeSpec <$> token.commaSep1 fillerGroup)))
+  <|> (try (Combination <$> token.parens (plusSep filler)))
+  <|> (Alternatives <$> LNE.singleton <$> (try filler))
+  where
+  filler :: IP FilledByAttribute
+  filler = do
+    typeName <- arcIdentifier
+    mcontext <- optionMaybe (reserved "in" *> arcIdentifier)
+    case mcontext of
+      Nothing -> do
+        pure $ FilledByAttribute typeName (ContextType "")
+      Just context -> pure $ FilledByAttribute typeName (ContextType context)
+
+  -- | Determine the appropriate TypeCombination from a list of fillerGroups:
+  -- | * All groups are singletons → Alternatives (each group's head is the sole attribute)
+  -- | * Single group with multiple members → Combination (unwrap the sole group)
+  -- | * Multiple groups, at least one with multiple members → DisjunctionOfConjunctions
+  makeSpec :: LNE.NonEmptyList (LNE.NonEmptyList FilledByAttribute) -> TypeCombination
+  makeSpec groups =
+    if all (\g -> LNE.length g == 1) groups
+    -- Every group is a singleton: extract the single element from each group.
+    -- LNE.head is safe here because LNE.length g == 1 guarantees exactly one element.
+    then Alternatives (LNE.head <$> groups)
+    else if LNE.length groups == 1
+    -- Single group with multiple members: use Combination.
+    -- LNE.head is safe here because LNE.length groups == 1 guarantees exactly one group.
+    then Combination (LNE.head groups)
+    else DisjunctionOfConjunctions groups
+
+  plus :: IP String
+  plus = token.symbol "+"
+
+  plusSep :: forall a. IP a -> IP (LNE.NonEmptyList a)
+  plusSep p = sepBy1 p plus
+
+  -- | A fillerGroup is either a parenthesised combination `(A + B)` or a single filler `A`.
+  fillerGroup :: IP (LNE.NonEmptyList FilledByAttribute)
+  fillerGroup =
+    (try (token.parens (plusSep filler)))
+      <|> (LNE.singleton <$> filler)

@@ -27,14 +27,13 @@ import Prelude
 import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
 import Data.List (List)
-import Data.List.Types (NonEmptyList)
 import Data.Maybe (Maybe, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple)
 import Foreign (unsafeToForeign)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.Parsing.Arc.Expression.AST (Step)
+import Perspectives.Parsing.Arc.Expression.AST (Step, TypeCombination)
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.Statement.AST (Statements)
@@ -92,7 +91,7 @@ data RolePart
   | FunctionalAttribute Boolean
   | MandatoryAttribute Boolean
   | UnlinkedAttribute
-  | FilledBySpecifications FilledBySpecification
+  | FilledBySpecifications TypeCombination
   | Calculation Step Boolean
   | RoleAspect String ArcPosition (Maybe PropertyMapping)
   | IndexedRole String ArcPosition
@@ -101,12 +100,6 @@ data RolePart
   | PublicUrl Step
   | DefaultUserRole
 
-data FilledBySpecification
-  = Alternatives (NonEmptyList FilledByAttribute)
-  | Combination (NonEmptyList FilledByAttribute)
-  | DisjunctionOfConjunctions (NonEmptyList (NonEmptyList FilledByAttribute))
-
-data FilledByAttribute = FilledByAttribute String ContextType
 --------------------------------------------------------------------------------
 ---- PROPERTYMAPPING
 --------------------------------------------------------------------------------
@@ -585,14 +578,6 @@ instance showRoleE :: Show RoleE where
 
 derive instance genericRoleElement :: Generic RolePart _
 instance showRoleElement :: Show RolePart where
-  show = genericShow
-
-derive instance Generic FilledBySpecification _
-instance Show FilledBySpecification where
-  show = genericShow
-
-derive instance Generic FilledByAttribute _
-instance Show FilledByAttribute where
   show = genericShow
 
 derive instance Generic PropertyMapping _

@@ -26,7 +26,7 @@ import Control.Monad.Error.Class (try)
 import Control.Monad.State (StateT, execStateT, get, put)
 import Control.Monad.Trans.Class (lift)
 import Control.Plus (map, (<|>), empty)
-import Data.Array (concat, cons, elemIndex, filter, filterA, findIndex, foldl, foldr, foldM, fromFoldable, null, singleton)
+import Data.Array (concat, cons, elemIndex, filter, filterA, findIndex, foldM, foldl, foldr, fromFoldable, null, singleton)
 import Data.FoldableWithIndex (foldWithIndexM)
 import Data.List (List, foldM, foldl) as LIST
 import Data.Map (Map, empty, lookup, insert, keys, unionWith, values) as Map
@@ -35,7 +35,7 @@ import Data.Newtype (unwrap)
 import Data.String.Regex (test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
-import Data.Traversable (for_, traverse)
+import Data.Traversable (for, for_, traverse)
 import Foreign.Object (Object, keys, lookup, union) as OBJ
 import Foreign.Object (values)
 import Partial.Unsafe (unsafePartial)
@@ -53,9 +53,9 @@ import Perspectives.Persistence.API (Keys(..), getViewOnDatabase)
 import Perspectives.Persistent (modelDatabaseName)
 import Perspectives.Persistent.PublicStore (PublicStore)
 import Perspectives.Query.QueryTypes (Calculation, QueryFunctionDescription, RoleInContext(..), domain2roleType, queryFunction, range, roleInContext2Role, roleRange, secondOperand)
-import Perspectives.Representation.ADT (ADT, allLeavesInADT, computeExpandedBoolean, equalsOrGeneralises_, equalsOrSpecialises_, equals_, generalises_, specialises_)
+import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, computeExpandedBoolean, equalsOrGeneralises_, equalsOrSpecialises_, equals_, generalises_, specialises_)
 import Perspectives.Representation.Action (Action(..))
-import Perspectives.Representation.CNF (CNF)
+import Perspectives.Representation.CNF (CNF, DPROD(..), DSUM(..), distribute, flattenProducts)
 import Perspectives.Representation.Class.Context (contextADT, contextRole, roleInContext, userRole) as ContextClass
 import Perspectives.Representation.Class.Context (contextAspects)
 import Perspectives.Representation.Class.Context (externalRole) as CTCLASS
@@ -537,6 +537,40 @@ equals left right = do
   (left' :: CNF RoleInContext) <- toConjunctiveNormalForm_ left
   (right' :: CNF RoleInContext) <- toConjunctiveNormalForm_ right
   pure (left' `equals_` right')
+
+-----------------------------------------------------------
+---- EQUALS, EQUALSORGENERALISES, EQUALSORSPECIALISES FOR CONTEXTADT
+-----------------------------------------------------------
+-- | Compares with `equalsOrGeneralises`.
+-- | right -> left (logical implication)
+equalsOrGeneralisesContextADT :: ADT ContextType -> ADT ContextType -> MP Boolean
+equalsOrGeneralisesContextADT = flip equalsOrSpecialisesContextADT
+
+-- | left -> right
+-- | Compares with `equalsOrSpecialises`.
+equalsOrSpecialisesContextADT :: ADT ContextType -> ADT ContextType -> MP Boolean
+equalsOrSpecialisesContextADT left right = do
+  (left' :: CNF ContextType) <- contextTypetoConjunctiveNormalForm_ left
+  (right' :: CNF ContextType) <- contextTypetoConjunctiveNormalForm_ right
+  pure (left' `equalsOrSpecialises_` right')
+
+equalsContextADT :: ADT ContextType -> ADT ContextType -> MP Boolean
+equalsContextADT left right = do
+  (left' :: CNF ContextType) <- contextTypetoConjunctiveNormalForm_ left
+  (right' :: CNF ContextType) <- contextTypetoConjunctiveNormalForm_ right
+  pure (left' `equals_` right')
+
+-----------------------------------------------------------
+-- ADT ContextType TO DNF
+-----------------------------------------------------------
+contextTypetoConjunctiveNormalForm_ :: ADT ContextType -> MP (CNF ContextType)
+contextTypetoConjunctiveNormalForm_ adt = case adt of
+  ST ctxt -> DPROD <<< (map DSUM <<< singleton) <$> (ctxt ###= contextAspectsClosure)
+  -- In the disjunctive normal form we have no UET.
+  -- We have a tree built from EST, ECT, ESUM and EPROD.
+  UET ctxt -> DPROD <<< (map DSUM <<< singleton) <$> (ctxt ###= contextAspectsClosure)
+  SUM as -> for as contextTypetoConjunctiveNormalForm_ >>= pure <<< unsafePartial distribute
+  PROD as -> for as contextTypetoConjunctiveNormalForm_ >>= pure <<< unsafePartial flattenProducts
 
 -----------------------------------------------------------
 ---- ISPERSPECTIVEONADT

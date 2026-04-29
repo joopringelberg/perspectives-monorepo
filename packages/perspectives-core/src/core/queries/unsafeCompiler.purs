@@ -36,10 +36,8 @@ import Control.Monad.Writer (WriterT, tell)
 import Control.Plus (empty)
 import Data.Array (catMaybes, elemIndex, filterA, findIndex, foldl, head, index, length, null, singleton, unsafeIndex)
 import Data.Either (Either(..))
-import Data.Foldable (any)
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
-import Data.Set (fromFoldable, member) as SET
 import Data.String (Pattern(..), lastIndexOf, stripSuffix, length) as STRING
 import Data.String.Regex (Regex, match, test)
 import Data.String.Regex.Flags (noFlags)
@@ -69,7 +67,7 @@ import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Persistent (getPerspectRol)
 import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getVariableBindings, lookupVariableBinding)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), Range, RoleInContext(..), domain, domain2PropertyRange, domain2contextType, domain2roleType, range, roleInContext2Role)
-import Perspectives.Representation.ADT (ADT(..), commonLeavesInADT, equalsOrSpecialises_)
+import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.CalculatedRole (CalculatedRole)
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getEnumeratedRole, getPerspectType, getState)
@@ -85,7 +83,7 @@ import Perspectives.Representation.Range (Range(..)) as RAN
 import Perspectives.Representation.State (State(..), StateFulObject(..)) as STATE
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.Time (string2Date, string2DateTime, string2Time)
-import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextAspectsClosure, contextTypeModelName', equalsOrSpecialisesRoleInContext, propertyAliases, publicUserRole, roleTypeModelName', specialisesRoleType, string2RoleType)
+import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextTypeModelName', equalsOrSpecialisesContextADT, equalsOrSpecialisesRoleInContext, propertyAliases, publicUserRole, roleTypeModelName', specialisesRoleType, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
 import Prelude (class Eq, class Ord, add, bind, discard, eq, identity, mul, negate, notEq, pure, show, sub, ($), (&&), (*), (+), (-), (/), (<), (<$>), (<*>), (<<<), (<=), (<>), (==), (>), (>=), (>=>), (>>=), (||))
 import Simple.JSON (readJSON)
@@ -1074,9 +1072,7 @@ roleMatchesTypeFilter roleId roleFilter = do
 contextMatchesTypeFilter :: ContextInstance -> ADT ContextType -> MonadPerspectives Boolean
 contextMatchesTypeFilter contextId contextFilter = do
   instanceContextType <- contextType_ contextId
-  contextAspects <- instanceContextType ###= contextAspectsClosure
-  let contextAspectSet = SET.fromFoldable contextAspects
-  pure $ any (\candidate -> SET.member candidate contextAspectSet) (commonLeavesInADT contextFilter)
+  (UET instanceContextType) `equalsOrSpecialisesContextADT` contextFilter
 
 -- | We look for a public role in the (type of the) ContextInstance.
 -- | We then arbitrarily take the publicUrl of the first public role to have one.
