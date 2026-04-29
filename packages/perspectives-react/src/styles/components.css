@@ -111,6 +111,12 @@ for a discussion about variables and sass. */
   box-shadow: none;
 }
 
+/* Active/selected field in a form row: warm tint of the primary colour */
+.selected-field-active {
+  background-color: rgba(var(--bs-primary-rgb), 0.18) !important;
+  color: var(--bs-body-color) !important;
+}
+
 .public-role {
   background-color: var(--bs-info-bg-subtle) !important;
 }

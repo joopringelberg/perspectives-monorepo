@@ -95,6 +95,7 @@ html body .dropdown-menu .dropdown-item {
   --markdown-padding-y: var(--bs-accordion-body-padding-y, 1rem);
   --markdown-padding-x: var(--bs-accordion-body-padding-x, 0.5rem);
   padding: var(--markdown-padding-y) var(--markdown-padding-x);
+  background-color: var(--bs-body-bg);
 }
 
 .content-top-aligned {

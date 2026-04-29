@@ -640,7 +640,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
         // for relevant types; its handler restores the previous
         // value both in the DOM and in the PDR.
         showUndo = component.isUndoRelevantType() && component.props.disabled === false;
-        selectedClass = component.props.isselected ? "text-light bg-secondary" : "";
+        selectedClass = component.props.isselected ? "selected-field-active" : "";
         combinedClassName = (selectedClass ? selectedClass + " " : "") + "flex-grow-1";
         handleUndoClick = (e: React.MouseEvent<HTMLButtonElement>) => {
           e.preventDefault();
