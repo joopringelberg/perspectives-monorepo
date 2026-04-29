@@ -703,7 +703,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               role="navigation"
               aria-label="Section navigation"
               >
-              <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
+              <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-body full-mobile-height px-2 scrollable-content'>
                 { this.state.screen?.whoWhatWhereScreen ?
                   <Who 
                     screenelements={ this.state.screen.whoWhatWhereScreen.who } 
@@ -713,14 +713,14 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   <p className='bg-light-subtle'>Ga ergens heen</p>
                 }
               </Tab>
-              <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
+              <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-body full-mobile-height px-2 scrollable-content'>
                 { this.state.screen?.whoWhatWhereScreen ? 
                     <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "what"}/>
                     : 
                   <div>Ga ergens heen.</div>
                 }
               </Tab>
-              <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
+              <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-body full-mobile-height px-2 scrollable-content'>
               { this.state.screen?.whoWhatWhereScreen ? 
                 <Where 
                   screenelements={ this.state.screen.whoWhatWhereScreen.whereto } 
@@ -1066,9 +1066,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
             <div tabIndex={0} className="content-section-area">
               <Row className='mx-0 px-0'>
                 <Col 
-                  className='bg-primary full-height animated-column' 
-                  xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "who" ? 6 : 3 } 
-                  style={{'--bs-bg-opacity': '.1'} as React.CSSProperties}>
+                  className='bg-body full-height animated-column' 
+                  xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "who" ? 6 : 3 }>
                   <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}>
                     <h2 className='text-center text-dark column-heading' aria-keyshortcuts="alt+1" tabIndex={0}>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h2>
                   </Row>
@@ -1083,9 +1082,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   </Row>
                 </Col>
                 <Col 
-                  className='bg-primary animated-column' 
-                  xs={ this.state.whatOnly ? 10 : this.state.doubleSection === "what" ? 6 : 3} 
-                  style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
+                  className='bg-body animated-column' 
+                  xs={ this.state.whatOnly ? 10 : this.state.doubleSection === "what" ? 6 : 3}>
                   <Row onClick={() => component.setState( {'doubleSection': "what"} )}
                     onDoubleClick={() => component.setState( {'whatOnly': !component.state.whatOnly} )}
                   >
@@ -1102,9 +1100,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   </Row>
                 </Col>
                 <Col 
-                  className='bg-primary full-height animated-column'
-                  xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "where" ? 6 : 3} 
-                  style={{'--bs-bg-opacity': '.3'} as React.CSSProperties}>
+                  className='bg-body full-height animated-column'
+                  xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "where" ? 6 : 3}>
                   <Row onClick={() => component.setState( {'doubleSection': "where"} )}>
                     <h2 className='text-center column-heading' aria-keyshortcuts="alt+3" tabIndex={0}>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h2>
                   </Row>  

@@ -12,9 +12,15 @@
   --bs-table-striped-color: #212529;
   --bs-table-hover-color: #212529;
   --bs-table-active-color: #212529;
-  
-  --bs-primary-rgb: 68, 110, 155;
-  --bs-primary: #446e9b;
+
+  /* === GUI theme: warm copper/parchment palette === */
+  /* Primary color: warm copper/bronze (navbar, buttons) */
+  --bs-primary-rgb: 165, 135, 97;
+  --bs-primary: #a58761;
+
+  /* Body background: warm cream/parchment */
+  --bs-body-bg: #f6f0e2;
+  --bs-body-bg-rgb: 246, 240, 226;
 
   /* Selected/active state colors with better contrast */
   --bs-secondary-bg: #626b73; /* Darker secondary background */
@@ -27,21 +33,31 @@
   /* Input placeholder color with better contrast */
   --bs-input-placeholder-color: #767676;
 
-  --bs-accordion-btn-color: #212529; /* Darker text for accordion buttons */
-  --bs-accordion-btn-bg: rgba(255, 255, 255, 0.9); /* Lighter background for accordion buttons */
+  /* Accordion buttons: tan/beige background with dark text (matching screenshot) */
+  --bs-accordion-btn-color: #1b2334;
+  --bs-accordion-btn-bg: #b7a38b;
+  --bs-accordion-active-bg: #b7a38b;
+  --bs-accordion-active-color: #1b2334;
 
-  /* Link colors with better contrast */
-  --bs-link-color: #043466; /* Darker blue for links */
-  --bs-link-color-rgb: 0, 86, 179; /* Darker blue for links */
+  /* Link colors: dark warm brown for cohesion with warm palette */
+  --bs-link-color: #7a5230;
+  --bs-link-color-rgb: 122, 82, 48;
   --bs-link-opacity: 1; /* Full opacity for better visibility */
-  --bs-link-hover-color-rgb: 0, 61, 126; /* Darker blue for hover/focus */
-  --bs-link-hover-color: #003d7e;
+  --bs-link-hover-color-rgb: 61, 45, 32;
+  --bs-link-hover-color: #3d2d20;
   --bs-link-hover-opacity: 1;
-  --bs-link-focus-color-rgb: 0, 61, 126;
-  --bs-link-focus-color: #003d7e;
+  --bs-link-focus-color-rgb: 61, 45, 32;
+  --bs-link-focus-color: #3d2d20;
   --bs-link-focus-opacity: 1;
 
   --bs-code-color: #bd2e76; /* Darker pink for code */
+}
+
+/* Primary buttons: use dark text on warm copper background for legibility */
+.btn-primary {
+  --bs-btn-color: #1b2334;
+  --bs-btn-hover-color: #1b2334;
+  --bs-btn-active-color: #1b2334;
 }
 
 h2.column-heading {
@@ -60,7 +76,7 @@ h3.column-heading {
 
 /* Focus styles for content sections */
 .content-section-area:focus {
-  outline: 2px solid #0056b3; /* Your link color for consistency */
+  outline: 2px solid var(--bs-link-color);
   outline-offset: -2px;
 }
 
