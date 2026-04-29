@@ -54,7 +54,8 @@
 }
 
 /* Primary buttons: warm copper background with dark text for legibility.
-   All --bs-btn-* variables override Bootswatch Spacelab's compiled values. */
+   All --bs-btn-* variables override Bootswatch Spacelab's compiled values.
+   background-image: none removes the Spacelab gradient (compiled with $enable-gradients). */
 .btn-primary {
   --bs-btn-color: #1b2334;
   --bs-btn-bg: var(--bs-primary);
@@ -68,6 +69,22 @@
   --bs-btn-disabled-bg: var(--bs-primary);
   --bs-btn-disabled-border-color: var(--bs-primary);
   --bs-btn-focus-shadow-rgb: var(--bs-primary-rgb);
+  background-image: none;
+}
+
+.btn-primary:hover,
+.btn-primary:active,
+.btn-primary.active,
+.btn-primary:disabled,
+.btn-primary.disabled {
+  background-image: none;
+}
+
+/* Spacelab is compiled with $enable-gradients: true, which bakes a
+   background-image linear-gradient into .navbar variants. Remove it so
+   the solid body-bg colour shows through cleanly. */
+.navbar {
+  background-image: none;
 }
 
 h2.column-heading {
