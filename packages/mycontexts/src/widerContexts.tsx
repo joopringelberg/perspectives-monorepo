@@ -53,7 +53,7 @@ export class WiderContexts extends PerspectivesComponent<WiderContextsProps, Wid
       return null
     }
     else {
-      return  (<div className="mb-2" ref={component.domEl}>
+      return  (<div className="mb-2 mt-2" ref={component.domEl}>
                 <h3 className="column-heading">{i18next.t("wider_context", {ns: 'mycontexts'})}</h3>
                 <ListGroup defaultActiveKey="#link1">
                 {
