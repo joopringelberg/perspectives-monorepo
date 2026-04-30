@@ -781,6 +781,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         <FlippingTitle
           title={this.state.title} 
           userRoleType={this.state.screen ? this.state.screen.userRole : (this.state.openContextUserType ? deconstructLocalName(this.state.openContextUserType) : '')} 
+          showTitleClass="text-primary"
         />
 
       </Navbar.Brand>
