@@ -39,7 +39,7 @@
   --bs-accordion-btn-bg: #b7a38b;
   --bs-accordion-active-bg: #b7a38b;
   --bs-accordion-active-color: #1b2334;
-
+  
   /* Link colors: dark warm brown for cohesion with warm palette */
   --bs-link-color: #7a5230;
   --bs-link-color-rgb: 122, 82, 48;
@@ -99,6 +99,8 @@
   --bs-accordion-btn-bg: #b7a38b;
   --bs-accordion-active-bg: #b7a38b;
   --bs-accordion-active-color: #1b2334;
+  --bs-accordion-btn-padding-y: 0.5rem;
+  --bs-accordion-btn-padding-x: 0.75rem;
 }
 
 /* Accordion items: tan background, invisible border, slightly rounded corners. */
