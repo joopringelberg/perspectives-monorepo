@@ -57,7 +57,6 @@ import Perspectives.CoreTypes (MP, MonadPerspectives, MonadPerspectivesTransacti
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DependencyTracking.Dependency (registerSupportedEffect, unregisterSupportedEffect)
 import Perspectives.DomeinCache (retrieveDomeinFile)
-import Perspectives.Logging (errorOther)
 import Perspectives.Fuzzysort (matchIndexedContextNames)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, isTypeUri, typeUri2ModelUri_, typeUri2couchdbFilename)
@@ -68,6 +67,7 @@ import Perspectives.Instances.Combinators (filter)
 import Perspectives.Instances.Me (getAllMyRoleTypes, getMeInRoleAndContext, getMyType, isMe)
 import Perspectives.Instances.ObjectGetters (binding, context, contextType, contextType_, externalRole, getAllFilledRoles, getContextActions, getFilledRoles, getMe, getProperty, roleType, roleType_, siblings)
 import Perspectives.Instances.Values (parsePerspectivesFile)
+import Perspectives.Logging (errorOther)
 import Perspectives.ModelDependencies (actualSharedFileServer, allSettings, fileShareCredentials, identifiableFirstName, identifiableLastName, itemOnClipboardClipboardData, itemsOnClipboard, mySharedFileServices, selectedClipboardItem, sharedFileServices, sysUser)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, getUserIdentifier, lookupIndexedContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -579,7 +579,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
         (RoleInstance subject)
         onlyOnce
 
-    Api.GetSelectedRoleFromClipboard -> do
+    Api.SubscribeSelectedRoleFromClipboard -> do
       -- Get the SelectedClipboardItem.
       -- Then get its ClipboardData and return that.
       mysystem <- getMySystem
@@ -762,6 +762,18 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
         void $ runMonadPerspectivesTransaction authoringRole $ removeBinding (RoleInstance subject)
         sendResponse (Result corrId []) setter
       (\e -> sendResponse (Error corrId (show e)) setter)
+
+    Api.GetSelectedRoleFromClipboard -> do
+      -- Get the SelectedClipboardItem.
+      -- Then get its ClipboardData and return that.
+      mysystem <- getMySystem
+      (try ((ContextInstance mysystem) ##= ((getRoleInstances (CR $ CalculatedRoleType selectedClipboardItem)) >=> getPropertyValues (ENP $ EnumeratedPropertyType itemOnClipboardClipboardData)))) >>=
+        case _ of
+          Left e -> do
+            errorOther (show $ RolErrorBoundary "Api.GetSelectedRoleFromClipboard" (show e))
+            sendResponse (Error corrId (show $ RolErrorBoundary "Api.GetSelectedRoleFromClipboard" (show e))) setter
+          Right item -> sendResponse (Result corrId (unwrap <$> item)) setter
+
     -- Check whether the role type in predicate allows RolID as binding.
     -- The context type given in object must be described in a locally installed model.
     -- {request: "CheckBinding", predicate: localRolName, object: rolInstance}
