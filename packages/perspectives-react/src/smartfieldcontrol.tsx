@@ -602,7 +602,9 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               required={mandatory}
             >
             {
-              component.selectableValues().map( value => <option key={value}>{value}</option>)
+              [<option key="" value="">— select —</option>].concat(
+                component.selectableValues().map( value => <option key={value} value={value}>{value}</option>)
+              )
             }
             </Form.Control>
           </div>);

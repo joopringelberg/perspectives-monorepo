@@ -52,7 +52,7 @@ import Perspectives.ModelDependencies (perspectivesUsersCancelled, roleWithId)
 import Perspectives.Names (findIndexedContextName)
 import Perspectives.Parsing.Arc.AST (PropertyFacet(..))
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), domain, domain2roleType, functional, isContextDomain, makeComposition, mandatory, queryFunction, range, roleInContext2Context, roleInContext2Role, roleRange)
-import Perspectives.Query.UnsafeCompiler (context2context, context2role, getDynamicPropertyGetter, getDynamicPropertyGetter_, getPropertyValues, getPublicUrl, roleFunctionFromQfd)
+import Perspectives.Query.UnsafeCompiler (context2context, context2propertyValue, context2role, getDynamicPropertyGetter, getDynamicPropertyGetter_, getPropertyValues, getPublicUrl, roleFunctionFromQfd)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.Class.PersistentType (EnumeratedRoleType, getEnumeratedRole)
@@ -73,7 +73,7 @@ import Perspectives.ResourceIdentifiers (createPublicIdentifier, guid)
 import Perspectives.TypePersistence.PerspectiveSerialisation.Data (PropertyFacets, RoleInstanceWithProperties, SerialisedPerspective(..), SerialisedPerspective', SerialisedProperty, ValuesWithVerbs)
 import Perspectives.Types.ObjectGetters (getContextAspectSpecialisations, indexedContextName)
 import Perspectives.Utilities (findM)
-import Prelude (append, bind, discard, eq, flip, map, not, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
+import Prelude (append, bind, const, discard, eq, flip, map, not, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
 import Simple.JSON (writeJSON)
 
 perspectiveForContextAndUser
@@ -255,7 +255,7 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyRestri
     Nothing -> pure empty
     Just propertyFillers -> lift do
       tuples <- for (EM.toUnfoldable propertyFillers :: Array (Tuple PropertyType QueryFunctionDescription)) \(Tuple propertyType qfd) -> do
-        f <- getPropertyValues qfd
+        f <- context2propertyValue qfd
         values <- catchError (cid ##= f) (const (pure []))
         pure $ Tuple (propertytype2string propertyType) (unwrap <$> values)
       pure $ fromFoldable tuples

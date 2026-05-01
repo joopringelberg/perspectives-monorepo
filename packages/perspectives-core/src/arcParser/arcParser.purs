@@ -1824,9 +1824,9 @@ widgetCommonFields = do
       case keyword of
         "with" -> do
           withProps <- reserved "with" *> withoutProperties
-          fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
           -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
           (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
+          fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
           mroleVerbs <- optionMaybe roleVerbs
           fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
           end <- getPosition
@@ -1845,9 +1845,9 @@ widgetCommonFields = do
             }
         "without" -> do
           withoutProps <- reserved "without" *> withoutProperties
-          fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
           -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
           (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
+          fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
           mroleVerbs <- optionMaybe roleVerbs
           fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
           end <- getPosition
