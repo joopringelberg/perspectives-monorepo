@@ -715,17 +715,15 @@ compileUnaryStep currentDomain (TypeFilterStep start end candidateStep typeExpre
       case productOfDomains (range source) (RDOM qualifiedNarrowedRange) of
         Just narrowed -> do
           typeFilterTest <- pure $ SQD (range source) (QF.RoleTypeFilter (writeJSON qualifiedNarrowedRange)) (VDOM PBool Nothing) True True
-          pure (makeComposition source (UQD (range source) QF.FilterF typeFilterTest (RDOM qualifiedNarrowedRange) (functional source) False))
+          pure (makeComposition source (SQD (range source) (QF.RoleTypeFilter (writeJSON qualifiedNarrowedRange)) (RDOM qualifiedNarrowedRange) (functional source) False))
         Nothing -> throwError $ IncompatibleDomains start end
-    -- TODO: in de copilot code werd not `simplifyTypeFilterRange` toegepast op narrowed. Het is mij onduidelijk of dat nodig is, maar ik vermoed van niet. 
     CDOM _ -> do
       narrowedRange :: ADT ContextType <- compileContextTypeCombination typeExpression
       (candidates :: Array String) <- keys <$> getsDF _.contexts
       qualifiedNarrowedRange <- traverse (\(ContextType ctxt) -> qualifyLocalContextName start ctxt candidates) narrowedRange
       case productOfDomains (range source) (CDOM qualifiedNarrowedRange) of
         Just narrowed -> do
-          typeFilterTest <- pure $ SQD (range source) (QF.ContextTypeFilter (writeJSON qualifiedNarrowedRange)) (VDOM PBool Nothing) True True
-          pure (makeComposition source (UQD (range source) QF.FilterF typeFilterTest (CDOM qualifiedNarrowedRange) (functional source) False))
+          pure (makeComposition source (SQD (range source) (QF.ContextTypeFilter (writeJSON qualifiedNarrowedRange)) (CDOM qualifiedNarrowedRange) (functional source) False))
         Nothing -> throwError $ IncompatibleDomains start end
     otherwise -> throwError $ ValueExpressionNotAllowed (range source) start end
 
