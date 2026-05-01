@@ -32,7 +32,6 @@ module Perspectives.Query.ExpressionCompiler where
 
 import Control.Monad.Error.Class (catchError, try)
 import Control.Monad.Except (lift)
-import Control.Monad.Except (throwError) as EXCEPT
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (gets)
 import Data.Array (elemIndex, filter, foldM, foldMap, fromFoldable, head, length, null, uncons)
