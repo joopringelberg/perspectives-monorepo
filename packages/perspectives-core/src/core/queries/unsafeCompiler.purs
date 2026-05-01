@@ -35,6 +35,7 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, tell)
 import Control.Plus (empty)
 import Data.Array (catMaybes, elemIndex, filterA, findIndex, foldl, head, index, length, null, singleton, unsafeIndex)
+import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), lastIndexOf, stripSuffix, length) as STRING
@@ -65,7 +66,7 @@ import Perspectives.ObjectGetterLookup (lookupPropertyValueGetterByName, lookupR
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Persistent (getPerspectRol)
 import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getVariableBindings, lookupVariableBinding)
-import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), Range, RoleInContext, domain, domain2PropertyRange, domain2contextType, domain2roleType, range, roleInContext2Role)
+import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), Range, RoleInContext(..), domain, domain2PropertyRange, domain2contextType, domain2roleType, range, roleInContext2Role)
 import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.CalculatedRole (CalculatedRole)
@@ -82,9 +83,10 @@ import Perspectives.Representation.Range (Range(..)) as RAN
 import Perspectives.Representation.State (State(..), StateFulObject(..)) as STATE
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.Time (string2Date, string2DateTime, string2Time)
-import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextTypeModelName', propertyAliases, publicUserRole, roleTypeModelName', specialisesRoleType, string2RoleType)
+import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextTypeModelName', equalsOrSpecialisesContextADT, equalsOrSpecialisesRoleInContext, propertyAliases, publicUserRole, roleTypeModelName', specialisesRoleType, string2RoleType)
 import Perspectives.Utilities (prettyPrint)
 import Prelude (class Eq, class Ord, add, bind, discard, eq, identity, mul, negate, notEq, pure, show, sub, ($), (&&), (*), (+), (-), (/), (<), (<$>), (<*>), (<<<), (<=), (<>), (==), (>), (>=), (>=>), (>>=), (||))
+import Simple.JSON (readJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
 -- TODO. String dekt de lading niet sinds we RoleTypes toelaten. Een variabele zou
@@ -320,6 +322,20 @@ compileFunction (UQD _ FilterF criterium _ _ _) = do
     passes <- criterium' r
     guard (passes == "true")
     pure r
+
+compileFunction (SQD _ (RoleTypeFilter adtString) _ _ _) = case readJSON adtString of
+  Left e -> throwError (error $ "Cannot read RoleTypeFilter ADT: " <> show e)
+  Right adt -> pure \roleId -> do
+    passes <- lift $ lift $ roleMatchesTypeFilter (RoleInstance roleId) adt
+    guard passes
+    pure roleId
+
+compileFunction (SQD _ (ContextTypeFilter adtString) _ _ _) = case readJSON adtString of
+  Left e -> throwError (error $ "Cannot read ContextTypeFilter ADT: " <> show e)
+  Right adt -> pure \contextId -> do
+    passes <- lift $ lift $ contextMatchesTypeFilter (ContextInstance contextId) adt
+    guard passes
+    pure contextId
 
 compileFunction (BQD _ (BinaryCombinator SequenceF) f1 f2 _ _ _) = do
   if (typeTimeOnly f1)
@@ -1046,6 +1062,17 @@ bindingInContext cType adt r = ArrayT do
             pure (eq cType fillerContextType)
     )
     fillers
+
+roleMatchesTypeFilter :: RoleInstance -> ADT RoleInContext -> MonadPerspectives Boolean
+roleMatchesTypeFilter roleId roleFilter = do
+  role <- getPerspectRol roleId
+  roleContextType <- (rol_context role) ##>> contextType
+  ST (RoleInContext { context: roleContextType, role: rol_pspType role }) `equalsOrSpecialisesRoleInContext` roleFilter
+
+contextMatchesTypeFilter :: ContextInstance -> ADT ContextType -> MonadPerspectives Boolean
+contextMatchesTypeFilter contextId contextFilter = do
+  instanceContextType <- contextType_ contextId
+  (UET instanceContextType) `equalsOrSpecialisesContextADT` contextFilter
 
 -- | We look for a public role in the (type of the) ContextInstance.
 -- | We then arbitrarily take the publicUrl of the first public role to have one.

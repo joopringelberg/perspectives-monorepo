@@ -13,8 +13,10 @@ import Effect.Exception (message)
 import Node.Encoding as ENC
 import Node.FS.Aff (readTextFile)
 import Node.Path as Path
-import Perspectives.Parsing.Arc (automaticEffectE, contextE, domain, propertyE, thingRoleE, userRoleE, viewE)
-import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FilledBySpecification(..), PropertyE(..), PropertyPart(..), PropsOrView(..), RoleE(..), RolePart(..), StateQualifiedPart, StateSpecification(..), ViewE(..))
+import Parsing (ParseError(..))
+import Perspectives.Parsing.Arc (automaticEffectE, contextE, contextRoleE, domain, propertyE, thingRoleE, userRoleE, viewE)
+import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), PropertyE(..), PropertyPart(..), PropsOrView(..), RoleE(..), RolePart(..), StateQualifiedPart, StateSpecification(..), ViewE(..))
+import Perspectives.Parsing.Arc.Expression.AST (TypeCombination(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier)
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
@@ -24,9 +26,8 @@ import Perspectives.Representation.TypeIdentifiers (ContextType(..), RoleKind(..
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerbList(..))
 import Perspectives.Representation.Verbs (RoleVerb(..), PropertyVerb(..)) as RV
 import Test.Parsing.ArcAstSelectors (actionExists, allPropertyVerbs, ensureAction, ensureContext, ensureOnEntry, ensureOnExit, ensurePerspectiveOf, ensurePerspectiveOn, ensurePropertyVerbsForPropsOrView, ensureRoleVerbs, ensureStateInContext, ensureStateInRole, ensureSubState, ensureUserRole, failure, hasAutomaticAction, isImplicitRoleOnIdentifier, isIndexed, isNotified, isStateWithContext, isStateWithExplicitRole, isStateWithExplicitRole_, perspectiveExists, stateExists, stateParts)
-import Test.Unit (TestF, suite, test)
+import Test.Unit (TestF, suite, test, testOnly)
 import Test.Unit.Assert (assert)
-import Parsing (ParseError(..))
 import Unsafe.Coerce (unsafeCoerce)
 
 testDirectory :: String
@@ -166,6 +167,19 @@ theSuite = suite "Perspectives.Parsing.Arc" do
           (isJust (findIndex (case _ of
             (Calculation _ _) -> true
             otherwise -> false) roleParts)))
+      otherwise -> assert "Role should have parts" false
+
+  test "Role with FilledBy attribute" do 
+    (r :: Either ParseError ContextPart) <- {-pure $ unwrap $-} runIndentParser "context Stadskamers (relational) filledBy Stadskamer\n" contextRoleE
+    case r of
+      (Left e) -> assert (show e) false
+      (Right rl@(RE (RoleE{roleParts}))) -> do
+        assert "Role should have a FilledBy attribute"
+          (1 == (length (filter (case _ of 
+            FilledBySpecifications spec -> (case spec of
+              (Alternatives atts) -> LNE.length atts == 1
+              otherwise -> false)
+            _ -> false) roleParts)))
       otherwise -> assert "Role should have parts" false
 
   test "Role that has two FilledBy attributes" do 
