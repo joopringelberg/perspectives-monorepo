@@ -37,7 +37,6 @@ module Perspectives.Sidecar.NormalizeTypeNames
 
 import Prelude
 
-import Control.Monad.Error.Class (throwError)
 import Control.Monad.Reader (Reader, ask, runReaderT)
 import Data.Array (catMaybes, elem, foldM)
 import Data.Either (Either(..))
@@ -46,8 +45,7 @@ import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
-import Effect.Aff (error)
-import Foreign.Object (Object, fromFoldable, toUnfoldable, values)
+import Foreign.Object (fromFoldable, toUnfoldable, values)
 import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
