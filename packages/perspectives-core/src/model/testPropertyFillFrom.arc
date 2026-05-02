@@ -41,10 +41,15 @@ domain model://joopringelberg.nl#TestPropertyFillFrom@1.0
       perspective on ReferenceValues
         defaults
       perspective on RoleWithProperty
-        defaults
+        only (Create, Remove)
+        props (Prop1) verbs (SetPropertyValue, Consult)
       screen
         who
         what
+          row
+            table RoleWithProperty
+              fillproperty Prop1 from ReferenceValues >> Value
+        where
           ReferenceValues
             master
               with props (Value)
@@ -55,7 +60,6 @@ domain model://joopringelberg.nl#TestPropertyFillFrom@1.0
             detail
               with props (Prop1)
               fillproperty Prop1 from ReferenceValues >> Value
-        where
 
     thing ReferenceValues (relational)
       property Value (String)
