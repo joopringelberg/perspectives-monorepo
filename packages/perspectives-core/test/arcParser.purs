@@ -287,6 +287,14 @@ theSuite = suite "Perspectives.Parsing.Arc" do
       Left e -> assert (show e) false
       Right _ -> assert "The domain parser should accept fillproperty clauses in screens." true
 
+  test "Screen parser accepts fillproperty in classic form and table widgets" do
+    let
+      src = "domain MyTestDomain\n  thing Extern (functional)\n    property OrganisatieNaam (String)\n  thing Task (relational)\n    property Status (String)\n  thing ReferenceValues (relational)\n    property Value (String)\n  user ProjectManager\n    perspective on Extern\n      all roleverbs\n      props (OrganisatieNaam) verbs (Consult, SetPropertyValue)\n    perspective on Task\n      all roleverbs\n      props (Status) verbs (Consult, SetPropertyValue)\n  screen \"Project\"\n    tab \"Overview\" default\n      row\n        form Extern\n          fillproperty OrganisatieNaam from ReferenceValues >> Value\n    tab \"Tasks\"\n      row\n        table Task\n          fillproperty Status from ReferenceValues >> Value"
+    (r :: Either ParseError ContextE) <- runIndentParser src domain
+    case r of
+      Left e -> assert (show e) false
+      Right _ -> assert "Classic form/table widgets should accept fillproperty clauses." true
+
   --------------------------------------------------------------------------------
   ---- DOMAIN
   --------------------------------------------------------------------------------

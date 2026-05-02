@@ -1820,69 +1820,37 @@ widgetCommonFields = do
     if isIndented' then withPos do
       mFillFrom <- optionMaybe (reserved "fillfrom" *> step)
       -- Parse at most one selector: either `with …` or `without …`.
-      keyword <- scanIdentifier
-      case keyword of
-        "with" -> do
-          withProps <- reserved "with" *> withoutProperties
-          -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
-          (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
-          fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
-          mroleVerbs <- optionMaybe roleVerbs
-          fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
-          end <- getPosition
-          pure
-            { title
-            , perspective
-            , fillFrom: mFillFrom
-            , fillPropertyValues
-            , withProps: Just withProps
-            , withoutProps: Nothing
-            , withoutVerbs
-            , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
-            , fieldConstraints
-            , start
-            , end
-            }
-        "without" -> do
-          withoutProps <- reserved "without" *> withoutProperties
-          -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
-          (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
-          fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
-          mroleVerbs <- optionMaybe roleVerbs
-          fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
-          end <- getPosition
-          pure
-            { title
-            , perspective
-            , fillFrom: mFillFrom
-            , fillPropertyValues
-            , withProps: Nothing
-            , withoutProps: Just withoutProps
-            , withoutVerbs
-            , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
-            , fieldConstraints
-            , start
-            , end
-            }
-        _ -> do
-          fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
-          (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
-          mroleVerbs <- optionMaybe roleVerbs
-          fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
-          end <- getPosition
-          pure
-            { title
-            , perspective
-            , fillFrom: mFillFrom
-            , fillPropertyValues
-            , withProps: Nothing
-            , withoutProps: Nothing
-            , withoutVerbs
-            , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
-            , fieldConstraints
-            , start
-            , end
-            }
+      mSelection <- optionMaybe
+        ( (Right <$> (reserved "with" *> withoutProperties))
+            <|>
+              (Left <$> (reserved "without" *> withoutProperties))
+        )
+      let
+        withProps = case mSelection of
+          Just (Right p) -> Just p
+          _ -> Nothing
+        withoutProps = case mSelection of
+          Just (Left p) -> Just p
+          _ -> Nothing
+      fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
+      -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
+      (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
+      mroleVerbs <- optionMaybe roleVerbs
+      fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
+      end <- getPosition
+      pure
+        { title
+        , perspective
+        , fillFrom: mFillFrom
+        , fillPropertyValues
+        , withProps
+        , withoutProps
+        , withoutVerbs
+        , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
+        , fieldConstraints
+        , start
+        , end
+        }
     else do
       end <- getPosition
       pure
