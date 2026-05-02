@@ -397,6 +397,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                   disabled={false}
                   isselected={component.props.isselected}
                   contextinstance={component.props.perspective.contextInstance}
+                  referenceValues={component.props.perspective.possiblePropertyValues?.[component.props.serialisedProperty.id]}
                 />
               </td>);
             }
@@ -466,6 +467,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
             disabled={component.inputType === 'checkbox' ? component.propertyOnlyConsultable() : !component.state.editable}
             isselected={component.props.isselected}
             contextinstance={component.props.perspective.contextInstance}
+            referenceValues={component.props.perspective.possiblePropertyValues?.[component.props.serialisedProperty.id]}
           />
         </td>);
     }

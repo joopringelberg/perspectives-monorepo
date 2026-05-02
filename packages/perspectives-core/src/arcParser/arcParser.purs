@@ -48,7 +48,7 @@ import Parsing.Indent.Monadic (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FillPropertyValueE, FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step, typeCombinations)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -1778,69 +1778,44 @@ widgetCommonFields = do
     if isIndented' then withPos do
       mFillFrom <- optionMaybe (reserved "fillfrom" *> step)
       -- Parse at most one selector: either `with …` or `without …`.
-      keyword <- scanIdentifier
-      case keyword of
-        "with" -> do
-          withProps <- reserved "with" *> withoutProperties
-          -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
-          (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
-          mroleVerbs <- optionMaybe roleVerbs
-          fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
-          end <- getPosition
-          pure
-            { title
-            , perspective
-            , fillFrom: mFillFrom
-            , withProps: Just withProps
-            , withoutProps: Nothing
-            , withoutVerbs
-            , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
-            , fieldConstraints
-            , start
-            , end
-            }
-        "without" -> do
-          withoutProps <- reserved "without" *> withoutProperties
-          -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
-          (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
-          mroleVerbs <- optionMaybe roleVerbs
-          fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
-          end <- getPosition
-          pure
-            { title
-            , perspective
-            , fillFrom: mFillFrom
-            , withProps: Nothing
-            , withoutProps: Just withoutProps
-            , withoutVerbs
-            , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
-            , fieldConstraints
-            , start
-            , end
-            }
-        _ -> do
-          (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
-          mroleVerbs <- optionMaybe roleVerbs
-          fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
-          end <- getPosition
-          pure
-            { title
-            , perspective
-            , fillFrom: mFillFrom
-            , withProps: Nothing
-            , withoutProps: Nothing
-            , withoutVerbs
-            , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
-            , fieldConstraints
-            , start
-            , end
-            }
+      mSelection <- optionMaybe
+        ( (Right <$> (reserved "with" *> withoutProperties))
+            <|>
+              (Left <$> (reserved "without" *> withoutProperties))
+        )
+      let
+        withProps = case mSelection of
+          Just (Right p) -> Just p
+          _ -> Nothing
+        withoutProps = case mSelection of
+          Just (Left p) -> Just p
+          _ -> Nothing
+      fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
+      -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
+      (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
+      mroleVerbs <- optionMaybe roleVerbs
+      fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
+      end <- getPosition
+      pure
+        { title
+        , perspective
+        , fillFrom: mFillFrom
+        , fillPropertyValues
+        , withProps
+        , withoutProps
+        , withoutVerbs
+        , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
+        , fieldConstraints
+        , start
+        , end
+        }
     else do
       end <- getPosition
       pure
         { title
         , perspective
         , fillFrom: Nothing
+        , fillPropertyValues: Nil
         , withProps: Nothing
         , withoutProps: Nothing
         , withoutVerbs: Nil
@@ -1872,6 +1847,16 @@ fieldConstraintE = do
   findConstraintValue :: String -> List (Tuple String Int) -> Maybe Int
   findConstraintValue key = foldl (\acc (Tuple k v) -> if k == key then Just v else acc) Nothing
 
+fillPropertyValueE :: IP FillPropertyValueE
+fillPropertyValueE = do
+  start <- getPosition
+  void $ reserved "fillproperty"
+  propertyName <- arcIdentifier
+  void $ reserved "from"
+  valuesQuery <- step
+  end <- getPosition
+  pure { propertyName, valuesQuery, start, end }
+
 tableFormFields :: RoleIdentification -> IP WidgetCommonFields
 tableFormFields perspective = do
   start <- getPosition
@@ -1896,6 +1881,7 @@ tableFormFields perspective = do
         withoutProps = case mSelection of
           Just (Left p) -> Just p
           _ -> Nothing
+      fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
       -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
       -- entireBlock expects the same indentation, i.e. the position taken up after parsing the optional 'without' clause.
       -- This may be outdented! 
@@ -1908,6 +1894,7 @@ tableFormFields perspective = do
         { title
         , perspective
         , fillFrom: mFillFrom
+        , fillPropertyValues
         , withProps
         , withoutProps
         , withoutVerbs
@@ -1922,6 +1909,7 @@ tableFormFields perspective = do
         { title
         , perspective
         , fillFrom: Nothing
+        , fillPropertyValues: Nil
         , withProps: Nothing
         , withoutProps: Nothing
         , withoutVerbs: Nil

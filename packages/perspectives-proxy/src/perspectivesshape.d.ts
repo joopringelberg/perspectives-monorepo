@@ -76,6 +76,7 @@ export type Perspective = {
   properties: Record<string, SerialisedProperty>;
   actions: Record<string, string>;
   possibleFillers: {readableName : string, instance: RoleInstanceT}[];
+  possiblePropertyValues: Record<string, ValueT[]>;
 };
 
 export type RoleVerb = 

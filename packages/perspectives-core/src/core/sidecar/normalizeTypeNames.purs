@@ -51,7 +51,7 @@ import Foreign.Object (Object, fromFoldable, toUnfoldable, values)
 import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
-import Perspectives.Data.EncodableMap (EncodableMap, toUnfoldable, fromFoldable, empty) as EM
+import Perspectives.Data.EncodableMap (EncodableMap, empty, fromFoldable, toUnfoldable) as EM
 import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), UpstreamAutomaticEffect(..), UpstreamStateNotification(..))
 import Perspectives.Identifiers (qualifyWith, splitTypeUri, typeUri2typeNameSpace)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
@@ -80,7 +80,7 @@ import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..), stateSpec2StateIdentifier, PropertyVerbs(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyValueFillers)
 import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), IndexedRole(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
@@ -983,8 +983,22 @@ normalizeWidgetCommonFields w = do
       Nothing -> w.perspectiveId
       Just stable -> stable
   fillFrom' <- traverse normalize w.fillFrom
+  fillPropertyFrom' <- traverse normalizePropertyValueFillers w.fillPropertyFrom
   fieldConstraints' <- traverse (traverse normalizeFieldConstraintDef) w.fieldConstraints
-  pure $ w { propertyRestrictions = propertyRestrictions', withoutProperties = withoutProperties', userRole = userRole', perspectiveId = perspectiveId', fillFrom = fillFrom', fieldConstraints = fieldConstraints' }
+  pure $ w
+    { propertyRestrictions = propertyRestrictions'
+    , withoutProperties = withoutProperties'
+    , userRole = userRole'
+    , perspectiveId = perspectiveId'
+    , fillFrom = fillFrom'
+    , fillPropertyFrom = fillPropertyFrom'
+    , fieldConstraints = fieldConstraints'
+    }
+
+normalizePropertyValueFillers :: PropertyValueFillers -> WithSideCars PropertyValueFillers
+normalizePropertyValueFillers fillers = do
+  let pairs = EM.toUnfoldable fillers :: Array (Tuple PropertyType QueryFunctionDescription)
+  EM.fromFoldable <$> for pairs (\(Tuple k v) -> Tuple <$> fqn2tid k <*> normalize v)
 
 normalizeFieldConstraintDef :: FieldConstraintDef -> WithSideCars FieldConstraintDef
 normalizeFieldConstraintDef fc = do
@@ -1028,4 +1042,3 @@ buildPerspectiveIdMap (DomeinFile dfr) env0 =
           mkTuples ownerTid cr.perspectives
   in
     OBJ.fromFoldable (erTuples <> crTuples)
-
