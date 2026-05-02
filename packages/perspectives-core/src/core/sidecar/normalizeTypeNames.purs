@@ -37,14 +37,17 @@ module Perspectives.Sidecar.NormalizeTypeNames
 
 import Prelude
 
+import Control.Monad.Error.Class (throwError)
 import Control.Monad.Reader (Reader, ask, runReaderT)
 import Data.Array (catMaybes, elem, foldM)
+import Data.Either (Either(..))
 import Data.Map (Map, empty, fromFoldable, insert, lookup, toUnfoldable, union) as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (fromFoldable, toUnfoldable, values)
+import Effect.Aff (error)
+import Foreign.Object (Object, fromFoldable, toUnfoldable, values)
 import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
@@ -85,6 +88,7 @@ import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.HashQFD (qfdSignature)
 import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), fromLocalModels, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping, lookupActionCuid, lookupContextIndividualId, lookupRoleIndividualId)
+import Simple.JSON (readJSON, writeJSON)
 
 -- Environment carried during normalization: sidecars and a perspective id rewrite map
 type Env =
@@ -703,6 +707,12 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
             Nothing -> Nothing
             Just sim -> lookupRoleIndividualId sim ident
       pure $ RoleIndividual (RoleInstance (maybe ident identity stableId))
+    normalizeQueryFunction (ContextTypeFilter serialisedADT) = do
+      case readJSON serialisedADT of
+        Left e -> pure $ ContextTypeFilter serialisedADT -- if we cannot parse the ADT, leave it as is
+        Right (adt :: ADT ContextType) -> do
+          adt' <- traverse fqn2tid adt
+          pure $ ContextTypeFilter $ writeJSON adt'
     normalizeQueryFunction f = pure f
 
 instance normalizeNotificationInst :: Normalize Notification where

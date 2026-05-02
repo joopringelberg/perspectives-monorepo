@@ -89,6 +89,18 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
               otherwise -> false
             otherwise -> false
 
+  test "TypeFilterStep" do
+    (r :: Either ParseError Step) <- runIndentParser "typeFilter MyRole with RoleA union RoleB" step
+    case r of
+      (Left e) -> assert (show e) false
+      (Right id) -> do
+        assert "'typeFilter MyRole with RoleA union RoleB' should be parsed as a binary step with operator 'TypeFilter'"
+          case id of
+            (Binary (BinaryStep {operator})) -> case operator of
+              (TypeFilter _) -> true
+              otherwise -> false
+            otherwise -> false
+
   test "BinaryStep with ==" do
     (r :: Either ParseError Step) <- runIndentParser "Prop1 == Prop2" step
     case r of

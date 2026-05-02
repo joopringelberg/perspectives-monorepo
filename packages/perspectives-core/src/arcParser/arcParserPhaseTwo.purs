@@ -31,7 +31,6 @@ import Data.Array (fromFoldable) as ARR
 import Data.Lens (over) as LN
 import Data.Lens.Record (prop)
 import Data.List (List(..), filter, findIndex, foldM, head)
-import Data.List.NonEmpty (head) as LNE
 import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.String.Regex (test)
@@ -41,7 +40,9 @@ import Foreign.Object (Object, fromFoldable, insert, union)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
 import Perspectives.Identifiers (Namespace, isExternalRole, isTypeUri, newModelRegex, qualifyWith, typeUri2typeNameSpace_)
-import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), FreeFormScreenE(..), PropertyE(..), PropertyMapping(..), PropertyPart(..), RoleE(..), RoleIdentification(..), RolePart(..), ScreenE(..), StateE(..), StateSpecification(..), ViewE(..), WhoWhatWhereScreenE(..))
+import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FreeFormScreenE(..), PropertyE(..), PropertyMapping(..), PropertyPart(..), RoleE(..), RoleIdentification(..), RolePart(..), ScreenE(..), StateE(..), StateSpecification(..), ViewE(..), WhoWhatWhereScreenE(..))
+import Perspectives.Parsing.Arc.Expression.AST (FilledByAttribute(..), TypeCombination(..))
+import Perspectives.Parsing.Arc.PhaseTwo.TypeCombination (compileRoleTypeCombination)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.ExpandPrefix (expandPrefix)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..))
@@ -315,43 +316,19 @@ traverseEnumeratedRoleE_ role@(EnumeratedRole { id: rn, kindOfRole }) roleParts 
   handleParts roleName (EnumeratedRole roleUnderConstruction) UnlinkedAttribute = pure (EnumeratedRole $ roleUnderConstruction { unlinked = true })
 
   -- FILLEDBYATTRIBUTE
-  handleParts roleName (EnumeratedRole roleUnderConstruction@{ id, binding }) (FilledBySpecifications spec) = case spec of
-    Alternatives attrs -> case LNE.head attrs of
-      FilledByAttribute "None" context -> pure (EnumeratedRole $ roleUnderConstruction { binding = Just $ UET $ RoleInContext { role: id, context } })
-      _ -> do
-        restrictions <- for attrs \(FilledByAttribute bnd context) -> do
-          ebnd <- expandBinding bnd
-          pure $ UET $ RoleInContext { role: EnumeratedRoleType ebnd, context }
-        pure $ EnumeratedRole $ roleUnderConstruction { binding = Just $ SUM (ARR.fromFoldable restrictions) }
+  handleParts roleName (EnumeratedRole roleUnderConstruction@{ id, binding }) (FilledBySpecifications (spec :: TypeCombination)) = do
+    spec' <-
+      if kindOfRole == TI.ContextRole then
+        case spec of
+          Alternatives attrs -> pure $ Alternatives (f <$> attrs)
+          Combination attrs -> pure $ Combination (f <$> attrs)
+          DisjunctionOfConjunctions groups -> pure $ DisjunctionOfConjunctions $ (\group -> f <$> group) <$> groups
+      else pure spec
+    bindingRestriction <- compileRoleTypeCombination id spec'
+    pure (EnumeratedRole $ roleUnderConstruction { binding = Just bindingRestriction })
 
-    Combination attrs -> do
-      restrictions <- for attrs \(FilledByAttribute bnd context) -> do
-        ebnd <- expandBinding bnd
-        pure $ UET $ RoleInContext { role: EnumeratedRoleType ebnd, context }
-      pure $ EnumeratedRole $ roleUnderConstruction { binding = Just $ PROD (ARR.fromFoldable restrictions) }
-
-    DisjunctionOfConjunctions groups -> do
-      conjunctions <- for groups \attrs -> do
-        restrictions <- for attrs \(FilledByAttribute bnd context) -> do
-          ebnd <- expandBinding bnd
-          pure $ UET $ RoleInContext { role: EnumeratedRoleType ebnd, context }
-        pure $ PROD (ARR.fromFoldable restrictions)
-      pure $ EnumeratedRole $ roleUnderConstruction { binding = Just $ SUM (ARR.fromFoldable conjunctions) }
-    -- We assume the result of expandBinding refers to an EnumeratedRoleType. This need not be so;
-    -- it will be repaired in PhaseThree.
-    -- Note that `context` may not yet be fully qualified.
-    -- It may also be unspecified, coded as an empty string.
-    -- PhaseThree will resolve both issues.
     where
-    expandBinding :: String -> PhaseTwo String
-    expandBinding bnd =
-      if kindOfRole == TI.ContextRole
-      -- If the RoleKind is ContextRole, we should construct the name of the External
-      -- Role of the binding (which then is a Context)
-      -- This is because the ArcIdentifier following 'filledBy' for a ContextRole, identifies the context - not its
-      -- external role.
-      then expandNamespace (externalRoleType_ bnd)
-      else expandNamespace bnd
+    f (FilledByAttribute bnd context) = FilledByAttribute (externalRoleType_ bnd) context
 
   -- ROLEASPECT
   handleParts roleName (EnumeratedRole roleUnderConstruction@{ context, roleAspects, propertyAliases }) (RoleAspect a pos' mPropertyMapping) = do

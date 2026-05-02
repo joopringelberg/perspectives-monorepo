@@ -27,11 +27,11 @@ import Control.Lazy (defer)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (fromFoldable, snoc)
 import Data.Either (Either(..))
-import Data.Foldable (all, foldl)
+import Data.Foldable (foldl)
 import Data.Int (toNumber)
 import Data.JSDate (toISOString)
 import Data.List (List(..), concat, filter, find, intercalate, many, null, singleton, some, (:))
-import Data.List.NonEmpty (NonEmptyList, head, length, toList, singleton) as LNE
+import Data.List.NonEmpty (toList) as LNE
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.String (indexOf, splitAt, trim, Pattern(..)) as STRING
@@ -43,14 +43,14 @@ import Data.Tuple (Tuple(..))
 import Data.Unit (Unit, unit)
 import Effect.Class (liftEffect)
 import Parsing (fail, failWithPosition)
-import Parsing.Combinators (between, lookAhead, option, optionMaybe, sepBy, sepBy1, try, (<?>))
+import Parsing.Combinators (between, lookAhead, option, optionMaybe, sepBy, try, (<?>))
 import Parsing.Indent.Monadic (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
 import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FillPropertyValueE, FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
-import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step)
+import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step, typeCombinations)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseName, prefixedName, qualifiedName, reserved, stringUntilNewline)
 import Perspectives.Parsing.Arc.IndentParser (IP, arcPosition2Position, containsTab, entireBlock, entireBlock1, getArcParserState, getCurrentContext, getCurrentState, getObject, getPosition, getStateIdentifier, getSubject, inSubContext, isEof, isIndented, isNextLine, nestedBlock, protectObject, protectOnEntry, protectOnExit, protectSubject, sameOrOutdented', setObject, setOnEntry, setOnExit, setSubject, withArcParserState, withEntireBlock)
@@ -560,49 +560,7 @@ enumeratedRole_ uname knd pos = do
 -- Enumerated. This will be fixed in PhaseThree.
 filledBy :: IP (Maybe RolePart)
 filledBy = optionMaybe
-  ( reserved "filledBy" *>
-      ( (try (FilledBySpecifications <$> token.parens (makeSpec <$> token.commaSep1 fillerGroup)))
-          <|> (try (FilledBySpecifications <<< Combination <$> token.parens (plusSep filler)))
-          <|> (FilledBySpecifications <<< Alternatives <<< LNE.singleton <$> (try filler))
-      )
-  )
-  where
-  filler :: IP FilledByAttribute
-  filler = do
-    role <- arcIdentifier
-    mcontext <- optionMaybe (reserved "in" *> arcIdentifier)
-    case mcontext of
-      Nothing -> do
-        pure $ FilledByAttribute role (ContextType "")
-      Just context -> pure $ FilledByAttribute role (ContextType context)
-
-  plus :: IP String
-  plus = token.symbol "+"
-
-  plusSep :: forall a. IP a -> IP (LNE.NonEmptyList a)
-  plusSep p = sepBy1 p plus
-
-  -- | A fillerGroup is either a parenthesised combination `(A + B)` or a single filler `A`.
-  fillerGroup :: IP (LNE.NonEmptyList FilledByAttribute)
-  fillerGroup =
-    (try (token.parens (plusSep filler)))
-      <|> (LNE.singleton <$> filler)
-
-  -- | Determine the appropriate FilledBySpecification from a list of fillerGroups:
-  -- | * All groups are singletons → Alternatives (each group's head is the sole attribute)
-  -- | * Single group with multiple members → Combination (unwrap the sole group)
-  -- | * Multiple groups, at least one with multiple members → DisjunctionOfConjunctions
-  makeSpec :: LNE.NonEmptyList (LNE.NonEmptyList FilledByAttribute) -> FilledBySpecification
-  makeSpec groups =
-    if all (\g -> LNE.length g == 1) groups
-    -- Every group is a singleton: extract the single element from each group.
-    -- LNE.head is safe here because LNE.length g == 1 guarantees exactly one element.
-    then Alternatives (LNE.head <$> groups)
-    else if LNE.length groups == 1
-    -- Single group with multiple members: use Combination.
-    -- LNE.head is safe here because LNE.length groups == 1 guarantees exactly one group.
-    then Combination (LNE.head groups)
-    else DisjunctionOfConjunctions groups
+  (reserved "filledBy" *> (FilledBySpecifications <$> typeCombinations))
 
 -- | rolePart =
 -- |   <perspectiveOn> |
@@ -628,13 +586,13 @@ rolePart = do
     -- When `second` is non-empty, twoReservedWords found a reserved word immediately
     -- after the keyword. Consume the keyword first so this becomes a committed (consumed)
     -- error that propagates even through any `try` wrapper around the inner parser.
-    "aspect", second | second /= "" -> void (reserved "aspect") *> failReservedWord second
+    "aspect", second' | second' /= "" -> void (reserved "aspect") *> failReservedWord second'
     "aspect", _ -> aspectE
-    "indexed", second | second /= "" -> void (reserved "indexed") *> failReservedWord second
+    "indexed", second' | second' /= "" -> void (reserved "indexed") *> failReservedWord second'
     "indexed", _ -> indexedE
-    "property", second | second /= "" -> void (reserved "property") *> failReservedWord second
+    "property", second' | second' /= "" -> void (reserved "property") *> failReservedWord second'
     "property", _ -> propertyE
-    "view", second | second /= "" -> void (reserved "view") *> failReservedWord second
+    "view", second' | second' /= "" -> void (reserved "view") *> failReservedWord second'
     "view", _ -> viewE
     "action", _ -> SQP <$> actionE
     "screen", _ -> Screen <$> screenE

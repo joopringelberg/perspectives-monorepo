@@ -384,6 +384,19 @@ theSuite = suite  "Perspectives.Query.ExpressionCompiler" do
               otherwise -> false
               )
 
+  makeTest "compileBinaryStep: make a binary operation with 'typeFilter'."
+    "domain Test\n  thing Role1 (mandatory)\n  thing Role2 = typeFilter Role1 with Role1"
+    (\e -> assert (show e) false)
+    (\(correctedDFR@{calculatedRoles}) -> do
+      case lookup "model:Test$Role2" calculatedRoles of
+        Nothing -> assert "There should be a role 'Role2'" false
+        Just (CalculatedRole{calculation}) -> do
+          assert "The calculation should compose source with a runtime FilterF over RoleTypeFilter."
+            case calculation of
+              (Q (BQD _ (BinaryCombinator ComposeF) _ (UQD _ FilterF (SQD _ (RoleTypeFilter _) (VDOM PBool _) _ _) _ _ _) _ _ _)) -> true
+              otherwise -> false
+              )
+
   makeTest "compileBinaryStep: make a binary operation with '>>='."
     "domain Test\n  thing Guest (mandatory)\n    property NumberOfGuests = this >>= count"
     (\e -> assert (show e) false)
