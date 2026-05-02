@@ -587,9 +587,21 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}
               aria-label={ component.state.value }
               readOnly={ component.props.disabled }
-              disabled={ component.props.disabled }
+              onMouseDown={e => {
+                // Keep the parent cell clickable when the field is not editable.
+                // A disabled <select> swallows pointer interaction and prevents
+                // TableCell from receiving the click used to select the cell.
+                if (component.props.disabled)
+                {
+                  e.preventDefault();
+                }
+              }}
               value={ component.state.value }
               onChange={e => {
+                if (component.props.disabled)
+                {
+                  return;
+                }
                 const wasEditing = component.state.hasLocalEdits;
                 const newVal = e.target.value;
                 component.setState({ value: newVal, hasLocalEdits: true });
