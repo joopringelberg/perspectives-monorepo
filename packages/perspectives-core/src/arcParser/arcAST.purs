@@ -481,6 +481,7 @@ data ScreenElement
   | MarkDownElement MarkDownE
   | ChatElement ChatE
   | WhenElement WhenE
+  | TypeAheadFillerElement TypeAheadFillerE
 
 --------------------------------------------------------------------------------
 ---- WHEN
@@ -541,6 +542,13 @@ type WidgetCommonFields =
 ---- TABLE
 --------------------------------------------------------------------------------
 data TableE = TableE (List MarkDownE) WidgetCommonFields
+
+--------------------------------------------------------------------------------
+---- TYPEAHEADFILLER
+--------------------------------------------------------------------------------
+-- | A widget that lets the user search for and select a role instance to fill
+-- | a target role, using the FilterValue view for efficient candidate lookup.
+newtype TypeAheadFillerE = TypeAheadFillerE WidgetCommonFields
 
 --------------------------------------------------------------------------------
 ---- MARKDOWN
@@ -737,6 +745,12 @@ instance Show ChatE where
   show = genericShow
 
 derive instance Newtype ChatE _
+
+derive instance Generic TypeAheadFillerE _
+instance Show TypeAheadFillerE where
+  show = genericShow
+
+derive instance Newtype TypeAheadFillerE _
 
 derive instance Generic WhenE _
 instance Show WhenE where

@@ -78,12 +78,24 @@ data ScreenElementDef
   | MarkDownElementD MarkDownDef
   | ChatElementD ChatDef
   | WhenElementD WhenDef
+  | TypeAheadFillerElementD TypeAheadFillerDef
 
 newtype RowDef = RowDef (Array ScreenElementDef)
 newtype ColumnDef = ColumnDef (Array ScreenElementDef)
 newtype WhenDef = WhenDef { condition :: QueryFunctionDescription, elements :: Array ScreenElementDef }
 newtype TableDef = TableDef { markdown :: Array MarkDownDef, widgetCommonFields :: WidgetCommonFieldsDef }
 newtype FormDef = FormDef { markdown :: Array MarkDownDef, widgetCommonFields :: WidgetCommonFieldsDef }
+
+-- | A type alias for a single filter value candidate entry returned from the FilterValue view.
+type FilterValueEntry = { filterValue :: String, roleId :: String }
+
+-- | A widget that shows a typeahead input allowing the user to search for a role instance
+-- | to fill the target role. Candidate entries are populated from the FilterValue CouchDB
+-- | view at context serialisation time, avoiding loading full role instances into memory.
+newtype TypeAheadFillerDef = TypeAheadFillerDef
+  { widgetCommonFields :: WidgetCommonFieldsDef
+  , candidates :: Array FilterValueEntry
+  }
 data MarkDownDef
   = MarkDownConstantDef { text :: String, condition :: Maybe QueryFunctionDescription, domain :: String }
   | MarkDownPerspectiveDef { widgetFields :: WidgetCommonFieldsDef, conditionProperty :: Maybe PropertyType }
@@ -195,6 +207,7 @@ derive instance Generic TableFormOrWhenDef _
 derive instance Generic What _
 derive instance Generic Who _
 derive instance Generic WhereTo _
+derive instance Generic TypeAheadFillerDef _
 
 -----------------------------------------------------------
 -- SHOW INSTANCES
@@ -248,6 +261,9 @@ instance Show Who where
   show = genericShow
 
 instance Show WhereTo where
+  show = genericShow
+
+instance Show TypeAheadFillerDef where
   show = genericShow
 
 -----------------------------------------------------------
@@ -304,6 +320,9 @@ instance Eq Who where
 instance Eq WhereTo where
   eq = genericEq
 
+instance Eq TypeAheadFillerDef where
+  eq = genericEq
+
 -----------------------------------------------------------
 -- WRITEFOREIGN INSTANCES
 -----------------------------------------------------------
@@ -319,6 +338,7 @@ instance writeForeignScreenElementDef :: WriteForeign ScreenElementDef where
   writeImpl (MarkDownElementD f) = write { elementType: "MarkDownElementD", element: f }
   writeImpl (ChatElementD c) = write { elementType: "ChatElementD", element: c }
   writeImpl (WhenElementD w) = write { elementType: "WhenElementD", element: w }
+  writeImpl (TypeAheadFillerElementD t) = write { elementType: "TypeAheadFillerElementD", element: t }
 
 instance writeForeignTabDef :: WriteForeign TabDef where
   writeImpl (TabDef widgetCommonFields) = write widgetCommonFields
@@ -374,6 +394,9 @@ instance WriteForeign What where
 instance WriteForeign WhereTo where
   writeImpl (WhereTo { markdown, contextRoles }) = write { tag: "WhereTo", markdown, contextRoles }
 
+instance WriteForeign TypeAheadFillerDef where
+  writeImpl (TypeAheadFillerDef { widgetCommonFields, candidates }) = write { tag: "TypeAheadFillerDef", widgetCommonFields, candidates }
+
 -----------------------------------------------------------
 -- READFOREIGN INSTANCES
 -----------------------------------------------------------
@@ -395,6 +418,7 @@ instance ReadForeign ScreenElementDef where
           "MarkDownExpressionDef" -> MarkDownElementD <<< MarkDownExpressionDef <$> ((read' subElement) :: F { textQuery :: QueryFunctionDescription, condition :: Maybe QueryFunctionDescription, text :: Maybe String })
       "ChatElementD" -> ChatElementD <$> ((read' element) :: F ChatDef)
       "WhenElementD" -> WhenElementD <$> ((read' element) :: F WhenDef)
+      "TypeAheadFillerElementD" -> TypeAheadFillerElementD <$> ((read' element) :: F TypeAheadFillerDef)
 
 instance ReadForeign ScreenKey where
   readImpl f = do
@@ -509,6 +533,13 @@ instance ReadForeign WhereTo where
     case tag of
       "WhereTo" -> pure $ WhereTo { markdown, contextRoles }
       _ -> fail (TypeMismatch "WhereTo" tag)
+
+instance ReadForeign TypeAheadFillerDef where
+  readImpl f = do
+    ({ tag, widgetCommonFields, candidates } :: { tag :: String, widgetCommonFields :: WidgetCommonFieldsDef, candidates :: Array FilterValueEntry }) <- read' f
+    case tag of
+      "TypeAheadFillerDef" -> pure $ TypeAheadFillerDef { widgetCommonFields, candidates }
+      _ -> fail (TypeMismatch "TypeAheadFillerDef" tag)
 
 -------------------------------------------------------------------------------
 ---- SCREENKEY

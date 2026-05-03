@@ -48,7 +48,7 @@ import Parsing.Indent.Monadic (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FillPropertyValueE, FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FillPropertyValueE, FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), TypeAheadFillerE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step, typeCombinations)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -1751,8 +1751,9 @@ screenElementE = withPos do
     "markdown" -> reserved "markdown" *> (MarkDownElement <$> markdownE)
     "chat" -> reserved "chat" *> (ChatElement <$> chatE)
     "when" -> WhenElement <$> whenE
+    "typeaheadfiller" -> reserved "typeaheadfiller" *> (TypeAheadFillerElement <$> typeAheadFillerE)
     -- NOTE: extend message when a new widget is added.
-    _ -> fail "Only `row`, `column`, `table`, `form`, `markdown`, `chat` and `when` are allowed here. "
+    _ -> fail "Only `row`, `column`, `table`, `form`, `markdown`, `chat`, `when` and `typeaheadfiller` are allowed here. "
 
 whenE :: IP WhenE
 whenE = do
@@ -1924,6 +1925,9 @@ formE = FormE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> 
 
 tableE :: IP TableE
 tableE = TableE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> widgetCommonFields
+
+typeAheadFillerE :: IP TypeAheadFillerE
+typeAheadFillerE = TypeAheadFillerE <$> widgetCommonFields
 
 markdownE :: IP MarkDownE
 markdownE = do

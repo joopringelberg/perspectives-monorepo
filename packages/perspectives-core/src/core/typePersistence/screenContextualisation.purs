@@ -20,7 +20,7 @@ import Perspectives.Query.QueryTypes (QueryFunctionDescription)
 import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType, RoleType(..), externalRoleType)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
@@ -112,6 +112,7 @@ contextualiseScreenElementDef (TableElementD e) = map TableElementD <$> contextu
 contextualiseScreenElementDef (FormElementD e) = map FormElementD <$> contextualiseFormDef e
 contextualiseScreenElementDef (MarkDownElementD e) = map MarkDownElementD <$> contextualiseMarkDownDef e
 contextualiseScreenElementDef (ChatElementD c) = map ChatElementD <$> contextualiseChatDef c
+contextualiseScreenElementDef (TypeAheadFillerElementD e) = map TypeAheadFillerElementD <$> contextualiseTypeAheadFillerDef e
 contextualiseScreenElementDef (WhenElementD (WhenDef { condition, elements })) = do
   { contextInstance } <- ask
   (criterium :: ContextInstance ~~> Value) <- lift $ lift $ lift $ (context2propertyValue condition)
@@ -149,6 +150,13 @@ contextualiseFormDef (FormDef { markdown, widgetCommonFields }) = do
   case mwidgetCommonFields of
     Nothing -> pure Nothing
     Just widgetCommonFields' -> pure $ Just $ FormDef { markdown: catMaybes markdown', widgetCommonFields: widgetCommonFields' }
+
+contextualiseTypeAheadFillerDef :: TypeAheadFillerDef -> InContext (Maybe TypeAheadFillerDef)
+contextualiseTypeAheadFillerDef (TypeAheadFillerDef { widgetCommonFields, candidates }) = do
+  mwidgetCommonFields <- contextualiseWidgetCommonFields widgetCommonFields
+  case mwidgetCommonFields of
+    Nothing -> pure Nothing
+    Just widgetCommonFields' -> pure $ Just $ TypeAheadFillerDef { widgetCommonFields: widgetCommonFields', candidates }
 
 contextualiseMarkDownDef :: MarkDownDef -> InContext (Maybe MarkDownDef)
 contextualiseMarkDownDef md = case md of

@@ -78,7 +78,7 @@ import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..), stateSpec2StateIdentifier, PropertyVerbs(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyValueFillers)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyValueFillers)
 import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), IndexedRole(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
@@ -814,6 +814,7 @@ instance normalizeScreenElementDefInst :: Normalize ScreenElementDef where
   normalize (FormElementD f) = FormElementD <$> normalize f
   normalize (MarkDownElementD m) = MarkDownElementD <$> normalize m
   normalize (ChatElementD c) = ChatElementD <$> normalize c
+  normalize (TypeAheadFillerElementD t) = TypeAheadFillerElementD <$> normalize t
   normalize (WhenElementD (WhenDef { condition, elements })) = do
     condition' <- normalize condition
     elements' <- traverse normalize elements
@@ -836,6 +837,11 @@ instance normalizeFormDefInst :: Normalize FormDef where
     markdown' <- traverse normalize r.markdown
     widgetCommonFields' <- normalizeWidgetCommonFields r.widgetCommonFields
     pure $ FormDef r { markdown = markdown', widgetCommonFields = widgetCommonFields' }
+
+instance Normalize TypeAheadFillerDef where
+  normalize (TypeAheadFillerDef r) = do
+    widgetCommonFields' <- normalizeWidgetCommonFields r.widgetCommonFields
+    pure $ TypeAheadFillerDef r { widgetCommonFields = widgetCommonFields' }
 
 instance normalizeMarkDownDefInst :: Normalize MarkDownDef where
   normalize (MarkDownConstantDef r) = do

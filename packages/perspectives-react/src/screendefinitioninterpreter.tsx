@@ -20,7 +20,7 @@
 
 import React from 'react';
 
-import {PDRproxy, CONTINUOUS, ContextInstanceT, ContextType, RoleType, Unsubscriber, PropertyType, EnumeratedOrCalculatedProperty, ScreenDefinition, ChatElementDef, ColumnElementDef, FormElementDef, MarkDownElementDef, Perspective, Roleinstancewithprops, RowElementDef, ScreenElementDefTagged, TabDef, TableElementDef, WhenElementDef, WidgetCommonFields, What} from "perspectives-proxy";
+import {PDRproxy, CONTINUOUS, ContextInstanceT, ContextType, RoleType, Unsubscriber, PropertyType, EnumeratedOrCalculatedProperty, ScreenDefinition, ChatElementDef, ColumnElementDef, FormElementDef, MarkDownElementDef, Perspective, Roleinstancewithprops, RowElementDef, ScreenElementDefTagged, TabDef, TableElementDef, TypeAheadFillerElementDef, WhenElementDef, WidgetCommonFields, What} from "perspectives-proxy";
 import PerspectivesComponent from "./perspectivesComponent";
 import {PSContext, PSContextType} from "./reactcontexts.js";
 import PerspectiveBasedForm from "./perspectivebasedform.js";
@@ -28,6 +28,7 @@ import PerspectiveTable from "./perspectivetable.js";
 import PerspectivesTabs from "./perspectivestabs.js";
 import {UserMessagingPromise} from "./userMessaging.js";
 import i18next from "i18next";
+import RoleTypeAheadFiller from "./roletypeaheadfiller.js";
 
 import {Tab, Container, Card, Row, Col} from "react-bootstrap";
 import {MarkDownWidget} from './markdownWidget.js';
@@ -268,6 +269,22 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
             { whenDef.elements.map( (el, idx) => component.screenElement(el, idx) ) }
           </React.Fragment>
         )
+      case "TypeAheadFillerElementD": {
+        const typeAheadDef = taggedElement.element as TypeAheadFillerElementDef;
+        return (
+          <div
+            className="border-bottom pb-4 pt-4 widget"
+            key={index}
+          >
+          { typeAheadDef.widgetCommonFields.title ? <h4>{typeAheadDef.widgetCommonFields.title}</h4> : null }
+          <RoleTypeAheadFiller
+            perspective={typeAheadDef.widgetCommonFields.perspective}
+            candidates={typeAheadDef.candidates}
+            title={typeAheadDef.widgetCommonFields.title}
+          />
+          </div>
+        );
+      }
     }
   }
   buildRow({elements} : RowElementDef, index : number)

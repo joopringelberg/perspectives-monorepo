@@ -184,6 +184,33 @@ export const role2contextView = (function(context)
   }
 }).toString()
 
+// This view is a table [{roleType, contextGuid}; {filterValue, roleId}].
+// Use it by querying with key [roleType, contextGuid] to obtain all roles of that
+// type in that context that have a FilterValue property set.
+// Only roles that implement the Filter aspect (i.e. have the FilterValue property)
+// appear in this view.
+export const filterValueView = (function (doc)
+{
+  function takeGuid(s)
+  {
+    return s.substring( s.lastIndexOf("#") + 1 );
+  }
+  // a proxy for being a role:
+  if (doc.context && doc.properties)
+  {
+    var filterValues = doc.properties["model://perspectives.domains#tiodn6tcyc$a2g0s6fcxr$b1h7t3mdwp"];
+    if (filterValues && filterValues.length > 0)
+    {
+      doc.allTypes.forEach(
+        function(roleType)
+        {
+          emit([roleType, takeGuid(doc.context)], { filterValue: filterValues[0], roleId: doc.id });
+        }
+      );
+    }
+  }
+}).toString();
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////    INVERTED QUERY VIEWS

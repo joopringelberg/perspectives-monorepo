@@ -165,11 +165,11 @@ export type TabDef = {
 };
 
 export type ScreenElementDefTagged = {
-  elementType: "RowElementD" | "ColumnElementD" | "TableElementD" | "FormElementD" | "MarkDownElementD" | "ChatElementD" | "WhenElementD";
+  elementType: "RowElementD" | "ColumnElementD" | "TableElementD" | "FormElementD" | "MarkDownElementD" | "ChatElementD" | "WhenElementD" | "TypeAheadFillerElementD";
   element: ScreenElementDef;
 }
 
-export type ScreenElementDef = RowElementDef | ColumnElementDef | TableElementDef | FormElementDef | MarkDownElementDef | ChatElementDef | WhenElementDef;
+export type ScreenElementDef = RowElementDef | ColumnElementDef | TableElementDef | FormElementDef | MarkDownElementDef | ChatElementDef | WhenElementDef | TypeAheadFillerElementDef;
 
 export type WhenElementDef = {
   tag: "WhenDef";
@@ -225,6 +225,17 @@ export type ChatElementDef = {
     messageProperty: PropertyType;
     mediaProperty: PropertyType;
   };
+}
+
+export type FilterValueEntry = {
+  filterValue: string;
+  roleId: string;
+}
+
+export type TypeAheadFillerElementDef = {
+  tag: "TypeAheadFillerDef";
+  widgetCommonFields: WidgetCommonFields;
+  candidates: FilterValueEntry[];
 }
 
 export type WidgetCommonFields = {
