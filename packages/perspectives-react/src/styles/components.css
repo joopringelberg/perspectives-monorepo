@@ -11,16 +11,16 @@ for a discussion about variables and sass. */
 
 .failure:focus{
   outline: none;
-  box-shadow: 0 0 0 5px #dc3545; /* $red */
+  box-shadow: 0 0 0 5px var(--bs-danger);
 }
 
 .dropHere{
   outline: none;
-  box-shadow: 0 0 0 5px #0dcaf0; /* $cyan */
+  box-shadow: 0 0 0 5px var(--bs-info);
 }
 
 .card:focus, .dropzone:focus {
-	outline-color: rgb(0, 95, 204);
+	outline-color: var(--bs-link-color);
 	outline-style: auto;
 	outline-width: 1px;
 }
@@ -65,7 +65,8 @@ for a discussion about variables and sass. */
 
 /* For when the accordion item is open. */
 .accordion-button:not(.collapsed) {
-  --bs-accordion-active-bg: var(--bs-dark-bg-subtle) !important;
+  --bs-accordion-active-bg: var(--bs-accordion-btn-bg) !important;
+  --bs-accordion-active-color: var(--bs-accordion-btn-color) !important;
 }
 
 /* STYLES RELATED TO SWIPE GESTURES */
@@ -110,14 +111,20 @@ for a discussion about variables and sass. */
   box-shadow: none;
 }
 
+/* Active/selected field in a form row: warm tint of the primary colour */
+.selected-field-active {
+  background-color: rgba(var(--bs-primary-rgb), 0.18) !important;
+  color: var(--bs-body-color) !important;
+}
+
 .public-role {
-  background-color: #e6f7ff !important; /* Light blue background for public roles */
+  background-color: var(--bs-info-bg-subtle) !important;
 }
 
 .calculated-role {
-  background-color: #fff3cd !important; /* Light yellow background for calculated roles */
+  background-color: var(--bs-warning-bg-subtle) !important;
 }
 
 .cancelled-peer {
-  background-color: #ffe0e0 !important; /* Light red background for cancelled/disconnected peers */
+  background-color: var(--bs-danger-bg-subtle) !important;
 }

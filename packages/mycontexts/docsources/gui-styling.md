@@ -1,28 +1,28 @@
-# Technische beschrijving: GUI-styling in MyContexts
+# Technical reference: GUI styling in MyContexts
 
-Dit document beschrijft de systematiek van de grafische stijl in de packages
-`mycontexts` en `perspectives-react`. Het doel is inzicht te bieden in de
-laagopbouw, zodat toekomstige stijlaanpassingen zo veel mogelijk via Bootstrap-
-variabelen en Bootstrap-conventies kunnen worden doorgevoerd in plaats van via
-ad-hoc CSS-aanpassingen.
+This document describes the systematic approach to graphical styling in the
+packages `mycontexts` and `perspectives-react`. Its purpose is to clarify the
+layered structure, so that future style changes can be applied as much as
+possible via Bootstrap variables and Bootstrap conventions rather than ad-hoc
+CSS overrides.
 
 ---
 
-## 1. Opbouw van de stijllagen
+## 1. Structure of the style layers
 
-De stijl is opgebouwd in vier opeenvolgende lagen, elk met een specifieke
-verantwoordelijkheid:
+The styling is built up in four successive layers, each with a specific
+responsibility:
 
 ```
-Laag 1  Bootstrap base stylesheet (Bootswatch-thema, CDN of npm)
-Laag 2  Bootstrap CSS-variabelen overschreven in accessibility.css (:root)
-Laag 3  Bootstrap React-componenten via react-bootstrap (className props)
-Laag 4  Package-specifieke custom stylesheets (www.css, components.css, …)
+Layer 1  Bootstrap base stylesheet (Bootswatch theme, CDN or npm)
+Layer 2  Bootstrap CSS variables overridden in accessibility.css (:root)
+Layer 3  Bootstrap React components via react-bootstrap (className props)
+Layer 4  Package-specific custom stylesheets (www.css, components.css, …)
 ```
 
-### Laag 1 – Bootstrap base stylesheet
+### Layer 1 – Bootstrap base stylesheet
 
-`mycontexts` importeert Bootstrap via het Bootswatch-thema **Spacelab**:
+`mycontexts` imports Bootstrap via the Bootswatch **Spacelab** theme:
 
 ```typescript
 // packages/mycontexts/src/App.tsx
@@ -30,113 +30,115 @@ import 'bootswatch/dist/spacelab/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 ```
 
-Dit levert Bootstrap 5 plus het Spacelab kleurenpalet (koele grijsblauw-tonen).
-Bootstrap Icons worden als afzonderlijk lettertype-pakket ingeladen.
+This provides Bootstrap 5 plus the Spacelab colour palette (cool grey-blue
+tones). Bootstrap Icons are loaded as a separate font package.
 
-Er bestaat ook een `ThemeManager` (`src/themeManagement.ts`) die op runtime
-alternatieve Bootswatch-thema's of externe custom-thema's dynamisch kan laden
-via een `<link>`-element in `document.head`. Op dit moment wordt de
-`ThemeManager` nog niet actief gebruikt in de productieflow; de statische import
-in `App.tsx` is leidend.
+A `ThemeManager` (`src/themeManagement.ts`) also exists that can dynamically
+load alternative Bootswatch themes or external custom themes at runtime via a
+`<link>` element in `document.head`. At present the `ThemeManager` is not
+actively used in the production flow; the static import in `App.tsx` is
+authoritative.
 
-### Laag 2 – CSS-variabelen in `accessibility.css`
+### Layer 2 – CSS variables in `accessibility.css`
 
-In `packages/mycontexts/src/styles/accessibility.css` worden Bootstrap
-5-CSS-variabelen overschreven in de `:root`-scope. Dit is de aanbevolen manier
-om Bootstrap-kleuren, typografie en interactie-stijlen te veranderen zonder de
-Bootstrap-broncode te wijzigen.
+In `packages/mycontexts/src/styles/accessibility.css`, Bootstrap 5 CSS
+variables are overridden in the `:root` scope. This is the recommended approach
+for changing Bootstrap colours, typography and interaction styles without
+modifying the Bootstrap source.
 
-Overschreven variabelen (selectie):
+Overridden variables (selection):
 
-| Bootstrap-variabele | Nieuwe waarde | Doel |
+| Bootstrap variable | New value | Purpose |
 |---|---|---|
-| `--bs-body-color` | `#464e57` | Hogere contrastverhouding voor standaard tekst |
-| `--bs-secondary-color` | `#555555` | Betere leesbaarheid van secundaire tekst |
-| `--bs-form-text-color` | `#6b6b6b` | Leesbaarheid van helptext in formulieren |
-| `--bs-primary-rgb` / `--bs-primary` | `68, 110, 155` / `#446e9b` | Afwijkend primair blauw t.o.v. Spacelab-standaard |
-| `--bs-secondary-bg` / `--bs-secondary-rgb` | `#626b73` | Donkerder secundaire achtergrond |
-| `--bs-success` / `--bs-success-rgb` | `#007b00` | Donkerder groen voor betere zichtbaarheid |
-| `--bs-link-color` / `--bs-link-hover-color` | `#043466` / `#003d7e` | Links met verhoogd contrast |
-| `--bs-input-placeholder-color` | `#767676` | Placeholderkleur voldoet aan WCAG AA |
-| `--bs-accordion-btn-color` | `#212529` | Donkere tekst in accordeon-knoppen |
-| `--bs-code-color` | `#bd2e76` | Donkerder roze voor inline code |
+| `--bs-body-color` | `#464e57` | Higher contrast ratio for default text |
+| `--bs-secondary-color` | `#555555` | Better legibility for secondary text |
+| `--bs-form-text-color` | `#6b6b6b` | Legibility of help text in forms |
+| `--bs-primary-rgb` / `--bs-primary` | `165, 135, 97` / `#a58761` | Warm copper primary colour |
+| `--bs-body-bg` / `--bs-body-bg-rgb` | `#f6f0e2` / `246, 240, 226` | Warm cream/parchment page background |
+| `--bs-secondary-bg` / `--bs-secondary-rgb` | `#626b73` | Darker secondary background |
+| `--bs-success` / `--bs-success-rgb` | `#007b00` | Darker green for better visibility |
+| `--bs-link-color` / `--bs-link-hover-color` | `#7a5230` / `#3d2d20` | Dark warm-brown links with good contrast |
+| `--bs-input-placeholder-color` | `#767676` | Placeholder colour meeting WCAG AA |
+| `--bs-accordion-btn-bg` | `#b7a38b` | Tan/beige accordion header background |
+| `--bs-accordion-btn-color` | `#1b2334` | Dark navy text on accordion headers |
+| `--bs-accordion-active-bg` | `#b7a38b` | Same tan background when expanded |
+| `--bs-accordion-active-color` | `#1b2334` | Dark navy text when expanded |
+| `--bs-code-color` | `#bd2e76` | Darker pink for inline code |
 
-Door uitsluitend Bootstrap-variabelen te overschrijven, zijn alle onderdelen van
-de UI die dezelfde variabele gebruiken (knoppen, links, tabellen, …) automatisch
-mee-aangepast.
+By overriding only Bootstrap variables, all UI parts that share a variable
+(buttons, links, tables, …) adapt automatically.
 
-### Laag 3 – Bootstrap React-componenten (`react-bootstrap`)
+### Layer 3 – Bootstrap React components (`react-bootstrap`)
 
-Zowel `mycontexts` als `perspectives-react` gebruiken de bibliotheek
-`react-bootstrap` (v2.x, Bootstrap 5). React-Bootstrap vertaalt
-Bootstrap-componentklassen naar React-componenten. De stijl wordt aangebracht
-via de `className`-prop op deze componenten.
+Both `mycontexts` and `perspectives-react` use the `react-bootstrap` library
+(v2.x, Bootstrap 5). React-Bootstrap maps Bootstrap component classes to React
+components. Styling is applied via the `className` prop on these components.
 
-### Laag 4 – Custom stylesheets
+### Layer 4 – Custom stylesheets
 
-Beide packages bevatten eigen CSS-bestanden voor zaken die buiten de Bootstrap-
-defaults vallen.
+Both packages contain their own CSS files for aspects that fall outside
+Bootstrap defaults.
 
 ---
 
-## 2. Gebruik van Bootstrap-klassen via `className`
+## 2. Using Bootstrap classes via `className`
 
-### 2.1 React-Bootstrap componenten
+### 2.1 React-Bootstrap components
 
-De volgende Bootstrap-componenten worden geïmporteerd en gebruikt:
+The following Bootstrap components are imported and used:
 
-**`packages/mycontexts`** (hoofdzakelijk `www.tsx`, `App.tsx`):
+**`packages/mycontexts`** (mainly `www.tsx`, `App.tsx`):
 
-| Component | Gebruik |
+| Component | Use |
 |---|---|
-| `Container` / `Row` / `Col` | Rasterindeling van de drie-kolomsweergave (Who / What / Where) |
-| `Navbar` | Bovenste en onderste navigatiebalk |
-| `NavDropdown` | Hamburgermenu (hoofdmenu) in de bovenste balk |
-| `Tab` / `Tabs` | Mobiele tabbladen voor Who / What / Where-secties |
-| `Accordion` / `Accordion.Item` | Notificaties, klembord, chat-kanalen |
-| `Offcanvas` | Uitschuifpanelen (links: Me, Apps, Settings; beneden: notificaties) |
-| `Modal` | Inspector-dialoog, transactie-importdialoog |
-| `Button` | Diverse actieknoppen |
-| `Form` / `Form.Group` / `Form.Control` | Bevestigingscode bij transactie-import |
+| `Container` / `Row` / `Col` | Grid layout of the three-column view (Who / What / Where) |
+| `Navbar` | Top and bottom navigation bars |
+| `NavDropdown` | Hamburger menu (main menu) in the top bar |
+| `Tab` / `Tabs` | Mobile tabs for Who / What / Where sections |
+| `Accordion` / `Accordion.Item` | Notifications, clipboard, chat channels |
+| `Offcanvas` | Slide-in panels (left: Me, Apps, Settings; bottom: notifications) |
+| `Modal` | Inspector dialog, transaction import dialog |
+| `Button` | Various action buttons |
+| `Form` / `Form.Group` / `Form.Control` | Confirmation code for transaction import |
 
-**`packages/perspectives-react`** (componenten voor de PDR-schermen):
+**`packages/perspectives-react`** (components for PDR screens):
 
-| Component | Gebruik |
+| Component | Use |
 |---|---|
-| `Table` | Tabelweergave van roleinstanties in `perspectivetable.tsx` |
-| `Accordion` / `AccordionContext` | Accordeon-rijen voor PerspectiveTable |
-| `Form` | Formuliervelden in meerdere formuliercomponenten |
-| `Card` | Foutmelding in `screen.tsx` |
-| `Navbar` | Knoppenbalk boven tabellen (`tablecontrols.tsx`, `formcontrols.tsx`) |
-| `Col` / `Row` / `Container` / `Button` | Layout en knoppen doorheen meerdere componenten |
+| `Table` | Table view of role instances in `perspectivetable.tsx` |
+| `Accordion` / `AccordionContext` | Accordion rows for PerspectiveTable |
+| `Form` | Form fields in multiple form components |
+| `Card` | Error message in `screen.tsx` |
+| `Navbar` | Button bar above tables (`tablecontrols.tsx`, `formcontrols.tsx`) |
+| `Col` / `Row` / `Container` / `Button` | Layout and buttons throughout components |
 
-### 2.2 Utility-klassen in `className`-props
+### 2.2 Utility classes in `className` props
 
-Bootstrap-utility-klassen worden direct als string doorgegeven in de
-`className`-prop. Hieronder een overzicht van de meest gebruikte klassen:
+Bootstrap utility classes are passed directly as strings in the `className` prop.
+The most commonly used classes:
 
-**Achtergrondkleuren (met opacity-variabele):**
+**Column backgrounds:**
 
 ```tsx
-// www.tsx – drie kolommen op desktop
-<Col className='bg-primary animated-column' style={{'--bs-bg-opacity': '.1'} as React.CSSProperties}>
-<Col className='bg-primary animated-column' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
-<Col className='bg-primary animated-column' style={{'--bs-bg-opacity': '.3'} as React.CSSProperties}>
+// www.tsx – three columns on desktop, using body background
+<Col className='bg-body full-height animated-column'>
+<Col className='bg-body animated-column'>
+<Col className='bg-body full-height animated-column'>
 ```
 
-De opacity van de achtergrondkleur wordt via de Bootstrap CSS-variabele
-`--bs-bg-opacity` als inline style ingesteld. Zo kunnen de kolommen elk een
-lichtere tint van dezelfde primaire kleur tonen zonder extra CSS-regels.
+All three columns now use `bg-body` (which resolves to `--bs-body-bg`,
+the warm cream colour `#f6f0e2`), giving a uniform background across all
+columns.
 
-**Tekstkleuren en typografie:**
+**Text colours and typography:**
 
 ```tsx
 <h2 className='text-center text-dark column-heading'>
-<i className="bi bi-list text-light fs-2">
+<i className="bi bi-list fs-2" aria-hidden="true">
 <h3 className="text-center pt-5">
 ```
 
-**Afstand (spacing):**
+**Spacing:**
 
 ```tsx
 <Container fluid className='px-0'>
@@ -146,28 +148,28 @@ lichtere tint van dezelfde primaire kleur tonen zonder extra CSS-regels.
 <div className="text-center p-4 border border-secondary rounded">
 ```
 
-**Borders en ronden:**
+**Borders and rounding:**
 
 ```tsx
 <div className="text-center p-4 border border-secondary rounded">
 ```
 
-**Visueel verbergen (screenreader-tekst):**
+**Visually hidden (screen-reader text):**
 
 ```tsx
 <span className="visually-hidden">{i18next.t("mainMenu")}</span>
 ```
 
-**Subtiele achtergrond:**
+**Subtle background:**
 
 ```tsx
-<p className='bg-light-subtle'>Ga ergens heen</p>
+<p className='bg-light-subtle'>Go somewhere</p>
 ```
 
-**Scrollgedrag (eigen klasse, zie §3):**
+**Scroll behaviour (custom class, see §3):**
 
 ```tsx
-<Tab className='bg-primary full-mobile-height px-2 scrollable-content'>
+<Tab className='bg-body full-mobile-height px-2 scrollable-content'>
 ```
 
 ---
@@ -176,58 +178,61 @@ lichtere tint van dezelfde primaire kleur tonen zonder extra CSS-regels.
 
 ### 3.1 `src/styles/accessibility.css`
 
-**Doel:** Overschrijft Bootstrap CSS-variabelen voor betere toegankelijkheid
-(WCAG-contrast).
+**Purpose:** Overrides Bootstrap CSS variables for better accessibility
+(WCAG contrast) and applies the warm copper/parchment colour theme.
 
-Inhoud:
-- `:root`-blok met gewijzigde `--bs-*`-variabelen (zie §1, laag 2).
-- `.h2.column-heading` / `.h3.column-heading`: lichte afwijking van standaard
-  Bootstrap h4-/h5-stijlen voor de kolom-headers.
-- `.content-section-area:focus`: zichtbaar focus-outline voor toetsenbordnavigatie.
-- `.keyboard-nav-instructions`: visueel verborgen instructies voor screenreaders.
-- `.dropdown-toggle:focus`, `.navbar *:focus`: vergroot focus-outline (3 px
-  witte rand + gekleurde box-shadow) op navbar-elementen.
-- `*:focus-visible`: globale focus-stijl met `--bs-link-color` voor consistentie.
+Contents:
+- `:root` block with modified `--bs-*` variables (see §1, layer 2).
+- `.btn-primary` block: dark text (`#1b2334`) on warm copper buttons for
+  sufficient contrast.
+- `h2.column-heading` / `h3.column-heading`: slight deviation from default
+  Bootstrap h4/h5 styles for column headers.
+- `.content-section-area:focus`: visible focus outline for keyboard navigation,
+  using `var(--bs-link-color)`.
+- `.keyboard-nav-instructions`: visually hidden instructions for screen readers.
+- `.dropdown-toggle:focus`, `.navbar *:focus`: enlarged focus outline (3px
+  white border + coloured box-shadow) on navbar elements.
+- `*:focus-visible`: global focus style with `--bs-link-color` for consistency.
 
 ### 3.2 `src/styles/www.css`
 
-**Doel:** Lay-out en animaties voor het hoofdscherm (WWWComponent).
+**Purpose:** Layout and animations for the main screen (WWWComponent).
 
-Inhoud:
+Contents:
 
-| Klasse | Beschrijving |
+| Class | Description |
 |---|---|
-| `.full-height` | Hoogte = dvh minus boven- en onderste navbar (gebruikt `--bottom-navbar-height`, `--top-navbar-height` CSS-variabelen). |
-| `.full-mobile-height` | Hoogte voor mobiel via `--mobile-content-height`. |
-| `.full-www-content-height` | Hoogte minus beide navbars én de kolom-header (`--who-header-height`). |
-| `.chat-height` | Halve beschikbare hoogte voor chatvenster. |
-| `.slide-in-from-right` / `.slide-out-to-right` | CSS-animaties voor het inschuiven/uitschuiven van vensters. |
-| `.hide-caret` | Verbergt het Bootstrap-dropdown-pijltje (used on `NavDropdown`). |
-| `.scrollable-content` | `overflow-y: auto; overflow-x: hidden` voor scrolbare kolommen. |
-| `.animated-column` | Vloeiende breedte-overgang bij klikken op kolom (`flex-basis`, `width`, `padding`). |
-| `.accordion` | Overschrijft `--bs-accordion-body-padding-x` naar `0.5rem`. |
-| `.container` | Overschrijft `--bs-gutter-x` naar `0.5rem`. |
-| `.markdown` | Leesbaarheid van Markdown-blokken; gebruikt de accordion-padding-variabelen als fallback. |
-| `.content-top-aligned` | Flex-kolom met `justify-content: flex-start` voor bovenlijning van content. |
-| `.navbar-title` | Afgeknotte titeltekst met `text-overflow: ellipsis` in de bovenste Navbar. |
-| `.skip-link` | Toegankelijkheids-skip-link, visueel verborgen tenzij gefocust. |
-| `.cursor-pointer` | Handcursor bij hover voor klikbare elementen. |
+| `.full-height` | Height = dvh minus top and bottom navbars (uses `--bottom-navbar-height`, `--top-navbar-height` CSS variables). |
+| `.full-mobile-height` | Height for mobile via `--mobile-content-height`. |
+| `.full-www-content-height` | Height minus both navbars and the column header (`--who-header-height`). |
+| `.chat-height` | Half the available height for the chat window. |
+| `.slide-in-from-right` / `.slide-out-to-right` | CSS animations for panel slide-in/out. |
+| `.hide-caret` | Hides the Bootstrap dropdown arrow (used on `NavDropdown`). |
+| `.scrollable-content` | `overflow-y: auto; overflow-x: hidden` for scrollable columns. |
+| `.animated-column` | Smooth width transition when clicking a column (`flex-basis`, `width`, `padding`). |
+| `.accordion` | Overrides `--bs-accordion-body-padding-x` to `0.5rem`. |
+| `.container` | Overrides `--bs-gutter-x` to `0.5rem`. |
+| `.markdown` | Legibility of Markdown blocks; uses accordion padding variables as fallback. |
+| `.content-top-aligned` | Flex column with `justify-content: flex-start` for top-aligned content. |
+| `.navbar-title` | Truncated title text with `text-overflow: ellipsis` in the top Navbar. |
+| `.skip-link` | Accessibility skip link, visually hidden unless focused. |
+| `.cursor-pointer` | Hand cursor on hover for clickable elements. |
 
-Overschrijvingen van Bootstrap-defaults via variabelen of specifiekere selectors:
+Bootstrap default overrides via variables or more specific selectors:
 
 ```css
-/* Dropdown-link kleur via Bootstrap variabelen */
+/* Dropdown link colour via Bootstrap variables */
 html body .dropdown-menu .dropdown-item {
   --bs-dropdown-link-color: var(--bs-primary);
   --bs-dropdown-link-hover-color: var(--bs-info-text);
 }
 
-/* Focus-ring kleur via Bootstrap variabele */
+/* Focus ring colour via Bootstrap variable */
 :focus {
   outline-color: var(--bs-warning);
 }
 
-/* Accordion-caret verbergen */
+/* Accordion caret hidden */
 .accordion-button:after {
   display: none;
 }
@@ -235,28 +240,23 @@ html body .dropdown-menu .dropdown-item {
 
 ### 3.3 `src/styles/slidingPanels.css`
 
-**Doel:** Stijl voor het `SlidingPanels`-patroon (een hoofd-paneel met een
-bedek-paneel dat van rechts inschuift).
+**Purpose:** Styles for the `SlidingPanels` pattern (a main panel with a cover
+panel that slides in from the right).
 
-| Klasse | Beschrijving |
+| Class | Description |
 |---|---|
-| `.sliding-panels-container` | `overflow-x: hidden`; flex-container op 100% breedte. |
-| `.main-panel` | Vult beschikbare ruimte; vaste achtergrondkleur `#f8f9fa` (Bootstrap `$gray-100`). |
-| `.cover-panel` | Absoluut gepositioneerd, begint op `right: -100%`, schuift naar `right: 0` via CSS-transitie. Z-index 1030 (boven de Navbar). |
-| `.cover-panel.open` | Activeert de inschuif-positie. |
-| `.has-open-panel .main-panel` | `pointer-events: none` zodat het achterliggende paneel niet klikbaar is. |
-| `.sliding-panel-content` | Flex-grow 1 met ondermarge. |
-
-De achtergrondkleur `#f8f9fa` is de Bootstrap 5 `$gray-100`-waarde, maar staat
-hier als hardcoded hex. Bij een themawijziging verdient het aanbeveling dit te
-vervangen door `var(--bs-light)` of `var(--bs-body-bg)`.
+| `.sliding-panels-container` | `overflow-x: hidden`; flex container at 100% width. |
+| `.main-panel` | Fills available space; uses `var(--bs-body-bg)` for background. |
+| `.cover-panel` | Absolutely positioned, starts at `right: -100%`, slides to `right: 0` via CSS transition. Z-index 1030 (above the Navbar). Also uses `var(--bs-body-bg)`. |
+| `.cover-panel.open` | Activates the slide-in position. |
+| `.has-open-panel .main-panel` | `pointer-events: none` so the underlying panel is not clickable. |
+| `.sliding-panel-content` | Flex-grow 1 with bottom margin. |
 
 ### 3.4 `src/styles/splash.css`
 
-**Doel:** Basisstijl voor het laadscherm (`loadingScreen.tsx`).
+**Purpose:** Basic style for the loading screen (`loadingScreen.tsx`).
 
-Bevat één klasse `.introductionSplash` met `font-size: large`. De commentaar-
-regels bevatten uitgeschakelde kleurinstellingen; deze zijn nog niet actief.
+Contains a single class `.introductionSplash` with `font-size: large`.
 
 ---
 
@@ -264,182 +264,165 @@ regels bevatten uitgeschakelde kleurinstellingen; deze zijn nog niet actief.
 
 ### 4.1 `src/styles/components.css`
 
-**Doel:** Stijlen voor generieke PDR-schermcomponenten (tabellen,
-accordeons, sleepgebieden).
+**Purpose:** Styles for generic PDR screen components (tables, accordions,
+drop areas).
 
-Inhoud:
+Contents:
 
-| Klasse / selector | Beschrijving |
+| Class / selector | Description |
 |---|---|
-| `::placeholder` | Hogere contrastkleur voor placeholder-tekst via `--bs-input-placeholder-color`. |
-| `.failure:focus` | Rode (Bootstrap `$red` = `#dc3545`) focus-ring voor validatiefouten. |
-| `.dropHere` | Cyaan (Bootstrap `$cyan` = `#0dcaf0`) ring voor actieve dropzones. |
-| `.card:focus, .dropzone:focus` | Blauwe outline voor focusbare kaarten. |
-| `.navbarCard` | Verminderde verticale padding voor kaartelementen in een Navbar. |
-| `.widget` | `flex-grow: 1` voor widgets die beschikbare ruimte moeten opvullen. |
-| `.disabledIcon` | Verminderde opacity + `pointer-events: none` voor uitgeschakelde iconen. |
-| `.accordion-button::after` | Caretknop naar rechterrand (`margin-left: auto`). |
-| `.accordion-button > div` | Ruimte tussen content en caret. |
-| `.accordion-button .btn-link:hover/focus` | Verwijdert Bootstrap hover-stijl in accordeon-knoppen. |
-| `.accordion-button:not(.collapsed)` | Overschrijft `--bs-accordion-active-bg` met `--bs-dark-bg-subtle`. |
-| `.swiping` | Vloeiende transform + opacity bij swipe-gebaren. |
-| `.swipe-confirm-element` / `.swipe-confirm-buttons` | Flex-layout voor swipe-bevestigingsopties. |
-| `.accordion-actions` | Inline flex-rij voor accordeon-actieknoppen. |
-| `.hide-caret.dropdown-toggle::after` | Verbergt Bootstrap dropdown-pijl (met `!important`). |
-| `.card-selected` | Visuele markering van geselecteerde kaart via `--bs-primary` box-shadow + achtergrond. |
-| `.public-role` | Lichtblauwe achtergrond voor publieke-rol-indicators. |
-| `.calculated-role` | Lichtgele achtergrond voor berekende-rol-indicators. |
-| `.cancelled-peer` | Lichtroze achtergrond voor verbroken peer-verbindingen. |
+| `::placeholder` | Higher contrast colour for placeholder text via `--bs-input-placeholder-color`. |
+| `.failure:focus` | Red (`var(--bs-danger)`) focus ring for validation errors. |
+| `.dropHere` | Cyan (`var(--bs-info)`) ring for active drop zones. |
+| `.card:focus, .dropzone:focus` | Coloured outline for focusable cards, using `var(--bs-link-color)`. |
+| `.navbarCard` | Reduced vertical padding for card elements in a Navbar. |
+| `.widget` | `flex-grow: 1` for widgets that must fill available space. |
+| `.disabledIcon` | Reduced opacity + `pointer-events: none` for disabled icons. |
+| `.accordion-button::after` | Caret button to right edge (`margin-left: auto`). |
+| `.accordion-button > div` | Space between content and caret. |
+| `.accordion-button .btn-link:hover/focus` | Removes Bootstrap hover style inside accordion buttons. |
+| `.accordion-button:not(.collapsed)` | Uses `var(--bs-accordion-btn-bg)` and `var(--bs-accordion-btn-color)` so the expanded header keeps the same tan/beige styling. |
+| `.swiping` | Smooth transform + opacity during swipe gestures. |
+| `.swipe-confirm-element` / `.swipe-confirm-buttons` | Flex layout for swipe confirmation options. |
+| `.accordion-actions` | Inline flex row for accordion action buttons. |
+| `.hide-caret.dropdown-toggle::after` | Hides Bootstrap dropdown arrow (with `!important`). |
+| `.card-selected` | Visual highlight for selected cards via `var(--bs-primary)` box-shadow + background. |
+| `.public-role` | Uses `var(--bs-info-bg-subtle)` for public role indicators. |
+| `.calculated-role` | Uses `var(--bs-warning-bg-subtle)` for calculated role indicators. |
+| `.cancelled-peer` | Uses `var(--bs-danger-bg-subtle)` for disconnected peer connections. |
 
-Opmerkingen:
-- De hardcoded hexwaarden `#dc3545` en `#0dcaf0` corresponderen met Bootstrap
-  5-variabelen `$red` en `$cyan`. Het commentaar in de code vermeldt dit
-  expliciet. Om stijlaanpassingen via Bootstrap-variabelen mogelijk te maken
-  zouden deze vervangen kunnen worden door `var(--bs-danger)` resp. `var(--bs-info)`.
-- De klasse `.card-selected` gebruikt al `var(--bs-primary)` met een fallback —
-  een goed voorbeeld van de gewenste aanpak.
-- `.public-role`, `.calculated-role` en `.cancelled-peer` gebruiken hardcoded
-  kleuren. Ook hier zijn Bootstrap-variabelen passender.
+All colour values in this file use Bootstrap CSS variables rather than hardcoded
+hex values, so they adapt automatically when the host application overrides
+`--bs-*` variables.
 
 ### 4.2 `src/styles/highlight.css`
 
-**Doel:** Kleurthema voor syntaxmarkering van ARC-code (via Highlight.js).
+**Purpose:** Colour theme for syntax highlighting of ARC code (via Highlight.js).
 
-Dit bestand bevat het **Solar Flare** thema (Base16-variant) van Highlight.js.
-Het bevat geen Bootstrap-variabelen; het is volledig zelfstandig en definieert
-zijn eigen achtergrond- en tekstkleur voor code-blokken. Het thema kan worden
-vervangen door een ander Highlight.js-thema via het keuze-script
-`choose_highlight-theme.sh` in de `perspectives-react`-root.
+This file contains the **Solar Flare** theme (Base16 variant) from Highlight.js.
+It contains no Bootstrap variables; it is fully self-contained and defines its
+own background and text colours for code blocks. The theme can be replaced by
+another Highlight.js theme via the selection script `choose_highlight-theme.sh`
+in the `perspectives-react` root.
 
 ---
 
-## 5. CSS-variabelen als stylingvectorpunt
+## 5. CSS variables as styling entry points
 
-De huidige implementatie volgt een gecombineerde aanpak:
+The current implementation follows a combined approach:
 
-1. **Bootstrap CSS-variabelen** (`--bs-*`) worden overschreven in
-   `accessibility.css` (`:root`) en op component-niveau via `style={}`-props.
-   Dit is de **aanbevolen** manier om Bootstrap-elementen thema-breed te
-   wijzigen.
+1. **Bootstrap CSS variables** (`--bs-*`) are overridden in `accessibility.css`
+   (`:root`) and at component level via `style={}` props.
+   This is the **recommended** way to make theme-wide changes to Bootstrap elements.
 
-2. **Eigen CSS-variabelen** worden gedefinieerd voor layout-specifieke afmetingen
-   die Bootstrap niet kent:
+2. **Custom CSS variables** are defined for layout-specific dimensions that
+   Bootstrap does not know about:
    - `--bottom-navbar-height`
    - `--top-navbar-height`
    - `--mobile-content-height`
    - `--who-header-height`
    - `--markdown-padding-y` / `--markdown-padding-x`
 
-   Deze variabelen zijn gedeclareerd als impliciet gebruik (de klassen verwijzen
-   ernaar, maar de initiële waarden worden elders ingesteld via JavaScript of
-   zijn CSS-standaardwaarden).
+   These variables are declared as implicit use (the classes reference them, but
+   initial values are set elsewhere via JavaScript or are CSS default values).
 
-3. **Hardcoded hexwaarden** komen voor in `slidingPanels.css` (`#f8f9fa`),
-   `components.css` (`#dc3545`, `#0dcaf0`, `#e6f7ff`, `#fff3cd`, `#ffe0e0`) en
-   `accessibility.css` (`#0056b3`). Dit zijn gebieden waar in de toekomst
-   Bootstrap-variabelen kunnen worden toegepast.
+3. **No remaining hardcoded hex values** in `slidingPanels.css`,
+   `components.css` or `accessibility.css`. All colour values reference
+   Bootstrap CSS variables, making the entire UI responsive to theme changes.
 
 ---
 
-## 6. Aanbevelingen voor stijlexperimenten
+## 6. Recommendations for style experiments
 
-Op basis van bovenstaande analyse zijn dit de aanbevolen aanknopingspunten voor
-stijlaanpassingen:
+Based on the analysis above, these are the recommended entry points for style
+changes:
 
-### 6.1 Kleurveranderingen (thema-breed)
+### 6.1 Colour changes (theme-wide)
 
-Pas de `:root`-variabelen in `accessibility.css` aan:
+Adjust the `:root` variables in `accessibility.css`:
 
 ```css
 :root {
-  --bs-primary:     #nieuwe-kleur;
+  --bs-primary:     #new-colour;
   --bs-primary-rgb: r, g, b;
-  --bs-secondary-bg: #nieuwe-kleur;
-  /* enzovoort */
+  --bs-body-bg:     #new-background;
+  /* etc. */
 }
 ```
 
-Alle Bootstrap-componenten die `--bs-primary` gebruiken (knoppen, navbars,
-`bg-primary`, links) passen automatisch mee.
+All Bootstrap components that use `--bs-primary` (buttons, navbars,
+`bg-primary`, links) adapt automatically.
 
-### 6.2 Thema wisselen (Bootswatch)
+### 6.2 Switching theme (Bootswatch)
 
-Vervang de import in `App.tsx`:
+Replace the import in `App.tsx`:
 
 ```typescript
-// Van:
+// From:
 import 'bootswatch/dist/spacelab/bootstrap.min.css';
-// Naar:
+// To:
 import 'bootswatch/dist/flatly/bootstrap.min.css';
 ```
 
-Of activeer de `ThemeManager` om runtime-themawisseling mogelijk te maken.
+Or activate the `ThemeManager` to enable runtime theme switching.
 
 ### 6.3 Font
 
-Bootstrap 5 gebruikt standaard de native system-font-stack. Om een ander font
-te gebruiken, overschrijf:
+Bootstrap 5 uses the native system-font stack by default. To use a different
+font, override:
 
 ```css
 :root {
-  --bs-body-font-family: 'Naam van het font', sans-serif;
-  --bs-font-sans-serif: 'Naam van het font', sans-serif;
+  --bs-body-font-family: 'Font Name', sans-serif;
+  --bs-font-sans-serif: 'Font Name', sans-serif;
 }
 ```
 
-### 6.4 Kaders en borders
+### 6.4 Borders and rounding
 
-Bootstrap 5 gebruikt `--bs-border-color` en `--bs-border-radius`:
+Bootstrap 5 uses `--bs-border-color` and `--bs-border-radius`:
 
 ```css
 :root {
-  --bs-border-color: #gewenste-kleur;
-  --bs-border-radius: 0; /* vierkante hoeken */
+  --bs-border-color: #desired-colour;
+  --bs-border-radius: 0; /* sharp corners */
 }
 ```
 
-### 6.5 Hardcoded waarden vervangen door variabelen
+### 6.5 Replacing hardcoded values with variables
 
-Kandidaten in `components.css`:
-
-```css
-/* Huidig: */
-.failure:focus { box-shadow: 0 0 0 5px #dc3545; }
-.dropHere      { box-shadow: 0 0 0 5px #0dcaf0; }
-
-/* Aanbevolen: */
-.failure:focus { box-shadow: 0 0 0 5px var(--bs-danger); }
-.dropHere      { box-shadow: 0 0 0 5px var(--bs-info);   }
-```
-
-In `slidingPanels.css`:
+The recommended pattern for any new colour values in custom CSS:
 
 ```css
-/* Huidig: */
-background: #f8f9fa;
+/* Instead of: */
+.my-class { box-shadow: 0 0 0 5px #dc3545; }
 
-/* Aanbevolen: */
-background: var(--bs-body-bg);
+/* Use: */
+.my-class { box-shadow: 0 0 0 5px var(--bs-danger); }
 ```
+
+This ensures the colour adapts when the Bootstrap theme changes.
 
 ---
 
-## 7. Bestandsoverzicht
+## 7. File overview
 
 ```
 packages/mycontexts/
 └── src/
-    ├── App.tsx                          # Bootstrap-thema-import (Bootswatch Spacelab)
-    ├── themeManagement.ts               # ThemeManager voor runtime-themawisseling
+    ├── App.tsx                          # Bootstrap theme import (Bootswatch Spacelab)
+    ├── themeManagement.ts               # ThemeManager for runtime theme switching
     └── styles/
-        ├── accessibility.css            # Bootstrap CSS-variabelen overschreven (:root)
-        ├── www.css                      # Layout- en animatiestijlen voor WWWComponent
-        ├── slidingPanels.css            # Inschuifpanelen
-        └── splash.css                   # Laadscherm
+        ├── accessibility.css            # Bootstrap CSS variables overridden (:root) +
+        │                                #   warm copper/parchment colour theme
+        ├── www.css                      # Layout and animation styles for WWWComponent
+        ├── slidingPanels.css            # Slide-in panels (uses var(--bs-body-bg))
+        └── splash.css                   # Loading screen
 
 packages/perspectives-react/
 └── src/
     └── styles/
-        ├── components.css               # Generieke PDR-UI-stijlen (tabellen, dropzones)
-        └── highlight.css                # Highlight.js thema voor ARC-syntaxmarkering
+        ├── components.css               # Generic PDR UI styles (tables, drop zones)
+        │                                #   All colours via Bootstrap variables
+        └── highlight.css                # Highlight.js theme for ARC syntax highlighting
 ```
