@@ -43,7 +43,6 @@ import Data.Array (concat, delete, head)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
-import Data.String (drop, length) as Str
 import Data.Traversable (for, for_)
 import Effect.Class.Console (log)
 import Foreign.Object (mapWithKey)

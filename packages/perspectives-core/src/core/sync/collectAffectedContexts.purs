@@ -49,7 +49,6 @@ import Perspectives.Instances.ObjectGetters (context, contextType, roleType) as 
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwards, isCalculatedUserQuery, shouldResultInContextStateQuery, shouldResultInRoleStateQuery, startsWithFilter)
 import Perspectives.InvertedQuery.Storable (getContextQueries, getFilledQueries, getFillerQueries, getPropertyQueries, getRoleQueries)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey)
-import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.DeltaStore (getDeltasForResource)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, tryGetPerspectEntiteit)

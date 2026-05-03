@@ -77,6 +77,7 @@ data RequestType
   | GetFile
   | GetPublicUrl
   | GetSelectedRoleFromClipboard
+  | SubscribeSelectedRoleFromClipboard
   | GetSettings
   | GetWiderContexts
   | GetInspectableContext

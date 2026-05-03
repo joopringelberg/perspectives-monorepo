@@ -61,7 +61,7 @@ import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), PropertyType(..), RoleKind(..))
 import Perspectives.Sidecar.StableIdMapping (Stable) as Sidecar
 import Perspectives.Types.ObjectGetters (propertiesInPerspective)
 import Simple.JSON (class WriteForeign, write)

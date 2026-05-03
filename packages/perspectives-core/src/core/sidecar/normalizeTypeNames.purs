@@ -39,16 +39,17 @@ import Prelude
 
 import Control.Monad.Reader (Reader, ask, runReaderT)
 import Data.Array (catMaybes, elem, foldM)
+import Data.Either (Either(..))
 import Data.Map (Map, empty, fromFoldable, insert, lookup, toUnfoldable, union) as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (Object, fromFoldable, toUnfoldable, values)
+import Foreign.Object (fromFoldable, toUnfoldable, values)
 import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
-import Perspectives.Data.EncodableMap (EncodableMap, toUnfoldable, fromFoldable, empty) as EM
+import Perspectives.Data.EncodableMap (EncodableMap, empty, fromFoldable, toUnfoldable) as EM
 import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), UpstreamAutomaticEffect(..), UpstreamStateNotification(..))
 import Perspectives.Identifiers (qualifyWith, splitTypeUri, typeUri2typeNameSpace)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
@@ -77,7 +78,7 @@ import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..), stateSpec2StateIdentifier, PropertyVerbs(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyValueFillers)
 import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), IndexedRole(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
@@ -85,6 +86,7 @@ import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.HashQFD (qfdSignature)
 import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), fromLocalModels, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping, lookupActionCuid, lookupContextIndividualId, lookupRoleIndividualId)
+import Simple.JSON (readJSON, writeJSON)
 
 -- Environment carried during normalization: sidecars and a perspective id rewrite map
 type Env =
@@ -703,6 +705,12 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
             Nothing -> Nothing
             Just sim -> lookupRoleIndividualId sim ident
       pure $ RoleIndividual (RoleInstance (maybe ident identity stableId))
+    normalizeQueryFunction (ContextTypeFilter serialisedADT) = do
+      case readJSON serialisedADT of
+        Left e -> pure $ ContextTypeFilter serialisedADT -- if we cannot parse the ADT, leave it as is
+        Right (adt :: ADT ContextType) -> do
+          adt' <- traverse fqn2tid adt
+          pure $ ContextTypeFilter $ writeJSON adt'
     normalizeQueryFunction f = pure f
 
 instance normalizeNotificationInst :: Normalize Notification where
@@ -973,8 +981,22 @@ normalizeWidgetCommonFields w = do
       Nothing -> w.perspectiveId
       Just stable -> stable
   fillFrom' <- traverse normalize w.fillFrom
+  fillPropertyFrom' <- traverse normalizePropertyValueFillers w.fillPropertyFrom
   fieldConstraints' <- traverse (traverse normalizeFieldConstraintDef) w.fieldConstraints
-  pure $ w { propertyRestrictions = propertyRestrictions', withoutProperties = withoutProperties', userRole = userRole', perspectiveId = perspectiveId', fillFrom = fillFrom', fieldConstraints = fieldConstraints' }
+  pure $ w
+    { propertyRestrictions = propertyRestrictions'
+    , withoutProperties = withoutProperties'
+    , userRole = userRole'
+    , perspectiveId = perspectiveId'
+    , fillFrom = fillFrom'
+    , fillPropertyFrom = fillPropertyFrom'
+    , fieldConstraints = fieldConstraints'
+    }
+
+normalizePropertyValueFillers :: PropertyValueFillers -> WithSideCars PropertyValueFillers
+normalizePropertyValueFillers fillers = do
+  let pairs = EM.toUnfoldable fillers :: Array (Tuple PropertyType QueryFunctionDescription)
+  EM.fromFoldable <$> for pairs (\(Tuple k v) -> Tuple <$> fqn2tid k <*> normalize v)
 
 normalizeFieldConstraintDef :: FieldConstraintDef -> WithSideCars FieldConstraintDef
 normalizeFieldConstraintDef fc = do
@@ -1018,4 +1040,3 @@ buildPerspectiveIdMap (DomeinFile dfr) env0 =
           mkTuples ownerTid cr.perspectives
   in
     OBJ.fromFoldable (erTuples <> crTuples)
-

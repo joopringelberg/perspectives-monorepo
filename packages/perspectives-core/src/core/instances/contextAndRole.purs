@@ -44,7 +44,7 @@ import Perspectives.InstanceRepresentation (ContextRecord, PerspectContext(..), 
 import Perspectives.InstanceRepresentation.PublicUrl (PublicUrl)
 import Perspectives.Representation.Class.PersistentType (getContext)
 import Perspectives.Representation.Context (Context(..))
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType, StateIdentifier)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, roleAspectsClosure)
 import Prelude (bind, flip, identity, pure, show, ($), (+), (/), (<#>), (<$>), (<<<), (<>))

@@ -27,11 +27,11 @@ import Control.Lazy (defer)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (fromFoldable, snoc)
 import Data.Either (Either(..))
-import Data.Foldable (all, foldl)
+import Data.Foldable (foldl)
 import Data.Int (toNumber)
 import Data.JSDate (toISOString)
 import Data.List (List(..), concat, filter, find, intercalate, many, null, singleton, some, (:))
-import Data.List.NonEmpty (NonEmptyList, head, length, toList, singleton) as LNE
+import Data.List.NonEmpty (toList) as LNE
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.String (indexOf, splitAt, trim, Pattern(..)) as STRING
@@ -43,14 +43,14 @@ import Data.Tuple (Tuple(..))
 import Data.Unit (Unit, unit)
 import Effect.Class (liftEffect)
 import Parsing (fail, failWithPosition)
-import Parsing.Combinators (between, lookAhead, option, optionMaybe, sepBy, sepBy1, try, (<?>))
+import Parsing.Combinators (between, lookAhead, option, optionMaybe, sepBy, try, (<?>))
 import Parsing.Indent.Monadic (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FilledByAttribute(..), FilledBySpecification(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FillPropertyValueE, FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
-import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step)
+import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step, typeCombinations)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseName, prefixedName, qualifiedName, reserved, stringUntilNewline)
 import Perspectives.Parsing.Arc.IndentParser (IP, arcPosition2Position, containsTab, entireBlock, entireBlock1, getArcParserState, getCurrentContext, getCurrentState, getObject, getPosition, getStateIdentifier, getSubject, inSubContext, isEof, isIndented, isNextLine, nestedBlock, protectObject, protectOnEntry, protectOnExit, protectSubject, sameOrOutdented', setObject, setOnEntry, setOnExit, setSubject, withArcParserState, withEntireBlock)
@@ -560,49 +560,7 @@ enumeratedRole_ uname knd pos = do
 -- Enumerated. This will be fixed in PhaseThree.
 filledBy :: IP (Maybe RolePart)
 filledBy = optionMaybe
-  ( reserved "filledBy" *>
-      ( (try (FilledBySpecifications <$> token.parens (makeSpec <$> token.commaSep1 fillerGroup)))
-          <|> (try (FilledBySpecifications <<< Combination <$> token.parens (plusSep filler)))
-          <|> (FilledBySpecifications <<< Alternatives <<< LNE.singleton <$> (try filler))
-      )
-  )
-  where
-  filler :: IP FilledByAttribute
-  filler = do
-    role <- arcIdentifier
-    mcontext <- optionMaybe (reserved "in" *> arcIdentifier)
-    case mcontext of
-      Nothing -> do
-        pure $ FilledByAttribute role (ContextType "")
-      Just context -> pure $ FilledByAttribute role (ContextType context)
-
-  plus :: IP String
-  plus = token.symbol "+"
-
-  plusSep :: forall a. IP a -> IP (LNE.NonEmptyList a)
-  plusSep p = sepBy1 p plus
-
-  -- | A fillerGroup is either a parenthesised combination `(A + B)` or a single filler `A`.
-  fillerGroup :: IP (LNE.NonEmptyList FilledByAttribute)
-  fillerGroup =
-    (try (token.parens (plusSep filler)))
-      <|> (LNE.singleton <$> filler)
-
-  -- | Determine the appropriate FilledBySpecification from a list of fillerGroups:
-  -- | * All groups are singletons → Alternatives (each group's head is the sole attribute)
-  -- | * Single group with multiple members → Combination (unwrap the sole group)
-  -- | * Multiple groups, at least one with multiple members → DisjunctionOfConjunctions
-  makeSpec :: LNE.NonEmptyList (LNE.NonEmptyList FilledByAttribute) -> FilledBySpecification
-  makeSpec groups =
-    if all (\g -> LNE.length g == 1) groups
-    -- Every group is a singleton: extract the single element from each group.
-    -- LNE.head is safe here because LNE.length g == 1 guarantees exactly one element.
-    then Alternatives (LNE.head <$> groups)
-    else if LNE.length groups == 1
-    -- Single group with multiple members: use Combination.
-    -- LNE.head is safe here because LNE.length groups == 1 guarantees exactly one group.
-    then Combination (LNE.head groups)
-    else DisjunctionOfConjunctions groups
+  (reserved "filledBy" *> (FilledBySpecifications <$> typeCombinations))
 
 -- | rolePart =
 -- |   <perspectiveOn> |
@@ -628,13 +586,13 @@ rolePart = do
     -- When `second` is non-empty, twoReservedWords found a reserved word immediately
     -- after the keyword. Consume the keyword first so this becomes a committed (consumed)
     -- error that propagates even through any `try` wrapper around the inner parser.
-    "aspect", second | second /= "" -> void (reserved "aspect") *> failReservedWord second
+    "aspect", second' | second' /= "" -> void (reserved "aspect") *> failReservedWord second'
     "aspect", _ -> aspectE
-    "indexed", second | second /= "" -> void (reserved "indexed") *> failReservedWord second
+    "indexed", second' | second' /= "" -> void (reserved "indexed") *> failReservedWord second'
     "indexed", _ -> indexedE
-    "property", second | second /= "" -> void (reserved "property") *> failReservedWord second
+    "property", second' | second' /= "" -> void (reserved "property") *> failReservedWord second'
     "property", _ -> propertyE
-    "view", second | second /= "" -> void (reserved "view") *> failReservedWord second
+    "view", second' | second' /= "" -> void (reserved "view") *> failReservedWord second'
     "view", _ -> viewE
     "action", _ -> SQP <$> actionE
     "screen", _ -> Screen <$> screenE
@@ -1820,69 +1778,44 @@ widgetCommonFields = do
     if isIndented' then withPos do
       mFillFrom <- optionMaybe (reserved "fillfrom" *> step)
       -- Parse at most one selector: either `with …` or `without …`.
-      keyword <- scanIdentifier
-      case keyword of
-        "with" -> do
-          withProps <- reserved "with" *> withoutProperties
-          -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
-          (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
-          mroleVerbs <- optionMaybe roleVerbs
-          fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
-          end <- getPosition
-          pure
-            { title
-            , perspective
-            , fillFrom: mFillFrom
-            , withProps: Just withProps
-            , withoutProps: Nothing
-            , withoutVerbs
-            , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
-            , fieldConstraints
-            , start
-            , end
-            }
-        "without" -> do
-          withoutProps <- reserved "without" *> withoutProperties
-          -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
-          (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
-          mroleVerbs <- optionMaybe roleVerbs
-          fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
-          end <- getPosition
-          pure
-            { title
-            , perspective
-            , fillFrom: mFillFrom
-            , withProps: Nothing
-            , withoutProps: Just withoutProps
-            , withoutVerbs
-            , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
-            , fieldConstraints
-            , start
-            , end
-            }
-        _ -> do
-          (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
-          mroleVerbs <- optionMaybe roleVerbs
-          fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
-          end <- getPosition
-          pure
-            { title
-            , perspective
-            , fillFrom: mFillFrom
-            , withProps: Nothing
-            , withoutProps: Nothing
-            , withoutVerbs
-            , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
-            , fieldConstraints
-            , start
-            , end
-            }
+      mSelection <- optionMaybe
+        ( (Right <$> (reserved "with" *> withoutProperties))
+            <|>
+              (Left <$> (reserved "without" *> withoutProperties))
+        )
+      let
+        withProps = case mSelection of
+          Just (Right p) -> Just p
+          _ -> Nothing
+        withoutProps = case mSelection of
+          Just (Left p) -> Just p
+          _ -> Nothing
+      fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
+      -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
+      (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
+      mroleVerbs <- optionMaybe roleVerbs
+      fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
+      end <- getPosition
+      pure
+        { title
+        , perspective
+        , fillFrom: mFillFrom
+        , fillPropertyValues
+        , withProps
+        , withoutProps
+        , withoutVerbs
+        , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
+        , fieldConstraints
+        , start
+        , end
+        }
     else do
       end <- getPosition
       pure
         { title
         , perspective
         , fillFrom: Nothing
+        , fillPropertyValues: Nil
         , withProps: Nothing
         , withoutProps: Nothing
         , withoutVerbs: Nil
@@ -1914,6 +1847,16 @@ fieldConstraintE = do
   findConstraintValue :: String -> List (Tuple String Int) -> Maybe Int
   findConstraintValue key = foldl (\acc (Tuple k v) -> if k == key then Just v else acc) Nothing
 
+fillPropertyValueE :: IP FillPropertyValueE
+fillPropertyValueE = do
+  start <- getPosition
+  void $ reserved "fillproperty"
+  propertyName <- arcIdentifier
+  void $ reserved "from"
+  valuesQuery <- step
+  end <- getPosition
+  pure { propertyName, valuesQuery, start, end }
+
 tableFormFields :: RoleIdentification -> IP WidgetCommonFields
 tableFormFields perspective = do
   start <- getPosition
@@ -1938,6 +1881,7 @@ tableFormFields perspective = do
         withoutProps = case mSelection of
           Just (Left p) -> Just p
           _ -> Nothing
+      fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
       -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
       -- entireBlock expects the same indentation, i.e. the position taken up after parsing the optional 'without' clause.
       -- This may be outdented! 
@@ -1950,6 +1894,7 @@ tableFormFields perspective = do
         { title
         , perspective
         , fillFrom: mFillFrom
+        , fillPropertyValues
         , withProps
         , withoutProps
         , withoutVerbs
@@ -1964,6 +1909,7 @@ tableFormFields perspective = do
         { title
         , perspective
         , fillFrom: Nothing
+        , fillPropertyValues: Nil
         , withProps: Nothing
         , withoutProps: Nothing
         , withoutVerbs: Nil

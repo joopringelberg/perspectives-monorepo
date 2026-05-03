@@ -320,6 +320,7 @@ export function buildMarkDown(contextinstance : ContextInstanceT, myroletype : R
                       disabled={ propertyOnlyConsultable(roleInstance) || !roleInstance.roleId }
                       isselected={true}
                       contextinstance={contextinstance}
+                      referenceValues={perspective.possiblePropertyValues?.[markDownProperty]}
                     />
                   </Col>
                 </Row>

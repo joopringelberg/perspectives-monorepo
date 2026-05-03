@@ -359,6 +359,8 @@ data QueryFunction
   | WithFrame
 
   | FilterF
+  | RoleTypeFilter String
+  | ContextTypeFilter String
 
   | TypeGetter FunctionName
   | RoleTypeConstant RoleType
@@ -427,6 +429,8 @@ instance showQueryFunction :: Show QueryFunction where
   show WithFrame = "WithFrame"
 
   show FilterF = "FilterF"
+  show (RoleTypeFilter adt) = "RoleTypeFilter " <> show adt
+  show (ContextTypeFilter adt) = "ContextTypeFilter " <> show adt
 
   show (TypeGetter functionName) = "TypeGetter " <> show functionName
   show (RoleTypeConstant roleType) = "RoleTypeConstant " <> show roleType
@@ -495,6 +499,8 @@ instance eqQueryFunction :: Eq QueryFunction where
   eq WithFrame WithFrame = true
 
   eq FilterF FilterF = true
+  eq (RoleTypeFilter adt) (RoleTypeFilter adt') = eq adt adt'
+  eq (ContextTypeFilter adt) (ContextTypeFilter adt') = eq adt adt'
 
   eq (TypeGetter a) (TypeGetter b) = eq a b
   eq (RoleTypeConstant a) (RoleTypeConstant b) = eq a b
@@ -567,6 +573,8 @@ instance writeForeignQueryFunction :: WriteForeign QueryFunction where
   writeImpl WithFrame = writeImpl { constructor: "WithFrame", arg1: "", arg2: "" }
 
   writeImpl FilterF = writeImpl { constructor: "FilterF", arg1: "", arg2: "" }
+  writeImpl (RoleTypeFilter adt) = writeImpl { constructor: "RoleTypeFilter", arg1: adt, arg2: "" }
+  writeImpl (ContextTypeFilter adt) = writeImpl { constructor: "ContextTypeFilter", arg1: adt, arg2: "" }
 
   writeImpl (TypeGetter functionName) = writeImpl { constructor: "TypeGetter", arg1: writeJSON functionName, arg2: "" }
   writeImpl (RoleTypeConstant roleType) = writeImpl { constructor: "RoleTypeConstant", arg1: writeJSON roleType, arg2: "" }
@@ -642,6 +650,8 @@ instance readForeignQueryFunction :: ReadForeign QueryFunction where
       "AssignmentOperator", functionName, _ -> AssignmentOperator <$> readJSON' functionName
       "WithFrame", _, _ -> pure $ WithFrame
       "FilterF", _, _ -> pure $ FilterF
+      "RoleTypeFilter", adt, _ -> pure $ RoleTypeFilter adt
+      "ContextTypeFilter", adt, _ -> pure $ ContextTypeFilter adt
       "TypeGetter", functionName, _ -> TypeGetter <$> readJSON' functionName
       "RoleTypeConstant", roleType, _ -> RoleTypeConstant <$> readJSON' roleType
       "ContextTypeConstant", contextType, _ -> ContextTypeConstant <$> readJSON' contextType
@@ -703,6 +713,8 @@ instance ordQueryFunction :: Ord QueryFunction where
   compare WithFrame WithFrame = EQ
 
   compare FilterF FilterF = EQ
+  compare (RoleTypeFilter adt) (RoleTypeFilter adt') = compare adt adt'
+  compare (ContextTypeFilter adt) (ContextTypeFilter adt') = compare adt adt'
 
   compare (TypeGetter functionName) (TypeGetter functionName') = compare functionName functionName'
   compare (RoleTypeConstant roleType) (RoleTypeConstant roleType') = compare roleType roleType'

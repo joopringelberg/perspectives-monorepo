@@ -179,6 +179,8 @@ perspectDef = LanguageDef
 
       -- Queries
       , "filter"
+      , "selectFrom"
+      , "just"
 
       -- Expressions
       , "remove"
@@ -247,6 +249,7 @@ perspectDef = LanguageDef
       , "detail"
       , "without"
       , "fillfrom"
+      , "fillproperty"
       , "fields"
       , "minLines"
       , "maxLines"

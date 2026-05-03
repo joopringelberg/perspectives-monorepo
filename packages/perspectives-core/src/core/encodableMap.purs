@@ -42,13 +42,13 @@ import Prelude
 
 import Data.Array (foldr)
 import Data.Array.Partial (head, tail)
-import Data.Foldable (class Foldable)
+import Data.Foldable (class Foldable, foldMap, foldl, foldr) as Foldable
 import Data.List (List)
 import Data.Map (Map, fromFoldable, showTree, toUnfoldable, insert, delete, lookup, values, empty, keys, union, filterKeys, unionWith, singleton, isEmpty) as Map
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype, over, unwrap)
 import Data.Set (Set)
-import Data.Traversable (traverse)
+import Data.Traversable (class Traversable, traverse)
 import Data.Tuple (Tuple(..))
 import Foreign (Foreign, unsafeFromForeign)
 import Partial.Unsafe (unsafePartial)
@@ -80,10 +80,14 @@ instance prettyPrintEncodableMap :: (Show k, Show v) => PrettyPrint (EncodableMa
 instance Functor (EncodableMap k) where
   map f (EncodableMap mp) = EncodableMap $ map f mp
 
--- instance traversableEncodableMap :: Traversable (EncodableMap k) where
---   traverse f (EncodableMap mp)  = EncodableMap <$> (traverse f mp)
---   sequence (EncodableMap mp) t = EncodableMap <$> (traverse t)
--- sequence (EncodableMap mp) = EncodableMap <$> traverse identity mp
+instance Foldable.Foldable (EncodableMap k) where
+  foldMap f (EncodableMap mp) = Foldable.foldMap f mp
+  foldr f z (EncodableMap mp) = Foldable.foldr f z mp
+  foldl f z (EncodableMap mp) = Foldable.foldl f z mp
+
+instance traversableEncodableMap :: Traversable (EncodableMap k) where
+  traverse f (EncodableMap mp) = EncodableMap <$> traverse f mp
+  sequence (EncodableMap mp) = EncodableMap <$> traverse identity mp
 
 instance semigroupEncodableMap :: (Ord k, Semigroup v) => Semigroup (EncodableMap k v) where
   append (EncodableMap map1) (EncodableMap map2) = EncodableMap (Map.unionWith append map1 map2)
@@ -129,7 +133,7 @@ singleton k v = EncodableMap $ Map.singleton k v
 
 -- | Convert any foldable collection of key/value pairs to a map.
 -- | On key collision, later values take precedence over earlier ones.
-fromFoldable :: forall f k v. Ord k => Foldable f => f (Tuple k v) -> EncodableMap k v
+fromFoldable :: forall f k v. Ord k => Foldable.Foldable f => f (Tuple k v) -> EncodableMap k v
 fromFoldable fd = EncodableMap $ Map.fromFoldable fd
 
 toUnfoldable :: forall k v. EncodableMap k v -> Array (Tuple k v)
