@@ -184,11 +184,23 @@ export const role2contextView = (function(context)
   }
 }).toString()
 
-// This view is a table [{roleType, contextGuid}; {filterValue, roleId}].
-// Use it by querying with key [roleType, contextGuid] to obtain all roles of that
-// type in that context that have a FilterValue property set.
-// Only roles that implement the Filter aspect (i.e. have the FilterValue property)
-// appear in this view.
+// filterValueView
+// This CouchDB map function indexes role documents that carry the Filter aspect.
+// For each such role (identified by having a non-empty FilterValue property array)
+// it emits one row per role type:
+//
+//   Key   : [roleType, contextGuid]
+//   Value : { filterValue: string, roleId: string }
+//
+// Query with Key([roleType, contextGuid]) to retrieve all role instances of a
+// given type in a given context that have a FilterValue set. This is used by the
+// typeaheadfiller screen widget to populate its candidate list efficiently.
+//
+// NOTE: The FilterValue property URI is the stable, generated identifier for
+// model://perspectives.domains#tiodn6tcyc$a2g0s6fcxr$b1h7t3mdwp.
+// It cannot reference the PureScript modelDependencies constant because this
+// function is serialised to a string and executed inside PouchDB's map/reduce
+// engine which has no access to PureScript modules.
 export const filterValueView = (function (doc)
 {
   function takeGuid(s)
@@ -198,6 +210,10 @@ export const filterValueView = (function (doc)
   // a proxy for being a role:
   if (doc.context && doc.properties)
   {
+    // The FilterValue property URI is the stable generated identifier for
+    // model://perspectives.domains#tiodn6tcyc$a2g0s6fcxr$b1h7t3mdwp (filterValueProperty).
+    // It is hardcoded here because PouchDB map functions must be self-contained
+    // strings with no external dependencies.
     var filterValues = doc.properties["model://perspectives.domains#tiodn6tcyc$a2g0s6fcxr$b1h7t3mdwp"];
     if (filterValues && filterValues.length > 0)
     {

@@ -437,6 +437,11 @@ instance AddPerspectives TypeAheadFillerDef where
       Nothing -> pure []
       Just fillFromQfd -> case unsnocQfd fillFromQfd of
         Just { query: contextGetterQfd, lastStep } -> case queryFunction lastStep of
+          -- Only GetRoleInstancesForContextFromDatabaseF (the compiled form of a
+          -- `fillfrom` expression such as `SomeContext >> SomeRole`) can be used
+          -- as a FilterValue view key. Other query functions (calculated roles,
+          -- external roles, etc.) do not map to a single (roleType, contextGuid)
+          -- key and therefore return no candidates.
           DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeStr -> do
             (ctxtGetter :: ContextInstance ~~> ContextInstance) <- lift $ context2context contextGetterQfd
             sourceContexts <- runArrayT $ ctxtGetter ctxt
@@ -449,7 +454,13 @@ instance AddPerspectives TypeAheadFillerDef where
         _ -> pure []
     pure $ TypeAheadFillerDef { widgetCommonFields: widgetCommonFields { perspective = Just perspective, title = translatedTitle }, candidates }
     where
-    -- | Unsnoc a composed QueryFunctionDescription: separate the last step from the prefix.
+    -- | Decompose a composed QueryFunctionDescription into its prefix query and
+    -- | final step. For a chain `A >> B >> C` this returns
+    -- | `Just { query: A >> B, lastStep: C }`.
+    -- |
+    -- | Used to extract the role-getter step from a `fillfrom` expression so that
+    -- | the preceding context navigation can be evaluated and the resulting context
+    -- | identifier used as a key in the FilterValue view.
     unsnocQfd :: QueryFunctionDescription -> Maybe { query :: QueryFunctionDescription, lastStep :: QueryFunctionDescription }
     unsnocQfd (BQD _ qf qfd1 qfd2 _ _ _)
       | qf == (BinaryCombinator ComposeF) && queryFunction qfd2 == BinaryCombinator ComposeF =

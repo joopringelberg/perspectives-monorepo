@@ -50,6 +50,9 @@ interface RoleTypeAheadFillerState {
 }
 
 const MAX_VISIBLE = 20;
+// Delay (ms) before closing the dropdown after blur, so that a click on a
+// list item registers before the list is removed from the DOM.
+const DROPDOWN_CLOSE_DELAY = 150;
 
 export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeAheadFillerProps, RoleTypeAheadFillerState>
 {
@@ -90,13 +93,16 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
 
   handleBlur() {
     // Delay closing so click on list item registers first.
-    setTimeout(() => this.setState({ isOpen: false }), 150);
+    setTimeout(() => this.setState({ isOpen: false }), DROPDOWN_CLOSE_DELAY);
   }
 
   handleSelect(candidate: FilterValueEntry) {
     const component = this;
     const { perspective } = component.props;
-    // Determine the role instance to fill (first instance in the perspective).
+    // Use the first role instance in the perspective as the role to be filled.
+    // The TypeAheadFiller is intended for roles where there is at most one
+    // (unfilled or empty) instance that the user wants to assign a filler to.
+    // Multi-instance scenarios should use a table with per-row fill controls.
     const firstInstance = Object.values(perspective.roleInstances)[0];
     const filledRoleInstance: RoleInstanceT | undefined = firstInstance?.roleId as RoleInstanceT | undefined;
 
