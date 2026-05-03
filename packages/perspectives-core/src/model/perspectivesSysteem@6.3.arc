@@ -154,6 +154,13 @@ domain model://perspectives.domains#System@6.3
     property Phone (String)
       -- pattern = "^(\\+|00)?[0-9]{1,3}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,9}$"
 
+    ----------------------------------
+    ---- ROLEWITHFILTER
+    ---- This role should be used as an aspect role for roles to be presented with the `typeaheadfiller` widget, so that the widget can filter the presented options based on the value of FilterValue.
+    ----------------------------------
+  thing RoleWithFilter
+    property FilterValue (String)
+
   -- TheWorld is shared by everyone. It is identified by def:#TheWorld.
   case TheWorld
     indexed sys:TheWorld
