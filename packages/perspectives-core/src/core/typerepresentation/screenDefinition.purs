@@ -96,6 +96,7 @@ newtype TypeAheadFillerDef = TypeAheadFillerDef
   { widgetCommonFields :: WidgetCommonFieldsDef
   , candidates :: Array FilterValueEntry
   }
+
 data MarkDownDef
   = MarkDownConstantDef { text :: String, condition :: Maybe QueryFunctionDescription, domain :: String }
   | MarkDownPerspectiveDef { widgetFields :: WidgetCommonFieldsDef, conditionProperty :: Maybe PropertyType }

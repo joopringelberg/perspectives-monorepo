@@ -227,6 +227,13 @@ domain model://perspectives.domains#System@6.3
 
     -- PDRDEPENDENCY
     user Persons (relational, unlinked) filledBy (PerspectivesUsers, NonPerspectivesUsers)
+      aspect sys:RoleWithFilter
+      -- We need to be able to filter Persons by LastName for the typeaheadfiller widget.
+      -- NOTE: when LastName changes, FilterValue will not follow automatically.
+      state HasLastName = exists LastName
+        on entry
+          do for Me
+            FilterValue = LastName
       -- perspective on Me
       --   props (Cancelled, LastName, FirstName, PublicKey) verbs (Consult)
       state Unfilled = not exists binding
@@ -249,7 +256,7 @@ domain model://perspectives.domains#System@6.3
       perspective on Persons
         only (Create, Fill)
         props (FirstName, LastName) verbs (Consult)
-        props (Cancelled) verbs (Consult, SetPropertyValue)
+        props (Cancelled, FilterValue) verbs (Consult, SetPropertyValue)
       perspective on OtherPersons
         only (Create, Fill)
         props (FirstName, LastName) verbs (Consult, SetPropertyValue)
