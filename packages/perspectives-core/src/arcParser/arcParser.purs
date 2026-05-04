@@ -1754,7 +1754,7 @@ screenElementE = withPos do
     "typeaheadfiller" -> reserved "typeaheadfiller" *> (TypeAheadFillerElement <$> typeAheadFillerE)
     "typeaheadform" -> reserved "typeaheadform" *> (TypeAheadFormElement <$> typeAheadFormE)
     -- NOTE: extend message when a new widget is added.
-    _ -> fail "Only `row`, `column`, `table`, `form`, `markdown`, `chat`, `when`, `typeaheadfiller` and `typeaheadform` are allowed here. "
+    _ -> fail "Only `row`, `column`, `table`, `form`, `markdown`, `chat`, `when`, `typeaheadfiller`, or `typeaheadform` are allowed here. "
 
 whenE :: IP WhenE
 whenE = do

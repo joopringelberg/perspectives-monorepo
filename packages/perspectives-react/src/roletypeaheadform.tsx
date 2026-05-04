@@ -129,7 +129,7 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
             onChange={component.handleInputChange}
             onFocus={component.handleFocus}
             onBlur={component.handleBlur}
-            aria-label={title || perspective.displayName || i18next.t('typeAheadForm_ariaLabel', { ns: 'preact' })}
+            aria-label={title || (perspective.displayName && perspective.displayName.trim()) || i18next.t('typeAheadForm_ariaLabel', { ns: 'preact' })}
           />
           { isOpen && matches.length > 0 && (
             <ListGroup
