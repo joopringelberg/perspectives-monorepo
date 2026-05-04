@@ -24,7 +24,7 @@ import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), TypeAheadFormDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType, RoleType(..), externalRoleType)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
@@ -117,6 +117,7 @@ contextualiseScreenElementDef (FormElementD e) = map FormElementD <$> contextual
 contextualiseScreenElementDef (MarkDownElementD e) = map MarkDownElementD <$> contextualiseMarkDownDef e
 contextualiseScreenElementDef (ChatElementD c) = map ChatElementD <$> contextualiseChatDef c
 contextualiseScreenElementDef (TypeAheadFillerElementD e) = map TypeAheadFillerElementD <$> contextualiseTypeAheadFillerDef e
+contextualiseScreenElementDef (TypeAheadFormElementD e) = map TypeAheadFormElementD <$> contextualiseTypeAheadFormDef e
 contextualiseScreenElementDef (WhenElementD (WhenDef { condition, elements })) = do
   { contextInstance } <- ask
   (criterium :: ContextInstance ~~> Value) <- lift $ lift $ lift $ (context2propertyValue condition)
@@ -193,6 +194,39 @@ contextualiseTypeAheadFillerDef (TypeAheadFillerDef { widgetCommonFields, candid
           Nothing -> Nothing
     | qf == (BinaryCombinator ComposeF) = Just { query: qfd1, lastStep: qfd2 }
   unsnocQfd _ = Nothing
+
+contextualiseTypeAheadFormDef :: TypeAheadFormDef -> InContext (Maybe TypeAheadFormDef)
+contextualiseTypeAheadFormDef (TypeAheadFormDef { widgetCommonFields, candidates: _ }) = do
+  mwidgetCommonFields <- contextualiseWidgetCommonFields widgetCommonFields
+  case mwidgetCommonFields of
+    Nothing -> pure Nothing
+    Just widgetCommonFields' -> do
+      { contextInstance } <- ask
+      candidates <- case widgetCommonFields.fillFrom of
+        Nothing -> pure []
+        Just fillFromQfd -> case unsnocQfd' fillFromQfd of
+          Just { query: contextGetterQfd, lastStep } -> case queryFunction lastStep of
+            DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeStr -> do
+              (ctxtGetter :: ContextInstance ~~> ContextInstance) <- lift2InContext $ context2context contextGetterQfd
+              sourceContexts <- lift $ lift $ runArrayT $ ctxtGetter contextInstance
+              case head sourceContexts of
+                Nothing -> pure []
+                Just sourceContext -> do
+                  db <- lift2InContext entitiesDatabaseName
+                  lift2InContext $ getViewOnDatabase db "defaultViews/filterValueView" (Key [ roleTypeStr, takeGuid (unwrap sourceContext) ])
+            _ -> pure []
+          _ -> pure []
+      pure $ Just $ TypeAheadFormDef { widgetCommonFields: widgetCommonFields', candidates }
+  where
+  unsnocQfd' :: QueryFunctionDescription -> Maybe { query :: QueryFunctionDescription, lastStep :: QueryFunctionDescription }
+  unsnocQfd' (BQD _ qf qfd1 qfd2 _ _ _)
+    | qf == (BinaryCombinator ComposeF) && queryFunction qfd2 == BinaryCombinator ComposeF =
+        case unsnocQfd' qfd2 of
+          Just { query: q, lastStep: ls } ->
+            Just { query: BQD (domain qfd1) (BinaryCombinator ComposeF) qfd1 q (range q) (functional q) (mandatory q), lastStep: ls }
+          Nothing -> Nothing
+    | qf == (BinaryCombinator ComposeF) = Just { query: qfd1, lastStep: qfd2 }
+  unsnocQfd' _ = Nothing
 
 contextualiseMarkDownDef :: MarkDownDef -> InContext (Maybe MarkDownDef)
 contextualiseMarkDownDef md = case md of

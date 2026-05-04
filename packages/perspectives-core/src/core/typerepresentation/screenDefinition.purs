@@ -79,6 +79,7 @@ data ScreenElementDef
   | ChatElementD ChatDef
   | WhenElementD WhenDef
   | TypeAheadFillerElementD TypeAheadFillerDef
+  | TypeAheadFormElementD TypeAheadFormDef
 
 newtype RowDef = RowDef (Array ScreenElementDef)
 newtype ColumnDef = ColumnDef (Array ScreenElementDef)
@@ -93,6 +94,14 @@ type FilterValueEntry = { filterValue :: String, roleId :: String }
 -- | to fill the target role. Candidate entries are populated from the FilterValue CouchDB
 -- | view at context serialisation time, avoiding loading full role instances into memory.
 newtype TypeAheadFillerDef = TypeAheadFillerDef
+  { widgetCommonFields :: WidgetCommonFieldsDef
+  , candidates :: Array FilterValueEntry
+  }
+
+-- | A widget that shows a typeahead input for searching and selecting a role instance,
+-- | and then presents the selected instance in a form. Candidates are fetched from the
+-- | FilterValue CouchDB view; the form uses the perspective from widgetCommonFields.
+newtype TypeAheadFormDef = TypeAheadFormDef
   { widgetCommonFields :: WidgetCommonFieldsDef
   , candidates :: Array FilterValueEntry
   }
@@ -209,6 +218,7 @@ derive instance Generic What _
 derive instance Generic Who _
 derive instance Generic WhereTo _
 derive instance Generic TypeAheadFillerDef _
+derive instance Generic TypeAheadFormDef _
 
 -----------------------------------------------------------
 -- SHOW INSTANCES
@@ -265,6 +275,9 @@ instance Show WhereTo where
   show = genericShow
 
 instance Show TypeAheadFillerDef where
+  show = genericShow
+
+instance Show TypeAheadFormDef where
   show = genericShow
 
 -----------------------------------------------------------
@@ -324,6 +337,9 @@ instance Eq WhereTo where
 instance Eq TypeAheadFillerDef where
   eq = genericEq
 
+instance Eq TypeAheadFormDef where
+  eq = genericEq
+
 -----------------------------------------------------------
 -- WRITEFOREIGN INSTANCES
 -----------------------------------------------------------
@@ -340,6 +356,7 @@ instance writeForeignScreenElementDef :: WriteForeign ScreenElementDef where
   writeImpl (ChatElementD c) = write { elementType: "ChatElementD", element: c }
   writeImpl (WhenElementD w) = write { elementType: "WhenElementD", element: w }
   writeImpl (TypeAheadFillerElementD t) = write { elementType: "TypeAheadFillerElementD", element: t }
+  writeImpl (TypeAheadFormElementD t) = write { elementType: "TypeAheadFormElementD", element: t }
 
 instance writeForeignTabDef :: WriteForeign TabDef where
   writeImpl (TabDef widgetCommonFields) = write widgetCommonFields
@@ -398,6 +415,9 @@ instance WriteForeign WhereTo where
 instance WriteForeign TypeAheadFillerDef where
   writeImpl (TypeAheadFillerDef { widgetCommonFields, candidates }) = write { tag: "TypeAheadFillerDef", widgetCommonFields, candidates }
 
+instance WriteForeign TypeAheadFormDef where
+  writeImpl (TypeAheadFormDef { widgetCommonFields, candidates }) = write { tag: "TypeAheadFormDef", widgetCommonFields, candidates }
+
 -----------------------------------------------------------
 -- READFOREIGN INSTANCES
 -----------------------------------------------------------
@@ -420,6 +440,7 @@ instance ReadForeign ScreenElementDef where
       "ChatElementD" -> ChatElementD <$> ((read' element) :: F ChatDef)
       "WhenElementD" -> WhenElementD <$> ((read' element) :: F WhenDef)
       "TypeAheadFillerElementD" -> TypeAheadFillerElementD <$> ((read' element) :: F TypeAheadFillerDef)
+      "TypeAheadFormElementD" -> TypeAheadFormElementD <$> ((read' element) :: F TypeAheadFormDef)
 
 instance ReadForeign ScreenKey where
   readImpl f = do
@@ -541,6 +562,13 @@ instance ReadForeign TypeAheadFillerDef where
     case tag of
       "TypeAheadFillerDef" -> pure $ TypeAheadFillerDef { widgetCommonFields, candidates }
       _ -> fail (TypeMismatch "TypeAheadFillerDef" tag)
+
+instance ReadForeign TypeAheadFormDef where
+  readImpl f = do
+    ({ tag, widgetCommonFields, candidates } :: { tag :: String, widgetCommonFields :: WidgetCommonFieldsDef, candidates :: Array FilterValueEntry }) <- read' f
+    case tag of
+      "TypeAheadFormDef" -> pure $ TypeAheadFormDef { widgetCommonFields, candidates }
+      _ -> fail (TypeMismatch "TypeAheadFormDef" tag)
 
 -------------------------------------------------------------------------------
 ---- SCREENKEY

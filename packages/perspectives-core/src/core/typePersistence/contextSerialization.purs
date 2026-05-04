@@ -67,7 +67,7 @@ import Perspectives.Query.QueryTypes (QueryFunctionDescription(..), domain, func
 import Perspectives.Query.UnsafeCompiler (context2context, context2propertyValue, getRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), TypeAheadFormDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), RoleKind(..), RoleType(..), externalRoleType, roletype2string)
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
@@ -379,6 +379,7 @@ instance addPerspectivesScreenElementDef :: AddPerspectives ScreenElementDef whe
   addPerspectives (MarkDownElementD re) user ctxt = MarkDownElementD <$> addPerspectives re user ctxt
   addPerspectives (ChatElementD re) user ctxt = ChatElementD <$> addPerspectives re user ctxt
   addPerspectives (TypeAheadFillerElementD re) user ctxt = TypeAheadFillerElementD <$> addPerspectives re user ctxt
+  addPerspectives (TypeAheadFormElementD re) user ctxt = TypeAheadFormElementD <$> addPerspectives re user ctxt
   addPerspectives (WhenElementD (WhenDef { condition, elements })) user ctxt = do
     elements' <- traverse (\e -> addPerspectives e user ctxt) elements
     pure $ WhenElementD (WhenDef { condition, elements: elements' })
@@ -470,6 +471,42 @@ instance AddPerspectives TypeAheadFillerDef where
             Nothing -> Nothing
       | qf == (BinaryCombinator ComposeF) = Just { query: qfd1, lastStep: qfd2 }
     unsnocQfd _ = Nothing
+
+instance AddPerspectives TypeAheadFormDef where
+  addPerspectives (TypeAheadFormDef { widgetCommonFields, candidates: _ }) user ctxt = do
+    -- Fetch the perspective (without loading all role instances via possibleFillers).
+    -- TypeAheadForm uses the FilterValue view for efficient candidate lookup.
+    perspective <- perspectiveForContextAndUserFromId
+      user
+      (widgetCommonFields { fillFrom = Nothing })
+      ctxt
+    contextType <- lift $ contextType_ ctxt
+    (translatedTitle :: Maybe String) <- lift $ traverse (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType)) widgetCommonFields.title
+    candidates <- case widgetCommonFields.fillFrom of
+      Nothing -> pure []
+      Just fillFromQfd -> case unsnocQfd' fillFromQfd of
+        Just { query: contextGetterQfd, lastStep } -> case queryFunction lastStep of
+          DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeStr -> do
+            (ctxtGetter :: ContextInstance ~~> ContextInstance) <- lift $ context2context contextGetterQfd
+            sourceContexts <- runArrayT $ ctxtGetter ctxt
+            case head sourceContexts of
+              Nothing -> pure []
+              Just sourceContext -> do
+                db <- lift entitiesDatabaseName
+                lift $ getViewOnDatabase db "defaultViews/filterValueView" (Key [ roleTypeStr, takeGuid (unwrap sourceContext) ])
+          _ -> pure []
+        _ -> pure []
+    pure $ TypeAheadFormDef { widgetCommonFields: widgetCommonFields { perspective = Just perspective, title = translatedTitle }, candidates }
+    where
+    unsnocQfd' :: QueryFunctionDescription -> Maybe { query :: QueryFunctionDescription, lastStep :: QueryFunctionDescription }
+    unsnocQfd' (BQD _ qf qfd1 qfd2 _ _ _)
+      | qf == (BinaryCombinator ComposeF) && queryFunction qfd2 == BinaryCombinator ComposeF =
+          case unsnocQfd' qfd2 of
+            Just { query: q, lastStep: ls } ->
+              Just { query: BQD (domain qfd1) (BinaryCombinator ComposeF) qfd1 q (range q) (functional q) (mandatory q), lastStep: ls }
+            Nothing -> Nothing
+      | qf == (BinaryCombinator ComposeF) = Just { query: qfd1, lastStep: qfd2 }
+    unsnocQfd' _ = Nothing
 
 instance AddPerspectives MarkDownDef where
   addPerspectives (MarkDownConstantDef r@{ text, domain }) user ctxt = do

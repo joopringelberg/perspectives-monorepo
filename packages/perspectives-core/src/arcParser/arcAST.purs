@@ -482,6 +482,7 @@ data ScreenElement
   | ChatElement ChatE
   | WhenElement WhenE
   | TypeAheadFillerElement TypeAheadFillerE
+  | TypeAheadFormElement TypeAheadFormE
 
 --------------------------------------------------------------------------------
 ---- WHEN
@@ -549,6 +550,14 @@ data TableE = TableE (List MarkDownE) WidgetCommonFields
 -- | A widget that lets the user search for and select a role instance to fill
 -- | a target role, using the FilterValue view for efficient candidate lookup.
 newtype TypeAheadFillerE = TypeAheadFillerE WidgetCommonFields
+
+--------------------------------------------------------------------------------
+---- TYPEAHEADFORM
+--------------------------------------------------------------------------------
+-- | A widget that shows a typeahead input for searching a role instance and,
+-- | once selected, presents the instance in a form. The candidates are fetched
+-- | from the FilterValue view; the form uses the same perspective.
+newtype TypeAheadFormE = TypeAheadFormE WidgetCommonFields
 
 --------------------------------------------------------------------------------
 ---- MARKDOWN
@@ -751,6 +760,12 @@ instance Show TypeAheadFillerE where
   show = genericShow
 
 derive instance Newtype TypeAheadFillerE _
+
+derive instance Generic TypeAheadFormE _
+instance Show TypeAheadFormE where
+  show = genericShow
+
+derive instance Newtype TypeAheadFormE _
 
 derive instance Generic WhenE _
 instance Show WhenE where

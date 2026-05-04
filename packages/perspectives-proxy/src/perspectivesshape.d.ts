@@ -165,11 +165,11 @@ export type TabDef = {
 };
 
 export type ScreenElementDefTagged = {
-  elementType: "RowElementD" | "ColumnElementD" | "TableElementD" | "FormElementD" | "MarkDownElementD" | "ChatElementD" | "WhenElementD" | "TypeAheadFillerElementD";
+  elementType: "RowElementD" | "ColumnElementD" | "TableElementD" | "FormElementD" | "MarkDownElementD" | "ChatElementD" | "WhenElementD" | "TypeAheadFillerElementD" | "TypeAheadFormElementD";
   element: ScreenElementDef;
 }
 
-export type ScreenElementDef = RowElementDef | ColumnElementDef | TableElementDef | FormElementDef | MarkDownElementDef | ChatElementDef | WhenElementDef | TypeAheadFillerElementDef;
+export type ScreenElementDef = RowElementDef | ColumnElementDef | TableElementDef | FormElementDef | MarkDownElementDef | ChatElementDef | WhenElementDef | TypeAheadFillerElementDef | TypeAheadFormElementDef;
 
 export type WhenElementDef = {
   tag: "WhenDef";
@@ -234,6 +234,12 @@ export type FilterValueEntry = {
 
 export type TypeAheadFillerElementDef = {
   tag: "TypeAheadFillerDef";
+  widgetCommonFields: WidgetCommonFields;
+  candidates: FilterValueEntry[];
+}
+
+export type TypeAheadFormElementDef = {
+  tag: "TypeAheadFormDef";
   widgetCommonFields: WidgetCommonFields;
   candidates: FilterValueEntry[];
 }

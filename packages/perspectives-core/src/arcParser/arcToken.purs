@@ -241,6 +241,7 @@ perspectDef = LanguageDef
       , "table"
       , "chat"
       , "typeaheadfiller"
+      , "typeaheadform"
       , "messages"
       , "media"
       , "who"

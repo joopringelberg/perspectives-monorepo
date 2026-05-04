@@ -42,7 +42,7 @@ import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Identifiers (areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_)
 import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), PropertyVerbE(..), PropsOrView, RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..), roleIdentification2context)
-import Perspectives.Parsing.Arc.AST (ColumnE(..), FieldConstraintE, FillPropertyValueE, FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TypeAheadFillerE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WidgetCommonFields) as AST
+import Perspectives.Parsing.Arc.AST (ColumnE(..), FieldConstraintE, FillPropertyValueE, FormE(..), FreeFormScreenE(..), MarkDownE, PropsOrView(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TypeAheadFillerE(..), TypeAheadFormE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WidgetCommonFields) as AST
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
@@ -58,7 +58,7 @@ import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.Class.Role (allProperties, displayName, perspectivesOfRoleType, roleADTOfRoleType, roleTypeIsFunctional)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..), elements_)
 import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsRoleVerbs)
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), PropertyRestrictions, PropertyValueFillers, RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), PropertyRestrictions, PropertyValueFillers, RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), TypeAheadFormDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optimistic, pessimistic)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), roletype2string)
 import Perspectives.Representation.Verbs (allPropertyVerbs, roleVerbList2Verbs)
@@ -240,6 +240,9 @@ handleScreens screenEs = do
       screenElementDef (AST.TypeAheadFillerElement (AST.TypeAheadFillerE fields)) = do
         widgetCommonFields' <- widgetCommonFields subjectRoleType fields functionalWidget
         pure $ TypeAheadFillerElementD (TypeAheadFillerDef { widgetCommonFields: widgetCommonFields', candidates: [] })
+      screenElementDef (AST.TypeAheadFormElement (AST.TypeAheadFormE fields)) = do
+        widgetCommonFields' <- widgetCommonFields subjectRoleType fields functionalWidget
+        pure $ TypeAheadFormElementD (TypeAheadFormDef { widgetCommonFields: widgetCommonFields', candidates: [] })
 
       functionalWidget :: ThreeValuedLogic
       functionalWidget = True

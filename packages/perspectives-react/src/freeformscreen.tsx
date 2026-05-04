@@ -20,7 +20,7 @@
 
 import React from 'react';
 
-import {PDRproxy, ContextInstanceT, ContextType, RoleType, Unsubscriber, PropertyType, EnumeratedOrCalculatedProperty, ScreenDefinition, ChatElementDef, ColumnElementDef, FormElementDef, MarkDownElementDef, Perspective, Roleinstancewithprops, RowElementDef, ScreenElementDefTagged, TabDef, TableElementDef, TypeAheadFillerElementDef, WhenElementDef, WidgetCommonFields, MainScreenElements, TableFormDef, RoleInstanceT} from "perspectives-proxy";
+import {PDRproxy, ContextInstanceT, ContextType, RoleType, Unsubscriber, PropertyType, EnumeratedOrCalculatedProperty, ScreenDefinition, ChatElementDef, ColumnElementDef, FormElementDef, MarkDownElementDef, Perspective, Roleinstancewithprops, RowElementDef, ScreenElementDefTagged, TabDef, TableElementDef, TypeAheadFillerElementDef, TypeAheadFormElementDef, WhenElementDef, WidgetCommonFields, MainScreenElements, TableFormDef, RoleInstanceT} from "perspectives-proxy";
 import PerspectivesComponent from "./perspectivesComponent";
 import {PSContext, PSContextType} from "./reactcontexts.js";
 import PerspectiveBasedForm from "./perspectivebasedform.js";
@@ -34,6 +34,7 @@ import {MarkDownWidget} from './markdownWidget.js';
 import SmartFieldControl from './smartfieldcontrol.js';
 import {ChatComponent} from './chatcomponent.js';
 import RoleTypeAheadFiller from "./roletypeaheadfiller.js";
+import RoleTypeAheadForm from "./roletypeaheadform.js";
 import { externalRole } from './urifunctions.js';
 import ModelDependencies from './modelDependencies';
 
@@ -238,6 +239,23 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
             perspective={typeAheadDef.widgetCommonFields.perspective}
             candidates={typeAheadDef.candidates}
             title={typeAheadDef.widgetCommonFields.title}
+          />
+          </div>
+        );
+      }
+      case "TypeAheadFormElementD": {
+        const typeAheadFormDef = taggedElement.element as TypeAheadFormElementDef;
+        return (
+          <div
+            className="border-bottom pb-4 pt-4 widget"
+            key={index}
+          >
+          { typeAheadFormDef.widgetCommonFields.title ? <h4>{typeAheadFormDef.widgetCommonFields.title}</h4> : null }
+          <RoleTypeAheadForm
+            perspective={typeAheadFormDef.widgetCommonFields.perspective}
+            candidates={typeAheadFormDef.candidates}
+            title={typeAheadFormDef.widgetCommonFields.title}
+            fieldConstraints={typeAheadFormDef.widgetCommonFields.fieldConstraints}
           />
           </div>
         );

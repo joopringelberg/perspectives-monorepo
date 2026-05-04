@@ -29,7 +29,7 @@ import Data.Traversable (traverse)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.Identifiers (isTypeUri, typeUri2typeNameSpace)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyVerbE(..), PropsOrView(..), RoleIdentification(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), TypeAheadFillerE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyVerbE(..), PropsOrView(..), RoleIdentification(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), TypeAheadFillerE(..), TypeAheadFormE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), FilledByAttribute(..), PureLetStep(..), SimpleStep(..), Step(..), TypeCombination(..), UnaryStep(..), VarBinding(..))
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo', expandNamespace)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetABinding(..), LetStep(..), Statements(..))
@@ -430,10 +430,14 @@ instance containsPrefixesScreenElement :: ScanSymbols ScreenElement where
   scan (MarkDownElement r) = MarkDownElement <$> scan r
   scan (ChatElement r) = ChatElement <$> scan r
   scan (TypeAheadFillerElement r) = TypeAheadFillerElement <$> scan r
+  scan (TypeAheadFormElement r) = TypeAheadFormElement <$> scan r
   scan (WhenElement r) = WhenElement <$> scan r
 
 instance ScanSymbols TypeAheadFillerE where
   scan (TypeAheadFillerE wcf) = TypeAheadFillerE <$> expandPrefixWidgetCommonFields wcf
+
+instance ScanSymbols TypeAheadFormE where
+  scan (TypeAheadFormE wcf) = TypeAheadFormE <$> expandPrefixWidgetCommonFields wcf
 
 instance ScanSymbols WhenE where
   scan (WhenE condition context elements) = do

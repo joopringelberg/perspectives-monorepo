@@ -71,7 +71,11 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
   filteredCandidates(): FilterValueEntry[] {
     const { query } = this.state;
     const { candidates } = this.props;
-    if (!query) return [];
+    // If the total number of candidates is below MAX_VISIBLE, show all of them
+    // immediately (even without a query) so the user sees the full list on focus.
+    if (!query) {
+      return candidates.length < MAX_VISIBLE ? candidates : [];
+    }
     const lower = query.toLowerCase();
     return candidates
       .filter(c => c.filterValue.toLowerCase().includes(lower))
@@ -86,9 +90,8 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
   }
 
   handleFocus() {
-    if (this.state.query) {
-      this.setState({ isOpen: true });
-    }
+    // Always open on focus — candidates below threshold will be shown immediately.
+    this.setState({ isOpen: true });
   }
 
   handleBlur() {
