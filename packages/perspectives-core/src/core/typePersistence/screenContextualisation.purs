@@ -15,8 +15,12 @@ import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Instances.ObjectGetters (getActiveRoleStates, getActiveStates)
 import Perspectives.ModelTranslation (translationOf)
-import Perspectives.Query.UnsafeCompiler (context2propertyValue, getRoleInstances)
-import Perspectives.Query.QueryTypes (QueryFunctionDescription)
+import Perspectives.Persistence.API (Keys(..), getViewOnDatabase)
+import Perspectives.Persistent (entitiesDatabaseName)
+import Perspectives.Query.UnsafeCompiler (context2context, context2propertyValue, getRoleInstances)
+import Perspectives.Query.QueryTypes (QueryFunctionDescription(..), domain, functional, mandatory, queryFunction, range)
+import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
+import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
@@ -152,11 +156,43 @@ contextualiseFormDef (FormDef { markdown, widgetCommonFields }) = do
     Just widgetCommonFields' -> pure $ Just $ FormDef { markdown: catMaybes markdown', widgetCommonFields: widgetCommonFields' }
 
 contextualiseTypeAheadFillerDef :: TypeAheadFillerDef -> InContext (Maybe TypeAheadFillerDef)
-contextualiseTypeAheadFillerDef (TypeAheadFillerDef { widgetCommonFields, candidates }) = do
+contextualiseTypeAheadFillerDef (TypeAheadFillerDef { widgetCommonFields, candidates: _ }) = do
   mwidgetCommonFields <- contextualiseWidgetCommonFields widgetCommonFields
   case mwidgetCommonFields of
     Nothing -> pure Nothing
-    Just widgetCommonFields' -> pure $ Just $ TypeAheadFillerDef { widgetCommonFields: widgetCommonFields', candidates }
+    Just widgetCommonFields' -> do
+      { contextInstance } <- ask
+      candidates <- case widgetCommonFields.fillFrom of
+        Nothing -> pure []
+        Just fillFromQfd -> case unsnocQfd fillFromQfd of
+          Just { query: contextGetterQfd, lastStep } -> case queryFunction lastStep of
+            -- Only GetRoleInstancesForContextFromDatabaseF (the compiled form of a
+            -- `fillfrom` expression such as `SomeContext >> SomeRole`) can be used
+            -- as a FilterValue view key.
+            DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeStr -> do
+              (ctxtGetter :: ContextInstance ~~> ContextInstance) <- lift2InContext $ context2context contextGetterQfd
+              sourceContexts <- lift $ lift $ runArrayT $ ctxtGetter contextInstance
+              case head sourceContexts of
+                Nothing -> pure []
+                Just sourceContext -> do
+                  db <- lift2InContext entitiesDatabaseName
+                  lift2InContext $ getViewOnDatabase db "defaultViews/filterValueView" (Key [ roleTypeStr, takeGuid (unwrap sourceContext) ])
+            _ -> pure []
+          _ -> pure []
+      pure $ Just $ TypeAheadFillerDef { widgetCommonFields: widgetCommonFields', candidates }
+  where
+  -- | Decompose a composed QueryFunctionDescription into its prefix query and
+  -- | final step. For a chain `A >> B >> C` this returns
+  -- | `Just { query: A >> B, lastStep: C }`.
+  unsnocQfd :: QueryFunctionDescription -> Maybe { query :: QueryFunctionDescription, lastStep :: QueryFunctionDescription }
+  unsnocQfd (BQD _ qf qfd1 qfd2 _ _ _)
+    | qf == (BinaryCombinator ComposeF) && queryFunction qfd2 == BinaryCombinator ComposeF =
+        case unsnocQfd qfd2 of
+          Just { query: q, lastStep: ls } ->
+            Just { query: BQD (domain qfd1) (BinaryCombinator ComposeF) qfd1 q (range q) (functional q) (mandatory q), lastStep: ls }
+          Nothing -> Nothing
+    | qf == (BinaryCombinator ComposeF) = Just { query: qfd1, lastStep: qfd2 }
+  unsnocQfd _ = Nothing
 
 contextualiseMarkDownDef :: MarkDownDef -> InContext (Maybe MarkDownDef)
 contextualiseMarkDownDef md = case md of
