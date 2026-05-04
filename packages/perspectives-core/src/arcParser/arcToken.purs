@@ -240,6 +240,7 @@ perspectDef = LanguageDef
       , "when"
       , "table"
       , "chat"
+      , "typeaheadfiller"
       , "messages"
       , "media"
       , "who"
