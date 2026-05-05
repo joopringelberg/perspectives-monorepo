@@ -73,10 +73,10 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
   filteredCandidates(): FilterValueEntry[] {
     const { query } = this.state;
     const { candidates } = this.props;
-    // If the total number of candidates is below MAX_VISIBLE, show all of them
-    // immediately (even without a query) so the user sees the full list on focus.
+    // When query is empty (e.g. after focusing to re-select), show up to
+    // MAX_VISIBLE candidates so the user can browse without typing.
     if (!query) {
-      return candidates.length < MAX_VISIBLE ? candidates : [];
+      return candidates.slice(0, MAX_VISIBLE);
     }
     const lower = query.toLowerCase();
     return candidates
@@ -92,13 +92,27 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
   }
 
   handleFocus() {
-    // Always open on focus — candidates below threshold will be shown immediately.
-    this.setState({ isOpen: true });
+    // Always clear the query on focus so the user sees the full candidate list
+    // and can re-select or search from scratch. The selected form stays visible
+    // (selectedRoleId is not cleared here) until the user picks a new item.
+    this.setState({ query: '', isOpen: true });
   }
 
   handleBlur() {
+    const component = this;
     // Delay closing so click on list item registers first.
-    setTimeout(() => this.setState({ isOpen: false }), DROPDOWN_CLOSE_DELAY);
+    setTimeout(() => {
+      const { selectedRoleId } = component.state;
+      const { candidates } = component.props;
+      if (selectedRoleId) {
+        // Restore the input to the selected item's label so the user sees
+        // which item is selected even when the dropdown is closed.
+        const match = candidates.find(c => c.roleId === selectedRoleId);
+        component.setState({ isOpen: false, query: match ? match.filterValue : '' });
+      } else {
+        component.setState({ isOpen: false });
+      }
+    }, DROPDOWN_CLOSE_DELAY);
   }
 
   handleSelect(candidate: FilterValueEntry) {
