@@ -103,10 +103,13 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
   // --------------------------------------------------------------------
   filteredCandidates(): FilterValueEntry[] {
     const { query } = this.state;
-    const { candidates } = this.props;
-    // When query is empty (e.g. on focus), show up to MAX_VISIBLE candidates
-    // so the user can see the options without having to type.
-    if (!query) {
+    const { candidates, perspective } = this.props;
+    const fillerLabel = currentFillerLabel(perspective, candidates);
+
+    // "Display mode": query is empty OR the query still shows the filler label
+    // (the user has not started a new search yet).  Show all candidates up to
+    // MAX_VISIBLE so the user can browse the full list on focus.
+    if (!query || query === fillerLabel) {
       return candidates.slice(0, MAX_VISIBLE);
     }
     const lower = query.toLowerCase();
@@ -123,9 +126,12 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
   }
 
   handleFocus() {
-    // Clear the query on focus so the user can search from all candidates.
-    // The current filler label is restored on blur if no new selection is made.
-    this.setState({ query: '', isOpen: true });
+    // Only open the dropdown — do NOT change the query.
+    // Programmatically changing `value` of a focused controlled input can
+    // trigger a synthetic blur in some browsers, which would immediately close
+    // the dropdown again.  filteredCandidates() detects "display mode" (query
+    // == filler label) and returns the full candidate list in that case.
+    this.setState({ isOpen: true });
   }
 
   handleBlur() {

@@ -71,13 +71,23 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
   // Filtering
   // --------------------------------------------------------------------
   filteredCandidates(): FilterValueEntry[] {
-    const { query } = this.state;
+    const { query, selectedRoleId } = this.state;
     const { candidates } = this.props;
-    // When query is empty (e.g. after focusing to re-select), show up to
-    // MAX_VISIBLE candidates so the user can browse without typing.
+
+    // "Display mode": query is empty OR the query still equals the selected
+    // item's label (i.e. the user has not started a new search yet).
+    // In display mode show all candidates up to MAX_VISIBLE so the user can
+    // browse the full list and re-select without having to erase the label.
     if (!query) {
       return candidates.slice(0, MAX_VISIBLE);
     }
+    if (selectedRoleId) {
+      const selectedEntry = candidates.find(c => c.roleId === selectedRoleId);
+      if (selectedEntry && selectedEntry.filterValue === query) {
+        return candidates.slice(0, MAX_VISIBLE);
+      }
+    }
+
     const lower = query.toLowerCase();
     return candidates
       .filter(c => c.filterValue.toLowerCase().includes(lower))
@@ -88,14 +98,18 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
   // Handlers
   // --------------------------------------------------------------------
   handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    // Changing the query always exits "display mode" and starts a real search.
+    // Clearing selectedRoleId ensures filteredCandidates filters normally.
     this.setState({ query: e.target.value, isOpen: true, selectedRoleId: null });
   }
 
   handleFocus() {
-    // Always clear the query on focus so the user sees the full candidate list
-    // and can re-select or search from scratch. The selected form stays visible
-    // (selectedRoleId is not cleared here) until the user picks a new item.
-    this.setState({ query: '', isOpen: true });
+    // Only open the dropdown — do NOT change the query.
+    // Programmatically changing `value` of a focused controlled input can
+    // trigger a synthetic blur in some browsers, which would immediately close
+    // the dropdown again.  filteredCandidates() detects "display mode" (query
+    // == selected label) and returns the full candidate list in that case.
+    this.setState({ isOpen: true });
   }
 
   handleBlur() {
