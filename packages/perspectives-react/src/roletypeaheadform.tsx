@@ -52,9 +52,6 @@ interface RoleTypeAheadFormState {
 }
 
 const MAX_VISIBLE = 20;
-// Delay (ms) before closing the dropdown after blur, so that a click on a
-// list item registers before the list is removed from the DOM.
-const DROPDOWN_CLOSE_DELAY = 150;
 
 export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAheadFormProps, RoleTypeAheadFormState>
 {
@@ -63,7 +60,7 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
     this.state = { query: '', isOpen: false, selectedRoleId: null };
     this.handleInputChange = this.handleInputChange.bind(this);
     this.handleSelect = this.handleSelect.bind(this);
-    this.handleBlur = this.handleBlur.bind(this);
+    this.handleContainerBlur = this.handleContainerBlur.bind(this);
     this.handleFocus = this.handleFocus.bind(this);
   }
 
@@ -104,29 +101,27 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
   }
 
   handleFocus() {
-    // Only open the dropdown — do NOT change the query.
-    // Programmatically changing `value` of a focused controlled input can
-    // trigger a synthetic blur in some browsers, which would immediately close
-    // the dropdown again.  filteredCandidates() detects "display mode" (query
-    // == selected label) and returns the full candidate list in that case.
     this.setState({ isOpen: true });
   }
 
-  handleBlur() {
-    const component = this;
-    // Delay closing so click on list item registers first.
-    setTimeout(() => {
-      const { selectedRoleId } = component.state;
-      const { candidates } = component.props;
-      if (selectedRoleId) {
-        // Restore the input to the selected item's label so the user sees
-        // which item is selected even when the dropdown is closed.
-        const match = candidates.find(c => c.roleId === selectedRoleId);
-        component.setState({ isOpen: false, query: match ? match.filterValue : '' });
-      } else {
-        component.setState({ isOpen: false });
-      }
-    }, DROPDOWN_CLOSE_DELAY);
+  // Close the dropdown only when focus leaves the entire widget (input + list).
+  // When focus moves from the input to a list item, relatedTarget is inside
+  // the container and we must NOT close — otherwise the list disappears before
+  // the user's click registers.
+  handleContainerBlur(e: React.FocusEvent<HTMLDivElement>) {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      return; // Focus still within widget — keep dropdown open
+    }
+    // Focus left the widget; close the dropdown and restore the query to the
+    // selected item's label so the user still sees which item is chosen.
+    const { selectedRoleId } = this.state;
+    const { candidates } = this.props;
+    if (selectedRoleId) {
+      const match = candidates.find(c => c.roleId === selectedRoleId);
+      this.setState({ isOpen: false, query: match ? match.filterValue : '' });
+    } else {
+      this.setState({ isOpen: false });
+    }
   }
 
   handleSelect(candidate: FilterValueEntry) {
@@ -149,14 +144,13 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
     return (
       <div>
         { title && <Form.Label>{title}</Form.Label> }
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} onBlur={component.handleContainerBlur}>
           <Form.Control
             type="text"
             value={query}
             placeholder={i18next.t('typeAheadForm_placeholder', { ns: 'preact' })}
             onChange={component.handleInputChange}
             onFocus={component.handleFocus}
-            onBlur={component.handleBlur}
             aria-label={title || (perspective.displayName && perspective.displayName.trim()) || i18next.t('typeAheadForm_ariaLabel', { ns: 'preact' })}
           />
           { isOpen && matches.length > 0 && (
@@ -174,7 +168,7 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
                 <ListGroup.Item
                   key={idx}
                   action
-                  onMouseDown={() => component.handleSelect(candidate)}
+                  onClick={() => component.handleSelect(candidate)}
                 >
                   {candidate.filterValue}
                 </ListGroup.Item>

@@ -50,9 +50,6 @@ interface RoleTypeAheadFillerState {
 }
 
 const MAX_VISIBLE = 20;
-// Delay (ms) before closing the dropdown after blur, so that a click on a
-// list item registers before the list is removed from the DOM.
-const DROPDOWN_CLOSE_DELAY = 150;
 
 // Returns the filterValue label for the current filler of the first role
 // instance in the perspective, or '' if the role is not yet filled or if the
@@ -69,8 +66,11 @@ function currentFillerLabel(perspective: Perspective, candidates: FilterValueEnt
 
 export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeAheadFillerProps, RoleTypeAheadFillerState>
 {
-  // Tracks whether a selection was just made via handleSelect so that handleBlur
-  // can distinguish "user selected a candidate" from "user clicked away".
+  // Tracks whether a selection was just made so that handleContainerBlur can
+  // distinguish "user selected a candidate" from "user clicked elsewhere".
+  // A selection closes the dropdown immediately (onMouseDown → handleSelect →
+  // setState({isOpen:false})); the flag prevents handleContainerBlur from
+  // then overwriting the newly selected label with the old filler label.
   private _selectionJustMade = false;
 
   constructor(props: RoleTypeAheadFillerProps) {
@@ -81,7 +81,7 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
     };
     this.handleInputChange = this.handleInputChange.bind(this);
     this.handleSelect = this.handleSelect.bind(this);
-    this.handleBlur = this.handleBlur.bind(this);
+    this.handleContainerBlur = this.handleContainerBlur.bind(this);
     this.handleFocus = this.handleFocus.bind(this);
   }
 
@@ -126,31 +126,30 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
   }
 
   handleFocus() {
-    // Only open the dropdown — do NOT change the query.
-    // Programmatically changing `value` of a focused controlled input can
-    // trigger a synthetic blur in some browsers, which would immediately close
-    // the dropdown again.  filteredCandidates() detects "display mode" (query
-    // == filler label) and returns the full candidate list in that case.
     this.setState({ isOpen: true });
   }
 
-  handleBlur() {
-    const component = this;
-    // Delay closing so click on list item registers first (mouseDown fires
-    // before blur, so _selectionJustMade will be set when this runs).
-    setTimeout(() => {
-      if (component._selectionJustMade) {
-        // A selection was just made – keep the label set by handleSelect.
-        component._selectionJustMade = false;
-        component.setState({ isOpen: false });
-      } else {
-        // No selection – restore the input to the current filler label.
-        component.setState({
-          isOpen: false,
-          query: currentFillerLabel(component.props.perspective, component.props.candidates),
-        });
-      }
-    }, DROPDOWN_CLOSE_DELAY);
+  // Close the dropdown only when focus leaves the entire widget (input + list).
+  // When the user clicks a list item the input loses focus first, but
+  // relatedTarget is the list item (inside the container) so we do NOT close.
+  // Only when focus moves outside (click elsewhere) do we close and restore
+  // the input to the current filler label.
+  handleContainerBlur(e: React.FocusEvent<HTMLDivElement>) {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      return; // Focus still within widget — keep dropdown open
+    }
+    // Focus left the widget.
+    if (this._selectionJustMade) {
+      // handleSelect already closed the dropdown and set the label — just
+      // clear the flag and leave state as-is.
+      this._selectionJustMade = false;
+      return;
+    }
+    // No selection was made; restore the input to the current filler label.
+    this.setState({
+      isOpen: false,
+      query: currentFillerLabel(this.props.perspective, this.props.candidates),
+    });
   }
 
   handleSelect(candidate: FilterValueEntry) {
@@ -203,7 +202,7 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
         )
     );
 
-    // Mark that a selection was just made (checked in handleBlur) and show the
+    // Mark that a selection was just made (checked in handleContainerBlur) and show the
     // chosen label immediately while the PDR processes the bind_ call.
     component._selectionJustMade = true;
     component.setState({ query: candidate.filterValue, isOpen: false });
@@ -221,7 +220,7 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
     const fillerLabel = currentFillerLabel(perspective, component.props.candidates);
 
     return (
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative' }} onBlur={component.handleContainerBlur}>
         { title && <Form.Label>{title}</Form.Label> }
         <Form.Control
           type="text"
@@ -229,7 +228,6 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
           placeholder={fillerLabel || i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
           onChange={component.handleInputChange}
           onFocus={component.handleFocus}
-          onBlur={component.handleBlur}
           disabled={!canFill}
           aria-label={title || perspective.displayName || i18next.t('typeAheadFiller_ariaLabel', { ns: 'preact' })}
         />
@@ -248,7 +246,7 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
               <ListGroup.Item
                 key={idx}
                 action
-                onMouseDown={() => component.handleSelect(candidate)}
+                onClick={() => component.handleSelect(candidate)}
               >
                 {candidate.filterValue}
               </ListGroup.Item>
