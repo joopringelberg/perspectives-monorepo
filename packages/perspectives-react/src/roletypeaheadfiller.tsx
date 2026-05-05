@@ -68,7 +68,7 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
 {
   // Tracks whether a selection was just made so that handleContainerBlur can
   // distinguish "user selected a candidate" from "user clicked elsewhere".
-  // A selection closes the dropdown immediately (onMouseDown → handleSelect →
+  // A selection closes the dropdown immediately (onClick → handleSelect →
   // setState({isOpen:false})); the flag prevents handleContainerBlur from
   // then overwriting the newly selected label with the old filler label.
   private _selectionJustMade = false;
