@@ -48,6 +48,9 @@ domain model://joopringelberg.nl#TestTypeAhead@1.0
           row
             typeaheadfiller Friend
               fillfrom sys:MySocialEnvironment >> Persons
+          row 
+            typeaheadform Friend
+              fillfrom sys:MySocialEnvironment >> Persons
         where
 
     user Friend filledBy sys:SocialEnvironment$Persons
