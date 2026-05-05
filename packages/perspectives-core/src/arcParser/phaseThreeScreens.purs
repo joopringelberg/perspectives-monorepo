@@ -242,7 +242,7 @@ handleScreens screenEs = do
         pure $ TypeAheadFillerElementD (TypeAheadFillerDef { widgetCommonFields: widgetCommonFields', candidates: [] })
       screenElementDef (AST.TypeAheadFormElement (AST.TypeAheadFormE fields)) = do
         widgetCommonFields' <- widgetCommonFields subjectRoleType fields functionalWidget
-        pure $ TypeAheadFormElementD (TypeAheadFormDef { widgetCommonFields: widgetCommonFields', candidates: [] })
+        pure $ TypeAheadFormElementD (TypeAheadFormDef { widgetCommonFields: widgetCommonFields', displayName: Nothing, candidates: [] })
 
       functionalWidget :: ThreeValuedLogic
       functionalWidget = True

@@ -295,7 +295,7 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
           >
           { typeAheadFormDef.widgetCommonFields.title ? <h4>{typeAheadFormDef.widgetCommonFields.title}</h4> : null }
           <RoleTypeAheadForm
-            perspective={typeAheadFormDef.widgetCommonFields.perspective}
+            displayName={typeAheadFormDef.displayName}
             candidates={typeAheadFormDef.candidates}
             title={typeAheadFormDef.widgetCommonFields.title}
             fieldConstraints={typeAheadFormDef.widgetCommonFields.fieldConstraints}

@@ -19,7 +19,7 @@
 // END LICENSE
 
 import React from 'react';
-import { FilterValueEntry, Perspective, RoleInstanceT } from 'perspectives-proxy';
+import { PDRproxy, CONTINUOUS, FilterValueEntry, Perspective, RoleInstanceT, Unsubscriber } from 'perspectives-proxy';
 import PerspectivesComponent from './perspectivesComponent';
 import i18next from 'i18next';
 import { Form, ListGroup } from 'react-bootstrap';
@@ -32,14 +32,18 @@ import PerspectiveBasedForm from './perspectivebasedform.js';
 // Designed for inspecting a single instance from a large candidate list.
 //
 // Props:
-//  - perspective : Perspective – the serialised perspective on the role to present
+//  - displayName : string – human-readable role-type name used as aria-label
 //  - candidates  : FilterValueEntry[] – pre-fetched {filterValue, roleId} entries
 //  - title       : string | undefined – optional label for the widget
 //  - fieldConstraints: any[] – per-property display constraints
+//
+// After the user selects a candidate the component calls getPerspective() to
+// fetch the perspective for that single instance on demand.  No full role-
+// instance list is ever sent at screen-build time.
 ////////////////////////////////////////////////////////////////////////////////
 
 interface RoleTypeAheadFormProps {
-  perspective: Perspective;
+  displayName: string;
   candidates: FilterValueEntry[];
   title?: string;
   fieldConstraints?: any[];
@@ -49,19 +53,37 @@ interface RoleTypeAheadFormState {
   query: string;
   isOpen: boolean;
   selectedRoleId: RoleInstanceT | null;
+  selectedPerspective: Perspective | null;
 }
 
 const MAX_VISIBLE = 20;
 
 export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAheadFormProps, RoleTypeAheadFormState>
 {
+  // Tracks the unsubscriber for the active getPerspective subscription so we
+  // can cancel it before starting a new one when the user re-selects.
+  private _perspectiveUnsub: Unsubscriber | null = null;
+
   constructor(props: RoleTypeAheadFormProps) {
     super(props);
-    this.state = { query: '', isOpen: false, selectedRoleId: null };
+    this.state = { query: '', isOpen: false, selectedRoleId: null, selectedPerspective: null };
     this.handleInputChange = this.handleInputChange.bind(this);
     this.handleSelect = this.handleSelect.bind(this);
     this.handleContainerBlur = this.handleContainerBlur.bind(this);
     this.handleFocus = this.handleFocus.bind(this);
+  }
+
+  componentWillUnmount() {
+    const component = this;
+    // Cancel the active perspective subscription before the base-class cleanup.
+    if (component._perspectiveUnsub) {
+      const unsub = component._perspectiveUnsub;
+      PDRproxy.then(function(pproxy) {
+        pproxy.send(unsub, function() {});
+      });
+      component._perspectiveUnsub = null;
+    }
+    super.componentWillUnmount();
   }
 
   // --------------------------------------------------------------------
@@ -97,7 +119,7 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
   handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     // Changing the query always exits "display mode" and starts a real search.
     // Clearing selectedRoleId ensures filteredCandidates filters normally.
-    this.setState({ query: e.target.value, isOpen: true, selectedRoleId: null });
+    this.setState({ query: e.target.value, isOpen: true, selectedRoleId: null, selectedPerspective: null });
   }
 
   handleFocus() {
@@ -125,10 +147,38 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
   }
 
   handleSelect(candidate: FilterValueEntry) {
-    this.setState({
+    const component = this;
+
+    // Cancel the previous perspective subscription before starting a new one.
+    if (component._perspectiveUnsub) {
+      const prevUnsub = component._perspectiveUnsub;
+      PDRproxy.then(function(pproxy) {
+        pproxy.send(prevUnsub, function() {});
+      });
+      component._perspectiveUnsub = null;
+    }
+
+    component.setState({
       query: candidate.filterValue,
       isOpen: false,
       selectedRoleId: candidate.roleId as RoleInstanceT,
+      selectedPerspective: null,
+    });
+
+    // Fetch the perspective for the selected role instance on demand.
+    PDRproxy.then(function(pproxy) {
+      const unsub = pproxy.getPerspective(
+        candidate.roleId as RoleInstanceT,
+        undefined,
+        function(perspectives: Perspective[]) {
+          if (perspectives.length > 0) {
+            component.setState({ selectedPerspective: perspectives[0] });
+          }
+        },
+        CONTINUOUS
+      );
+      // Store unsubscriber for manual cleanup on re-selection.
+      unsub.then(function(u) { component._perspectiveUnsub = u; });
     });
   }
 
@@ -137,8 +187,8 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
   // --------------------------------------------------------------------
   render() {
     const component = this;
-    const { title, perspective, fieldConstraints } = component.props;
-    const { query, isOpen, selectedRoleId } = component.state;
+    const { title, displayName, fieldConstraints } = component.props;
+    const { query, isOpen, selectedRoleId, selectedPerspective } = component.state;
     const matches = component.filteredCandidates();
 
     return (
@@ -151,7 +201,7 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
             placeholder={i18next.t('typeAheadForm_placeholder', { ns: 'preact' })}
             onChange={component.handleInputChange}
             onFocus={component.handleFocus}
-            aria-label={title || (perspective.displayName && perspective.displayName.trim()) || i18next.t('typeAheadForm_ariaLabel', { ns: 'preact' })}
+            aria-label={title || (displayName && displayName.trim()) || i18next.t('typeAheadForm_ariaLabel', { ns: 'preact' })}
           />
           { isOpen && matches.length > 0 && (
             <ListGroup
@@ -176,12 +226,12 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
             </ListGroup>
           )}
         </div>
-        { selectedRoleId && (
+        { selectedRoleId && selectedPerspective && (
           <div className="mt-3">
             <PerspectiveBasedForm
-              perspective={perspective}
+              perspective={selectedPerspective}
               roleinstance={selectedRoleId}
-              cardtitle={perspective.identifyingProperty}
+              cardtitle={selectedPerspective.identifyingProperty}
               showControls={false}
               fieldConstraints={fieldConstraints}
             />
@@ -191,3 +241,4 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
     );
   }
 }
+

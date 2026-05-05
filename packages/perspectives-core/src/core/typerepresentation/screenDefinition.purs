@@ -28,7 +28,7 @@ import Data.Array (length, mapWithIndex)
 import Data.Either (Either(..))
 import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (class Newtype)
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple(..))
@@ -100,9 +100,12 @@ newtype TypeAheadFillerDef = TypeAheadFillerDef
 
 -- | A widget that shows a typeahead input for searching and selecting a role instance,
 -- | and then presents the selected instance in a form. Candidates are fetched from the
--- | FilterValue CouchDB view; the form uses the perspective from widgetCommonFields.
+-- | FilterValue CouchDB view. After selection the React component fetches the perspective
+-- | on demand via GetPerspective so that no full role-instance list is sent at build time.
+-- | `displayName` is the human-readable role-type label used for the aria-label.
 newtype TypeAheadFormDef = TypeAheadFormDef
   { widgetCommonFields :: WidgetCommonFieldsDef
+  , displayName :: Maybe String
   , candidates :: Array FilterValueEntry
   }
 
@@ -416,7 +419,7 @@ instance WriteForeign TypeAheadFillerDef where
   writeImpl (TypeAheadFillerDef { widgetCommonFields, candidates }) = write { tag: "TypeAheadFillerDef", widgetCommonFields, candidates }
 
 instance WriteForeign TypeAheadFormDef where
-  writeImpl (TypeAheadFormDef { widgetCommonFields, candidates }) = write { tag: "TypeAheadFormDef", widgetCommonFields, candidates }
+  writeImpl (TypeAheadFormDef { widgetCommonFields, displayName, candidates }) = write { tag: "TypeAheadFormDef", widgetCommonFields, displayName: fromMaybe "" displayName, candidates }
 
 -----------------------------------------------------------
 -- READFOREIGN INSTANCES
@@ -567,7 +570,7 @@ instance ReadForeign TypeAheadFormDef where
   readImpl f = do
     ({ tag, widgetCommonFields, candidates } :: { tag :: String, widgetCommonFields :: WidgetCommonFieldsDef, candidates :: Array FilterValueEntry }) <- read' f
     case tag of
-      "TypeAheadFormDef" -> pure $ TypeAheadFormDef { widgetCommonFields, candidates }
+      "TypeAheadFormDef" -> pure $ TypeAheadFormDef { widgetCommonFields, displayName: Nothing, candidates }
       _ -> fail (TypeMismatch "TypeAheadFormDef" tag)
 
 -------------------------------------------------------------------------------

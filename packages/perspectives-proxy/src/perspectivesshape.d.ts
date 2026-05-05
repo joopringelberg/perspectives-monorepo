@@ -238,9 +238,17 @@ export type TypeAheadFillerElementDef = {
   candidates: FilterValueEntry[];
 }
 
+// Widget common fields for TypeAheadForm: omits `perspective` because it is
+// fetched on demand via getPerspective() after the user selects a candidate.
+export type TypeAheadFormWidgetFields = {
+  title?: string;
+  fieldConstraints?: FieldDisplayConstraint[];
+};
+
 export type TypeAheadFormElementDef = {
   tag: "TypeAheadFormDef";
-  widgetCommonFields: WidgetCommonFields;
+  widgetCommonFields: TypeAheadFormWidgetFields;
+  displayName: string;
   candidates: FilterValueEntry[];
 }
 

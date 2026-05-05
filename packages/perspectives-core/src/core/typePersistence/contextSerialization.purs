@@ -44,7 +44,7 @@ import Prelude
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (catMaybes, concat, difference, filter, filterA, head)
-import Data.Maybe (Maybe(..), isJust, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Traversable (traverse)
 import Foreign.Object (values)
@@ -75,6 +75,8 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableName, perspectiveForContextAndUser', perspectiveForContextAndUserFromId, perspectivesForContextAndUser')
 import Perspectives.TypePersistence.PerspectiveSerialisation.Data (SerialisedPerspective', SerialisedProperty)
 import Perspectives.TypePersistence.ScreenContextualisation (contextualiseScreen, contextualiseTableFormDef)
+import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
+import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, generalisesRoleType_, indexedContextName, string2RoleType)
 import Simple.JSON (writeJSON)
 
@@ -473,19 +475,22 @@ instance AddPerspectives TypeAheadFillerDef where
     unsnocQfd _ = Nothing
 
 instance AddPerspectives TypeAheadFormDef where
-  addPerspectives (TypeAheadFormDef { widgetCommonFields, candidates: _ }) user ctxt = do
-    -- Fetch the perspective (without loading all role instances via possibleFillers).
-    -- TypeAheadForm uses the FilterValue view for efficient candidate lookup.
-    perspective <- perspectiveForContextAndUserFromId
-      user
-      (widgetCommonFields { fillFrom = Nothing })
-      ctxt
+  addPerspectives (TypeAheadFormDef { widgetCommonFields, displayName: _, candidates: _ }) user ctxt = do
+    -- Look up the compiled perspective to derive candidates from its `object` QFD.
+    -- We do NOT serialise the full perspective (no role instances sent at build time).
+    -- The React component fetches the perspective on demand after the user selects a
+    -- candidate, so the full instance list never burdens the cache unnecessarily.
     contextType <- lift $ contextType_ ctxt
     (translatedTitle :: Maybe String) <- lift $ traverse (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType)) widgetCommonFields.title
-    candidates <- case widgetCommonFields.fillFrom of
+    allPerspectives <- lift $ perspectivesOfRoleType widgetCommonFields.userRole
+    let mCompiledPerspective = head $ filter (\(Perspective { id }) -> id == widgetCommonFields.perspectiveId) allPerspectives
+    candidates <- case mCompiledPerspective of
       Nothing -> pure []
-      Just fillFromQfd -> case unsnocQfd' fillFromQfd of
+      Just (Perspective { object }) -> case unsnocQfd' object of
         Just { query: contextGetterQfd, lastStep } -> case queryFunction lastStep of
+          -- Only GetRoleInstancesForContextFromDatabaseF (the compiled form of a
+          -- role defined as `= SomeContext >> SomeEnumeratedRole`) maps directly
+          -- to a (roleType, contextGuid) key in the FilterValue view.
           DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeStr -> do
             (ctxtGetter :: ContextInstance ~~> ContextInstance) <- lift $ context2context contextGetterQfd
             sourceContexts <- runArrayT $ ctxtGetter ctxt
@@ -496,7 +501,12 @@ instance AddPerspectives TypeAheadFormDef where
                 lift $ getViewOnDatabase db "defaultViews/filterValueView" (Key [ roleTypeStr, takeGuid (unwrap sourceContext) ])
           _ -> pure []
         _ -> pure []
-    pure $ TypeAheadFormDef { widgetCommonFields: widgetCommonFields { perspective = Just perspective, title = translatedTitle }, candidates }
+    displayName <- case mCompiledPerspective of
+      Nothing -> pure $ fromMaybe "" translatedTitle
+      Just (Perspective { roleTypes }) -> case head roleTypes of
+        Nothing -> pure $ fromMaybe "" translatedTitle
+        Just rt -> lift $ translateType rt
+    pure $ TypeAheadFormDef { widgetCommonFields: widgetCommonFields { perspective = Nothing, title = translatedTitle }, displayName: Just displayName, candidates }
     where
     unsnocQfd' :: QueryFunctionDescription -> Maybe { query :: QueryFunctionDescription, lastStep :: QueryFunctionDescription }
     unsnocQfd' (BQD _ qf qfd1 qfd2 _ _ _)

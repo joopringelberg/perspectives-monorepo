@@ -5,7 +5,7 @@ import Prelude
 import Control.Monad.Reader (ReaderT, ask)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (catMaybes, concat, elemIndex, filter, filterA, head, null)
-import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
+import Data.Maybe (Maybe(..), fromJust, fromMaybe, isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Partial.Unsafe (unsafePartial)
@@ -196,37 +196,46 @@ contextualiseTypeAheadFillerDef (TypeAheadFillerDef { widgetCommonFields, candid
   unsnocQfd _ = Nothing
 
 contextualiseTypeAheadFormDef :: TypeAheadFormDef -> InContext (Maybe TypeAheadFormDef)
-contextualiseTypeAheadFormDef (TypeAheadFormDef { widgetCommonFields, candidates: _ }) = do
-  mwidgetCommonFields <- contextualiseWidgetCommonFields widgetCommonFields
-  case mwidgetCommonFields of
+contextualiseTypeAheadFormDef (TypeAheadFormDef { widgetCommonFields, displayName: _, candidates: _ }) = do
+  { contextInstance, contextType } <- ask
+  (translatedTitle :: Maybe String) <- lift2InContext $ traverse (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType)) widgetCommonFields.title
+  allPerspectives <- lift2InContext $ perspectivesOfRoleType widgetCommonFields.userRole
+  let mCompiledPerspective = head $ filter (\(Perspective { id }) -> id == widgetCommonFields.perspectiveId) allPerspectives
+  case mCompiledPerspective of
     Nothing -> pure Nothing
-    Just widgetCommonFields' -> do
-      { contextInstance } <- ask
-      candidates <- case widgetCommonFields.fillFrom of
-        Nothing -> pure []
-        Just fillFromQfd -> case unsnocQfd' fillFromQfd of
-          Just { query: contextGetterQfd, lastStep } -> case queryFunction lastStep of
-            DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeStr -> do
-              (ctxtGetter :: ContextInstance ~~> ContextInstance) <- lift2InContext $ context2context contextGetterQfd
-              sourceContexts <- lift $ lift $ runArrayT $ ctxtGetter contextInstance
-              case head sourceContexts of
-                Nothing -> pure []
-                Just sourceContext -> do
-                  db <- lift2InContext entitiesDatabaseName
-                  lift2InContext $ getViewOnDatabase db "defaultViews/filterValueView" (Key [ roleTypeStr, takeGuid (unwrap sourceContext) ])
+    Just perspective@(Perspective { object, roleTypes }) -> do
+      mValidPerspective <- contextualisePerspective perspective
+      case mValidPerspective of
+        Nothing -> pure Nothing
+        Just _ -> do
+          candidates <- case unsnocQfd object of
+            Just { query: contextGetterQfd, lastStep } -> case queryFunction lastStep of
+              -- Only GetRoleInstancesForContextFromDatabaseF maps to a (roleType, contextGuid)
+              -- key in the FilterValue view.
+              DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeStr -> do
+                (ctxtGetter :: ContextInstance ~~> ContextInstance) <- lift2InContext $ context2context contextGetterQfd
+                sourceContexts <- lift $ lift $ runArrayT $ ctxtGetter contextInstance
+                case head sourceContexts of
+                  Nothing -> pure []
+                  Just sourceContext -> do
+                    db <- lift2InContext entitiesDatabaseName
+                    lift2InContext $ getViewOnDatabase db "defaultViews/filterValueView" (Key [ roleTypeStr, takeGuid (unwrap sourceContext) ])
+              _ -> pure []
             _ -> pure []
-          _ -> pure []
-      pure $ Just $ TypeAheadFormDef { widgetCommonFields: widgetCommonFields', candidates }
+          displayName <- case head roleTypes of
+            Nothing -> pure $ fromMaybe "" translatedTitle
+            Just rt -> lift2InContext $ translateType rt
+          pure $ Just $ TypeAheadFormDef { widgetCommonFields: widgetCommonFields { perspective = Nothing, title = translatedTitle }, displayName: Just displayName, candidates }
   where
-  unsnocQfd' :: QueryFunctionDescription -> Maybe { query :: QueryFunctionDescription, lastStep :: QueryFunctionDescription }
-  unsnocQfd' (BQD _ qf qfd1 qfd2 _ _ _)
+  unsnocQfd :: QueryFunctionDescription -> Maybe { query :: QueryFunctionDescription, lastStep :: QueryFunctionDescription }
+  unsnocQfd (BQD _ qf qfd1 qfd2 _ _ _)
     | qf == (BinaryCombinator ComposeF) && queryFunction qfd2 == BinaryCombinator ComposeF =
-        case unsnocQfd' qfd2 of
+        case unsnocQfd qfd2 of
           Just { query: q, lastStep: ls } ->
             Just { query: BQD (domain qfd1) (BinaryCombinator ComposeF) qfd1 q (range q) (functional q) (mandatory q), lastStep: ls }
           Nothing -> Nothing
     | qf == (BinaryCombinator ComposeF) = Just { query: qfd1, lastStep: qfd2 }
-  unsnocQfd' _ = Nothing
+  unsnocQfd _ = Nothing
 
 contextualiseMarkDownDef :: MarkDownDef -> InContext (Maybe MarkDownDef)
 contextualiseMarkDownDef md = case md of
