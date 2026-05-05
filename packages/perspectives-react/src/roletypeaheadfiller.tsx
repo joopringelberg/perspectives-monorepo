@@ -54,15 +54,48 @@ const MAX_VISIBLE = 20;
 // list item registers before the list is removed from the DOM.
 const DROPDOWN_CLOSE_DELAY = 150;
 
+// Returns the filterValue label for the current filler of the first role
+// instance in the perspective, or '' if the role is not yet filled or if the
+// filler is not found among the candidates.
+function currentFillerLabel(perspective: Perspective, candidates: FilterValueEntry[]): string {
+  const firstInstance = Object.values(perspective.roleInstances)[0];
+  const existingFiller = firstInstance?.filler;
+  if (existingFiller) {
+    const match = candidates.find(c => c.roleId === existingFiller);
+    return match ? match.filterValue : '';
+  }
+  return '';
+}
+
 export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeAheadFillerProps, RoleTypeAheadFillerState>
 {
+  // Tracks whether a selection was just made via handleSelect so that handleBlur
+  // can distinguish "user selected a candidate" from "user clicked away".
+  private _selectionJustMade = false;
+
   constructor(props: RoleTypeAheadFillerProps) {
     super(props);
-    this.state = { query: '', isOpen: false };
+    this.state = {
+      query: currentFillerLabel(props.perspective, props.candidates),
+      isOpen: false,
+    };
     this.handleInputChange = this.handleInputChange.bind(this);
     this.handleSelect = this.handleSelect.bind(this);
     this.handleBlur = this.handleBlur.bind(this);
     this.handleFocus = this.handleFocus.bind(this);
+  }
+
+  // When the filler changes externally (e.g. another user fills the role),
+  // update the input label — but only while the dropdown is not open so we
+  // don't interrupt an active search.
+  componentDidUpdate(prevProps: RoleTypeAheadFillerProps) {
+    const prevFiller = Object.values(prevProps.perspective.roleInstances)[0]?.filler;
+    const currFiller = Object.values(this.props.perspective.roleInstances)[0]?.filler;
+    if (prevFiller !== currFiller && !this.state.isOpen) {
+      this.setState({
+        query: currentFillerLabel(this.props.perspective, this.props.candidates),
+      });
+    }
   }
 
   // --------------------------------------------------------------------
@@ -71,10 +104,10 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
   filteredCandidates(): FilterValueEntry[] {
     const { query } = this.state;
     const { candidates } = this.props;
-    // If the total number of candidates is below MAX_VISIBLE, show all of them
-    // immediately (even without a query) so the user sees the full list on focus.
+    // When query is empty (e.g. on focus), show up to MAX_VISIBLE candidates
+    // so the user can see the options without having to type.
     if (!query) {
-      return candidates.length < MAX_VISIBLE ? candidates : [];
+      return candidates.slice(0, MAX_VISIBLE);
     }
     const lower = query.toLowerCase();
     return candidates
@@ -90,13 +123,28 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
   }
 
   handleFocus() {
-    // Always open on focus — candidates below threshold will be shown immediately.
-    this.setState({ isOpen: true });
+    // Clear the query on focus so the user can search from all candidates.
+    // The current filler label is restored on blur if no new selection is made.
+    this.setState({ query: '', isOpen: true });
   }
 
   handleBlur() {
-    // Delay closing so click on list item registers first.
-    setTimeout(() => this.setState({ isOpen: false }), DROPDOWN_CLOSE_DELAY);
+    const component = this;
+    // Delay closing so click on list item registers first (mouseDown fires
+    // before blur, so _selectionJustMade will be set when this runs).
+    setTimeout(() => {
+      if (component._selectionJustMade) {
+        // A selection was just made – keep the label set by handleSelect.
+        component._selectionJustMade = false;
+        component.setState({ isOpen: false });
+      } else {
+        // No selection – restore the input to the current filler label.
+        component.setState({
+          isOpen: false,
+          query: currentFillerLabel(component.props.perspective, component.props.candidates),
+        });
+      }
+    }, DROPDOWN_CLOSE_DELAY);
   }
 
   handleSelect(candidate: FilterValueEntry) {
@@ -149,7 +197,9 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
         )
     );
 
-    // Close the dropdown and reset the query after selection.
+    // Mark that a selection was just made (checked in handleBlur) and show the
+    // chosen label immediately while the PDR processes the bind_ call.
+    component._selectionJustMade = true;
     component.setState({ query: candidate.filterValue, isOpen: false });
   }
 
@@ -162,6 +212,7 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
     const { query, isOpen } = component.state;
     const matches = component.filteredCandidates();
     const canFill = perspective.verbs && perspective.verbs.includes('Fill');
+    const fillerLabel = currentFillerLabel(perspective, component.props.candidates);
 
     return (
       <div style={{ position: 'relative' }}>
@@ -169,7 +220,7 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
         <Form.Control
           type="text"
           value={query}
-          placeholder={i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
+          placeholder={fillerLabel || i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
           onChange={component.handleInputChange}
           onFocus={component.handleFocus}
           onBlur={component.handleBlur}
