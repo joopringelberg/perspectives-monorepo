@@ -261,8 +261,8 @@ objectRoleTypeFromSerialisedPerspective :: SerialisedPerspective' -> RoleType
 objectRoleTypeFromSerialisedPerspective { roleType: mRoleTypeStr, isCalculated } =
   case mRoleTypeStr of
     Just rtStr | isCalculated -> CR (CalculatedRoleType rtStr)
-    Just rtStr                -> ENR (EnumeratedRoleType rtStr)
-    Nothing                   -> ENR (EnumeratedRoleType "")
+    Just rtStr -> ENR (EnumeratedRoleType rtStr)
+    Nothing -> ENR (EnumeratedRoleType "")
 
 isChat :: SerialisedPerspective' -> MonadPerspectives Boolean
 isChat { roleType } = case roleType of
