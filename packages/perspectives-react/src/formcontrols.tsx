@@ -193,7 +193,7 @@ export default class FormControls extends PerspectivesComponent<FormControlsProp
 
     if ( component.stateIsComplete(["roleinstance"]) )
     {
-      return  <Navbar bg="light" expand="lg" aria-label="Form controls" className="mt-2">
+      return  <Navbar expand="lg" aria-label="Form controls" className="mt-2">
                 {
                   mayCreateContext ?
                   <CreateContextDropDown 

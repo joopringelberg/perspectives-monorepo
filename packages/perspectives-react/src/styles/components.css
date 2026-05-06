@@ -1,4 +1,10 @@
 
+/* Reduce vertical padding in form controls to make fields less tall */
+.form-control {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
 /* Ensure placeholders have good contrast */
 ::placeholder {
   color: var(--bs-input-placeholder-color) !important;
@@ -98,10 +104,8 @@ for a discussion about variables and sass. */
 
 /* Per-table selection highlight independent of browser focus */
 .card-selected {
-  /* Visual highlight similar to bootstrap focus but not tied to :focus */
-  box-shadow: 0 0 0 2px var(--bs-primary, #0d6efd) inset, 0 0 0 2px var(--bs-primary, #0d6efd);
-  background-color: rgba(13,110,253,0.08) !important;
-  border-color: var(--bs-primary, #0d6efd) !important;
+  background-color: rgba(var(--bs-primary-rgb), 0.18) !important;
+  border-color: rgba(var(--bs-primary-rgb), 0.3) !important;
 }
 
 /* Ensure inner input inherits highlight if wrapper gets class via adornment */
