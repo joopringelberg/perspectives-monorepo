@@ -59,11 +59,13 @@ export class Where extends Component<WhereProps, WhereState> {
       {this.props.screenelements.markdown.map((markdown, index) => 
           <div key={index} className="markdown">{ buildMarkDown(value.contextinstance, value.myroletype, markdown) }</div>
         )}
-      <WiderContexts externalrole={component.props.openContext}/>
-      <Accordion ref={this.ref} activeKey={this.state.accordionOpen} flush className="pb-3">
-        <PinnedContexts systemuser={this.props.systemUser} />
-        <RecentContexts systemuser={this.props.systemUser} openContext={this.props.openContext} systemIdentifier={this.props.systemIdentifier}/>
-      </Accordion>
+      <div className="markdown">
+        <WiderContexts externalrole={component.props.openContext}/>
+        <Accordion ref={this.ref} activeKey={this.state.accordionOpen} flush className="pb-3">
+          <PinnedContexts systemuser={this.props.systemUser} />
+          <RecentContexts systemuser={this.props.systemUser} openContext={this.props.openContext} systemIdentifier={this.props.systemIdentifier}/>
+        </Accordion>
+      </div>
       {
         this.props.screenelements.contextRoles.length > 0 ?
         <div>
