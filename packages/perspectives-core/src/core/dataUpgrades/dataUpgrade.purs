@@ -53,6 +53,7 @@ import Prelude
 import Control.Monad.Cont (lift)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Reader.Trans (runReaderT)
+import Control.Monad.ST (run)
 import Control.Monad.Writer (runWriterT)
 import Data.Array (catMaybes, elemIndex, foldM, head, length, union)
 import Data.Either (Either(..))
@@ -393,6 +394,12 @@ runDataUpgrades = do
         -- Set the new view through Pouchdb.
         entitiesDatabaseName >>= setFilterValueView
     )
+
+  runUpgrade installedVersion "3.3.3"
+    ( \_ -> void recompileLocalModels
+    )
+
+  void recompileLocalModels
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
