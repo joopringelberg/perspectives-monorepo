@@ -194,7 +194,7 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
         { title: Nothing
         , perspective: Just p
         , perspectiveId: ""
-        , objectRoleType
+        , objectRoleType: Just objectRoleType
         , propertyRestrictions: Nothing
         , withoutProperties: Nothing
         , roleVerbs: Nothing
@@ -223,7 +223,7 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
         { title: Nothing
         , perspective: Just p
         , perspectiveId: ""
-        , objectRoleType
+        , objectRoleType: Just objectRoleType
         , propertyRestrictions: Nothing
         , withoutProperties: Nothing
         , roleVerbs: Nothing
@@ -277,7 +277,7 @@ makeTableFormDef userRoleType p@{ id, displayName } =
       { title: Just displayName
       , perspective: Just p
       , perspectiveId: id
-      , objectRoleType
+      , objectRoleType: Just objectRoleType
       , propertyRestrictions: Nothing
       , withoutProperties: Nothing
       , roleVerbs: Nothing
@@ -461,7 +461,7 @@ instance AddPerspectives TypeAheadFormDef where
     -- candidate, so the full instance list never burdens the cache unnecessarily.
     contextType <- lift $ contextType_ ctxt
     (translatedTitle :: Maybe String) <- lift $ traverse (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType)) widgetCommonFields.title
-    candidates <- lift $ fetchFilterValueCandidates widgetCommonFields.objectRoleType ctxt
+    candidates <- lift $ maybe (pure []) (\rt -> fetchFilterValueCandidates rt ctxt) widgetCommonFields.objectRoleType
     allPerspectives <- lift $ perspectivesOfRoleType widgetCommonFields.userRole
     let mCompiledPerspective = head $ filter (\(Perspective { id }) -> id == widgetCommonFields.perspectiveId) allPerspectives
     displayName <- case mCompiledPerspective of
@@ -632,7 +632,7 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               { title: Nothing
               , perspective: Just perspective
               , perspectiveId: ""
-              , objectRoleType
+              , objectRoleType: Just objectRoleType
               , propertyRestrictions: Nothing
               , withoutProperties: Nothing
               , roleVerbs: Nothing
@@ -648,7 +648,7 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               { title: Nothing
               , perspective: Just perspective
               , perspectiveId: ""
-              , objectRoleType
+              , objectRoleType: Just objectRoleType
               , propertyRestrictions: Nothing
               , withoutProperties: Nothing
               , roleVerbs: Nothing

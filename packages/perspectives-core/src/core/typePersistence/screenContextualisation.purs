@@ -233,7 +233,7 @@ contextualiseTypeAheadFormDef (TypeAheadFormDef { widgetCommonFields, displayNam
       case mValidPerspective of
         Nothing -> pure Nothing
         Just _ -> do
-          candidates <- lift2InContext $ fetchFilterValueCandidates widgetCommonFields.objectRoleType contextInstance
+          candidates <- lift2InContext $ maybe (pure []) (\rt -> fetchFilterValueCandidates rt contextInstance) widgetCommonFields.objectRoleType
           displayName <- case head roleTypes of
             Nothing -> pure $ fromMaybe "" translatedTitle
             Just rt -> lift2InContext $ translateType rt
