@@ -37,6 +37,13 @@ type InContext = ReaderT Context MonadPerspectivesQuery
 -- | For a chain `A >> B >> C` this returns `Just { query: A >> B, lastStep: C }`.
 -- | Used to extract the role-getter step from a `fillfrom` or role calculation expression
 -- | so that the preceding context navigation can be evaluated separately.
+-- |
+-- | Two guard conditions cover the two structural cases:
+-- | 1. When the right operand of `ComposeF` is itself a composition (`queryFunction qfd2 == BinaryCombinator ComposeF`),
+-- |    the function recurses into the right subtree, effectively right-associating the chain
+-- |    so the very last step can be peeled off.
+-- | 2. When the right operand is NOT a composition, the BQD is a simple two-step chain;
+-- |    the left operand is the context-getter and the right operand is the final role-getter step.
 unsnocQfd :: QueryFunctionDescription -> Maybe { query :: QueryFunctionDescription, lastStep :: QueryFunctionDescription }
 unsnocQfd (BQD _ qf qfd1 qfd2 _ _ _)
   | qf == (BinaryCombinator ComposeF) && queryFunction qfd2 == BinaryCombinator ComposeF =

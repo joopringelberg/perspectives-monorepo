@@ -187,12 +187,9 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
     }
   where
   makeTab :: SerialisedPerspective' -> TabDef
-  makeTab p@{ displayName, isFunctional, roleType: mRoleTypeStr, isCalculated } =
+  makeTab p@{ displayName, isFunctional } =
     let
-      objectRoleType = case mRoleTypeStr of
-        Just rtStr | isCalculated -> CR (CalculatedRoleType rtStr)
-        Just rtStr                -> ENR (EnumeratedRoleType rtStr)
-        Nothing                   -> ENR (EnumeratedRoleType "")
+      objectRoleType = objectRoleTypeFromSerialisedPerspective p
       widgetCommonFields =
         { title: Nothing
         , perspective: Just p
@@ -219,12 +216,9 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
         }
 
   makeRow :: SerialisedPerspective' -> ScreenElementDef
-  makeRow p@{ displayName, isFunctional, roleType: mRoleTypeStr, isCalculated } =
+  makeRow p@{ displayName, isFunctional } =
     let
-      objectRoleType = case mRoleTypeStr of
-        Just rtStr | isCalculated -> CR (CalculatedRoleType rtStr)
-        Just rtStr                -> ENR (EnumeratedRoleType rtStr)
-        Nothing                   -> ENR (EnumeratedRoleType "")
+      objectRoleType = objectRoleTypeFromSerialisedPerspective p
       widgetCommonFields =
         { title: Nothing
         , perspective: Just p
@@ -260,18 +254,25 @@ isOnContextRole { roleKind } = case roleKind of
   Just ContextRole -> true
   _ -> false
 
+-- | Derive an `objectRoleType` from a `SerialisedPerspective'`.
+-- | Uses `roleType` + `isCalculated` to decide between `CR` and `ENR`; falls back to
+-- | `ENR (EnumeratedRoleType "")` when the serialised perspective has no `roleType`.
+objectRoleTypeFromSerialisedPerspective :: SerialisedPerspective' -> RoleType
+objectRoleTypeFromSerialisedPerspective { roleType: mRoleTypeStr, isCalculated } =
+  case mRoleTypeStr of
+    Just rtStr | isCalculated -> CR (CalculatedRoleType rtStr)
+    Just rtStr                -> ENR (EnumeratedRoleType rtStr)
+    Nothing                   -> ENR (EnumeratedRoleType "")
+
 isChat :: SerialisedPerspective' -> MonadPerspectives Boolean
 isChat { roleType } = case roleType of
   Just r -> string2RoleType r >>= generalisesRoleType_ (ENR $ EnumeratedRoleType chatAspect)
   Nothing -> pure false
 
 makeTableFormDef :: RoleType -> SerialisedPerspective' -> TableFormDef
-makeTableFormDef userRoleType p@{ id, displayName, roleType: mRoleTypeStr, isCalculated } =
+makeTableFormDef userRoleType p@{ id, displayName } =
   let
-    objectRoleType = case mRoleTypeStr of
-      Just rtStr | isCalculated -> CR (CalculatedRoleType rtStr)
-      Just rtStr                -> ENR (EnumeratedRoleType rtStr)
-      Nothing                   -> ENR (EnumeratedRoleType id)
+    objectRoleType = objectRoleTypeFromSerialisedPerspective p
     widgetCommonFields =
       { title: Just displayName
       , perspective: Just p
