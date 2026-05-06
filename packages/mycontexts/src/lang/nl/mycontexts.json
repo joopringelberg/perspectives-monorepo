@@ -147,7 +147,7 @@
   , "bottom_showNotifications": "Toon meldingen"
   , "bottom_goForward": "Vooruit naar de volgende context"
   , "flipping_title": "{{userRoleType}}"
-  , "wider_context": "Hoort bij:"
+  , "wider_context": "Hoort bij"
   , "dive_in": "Duik in:"
   , "jump_to": "Spring naar:"
   , "www_importTransaction": "Contexten en rollen importeren"
