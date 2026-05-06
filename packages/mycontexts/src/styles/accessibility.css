@@ -18,9 +18,10 @@
   --bs-primary-rgb: 165, 135, 97;
   --bs-primary: #a58761;
 
-  /* Body background: warm cream/parchment */
-  --bs-body-bg: #f6f0e2;
-  --bs-body-bg-rgb: 246, 240, 226;
+  /* Body background: warm cream/parchment (lighter) */
+  --bs-body-bg: #faf7f0;
+  --bs-body-bg-rgb: 250, 247, 240;
+  --bs-light-rgb: 250, 247, 240;
 
   /* Selected/active state colors with better contrast */
   --bs-secondary-bg: #626b73; /* Darker secondary background */
@@ -33,11 +34,11 @@
   /* Input placeholder color with better contrast */
   --bs-input-placeholder-color: #767676;
 
-  /* Accordion: tan/beige background with dark text (matching screenshot) */
-  --bs-accordion-bg: #b7a38b;
+  /* Accordion: lighter tan/beige background with dark text */
+  --bs-accordion-bg: #c8b89e;
   --bs-accordion-btn-color: #1b2334;
-  --bs-accordion-btn-bg: #b7a38b;
-  --bs-accordion-active-bg: #b7a38b;
+  --bs-accordion-btn-bg: #c8b89e;
+  --bs-accordion-active-bg: #c8b89e;
   --bs-accordion-active-color: #1b2334;
   
   /* Link colors: dark warm brown for cohesion with warm palette */
@@ -82,22 +83,23 @@
 }
 
 /* Spacelab is compiled with $enable-gradients: true, which bakes a
-   background-image linear-gradient into .navbar variants. Remove it so
-   the solid body-bg colour shows through cleanly. */
-.navbar {
+   background-image linear-gradient into .navbar variants. Remove it and
+   make the navbar transparent so it inherits the body background. */
+.navbar, .navbar.bg-light, .navbar.bg-dark {
   background-image: none;
+  background-color: transparent;
 }
 
 /* Fix: Spacelab's Bootstrap 5 scopes accordion variables inside .accordion{}
    (not :root), so the :root overrides above lose to the theme file.
    Repeat the overrides here at the same selector level so ours win. */
 .accordion {
-  --bs-accordion-bg: #b7a38b;
+  --bs-accordion-bg: #c8b89e;
   --bs-accordion-color: #1b2334;
-  --bs-accordion-border-color: #b7a38b; /* border same colour as bg = invisible */
+  --bs-accordion-border-color: #c8b89e; /* border same colour as bg = invisible */
   --bs-accordion-btn-color: #1b2334;
-  --bs-accordion-btn-bg: #b7a38b;
-  --bs-accordion-active-bg: #b7a38b;
+  --bs-accordion-btn-bg: #c8b89e;
+  --bs-accordion-active-bg: #c8b89e;
   --bs-accordion-active-color: #1b2334;
   --bs-accordion-btn-padding-y: 0.5rem;
   --bs-accordion-btn-padding-x: 0.75rem;
@@ -109,7 +111,7 @@
   border-color: var(--bs-accordion-bg);
   border-radius: 0.375rem !important;
   overflow: hidden;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.125rem;
 }
 
 /* Remove Spacelab's gradient from accordion buttons. */
@@ -187,4 +189,12 @@ h3.column-heading {
 button:focus-visible, 
 .btn:focus-visible {
   box-shadow: 0 0 0 0.25rem rgba(var(--bs-link-color-rgb), 0.5) !important;
+}
+
+/* Remove Bootstrap's focus glow/shadow from form controls to avoid
+   a highlighted border around fields when clicking to select them. */
+.form-control:focus {
+  box-shadow: none;
+  border-color: var(--bs-border-color);
+  outline: none;
 }

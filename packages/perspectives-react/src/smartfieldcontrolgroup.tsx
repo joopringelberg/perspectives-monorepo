@@ -129,7 +129,7 @@ export default class SmartFieldControlGroup extends Component<SmartFieldControlG
     const isHorizontal = containerWidth > 400;
     return (
       <div ref={this.containerRef}>
-        <Form.Group as={ isHorizontal ? Row : 'div'} className="mb-2">
+        <Form.Group as={ isHorizontal ? Row : 'div'} className="mb-1">
           <Form.Label
             column={isHorizontal}
             className={isHorizontal ? "col-4" : ""}

@@ -4,8 +4,8 @@ import { RoleInstanceT, ContextInstanceT, WhereTo } from "perspectives-proxy";
 import { TableForms } from "./tableForms";
 import { PinnedContexts } from "./pinnedContexts";
 import { RecentContexts } from "./recentContexts";
-import { Accordion, Container } from "react-bootstrap";
-import { buildMarkDown, i18next, ModelDependencies, PSContext } from "perspectives-react";
+import { Accordion } from "react-bootstrap";
+import { buildMarkDown, PSContext } from "perspectives-react";
 import { WiderContexts } from "./widerContexts";
 
 interface WhereProps {
@@ -59,20 +59,20 @@ export class Where extends Component<WhereProps, WhereState> {
       {this.props.screenelements.markdown.map((markdown, index) => 
           <div key={index} className="markdown">{ buildMarkDown(value.contextinstance, value.myroletype, markdown) }</div>
         )}
-      <WiderContexts externalrole={component.props.openContext}/>
+      <div className="markdown">
+        <WiderContexts externalrole={component.props.openContext}/>
+        <Accordion ref={this.ref} activeKey={this.state.accordionOpen} flush className="pb-3">
+          <PinnedContexts systemuser={this.props.systemUser} />
+          <RecentContexts systemuser={this.props.systemUser} openContext={this.props.openContext} systemIdentifier={this.props.systemIdentifier}/>
+        </Accordion>
+      </div>
       {
         this.props.screenelements.contextRoles.length > 0 ?
         <div>
-          <h3 className="column-heading">{i18next.t("dive_in", {ns: 'mycontexts'})}</h3>
           <TableForms screenelements={this.props.screenelements.contextRoles} showTablesAndForm={this.props.showTablesAndForm} />
         </div>
         : null
       }
-      <h3 className="column-heading">{i18next.t("jump_to", {ns: 'mycontexts'})}</h3>
-      <Accordion ref={this.ref} activeKey={this.state.accordionOpen} flush className="pb-3">
-        <PinnedContexts systemuser={this.props.systemUser} />
-        <RecentContexts systemuser={this.props.systemUser} openContext={this.props.openContext} systemIdentifier={this.props.systemIdentifier}/>
-      </Accordion>
     </div>)
     }</PSContext.Consumer>);
   }
