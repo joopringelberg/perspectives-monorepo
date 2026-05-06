@@ -144,7 +144,8 @@ type WidgetCommonFieldsDefWithoutPerspective f =
   -- For typeaheadfiller it is the role being filled; for typeaheadform it is the role
   -- whose instances are searched and displayed.  Used to derive FilterValue candidates
   -- without re-analysing the perspective's object QFD at runtime.
-  , objectRoleType :: RoleType
+  -- Nothing for older serialised DomeinFiles that pre-date this field.
+  , objectRoleType :: Maybe RoleType
   , fillFrom :: Maybe QueryFunctionDescription
   , fillPropertyFrom :: Maybe PropertyValueFillers
   -- The runtime  has a perspective serialisation.
