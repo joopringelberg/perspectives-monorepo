@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider, Modal, OverlayTrigger, Tooltip, Button, Form } from 'react-bootstrap';
+import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider, Modal, OverlayTrigger, Tooltip, Button, Form, Nav } from 'react-bootstrap';
 
 // Add axe to the Window interface for TypeScript
 declare global {
@@ -735,20 +735,6 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     const component = this;
     return (<header> {/* Add header landmark */}
       <Navbar bg="body" expand="xs" className="py-0 ps-2 border-bottom" id="top-navbar" role="navigation" aria-label="Main navigation">
-      { component.state.actions && Object.keys( component.state.actions ).length > 0 ?
-        <NavDropdown
-          title={
-            <>
-              <i className="bi bi-lightning-charge-fill text-body fs-5" aria-hidden="true"></i>
-              <span className="visually-hidden">{i18next.t("www_contextActions", {ns: "mycontexts"})}</span>
-            </>
-          }
-          className="hide-caret px-2 py-1"
-          id="context-actions-dropdown"
-        >
-          { Object.keys( component.state.actions ).map( action => <NavDropdown.Item key={action} onClick={() => component.runAction(action)}>{ component.state.actions![action]}</NavDropdown.Item>) }
-        </NavDropdown>
-        : null }
       <NavDropdown 
         title={
           <>
@@ -765,11 +751,27 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'apps'})}>Apps</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'settings'})}>Settings</NavDropdown.Item>
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.setState( {leftPanelContent: 'myroles'} ) }>{ i18next.t("www_myroles", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
-        <DropdownDivider />
-        <NavDropdown.Item onClick={() => component.setState({showImportTransaction: true})}>{ i18next.t("www_importTransaction", {ns: 'mycontexts'}) }</NavDropdown.Item>
-        { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
-        { component.state.openContext ? <NavDropdown.Item onClick={ () => component.copyContext( component.state.openContext! ) }>{ i18next.t("www_copycontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
+        <NavDropdown
+          title={
+            <>
+              <span>{i18next.t("www_contextActions", {ns: "mycontexts"})}</span>
+            </>
+          }
+          className="hide-caret px-2 py-1"
+          id="context-actions-dropdown"
+        >
+          { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
+          { component.state.openContext ? <NavDropdown.Item onClick={ () => component.copyContext( component.state.openContext! ) }>{ i18next.t("www_copycontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
+          <NavDropdown.Item onClick={() => component.setState({showImportTransaction: true})}>{ i18next.t("www_importTransaction", {ns: 'mycontexts'}) }</NavDropdown.Item>
+          { component.state.actions && Object.keys( component.state.actions ).length > 0 ? 
+            <>
+              <NavDropdown.Divider />
+              {Object.keys( component.state.actions ).map( action => <NavDropdown.Item key={action} onClick={() => component.runAction(action)}>{ component.state.actions![action]}</NavDropdown.Item>)}
+            </>
+            :
+            null }
+        </NavDropdown>
       <Navbar.Brand href="#home" className='me-auto text-body navbar-title'>
         {/* TODO If the available width is large enough, display both context- and role name. */}
         <FlippingTitle

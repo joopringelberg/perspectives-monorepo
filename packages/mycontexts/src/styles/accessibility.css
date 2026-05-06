@@ -21,6 +21,7 @@
   /* Body background: warm cream/parchment (lighter) */
   --bs-body-bg: #faf7f0;
   --bs-body-bg-rgb: 250, 247, 240;
+  --bs-light-rgb: 250, 247, 240;
 
   /* Selected/active state colors with better contrast */
   --bs-secondary-bg: #626b73; /* Darker secondary background */
@@ -84,7 +85,7 @@
 /* Spacelab is compiled with $enable-gradients: true, which bakes a
    background-image linear-gradient into .navbar variants. Remove it and
    make the navbar transparent so it inherits the body background. */
-.navbar {
+.navbar, .navbar.bg-light, .navbar.bg-dark {
   background-image: none;
   background-color: transparent;
 }

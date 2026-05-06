@@ -56,7 +56,7 @@ export class WiderContexts extends PerspectivesComponent<WiderContextsProps, Wid
       return  (<div ref={component.domEl}>
                 <Accordion>
                   <Accordion.Item eventKey="0">
-                    <Accordion.Header>
+                    <Accordion.Header className="py-1">
                       {i18next.t("wider_context", {ns: 'mycontexts'})}
                     </Accordion.Header>
                     <Accordion.Body className="p-0">
