@@ -408,6 +408,7 @@ handleScreens screenEs = do
         pure
           { title: title'
           , perspectiveId
+          , objectRoleType
           , perspective: Nothing
           , fillFrom: fillFrom'
           , fillPropertyFrom: fillPropertyFrom'

@@ -140,6 +140,11 @@ type WidgetCommonFieldsDefWithoutPerspective f =
   -- `perspectiveId` replaces the RoleIdentification from the WidgetCommonFields.
   -- By construction, a screen can only be specified for Perspectives that have a Just value for RoleType.
   , perspectiveId :: PerspectiveId
+  -- The role type that is the object of this widget's perspective (ENR or CR).
+  -- For typeaheadfiller it is the role being filled; for typeaheadform it is the role
+  -- whose instances are searched and displayed.  Used to derive FilterValue candidates
+  -- without re-analysing the perspective's object QFD at runtime.
+  , objectRoleType :: RoleType
   , fillFrom :: Maybe QueryFunctionDescription
   , fillPropertyFrom :: Maybe PropertyValueFillers
   -- The runtime  has a perspective serialisation.

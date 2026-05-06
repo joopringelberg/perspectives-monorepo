@@ -9,7 +9,7 @@ import Data.Maybe (Maybe(..), fromJust, fromMaybe, isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesQuery, type (~~>), (###=))
+import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesQuery, type (~~>), (###=), (##=))
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (typeUri2ModelUri_)
@@ -21,10 +21,10 @@ import Perspectives.Query.UnsafeCompiler (context2context, context2propertyValue
 import Perspectives.Query.QueryTypes (QueryFunctionDescription(..), domain, functional, mandatory, queryFunction, range)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.ResourceIdentifiers (takeGuid)
-import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
+import Perspectives.Representation.Class.Role (calculationOfRoleType, perspectivesOfRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), TypeAheadFormDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FilterValueEntry, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), TypeAheadFormDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType, RoleType(..), externalRoleType)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
@@ -32,6 +32,51 @@ import Perspectives.Types.ObjectGetters (allEnumeratedRoles, aspectsOfRole)
 
 type Context = { userRoleInstance :: RoleInstance, contextType :: ContextType, contextInstance :: ContextInstance }
 type InContext = ReaderT Context MonadPerspectivesQuery
+
+-- | Decompose a composed QueryFunctionDescription into its prefix query and final step.
+-- | For a chain `A >> B >> C` this returns `Just { query: A >> B, lastStep: C }`.
+-- | Used to extract the role-getter step from a `fillfrom` or role calculation expression
+-- | so that the preceding context navigation can be evaluated separately.
+unsnocQfd :: QueryFunctionDescription -> Maybe { query :: QueryFunctionDescription, lastStep :: QueryFunctionDescription }
+unsnocQfd (BQD _ qf qfd1 qfd2 _ _ _)
+  | qf == (BinaryCombinator ComposeF) && queryFunction qfd2 == BinaryCombinator ComposeF =
+      case unsnocQfd qfd2 of
+        Just { query: q, lastStep: ls } ->
+          Just { query: BQD (domain qfd1) (BinaryCombinator ComposeF) qfd1 q (range q) (functional q) (mandatory q), lastStep: ls }
+        Nothing -> Nothing
+  | qf == (BinaryCombinator ComposeF) = Just { query: qfd1, lastStep: qfd2 }
+unsnocQfd _ = Nothing
+
+-- | Given a composed role-getter QFD (a `fillfrom` expression or a calculated role's
+-- | `calculation`), navigate to the source context and query the FilterValue CouchDB view.
+-- | The QFD must end in a `GetRoleInstancesForContextFromDatabaseF` step; otherwise [].
+-- | Shared by both typeaheadfiller and typeaheadform candidate-fetching logic.
+fetchCandidatesFromQfd :: QueryFunctionDescription -> ContextInstance -> MonadPerspectives (Array FilterValueEntry)
+fetchCandidatesFromQfd qfd contextInstance = case unsnocQfd qfd of
+  Just { query: contextGetterQfd, lastStep } -> case queryFunction lastStep of
+    DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeStr -> do
+      ctxtGetter <- context2context contextGetterQfd
+      sourceContexts <- contextInstance ##= ctxtGetter
+      case head sourceContexts of
+        Nothing -> pure []
+        Just sourceContext -> do
+          db <- entitiesDatabaseName
+          getViewOnDatabase db "defaultViews/filterValueView" (Key [ roleTypeStr, takeGuid (unwrap sourceContext) ])
+    _ -> pure []
+  _ -> pure []
+
+-- | Fetch FilterValue candidates for a given role type and context instance.
+-- | For an unlinked EnumeratedRoleType, queries the FilterValue view directly using the
+-- | role type string and the current context GUID (no QFD navigation needed).
+-- | For a CalculatedRoleType, looks up the role's calculation QFD and delegates to
+-- | `fetchCandidatesFromQfd`, which navigates to the source context before querying.
+fetchFilterValueCandidates :: RoleType -> ContextInstance -> MonadPerspectives (Array FilterValueEntry)
+fetchFilterValueCandidates (ENR rt) contextInstance = do
+  db <- entitiesDatabaseName
+  getViewOnDatabase db "defaultViews/filterValueView" (Key [ unwrap rt, takeGuid (unwrap contextInstance) ])
+fetchFilterValueCandidates crType contextInstance = do
+  qfd <- calculationOfRoleType crType
+  fetchCandidatesFromQfd qfd contextInstance
 
 contextualiseScreen :: ScreenDefinition -> String -> String -> InContext (Maybe ScreenDefinition)
 contextualiseScreen (ScreenDefinition { title, tabs, rows, columns, whoWhatWhereScreen }) computedTitle translatedUserRoleType = do
@@ -165,35 +210,8 @@ contextualiseTypeAheadFillerDef (TypeAheadFillerDef { widgetCommonFields, candid
       { contextInstance } <- ask
       candidates <- case widgetCommonFields.fillFrom of
         Nothing -> pure []
-        Just fillFromQfd -> case unsnocQfd fillFromQfd of
-          Just { query: contextGetterQfd, lastStep } -> case queryFunction lastStep of
-            -- Only GetRoleInstancesForContextFromDatabaseF (the compiled form of a
-            -- `fillfrom` expression such as `SomeContext >> SomeRole`) can be used
-            -- as a FilterValue view key.
-            DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeStr -> do
-              (ctxtGetter :: ContextInstance ~~> ContextInstance) <- lift2InContext $ context2context contextGetterQfd
-              sourceContexts <- lift $ lift $ runArrayT $ ctxtGetter contextInstance
-              case head sourceContexts of
-                Nothing -> pure []
-                Just sourceContext -> do
-                  db <- lift2InContext entitiesDatabaseName
-                  lift2InContext $ getViewOnDatabase db "defaultViews/filterValueView" (Key [ roleTypeStr, takeGuid (unwrap sourceContext) ])
-            _ -> pure []
-          _ -> pure []
+        Just fillFromQfd -> lift2InContext $ fetchCandidatesFromQfd fillFromQfd contextInstance
       pure $ Just $ TypeAheadFillerDef { widgetCommonFields: widgetCommonFields', candidates }
-  where
-  -- | Decompose a composed QueryFunctionDescription into its prefix query and
-  -- | final step. For a chain `A >> B >> C` this returns
-  -- | `Just { query: A >> B, lastStep: C }`.
-  unsnocQfd :: QueryFunctionDescription -> Maybe { query :: QueryFunctionDescription, lastStep :: QueryFunctionDescription }
-  unsnocQfd (BQD _ qf qfd1 qfd2 _ _ _)
-    | qf == (BinaryCombinator ComposeF) && queryFunction qfd2 == BinaryCombinator ComposeF =
-        case unsnocQfd qfd2 of
-          Just { query: q, lastStep: ls } ->
-            Just { query: BQD (domain qfd1) (BinaryCombinator ComposeF) qfd1 q (range q) (functional q) (mandatory q), lastStep: ls }
-          Nothing -> Nothing
-    | qf == (BinaryCombinator ComposeF) = Just { query: qfd1, lastStep: qfd2 }
-  unsnocQfd _ = Nothing
 
 contextualiseTypeAheadFormDef :: TypeAheadFormDef -> InContext (Maybe TypeAheadFormDef)
 contextualiseTypeAheadFormDef (TypeAheadFormDef { widgetCommonFields, displayName: _, candidates: _ }) = do
@@ -203,39 +221,16 @@ contextualiseTypeAheadFormDef (TypeAheadFormDef { widgetCommonFields, displayNam
   let mCompiledPerspective = head $ filter (\(Perspective { id }) -> id == widgetCommonFields.perspectiveId) allPerspectives
   case mCompiledPerspective of
     Nothing -> pure Nothing
-    Just perspective@(Perspective { object, roleTypes }) -> do
+    Just perspective@(Perspective { roleTypes }) -> do
       mValidPerspective <- contextualisePerspective perspective
       case mValidPerspective of
         Nothing -> pure Nothing
         Just _ -> do
-          candidates <- case unsnocQfd object of
-            Just { query: contextGetterQfd, lastStep } -> case queryFunction lastStep of
-              -- Only GetRoleInstancesForContextFromDatabaseF maps to a (roleType, contextGuid)
-              -- key in the FilterValue view.
-              DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeStr -> do
-                (ctxtGetter :: ContextInstance ~~> ContextInstance) <- lift2InContext $ context2context contextGetterQfd
-                sourceContexts <- lift $ lift $ runArrayT $ ctxtGetter contextInstance
-                case head sourceContexts of
-                  Nothing -> pure []
-                  Just sourceContext -> do
-                    db <- lift2InContext entitiesDatabaseName
-                    lift2InContext $ getViewOnDatabase db "defaultViews/filterValueView" (Key [ roleTypeStr, takeGuid (unwrap sourceContext) ])
-              _ -> pure []
-            _ -> pure []
+          candidates <- lift2InContext $ fetchFilterValueCandidates widgetCommonFields.objectRoleType contextInstance
           displayName <- case head roleTypes of
             Nothing -> pure $ fromMaybe "" translatedTitle
             Just rt -> lift2InContext $ translateType rt
           pure $ Just $ TypeAheadFormDef { widgetCommonFields: widgetCommonFields { perspective = Nothing, title = translatedTitle }, displayName: Just displayName, candidates }
-  where
-  unsnocQfd :: QueryFunctionDescription -> Maybe { query :: QueryFunctionDescription, lastStep :: QueryFunctionDescription }
-  unsnocQfd (BQD _ qf qfd1 qfd2 _ _ _)
-    | qf == (BinaryCombinator ComposeF) && queryFunction qfd2 == BinaryCombinator ComposeF =
-        case unsnocQfd qfd2 of
-          Just { query: q, lastStep: ls } ->
-            Just { query: BQD (domain qfd1) (BinaryCombinator ComposeF) qfd1 q (range q) (functional q) (mandatory q), lastStep: ls }
-          Nothing -> Nothing
-    | qf == (BinaryCombinator ComposeF) = Just { query: qfd1, lastStep: qfd2 }
-  unsnocQfd _ = Nothing
 
 contextualiseMarkDownDef :: MarkDownDef -> InContext (Maybe MarkDownDef)
 contextualiseMarkDownDef md = case md of
