@@ -42,6 +42,8 @@ domain model://joopringelberg.nl#TestTypeAhead@1.0
         defaults
       action CreateFriend
         create role Friend
+      perspective on Candidates
+        all props verbs (Consult)
       screen
         who
         what
@@ -49,8 +51,9 @@ domain model://joopringelberg.nl#TestTypeAhead@1.0
             typeaheadfiller Friend
               fillfrom sys:MySocialEnvironment >> Persons
           row 
-            typeaheadform Friend
-              fillfrom sys:MySocialEnvironment >> Persons
+            typeaheadform Candidates
         where
 
     user Friend filledBy sys:SocialEnvironment$Persons
+
+    user Candidates = sys:MySocialEnvironment >> Persons
