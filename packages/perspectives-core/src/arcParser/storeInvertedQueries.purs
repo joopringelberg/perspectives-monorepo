@@ -88,27 +88,51 @@ storeInvertedQuery' qwk@(ZQ backward forward) users roleStates statesPerProperty
     Just (BQD _ (BinaryCombinator ComposeF) qfd1 qfd2 _ _ _) -> case qfd2 of
       -- qfd1 is the last step of the INVERTED criterium; 'criterium' in FilterF is the ORIGINAL criterium. 
       (BQD _ (BinaryCombinator ComposeF) filter@(UQD _ FilterF criterium _ _ _) source _ _ _) -> do
-        -- Drop the filter. Store  {first source step} << {last criterium step}
-        unsafePartial $ setPathForStep
-          qfd1
-          (ZQ (Just $ makeComposition qfd1 source) $ forwards qwk)
-          users
-          roleStates
-          statesPerProperty
-          selfOnly
-          authorOnly
-          Nothing
-          mCalcUserRoleType
-        -- prepend the filter to the source. Store {first source step} << filter criterium.
-        storeInvertedQuery'
-          (ZQ (Just source) $ forwards qwk)
-          users
-          (roleStates `union` (concat $ fromFoldable $ Map.values statesPerProperty))
-          statesPerProperty
-          selfOnly
-          authorOnly
-          (Just filter)
-          mCalcUserRoleType
+        case mCalcUserRoleType of
+          -- For Calculated User role detection queries: produce a filter-based description so that
+          -- `handleNewCalculatedUsersForBinding` can apply both backward (filter >> source) and
+          -- forward (filter) to the same role instance, checking the filter before recognising
+          -- the instance as a new Calculated User.
+          -- The second storeInvertedQuery' call (which would store an RTPropertyKey or similar with
+          -- a property-getter forward) is intentionally omitted: it would incorrectly return
+          -- property values instead of role instances at runtime.
+          Just _ ->
+            unsafePartial $ setPathForStep
+              qfd1
+              (ZQ (Just $ makeComposition filter source) (Just filter))
+              users
+              roleStates
+              statesPerProperty
+              selfOnly
+              authorOnly
+              Nothing
+              mCalcUserRoleType
+          -- Regular case: drop the filter to detect changes even when the filter evaluates to
+          -- false (the user may have just *lost* visibility of an item). Also store a separate
+          -- query with the filter prepended, for the case where the filter condition now becomes
+          -- satisfied.
+          Nothing -> do
+            -- Drop the filter. Store  {first source step} << {last criterium step}
+            unsafePartial $ setPathForStep
+              qfd1
+              (ZQ (Just $ makeComposition qfd1 source) $ forwards qwk)
+              users
+              roleStates
+              statesPerProperty
+              selfOnly
+              authorOnly
+              Nothing
+              mCalcUserRoleType
+            -- prepend the filter to the source. Store {first source step} << filter criterium.
+            storeInvertedQuery'
+              (ZQ (Just source) $ forwards qwk)
+              users
+              (roleStates `union` (concat $ fromFoldable $ Map.values statesPerProperty))
+              statesPerProperty
+              selfOnly
+              authorOnly
+              (Just filter)
+              mCalcUserRoleType
       -- unsafePartial $ setPathForStep 
       --   source
       --   (ZQ (Just source) $ forwards qwk)

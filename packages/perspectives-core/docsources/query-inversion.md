@@ -142,7 +142,12 @@ The `invert_` function handles recursive cases:
 
 - **Composition** (`s1 >> s2`): kinks are produced both at `s1` and at `s2`, with appropriate combinations. The `comprehend` function generates all valid pairs of (backwards steps from the right sub-query) cross (backwards steps from the left sub-query), concatenating them in reversed order.
 - **Union / Intersection** (`q1 | q2`, `q1 & q2`): inverted as the union of inversions of `q1` and `q2`.
-- **Filter** (`filter source with criterium`): the criterium is inverted and a `FilterF` step is appended. Crucially, the filter is later *removed* when storing the inverted query (see §1.5), because at runtime we want to detect the change even when the filter now evaluates to false (the user may have just *lost* visibility of an item).
+- **Filter** (`filter source with criterium`): the criterium is inverted and a `FilterF` step is
+  appended. For **regular perspective queries** the filter is later *removed* when storing the
+  inverted query (see §1.5), because at runtime we want to detect the change even when the filter
+  now evaluates to false (the user may have just *lost* visibility of an item).
+  For **Calculated User role detection queries** (see §1.9) the filter is *kept* in both the
+  backwards and forwards slots of the stored `QueryWithAKink` — see §1.9 for the full rationale.
 - **Let\* (WithFrame / BindVariable)**: variable bindings are stored and substituted when the variable is later referenced.
 - **Calculated Role** (`RolGetter (CR r)`): the calculation of the role is retrieved and inverted recursively.
 
@@ -373,13 +378,134 @@ Runtime (on data mutation)
 
 At runtime, when `usersWithAnActivePerspective` computes user instances, it calls `getRoleInstances (CR rName)`, which evaluates the Calculated role's query to produce the actual user role instances.
 
-**Important limitation**: The inverted query is stored on the type visited by the perspective object query. It is indexed so that mutations to that type trigger the backwards query, which navigates back to a context where the Calculated user role is defined. In that context, the Calculated role is evaluated to find the actual user instances.
+**Important limitation (partially resolved)**: The inverted query is stored on the type visited by
+the perspective object query. It is indexed so that mutations to that type trigger the backwards
+query, which navigates back to a context where the Calculated user role is defined. In that
+context, the Calculated role is evaluated to find the actual user instances.
 
-However, when the Calculated role's **query itself** traverses a role binding (filler/filled step), a change to that binding can introduce entirely new user instances whose context has never been serialised. This is a known limitation and the subject of ongoing work.
+When the Calculated role's **query itself** traverses a role binding (filler/filled step), a
+change to that binding can introduce entirely new user instances whose context has never been
+serialised. The `invertCalculatedUsers` pass (§1.9) addresses this case.
 
 ---
 
-## Note on Redundancy in Inverted Query Storage (Future Optimisation)
+## §1.9 `invertCalculatedUsers` — Detecting New Calculated User Instances
+
+### Purpose
+
+A Calculated User Role whose definition traverses a role binding (e.g. via `filler`, `fills`,
+or an external database query such as `callExternal cdb:RoleInstances(...)`) can gain **new
+instances** when a binding changes.  The regular `invertPerspectiveObjects` pass is not
+sufficient for this: it inverts the *perspective object* query (what the user sees), not the
+*user role calculation* itself.  So when a new role binding appears, there is no mechanism in
+`invertPerspectiveObjects` to notice that a new Calculated User instance has come into
+existence and that its context must be serialised for it.
+
+`invertCalculatedUsers` fills this gap.  For every Calculated User Role it calls `invert` on
+the role's own calculation query, and stores each resulting `QueryWithAKink` via
+`storeCalculatedUserInvertedQuery`, which sets `calculatedUserRoleType = Just (CR id)` and
+`users = []`.
+
+### Special Semantics for Filter-based Queries
+
+The running example from the issue is the `Contacts` role of the System model:
+
+```arc
+filter (callExternal cdb:RoleInstances("Persons") returns SocialEnvironment$Persons)
+  with (exists PublicKey) and (not this == me)
+```
+
+`invert` produces (for the `exists PublicKey` criterium, assuming PublicKey is a property of
+the filler `PerspectivesUsers`):
+
+```
+ZQ (Just (FilledF >> filter >> ExternalCoreContextGetter))
+   (Just PropertyGetter_pk)
+```
+
+#### The Original Bug
+
+Under the old storage code `storeInvertedQuery'` would drop the filter and store:
+
+```
+RTFilledKey  description = ZQ (Just ExternalCoreContextGetter)
+                                (Just PropertyGetter_pk)
+```
+
+At runtime `handleNewCalculatedUsersForBinding filled filler iq` was called:
+- backward `ExternalCoreContextGetter` on `filled` (Persons) → context **✓**
+- forward `PropertyGetter_pk` on `fwStart = filler` (PerspectivesUser) → property **values** **✗**
+
+The property value string was then passed as a `RoleInstance` to `serialisedAsDeltasFor_`,
+causing runtime errors.
+
+#### The Fix
+
+For `mCalcUserRoleType = Just _` in the filter pattern case, `storeInvertedQuery'` now
+produces the description:
+
+```
+ZQ (Just (filter >> source)) (Just filter)
+```
+
+i.e. both the backwards and forwards slots carry the `FilterF` expression.
+
+After `setPathForStep FilledF` removes the `FilledF` first step, the stored description is:
+
+```
+RTFilledKey  description = ZQ (Just ExternalCoreContextGetter)
+                                (Just filter)        ← FilterF, not PropertyGetter_pk
+```
+
+At runtime, `handleNewCalculatedUsersForBinding` now detects `forwardStartsWithFilter iq` and
+uses `bwStart` (the filled Persons role) as the start for **both** the backwards and the
+forwards query:
+
+- backward `ExternalCoreContextGetter` on `filled` (Persons) → context **✓**
+- forward `filter` on `filled` (Persons) → `[Persons]` if the filter passes **✓**
+
+The result is a `calcUserInstances = [Persons role instance]` that is correctly treated as the
+new Calculated User instance.
+
+#### Property-Change Trigger
+
+For scenario A (PublicKey directly on the Persons role), a corresponding `RTPropertyKey`
+inverted query is also stored with:
+
+```
+description = ZQ (Just (filter >> ExternalCoreContextGetter)) (Just filter)
+```
+
+When PublicKey changes on a Persons role, `aisInPropertyDelta` detects
+`isCalculatedUserQuery iq && forwardStartsWithFilter iq` and calls
+`handleNewCalculatedUsersForBinding propertyBearingInstance propertyBearingInstance iq`,
+applying both backward (`filter >> ECG`) and forward (`filter`) to the same Persons role
+instance.
+
+For scenario B (PublicKey on the filler PerspectivesUser), no `RTPropertyKey` is stored for
+the Calculated User query because the first backwards step is `FilledF` (not `Value2Role`).
+The property-change trigger for scenario B is a remaining limitation: only the role-binding
+change (RTFilledKey) is detected.
+
+#### The `not this == me` Criterion
+
+The `not this == me` condition inverts to nothing useful (the `this` variable cannot be
+inverted in a way that produces a meaningful key), so it does not generate a stored inverted
+query.  At runtime the filter checks both criteria (`exists PublicKey` **and** `not this == me`)
+before returning the role as a new Calculated User instance.  This is correct: the filter
+criterium is evaluated in full when the forward `filter` step is applied.
+
+### Runtime Flow
+
+1. A new Persons role gets a PerspectivesUser filler (RTFilledKey fires).
+2. `usersWithPerspectiveOnRoleBinding'` separates `isCalculatedUserQuery` queries from regular
+   ones.
+3. For each `calcUserFilledCalculation`, `handleNewCalculatedUsersForBinding filled filler iq`
+   is called with `bwStart = filled`, `fwStart = filler`.
+4. Because `forwardStartsWithFilter iq`, `forwardStart = bwStart = filled`.
+5. Backward: `ExternalCoreContextGetter` on `filled` → `SocialEnvironment` context.
+6. Forward: `filter` on `filled` → `[filled]` if both criterium conditions pass.
+7. Context is serialised for the new user (the Persons role instance).
 
 When a context defines two user roles U1 and U2 that both have a perspective on the same Calculated thing role O, `invertPerspectiveObjects` processes each user role's perspective independently:
 

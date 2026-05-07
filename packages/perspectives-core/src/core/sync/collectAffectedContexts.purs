@@ -46,7 +46,7 @@ import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..)
 import Perspectives.Instances.Me (notIsMe)
 import Perspectives.Instances.ObjectGetters (allFillers, binding, context, context', contextIsInState, contextType, contextType_, getActiveRoleStates_, getFilledRoles, getRecursivelyAllFilledRoles, roleIsInState, roleType_)
 import Perspectives.Instances.ObjectGetters (context, contextType, roleType) as OG
-import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwards, isCalculatedUserQuery, shouldResultInContextStateQuery, shouldResultInRoleStateQuery, startsWithFilter)
+import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwards, forwardStartsWithFilter, isCalculatedUserQuery, shouldResultInContextStateQuery, shouldResultInRoleStateQuery, startsWithFilter)
 import Perspectives.InvertedQuery.Storable (getContextQueries, getFilledQueries, getFillerQueries, getPropertyQueries, getRoleQueries)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource)
@@ -488,14 +488,23 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
 -- |   - filler (for RTFilledKey queries) — goes forwards from filler to find Calculated User instances
 -- | This mirrors the convention used for regular RTFillerKey/RTFilledKey queries in
 -- | `usersWithPerspectiveOnRoleBinding'`.
+-- | SPECIAL CASE: when `forwardStartsWithFilter iq` is true the InvertedQuery was generated from a
+-- | filter-based Calculated User Role calculation.  In that case the filter must be evaluated
+-- | against the *same* role instance as the backwards query (the candidate new user), so the
+-- | forward query is applied to `bwStart` instead of `fwStart`.
 handleNewCalculatedUsersForBinding :: RoleInstance -> RoleInstance -> InvertedQuery -> MonadPerspectivesTransaction Unit
-handleNewCalculatedUsersForBinding bwStart fwStart (InvertedQuery { backwardsCompiled, forwardsCompiled, calculatedUserRoleType: Just calcUserRoleType }) =
+handleNewCalculatedUsersForBinding bwStart fwStart iq@(InvertedQuery { backwardsCompiled, forwardsCompiled, calculatedUserRoleType: Just calcUserRoleType }) =
   case backwardsCompiled, forwardsCompiled of
     Just bw, Just fw -> do
       -- The backwards query runs from `bwStart` to the context(s) where the Calculated User role is defined.
       (contextInstances :: Array ContextInstance) <- lift (bwStart ##= (unsafeCoerce bw :: RoleInstance ~~> ContextInstance))
-      -- The forwards query runs from `fwStart` to the new Calculated User role instances.
-      (calcUserInstances :: Array RoleInstance) <- lift (fwStart ##= (unsafeCoerce fw :: RoleInstance ~~> RoleInstance))
+      -- For filter-based Calculated User queries the forward query (a FilterF) must be evaluated
+      -- against the same role instance as the backwards query (i.e. bwStart, the candidate new
+      -- user), not against fwStart.  For all other Calculated User queries the forward query
+      -- starts from fwStart as usual.
+      let forwardStart = if forwardStartsWithFilter iq then bwStart else fwStart
+      -- The forwards query runs from `forwardStart` to the new Calculated User role instances.
+      (calcUserInstances :: Array RoleInstance) <- lift (forwardStart ##= (unsafeCoerce fw :: RoleInstance ~~> RoleInstance))
       newCalcUsers <- lift $ filterA notIsMe calcUserInstances
       -- For each (context, new user) pair: add context creation deltas first, then serialise the full context.
       for_ contextInstances \contextInstance -> do
@@ -848,7 +857,13 @@ aisInPropertyDelta
 
     -- `handleBackwardQuery` will actually not return any users since we have no property queries for properties in a perspective and a perspective itself is always on a role.
     -- However, there may be state queries that must be re-evaluated. We conveniently capture both role- and context state queries through handleBackwardQuery
-    for_ allCalculations (handleBackwardQuery propertyBearingInstance)
+    -- For Calculated User queries whose forward part is a filter (forwardStartsWithFilter), apply
+    -- handleNewCalculatedUsersForBinding so that the filter is evaluated against the
+    -- property-bearing role instance to detect newly satisfying Calculated User instances.
+    for_ allCalculations \iq ->
+      if isCalculatedUserQuery iq && forwardStartsWithFilter iq
+        then handleNewCalculatedUsersForBinding propertyBearingInstance propertyBearingInstance iq
+        else handleBackwardQuery propertyBearingInstance iq
     -- The property might fall in a perspective. Compute the users and add deltas to the transaction.
     users <- addDeltasForPropertyChange propertyBearingInstance property replacementProperty
     pure (nub users)
