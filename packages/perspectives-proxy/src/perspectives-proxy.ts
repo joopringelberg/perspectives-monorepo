@@ -1987,7 +1987,21 @@ class Cursor {
   setPDRStatus({ action, message }: { action: "push" | "remove"; message: string }) {
     const STATUS_ID = Cursor.STATUS_ID;
     if (action === "push") {
-      this.pushMessage(STATUS_ID, message);
+      this.enqueue(() => {
+        const existingIndex = this.messages.findIndex(msg => msg.identifier === STATUS_ID);
+        if (existingIndex >= 0) {
+          const [statusMessage] = this.messages.splice(existingIndex, 1);
+          if (statusMessage) {
+            statusMessage.text = message;
+            this.messages.unshift(statusMessage);
+          }
+        } else {
+          this.messages.unshift({ identifier: STATUS_ID, text: message, startedAt: Date.now() });
+        }
+        this.setOverlayText(message);
+        this.setOverlayVisibility(true);
+        document.body.style.cursor = "wait";
+      });
     } else if (action === "remove") {
       this.removeMessage(STATUS_ID);
     }
