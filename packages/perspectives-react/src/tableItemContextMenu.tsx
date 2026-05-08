@@ -21,7 +21,7 @@
 import React, { Component, forwardRef, JSX } from "react";
 import {Dropdown, NavDropdown} from 'react-bootstrap';
 import i18next from "i18next";
-import { ContextType, FillerType, PDRproxy, Perspective, RoleInstanceT, RoleOnClipboard, RoleType } from "perspectives-proxy";
+import { ContextType, FillMode, FillerType, PDRproxy, Perspective, RoleInstanceT, RoleOnClipboard, RoleType } from "perspectives-proxy";
 import { UserMessagingPromise } from "./userMessaging";
 import { PSContextType } from "./reactcontexts";
 import { externalRole } from "./urifunctions";
@@ -59,7 +59,10 @@ interface TableItemContextMenuProps {
 
 interface TableItemContextMenuState {
   actions: string[];
-  compatibleRole?: boolean;
+  providedTypeCompatible?: boolean;
+  requiredTypeCompatible?: boolean;
+  providedTypeName?: string;
+  requiredTypeName?: string;
   fillerTypes?: FillerType[];
 }
 
@@ -84,11 +87,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     if (component.props.isOpen && !component.props.perspective.isCalculated)
     {
       PDRproxy.then( pproxy => {
-        if (component.props.roleOnClipboard !== undefined) {
-          pproxy.checkBindingP( component.props.perspective.roleType, component.props.roleOnClipboard!.roleData.rolinstance )
-          .then( compatibleRole => 
-            component.setState({compatibleRole}));
-        }
+        component.refreshClipboardCompatibility();
         pproxy.getBindingType( component.props.perspective.roleType,
           (fillerTypes) => component.setState({fillerTypes}),
           true );
@@ -103,14 +102,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     const dependenciesChanged = component.props.roleOnClipboard && (!_.isEqual(component.props.roleOnClipboard, prevProps.roleOnClipboard) || component.props.roleinstance !== prevProps.roleinstance);
     if (component.props.isOpen && !component.props.perspective.isCalculated && (openedNow || dependenciesChanged))
     {
-      PDRproxy.then( pproxy => {
-        if (component.props.roleOnClipboard)
-        {
-          pproxy.checkBindingP( component.props.perspective.roleType, component.props.roleOnClipboard!.roleData.rolinstance )
-          .then( compatibleRole => 
-            component.setState({compatibleRole}));
-        }
-      });
+      component.refreshClipboardCompatibility();
     }
     // Fetch filler types once when the menu opens (role type doesn't change during session).
     if (openedNow && !component.props.perspective.isCalculated)
@@ -121,6 +113,50 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
           true )
       );
     }
+  }
+
+  refreshClipboardCompatibility()
+  {
+    const clipboardRole = this.props.roleOnClipboard?.roleData.rolinstance;
+    if (!clipboardRole)
+    {
+      this.setState(
+        {
+          providedTypeCompatible: false,
+          requiredTypeCompatible: false,
+          providedTypeName: undefined,
+          requiredTypeName: undefined
+        }
+      );
+      return;
+    }
+    PDRproxy.then( async pproxy =>
+      {
+        const [providedTypeCompatible, providedTypeName, requiredType] = await Promise.all(
+          [
+            pproxy.checkBindingP(this.props.perspective.roleType, clipboardRole),
+            pproxy.getRoleNameP(clipboardRole),
+            pproxy.getMostGeneralAllowedBindingType(this.props.perspective.roleType, clipboardRole)
+          ]
+        );
+        this.setState(
+          {
+            providedTypeCompatible,
+            requiredTypeCompatible: requiredType !== undefined,
+            providedTypeName,
+            requiredTypeName: requiredType?.readableName
+          }
+        );
+      })
+      .catch(() =>
+        this.setState(
+          {
+            providedTypeCompatible: false,
+            requiredTypeCompatible: false,
+            providedTypeName: undefined,
+            requiredTypeName: undefined
+          }
+        ));
   }
 
   computeActionItems(): JSX.Element[] 
@@ -271,57 +307,104 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   {
   if (!this.props.isOpen) return [];
     const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance];
-    if ((this.mayCreateContext() || this.mayCreateInstance()) && roleInstanceWithProps && !roleInstanceWithProps.filler && this.state.compatibleRole)
+    if ((this.mayCreateContext() || this.mayCreateInstance()) && roleInstanceWithProps && !roleInstanceWithProps.filler)
     {
-      return [<Dropdown.Item
-                key="Fill"
-                eventKey="Fill"
-                onClick={ () => this.fillRole()} 
-              >{
-                i18next.t("tableContextMenu_fill", { ns: 'preact' }) 
-              }</Dropdown.Item>];
-    }
-    else if ((this.mayCreateContext() || this.mayCreateInstance()) && roleInstanceWithProps && !roleInstanceWithProps.filler && !this.state.compatibleRole && this.state.fillerTypes && this.state.fillerTypes.length > 0)
-    {
-      return this.state.fillerTypes.map(({readableName}, index) =>
-        <Dropdown.Item
-          key={`PossibleFiller_${index}`}
-          eventKey={`PossibleFiller_${index}`}
-          disabled
+      const items: JSX.Element[] = [];
+      if (this.state.providedTypeCompatible)
+      {
+        items.push(<Dropdown.Item
+          key="Fill"
+          eventKey="Fill"
+          onClick={ () => this.fillRole("provided")} 
         >{
-          i18next.t("tableContextMenu_fillWith", { ns: 'preact', roleName: readableName })
-        }</Dropdown.Item>
-      );
+          i18next.t(
+            "tableContextMenu_fillWithProvidedType",
+            { ns: 'preact'
+            , roleName: this.props.roleOnClipboard?.roleData.cardTitle
+            , typeName: this.state.providedTypeName
+            }) 
+        }</Dropdown.Item>);
+      }
+      if (this.state.requiredTypeCompatible)
+      {
+        items.push(<Dropdown.Item
+          key="FillRequiredType"
+          eventKey="FillRequiredType"
+          onClick={ () => this.fillRole("required")} 
+        >{
+          i18next.t(
+            "tableContextMenu_fillWithRequiredType",
+            { ns: 'preact'
+            , roleName: this.props.roleOnClipboard?.roleData.cardTitle
+            , typeName: this.state.requiredTypeName
+            }) 
+        }</Dropdown.Item>);
+      }
+      if (items.length > 0)
+      {
+        return items;
+      }
+      if (this.state.fillerTypes && this.state.fillerTypes.length > 0)
+      {
+        return this.state.fillerTypes.map(({readableName}, index) =>
+          <Dropdown.Item
+            key={`PossibleFiller_${index}`}
+            eventKey={`PossibleFiller_${index}`}
+            disabled
+          >{
+            i18next.t("tableContextMenu_fillWith", { ns: 'preact', roleName: readableName })
+          }</Dropdown.Item>
+        );
+      }
     }
-    else
-    {
-      return [];
-    }
+    return [];
   }
   
   computeReplaceFillerItem(): JSX.Element[] 
   {
   if (!this.props.isOpen) return [];
     const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance];
-    if ((this.mayCreateContext() || this.mayCreateInstance()) && roleInstanceWithProps && roleInstanceWithProps.filler && this.state.compatibleRole)
+    if ((this.mayCreateContext() || this.mayCreateInstance()) && roleInstanceWithProps && roleInstanceWithProps.filler)
     {
-      return [<Dropdown.Item
-                key="ReplaceFiller"
-                eventKey="ReplaceFiller"
-                onClick={ () => this.fillRole()} 
-              >{
-                i18next.t("tableContextMenu_replacefiller", { ns: 'preact' }) 
-              }</Dropdown.Item>];
+      const items: JSX.Element[] = [];
+      if (this.state.providedTypeCompatible)
+      {
+        items.push(<Dropdown.Item
+          key="ReplaceFiller"
+          eventKey="ReplaceFiller"
+          onClick={ () => this.fillRole("provided")} 
+        >{
+          i18next.t(
+            "tableContextMenu_fillWithProvidedType",
+            { ns: 'preact'
+            , roleName: this.props.roleOnClipboard?.roleData.cardTitle
+            , typeName: this.state.providedTypeName
+            }) 
+        }</Dropdown.Item>);
+      }
+      if (this.state.requiredTypeCompatible)
+      {
+        items.push(<Dropdown.Item
+          key="ReplaceFillerRequiredType"
+          eventKey="ReplaceFillerRequiredType"
+          onClick={ () => this.fillRole("required")} 
+        >{
+          i18next.t(
+            "tableContextMenu_fillWithRequiredType",
+            { ns: 'preact'
+            , roleName: this.props.roleOnClipboard?.roleData.cardTitle
+            , typeName: this.state.requiredTypeName
+            }) 
+        }</Dropdown.Item>);
+      }
+      return items;
     }
-    else
-    {
-      return [];
-    }
+    return [];
   }
   
   // Notice that fillRole can only be called from the menu and the fill option is only 
   // available when the roleOnClipboard is compatible with the roleType of the perspective.
-  fillRole()
+  fillRole(fillMode: FillMode)
   {
     const component = this;
     PDRproxy.then(
@@ -331,7 +414,8 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
         pproxy.bind_(
           component.props.roleinstance,
           component.props.roleOnClipboard!.roleData.rolinstance,
-          component.props.perspective.userRoleType)
+          component.props.perspective.userRoleType,
+          fillMode)
           .then( uniqueFiller => {
             if (!uniqueFiller)
             {

@@ -6,7 +6,7 @@ import {PSRol, PSRolType, DefaultPSRol} from "./reactcontexts";
 
 import {RoleDataProper} from "perspectives-proxy";
 
-import {PDRproxy, FIREANDFORGET, ContextInstanceT, RoleInstanceT, RoleType, RoleKind, ContextType} from "perspectives-proxy";
+import {PDRproxy, FIREANDFORGET, ContextInstanceT, FillMode, RoleInstanceT, RoleType, RoleKind, ContextType} from "perspectives-proxy";
 
 
 import BinaryModal from "./binarymodal.js";
@@ -51,7 +51,7 @@ export default class RoleInstance extends PerspectivesComponent<RoleInstanceProp
       function (pproxy)
       {
         // see RoleData (in perspectivesshape.js) for the structure of the roleData argument that binds to the parameter.
-        function bind_(roleData : RoleDataProper) : Promise<boolean>
+        function bind_(roleData : RoleDataProper, fillMode: FillMode = "required") : Promise<boolean>
         {
           const filler = roleData.rolinstance;
           if (filler && component.props.roleinstance)
@@ -60,7 +60,8 @@ export default class RoleInstance extends PerspectivesComponent<RoleInstanceProp
               .bind_(
                 component.props.roleinstance,
                 filler,
-                component.props.myroletype)
+                component.props.myroletype,
+                fillMode)
               .catch(e => UserMessagingPromise.then( um => 
                 {
                   um.addMessageForEndUser(
@@ -77,7 +78,7 @@ export default class RoleInstance extends PerspectivesComponent<RoleInstanceProp
 
         // returns a promise for a RoleInstance.
         // see RoleData (in perspectivesshape.js) for the structure of the roleData argument that binds to the parameter.
-        function bind (rolinstance : RoleInstanceT) : Promise<RoleInstanceT | void>
+        function bind (rolinstance : RoleInstanceT, fillMode: FillMode = "required") : Promise<RoleInstanceT | void>
         {
           if (rolinstance)
           {
@@ -87,7 +88,8 @@ export default class RoleInstance extends PerspectivesComponent<RoleInstanceProp
                 component.props.roletype,
                 component.props.contexttype,
                 {properties: {}, binding: rolinstance as unknown as string},
-                component.props.myroletype)
+                component.props.myroletype,
+                fillMode)
               .catch(e => UserMessagingPromise.then( um => 
                 {
                   um.addMessageForEndUser(

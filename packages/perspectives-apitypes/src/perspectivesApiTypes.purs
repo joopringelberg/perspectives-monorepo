@@ -95,6 +95,8 @@ data RequestType
   | RemoveContext
   | DeleteRole
   | Bind_ -- Formerly SetBinding
+  | FillWithProvidedType
+  | FillWithRequiredType
   | RemoveBinding
   | SetProperty
   | DeleteProperty
@@ -118,6 +120,7 @@ data RequestType
   | Unsubscribe
   | ShutDown
   | CheckBinding
+  | GetMostGeneralAllowedBindingType
   | WrongRequest
   | EvaluateRoleInstance
   | RestoreContextForUser
@@ -180,9 +183,12 @@ instance decodeRequestType :: ReadForeign RequestType where
     "RemoveContext" -> RemoveContext
     "DeleteRole" -> DeleteRole
     "Bind_" -> Bind_
+    "FillWithProvidedType" -> FillWithProvidedType
+    "FillWithRequiredType" -> FillWithRequiredType
     "RemoveBinding" -> RemoveBinding
     "Bind" -> Bind
     "CheckBinding" -> CheckBinding
+    "GetMostGeneralAllowedBindingType" -> GetMostGeneralAllowedBindingType
     "SetProperty" -> SetProperty
     "DeleteProperty" -> DeleteProperty
     "Action" -> Action
