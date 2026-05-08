@@ -147,6 +147,7 @@ instance decodeRequestType :: ReadForeign RequestType where
     "GetFile" -> GetFile
     "GetPublicUrl" -> GetPublicUrl
     "GetSelectedRoleFromClipboard" -> GetSelectedRoleFromClipboard
+    "SubscribeSelectedRoleFromClipboard" -> SubscribeSelectedRoleFromClipboard
     "GetSettings" -> GetSettings
     "GetWiderContexts" -> GetWiderContexts
     "GetInspectableContext" -> GetInspectableContext
