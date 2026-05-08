@@ -41,7 +41,6 @@ import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssu
 import Perspectives.Data.EncodableMap (EncodableMap, filterKeys, lookup)
 import Perspectives.Deltas (addDelta)
 import Perspectives.Error.Boundaries (handlePerspectContextError)
-import Perspectives.Logging (errorSync)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.Me (notIsMe)
 import Perspectives.Instances.ObjectGetters (allFillers, binding, context, context', contextIsInState, contextType, contextType_, getActiveRoleStates_, getFilledRoles, getRecursivelyAllFilledRoles, roleIsInState, roleType_)
@@ -49,6 +48,7 @@ import Perspectives.Instances.ObjectGetters (context, contextType, roleType) as 
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwards, forwardStartsWithFilter, isCalculatedUserQuery, shouldResultInContextStateQuery, shouldResultInRoleStateQuery, startsWithFilter)
 import Perspectives.InvertedQuery.Storable (getContextQueries, getFilledQueries, getFillerQueries, getPropertyQueries, getRoleQueries)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey)
+import Perspectives.Logging (errorSync)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, tryGetPerspectEntiteit)
@@ -70,7 +70,7 @@ import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (enumeratedRoleContextType, equalsOrSpecialisesRoleInContext)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..), RoleBindingDeltaType(..))
 import Perspectives.Utilities (findM, prettyPrint)
-import Prelude (Unit, bind, discard, flip, join, map, not, pure, show, unit, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
+import Prelude (Unit, bind, discard, flip, join, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
 import Unsafe.Coerce (unsafeCoerce)
 
 -- TODO. #12 Check the way state-conditional verbs are combined to establish whether a peer should receive a delta.
@@ -861,9 +861,8 @@ aisInPropertyDelta
     -- handleNewCalculatedUsersForBinding so that the filter is evaluated against the
     -- property-bearing role instance to detect newly satisfying Calculated User instances.
     for_ allCalculations \iq ->
-      if isCalculatedUserQuery iq && forwardStartsWithFilter iq
-        then handleNewCalculatedUsersForBinding propertyBearingInstance propertyBearingInstance iq
-        else handleBackwardQuery propertyBearingInstance iq
+      if isCalculatedUserQuery iq && forwardStartsWithFilter iq then handleNewCalculatedUsersForBinding propertyBearingInstance propertyBearingInstance iq
+      else void $ handleBackwardQuery propertyBearingInstance iq
     -- The property might fall in a perspective. Compute the users and add deltas to the transaction.
     users <- addDeltasForPropertyChange propertyBearingInstance property replacementProperty
     pure (nub users)
