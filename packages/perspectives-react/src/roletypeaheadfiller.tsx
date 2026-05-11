@@ -160,7 +160,7 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
     // (unfilled or empty) instance that the user wants to assign a filler to.
     // Multi-instance scenarios should use a table with per-row fill controls.
     const firstInstance = Object.values(perspective.roleInstances)[0];
-    const filledRoleInstance: RoleInstanceT | undefined = firstInstance?.roleId as RoleInstanceT | undefined;
+    const filledRoleInstance: RoleInstanceT | undefined = firstInstance?.roleId;
 
     if (!filledRoleInstance) {
       UserMessagingPromise.then(um =>
@@ -177,7 +177,7 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
       pproxy
         .bind_(
           filledRoleInstance,
-          candidate.roleId as RoleInstanceT,
+          candidate.roleId,
           perspective.userRoleType
         )
         .then(uniqueFiller => {

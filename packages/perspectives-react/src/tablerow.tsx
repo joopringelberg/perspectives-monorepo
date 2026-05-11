@@ -217,7 +217,7 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
                   perspective={component.props.perspective}
                   readableName={roleInstanceWithProps.readableName}
                   cancelled={roleInstanceWithProps.cancelled}
-                  typeAheadFillFromCandidates={serialisedProperty.id == component.props.cardcolumn ? component.props.typeAheadFillFromCandidates : undefined}
+                  typeAheadFillFromCandidates={serialisedProperty.id === component.props.cardcolumn ? component.props.typeAheadFillFromCandidates : undefined}
                 /> )
             }</tr>;
   }

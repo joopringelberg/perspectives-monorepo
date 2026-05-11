@@ -161,14 +161,14 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
     component.setState({
       query: candidate.filterValue,
       isOpen: false,
-      selectedRoleId: candidate.roleId as RoleInstanceT,
+      selectedRoleId: candidate.roleId,
       selectedPerspective: null,
     });
 
     // Fetch the perspective for the selected role instance on demand.
     PDRproxy.then(function(pproxy) {
       const unsub = pproxy.getPerspective(
-        candidate.roleId as RoleInstanceT,
+        candidate.roleId,
         undefined,
         function(perspectives: Perspective[]) {
           if (perspectives.length > 0) {

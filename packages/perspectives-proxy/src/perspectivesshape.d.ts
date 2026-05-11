@@ -229,7 +229,7 @@ export type ChatElementDef = {
 
 export type FilterValueEntry = {
   filterValue: string;
-  roleId: string;
+  roleId: RoleInstanceT;
 }
 
 export type TypeAheadFillerElementDef = {

@@ -362,8 +362,9 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
             const MAX_VISIBLE = 20;
             const candidates = component.props.typeAheadFillFromCandidates!;
             const query = component.state.taQuery;
+            const lowerQuery = query.toLowerCase();
             const filtered = query
-              ? candidates.filter(c => c.filterValue.toLowerCase().includes(query.toLowerCase())).slice(0, MAX_VISIBLE)
+              ? candidates.filter(c => c.filterValue.toLowerCase().includes(lowerQuery)).slice(0, MAX_VISIBLE)
               : candidates.slice(0, MAX_VISIBLE);
 
             return (
@@ -407,7 +408,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                           key={roleId}
                           style={{ padding: '4px 8px', cursor: 'pointer' }}
                           onClick={() => {
-                            component.handleFillerSelect(roleId as RoleInstanceT);
+                            component.handleFillerSelect(roleId);
                             component.setState({ taOpen: false, taQuery: '', editable: false });
                           }}
                         >
