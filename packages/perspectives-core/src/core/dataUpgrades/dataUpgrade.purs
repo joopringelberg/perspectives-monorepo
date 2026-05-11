@@ -399,7 +399,21 @@ runDataUpgrades = do
     ( \_ -> void recompileLocalModels
     )
 
-  void recompileLocalModels
+  -- runMonadPerspectivesTransaction'
+  --   false
+  --   (ENR $ EnumeratedRoleType sysUser)
+  --   do
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#Serialise@3.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#Utilities@3.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#RabbitMQ@2.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#Couchdb@4.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#Files@3.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#Sensor@3.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#Parsing@3.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#BodiesWithAccounts@5.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#HyperContext@1.0"
+
+  -- void recompileLocalModels
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.

@@ -94,7 +94,7 @@ recompileLocalModel modelUri = do
         (ENR $ EnumeratedRoleType sysUser)
         (runExceptT (recompileModel udf))
       case r of
-        Left errors -> errorUpgrade ("recompileLocalModel: " <> show errors) *> pure false
+        Left errors -> errorUpgrade ("recompileLocalModels(" <> show modelUri <> "): " <> show errors) *> pure false
         Right success -> do
           saveMarkedResources
           pure true
