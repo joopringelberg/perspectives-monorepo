@@ -49,7 +49,8 @@ import type {
   ContextAndNameReceiver,
   InspectableContext,
   InspectableRole,
-  FillerType
+  FillerType,
+  FillMode
 } from "./perspectivesshape.d.ts";
 
 export type * from "./perspectivesshape.d.ts";
@@ -912,6 +913,19 @@ export class PerspectivesProxy
     );
   }
 
+  getRoleNameP(rid: RoleInstanceT): Promise<string>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        proxy.send(
+          { request: "GetRoleName", object: rid, onlyOnce: true },
+          values => resolver(values[0]),
+          rejecter
+        );
+      });
+  }
+
   // We haven't made this promisebased because the binding can change, even though its type cannot.
   getBindingType (roleType : RoleType, receiveValues : (fillerTypes: FillerType[]) => void, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
   {
@@ -1023,6 +1037,29 @@ export class PerspectivesProxy
           {request: "CheckBinding", predicate: roleName, object: rolInstance, onlyOnce: true}
           , (r => resolver(r[0] === "true"))
           , rejecter
+        );
+      });
+  }
+
+  getMostGeneralAllowedBindingType(roleName: RoleType, rolInstance: RoleInstanceT): Promise<FillerType | undefined>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        proxy.send(
+          { request: "GetMostGeneralAllowedBindingType", predicate: roleName, object: rolInstance, onlyOnce: true },
+          values =>
+          {
+            if (values.length === 0)
+            {
+              resolver(undefined);
+            }
+            else
+            {
+              resolver(JSON.parse(values[0]));
+            }
+          },
+          rejecter
         );
       });
   }
@@ -1654,26 +1691,28 @@ export class PerspectivesProxy
    * @param myroletype - The type of the user role.
    * @returns A promise that resolves to the role instance.
    */
-  bind (contextinstance : ContextInstanceT, localRolName : RolName, contextType : ContextType, rolDescription : RolSerialization, myroletype : UserRoleType) : Promise<RoleInstanceT>
+  bind (contextinstance : ContextInstanceT, localRolName : RolName, contextType : ContextType, rolDescription : RolSerialization, myroletype : UserRoleType, fillMode: FillMode = "required") : Promise<RoleInstanceT>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)
       {
+        const request = fillMode === "provided" ? "FillWithProvidedType" : "FillWithRequiredType";
         return proxy.send(
-          {request: "Bind", subject: contextinstance, predicate: localRolName, object: contextType, rolDescription: rolDescription, authoringRole: myroletype, onlyOnce: true },
+          {request, subject: contextinstance, predicate: localRolName, object: contextType, rolDescription: rolDescription, authoringRole: myroletype, onlyOnce: true },
           (r => resolver(r[0])),
           rejecter
         );
       });
   }
 
-  bind_ (filledRole : RoleInstanceT, filler : RoleInstanceT, myroletype  : UserRoleType) : Promise<boolean>
+  bind_ (filledRole : RoleInstanceT, filler : RoleInstanceT, myroletype  : UserRoleType, fillMode: FillMode = "required") : Promise<boolean>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)
       {
+        const request = fillMode === "provided" ? "FillWithProvidedType" : "FillWithRequiredType";
         return proxy.send(
-          {request: "Bind_", subject: filledRole, object: filler, authoringRole: myroletype, onlyOnce: true},
+          {request, subject: filledRole, object: filler, authoringRole: myroletype, onlyOnce: true},
           values => resolver( values[0] == "true" ),
           rejecter
         );

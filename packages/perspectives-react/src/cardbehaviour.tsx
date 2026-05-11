@@ -628,7 +628,8 @@ export function addRoleToClipboard(roleInstance : RoleInstanceT, roleData: RoleO
       ModelDependencies.itemsOnClipboard,
       ModelDependencies.system,
       itemOnClipboard,
-      myroletype
+      myroletype,
+      "provided"
       ).then( uniqueFiller => {
         if (!uniqueFiller)
         {

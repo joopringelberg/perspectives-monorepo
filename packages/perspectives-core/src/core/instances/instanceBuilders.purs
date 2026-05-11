@@ -76,7 +76,7 @@ import Perspectives.Representation.Class.Role (kindOfRole)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (ResourceType(..), RoleKind(..), RoleType(..), roletype2string)
 import Perspectives.ResourceIdentifiers (createResourceIdentifier, createResourceIdentifier', guid, isInPublicScheme)
-import Perspectives.SaveUserData (setFirstBinding)
+import Perspectives.SaveUserData (FillBindingMode(..), setFirstBinding, setFirstBindingWithMode)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (indexedContextName, indexedRoleName, publicUserRole)
@@ -229,7 +229,7 @@ createAndAddRoleInstance_ roleType@(EnumeratedRoleType rtype) contextId (RolSeri
       Nothing -> pure unit
       Just bnd -> do
         expandedBinding <- RoleInstance <$> (lift $ expandDefaultNamespaces bnd)
-        void $ withRoleInsertionPoint (setFirstBinding roleInstance expandedBinding Nothing)
+        void $ withRoleInsertionPoint (setFirstBindingWithMode FillWithProvidedType roleInstance expandedBinding Nothing)
     -- Then add the properties
     case properties of
       (PropertySerialization props) -> forWithIndex_ props \propertyTypeId values ->

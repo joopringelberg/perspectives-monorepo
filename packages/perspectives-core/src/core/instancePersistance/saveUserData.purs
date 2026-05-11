@@ -38,11 +38,15 @@ module Perspectives.SaveUserData
   , removeContextIfUnbound
   , removeContextInstance
   , removeRoleInstance
+  , FillBindingMode(..)
+  , findMostGeneralAllowedFillerType
   , replaceBinding
   , scheduleContextRemoval
   , scheduleRoleRemoval
   , setBinding
+  , setBindingWithMode
   , setFirstBinding
+  , setFirstBindingWithMode
   , severeBindingLinks
   , stateEvaluationAndQueryUpdatesForContext
   , synchronise
@@ -102,6 +106,10 @@ synchronise = true
 
 doNotSynchronise :: Boolean
 doNotSynchronise = false
+
+data FillBindingMode
+  = FillWithProvidedType
+  | FillWithRequiredType
 
 -- | Add the role instance to the end of the roles to exit.
 -- | Add the actual removal instruction to the end of the scheduledAssignments.
@@ -432,13 +440,16 @@ removeAllRoleInstances et cid = do
 -- the bound role. SYNCHRONISATION should be taken care of by a RoleBindingDelta.
 -----------------------------------------------------------
 setBinding :: RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPerspectivesTransaction (Array RoleInstance)
-setBinding roleId newBindingId msignedDelta = (lift $ try $ getPerspectRol roleId) >>=
+setBinding = setBindingWithMode FillWithRequiredType
+
+setBindingWithMode :: FillBindingMode -> RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPerspectivesTransaction (Array RoleInstance)
+setBindingWithMode mode roleId newBindingId msignedDelta = (lift $ try $ getPerspectRol roleId) >>=
   handlePerspectRolError' "setBinding" []
     \(filled :: PerspectRol) ->
-      if isJust $ rol_binding filled then replaceBinding roleId newBindingId msignedDelta
+      if isJust $ rol_binding filled then replaceBindingWithMode mode roleId newBindingId msignedDelta
       -- Since in all cases that setBinding is called, the role instances involved do already exist, we can just
       -- insert all context serialisation deltas for a new peer right at the end of the array of deltas.
-      else setFirstBinding roleId newBindingId msignedDelta
+      else setFirstBindingWithMode mode roleId newBindingId msignedDelta
 
 -- | The first argument represents the role instance that receives the new binding.
 -- | The second argument represents the new binding.
@@ -450,20 +461,21 @@ setBinding roleId newBindingId msignedDelta = (lift $ try $ getPerspectRol roleI
 -- | QUERY UPDATES for `binding <roleId`, `binder <TypeOfRoleId>` for both the old binding and the new binding.
 -- | CURRENTUSER for roleId and its context.
 replaceBinding :: RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPerspectivesTransaction (Array RoleInstance)
-replaceBinding roleId (newBindingId :: RoleInstance) msignedDelta = (lift $ try $ getPerspectRol roleId) >>=
+replaceBinding = replaceBindingWithMode FillWithRequiredType
+
+replaceBindingWithMode :: FillBindingMode -> RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPerspectivesTransaction (Array RoleInstance)
+replaceBindingWithMode mode roleId (newBindingId :: RoleInstance) msignedDelta = (lift $ try $ getPerspectRol roleId) >>=
   handlePerspectRolError' "replaceBinding" []
     \(originalRole :: PerspectRol) -> do
-      -- When msignedDelta is Nothing (local call), find the exact filler in the binding chain
-      -- so that the resolved filler matches the compile-time declared type constraint of the filled role.
-      -- This ensures a fixed filler depth: A fills only instances of the declared filler type,
-      -- not 'specialised' instances that are themselves filled by the declared type.
-      actualNewBinding <- case msignedDelta of
-        Nothing -> do
-          mexact <- lift $ findExactFiller (rol_pspType originalRole) newBindingId
-          pure $ case mexact of
-            Just exactFiller -> exactFiller
-            Nothing -> newBindingId
-        Just _ -> pure newBindingId
+      actualNewBinding <- case mode of
+        FillWithProvidedType -> pure newBindingId
+        FillWithRequiredType -> case msignedDelta of
+          Nothing -> do
+            mexact <- lift $ findExactFiller (rol_pspType originalRole) newBindingId
+            pure $ case mexact of
+              Just exactFiller -> exactFiller
+              Nothing -> newBindingId
+          Just _ -> pure newBindingId
       if (rol_binding originalRole == Just actualNewBinding) then pure []
       else do
         users <- removeBinding_ roleId (Just actualNewBinding) msignedDelta
@@ -492,6 +504,11 @@ findExactFiller filledType startFiller = go Nothing startFiller
       Nothing -> pure newDeepest
       Just nextFiller -> go newDeepest nextFiller
 
+findMostGeneralAllowedFillerType :: EnumeratedRoleType -> RoleInstance -> MonadPerspectives (Maybe EnumeratedRoleType)
+findMostGeneralAllowedFillerType filledType filler = do
+  mrole <- findExactFiller filledType filler
+  traverse roleType_ mrole
+
 -- | PERSISTENCE
 -- | QUERY EVALUATION
 -- | CURRENTUSER
@@ -499,20 +516,21 @@ findExactFiller filledType startFiller = go Nothing startFiller
 -- | STATE EVALUATION
 -- | This function is idempotent: if the role is already filled with the filler, nothing changes.
 setFirstBinding :: RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPerspectivesTransaction (Array RoleInstance)
-setFirstBinding filled filler msignedDelta = (lift $ try $ getPerspectRol filled) >>=
+setFirstBinding = setFirstBindingWithMode FillWithRequiredType
+
+setFirstBindingWithMode :: FillBindingMode -> RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPerspectivesTransaction (Array RoleInstance)
+setFirstBindingWithMode mode filled filler msignedDelta = (lift $ try $ getPerspectRol filled) >>=
   handlePerspectRolError' "setFirstBinding, filled" []
     \(filledRole :: PerspectRol) -> do
-      -- When msignedDelta is Nothing (local call), find the exact filler in the binding chain
-      -- so that the resolved filler matches the compile-time declared type constraint of the filled role.
-      -- This ensures a fixed filler depth: A fills only instances of the declared filler type,
-      -- not 'specialised' instances that are themselves filled by the declared type.
-      actualFiller <- case msignedDelta of
-        Nothing -> do
-          mexact <- lift $ findExactFiller (rol_pspType filledRole) filler
-          pure $ case mexact of
-            Just exactFiller -> exactFiller
-            Nothing -> filler
-        Just _ -> pure filler
+      actualFiller <- case mode of
+        FillWithProvidedType -> pure filler
+        FillWithRequiredType -> case msignedDelta of
+          Nothing -> do
+            mexact <- lift $ findExactFiller (rol_pspType filledRole) filler
+            pure $ case mexact of
+              Just exactFiller -> exactFiller
+              Nothing -> filler
+          Just _ -> pure filler
       if rol_binding filledRole == Just actualFiller then pure []
       else (lift $ try $ getPerspectRol actualFiller) >>=
         handlePerspectRolError' "setFirstBinding, filler" []
@@ -778,4 +796,3 @@ changeRoleBinding filledId mNewFiller = (lift $ try $ getPerspectRol filledId) >
             if newFillerIsMe then roleIsMe filledId (rol_context filled) -- Set isMe of the role and set the role to Me of the context.
             else pure unit
           else pure unit
-
