@@ -152,6 +152,10 @@ interface RequestRecord {
   reactStateSetter?: (response: any) => void;
   corrId?: number;
   trackingNumber?: number;
+  // When true, cursor.wait() is not called for this request. Use for background
+  // subscriptions that auto-subscribe on mount (e.g. subscribeSelectedRoleFromClipboard)
+  // so that rapid component remounts during window resize do not trigger the loading overlay.
+  noWaitCursor?: boolean;
 }
 
 const defaultRequest =
@@ -682,7 +686,7 @@ export class PerspectivesProxy
     // }
 
     // Set cursor shape
-    if ( !(req.request == "Unsubscribe") )
+    if ( !(req.request == "Unsubscribe") && !req.noWaitCursor )
       {
         cursor.wait(req);
       }
@@ -978,7 +982,7 @@ export class PerspectivesProxy
   {
     const proxy = this;
     return proxy.send(
-        { request: "SubscribeSelectedRoleFromClipboard", onlyOnce: false },
+        { request: "SubscribeSelectedRoleFromClipboard", onlyOnce: false, noWaitCursor: true },
         values => receiver( values.map( JSON.parse ) )
       );
   }
