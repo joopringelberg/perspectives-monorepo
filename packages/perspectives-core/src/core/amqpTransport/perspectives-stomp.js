@@ -44,6 +44,19 @@ export function createStompClientImpl ( url )
 // on server shutdown.
 export function connectAndSubscribeImpl (stompClient, params, emitStep, finishStep, emit)
 {
+  let pendingIncomingMessageCount = 0;
+
+  function emitInternalMessage(body)
+  {
+    emit(emitStep(
+      { body
+      , ack: function() {}
+      , markHandled: function() { return pendingIncomingMessageCount; }
+      , pendingCount: pendingIncomingMessageCount
+      }
+    ))();
+  }
+
   stompClient.connectHeaders =
     { login: params.login
     , passcode: params.passcode
@@ -62,6 +75,21 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
       emit( emitStep( message ) )();
     };
 
+  stompClient.forwardIncomingMessage = function(message)
+    {
+      pendingIncomingMessageCount += 1;
+      stompClient.emitToPurescript(
+        { body: message.body
+        , ack: message.ack.bind(message)
+        , markHandled: function()
+          {
+            pendingIncomingMessageCount = Math.max(0, pendingIncomingMessageCount - 1);
+            return pendingIncomingMessageCount;
+          }
+        , pendingCount: pendingIncomingMessageCount
+        });
+    };
+
   stompClient.onConnect =
     function()
     {
@@ -71,7 +99,7 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
         "/topic/" + params.topic,
         // publish to the default exchange.
         // "/queue/" + params.queueId,
-        stompClient.emitToPurescript,
+        stompClient.forwardIncomingMessage,
         { durable: true
         , "auto-delete": false
         // This will be the id that we identify the STOMP-subscription with.
@@ -79,7 +107,7 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
         , ack: "client"
         , "x-queue-name": params.queueId
         });
-        emit( emitStep( {body: "connection"} ) )();
+        emitInternalMessage("connection");
       };
     stompClient.onStompError = function (frame) {
         // Will be invoked in case of error encountered at Broker
@@ -91,11 +119,11 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
       };
     stompClient.onDisconnect = function ()
       {
-        emit( emitStep( {body: "noConnection"} ) )();
+        emitInternalMessage("noConnection");
       };
     stompClient.onWebSocketClose = function ()
       {
-        emit( emitStep( {body: "noConnection"} ) )();
+        emitInternalMessage("noConnection");
       };
     stompClient.onUnhandledMessage = function(message)
     {
@@ -116,7 +144,12 @@ export function sendImpl( stompClient, destination, receiptId, messageString )
   stompClient.watchForReceipt( receiptId,
     function()
     {
-      stompClient.emitToPurescript( {body: "receipt:" + receiptId} );
+      stompClient.emitToPurescript(
+        { body: "receipt:" + receiptId
+        , ack: function() {}
+        , markHandled: function() { return pendingIncomingMessageCount; }
+        , pendingCount: pendingIncomingMessageCount
+        } );
     })
   stompClient.publish(
     { destination: destination

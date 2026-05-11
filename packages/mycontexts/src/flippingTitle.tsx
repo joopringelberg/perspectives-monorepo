@@ -25,6 +25,8 @@ const FlippingTitle: React.FC<FlippingTitleProps> = ({
 
   // Format the role type to be more readable
   const formattedRoleType = userRoleType ? i18next.t("flipping_title", {ns: 'mycontexts', userRoleType }) : '';
+  const youAre = i18next.t("you_are", {ns: 'mycontexts'});
+  const wordIn = i18next.t("word_in", {ns: 'mycontexts'});
   
   // Determine if there is enough space to show both title and role
   // side by side. We measure a hidden span with the combined text
@@ -147,14 +149,14 @@ const FlippingTitle: React.FC<FlippingTitleProps> = ({
           pointerEvents: 'none',
         }}
       >
-        {title}{formattedRoleType ? ` ${formattedRoleType}` : ''}
+        {formattedRoleType ? `${youAre}${formattedRoleType}${wordIn}${title}` : title}
       </span>
 
       {canShowBoth && formattedRoleType
         ? (
           <>
-            <span className={showTitleClass}>{formattedRoleType}</span>
-            {' in'}
+            <span className={showTitleClass}>{youAre}{formattedRoleType}</span>
+            {wordIn}
             <span className={showTitleClass}>{title}</span>
           </>
         )

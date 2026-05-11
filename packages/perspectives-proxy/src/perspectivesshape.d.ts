@@ -355,6 +355,7 @@ export type ContextAndName =
 //// FILLER TYPES
 ////////////////////////////////////////////
 export type FillerType = { roleType: RoleType, readableName: string }
+export type FillMode = "provided" | "required"
 
 ////////////////////////////////////////////
 //// INSPECTABLE CONTEXT
