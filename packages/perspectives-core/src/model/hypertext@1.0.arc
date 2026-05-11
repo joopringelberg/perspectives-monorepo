@@ -1,4 +1,4 @@
-domain model://perspectives.domains#HyperContext
+domain model://perspectives.domains#HyperContext@1.0
   use sys for model://perspectives.domains#System
   use hypercontext for model://perspectives.domains#HyperContext
   use cm for model://perspectives.domains#CouchdbManagement
@@ -35,7 +35,6 @@ domain model://perspectives.domains#HyperContext
     aspect sys:RootContext
 
     external
-      aspect sys:RootContext$External
     
     state NoManager = not exists Manager
       on entry 
