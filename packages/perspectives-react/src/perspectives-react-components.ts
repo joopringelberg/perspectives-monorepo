@@ -1,4 +1,4 @@
-import "./types/globals.ts";
+import "./types/globals";
 
 // No items are included from the folder notinuse.
 export { ViewOnExternalRole } from "./views";
