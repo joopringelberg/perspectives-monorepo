@@ -64,7 +64,7 @@ import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffec
 import Perspectives.Parsing.Arc.AST (RoleIdentification(..), SegmentedPath, SentenceE(..), SentencePartE(..), StateTransitionE(..), roleIdentification2context, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AspectInference (inferFromAspectRoles)
 import Perspectives.Parsing.Arc.CheckSynchronization (checkSynchronization) as SYNC
-import Perspectives.Parsing.Arc.ContextualVariables (addContextualBindingsToExpression, addContextualBindingsToStatements, makeContextStep, makeIdentityStep, makeTypeTimeOnlyContextStep, makeTypeTimeOnlyRoleStep)
+import Perspectives.Parsing.Arc.ContextualVariables (addContextualBindingsToExpression, addContextualBindingsToStatements, makeContextStep, makeIdentityStep, makeTypeTimeOnlyContextStep, makeTypeTimeOnlyRoleStep, makeTypeTimeOnlyRoleTypeStep)
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (Step, VarBinding)
 import Perspectives.Parsing.Arc.PhaseThree.CheckPerspectivesModifiers (checkPerspectiveModifiers)
@@ -618,6 +618,17 @@ handlePostponedStateQualifiedParts = do
       RDOM adt -> pure adt
       otherwise -> throwError $ NotARoleDomain otherwise (startOf s) (endOf s)
 
+  makeTypeTimeOnlyRoleBinding :: String -> RoleIdentification -> ADT QT.RoleInContext -> ArcPosition -> PhaseThree VarBinding
+  makeTypeTimeOnlyRoleBinding varName roleIdentification usersInContext pos = case roleIdentification of
+    ExplicitRole ctxt rt rolePos -> do
+      maximallyQualifiedName <-
+        if isTypeUri (roletype2string rt) then pure (roletype2string rt)
+        else pure $ concatenateSegments (unwrap ctxt) (roletype2string rt)
+      qualifiedRole <- qualifyLocalRoleName rolePos maximallyQualifiedName
+      pure $ makeTypeTimeOnlyRoleTypeStep varName qualifiedRole pos
+    ImplicitRole _ _ ->
+      pure $ unsafePartial makeTypeTimeOnlyRoleStep varName usersInContext pos
+
   -- | Correctly handles incomplete (not qualified) RoleIdentifications.
   -- | Result contains no double entries.
   collectStates :: (Maybe SegmentedPath) -> RoleIdentification -> PhaseThree (Array StateIdentifier)
@@ -741,10 +752,11 @@ handlePostponedStateQualifiedParts = do
     -- its current context. We include a computation of type TypeTimeOnly, which instructs the unsafeCompiler to remove them. The value has to be supplied in runtime.
     -- currentactor -> It's type is the qualifiedUser computed above. Again, just a TypeTimeOnly computation.
     (usersInContext :: ADT QT.RoleInContext) <- collectRoleInContexts subject
+    currentactorBinding <- makeTypeTimeOnlyRoleBinding "currentactor" subject usersInContext start
     effectWithEnvironment <- pure $ addContextualBindingsToStatements
       [ computeOrigin (transition2stateSpec transition) start
       , computeCurrentContext (transition2stateSpec transition) start
-      , unsafePartial makeTypeTimeOnlyRoleStep "currentactor" usersInContext start
+      , currentactorBinding
       ]
       effect
     -- Single base state only (no aspect fan-out)
@@ -865,7 +877,8 @@ handlePostponedStateQualifiedParts = do
     _ <- statesExist start end [ baseState ]
     let states = [ baseState ]
     (usersInContext :: ADT QT.RoleInContext) <- collectRoleInContexts user
-    compiledMessage <- compileSentence originDomain message usersInContext states spec
+    notifieduserBinding <- makeTypeTimeOnlyRoleBinding "notifieduser" user usersInContext start
+    compiledMessage <- compileSentence originDomain message notifieduserBinding states spec
     currentContextCalculation <- case spec of
       AST.ContextState ct _ -> pure $ SQD (CDOM $ UET ct) (DataTypeGetter IdentityF) (CDOM $ UET ct) True True
       AST.ObjectState roleIdentification _ -> computeCurrentContextFromRoleIdentification roleIdentification start
@@ -950,8 +963,8 @@ handlePostponedStateQualifiedParts = do
           )
           stateId
 
-    compileSentence :: Domain -> SentenceE -> ADT QT.RoleInContext -> Array StateIdentifier -> AST.StateSpecification -> PhaseThree Sentence.Sentence
-    compileSentence currentDomain (SentenceE { parts, sentence }) usersInContext states stateSpec = do
+    compileSentence :: Domain -> SentenceE -> VarBinding -> Array StateIdentifier -> AST.StateSpecification -> PhaseThree Sentence.Sentence
+    compileSentence currentDomain (SentenceE { parts, sentence }) notifieduserBinding states stateSpec = do
       parts' <- traverse compilePart parts
       pure $ Sentence.Sentence { sentence, parts: parts' }
       where
@@ -960,7 +973,7 @@ handlePostponedStateQualifiedParts = do
         expressionWithEnvironment <- pure $ addContextualBindingsToExpression
           [ computeOrigin (transition2stateSpec transition) start
           , computeCurrentContext (transition2stateSpec transition) start
-          , unsafePartial makeTypeTimeOnlyRoleStep "notifieduser" usersInContext start
+          , notifieduserBinding
           ]
           stp
         compileExpression currentDomain expressionWithEnvironment
@@ -984,10 +997,11 @@ handlePostponedStateQualifiedParts = do
     --  currentactor -> It's type is the qualifiedUser computed above.
     -- The last two VarBindings have a computation of type TypeTimeOnly, which instructs the unsafeCompiler to remove them.
     (usersInContext :: ADT QT.RoleInContext) <- collectRoleInContexts subject
+    currentactorBinding <- makeTypeTimeOnlyRoleBinding "currentactor" subject usersInContext start
     effectWithEnvironment <- pure $ addContextualBindingsToStatements
       [ makeIdentityStep "origin" start
       , computeCurrentContext state start
-      , unsafePartial makeTypeTimeOnlyRoleStep "currentactor" usersInContext start
+      , currentactorBinding
       ]
       effect
     -- `syntacticObject` represents the object of the perspective. It allows
@@ -1227,10 +1241,11 @@ handlePostponedStateQualifiedParts = do
     --  currentactor -> It's type is the qualifiedUser computed above.
     -- The last VarBinding has a computation of type TypeTimeOnly, which instructs the unsafeCompiler to remove it.
     (usersInContext :: ADT QT.RoleInContext) <- collectRoleInContexts subject
+    currentactorBinding <- makeTypeTimeOnlyRoleBinding "currentactor" subject usersInContext start
     effectWithEnvironment <- pure $ addContextualBindingsToStatements
       [ makeIdentityStep "origin" start
       , makeIdentityStep "currentcontext" start
-      , unsafePartial makeTypeTimeOnlyRoleStep "currentactor" usersInContext start
+      , currentactorBinding
       ]
       effect
     states <- stateSpec2States state >>= statesExist start end
