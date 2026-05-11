@@ -120,10 +120,9 @@ scheduleRoleRemoval sync id = do
   -- It may happen that two public roles with the same address both have a perspective on this role instance.
   -- In that case, we remove the instance for the first public role (in a random order). 
   -- We should check whether it is still there before we try to remove it.
-  if isInPublicScheme (unwrap id) then (lift $ tryGetPerspectRol id) >>= case _ of
+  (lift $ tryGetPerspectRol id) >>= case _ of
     Nothing -> pure []
     Just _ -> f
-  else f
   where
   f :: MonadPerspectivesTransaction (Array RoleInstance)
   f = do
