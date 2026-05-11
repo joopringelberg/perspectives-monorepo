@@ -37,8 +37,7 @@ import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetABinding(..), LetStep(..), Statements(..), endOfAssignment, startOfAssignment)
 import Perspectives.Query.QueryTypes (RoleInContext(..))
 import Perspectives.Representation.ADT (ADT(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType)
-import Perspectives.Representation.TypeIdentifiers (RoleType, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..), roletype2string)
 import Prelude (($), (<$>), (<>), (==), (||))
 
 --------------------------------------------------------------------------
