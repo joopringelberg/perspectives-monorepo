@@ -256,6 +256,7 @@ export type WidgetCommonFields = {
   title: string;
   perspective: Perspective;
   fieldConstraints?: FieldDisplayConstraint[];
+  typeAheadFillFromCandidates?: FilterValueEntry[];
 };
 
 export type FieldDisplayConstraint = {

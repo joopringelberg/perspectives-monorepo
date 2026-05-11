@@ -242,6 +242,7 @@ perspectDef = LanguageDef
       , "chat"
       , "typeaheadfiller"
       , "typeaheadform"
+      , "typeaheadfillfrom"
       , "messages"
       , "media"
       , "who"

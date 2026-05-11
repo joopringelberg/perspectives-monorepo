@@ -1802,6 +1802,7 @@ widgetCommonFields = do
         { title
         , perspective
         , fillFrom: mFillFrom
+        , typeAheadFillFromRole: Nothing
         , fillPropertyValues
         , withProps
         , withoutProps
@@ -1817,6 +1818,7 @@ widgetCommonFields = do
         { title
         , perspective
         , fillFrom: Nothing
+        , typeAheadFillFromRole: Nothing
         , fillPropertyValues: Nil
         , withProps: Nothing
         , withoutProps: Nothing
@@ -1870,6 +1872,7 @@ tableFormFields perspective = do
     -- Set the reference position to the indented position following 'master' or 'detail'.
     then withPos do
       mFillFrom <- optionMaybe (reserved "fillfrom" *> step)
+      mTypeAheadFillFromRole <- optionMaybe (reserved "typeaheadfillfrom" *> arcIdentifier)
       -- Parse at most one selector: either `with …` or `without …`.
       mSelection <- optionMaybe
         ( (Right <$> (reserved "with" *> withProperties))
@@ -1896,6 +1899,7 @@ tableFormFields perspective = do
         { title
         , perspective
         , fillFrom: mFillFrom
+        , typeAheadFillFromRole: mTypeAheadFillFromRole
         , fillPropertyValues
         , withProps
         , withoutProps
@@ -1911,6 +1915,7 @@ tableFormFields perspective = do
         { title
         , perspective
         , fillFrom: Nothing
+        , typeAheadFillFromRole: Nothing
         , fillPropertyValues: Nil
         , withProps: Nothing
         , withoutProps: Nothing

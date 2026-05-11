@@ -26,7 +26,7 @@ import RoleInstance from "./roleinstance.js";
 
 import "././styles/components.css";
 import { Dropdown } from "react-bootstrap";
-import { PropertyType, RoleInstanceT, RoleType, Perspective, PropertyValues, SerialisedProperty, mapRange, InputType, PDRproxy } from "perspectives-proxy";
+import { PropertyType, RoleInstanceT, RoleType, Perspective, PropertyValues, SerialisedProperty, mapRange, InputType, PDRproxy, FilterValueEntry } from "perspectives-proxy";
 import { WithOutBehavioursProps } from "./adorningComponentWrapper";
 import ModelDependencies from "./modelDependencies";
 import {UserMessagingPromise} from "./userMessaging.js";
@@ -79,11 +79,14 @@ interface TableCellProps
   perspective: Perspective;
   readableName: string;
   cancelled: boolean;
+  typeAheadFillFromCandidates?: FilterValueEntry[];
 }
 
 interface TableCellState
 {
   editable: boolean;
+  taQuery: string;
+  taOpen: boolean;
 }
 
 export default class TableCell extends PerspectivesComponent<TableCellProps, TableCellState>
@@ -95,10 +98,11 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     super(props);
     // Being editable is not determined by props, but entirely by interaction with the cell
     // through the keyboard.
-    this.state = { editable: false };
+    this.state = { editable: false, taQuery: '', taOpen: false };
     this.handleClick = this.handleClick.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.handleFillerSelect = this.handleFillerSelect.bind(this);
+    this.handleTypeAheadContainerBlur = this.handleTypeAheadContainerBlur.bind(this);
     // A reference to the Form.Control that handles input.
     // It is used to dispatch the custom SetRow and SetColumn events.
     // It also receives focus.
@@ -147,6 +151,12 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
       {
         try { toggle.focus(); } catch (_) { /* ignore */ }
       }
+    }
+
+    // When entering editable mode for typeahead fill, open the typeahead.
+    if (!prevState.editable && component.state.editable && component.typeAheadFillFromAllowed())
+    {
+      component.setState({ taOpen: true, taQuery: '' });
     }
   }
 
@@ -310,9 +320,25 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
 
   fillFromDropdownAllowed() : boolean
   {
-    return this.props.perspective.possibleFillers
+    return !this.typeAheadFillFromAllowed()
+      && !!(this.props.perspective.possibleFillers
       && this.props.perspective.possibleFillers.length > 0
-      && this.props.perspective.verbs.includes("Fill");
+      && this.props.perspective.verbs.includes("Fill"));
+  }
+
+  typeAheadFillFromAllowed() : boolean
+  {
+    return !!(this.props.typeAheadFillFromCandidates !== undefined
+      && this.props.perspective.verbs.includes("Fill"));
+  }
+
+  handleTypeAheadContainerBlur(e: React.FocusEvent<HTMLDivElement>)
+  {
+    // Close the typeahead dropdown only when focus leaves the entire container.
+    if (!e.currentTarget.contains(e.relatedTarget as Node))
+    {
+      this.setState({ taOpen: false, taQuery: '', editable: false });
+    }
   }
 
   render ()
@@ -330,6 +356,70 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
       {
         if (component.state.editable)
         {
+          // Typeahead fill: show a text input with candidate filtering (typeaheadfillfrom).
+          if (component.typeAheadFillFromAllowed())
+          {
+            const MAX_VISIBLE = 20;
+            const candidates = component.props.typeAheadFillFromCandidates!;
+            const query = component.state.taQuery;
+            const filtered = query
+              ? candidates.filter(c => c.filterValue.toLowerCase().includes(query.toLowerCase())).slice(0, MAX_VISIBLE)
+              : candidates.slice(0, MAX_VISIBLE);
+
+            return (
+              <td
+                role="gridcell"
+                style={{ padding: '0.25rem' }}
+              >
+                <div
+                  style={{ position: 'relative' }}
+                  onBlur={component.handleTypeAheadContainerBlur}
+                >
+                  <input
+                    autoFocus
+                    type="text"
+                    className="form-control form-control-sm"
+                    value={query}
+                    placeholder={i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
+                    aria-label={ariaLabel}
+                    onChange={e => component.setState({ taQuery: e.target.value, taOpen: true })}
+                    onFocus={() => component.setState({ taOpen: true })}
+                  />
+                  {component.state.taOpen && filtered.length > 0 && (
+                    <ul
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        zIndex: 1050,
+                        listStyle: 'none',
+                        margin: 0,
+                        padding: 0,
+                        backgroundColor: 'white',
+                        border: '1px solid #ccc',
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                      }}
+                    >
+                      {filtered.map(({ filterValue, roleId }) => (
+                        <li
+                          key={roleId}
+                          style={{ padding: '4px 8px', cursor: 'pointer' }}
+                          onClick={() => {
+                            component.handleFillerSelect(roleId as RoleInstanceT);
+                            component.setState({ taOpen: false, taQuery: '', editable: false });
+                          }}
+                        >
+                          {filterValue}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </td>
+            );
+          }
           // If we have possibleFillers in the Perspective, instead show a dropdown to select from. 
           // This is because cards often represent RoleInstances, and for RoleInstances we want to be able 
           // to set the RoleInstance by selecting one that fits in the same RoleType.

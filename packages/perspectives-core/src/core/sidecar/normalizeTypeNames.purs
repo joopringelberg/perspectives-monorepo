@@ -995,6 +995,7 @@ normalizeWidgetCommonFields w = do
   fillFrom' <- traverse normalize w.fillFrom
   fillPropertyFrom' <- traverse normalizePropertyValueFillers w.fillPropertyFrom
   fieldConstraints' <- traverse (traverse normalizeFieldConstraintDef) w.fieldConstraints
+  typeAheadFillFrom' <- traverse fqn2tid w.typeAheadFillFrom
   pure $ w
     { propertyRestrictions = propertyRestrictions'
     , withoutProperties = withoutProperties'
@@ -1003,6 +1004,7 @@ normalizeWidgetCommonFields w = do
     , fillFrom = fillFrom'
     , fillPropertyFrom = fillPropertyFrom'
     , fieldConstraints = fieldConstraints'
+    , typeAheadFillFrom = typeAheadFillFrom'
     }
 
 normalizePropertyValueFillers :: PropertyValueFillers -> WithSideCars PropertyValueFillers

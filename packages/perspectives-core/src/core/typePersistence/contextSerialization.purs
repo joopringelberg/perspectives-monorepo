@@ -200,6 +200,8 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
         , roleVerbs: Nothing
         , userRole: userRoleType
         , fillFrom: Nothing
+        , typeAheadFillFrom: Nothing
+        , typeAheadFillFromCandidates: Nothing
         , fillPropertyFrom: Nothing
         , fieldConstraints: Nothing
         }
@@ -229,6 +231,8 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
         , roleVerbs: Nothing
         , userRole: userRoleType
         , fillFrom: Nothing
+        , typeAheadFillFrom: Nothing
+        , typeAheadFillFromCandidates: Nothing
         , fillPropertyFrom: Nothing
         , fieldConstraints: Nothing
         }
@@ -283,6 +287,8 @@ makeTableFormDef userRoleType p@{ id, displayName } =
       , roleVerbs: Nothing
       , userRole: userRoleType
       , fillFrom: Nothing
+      , typeAheadFillFrom: Nothing
+      , typeAheadFillFromCandidates: Nothing
       , fillPropertyFrom: Nothing
       , fieldConstraints: Nothing
       }
@@ -424,8 +430,12 @@ instance addPerspectivesTableDef :: AddPerspectives TableDef where
       ctxt
     contextType <- lift $ contextType_ ctxt
     (translatedTitle :: Maybe String) <- lift $ traverse (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType)) widgetCommonFields.title
+    -- Fetch typeahead fillfrom candidates (if any) from the filterValueView.
+    typeAheadFillFromCandidates <- case widgetCommonFields.typeAheadFillFrom of
+      Nothing -> pure Nothing
+      Just rt -> lift $ Just <$> fetchFilterValueCandidates rt ctxt
     markdown' <- traverse (\a -> addPerspectives a user ctxt) markdown
-    pure $ TableDef { markdown: markdown', widgetCommonFields: widgetCommonFields { perspective = Just perspective, title = translatedTitle } }
+    pure $ TableDef { markdown: markdown', widgetCommonFields: widgetCommonFields { perspective = Just perspective, title = translatedTitle, typeAheadFillFromCandidates = typeAheadFillFromCandidates } }
 
 instance addPerspectivesFormDef :: AddPerspectives FormDef where
   addPerspectives (FormDef { markdown, widgetCommonFields }) user ctxt = do
@@ -638,6 +648,8 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               , roleVerbs: Nothing
               , userRole: userRoleType
               , fillFrom: Nothing
+              , typeAheadFillFrom: Nothing
+              , typeAheadFillFromCandidates: Nothing
               , fillPropertyFrom: Nothing
               , fieldConstraints: Nothing
               }
@@ -654,6 +666,8 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               , roleVerbs: Nothing
               , userRole: userRoleType
               , fillFrom: Nothing
+              , typeAheadFillFrom: Nothing
+              , typeAheadFillFromCandidates: Nothing
               , fillPropertyFrom: Nothing
               , fieldConstraints: Nothing
               }

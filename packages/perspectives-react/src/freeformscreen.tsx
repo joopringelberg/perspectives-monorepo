@@ -404,6 +404,7 @@ export function buildTable(table : TableElementDef, showControls : boolean = tru
         showcontrolsandcaption={showControls}
         showAsAccordionItem={showAsAccordionItem}
         showDetails={showDetails}
+        typeAheadFillFromCandidates={table.widgetCommonFields.typeAheadFillFromCandidates}
         />
     </>);
 }

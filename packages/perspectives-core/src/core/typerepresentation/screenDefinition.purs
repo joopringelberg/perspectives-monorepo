@@ -148,6 +148,13 @@ type WidgetCommonFieldsDefWithoutPerspective f =
   , objectRoleType :: Maybe RoleType
   , fillFrom :: Maybe QueryFunctionDescription
   , fillPropertyFrom :: Maybe PropertyValueFillers
+  -- The role type whose instances provide typeahead candidates when `typeaheadfillfrom` is
+  -- used in the master/detail context.  Nothing = ordinary fillfrom or no fill at all.
+  -- Nothing for older serialised DomeinFiles that pre-date this field.
+  , typeAheadFillFrom :: Maybe RoleType
+  -- Pre-fetched FilterValue candidates for typeaheadfillfrom.
+  -- Nothing for older serialised DomeinFiles; empty array means no candidates found.
+  , typeAheadFillFromCandidates :: Maybe (Array FilterValueEntry)
   -- The runtime  has a perspective serialisation.
   -- These three fields are not serialised runtime; they are used to
   -- create the restricted serialised perspective.

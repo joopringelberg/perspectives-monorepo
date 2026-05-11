@@ -261,7 +261,7 @@ const meta: Mode = {
 // SCREEN ELEMENTS (base04)
 const screenKeywords: Mode = {
     scope: base04,
-    begin: /\b(screen|tab|row|column|form|markdown|table|chat|messages|media|who|what|where|master|detail|when|fillfrom|typeaheadfiller|typeaheadform)\b/
+    begin: /\b(screen|tab|row|column|form|markdown|table|chat|messages|media|who|what|where|master|detail|when|fillfrom|typeaheadfiller|typeaheadform|typeaheadfillfrom)\b/
 };
 
 const use: Mode = {

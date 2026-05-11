@@ -526,6 +526,9 @@ type WidgetCommonFields =
   -- Only the ExplicitRole constructor is allowed!
   , perspective :: RoleIdentification
   , fillFrom :: Maybe Step
+  -- The role name after `typeaheadfillfrom` (used in master/detail context).
+  -- Mutually exclusive with fillFrom; Nothing when not specified.
+  , typeAheadFillFromRole :: Maybe String
   , fillPropertyValues :: List FillPropertyValueE
   -- Alternative to withoutProps: explicitly include properties/views
   , withProps :: Maybe PropsOrView

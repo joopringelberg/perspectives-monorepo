@@ -320,7 +320,7 @@ handleScreens screenEs = do
             otherwise -> throwError $ NotUniquelyIdentifyingPropertyType start' (ENP $ EnumeratedPropertyType prop) candidates
 
   widgetCommonFields :: RoleType -> AST.WidgetCommonFields -> ThreeValuedLogic -> PhaseThree WidgetCommonFieldsDef
-  widgetCommonFields subjectRoleType { title: title', perspective, fillFrom, fillPropertyValues, withProps, withoutProps, withoutVerbs, roleVerbs, fieldConstraints: fieldConstraints', start: start', end: end' } isFunctionalWidget = do
+  widgetCommonFields subjectRoleType { title: title', perspective, fillFrom, typeAheadFillFromRole, fillPropertyValues, withProps, withoutProps, withoutVerbs, roleVerbs, fieldConstraints: fieldConstraints', start: start', end: end' } isFunctionalWidget = do
     -- From a RoleIdentification that represents the object,
     -- find the relevant Perspective.
     -- A ScreenElement can only be defined for a named Enumerated or Calculated Role. This means that `perspective` is constructed with the
@@ -356,6 +356,12 @@ handleScreens screenEs = do
     perspectives <- lift2 $ perspectivesOfRoleType subjectRoleType
     fillFrom' <- traverse (compileStep (CDOM $ ST (roleIdentification2context perspective))) fillFrom
     fillPropertyFrom' <- compileFillPropertyValues fillPropertyValues objectRoleType perspective
+    -- Compile the typeAheadFillFromRole (if any) to a RoleType using the same context.
+    typeAheadFillFrom' <- case typeAheadFillFromRole of
+      Nothing -> pure Nothing
+      Just roleName -> do
+        let ctxt = roleIdentification2context perspective
+        Just <<< unsafePartial ARRP.head <$> collectRoles (ExplicitRole ctxt (ENR $ EnumeratedRoleType roleName) start')
     stableObjectRoleType <- lift2 $ toReadable objectRoleType
     case find (\(Perspective { roleTypes }) -> isJust $ elemIndex stableObjectRoleType roleTypes) perspectives of
       -- This case is probably that the object and user exist, but the latter
@@ -411,6 +417,8 @@ handleScreens screenEs = do
           , objectRoleType: Just objectRoleType
           , perspective: Nothing
           , fillFrom: fillFrom'
+          , typeAheadFillFrom: typeAheadFillFrom'
+          , typeAheadFillFromCandidates: Nothing
           , fillPropertyFrom: fillPropertyFrom'
           , propertyRestrictions
           , withoutProperties

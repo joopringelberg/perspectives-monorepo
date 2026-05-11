@@ -292,7 +292,7 @@
     },
     {
       "name": "entity.name.tag.screenelement.arc",
-      "match": "\\b(screen|tab|row|column|form|markdown|table|chat|messages|media|who|what|where|master|detail|when|fillfrom|typeaheadfiller|typeaheadform)\\b"
+      "match": "\\b(screen|tab|row|column|form|markdown|table|chat|messages|media|who|what|where|master|detail|when|fillfrom|typeaheadfiller|typeaheadform|typeaheadfillfrom)\\b"
     },
     {
       "name": "keyword.operator",
