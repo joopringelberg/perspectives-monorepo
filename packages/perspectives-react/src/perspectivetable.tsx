@@ -241,8 +241,8 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
       const specifiedFirst = perspective.propertyOrder
         .map(id => perspective.properties[id])
         .filter(Boolean);
-      const specifiedIds = new Set(perspective.propertyOrder as string[]);
-      const rest = Object.values(perspective.properties).filter(p => !specifiedIds.has(p.id as string));
+      const specifiedIds = new Set(perspective.propertyOrder);
+      const rest = Object.values(perspective.properties).filter(p => !specifiedIds.has(p.id));
       this.orderedProperties = [...specifiedFirst, ...rest];
     }
     else

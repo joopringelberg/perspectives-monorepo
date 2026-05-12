@@ -285,16 +285,20 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
       const constraintMap = new Map(
         (component.props.fieldConstraints ?? []).map(c => [c.propertyType.value as string, c])
       );
+      // Order properties according to the explicit ordering from the screen definition, if present.
+      const orderedPropertyValues = perspective.propertyOrder && perspective.propertyOrder.length > 0
+        ? (() => {
+            const specifiedIds = new Set(perspective.propertyOrder);
+            return [
+              ...perspective.propertyOrder.map(id => perspective.properties[id]).filter(Boolean),
+              ...Object.values(perspective.properties).filter(p => !specifiedIds.has(p.id))
+            ];
+          })()
+        : Object.values(perspective.properties);
       return (
         <Form onKeyDown={handleTab}>
           {
-            (perspective.propertyOrder && perspective.propertyOrder.length > 0
-              ? [
-                  ...perspective.propertyOrder.map(id => perspective.properties[id]).filter(Boolean),
-                  ...Object.values(perspective.properties).filter(p => !(perspective.propertyOrder as string[]).includes(p.id as string))
-                ]
-              : Object.values(perspective.properties)
-            )
+            orderedPropertyValues
               .filter( property => !component.props.suppressIdentifyingProperty || property.id !== perspective.identifyingProperty)
               .map((serialisedProperty, index) =>
               {
