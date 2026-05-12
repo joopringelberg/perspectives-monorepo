@@ -234,13 +234,27 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
   orderProperties()
   {
     const perspective = this.props.perspective;
-    // Here we put the identifying property in the front of the list, so it will be the first column.
-    const identifyingProperty = perspective.properties[perspective.identifyingProperty];
-    this.orderedProperties = Object.values(perspective.properties);
-    this.orderedProperties.splice( this.orderedProperties.indexOf( identifyingProperty), 1);
-    if (identifyingProperty)
+    if (perspective.propertyOrder && perspective.propertyOrder.length > 0)
     {
-      this.orderedProperties.unshift(identifyingProperty);
+      // When an explicit property order is given by the screen definition (`with props`),
+      // honour it: listed properties come first in the specified order, then any remaining.
+      const specifiedFirst = perspective.propertyOrder
+        .map(id => perspective.properties[id])
+        .filter(Boolean);
+      const specifiedIds = new Set(perspective.propertyOrder as string[]);
+      const rest = Object.values(perspective.properties).filter(p => !specifiedIds.has(p.id as string));
+      this.orderedProperties = [...specifiedFirst, ...rest];
+    }
+    else
+    {
+      // Default: put the identifying property in the front of the list, so it will be the first column.
+      const identifyingProperty = perspective.properties[perspective.identifyingProperty];
+      this.orderedProperties = Object.values(perspective.properties);
+      this.orderedProperties.splice( this.orderedProperties.indexOf( identifyingProperty), 1);
+      if (identifyingProperty)
+      {
+        this.orderedProperties.unshift(identifyingProperty);
+      }
     }
     this.propertyNames = this.orderedProperties.map( p => p.id);
     // Finally, remove an eventual sort property from the list of properties.

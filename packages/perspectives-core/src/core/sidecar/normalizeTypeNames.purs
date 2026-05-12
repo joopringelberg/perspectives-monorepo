@@ -974,6 +974,7 @@ normalizeWidgetCommonFields w = do
   let perspMap = env.perspMap
   propertyRestrictions' <- traverse normalize w.propertyRestrictions
   withoutProperties' <- traverse (traverse fqn2tid) w.withoutProperties
+  requiredProperties' <- traverse (traverse fqn2tid) w.requiredProperties
   userRole' <- fqn2tid w.userRole
   -- rewrite perspectiveId if we have a stable id for it
   let
@@ -986,6 +987,7 @@ normalizeWidgetCommonFields w = do
   pure $ w
     { propertyRestrictions = propertyRestrictions'
     , withoutProperties = withoutProperties'
+    , requiredProperties = requiredProperties'
     , userRole = userRole'
     , perspectiveId = perspectiveId'
     , fillFrom = fillFrom'

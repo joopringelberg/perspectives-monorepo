@@ -288,7 +288,13 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
       return (
         <Form onKeyDown={handleTab}>
           {
-            Object.values(perspective.properties)
+            (perspective.propertyOrder && perspective.propertyOrder.length > 0
+              ? [
+                  ...perspective.propertyOrder.map(id => perspective.properties[id]).filter(Boolean),
+                  ...Object.values(perspective.properties).filter(p => !(perspective.propertyOrder as string[]).includes(p.id as string))
+                ]
+              : Object.values(perspective.properties)
+            )
               .filter( property => !component.props.suppressIdentifyingProperty || property.id !== perspective.identifyingProperty)
               .map((serialisedProperty, index) =>
               {

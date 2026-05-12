@@ -374,7 +374,9 @@ handleScreens screenEs = do
             CR crt -> CR <$> toReadable crt
           throwError (UnauthorizedForRole "Auteur" subjectRoleType' objectRoleType' (maybe [] roleVerbList2Verbs roleVerbs) (Just start') (Just end'))
         -- Compute the excluded properties from either withProps (inclusion) or withoutProps (exclusion).
-        (withoutProperties :: Maybe (Array PropertyType)) <- case withProps, withoutProps of
+        -- When withProps is used, also capture the ordered inclusion list as requiredProperties
+        -- so the client can sort columns/fields accordingly.
+        withoutAndRequired <- case withProps, withoutProps of
           Just withSel, Nothing -> do
             included <- propertiesInPropsOrView withSel perspective objectRoleType start'
             let
@@ -384,11 +386,16 @@ handleScreens screenEs = do
                     _ -> false
                 )
                 allProps
-            pure (Just excluded)
-          Nothing, Just withoutSel -> Just <$> propertiesInPropsOrView withoutSel perspective objectRoleType start'
-          Nothing, Nothing -> pure Nothing
-          Just _, Just _ -> pure Nothing -- unreachable due to parser mutual exclusion
+            pure (Tuple (Just excluded) (Just included))
+          Nothing, Just withoutSel -> do
+            excluded <- propertiesInPropsOrView withoutSel perspective objectRoleType start'
+            pure (Tuple (Just excluded) Nothing)
+          Nothing, Nothing -> pure (Tuple Nothing Nothing)
+          Just _, Just _ -> pure (Tuple Nothing Nothing) -- unreachable due to parser mutual exclusion
         -- Parser ensures mutual exclusion; both Just cannot occur.
+        let
+          withoutProperties = fst withoutAndRequired
+          requiredProperties = snd withoutAndRequired
 
         -- compute the excluded verbs per property from List PropertyVerbE.
         -- Each PropertyVerbE has an ExplicitSet PropertyVerb and a PropsOrView. 
@@ -407,6 +414,7 @@ handleScreens screenEs = do
           , fillPropertyFrom: fillPropertyFrom'
           , propertyRestrictions
           , withoutProperties
+          , requiredProperties
           , roleVerbs: maybe Nothing (Just <<< roleVerbList2Verbs) roleVerbs
           , userRole: subjectRoleType
           , fieldConstraints: compiledFieldConstraints
