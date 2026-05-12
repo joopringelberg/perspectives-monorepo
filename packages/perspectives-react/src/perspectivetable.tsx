@@ -16,6 +16,7 @@ import { CardWithFixedBehaviour, WithOutBehavioursProps } from "./adorningCompon
 import { RoleInstanceT, Perspective, SerialisedProperty, PropertyType, Roleinstancewithprops } from "perspectives-proxy";
 import { AppContext } from "./reactcontexts";
 import TableItemContextMenu from "./tableItemContextMenu";
+import { orderPropertiesByPerspective } from "./utilities";
 
 // Wrapper functional component to derive `isOpen` from Accordion context and pass to the menu.
 const TableItemContextMenuWithOpen: React.FC<{
@@ -237,13 +238,8 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
     if (perspective.propertyOrder && perspective.propertyOrder.length > 0)
     {
       // When an explicit property order is given by the screen definition (`with props`),
-      // honour it: listed properties come first in the specified order, then any remaining.
-      const specifiedFirst = perspective.propertyOrder
-        .map(id => perspective.properties[id])
-        .filter(Boolean);
-      const specifiedIds = new Set(perspective.propertyOrder);
-      const rest = Object.values(perspective.properties).filter(p => !specifiedIds.has(p.id));
-      this.orderedProperties = [...specifiedFirst, ...rest];
+      // use the shared helper to order: listed properties come first, then any remaining.
+      this.orderedProperties = orderPropertiesByPerspective(perspective);
     }
     else
     {

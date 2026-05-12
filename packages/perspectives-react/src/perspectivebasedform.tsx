@@ -26,6 +26,7 @@ import PerspectivesComponent from "./perspectivesComponent";
 import RoleInstance from "./roleinstance.js";
 import SmartFieldControlGroup from "./smartfieldcontrolgroup.js";
 import FormControls from "./formcontrols.js";
+import { orderPropertiesByPerspective } from "./utilities";
 import
   { Card, Form
   } from "react-bootstrap";
@@ -286,15 +287,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
         (component.props.fieldConstraints ?? []).map(c => [c.propertyType.value as string, c])
       );
       // Order properties according to the explicit ordering from the screen definition, if present.
-      const orderedPropertyValues = perspective.propertyOrder && perspective.propertyOrder.length > 0
-        ? (() => {
-            const specifiedIds = new Set(perspective.propertyOrder);
-            return [
-              ...perspective.propertyOrder.map(id => perspective.properties[id]).filter(Boolean),
-              ...Object.values(perspective.properties).filter(p => !specifiedIds.has(p.id))
-            ];
-          })()
-        : Object.values(perspective.properties);
+      const orderedPropertyValues = orderPropertiesByPerspective(perspective);
       return (
         <Form onKeyDown={handleTab}>
           {
