@@ -34,7 +34,7 @@ import Control.Monad.Error.Class (catchError, try)
 import Control.Monad.Except (lift)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (gets)
-import Data.Array (elemIndex, filter, foldM, foldMap, fromFoldable, head, length, null, uncons)
+import Data.Array (any, elemIndex, filter, foldM, foldMap, fromFoldable, head, length, null, uncons)
 import Data.Either (Either(..))
 import Data.Map (empty)
 import Data.Maybe (Maybe(..), fromJust, isJust)
@@ -141,7 +141,10 @@ compileAndSaveRole dom step (CalculatedRole cr@{ id, kindOfRole, pos }) consider
         else pure compiledExpression
       roleRange <- case range compiledExpression' of
         RDOM roleRange -> pure roleRange
-        r -> throwError $ NotARoleDomain r (startOf step) (endOf step)
+        r ->
+          if kindOfRole == RTI.ContextRole then
+            throwError $ NotAContextRole (startOf step) (endOf step)
+          else throwError $ NotARoleDomain r (startOf step) (endOf step)
       if kindOfRole == RTI.ContextRole && contextRoleRangeHasNonExternalRole roleRange then
         throwError $ NotAContextRole (startOf step) (endOf step)
       else do
@@ -150,7 +153,7 @@ compileAndSaveRole dom step (CalculatedRole cr@{ id, kindOfRole, pos }) consider
         pure roleRange
 
 contextRoleRangeHasNonExternalRole :: ADT RoleInContext -> Boolean
-contextRoleRangeHasNonExternalRole = ((==) false <<< null <<< filter nonExternalRole) <<< commonLeavesInADT
+contextRoleRangeHasNonExternalRole = any nonExternalRole <<< commonLeavesInADT
   where
   nonExternalRole :: RoleInContext -> Boolean
   nonExternalRole (RoleInContext { role }) = isExternalRole (unwrap role) == false
