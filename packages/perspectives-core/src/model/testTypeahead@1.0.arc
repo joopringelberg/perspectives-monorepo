@@ -46,12 +46,17 @@ domain model://joopringelberg.nl#TestTypeAhead@1.0
         all props verbs (Consult)
       screen
         who
+          Deelnemer
+            master
+              typeaheadfillfrom Candidates
+              with props (LastName)
+            detail
         what
           row
             typeaheadfiller Friend
-              fillfrom sys:MySocialEnvironment >> Persons
+              fillfrom Candidates
           row 
-            typeaheadform Candidates
+            typeaheadform "Persons" Candidates
         where
 
     user Friend filledBy sys:SocialEnvironment$Persons

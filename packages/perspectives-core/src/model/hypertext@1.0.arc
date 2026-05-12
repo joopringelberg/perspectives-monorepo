@@ -252,6 +252,8 @@ domain model://perspectives.domains#HyperContext@1.0
             props (MD) without (SetPropertyValue, AddPropertyValue, RemovePropertyValue, DeleteProperty)
             when ShowBlock
 
+    -- By construction we fill this role with the Author of the PublicPageCollection.
+    -- Consequently, the Author of a PublicPage has access to the database that lives at the Visitor's public address, and can use it to store the content of the page.
     aspect user hypercontext:Page$Author
 
     aspect thing hypercontext:Page$TextBlocks

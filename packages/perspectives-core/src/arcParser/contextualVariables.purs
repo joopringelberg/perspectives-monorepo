@@ -170,7 +170,7 @@ makeTypeTimeOnlyRoleStep varName (PROD alternatives) pos = case head alternative
 
 makeTypeTimeOnlyRoleTypeStep :: VarName -> RoleType -> ContextType -> ArcPosition -> VarBinding
 makeTypeTimeOnlyRoleTypeStep varName roleType ctxt pos = case roleType of
-  ENR rt -> VarBinding varName (Simple $ TypeTimeOnlyEnumeratedRole pos (roletype2string roleType) (unwrap ctxt))
+  ENR rt -> VarBinding varName (Simple $ TypeTimeOnlyEnumeratedRole pos (unwrap ctxt) (roletype2string roleType))
   CR rt -> VarBinding varName (Simple $ TypeTimeOnlyCalculatedRole pos (roletype2string roleType))
 
 -- | Produces a step that takes the context of its origin.
