@@ -16,7 +16,10 @@ import Perspectives.Parsing.Arc.AST (ContextE)
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..), VarBinding(..))
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), RoleType(..))
+import Perspectives.Query.ExpressionCompiler (contextRoleRangeHasNonExternalRole)
+import Perspectives.Query.QueryTypes (RoleInContext(..))
+import Perspectives.Representation.ADT (ADT(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), RoleType(..))
 import Test.Unit (TestF, suiteOnly, test)
 import Test.Unit.Assert (assert)
 
@@ -52,3 +55,18 @@ theSuite = suiteOnly "Perspectives.Parsing.Arc.Model" do
       case binding of
         VarBinding "currentactor" (Simple (TypeTimeOnlyCalculatedRole _ "model:MyTestDomain$Guest")) -> true
         _ -> false
+
+  test "contextRoleRangeHasNonExternalRole detects non-external role types" do
+    let
+      externalRange = ST $ RoleInContext
+        { context: ContextType "model:MyDomain$SubContext"
+        , role: EnumeratedRoleType "model:MyDomain$SubContext$External"
+        }
+      nonExternalRange = ST $ RoleInContext
+        { context: ContextType "model:MyDomain$SubContext"
+        , role: EnumeratedRoleType "model:MyDomain$SubContext$SomeRole"
+        }
+    assert "External-only role range should be accepted"
+      (contextRoleRangeHasNonExternalRole externalRange == false)
+    assert "Non-external role range should be rejected"
+      (contextRoleRangeHasNonExternalRole nonExternalRange)
