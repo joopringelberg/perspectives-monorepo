@@ -390,7 +390,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                         onChange={e => component.setState({ taQuery: e.target.value, taOpen: true })}
                       />
                     </Dropdown.Toggle>
-                    <Dropdown.Menu className="w-100">
+                    <Dropdown.Menu className="w-100" popperConfig={{ strategy: 'fixed' }}>
                       {filtered.map(({ filterValue, roleId }) =>
                         <Dropdown.Item
                           key={String(roleId)}
@@ -440,7 +440,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                     >
                       {i18next.t("tablecell_select_filler", { ns: 'preact', defaultValue: 'Select a filler' })}
                     </Dropdown.Toggle>
-                    <Dropdown.Menu className="w-100">
+                    <Dropdown.Menu className="w-100" popperConfig={{ strategy: 'fixed' }}>
                       {fillers.map(({readableName, instance}) =>
                         <Dropdown.Item
                           key={String(instance)}
