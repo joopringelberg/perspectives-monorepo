@@ -66,6 +66,8 @@ const receiveFocusByKeyboard = 0;
 // `strategy: 'fixed'` makes the menu overlay ancestor overflow/clipping (e.g. accordion-item).
 // The custom `sameWidth` modifier sizes the menu to exactly match the toggle (column) width
 // so the menu does not expand to fill the whole viewport.
+const MAX_VISIBLE = 20;
+
 const columnWidthPopperConfig = {
   strategy: 'fixed' as const,
   modifiers: [
@@ -176,7 +178,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     }
 
     // When entering editable mode for typeahead fill, open the typeahead.
-    if (!prevState.editable && component.state.editable && component.typeAheadFillFromAllowed())
+    if (!prevState.editable && component.state.editable && (component.typeAheadFillFromAllowed() || component.fillFromTypeAheadAllowed()))
     {
       component.setState({ taOpen: true, taQuery: '' });
     }
@@ -246,7 +248,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
             break;
         }
       }
-      else if (!event.shiftKey && (!component.propertyOnlyConsultable()) || component.fillFromDropdownAllowed() || component.typeAheadFillFromAllowed())
+      else if (!event.shiftKey && (!component.propertyOnlyConsultable()) || component.fillFromDropdownAllowed() || component.typeAheadFillFromAllowed() || component.fillFromTypeAheadAllowed())
       {
         switch(event.code){
           case "Enter":
@@ -345,6 +347,15 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     return !this.typeAheadFillFromAllowed()
       && !!(this.props.perspective.possibleFillers
       && this.props.perspective.possibleFillers.length > 0
+      && this.props.perspective.possibleFillers.length <= MAX_VISIBLE
+      && this.props.perspective.verbs.includes("Fill"));
+  }
+
+  fillFromTypeAheadAllowed() : boolean
+  {
+    return !this.typeAheadFillFromAllowed()
+      && !!(this.props.perspective.possibleFillers
+      && this.props.perspective.possibleFillers.length > MAX_VISIBLE
       && this.props.perspective.verbs.includes("Fill"));
   }
 
@@ -372,7 +383,6 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
           // Typeahead fill: show a text input with candidate filtering (typeaheadfillfrom).
           if (component.typeAheadFillFromAllowed())
           {
-            const MAX_VISIBLE = 20;
             const candidates = component.props.typeAheadFillFromCandidates!;
             const query = component.state.taQuery;
             const lowerQuery = query.toLowerCase();
@@ -420,6 +430,64 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                           onClick={() => component.handleFillerSelect(roleId)}
                         >
                           {filterValue}
+                        </Dropdown.Item>
+                      )}
+                    </Dropdown.Menu>
+                  </Dropdown>
+                </div>
+              </td>
+            );
+          }
+          // If we have many possibleFillers, use typeahead for filtering.
+          if (component.fillFromTypeAheadAllowed())
+          {
+            const fillers = component.props.perspective.possibleFillers;
+            const query = component.state.taQuery;
+            const lowerQuery = query.toLowerCase();
+            const filtered = query
+              ? fillers.filter(f => f.readableName.toLowerCase().includes(lowerQuery)).slice(0, MAX_VISIBLE)
+              : fillers.slice(0, MAX_VISIBLE);
+
+            return (
+              <td
+                role="gridcell"
+                style={{ padding: '0.25rem' }}
+              >
+                <div style={{ height: '100%', width: '100%' }}>
+                  <Dropdown
+                    className="w-100 h-100"
+                    show={component.state.taOpen}
+                    onToggle={(isOpen: boolean) => {
+                      if (!isOpen)
+                      {
+                        component.setState({ taOpen: false, taQuery: '', editable: false });
+                      }
+                    }}
+                  >
+                    <Dropdown.Toggle
+                      as="div"
+                      id={`tablecell-fillers-typeahead-${String(component.props.roleinstance)}`}
+                      className="w-100 h-100"
+                    >
+                      <input
+                        autoFocus
+                        ref={component.inputRef as React.RefObject<any>}
+                        type="text"
+                        className="form-control form-control-sm"
+                        value={query}
+                        placeholder={i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
+                        aria-label={ariaLabel}
+                        onClick={e => e.stopPropagation()}
+                        onChange={e => component.setState({ taQuery: e.target.value, taOpen: true })}
+                      />
+                    </Dropdown.Toggle>
+                    <Dropdown.Menu popperConfig={columnWidthPopperConfig}>
+                      {filtered.map(({ readableName, instance }) =>
+                        <Dropdown.Item
+                          key={String(instance)}
+                          onClick={() => component.handleFillerSelect(instance)}
+                        >
+                          {readableName}
                         </Dropdown.Item>
                       )}
                     </Dropdown.Menu>
