@@ -62,6 +62,29 @@ const focusable = -1;
  */
 const receiveFocusByKeyboard = 0;
 
+// Popper config used for both filler dropdowns in TableCell.
+// `strategy: 'fixed'` makes the menu overlay ancestor overflow/clipping (e.g. accordion-item).
+// The custom `sameWidth` modifier sizes the menu to exactly match the toggle (column) width
+// so the menu does not expand to fill the whole viewport.
+const columnWidthPopperConfig = {
+  strategy: 'fixed' as const,
+  modifiers: [
+    {
+      name: 'sameWidth',
+      enabled: true,
+      phase: 'beforeWrite' as const,
+      requires: ['computeStyles'],
+      fn({ state }: { state: any })
+      {
+        state.styles.popper.width = `${state.rects.reference.width}px`;
+      },
+      effect({ state }: { state: any })
+      {
+        state.elements.popper.style.width = `${(state.elements.reference as HTMLElement).offsetWidth}px`;
+      },
+    },
+  ],
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // TABLECELL
@@ -390,7 +413,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                         onChange={e => component.setState({ taQuery: e.target.value, taOpen: true })}
                       />
                     </Dropdown.Toggle>
-                    <Dropdown.Menu className="w-100" popperConfig={{ strategy: 'fixed' }}>
+                    <Dropdown.Menu popperConfig={columnWidthPopperConfig}>
                       {filtered.map(({ filterValue, roleId }) =>
                         <Dropdown.Item
                           key={String(roleId)}
@@ -440,7 +463,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                     >
                       {i18next.t("tablecell_select_filler", { ns: 'preact', defaultValue: 'Select a filler' })}
                     </Dropdown.Toggle>
-                    <Dropdown.Menu className="w-100" popperConfig={{ strategy: 'fixed' }}>
+                    <Dropdown.Menu popperConfig={columnWidthPopperConfig}>
                       {fillers.map(({readableName, instance}) =>
                         <Dropdown.Item
                           key={String(instance)}
