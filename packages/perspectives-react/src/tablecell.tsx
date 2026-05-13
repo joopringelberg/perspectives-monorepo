@@ -177,14 +177,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
       }
     }
 
-    // When entering editable mode for typeahead fill, open the typeahead.
-    // Use requestAnimationFrame to defer until after the browser has laid out
-    // the newly-mounted Dropdown.Toggle, so Popper.js receives a correct
-    // bounding rect and places the menu directly below the input.
-    if (!prevState.editable && component.state.editable && (component.typeAheadFillFromAllowed() || component.fillFromTypeAheadAllowed()))
-    {
-      requestAnimationFrame(() => component.setState({ taOpen: true, taQuery: '' }));
-    }
+
   }
 
   setFocus()
@@ -423,6 +416,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                       placeholder={i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
                       aria-label={ariaLabel}
                       onClick={e => e.stopPropagation()}
+                      onFocus={() => component.setState({ taOpen: true })}
                       onChange={e => component.setState({ taQuery: e.target.value, taOpen: true })}
                     />
                   </Dropdown.Toggle>
@@ -480,6 +474,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                       placeholder={i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
                       aria-label={ariaLabel}
                       onClick={e => e.stopPropagation()}
+                      onFocus={() => component.setState({ taOpen: true })}
                       onChange={e => component.setState({ taQuery: e.target.value, taOpen: true })}
                     />
                   </Dropdown.Toggle>
