@@ -87,7 +87,6 @@ interface TableCellState
   editable: boolean;
   taQuery: string;
   taOpen: boolean;
-  taHighlightIndex: number;
 }
 
 export default class TableCell extends PerspectivesComponent<TableCellProps, TableCellState>
@@ -99,11 +98,10 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     super(props);
     // Being editable is not determined by props, but entirely by interaction with the cell
     // through the keyboard.
-    this.state = { editable: false, taQuery: '', taOpen: false, taHighlightIndex: -1 };
+    this.state = { editable: false, taQuery: '', taOpen: false };
     this.handleClick = this.handleClick.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.handleFillerSelect = this.handleFillerSelect.bind(this);
-    this.handleTypeAheadContainerBlur = this.handleTypeAheadContainerBlur.bind(this);
     // A reference to the Form.Control that handles input.
     // It is used to dispatch the custom SetRow and SetColumn events.
     // It also receives focus.
@@ -157,7 +155,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     // When entering editable mode for typeahead fill, open the typeahead.
     if (!prevState.editable && component.state.editable && component.typeAheadFillFromAllowed())
     {
-      component.setState({ taOpen: true, taQuery: '', taHighlightIndex: -1 });
+      component.setState({ taOpen: true, taQuery: '' });
     }
   }
 
@@ -333,15 +331,6 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
       && this.props.perspective.verbs.includes("Fill"));
   }
 
-  handleTypeAheadContainerBlur(e: React.FocusEvent<HTMLDivElement>)
-  {
-    // Close the typeahead dropdown only when focus leaves the entire container.
-    if (!e.currentTarget.contains(e.relatedTarget as Node))
-    {
-      this.setState({ taOpen: false, taQuery: '', editable: false, taHighlightIndex: -1 });
-    }
-  }
-
   render ()
   {
     const component = this;
@@ -367,104 +356,51 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
             const filtered = query
               ? candidates.filter(c => c.filterValue.toLowerCase().includes(lowerQuery)).slice(0, MAX_VISIBLE)
               : candidates.slice(0, MAX_VISIBLE);
-            const highlightIndex = component.state.taHighlightIndex;
-
-            const handleTypeAheadKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-              switch (e.key) {
-                case 'ArrowDown':
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (filtered.length > 0) {
-                    component.setState(s => ({
-                      taHighlightIndex: Math.min(s.taHighlightIndex + 1, filtered.length - 1),
-                      taOpen: true
-                    }));
-                  }
-                  break;
-                case 'ArrowUp':
-                  e.preventDefault();
-                  e.stopPropagation();
-                  component.setState(s => ({
-                    taHighlightIndex: s.taHighlightIndex > 0 ? s.taHighlightIndex - 1 : -1,
-                    taOpen: true
-                  }));
-                  break;
-                case 'Enter':
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (highlightIndex >= 0 && highlightIndex < filtered.length) {
-                    component.handleFillerSelect(filtered[highlightIndex].roleId);
-                    component.setState({ taOpen: false, taQuery: '', editable: false, taHighlightIndex: -1 });
-                  } else if (filtered.length === 1) {
-                    component.handleFillerSelect(filtered[0].roleId);
-                    component.setState({ taOpen: false, taQuery: '', editable: false, taHighlightIndex: -1 });
-                  }
-                  break;
-                case 'Escape':
-                  e.preventDefault();
-                  e.stopPropagation();
-                  component.setState({ taOpen: false, taQuery: '', editable: false, taHighlightIndex: -1 });
-                  break;
-              }
-            };
 
             return (
               <td
                 role="gridcell"
                 style={{ padding: '0.25rem' }}
               >
-                <div
-                  style={{ position: 'relative' }}
-                  onBlur={component.handleTypeAheadContainerBlur}
-                >
-                  <input
-                    autoFocus
-                    type="text"
-                    className="form-control form-control-sm"
-                    value={query}
-                    placeholder={i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
-                    aria-label={ariaLabel}
-                    aria-activedescendant={component.state.taOpen && highlightIndex >= 0 ? `ta-item-${highlightIndex}` : undefined}
-                    onChange={e => component.setState({ taQuery: e.target.value, taOpen: true, taHighlightIndex: -1 })}
-                    onFocus={() => component.setState({ taOpen: true })}
-                    onKeyDown={handleTypeAheadKeyDown}
-                  />
-                  {component.state.taOpen && filtered.length > 0 && (
-                    <ul
-                      role="listbox"
-                      style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        zIndex: 1050,
-                        listStyle: 'none',
-                        margin: 0,
-                        padding: 0,
-                        backgroundColor: 'white',
-                        border: '1px solid #ccc',
-                        maxHeight: '200px',
-                        overflowY: 'auto',
-                      }}
+                <div style={{ height: '100%', width: '100%' }}>
+                  <Dropdown
+                    className="w-100 h-100"
+                    show={component.state.taOpen}
+                    onToggle={(isOpen: boolean) => {
+                      if (!isOpen)
+                      {
+                        component.setState({ taOpen: false, taQuery: '', editable: false });
+                      }
+                    }}
+                  >
+                    <Dropdown.Toggle
+                      as="div"
+                      id={`tablecell-typeahead-${String(component.props.roleinstance)}`}
+                      className="w-100 h-100"
                     >
-                      {filtered.map(({ filterValue, roleId }, idx) => (
-                        <li
-                          id={`ta-item-${idx}`}
-                          role="option"
-                          aria-selected={idx === highlightIndex}
-                          key={roleId}
-                          className={idx === highlightIndex ? 'active' : undefined}
-                          style={{ padding: '4px 8px', cursor: 'pointer' }}
-                          onClick={() => {
-                            component.handleFillerSelect(roleId);
-                            component.setState({ taOpen: false, taQuery: '', editable: false, taHighlightIndex: -1 });
-                          }}
+                      <input
+                        autoFocus
+                        ref={component.inputRef as React.RefObject<any>}
+                        type="text"
+                        className="form-control form-control-sm"
+                        value={query}
+                        placeholder={i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
+                        aria-label={ariaLabel}
+                        onClick={e => e.stopPropagation()}
+                        onChange={e => component.setState({ taQuery: e.target.value, taOpen: true })}
+                      />
+                    </Dropdown.Toggle>
+                    <Dropdown.Menu className="w-100">
+                      {filtered.map(({ filterValue, roleId }) =>
+                        <Dropdown.Item
+                          key={String(roleId)}
+                          onClick={() => component.handleFillerSelect(roleId)}
                         >
                           {filterValue}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                        </Dropdown.Item>
+                      )}
+                    </Dropdown.Menu>
+                  </Dropdown>
                 </div>
               </td>
             );
