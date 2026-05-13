@@ -54,6 +54,7 @@ interface RoleTypeAheadFormState {
   isOpen: boolean;
   selectedRoleId: RoleInstanceT | null;
   selectedPerspective: Perspective | null;
+  highlightIndex: number;
 }
 
 const MAX_VISIBLE = 20;
@@ -66,11 +67,12 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
 
   constructor(props: RoleTypeAheadFormProps) {
     super(props);
-    this.state = { query: '', isOpen: false, selectedRoleId: null, selectedPerspective: null };
+    this.state = { query: '', isOpen: false, selectedRoleId: null, selectedPerspective: null, highlightIndex: -1 };
     this.handleInputChange = this.handleInputChange.bind(this);
     this.handleSelect = this.handleSelect.bind(this);
     this.handleContainerBlur = this.handleContainerBlur.bind(this);
     this.handleFocus = this.handleFocus.bind(this);
+    this.handleKeyDown = this.handleKeyDown.bind(this);
   }
 
   componentWillUnmount() {
@@ -119,7 +121,7 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
   handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     // Changing the query always exits "display mode" and starts a real search.
     // Clearing selectedRoleId ensures filteredCandidates filters normally.
-    this.setState({ query: e.target.value, isOpen: true, selectedRoleId: null, selectedPerspective: null });
+    this.setState({ query: e.target.value, isOpen: true, selectedRoleId: null, selectedPerspective: null, highlightIndex: -1 });
   }
 
   handleFocus() {
@@ -163,6 +165,7 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
       isOpen: false,
       selectedRoleId: candidate.roleId,
       selectedPerspective: null,
+      highlightIndex: -1,
     });
 
     // Fetch the perspective for the selected role instance on demand.
@@ -182,13 +185,43 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
     });
   }
 
+  handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    const component = this;
+    const { isOpen, highlightIndex } = component.state;
+    const matches = component.filteredCandidates();
+
+    if (!isOpen || matches.length === 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        component.setState({ isOpen: true, highlightIndex: 0 });
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      component.setState({ highlightIndex: Math.min(highlightIndex + 1, matches.length - 1) });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      component.setState({ highlightIndex: Math.max(highlightIndex - 1, -1) });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightIndex >= 0 && highlightIndex < matches.length) {
+        component.handleSelect(matches[highlightIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      component.setState({ isOpen: false, highlightIndex: -1 });
+    }
+  }
+
   // --------------------------------------------------------------------
   // Render
   // --------------------------------------------------------------------
   render() {
     const component = this;
     const { title, displayName, fieldConstraints } = component.props;
-    const { query, isOpen, selectedRoleId, selectedPerspective } = component.state;
+    const { query, isOpen, selectedRoleId, selectedPerspective, highlightIndex } = component.state;
     const matches = component.filteredCandidates();
 
     return (
@@ -201,6 +234,7 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
             placeholder={i18next.t('typeAheadForm_placeholder', { ns: 'preact' })}
             onChange={component.handleInputChange}
             onFocus={component.handleFocus}
+            onKeyDown={component.handleKeyDown}
             aria-label={title || (displayName && displayName.trim()) || i18next.t('typeAheadForm_ariaLabel', { ns: 'preact' })}
           />
           { isOpen && matches.length > 0 && (
@@ -218,6 +252,7 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
                 <ListGroup.Item
                   key={idx}
                   action
+                  active={idx === highlightIndex}
                   onClick={() => component.handleSelect(candidate)}
                 >
                   {candidate.filterValue}

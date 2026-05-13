@@ -47,6 +47,7 @@ interface RoleTypeAheadFillerProps {
 interface RoleTypeAheadFillerState {
   query: string;
   isOpen: boolean;
+  highlightIndex: number;
 }
 
 const MAX_VISIBLE = 20;
@@ -78,11 +79,13 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
     this.state = {
       query: currentFillerLabel(props.perspective, props.candidates),
       isOpen: false,
+      highlightIndex: -1,
     };
     this.handleInputChange = this.handleInputChange.bind(this);
     this.handleSelect = this.handleSelect.bind(this);
     this.handleContainerBlur = this.handleContainerBlur.bind(this);
     this.handleFocus = this.handleFocus.bind(this);
+    this.handleKeyDown = this.handleKeyDown.bind(this);
   }
 
   // When the filler changes externally (e.g. another user fills the role),
@@ -122,7 +125,7 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
   // Handlers
   // --------------------------------------------------------------------
   handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    this.setState({ query: e.target.value, isOpen: true });
+    this.setState({ query: e.target.value, isOpen: true, highlightIndex: -1 });
   }
 
   handleFocus() {
@@ -205,7 +208,37 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
     // Mark that a selection was just made (checked in handleContainerBlur) and show the
     // chosen label immediately while the PDR processes the bind_ call.
     component._selectionJustMade = true;
-    component.setState({ query: candidate.filterValue, isOpen: false });
+    component.setState({ query: candidate.filterValue, isOpen: false, highlightIndex: -1 });
+  }
+
+  handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    const component = this;
+    const { isOpen, highlightIndex } = component.state;
+    const matches = component.filteredCandidates();
+
+    if (!isOpen || matches.length === 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        component.setState({ isOpen: true, highlightIndex: 0 });
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      component.setState({ highlightIndex: Math.min(highlightIndex + 1, matches.length - 1) });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      component.setState({ highlightIndex: Math.max(highlightIndex - 1, -1) });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightIndex >= 0 && highlightIndex < matches.length) {
+        component.handleSelect(matches[highlightIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      component.setState({ isOpen: false, highlightIndex: -1 });
+    }
   }
 
   // --------------------------------------------------------------------
@@ -214,7 +247,7 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
   render() {
     const component = this;
     const { title, perspective } = component.props;
-    const { query, isOpen } = component.state;
+    const { query, isOpen, highlightIndex } = component.state;
     const matches = component.filteredCandidates();
     const canFill = perspective.verbs && perspective.verbs.includes('Fill');
     const fillerLabel = currentFillerLabel(perspective, component.props.candidates);
@@ -228,6 +261,7 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
           placeholder={fillerLabel || i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
           onChange={component.handleInputChange}
           onFocus={component.handleFocus}
+          onKeyDown={component.handleKeyDown}
           disabled={!canFill}
           aria-label={title || perspective.displayName || i18next.t('typeAheadFiller_ariaLabel', { ns: 'preact' })}
         />
@@ -246,6 +280,7 @@ export default class RoleTypeAheadFiller extends PerspectivesComponent<RoleTypeA
               <ListGroup.Item
                 key={idx}
                 action
+                active={idx === highlightIndex}
                 onClick={() => component.handleSelect(candidate)}
               >
                 {candidate.filterValue}
