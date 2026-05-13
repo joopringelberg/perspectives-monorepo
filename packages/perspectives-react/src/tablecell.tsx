@@ -178,9 +178,12 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     }
 
     // When entering editable mode for typeahead fill, open the typeahead.
+    // Use requestAnimationFrame to defer until after the browser has laid out
+    // the newly-mounted Dropdown.Toggle, so Popper.js receives a correct
+    // bounding rect and places the menu directly below the input.
     if (!prevState.editable && component.state.editable && (component.typeAheadFillFromAllowed() || component.fillFromTypeAheadAllowed()))
     {
-      component.setState({ taOpen: true, taQuery: '' });
+      requestAnimationFrame(() => component.setState({ taOpen: true, taQuery: '' }));
     }
   }
 
@@ -395,46 +398,45 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                 role="gridcell"
                 style={{ padding: '0.25rem' }}
               >
-                <div style={{ height: '100%', width: '100%' }}>
-                  <Dropdown
-                    className="w-100 h-100"
-                    show={component.state.taOpen}
-                    onToggle={(isOpen: boolean) => {
-                      if (!isOpen)
-                      {
-                        component.setState({ taOpen: false, taQuery: '', editable: false });
-                      }
-                    }}
+                <Dropdown
+                  className="w-100"
+                  placement="bottom-start"
+                  show={component.state.taOpen}
+                  onToggle={(isOpen: boolean) => {
+                    if (!isOpen)
+                    {
+                      component.setState({ taOpen: false, taQuery: '', editable: false });
+                    }
+                  }}
+                >
+                  <Dropdown.Toggle
+                    as="div"
+                    id={`tablecell-typeahead-${String(component.props.roleinstance)}`}
+                    className="w-100"
                   >
-                    <Dropdown.Toggle
-                      as="div"
-                      id={`tablecell-typeahead-${String(component.props.roleinstance)}`}
-                      className="w-100 h-100"
-                    >
-                      <input
-                        autoFocus
-                        ref={component.inputRef as React.RefObject<any>}
-                        type="text"
-                        className="form-control form-control-sm"
-                        value={query}
-                        placeholder={i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
-                        aria-label={ariaLabel}
-                        onClick={e => e.stopPropagation()}
-                        onChange={e => component.setState({ taQuery: e.target.value, taOpen: true })}
-                      />
-                    </Dropdown.Toggle>
-                    <Dropdown.Menu popperConfig={columnWidthPopperConfig}>
-                      {filtered.map(({ filterValue, roleId }) =>
-                        <Dropdown.Item
-                          key={String(roleId)}
-                          onClick={() => component.handleFillerSelect(roleId)}
-                        >
-                          {filterValue}
-                        </Dropdown.Item>
-                      )}
-                    </Dropdown.Menu>
-                  </Dropdown>
-                </div>
+                    <input
+                      autoFocus
+                      ref={component.inputRef as React.RefObject<any>}
+                      type="text"
+                      className="form-control form-control-sm"
+                      value={query}
+                      placeholder={i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
+                      aria-label={ariaLabel}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => component.setState({ taQuery: e.target.value, taOpen: true })}
+                    />
+                  </Dropdown.Toggle>
+                  <Dropdown.Menu popperConfig={columnWidthPopperConfig}>
+                    {filtered.map(({ filterValue, roleId }) =>
+                      <Dropdown.Item
+                        key={String(roleId)}
+                        onClick={() => component.handleFillerSelect(roleId)}
+                      >
+                        {filterValue}
+                      </Dropdown.Item>
+                    )}
+                  </Dropdown.Menu>
+                </Dropdown>
               </td>
             );
           }
@@ -453,46 +455,45 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                 role="gridcell"
                 style={{ padding: '0.25rem' }}
               >
-                <div style={{ height: '100%', width: '100%' }}>
-                  <Dropdown
-                    className="w-100 h-100"
-                    show={component.state.taOpen}
-                    onToggle={(isOpen: boolean) => {
-                      if (!isOpen)
-                      {
-                        component.setState({ taOpen: false, taQuery: '', editable: false });
-                      }
-                    }}
+                <Dropdown
+                  className="w-100"
+                  placement="bottom-start"
+                  show={component.state.taOpen}
+                  onToggle={(isOpen: boolean) => {
+                    if (!isOpen)
+                    {
+                      component.setState({ taOpen: false, taQuery: '', editable: false });
+                    }
+                  }}
+                >
+                  <Dropdown.Toggle
+                    as="div"
+                    id={`tablecell-fillers-typeahead-${String(component.props.roleinstance)}`}
+                    className="w-100"
                   >
-                    <Dropdown.Toggle
-                      as="div"
-                      id={`tablecell-fillers-typeahead-${String(component.props.roleinstance)}`}
-                      className="w-100 h-100"
-                    >
-                      <input
-                        autoFocus
-                        ref={component.inputRef as React.RefObject<any>}
-                        type="text"
-                        className="form-control form-control-sm"
-                        value={query}
-                        placeholder={i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
-                        aria-label={ariaLabel}
-                        onClick={e => e.stopPropagation()}
-                        onChange={e => component.setState({ taQuery: e.target.value, taOpen: true })}
-                      />
-                    </Dropdown.Toggle>
-                    <Dropdown.Menu popperConfig={columnWidthPopperConfig}>
-                      {filtered.map(({ readableName, instance }) =>
-                        <Dropdown.Item
-                          key={String(instance)}
-                          onClick={() => component.handleFillerSelect(instance)}
-                        >
-                          {readableName}
-                        </Dropdown.Item>
-                      )}
-                    </Dropdown.Menu>
-                  </Dropdown>
-                </div>
+                    <input
+                      autoFocus
+                      ref={component.inputRef as React.RefObject<any>}
+                      type="text"
+                      className="form-control form-control-sm"
+                      value={query}
+                      placeholder={i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
+                      aria-label={ariaLabel}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => component.setState({ taQuery: e.target.value, taOpen: true })}
+                    />
+                  </Dropdown.Toggle>
+                  <Dropdown.Menu popperConfig={columnWidthPopperConfig}>
+                    {filtered.map(({ readableName, instance }) =>
+                      <Dropdown.Item
+                        key={String(instance)}
+                        onClick={() => component.handleFillerSelect(instance)}
+                      >
+                        {readableName}
+                      </Dropdown.Item>
+                    )}
+                  </Dropdown.Menu>
+                </Dropdown>
               </td>
             );
           }
@@ -508,41 +509,40 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                 role="gridcell"
                 style={{ padding: '0.25rem' }}
               >
-                <div style={{ height: '100%', width: '100%' }}>
-                  <Dropdown
-                    className="w-100 h-100"
-                    show={component.state.editable}
-                    onToggle={(isOpen: boolean) => {
-                      // When the dropdown closes (ESC, outside click, toggle), leave edit mode.
-                      if (!isOpen)
-                      {
-                        component.setState({ editable: false });
-                      }
-                    }}
+                <Dropdown
+                  className="w-100"
+                  placement="bottom-start"
+                  show={component.state.editable}
+                  onToggle={(isOpen: boolean) => {
+                    // When the dropdown closes (ESC, outside click, toggle), leave edit mode.
+                    if (!isOpen)
+                    {
+                      component.setState({ editable: false });
+                    }
+                  }}
+                >
+                  <Dropdown.Toggle
+                    id={`tablecell-filler-${String(component.props.roleinstance)}`}
+                    ref={component.inputRef as React.RefObject<any>}
+                    aria-label={ariaLabel}
+                    as="div"
+                    role="button"
+                    tabIndex={0}
+                    className="dropdown-item w-100 text-start"
                   >
-                    <Dropdown.Toggle
-                      id={`tablecell-filler-${String(component.props.roleinstance)}`}
-                      ref={component.inputRef as React.RefObject<any>}
-                      aria-label={ariaLabel}
-                      as="div"
-                      role="button"
-                      tabIndex={0}
-                      className="dropdown-item w-100 h-100 text-start"
-                    >
-                      {i18next.t("tablecell_select_filler", { ns: 'preact', defaultValue: 'Select a filler' })}
-                    </Dropdown.Toggle>
-                    <Dropdown.Menu popperConfig={columnWidthPopperConfig}>
-                      {fillers.map(({readableName, instance}) =>
-                        <Dropdown.Item
-                          key={String(instance)}
-                          onClick={() => component.handleFillerSelect(instance)}
-                        >
-                          {readableName}
-                        </Dropdown.Item>)
-                      }
-                    </Dropdown.Menu>
-                  </Dropdown>
-                </div>
+                    {i18next.t("tablecell_select_filler", { ns: 'preact', defaultValue: 'Select a filler' })}
+                  </Dropdown.Toggle>
+                  <Dropdown.Menu popperConfig={columnWidthPopperConfig}>
+                    {fillers.map(({readableName, instance}) =>
+                      <Dropdown.Item
+                        key={String(instance)}
+                        onClick={() => component.handleFillerSelect(instance)}
+                      >
+                        {readableName}
+                      </Dropdown.Item>)
+                    }
+                  </Dropdown.Menu>
+                </Dropdown>
               </td>
             );
           }
