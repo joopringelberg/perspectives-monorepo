@@ -87,6 +87,7 @@ interface TableCellState
   editable: boolean;
   taQuery: string;
   taOpen: boolean;
+  taHighlightIndex: number;
 }
 
 export default class TableCell extends PerspectivesComponent<TableCellProps, TableCellState>
@@ -98,7 +99,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     super(props);
     // Being editable is not determined by props, but entirely by interaction with the cell
     // through the keyboard.
-    this.state = { editable: false, taQuery: '', taOpen: false };
+    this.state = { editable: false, taQuery: '', taOpen: false, taHighlightIndex: -1 };
     this.handleClick = this.handleClick.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.handleFillerSelect = this.handleFillerSelect.bind(this);
@@ -156,7 +157,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     // When entering editable mode for typeahead fill, open the typeahead.
     if (!prevState.editable && component.state.editable && component.typeAheadFillFromAllowed())
     {
-      component.setState({ taOpen: true, taQuery: '' });
+      component.setState({ taOpen: true, taQuery: '', taHighlightIndex: -1 });
     }
   }
 
@@ -337,7 +338,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     // Close the typeahead dropdown only when focus leaves the entire container.
     if (!e.currentTarget.contains(e.relatedTarget as Node))
     {
-      this.setState({ taOpen: false, taQuery: '', editable: false });
+      this.setState({ taOpen: false, taQuery: '', editable: false, taHighlightIndex: -1 });
     }
   }
 
@@ -366,6 +367,46 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
             const filtered = query
               ? candidates.filter(c => c.filterValue.toLowerCase().includes(lowerQuery)).slice(0, MAX_VISIBLE)
               : candidates.slice(0, MAX_VISIBLE);
+            const highlightIndex = component.state.taHighlightIndex;
+
+            const handleTypeAheadKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+              switch (e.key) {
+                case 'ArrowDown':
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (filtered.length > 0) {
+                    component.setState(s => ({
+                      taHighlightIndex: Math.min(s.taHighlightIndex + 1, filtered.length - 1),
+                      taOpen: true
+                    }));
+                  }
+                  break;
+                case 'ArrowUp':
+                  e.preventDefault();
+                  e.stopPropagation();
+                  component.setState(s => ({
+                    taHighlightIndex: s.taHighlightIndex > 0 ? s.taHighlightIndex - 1 : -1,
+                    taOpen: true
+                  }));
+                  break;
+                case 'Enter':
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (highlightIndex >= 0 && highlightIndex < filtered.length) {
+                    component.handleFillerSelect(filtered[highlightIndex].roleId);
+                    component.setState({ taOpen: false, taQuery: '', editable: false, taHighlightIndex: -1 });
+                  } else if (filtered.length === 1) {
+                    component.handleFillerSelect(filtered[0].roleId);
+                    component.setState({ taOpen: false, taQuery: '', editable: false, taHighlightIndex: -1 });
+                  }
+                  break;
+                case 'Escape':
+                  e.preventDefault();
+                  e.stopPropagation();
+                  component.setState({ taOpen: false, taQuery: '', editable: false, taHighlightIndex: -1 });
+                  break;
+              }
+            };
 
             return (
               <td
@@ -383,11 +424,14 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                     value={query}
                     placeholder={i18next.t('typeAheadFiller_placeholder', { ns: 'preact' })}
                     aria-label={ariaLabel}
-                    onChange={e => component.setState({ taQuery: e.target.value, taOpen: true })}
+                    aria-activedescendant={component.state.taOpen && highlightIndex >= 0 ? `ta-item-${highlightIndex}` : undefined}
+                    onChange={e => component.setState({ taQuery: e.target.value, taOpen: true, taHighlightIndex: -1 })}
                     onFocus={() => component.setState({ taOpen: true })}
+                    onKeyDown={handleTypeAheadKeyDown}
                   />
                   {component.state.taOpen && filtered.length > 0 && (
                     <ul
+                      role="listbox"
                       style={{
                         position: 'absolute',
                         top: '100%',
@@ -403,13 +447,17 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                         overflowY: 'auto',
                       }}
                     >
-                      {filtered.map(({ filterValue, roleId }) => (
+                      {filtered.map(({ filterValue, roleId }, idx) => (
                         <li
+                          id={`ta-item-${idx}`}
+                          role="option"
+                          aria-selected={idx === highlightIndex}
                           key={roleId}
+                          className={idx === highlightIndex ? 'active' : undefined}
                           style={{ padding: '4px 8px', cursor: 'pointer' }}
                           onClick={() => {
                             component.handleFillerSelect(roleId);
-                            component.setState({ taOpen: false, taQuery: '', editable: false });
+                            component.setState({ taOpen: false, taQuery: '', editable: false, taHighlightIndex: -1 });
                           }}
                         >
                           {filterValue}
