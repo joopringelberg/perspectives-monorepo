@@ -44,11 +44,22 @@ domain model://joopringelberg.nl#TestTypeAhead@1.0
         create role Friend
       perspective on Candidates
         all props verbs (Consult)
+      perspective on Deelnemer
+        only (Create, Fill, Remove)
+        props (LastName) verbs (Consult)
+      perspective on Gast
+        only (Create, Fill, Remove)
+        props (LastName) verbs (Consult)
       screen
         who
           Deelnemer
             master
               typeaheadfillfrom Candidates
+              with props (LastName)
+            detail
+          Gast
+            master
+              fillfrom Candidates
               with props (LastName)
             detail
         what
@@ -62,3 +73,7 @@ domain model://joopringelberg.nl#TestTypeAhead@1.0
     user Friend filledBy sys:SocialEnvironment$Persons
 
     user Candidates = sys:MySocialEnvironment >> Persons
+
+    user Deelnemer (relational) filledBy sys:SocialEnvironment$Persons
+
+    user Gast (relational) filledBy sys:SocialEnvironment$Persons

@@ -224,7 +224,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
             break;
         }
       }
-      else if (!event.shiftKey && (!component.propertyOnlyConsultable()) || component.fillFromDropdownAllowed())
+      else if (!event.shiftKey && (!component.propertyOnlyConsultable()) || component.fillFromDropdownAllowed() || component.typeAheadFillFromAllowed())
       {
         switch(event.code){
           case "Enter":
