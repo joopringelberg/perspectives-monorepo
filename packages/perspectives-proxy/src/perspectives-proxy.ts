@@ -110,7 +110,7 @@ export function configurePDRproxy(channeltype: "internalChannel" | "sharedWorker
       // Force a new instance per app version; keep Vite’s worker URL untouched
       sharedWorker = new SharedWorker( new URL('perspectives-sharedworker', import.meta.url), {
         type: 'module',
-        name: `pdr-${__MYCONTEXTS_VERSION__}-${__BUILD__}`
+        name: `pdr-${__MYCONTEXTS_VERSION__}-${__BUILD_ID__}`
       });
       sharedWorkerChannel = new SharedWorkerChannel(sharedWorker.port, cursor);
       sharedWorkerChannelResolver(sharedWorkerChannel);

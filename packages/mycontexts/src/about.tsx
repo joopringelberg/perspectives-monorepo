@@ -27,7 +27,7 @@ export class About extends PerspectivesComponent<object, object> {
             className="accessible-form-control" 
             type="text" 
             readOnly 
-            value={__BUILD__}
+            value={__BUILD_ID__}
           />
         </Form.Group>
         <Form.Group className="mb-3">
