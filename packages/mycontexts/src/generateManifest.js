@@ -1,15 +1,8 @@
 import { promises as fs } from 'fs';
 
-// Create build.json if it doesn't exist
-try {
-  await fs.access("./build.json");
-  
-} catch (err) {
-  console.log(err)
-  await fs.writeFile("./build.json", JSON.stringify({build: 0}));
-}
+import { ensureBuildMeta } from './buildMeta.js';
 
-const {build, buildPath} = JSON.parse(await fs.readFile("./build.json", { encoding: "utf-8" }));
+const { buildId, buildPath } = await ensureBuildMeta({ refresh: true });
 
 // See: https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/How_to/Define_app_icons#create_the_necessary_icon_sizes
 const macIcons = ["512.png", "256.png", "128.png", "32.png", "16.png"].map( 
@@ -42,11 +35,4 @@ await fs.writeFile('./public/perspectives.webmanifest', JSON.stringify(manifest,
     console.error("Error writing manifest:", err);
   });
 
-// Update build number
-await fs.writeFile("./build.json", JSON.stringify({build: build + 1, buildPath: buildPath}))
-  .then(() => {
-    console.log(`Build increased to ${build + 1}`);
-  })
-  .catch(err => {
-    console.error("Error updating build number:", err);
-  });
+console.log(`Build id: ${buildId}`);

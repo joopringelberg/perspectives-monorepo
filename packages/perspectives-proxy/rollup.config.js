@@ -9,11 +9,12 @@ import del from 'rollup-plugin-delete';
 import replace from '@rollup/plugin-replace';
 import fs from 'fs';
 import path from 'path';
+import { ensureBuildMeta } from '../mycontexts/src/buildMeta.js';
 
 // Resolve paths to sibling package (mycontexts)
 const mycontextsDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../mycontexts');
 const thepackage = JSON.parse(fs.readFileSync(path.join(mycontextsDir, 'package.json'), 'utf8'));
-const buildinfo = JSON.parse(fs.readFileSync(path.join(mycontextsDir, 'build.json'), 'utf8'));
+const { buildId } = await ensureBuildMeta();
 
 export default {
   input: 'src/perspectives-proxy.ts',
@@ -34,7 +35,7 @@ export default {
       preventAssignment: true,
       values: {
         __MYCONTEXTS_VERSION__: JSON.stringify(thepackage.version),
-        __BUILD__: JSON.stringify(buildinfo.build),
+        __BUILD_ID__: JSON.stringify(buildId),
       }
     }),
     typescript({
