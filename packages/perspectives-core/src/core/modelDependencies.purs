@@ -137,6 +137,16 @@ selectedClipboardItem = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ji08
 chatAspect :: String
 chatAspect = "model://perspectives.domains#tiodn6tcyc$s6roz183wh"
 
+-- | The Filter role aspect. Roles that carry this aspect have a FilterValue property
+-- | which can be used to find them via the filterValueView.
+-- | NOTE: these URIs must match the actual URIs generated for the Filter aspect
+-- | and its FilterValue property in the System model ARC source.
+filterAspect :: String
+filterAspect = "model://perspectives.domains#tiodn6tcyc$x96ouy1wig"
+
+filterValueProperty :: String
+filterValueProperty = "model://perspectives.domains#tiodn6tcyc$x96ouy1wig$iakqeqsarz"
+
 recentContexts :: String
 recentContexts = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$chuol755yg"
 
@@ -356,11 +366,11 @@ sharedFileServices :: String
 sharedFileServices = "model://perspectives.domains#xjrfkxrzyt" -- SharedFileServices
 
 mySharedFileServices :: String
-mySharedFileServices = "model://perspectives.domains#xjrfkxrzyt$ul1y1ukzye$tp551lll1t"
+mySharedFileServices = "model://perspectives.domains#xjrfkxrzyt$p6irsi0fot$zbhqrtftsu"
 
 actualSharedFileServer :: String
-actualSharedFileServer = "model://perspectives.domains#xjrfkxrzyt$ul1y1ukzye$jx2xqh4f1w"
+actualSharedFileServer = "model://perspectives.domains#xjrfkxrzyt$p6irsi0fot$ee6lcb9jxh"
 
 fileShareCredentials :: String
-fileShareCredentials = "model://perspectives.domains#xjrfkxrzyt$fvq0e98r87$mnfe8z3j7a"
+fileShareCredentials = "model://perspectives.domains#xjrfkxrzyt$z685qvaro6$r7vvr6u68p"
 

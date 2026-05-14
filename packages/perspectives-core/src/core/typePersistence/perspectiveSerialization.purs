@@ -101,7 +101,7 @@ perspectiveForContextAndUser' subject userRoleType objectRoleType cid = ArrayT d
   subjectStates <- map SubjectState <$> (runArrayT $ getActiveRoleStates subject)
   allPerspectives <- lift $ perspectivesOfRoleType userRoleType
   traverse
-    ((serialisePerspective contextStates subjectStates cid userRoleType Nothing Nothing Nothing Nothing Nothing))
+    ((serialisePerspective contextStates subjectStates cid userRoleType Nothing Nothing Nothing Nothing Nothing Nothing))
     ( filter
         (isJust <<< elemIndex objectRoleType <<< _.roleTypes <<< unwrap)
         allPerspectives
@@ -115,7 +115,7 @@ perspectiveForContextAndUserFromId
   WidgetCommonFieldsDef
   -> ContextInstance
   -> AssumptionTracking SerialisedPerspective'
-perspectiveForContextAndUserFromId subject { perspectiveId, fillFrom, fillPropertyFrom, propertyRestrictions, withoutProperties, roleVerbs, userRole } cid = do
+perspectiveForContextAndUserFromId subject { perspectiveId, fillFrom, fillPropertyFrom, propertyRestrictions, withoutProperties, requiredProperties, roleVerbs, userRole } cid = do
   contextStates <- map ContextState <$> (runArrayT $ getActiveStates cid)
   subjectStates <- map SubjectState <$> (runArrayT $ getActiveRoleStates subject)
   allPerspectives <- lift $ perspectivesOfRoleType userRole
@@ -125,7 +125,7 @@ perspectiveForContextAndUserFromId subject { perspectiveId, fillFrom, fillProper
         allPerspectives
     )
 
-  serialisePerspective contextStates subjectStates cid userRole propertyRestrictions withoutProperties roleVerbs fillFrom fillPropertyFrom perspective
+  serialisePerspective contextStates subjectStates cid userRole propertyRestrictions withoutProperties requiredProperties roleVerbs fillFrom fillPropertyFrom perspective
 
 perspectivesForContextAndUser :: RoleInstance -> RoleType -> (ContextInstance ~~> SerialisedPerspective)
 perspectivesForContextAndUser subject userRoleType cid = ArrayT do
@@ -139,7 +139,7 @@ perspectivesForContextAndUser' subject userRoleType cid = ArrayT do
   -- NOTE that we ignore perspectives that the user role's aspects may have!
   -- These have been added in compile time.
   perspectives <- lift $ perspectivesOfRoleType userRoleType
-  (traverse (serialisePerspective contextStates subjectStates cid userRoleType Nothing Nothing Nothing Nothing Nothing) perspectives) >>=
+  (traverse (serialisePerspective contextStates subjectStates cid userRoleType Nothing Nothing Nothing Nothing Nothing Nothing) perspectives) >>=
     (filterA sendToClient)
   where
   sendToClient :: SerialisedPerspective' -> AssumptionTracking Boolean
@@ -158,7 +158,7 @@ settingsPerspective subject userRoleType objectRoleType cid = ArrayT do
           (allProps :: Array PropertyType) <- lift $ allProperties (roleInContext2Role <$> (unsafePartial domain2roleType $ range object))
           settingsProperties <- lift $ filterA (flip hasFacet SettingProperty) allProps
           propertyRestrictions <- pure $ EM.fromFoldable (flip Tuple [ Consult, Verbs.SetPropertyValue ] <$> settingsProperties)
-          serialisePerspective contextStates subjectStates cid userRoleType (Just propertyRestrictions) (Just $ difference allProps settingsProperties) Nothing Nothing Nothing p
+          serialisePerspective contextStates subjectStates cid userRoleType (Just propertyRestrictions) (Just $ difference allProps settingsProperties) Nothing Nothing Nothing Nothing p
       )
         >=> pure <<< SerialisedPerspective <<< writeJSON
     )
@@ -174,12 +174,13 @@ serialisePerspective
   -> RoleType
   -> Maybe PropertyRestrictions
   -> Maybe (Array PropertyType)
+  -> Maybe (Array PropertyType)
   -> Maybe (Array RoleVerb)
   -> Maybe QueryFunctionDescription
   -> Maybe PropertyValueFillers
   -> Perspective
   -> AssumptionTracking SerialisedPerspective'
-serialisePerspective contextStates subjectStates cid userRoleType propertyRestrictions withoutProperties roleVerbs' fillFrom fillPropertyFrom p@(Perspective { id, object, isEnumerated, roleTypes, roleVerbs, propertyVerbs, actions }) = do
+serialisePerspective contextStates subjectStates cid userRoleType propertyRestrictions withoutProperties maybePropertyOrder roleVerbs' fillFrom fillPropertyFrom p@(Perspective { id, object, isEnumerated, roleTypes, roleVerbs, propertyVerbs, actions }) = do
   -- All properties available on the object of the perspective.
   (allProps :: Array PropertyType) <- lift $ allProperties (roleInContext2Role <$> (unsafePartial domain2roleType $ range object))
   -- All PropertyVerbs (PropertyVerbs (ExplicitSet PropertyType) (ExplicitSet PropertyVerb) available on the object of the perspective, given context- and subject state.
@@ -200,11 +201,28 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyRestri
   availableProperties <-
     if isJust $ elemIndex identifyingProperty availableProperties' then pure availableProperties'
     else pure $ cons identifyingProperty availableProperties'
+  -- When requiredProperties (from `with props`) is specified, reorder available properties so
+  -- that the explicitly-specified properties come first in the given order, then any remaining
+  -- available properties follow.
+  (orderedProperties :: Array PropertyType) <- case maybePropertyOrder of
+    Nothing -> pure availableProperties
+    Just specOrder ->
+      let
+        specAvailable = filter (\p -> isJust $ elemIndex p availableProperties) specOrder
+        rest = filter (\p -> isNothing $ elemIndex p specOrder) availableProperties
+      in
+        pure (specAvailable <> rest)
+  -- Build the propertyOrder to include in the serialised perspective.
+  -- Only set when an explicit order was given, so the client knows to honour it.
+  (computedPropertyOrder :: Maybe (Array String)) <- case maybePropertyOrder of
+    Nothing -> pure Nothing
+    Just specOrder ->
+      pure $ Just $ map propertytype2string $ filter (\p -> isJust $ elemIndex p availableProperties) specOrder
   -- Role instances with their property values.
   roleInstances <- roleInstancesWithProperties
     allProps
-    -- availableProperties now includes the identifyingProperty...
-    availableProperties
+    -- orderedProperties now includes the identifyingProperty...
+    orderedProperties
     -- ... so make sure that verbsPerProperty contains an index for it, too.
     (ensureIdentifyingProperty identifyingProperty (verbsPerProperty availablePropertyVerbs allProps))
     cid
@@ -215,7 +233,7 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyRestri
   -- Additional properties available on instances given object state.
   additionalPropertiesOnInstances <- pure $ foldl union [] (propertiesInInstance <$> roleInstances)
   -- If no properties are available, we'd like to add roleWithId as property. Otherwise, no table can be built.
-  serialisedProps <- lift $ traverse makeSerialisedProperty (availableProperties <> additionalPropertiesOnInstances)
+  serialisedProps <- lift $ traverse makeSerialisedProperty (orderedProperties <> additionalPropertiesOnInstances)
   roleKind <- lift $ traverse roleKindOfRoleType (head roleTypes)
   -- If the binding of the ADT that is the range of the object QueryFunctionDescription, is an external role,
   -- its context type may be created.
@@ -284,6 +302,7 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyRestri
     , identifyingProperty: propertytype2string identifyingProperty
     , possibleFillers
     , possiblePropertyValues
+    , propertyOrder: computedPropertyOrder
     }
   where
 

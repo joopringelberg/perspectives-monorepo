@@ -184,6 +184,49 @@ export const role2contextView = (function(context)
   }
 }).toString()
 
+// filterValueView
+// This CouchDB map function indexes role documents that carry the Filter aspect.
+// For each such role (identified by having a non-empty FilterValue property array)
+// it emits one row per role type:
+//
+//   Key   : [roleType, contextGuid]
+//   Value : { filterValue: string, roleId: string }
+//
+// Query with Key([roleType, contextGuid]) to retrieve all role instances of a
+// given type in a given context that have a FilterValue set. This is used by the
+// typeaheadfiller screen widget to populate its candidate list efficiently.
+//
+// NOTE: The FilterValue property URI is the stable, generated identifier for
+// model://perspectives.domains#tiodn6tcyc$x96ouy1wig$iakqeqsarz.
+// It cannot reference the PureScript modelDependencies constant because this
+// function is serialised to a string and executed inside PouchDB's map/reduce
+// engine which has no access to PureScript modules.
+export const filterValueView = (function (doc)
+{
+  function takeGuid(s)
+  {
+    return s.substring( s.lastIndexOf("#") + 1 );
+  }
+  // a proxy for being a role:
+  if (doc.context && doc.properties)
+  {
+    // The FilterValue property URI is the stable generated identifier for
+    // model://perspectives.domains#tiodn6tcyc$a2g0s6fcxr$b1h7t3mdwp (filterValueProperty).
+    // It is hardcoded here because PouchDB map functions must be self-contained
+    // strings with no external dependencies.
+    var filterValues = doc.properties["model://perspectives.domains#tiodn6tcyc$x96ouy1wig$iakqeqsarz"];
+    if (filterValues && filterValues.length > 0)
+    {
+      doc.allTypes.forEach(
+        function(roleType)
+        {
+          emit([roleType, takeGuid(doc.context)], { filterValue: filterValues[0], roleId: doc.id });
+        }
+      );
+    }
+  }
+}).toString();
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////    INVERTED QUERY VIEWS

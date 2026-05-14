@@ -78,7 +78,7 @@ import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..), stateSpec2StateIdentifier, PropertyVerbs(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyValueFillers)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), TypeAheadFormDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyValueFillers)
 import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), IndexedRole(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
@@ -814,6 +814,8 @@ instance normalizeScreenElementDefInst :: Normalize ScreenElementDef where
   normalize (FormElementD f) = FormElementD <$> normalize f
   normalize (MarkDownElementD m) = MarkDownElementD <$> normalize m
   normalize (ChatElementD c) = ChatElementD <$> normalize c
+  normalize (TypeAheadFillerElementD t) = TypeAheadFillerElementD <$> normalize t
+  normalize (TypeAheadFormElementD t) = TypeAheadFormElementD <$> normalize t
   normalize (WhenElementD (WhenDef { condition, elements })) = do
     condition' <- normalize condition
     elements' <- traverse normalize elements
@@ -836,6 +838,16 @@ instance normalizeFormDefInst :: Normalize FormDef where
     markdown' <- traverse normalize r.markdown
     widgetCommonFields' <- normalizeWidgetCommonFields r.widgetCommonFields
     pure $ FormDef r { markdown = markdown', widgetCommonFields = widgetCommonFields' }
+
+instance Normalize TypeAheadFillerDef where
+  normalize (TypeAheadFillerDef r) = do
+    widgetCommonFields' <- normalizeWidgetCommonFields r.widgetCommonFields
+    pure $ TypeAheadFillerDef r { widgetCommonFields = widgetCommonFields' }
+
+instance Normalize TypeAheadFormDef where
+  normalize (TypeAheadFormDef r) = do
+    widgetCommonFields' <- normalizeWidgetCommonFields r.widgetCommonFields
+    pure $ TypeAheadFormDef r { widgetCommonFields = widgetCommonFields' }
 
 instance normalizeMarkDownDefInst :: Normalize MarkDownDef where
   normalize (MarkDownConstantDef r) = do
@@ -974,6 +986,7 @@ normalizeWidgetCommonFields w = do
   let perspMap = env.perspMap
   propertyRestrictions' <- traverse normalize w.propertyRestrictions
   withoutProperties' <- traverse (traverse fqn2tid) w.withoutProperties
+  requiredProperties' <- traverse (traverse fqn2tid) w.requiredProperties
   userRole' <- fqn2tid w.userRole
   -- rewrite perspectiveId if we have a stable id for it
   let
@@ -983,14 +996,17 @@ normalizeWidgetCommonFields w = do
   fillFrom' <- traverse normalize w.fillFrom
   fillPropertyFrom' <- traverse normalizePropertyValueFillers w.fillPropertyFrom
   fieldConstraints' <- traverse (traverse normalizeFieldConstraintDef) w.fieldConstraints
+  typeAheadFillFrom' <- traverse fqn2tid w.typeAheadFillFrom
   pure $ w
     { propertyRestrictions = propertyRestrictions'
     , withoutProperties = withoutProperties'
+    , requiredProperties = requiredProperties'
     , userRole = userRole'
     , perspectiveId = perspectiveId'
     , fillFrom = fillFrom'
     , fillPropertyFrom = fillPropertyFrom'
     , fieldConstraints = fieldConstraints'
+    , typeAheadFillFrom = typeAheadFillFrom'
     }
 
 normalizePropertyValueFillers :: PropertyValueFillers -> WithSideCars PropertyValueFillers

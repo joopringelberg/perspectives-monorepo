@@ -77,6 +77,9 @@ type SerialisedPerspective' =
   , possibleFillers :: Array { readableName :: String, instance :: RoleInstance }
   -- The keys are PropertyType names; values are candidate values for that property.
   , possiblePropertyValues :: Object (Array String)
+  -- When set, the client should display properties in this order.
+  -- Populated when `with props` is used in a screen definition.
+  , propertyOrder :: Maybe (Array String)
   }
 
 -- | SerialisedProperty is state-independent.

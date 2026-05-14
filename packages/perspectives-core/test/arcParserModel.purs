@@ -10,11 +10,11 @@ import Node.FS.Aff (readTextFile)
 import Node.Path as Path
 import Node.Process (cwd)
 import Parsing (ParseError)
-import Perspectives.Parsing.Arc.ContextualVariables (makeTypeTimeOnlyRoleTypeStep)
 import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE)
-import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
+import Perspectives.Parsing.Arc.ContextualVariables (makeTypeTimeOnlyRoleTypeStep)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..), VarBinding(..))
+import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Query.ExpressionCompiler (contextRoleRangeHasNonExternalRole)
 import Perspectives.Query.QueryTypes (RoleInContext(..))
@@ -50,6 +50,7 @@ theSuite = suiteOnly "Perspectives.Parsing.Arc.Model" do
       binding = makeTypeTimeOnlyRoleTypeStep
         "currentactor"
         (CR $ CalculatedRoleType "model:MyTestDomain$Guest")
+        (ContextType "model:MyTestDomain$SomeContext")
         (ArcPosition { column: 1, line: 1 })
     assert "currentactor should keep the calculated role type in type-time bindings"
       case binding of

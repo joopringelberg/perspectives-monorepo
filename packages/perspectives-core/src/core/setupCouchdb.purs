@@ -274,6 +274,21 @@ role2ContextFilter :: ContextInstance -> PerspectRol -> Boolean
 role2ContextFilter cid prol = cid == rol_context prol
 
 -----------------------------------------------------------
+-- THE VIEW 'filterValueView'
+-- This view is a table [{roleType, contextGuid}; {filterValue, roleId}].
+-- Use it by querying with key [roleType, takeGuid contextId] to obtain
+-- all roles of that type in that context that have a FilterValue property set.
+-----------------------------------------------------------
+setFilterValueView :: forall f. String -> MonadPouchdb f Unit
+setFilterValueView dbname = void $ addViewToDatabase dbname "defaultViews" "filterValueView"
+  ({ map: filterValueView, reduce: Nothing })
+
+foreign import filterValueView :: String
+
+filterValueViewFilter :: EnumeratedRoleType -> ContextInstance -> PerspectRol -> Boolean
+filterValueViewFilter eRoleType cinstance role = rol_context role == cinstance && isJust (elemIndex eRoleType (rol_allTypes role))
+
+-----------------------------------------------------------
 -- THE VIEW 'modelView'
 -----------------------------------------------------------
 setModelView :: forall f. String -> MonadPouchdb f Unit
