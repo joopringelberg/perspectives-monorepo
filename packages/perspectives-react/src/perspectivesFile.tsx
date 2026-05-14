@@ -338,7 +338,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
             { state: FILLED
             , fileName: parsedPropertyValue.fileName || ""
             , mimeType: parsedPropertyValue.mimeType || ""
-            , database: parsedPropertyValue.database
+            , database: parsedPropertyValue.database || ""
             , roleFileName: parsedPropertyValue.roleFileName
           });  
         }
@@ -372,7 +372,8 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
           )
           .then( perspectivesFile => 
             {
-              return component.setState({ database: perspectivesFile.database });
+              const parsedFile = JSON.parse(perspectivesFile) as PerspectivesFileType;
+              return component.setState({ database: parsedFile.database });
             })
           .catch(e => UserMessagingPromise.then( um => 
             um.addMessageForEndUser(
