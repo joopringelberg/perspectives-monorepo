@@ -34,7 +34,7 @@ import Control.Monad.Error.Class (catchError, try)
 import Control.Monad.Except (lift)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (gets)
-import Data.Array (elemIndex, filter, foldM, foldMap, fromFoldable, head, length, null, uncons)
+import Data.Array (any, elemIndex, filter, foldM, foldMap, fromFoldable, head, length, null, uncons)
 import Data.Either (Either(..))
 import Data.Map (empty)
 import Data.Maybe (Maybe(..), fromJust, isJust)
@@ -139,9 +139,24 @@ compileAndSaveRole dom step (CalculatedRole cr@{ id, kindOfRole, pos }) consider
       compiledExpression' <-
         if considerFunctional then pure $ setCardinality compiledExpression True
         else pure compiledExpression
-      -- Save the result in DomeinCache.
-      lift2 $ void $ modifyCalculatedRoleInDomeinFile (ModelUri $ unsafePartial fromJust $ typeUri2ModelUri (unwrap id)) (CalculatedRole cr { calculation = Q compiledExpression' })
-      pure $ unsafePartial $ domain2roleType $ range compiledExpression'
+      roleRange <- case range compiledExpression' of
+        RDOM roleRange -> pure roleRange
+        r ->
+          if kindOfRole == RTI.ContextRole then
+            throwError $ NotAContextRole (startOf step) (endOf step)
+          else throwError $ NotARoleDomain r (startOf step) (endOf step)
+      if kindOfRole == RTI.ContextRole && contextRoleRangeHasNonExternalRole roleRange then
+        throwError $ NotAContextRole (startOf step) (endOf step)
+      else do
+        -- Save the result in DomeinCache.
+        lift2 $ void $ modifyCalculatedRoleInDomeinFile (ModelUri $ unsafePartial fromJust $ typeUri2ModelUri (unwrap id)) (CalculatedRole cr { calculation = Q compiledExpression' })
+        pure roleRange
+
+contextRoleRangeHasNonExternalRole :: ADT RoleInContext -> Boolean
+contextRoleRangeHasNonExternalRole = any nonExternalRole <<< commonLeavesInADT
+  where
+  nonExternalRole :: RoleInContext -> Boolean
+  nonExternalRole (RoleInContext { role }) = isExternalRole (unwrap role) == false
 
 -- | Ensures that the range of the QueryFunctionDescription is a qualified
 -- | EnumeratedRole.
