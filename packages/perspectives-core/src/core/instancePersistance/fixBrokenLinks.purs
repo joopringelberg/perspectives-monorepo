@@ -58,6 +58,7 @@ import Perspectives.Instances.ObjectGetters (Filler_(..), context2roleFromDataba
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, saveMarkedResources)
 import Perspectives.PerspectivesState (addWarning, transactionLevel)
+import Perspectives.Representation.Class.Cacheable (tryReadEntiteitFromCache)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RestoreResource (restoreResource)
@@ -87,18 +88,23 @@ fixReferences resource@(Rle roleId) = do
       pure $ case mCtxt of
         Left _ -> { displayName: "", extRole: buitenRol (unwrap contextId) }
         Right ctxt -> { displayName: context_displayName ctxt, extRole: unwrap (context_buitenRol ctxt) }
-  -- Notify the user that the resource has been restored, via the piggybacked warning mechanism.
-  -- The message field serves as a stable identifier; the frontend uses i18n keys for the
-  -- user-facing text when externalRoleId is non-empty (see www.tsx restorationPanel_message).
-  addWarning
-    { message: "RestoredMissingResource"
-    , error: ""
-    , externalRoleId: extRole
-    , contextName: displayName
-    }
-  -- Persist the restored resource.
-  saveMarkedResources
-  pure true
+  -- Now check whether the restored role is still missing (e.g. because the restoration failed or because the reference was to a role that has been deleted). If so, we should remove the dangling reference.
+  mRestoredRole <- tryReadEntiteitFromCache roleId
+  case mRestoredRole of
+    Nothing -> fixRoleReferences roleId *> pure false
+    Just _ -> do
+      -- Notify the user that the resource has been restored, via the piggybacked warning mechanism.
+      -- The message field serves as a stable identifier; the frontend uses i18n keys for the
+      -- user-facing text when externalRoleId is non-empty (see www.tsx restorationPanel_message).
+      addWarning
+        { message: "RestoredMissingResource"
+        , error: ""
+        , externalRoleId: extRole
+        , contextName: displayName
+        }
+      -- Persist the restored role.
+      saveMarkedResources
+      pure true
 fixReferences resource@(Ctxt contextId) = do
   -- Restore the resource so that it is available in the database.
   restoreResource resource
@@ -108,18 +114,23 @@ fixReferences resource@(Ctxt contextId) = do
     { displayName, extRole } = case mCtxt of
       Left _ -> { displayName: "", extRole: buitenRol (unwrap contextId) }
       Right ctxt -> { displayName: context_displayName ctxt, extRole: unwrap (context_buitenRol ctxt) }
-  -- Notify the user that the context has been restored, via the piggybacked warning mechanism.
-  -- The message field serves as a stable identifier; the frontend uses i18n keys for the
-  -- user-facing text when externalRoleId is non-empty (see www.tsx restorationPanel_message).
-  addWarning
-    { message: "RestoredMissingResource"
-    , error: ""
-    , externalRoleId: extRole
-    , contextName: displayName
-    }
-  -- Persist the restored context.
-  saveMarkedResources
-  pure true
+  -- Now check whether the restored context is still missing (e.g. because the restoration failed or because the reference was to a context that has been deleted). If so, we should remove the dangling reference.
+  mRestoredContext <- tryReadEntiteitFromCache contextId
+  case mRestoredContext of
+    Nothing -> fixContextReferences contextId *> pure false
+    Just _ -> do
+      -- Notify the user that the context has been restored, via the piggybacked warning mechanism.
+      -- The message field serves as a stable identifier; the frontend uses i18n keys for the
+      -- user-facing text when externalRoleId is non-empty (see www.tsx restorationPanel_message).
+      addWarning
+        { message: "RestoredMissingResource"
+        , error: ""
+        , externalRoleId: extRole
+        , contextName: displayName
+        }
+      -- Persist the restored context.
+      saveMarkedResources
+      pure true
 fixReferences (Dfile _) = pure false
 
 ----------------------------------------------------------------------------

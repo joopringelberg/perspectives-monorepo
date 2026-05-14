@@ -72,7 +72,7 @@ import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..))
 import Perspectives.Representation.Perspective (StateSpec, stateSpec2StateIdentifier)
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), TypeAheadFormDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), IndexedContext(..), PropertyType(..), RoleType(..), roletype2string)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
@@ -990,6 +990,8 @@ instance addPerspectivesScreenElementDef :: CollectMarkdowns ScreenElementDef wh
   collectMarkdowns (FormElementD (FormDef re)) = []
   collectMarkdowns (MarkDownElementD re) = collectMarkdowns re
   collectMarkdowns (ChatElementD re) = []
+  collectMarkdowns (TypeAheadFillerElementD re) = []
+  collectMarkdowns (TypeAheadFormElementD re) = []
   collectMarkdowns (WhenElementD (WhenDef { elements })) = concat $ collectMarkdowns <$> elements
   collectTitles (RowElementD (RowDef re)) = concat $ collectTitles <$> re
   collectTitles (ColumnElementD (ColumnDef re)) = concat $ collectTitles <$> re
@@ -997,6 +999,8 @@ instance addPerspectivesScreenElementDef :: CollectMarkdowns ScreenElementDef wh
   collectTitles (FormElementD re) = collectTitles re
   collectTitles (MarkDownElementD re) = []
   collectTitles (ChatElementD re) = []
+  collectTitles (TypeAheadFillerElementD re) = collectTitles re
+  collectTitles (TypeAheadFormElementD re) = collectTitles re
   collectTitles (WhenElementD (WhenDef { elements })) = concat $ collectTitles <$> elements
 
 instance CollectMarkdowns WhoWhatWhereScreenDef where
@@ -1054,6 +1058,14 @@ instance addPerspectivesTableDef :: CollectMarkdowns TableDef where
 instance addPerspectivesFormDef :: CollectMarkdowns FormDef where
   collectMarkdowns (FormDef { markdown }) = concat (collectMarkdowns <$> markdown)
   collectTitles (FormDef { widgetCommonFields }) = maybe [] (\title -> [ title ]) widgetCommonFields.title
+
+instance CollectMarkdowns TypeAheadFillerDef where
+  collectMarkdowns _ = []
+  collectTitles (TypeAheadFillerDef { widgetCommonFields }) = maybe [] (\title -> [ title ]) widgetCommonFields.title
+
+instance CollectMarkdowns TypeAheadFormDef where
+  collectMarkdowns _ = []
+  collectTitles (TypeAheadFormDef { widgetCommonFields }) = maybe [] (\title -> [ title ]) widgetCommonFields.title
 
 instance CollectMarkdowns MarkDownDef where
   collectMarkdowns (MarkDownConstantDef { text }) = [ text ]

@@ -46,8 +46,8 @@ const ModelDependencies =
 , allNotifications: "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$lcjg3w5vla" as RoleType
 , notificationMessage: "model://perspectives.domains#tiodn6tcyc$w5l42i0gk4$qj53ocobq1$gnbvtwfm3d" as PropertyType
 , isOnScreen: "model://perspectives.domains#tiodn6tcyc$rmg5g1jus3$External$r9unsp62y1" as PropertyType
-, nrOfUploadedFiles: "model://perspectives.domains#xjrfkxrzyt$ul1y1ukzye$h5m3plntew$if6u0tqgxn" as PropertyType
-, disabled: "model://perspectives.domains#xjrfkxrzyt$ul1y1ukzye$h5m3plntew$r420hr69s0" as PropertyType
+, nrOfUploadedFiles: "model://perspectives.domains#xjrfkxrzyt$p6irsi0fot$aozjh4f3t3$k942jjwsr5" as PropertyType
+, disabled: "model://perspectives.domains#xjrfkxrzyt$p6irsi0fot$aozjh4f3t3$ah6ca0v3o8" as PropertyType
 , pinnedContexts: "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$x52ziv2d1i" as RoleType
 , actualRecentContexts: "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$g9ulp86zo8" as RoleType
 , recentContexts: "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$chuol755yg" as RoleType

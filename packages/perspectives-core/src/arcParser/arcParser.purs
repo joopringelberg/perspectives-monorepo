@@ -48,7 +48,7 @@ import Parsing.Indent.Monadic (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FillPropertyValueE, FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FillPropertyValueE, FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), TypeAheadFillerE(..), TypeAheadFormE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step, typeCombinations)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
@@ -1751,8 +1751,10 @@ screenElementE = withPos do
     "markdown" -> reserved "markdown" *> (MarkDownElement <$> markdownE)
     "chat" -> reserved "chat" *> (ChatElement <$> chatE)
     "when" -> WhenElement <$> whenE
+    "typeaheadfiller" -> reserved "typeaheadfiller" *> (TypeAheadFillerElement <$> typeAheadFillerE)
+    "typeaheadform" -> reserved "typeaheadform" *> (TypeAheadFormElement <$> typeAheadFormE)
     -- NOTE: extend message when a new widget is added.
-    _ -> fail "Only `row`, `column`, `table`, `form`, `markdown`, `chat` and `when` are allowed here. "
+    _ -> fail "Only `row`, `column`, `table`, `form`, `markdown`, `chat`, `when`, `typeaheadfiller`, or `typeaheadform` are allowed here. "
 
 whenE :: IP WhenE
 whenE = do
@@ -1800,6 +1802,7 @@ widgetCommonFields = do
         { title
         , perspective
         , fillFrom: mFillFrom
+        , typeAheadFillFromRole: Nothing
         , fillPropertyValues
         , withProps
         , withoutProps
@@ -1815,6 +1818,7 @@ widgetCommonFields = do
         { title
         , perspective
         , fillFrom: Nothing
+        , typeAheadFillFromRole: Nothing
         , fillPropertyValues: Nil
         , withProps: Nothing
         , withoutProps: Nothing
@@ -1868,6 +1872,7 @@ tableFormFields perspective = do
     -- Set the reference position to the indented position following 'master' or 'detail'.
     then withPos do
       mFillFrom <- optionMaybe (reserved "fillfrom" *> step)
+      mTypeAheadFillFromRole <- optionMaybe (reserved "typeaheadfillfrom" *> arcIdentifier)
       -- Parse at most one selector: either `with …` or `without …`.
       mSelection <- optionMaybe
         ( (Right <$> (reserved "with" *> withProperties))
@@ -1894,6 +1899,7 @@ tableFormFields perspective = do
         { title
         , perspective
         , fillFrom: mFillFrom
+        , typeAheadFillFromRole: mTypeAheadFillFromRole
         , fillPropertyValues
         , withProps
         , withoutProps
@@ -1909,6 +1915,7 @@ tableFormFields perspective = do
         { title
         , perspective
         , fillFrom: Nothing
+        , typeAheadFillFromRole: Nothing
         , fillPropertyValues: Nil
         , withProps: Nothing
         , withoutProps: Nothing
@@ -1924,6 +1931,12 @@ formE = FormE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> 
 
 tableE :: IP TableE
 tableE = TableE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> widgetCommonFields
+
+typeAheadFillerE :: IP TypeAheadFillerE
+typeAheadFillerE = TypeAheadFillerE <$> widgetCommonFields
+
+typeAheadFormE :: IP TypeAheadFormE
+typeAheadFormE = TypeAheadFormE <$> widgetCommonFields
 
 markdownE :: IP MarkDownE
 markdownE = do

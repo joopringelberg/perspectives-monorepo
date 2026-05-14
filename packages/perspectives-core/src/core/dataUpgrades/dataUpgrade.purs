@@ -53,6 +53,7 @@ import Prelude
 import Control.Monad.Cont (lift)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Reader.Trans (runReaderT)
+import Control.Monad.ST (run)
 import Control.Monad.Writer (runWriterT)
 import Data.Array (catMaybes, elemIndex, foldM, head, length, union)
 import Data.Either (Either(..))
@@ -76,8 +77,8 @@ import Perspectives.ContextAndRole (deleteContext_rolInContext, removeContext_ro
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, removeInternally, (##=))
 import Perspectives.Data.EncodableMap as EM
 import Perspectives.DataUpgrade.AddContextKeyMigration (addContextKeyToDeltas)
-import Perspectives.DataUpgrade.DeltasMigration (migrateDeltasToStore)
 import Perspectives.DataUpgrade.DeltaStoreKeyMigration (migrateDeltaStoreKeys)
+import Perspectives.DataUpgrade.DeltasMigration (migrateDeltasToStore)
 import Perspectives.DataUpgrade.PatchModels (patchModels)
 import Perspectives.DataUpgrade.PatchModels.PDR3061 as PDR3061
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
@@ -93,9 +94,9 @@ import Perspectives.Identifiers (buitenRol, splitTypeUri, unversionedModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter)
-import Perspectives.Instances.ObjectGetters (binding, getProperty)
+import Perspectives.Instances.ObjectGetters (binding, getEnumeratedRoleInstances, getProperty, getUnlinkedRoleInstances)
 import Perspectives.Instances.Values (PerspectivesFile, parsePerspectivesFile, writePerspectivesFile)
-import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, isSystemModel, mySocialEnvironment, repositoryRegistryModelName, rootName, settings, socialEnvironmentMe, startContexts, sysUser, systemModelName, theSystem)
+import Perspectives.ModelDependencies (filterValueProperty, identifiableLastName, indexedContext, indexedContextName, indexedRole, indexedRoleName, isSystemModel, mySocialEnvironment, repositoryRegistryModelName, rootName, settings, socialEnvironmentMe, socialEnvironmentPersons, startContexts, sysUser, systemModelName, theSystem)
 import Perspectives.Names (getMySystem, lookupIndexedContext)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (toReadableDomeinFile, toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -104,12 +105,12 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspectRol, saveEntiteit_, saveMarkedResources, tryGetPerspectEntiteit, tryGetPerspectRol, tryRemoveEntiteit)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage)
-import Perspectives.Query.UnsafeCompiler (getRoleInstances)
+import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..), EnumeratedPropertyType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
-import Perspectives.SetupCouchdb (setContext2RoleView, setContextView, setCredentialsView, setFilled2FillerView, setFiller2FilledView, setRole2ContextView, setRoleFromContextView, setRoleView)
+import Perspectives.SetupCouchdb (setContext2RoleView, setContextView, setCredentialsView, setFilled2FillerView, setFiller2FilledView, setFilterValueView, setRole2ContextView, setRoleFromContextView, setRoleView)
 import Perspectives.SetupUser (setupInvertedQueryDatabase)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.Sidecar.NormalizeTypeNames (fqn2tid, normalize, normalizeTypeNames)
@@ -372,6 +373,47 @@ runDataUpgrades = do
     ( \_ -> do
         addContextKeyToDeltas unit
     )
+
+  runUpgrade installedVersion "3.3.2"
+    ( \_ -> do
+        runMonadPerspectivesTransaction'
+          false
+          (ENR $ EnumeratedRoleType sysUser)
+          do
+            -- This adds the facet RoleWithFilter.
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.3"
+            -- We need to set the FilterValue property for the RoleWithFilter aspect on each Persons instance, so that the typeaheadfiller widget can filter by last name.
+            msocEnv <- lift $ lookupIndexedContext mySocialEnvironment
+            case msocEnv of
+              Just socEnv -> do
+                persons <- lift (socEnv ##= getUnlinkedRoleInstances (EnumeratedRoleType socialEnvironmentPersons))
+                for_ persons \person -> do
+                  lastName <- lift (person ##= getPropertyValues (ENP $ EnumeratedPropertyType identifiableLastName))
+                  setProperty [ person ] (EnumeratedPropertyType filterValueProperty) Nothing lastName
+              Nothing -> logPerspectivesError (Custom "Could not find mySocialEnvironment during data upgrade to 3.3.0; cannot set FilterValue for RoleWithFilter aspect.")
+        -- Set the new view through Pouchdb.
+        entitiesDatabaseName >>= setFilterValueView
+    )
+
+  runUpgrade installedVersion "3.3.3"
+    ( \_ -> void recompileLocalModels
+    )
+
+  -- runMonadPerspectivesTransaction'
+  --   false
+  --   (ENR $ EnumeratedRoleType sysUser)
+  --   do
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#Serialise@3.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#Utilities@3.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#RabbitMQ@2.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#Couchdb@4.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#Files@3.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#Sensor@3.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#Parsing@3.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#BodiesWithAccounts@5.0"
+  --     updateModelForUpgrade $ ModelUri "model://perspectives.domains#HyperContext@1.0"
+
+  -- void recompileLocalModels
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.

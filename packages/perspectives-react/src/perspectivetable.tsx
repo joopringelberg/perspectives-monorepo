@@ -13,7 +13,7 @@ import
 import "././styles/components.css";
 import { CardProperties } from "./cardbehaviour";
 import { CardWithFixedBehaviour, WithOutBehavioursProps } from "./adorningComponentWrapper";
-import { RoleInstanceT, Perspective, SerialisedProperty, PropertyType, Roleinstancewithprops } from "perspectives-proxy";
+import { RoleInstanceT, Perspective, SerialisedProperty, PropertyType, Roleinstancewithprops, FilterValueEntry } from "perspectives-proxy";
 import { AppContext } from "./reactcontexts";
 import TableItemContextMenu from "./tableItemContextMenu";
 import { orderPropertiesByPerspective } from "./utilities";
@@ -180,6 +180,7 @@ interface PerspectiveTableProps
   , showDetails? : boolean
   , sortOnHiddenProperty?: PropertyType
   , sortAscending?: boolean
+  , typeAheadFillFromCandidates?: FilterValueEntry[]
   }
 
 interface PerspectiveTableState
@@ -489,6 +490,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
                     perspective={component.props.perspective}
                     orderedProperties={component.orderedProperties}
                     showDetails={component.props.showDetails}
+                    typeAheadFillFromCandidates={component.props.typeAheadFillFromCandidates}
                     />)
               }
             </tbody>

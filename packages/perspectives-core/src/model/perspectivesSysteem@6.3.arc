@@ -154,6 +154,13 @@ domain model://perspectives.domains#System@6.3
     property Phone (String)
       -- pattern = "^(\\+|00)?[0-9]{1,3}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,9}$"
 
+    ----------------------------------
+    ---- ROLEWITHFILTER
+    ---- This role should be used as an aspect role for roles to be presented with the `typeaheadfiller` widget, so that the widget can filter the presented options based on the value of FilterValue.
+    ----------------------------------
+  thing RoleWithFilter
+    property FilterValue (String)
+
   -- TheWorld is shared by everyone. It is identified by def:#TheWorld.
   case TheWorld
     indexed sys:TheWorld
@@ -220,6 +227,13 @@ domain model://perspectives.domains#System@6.3
 
     -- PDRDEPENDENCY
     user Persons (relational, unlinked) filledBy (PerspectivesUsers, NonPerspectivesUsers)
+      aspect sys:RoleWithFilter
+      -- We need to be able to filter Persons by LastName for the typeaheadfiller widget.
+      -- NOTE: when LastName changes, FilterValue will not follow automatically.
+      state HasLastName = exists LastName
+        on entry
+          do for Me
+            FilterValue = LastName
       -- perspective on Me
       --   props (Cancelled, LastName, FirstName, PublicKey) verbs (Consult)
       state Unfilled = not exists binding
@@ -242,7 +256,7 @@ domain model://perspectives.domains#System@6.3
       perspective on Persons
         only (Create, Fill)
         props (FirstName, LastName) verbs (Consult)
-        props (Cancelled) verbs (Consult, SetPropertyValue)
+        props (Cancelled, FilterValue) verbs (Consult, SetPropertyValue)
       perspective on OtherPersons
         only (Create, Fill)
         props (FirstName, LastName) verbs (Consult, SetPropertyValue)
