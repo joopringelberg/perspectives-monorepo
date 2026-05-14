@@ -271,7 +271,7 @@ supported. The `displayName` prop is shown as a label.
 
 ## `fillfrom` (for contrast)
 
-`fillfrom` is the *non*-typeahead sibling of `typeaheadfillfrom`. It also lives in the
+`fillfrom` is the *non*-typeahead sibling of `typeaheadfillfrom`. **However**, when more than a fixed number (hard-coded as 20) of candidates are retrieved, it switches to type-ahead behaviour.  It also lives in the
 `master…detail` block but takes a full **query expression** rather than a role name:
 
 ```arc
@@ -289,7 +289,7 @@ and `typeaheadfillfrom` coexist and serve different use-cases:
 |---|---|---|
 | Candidate specification | Arbitrary query | Role type name |
 | Candidate size | Small–medium (all loaded) | Potentially very large |
-| Filtering | Not applicable (full list shown) | Client-side text filter |
+| Filtering | Not applicable (full list shown) while less than 20 | Client-side text filter |
 | Requires Filter aspect | No | Yes |
 
 ---
