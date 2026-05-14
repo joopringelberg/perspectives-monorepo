@@ -39,7 +39,7 @@ import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..), fromJust, isJust)
+import Data.Maybe (Maybe(..), fromJust, fromMaybe, isJust)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), Replacement(..), replace)
@@ -58,12 +58,12 @@ import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (addAttachments, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..), addDownStreamAutomaticEffect, addDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError)
-import Perspectives.Logging (debugUpgrade, errorUpgrade, infoUpgrade)
 import Perspectives.ExecuteInTopologicalOrder (executeInTopologicalOrder) as TOP
 import Perspectives.Extern.Couchdb (roleInstancesFromCouchdb)
 import Perspectives.Identifiers (domeinFileVersion, modelUri2LocalName, modelUriVersion)
 import Perspectives.Instances.Indexed (indexedContexts_, indexedRoles_)
 import Perspectives.InvertedQuery.Storable (saveInvertedQueries)
+import Perspectives.Logging (debugUpgrade, errorUpgrade, infoUpgrade)
 import Perspectives.ModelDependencies (domeinFileName, indexedContext, indexedRole, modelManifest, versionToInstall)
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors)
 import Perspectives.Persistence.API (Keys(..), addAttachment, addDocument, documentsInDatabase, getAttachment, includeDocs, retrieveDocumentVersion, toFile)
@@ -105,7 +105,7 @@ recompileModelsAtUrl modelsDb manifestsDb = do
           -- Load sidecar from repository DB and compile with it. We need the version to take the right sidecar.
           mRepoMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id <> "@" <> version) fromRepository
           -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
-          r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> "@" <> version) version
+          r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> "@" <> version) (Just version)
           case r of
             Left m -> lift $ lift $ errorUpgrade ("recompileModelsAtUrl: " <> show m)
             Right (Tuple df@(DomeinFile dfr@{ id: id' }) (Tuple invertedQueries mapping')) -> lift $ lift do
@@ -142,7 +142,7 @@ recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _
     mlocalMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id) fromLocalModels
     -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
     -- It should also be the local part of the id.
-    r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc true mlocalMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> "@" <> (unsafePartial fromJust $ modelUriVersion _id)) (unsafePartial fromJust $ modelUriVersion _id)
+    r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc true mlocalMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> (fromMaybe "" ((<>) "@" <$> (modelUriVersion _id)))) (modelUriVersion _id)
     case r of
       Left m -> lift $ lift $ errorUpgrade ("recompileModel: " <> show m)
       Right (Tuple df@(DomeinFile drf@{ invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects }) (Tuple invertedQueries mapping')) -> lift $ lift do

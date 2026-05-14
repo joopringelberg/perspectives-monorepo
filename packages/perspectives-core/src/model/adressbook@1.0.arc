@@ -2,7 +2,7 @@
 -- All rights reserved.
 -- Unauthorized copying, redistribution, or commercial use is prohibited without written permission.
 
-domain model://joopringelberg.nl#Addressbook
+domain model://joopringelberg.nl#Addressbook@1.0
   use sys for model://perspectives.domains#System
   use ab for model://joopringelberg.nl#Addressbook
 
@@ -39,7 +39,6 @@ domain model://joopringelberg.nl#Addressbook
     indexed ab:MyAddressbook
     aspect sys:RootContext
     external
-      aspect sys:RootContext$External
     
     user Manager = sys:Me
       perspective on AllPersons

@@ -136,13 +136,14 @@ evaluateRootRoleState roleId = do
 -- | Put an error boundary around this function.
 evaluateRoleState :: RoleInstance -> StateIdentifier -> MonadPerspectivesTransaction Unit
 evaluateRoleState roleId stateId = do
+  padding <- lift transactionLevel
+  lift $ toReadable stateId >>= \readableStateId -> traceState (padding <> "Evaluating role state " <> unwrap readableStateId <> ": " <> unwrap roleId)
   roleIsInState' <- conditionSatisfied roleId stateId
   case roleIsInState' of
     Determined roleIsInState ->
       if roleIsInState then do
         roleWasInState <- lift $ isActive stateId roleId
         if roleWasInState then do
-          padding <- lift transactionLevel
           lift $ toReadable stateId >>= \readableStateId -> traceState (padding <> "Already in role state " <> unwrap readableStateId <> ": " <> unwrap roleId)
           subStates <- lift $ subStates_ stateId
           for_ subStates (evaluateRoleState roleId)

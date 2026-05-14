@@ -5,22 +5,26 @@ import Prelude
 import Control.Monad.Reader (ReaderT, ask)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (catMaybes, concat, elemIndex, filter, filterA, head, null)
-import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
+import Data.Maybe (Maybe(..), fromJust, fromMaybe, isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesQuery, type (~~>), (###=))
+import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesQuery, type (~~>), (###=), (##=))
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (typeUri2ModelUri_)
 import Perspectives.Instances.ObjectGetters (getActiveRoleStates, getActiveStates)
 import Perspectives.ModelTranslation (translationOf)
-import Perspectives.Query.UnsafeCompiler (context2propertyValue, getRoleInstances)
-import Perspectives.Query.QueryTypes (QueryFunctionDescription)
-import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
+import Perspectives.Persistence.API (Keys(..), getViewOnDatabase)
+import Perspectives.Persistent (entitiesDatabaseName)
+import Perspectives.Query.UnsafeCompiler (context2context, context2propertyValue, getRoleInstances)
+import Perspectives.Query.QueryTypes (QueryFunctionDescription(..), domain, functional, mandatory, queryFunction, range)
+import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
+import Perspectives.ResourceIdentifiers (takeGuid)
+import Perspectives.Representation.Class.Role (calculationOfRoleType, perspectivesOfRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FilterValueEntry, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), TypeAheadFormDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType, RoleType(..), externalRoleType)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.TypePersistence.PerspectiveSerialisation (serialisePerspective)
@@ -28,6 +32,58 @@ import Perspectives.Types.ObjectGetters (allEnumeratedRoles, aspectsOfRole)
 
 type Context = { userRoleInstance :: RoleInstance, contextType :: ContextType, contextInstance :: ContextInstance }
 type InContext = ReaderT Context MonadPerspectivesQuery
+
+-- | Decompose a composed QueryFunctionDescription into its prefix query and final step.
+-- | For a chain `A >> B >> C` this returns `Just { query: A >> B, lastStep: C }`.
+-- | Used to extract the role-getter step from a `fillfrom` or role calculation expression
+-- | so that the preceding context navigation can be evaluated separately.
+-- |
+-- | Two guard conditions cover the two structural cases:
+-- | 1. When the right operand of `ComposeF` is itself a composition (`queryFunction qfd2 == BinaryCombinator ComposeF`),
+-- |    the function recurses into the right subtree, effectively right-associating the chain
+-- |    so the very last step can be peeled off.
+-- | 2. When the right operand is NOT a composition, the BQD is a simple two-step chain;
+-- |    the left operand is the context-getter and the right operand is the final role-getter step.
+unsnocQfd :: QueryFunctionDescription -> Maybe { query :: QueryFunctionDescription, lastStep :: QueryFunctionDescription }
+unsnocQfd (BQD _ qf qfd1 qfd2 _ _ _)
+  | qf == (BinaryCombinator ComposeF) && queryFunction qfd2 == BinaryCombinator ComposeF =
+      case unsnocQfd qfd2 of
+        Just { query: q, lastStep: ls } ->
+          Just { query: BQD (domain qfd1) (BinaryCombinator ComposeF) qfd1 q (range q) (functional q) (mandatory q), lastStep: ls }
+        Nothing -> Nothing
+  | qf == (BinaryCombinator ComposeF) = Just { query: qfd1, lastStep: qfd2 }
+unsnocQfd _ = Nothing
+
+-- | Given a composed role-getter QFD (a `fillfrom` expression or a calculated role's
+-- | `calculation`), navigate to the source context and query the FilterValue CouchDB view.
+-- | The QFD must end in a `GetRoleInstancesForContextFromDatabaseF` step; otherwise [].
+-- | Shared by both typeaheadfiller and typeaheadform candidate-fetching logic.
+fetchCandidatesFromQfd :: QueryFunctionDescription -> ContextInstance -> MonadPerspectives (Array FilterValueEntry)
+fetchCandidatesFromQfd qfd contextInstance = case unsnocQfd qfd of
+  Just { query: contextGetterQfd, lastStep } -> case queryFunction lastStep of
+    DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeStr -> do
+      ctxtGetter <- context2context contextGetterQfd
+      sourceContexts <- contextInstance ##= ctxtGetter
+      case head sourceContexts of
+        Nothing -> pure []
+        Just sourceContext -> do
+          db <- entitiesDatabaseName
+          getViewOnDatabase db "defaultViews/filterValueView" (Key [ roleTypeStr, takeGuid (unwrap sourceContext) ])
+    _ -> pure []
+  _ -> pure []
+
+-- | Fetch FilterValue candidates for a given role type and context instance.
+-- | For an unlinked EnumeratedRoleType, queries the FilterValue view directly using the
+-- | role type string and the current context GUID (no QFD navigation needed).
+-- | For a CalculatedRoleType, looks up the role's calculation QFD and delegates to
+-- | `fetchCandidatesFromQfd`, which navigates to the source context before querying.
+fetchFilterValueCandidates :: RoleType -> ContextInstance -> MonadPerspectives (Array FilterValueEntry)
+fetchFilterValueCandidates (ENR rt) contextInstance = do
+  db <- entitiesDatabaseName
+  getViewOnDatabase db "defaultViews/filterValueView" (Key [ unwrap rt, takeGuid (unwrap contextInstance) ])
+fetchFilterValueCandidates crType contextInstance = do
+  qfd <- calculationOfRoleType crType
+  fetchCandidatesFromQfd qfd contextInstance
 
 contextualiseScreen :: ScreenDefinition -> String -> String -> InContext (Maybe ScreenDefinition)
 contextualiseScreen (ScreenDefinition { title, tabs, rows, columns, whoWhatWhereScreen }) computedTitle translatedUserRoleType = do
@@ -112,6 +168,8 @@ contextualiseScreenElementDef (TableElementD e) = map TableElementD <$> contextu
 contextualiseScreenElementDef (FormElementD e) = map FormElementD <$> contextualiseFormDef e
 contextualiseScreenElementDef (MarkDownElementD e) = map MarkDownElementD <$> contextualiseMarkDownDef e
 contextualiseScreenElementDef (ChatElementD c) = map ChatElementD <$> contextualiseChatDef c
+contextualiseScreenElementDef (TypeAheadFillerElementD e) = map TypeAheadFillerElementD <$> contextualiseTypeAheadFillerDef e
+contextualiseScreenElementDef (TypeAheadFormElementD e) = map TypeAheadFormElementD <$> contextualiseTypeAheadFormDef e
 contextualiseScreenElementDef (WhenElementD (WhenDef { condition, elements })) = do
   { contextInstance } <- ask
   (criterium :: ContextInstance ~~> Value) <- lift $ lift $ lift $ (context2propertyValue condition)
@@ -150,6 +208,37 @@ contextualiseFormDef (FormDef { markdown, widgetCommonFields }) = do
     Nothing -> pure Nothing
     Just widgetCommonFields' -> pure $ Just $ FormDef { markdown: catMaybes markdown', widgetCommonFields: widgetCommonFields' }
 
+contextualiseTypeAheadFillerDef :: TypeAheadFillerDef -> InContext (Maybe TypeAheadFillerDef)
+contextualiseTypeAheadFillerDef (TypeAheadFillerDef { widgetCommonFields, candidates: _ }) = do
+  mwidgetCommonFields <- contextualiseWidgetCommonFields widgetCommonFields
+  case mwidgetCommonFields of
+    Nothing -> pure Nothing
+    Just widgetCommonFields' -> do
+      { contextInstance } <- ask
+      candidates <- case widgetCommonFields.fillFrom of
+        Nothing -> pure []
+        Just fillFromQfd -> lift2InContext $ fetchCandidatesFromQfd fillFromQfd contextInstance
+      pure $ Just $ TypeAheadFillerDef { widgetCommonFields: widgetCommonFields', candidates }
+
+contextualiseTypeAheadFormDef :: TypeAheadFormDef -> InContext (Maybe TypeAheadFormDef)
+contextualiseTypeAheadFormDef (TypeAheadFormDef { widgetCommonFields, displayName: _, candidates: _ }) = do
+  { contextInstance, contextType } <- ask
+  (translatedTitle :: Maybe String) <- lift2InContext $ traverse (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType)) widgetCommonFields.title
+  allPerspectives <- lift2InContext $ perspectivesOfRoleType widgetCommonFields.userRole
+  let mCompiledPerspective = head $ filter (\(Perspective { id }) -> id == widgetCommonFields.perspectiveId) allPerspectives
+  case mCompiledPerspective of
+    Nothing -> pure Nothing
+    Just perspective@(Perspective { roleTypes }) -> do
+      mValidPerspective <- contextualisePerspective perspective
+      case mValidPerspective of
+        Nothing -> pure Nothing
+        Just _ -> do
+          candidates <- lift2InContext $ maybe (pure []) (\rt -> fetchFilterValueCandidates rt contextInstance) widgetCommonFields.objectRoleType
+          displayName <- case head roleTypes of
+            Nothing -> pure $ fromMaybe "" translatedTitle
+            Just rt -> lift2InContext $ translateType rt
+          pure $ Just $ TypeAheadFormDef { widgetCommonFields: widgetCommonFields { perspective = Nothing, title = translatedTitle }, displayName: Just displayName, candidates }
+
 contextualiseMarkDownDef :: MarkDownDef -> InContext (Maybe MarkDownDef)
 contextualiseMarkDownDef md = case md of
   MarkDownPerspectiveDef { widgetFields, conditionProperty } -> do
@@ -187,7 +276,7 @@ contextualiseChatDef (ChatDef r@{ chatRole, title }) = do
   pure $ Just $ ChatDef r { chatInstance = head chatRoleInstances, title = Just title' }
 
 contextualiseWidgetCommonFields :: WidgetCommonFieldsDef -> InContext (Maybe WidgetCommonFieldsDef)
-contextualiseWidgetCommonFields wc@{ title, perspectiveId, fillFrom, fillPropertyFrom, propertyRestrictions, withoutProperties, roleVerbs, userRole } = do
+contextualiseWidgetCommonFields wc@{ title, perspectiveId, fillFrom, fillPropertyFrom, propertyRestrictions, withoutProperties, roleVerbs, userRole, typeAheadFillFrom } = do
   { contextInstance, userRoleInstance, contextType } <- ask
   contextStates <- lift $ lift (map ContextState <$> (runArrayT $ getActiveStates contextInstance))
   subjectStates <- lift $ lift (map SubjectState <$> (runArrayT $ getActiveRoleStates userRoleInstance))
@@ -199,13 +288,17 @@ contextualiseWidgetCommonFields wc@{ title, perspectiveId, fillFrom, fillPropert
     )
   mperspective <- contextualisePerspective perspective
   (translatedTitle :: Maybe String) <- lift2InContext $ traverse (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType)) title
-  for mperspective (serialise translatedTitle contextStates subjectStates)
+  -- Fetch typeahead fillfrom candidates when typeAheadFillFrom is set.
+  typeAheadFillFromCandidates <- case typeAheadFillFrom of
+    Nothing -> pure Nothing
+    Just rt -> Just <$> lift2InContext (fetchFilterValueCandidates rt contextInstance)
+  for mperspective (serialise translatedTitle contextStates subjectStates typeAheadFillFromCandidates)
   where
-  serialise :: Maybe String -> Array StateSpec -> Array StateSpec -> Perspective -> InContext WidgetCommonFieldsDef
-  serialise translatedTitle contextStates subjectStates perspective = do
+  serialise :: Maybe String -> Array StateSpec -> Array StateSpec -> Maybe (Array FilterValueEntry) -> Perspective -> InContext WidgetCommonFieldsDef
+  serialise translatedTitle contextStates subjectStates typeAheadFillFromCandidates perspective = do
     { contextInstance } <- ask
     serialisedPerspective <- lift $ lift $ serialisePerspective contextStates subjectStates contextInstance userRole propertyRestrictions withoutProperties roleVerbs fillFrom fillPropertyFrom perspective
-    pure $ wc { perspective = Just serialisedPerspective, title = translatedTitle }
+    pure $ wc { perspective = Just serialisedPerspective, title = translatedTitle, typeAheadFillFromCandidates = typeAheadFillFromCandidates }
 
 contextualisePerspective :: Perspective -> InContext (Maybe Perspective)
 contextualisePerspective p@(Perspective pr) =

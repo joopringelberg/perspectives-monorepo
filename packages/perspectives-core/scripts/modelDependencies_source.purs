@@ -137,6 +137,17 @@ selectedClipboardItem = "model://perspectives.domains#System$PerspectivesSystem$
 chatAspect :: String
 chatAspect = "model://perspectives.domains#System$Chat"
 
+
+-- | The Filter role aspect. Roles that carry this aspect have a FilterValue property
+-- | which can be used to find them via the filterValueView.
+-- | NOTE: these URIs must match the actual URIs generated for the Filter aspect
+-- | and its FilterValue property in the System model ARC source.
+filterAspect :: String
+filterAspect = "model://perspectives.domains#System$RoleWithFilter"
+
+filterValueProperty :: String
+filterValueProperty = "model://perspectives.domains#System$RoleWithFilter$FilterValue"
+
 recentContexts :: String
 recentContexts = "model://perspectives.domains#System$PerspectivesSystem$RecentContexts"
 

@@ -625,7 +625,7 @@ handlePostponedStateQualifiedParts = do
         if isTypeUri (roletype2string rt) then pure (roletype2string rt)
         else pure $ concatenateSegments (unwrap ctxt) (roletype2string rt)
       qualifiedRole <- qualifyLocalRoleName rolePos maximallyQualifiedName
-      pure $ makeTypeTimeOnlyRoleTypeStep varName qualifiedRole pos
+      pure $ makeTypeTimeOnlyRoleTypeStep varName qualifiedRole ctxt pos
     ImplicitRole _ _ ->
       pure $ unsafePartial makeTypeTimeOnlyRoleStep varName usersInContext pos
 

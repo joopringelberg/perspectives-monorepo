@@ -38,6 +38,12 @@ This index provides an overview of the technical documentation in `packages/pers
 | [Type Comparison](type-comparison.md) | How types are represented (ADT, ExpandedADT, CNF), normalised, and compared throughout the PDR. Covers `equalsOrSpecialises`, `leastCommonSuperType`, role-class hierarchy, and the role of Phase Three in populating comparison tables. |
 | [Stable ID Mapping](stable-id-mapping.md) | How stable type identifiers are preserved across ARC model refactors using a `stableIdMapping.json` sidecar stored alongside the DomeinFile. Covers the alias mechanism, snapshot heuristics, and where in the compilation pipeline the mapping is applied. |
 
+### Screen Widgets & Language Extensions
+
+| Document | Description |
+|---|---|
+| [Typeahead Screen Widgets](typeahead-screen-widgets.md) | The four ARC keywords for role-filling with large candidate lists: `typeaheadfillfrom`, `typeaheadfiller`, `typeaheadform`, and `fillfrom`. Explains the `filterValueView` PouchDB view, the full compilation pipeline from ARC parser to React components, and the shared helper functions `fetchCandidatesFromQfd` and `fetchFilterValueCandidates`. |
+
 ---
 
 ## Module Index
@@ -95,3 +101,8 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.TypePersistence.PerspectiveSerialisation.Data` | [PDR Client Data Structures](pdr-client-data-structures.md) |
 | `Perspectives.Types.ObjectGetters` | [Type Comparison](type-comparison.md) |
 | `Perspectives.TypesForDeltas` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
+| `Perspectives.Parsing.Arc.AST` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |
+| `Perspectives.Parsing.Arc` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |
+| `Perspectives.Parsing.Arc.PhaseThree.Screens` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |
+| `Perspectives.Parsing.Arc.NormalizeTypeNames` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |
+| `Perspectives.TypePersistence.ScreenContextualisation` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |

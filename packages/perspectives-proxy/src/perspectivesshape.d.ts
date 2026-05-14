@@ -165,11 +165,11 @@ export type TabDef = {
 };
 
 export type ScreenElementDefTagged = {
-  elementType: "RowElementD" | "ColumnElementD" | "TableElementD" | "FormElementD" | "MarkDownElementD" | "ChatElementD" | "WhenElementD";
+  elementType: "RowElementD" | "ColumnElementD" | "TableElementD" | "FormElementD" | "MarkDownElementD" | "ChatElementD" | "WhenElementD" | "TypeAheadFillerElementD" | "TypeAheadFormElementD";
   element: ScreenElementDef;
 }
 
-export type ScreenElementDef = RowElementDef | ColumnElementDef | TableElementDef | FormElementDef | MarkDownElementDef | ChatElementDef | WhenElementDef;
+export type ScreenElementDef = RowElementDef | ColumnElementDef | TableElementDef | FormElementDef | MarkDownElementDef | ChatElementDef | WhenElementDef | TypeAheadFillerElementDef | TypeAheadFormElementDef;
 
 export type WhenElementDef = {
   tag: "WhenDef";
@@ -227,10 +227,36 @@ export type ChatElementDef = {
   };
 }
 
+export type FilterValueEntry = {
+  filterValue: string;
+  roleId: RoleInstanceT;
+}
+
+export type TypeAheadFillerElementDef = {
+  tag: "TypeAheadFillerDef";
+  widgetCommonFields: WidgetCommonFields;
+  candidates: FilterValueEntry[];
+}
+
+// Widget common fields for TypeAheadForm: omits `perspective` because it is
+// fetched on demand via getPerspective() after the user selects a candidate.
+export type TypeAheadFormWidgetFields = {
+  title?: string;
+  fieldConstraints?: FieldDisplayConstraint[];
+};
+
+export type TypeAheadFormElementDef = {
+  tag: "TypeAheadFormDef";
+  widgetCommonFields: TypeAheadFormWidgetFields;
+  displayName: string;
+  candidates: FilterValueEntry[];
+}
+
 export type WidgetCommonFields = {
   title: string;
   perspective: Perspective;
   fieldConstraints?: FieldDisplayConstraint[];
+  typeAheadFillFromCandidates?: FilterValueEntry[];
 };
 
 export type FieldDisplayConstraint = {
