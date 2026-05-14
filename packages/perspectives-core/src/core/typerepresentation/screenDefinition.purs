@@ -160,6 +160,9 @@ type WidgetCommonFieldsDefWithoutPerspective f =
   -- create the restricted serialised perspective.
   , propertyRestrictions :: Maybe PropertyRestrictions
   , withoutProperties :: Maybe (Array PropertyType)
+  -- When set, the client should display properties in this order.
+  -- Populated from `with props` in a screen definition.
+  , requiredProperties :: Maybe (Array PropertyType)
   , roleVerbs :: Maybe (Array RoleVerb)
   , userRole :: RoleType
   -- Per-property display constraints (minLines, maxLines for textareas)

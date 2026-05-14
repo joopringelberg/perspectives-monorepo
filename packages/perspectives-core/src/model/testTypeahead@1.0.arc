@@ -46,10 +46,10 @@ domain model://joopringelberg.nl#TestTypeAhead@1.0
         all props verbs (Consult)
       perspective on Deelnemer
         only (Create, Fill, Remove)
-        props (LastName) verbs (Consult)
+        props (LastName, FirstName) verbs (Consult)
       perspective on Gast
         only (Create, Fill, Remove)
-        props (LastName) verbs (Consult)
+        props (LastName, FirstName) verbs (Consult)
       screen
         who
           Deelnemer
@@ -57,11 +57,13 @@ domain model://joopringelberg.nl#TestTypeAhead@1.0
               typeaheadfillfrom Candidates
               with props (LastName)
             detail
+              with props (FirstName, LastName)
           Gast
             master
               fillfrom Candidates
               with props (LastName)
             detail
+              with props (LastName, FirstName)
         what
           row
             typeaheadfiller Friend

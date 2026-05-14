@@ -276,7 +276,7 @@ contextualiseChatDef (ChatDef r@{ chatRole, title }) = do
   pure $ Just $ ChatDef r { chatInstance = head chatRoleInstances, title = Just title' }
 
 contextualiseWidgetCommonFields :: WidgetCommonFieldsDef -> InContext (Maybe WidgetCommonFieldsDef)
-contextualiseWidgetCommonFields wc@{ title, perspectiveId, fillFrom, fillPropertyFrom, propertyRestrictions, withoutProperties, roleVerbs, userRole, typeAheadFillFrom } = do
+contextualiseWidgetCommonFields wc@{ title, perspectiveId, fillFrom, fillPropertyFrom, propertyRestrictions, withoutProperties, requiredProperties, roleVerbs, userRole, typeAheadFillFrom } = do
   { contextInstance, userRoleInstance, contextType } <- ask
   contextStates <- lift $ lift (map ContextState <$> (runArrayT $ getActiveStates contextInstance))
   subjectStates <- lift $ lift (map SubjectState <$> (runArrayT $ getActiveRoleStates userRoleInstance))
@@ -297,7 +297,7 @@ contextualiseWidgetCommonFields wc@{ title, perspectiveId, fillFrom, fillPropert
   serialise :: Maybe String -> Array StateSpec -> Array StateSpec -> Maybe (Array FilterValueEntry) -> Perspective -> InContext WidgetCommonFieldsDef
   serialise translatedTitle contextStates subjectStates typeAheadFillFromCandidates perspective = do
     { contextInstance } <- ask
-    serialisedPerspective <- lift $ lift $ serialisePerspective contextStates subjectStates contextInstance userRole propertyRestrictions withoutProperties roleVerbs fillFrom fillPropertyFrom perspective
+    serialisedPerspective <- lift $ lift $ serialisePerspective contextStates subjectStates contextInstance userRole propertyRestrictions withoutProperties requiredProperties roleVerbs fillFrom fillPropertyFrom perspective
     pure $ wc { perspective = Just serialisedPerspective, title = translatedTitle, typeAheadFillFromCandidates = typeAheadFillFromCandidates }
 
 contextualisePerspective :: Perspective -> InContext (Maybe Perspective)

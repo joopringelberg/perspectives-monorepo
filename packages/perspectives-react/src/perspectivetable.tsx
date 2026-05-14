@@ -16,6 +16,7 @@ import { CardWithFixedBehaviour, WithOutBehavioursProps } from "./adorningCompon
 import { RoleInstanceT, Perspective, SerialisedProperty, PropertyType, Roleinstancewithprops, FilterValueEntry } from "perspectives-proxy";
 import { AppContext } from "./reactcontexts";
 import TableItemContextMenu from "./tableItemContextMenu";
+import { orderPropertiesByPerspective } from "./utilities";
 
 // Wrapper functional component to derive `isOpen` from Accordion context and pass to the menu.
 const TableItemContextMenuWithOpen: React.FC<{
@@ -235,13 +236,22 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
   orderProperties()
   {
     const perspective = this.props.perspective;
-    // Here we put the identifying property in the front of the list, so it will be the first column.
-    const identifyingProperty = perspective.properties[perspective.identifyingProperty];
-    this.orderedProperties = Object.values(perspective.properties);
-    this.orderedProperties.splice( this.orderedProperties.indexOf( identifyingProperty), 1);
-    if (identifyingProperty)
+    if (perspective.propertyOrder && perspective.propertyOrder.length > 0)
     {
-      this.orderedProperties.unshift(identifyingProperty);
+      // When an explicit property order is given by the screen definition (`with props`),
+      // use the shared helper to order: listed properties come first, then any remaining.
+      this.orderedProperties = orderPropertiesByPerspective(perspective);
+    }
+    else
+    {
+      // Default: put the identifying property in the front of the list, so it will be the first column.
+      const identifyingProperty = perspective.properties[perspective.identifyingProperty];
+      this.orderedProperties = Object.values(perspective.properties);
+      this.orderedProperties.splice( this.orderedProperties.indexOf( identifyingProperty), 1);
+      if (identifyingProperty)
+      {
+        this.orderedProperties.unshift(identifyingProperty);
+      }
     }
     this.propertyNames = this.orderedProperties.map( p => p.id);
     // Finally, remove an eventual sort property from the list of properties.

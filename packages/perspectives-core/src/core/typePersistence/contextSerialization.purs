@@ -197,6 +197,7 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
         , objectRoleType: Just objectRoleType
         , propertyRestrictions: Nothing
         , withoutProperties: Nothing
+        , requiredProperties: Nothing
         , roleVerbs: Nothing
         , userRole: userRoleType
         , fillFrom: Nothing
@@ -228,6 +229,7 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
         , objectRoleType: Just objectRoleType
         , propertyRestrictions: Nothing
         , withoutProperties: Nothing
+        , requiredProperties: Nothing
         , roleVerbs: Nothing
         , userRole: userRoleType
         , fillFrom: Nothing
@@ -284,6 +286,7 @@ makeTableFormDef userRoleType p@{ id, displayName } =
       , objectRoleType: Just objectRoleType
       , propertyRestrictions: Nothing
       , withoutProperties: Nothing
+      , requiredProperties: Nothing
       , roleVerbs: Nothing
       , userRole: userRoleType
       , fillFrom: Nothing
@@ -645,6 +648,7 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               , objectRoleType: Just objectRoleType
               , propertyRestrictions: Nothing
               , withoutProperties: Nothing
+              , requiredProperties: Nothing
               , roleVerbs: Nothing
               , userRole: userRoleType
               , fillFrom: Nothing
@@ -663,6 +667,7 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               , objectRoleType: Just objectRoleType
               , propertyRestrictions: Nothing
               , withoutProperties: Nothing
+              , requiredProperties: Nothing
               , roleVerbs: Nothing
               , userRole: userRoleType
               , fillFrom: Nothing

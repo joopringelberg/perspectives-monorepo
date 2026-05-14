@@ -77,6 +77,9 @@ export type Perspective = {
   actions: Record<string, string>;
   possibleFillers: {readableName : string, instance: RoleInstanceT}[];
   possiblePropertyValues: Record<string, ValueT[]>;
+  // When set, properties should be displayed in this order (from `with props` in a screen
+  // definition). Properties listed here come first; any remaining properties follow.
+  propertyOrder?: PropertyType[];
 };
 
 export type RoleVerb = 
