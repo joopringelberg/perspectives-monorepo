@@ -458,9 +458,10 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
     {
       event.preventDefault();
       event.stopPropagation();
-      const selectedFile = document.getElementById(component.props.serialisedProperty.id + '_selectedFile');
+      const selectedFile = document.getElementById(component.props.serialisedProperty.id + '_selectedFile') as HTMLInputElement;
       if (selectedFile)
       {
+        selectedFile.value = '';  // Reset so onChange fires even when the same file is re-selected.
         selectedFile.click();   
       }
     }
