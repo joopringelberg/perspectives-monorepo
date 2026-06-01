@@ -1,6 +1,7 @@
 domain model://joopringelberg.nl#TestStateEntryAndExit@1.0
   use sys for model://perspectives.domains#System
   use mm for model://joopringelberg.nl#TestStateEntryAndExit
+  use sensor for model://perspectives.domains#Sensor
 
   -------------------------------------------------------------------------------
   ---- SETTING UP
@@ -45,6 +46,9 @@ domain model://joopringelberg.nl#TestStateEntryAndExit@1.0
       perspective on RoleWithDelayedExit
         only (Create, Remove)
         props (State1Sentinel, Name) verbs (Consult, SetPropertyValue, RemovePropertyValue)
+      perspective on RoleWithFile
+        only (Create, Remove)
+        props (TheFile, Name, LastChangeDT, NrOfUploads) verbs (Consult, SetPropertyValue, RemovePropertyValue)
 
     -- On setting State1Sentinel to true, the role enters State1.
     -- We get a notification of entry.
@@ -67,10 +71,9 @@ domain model://joopringelberg.nl#TestStateEntryAndExit@1.0
     -- On setting State1Sentinel to true, the role enters State1.
     -- We get a notification of entry.
     -- After 1 second, StateSentinel1 is set to false.
-    -- The role exits State1 - however, instead of a notification, nothing happens, we see the 'processing' spinner.
-    -- On the console of the SharedWorker I see the STATE TRACE message that the role exits State1.
-    -- The inspector confirms this: State1 is no longer recorded in the role instance.
-    -- Then follows an error on the console: typeError: J is not a function.
+    -- The role exits State1. We do not see a notification but that may be due to a mechanism to suppress very fast notification sequences.
+    -- The notification is generated.
+    -- The inspector confirms that State1 is exited.
     thing RoleWithDelayedExit (relational)
       state State1 = State1Sentinel == true
         on entry
@@ -83,3 +86,32 @@ domain model://joopringelberg.nl#TestStateEntryAndExit@1.0
             "Exited State 1 of RoleWithDelayedExit {Name}"
       property State1Sentinel (Boolean)  
       property Name (String)  
+    
+    -- Consider this an extension of RoleWithDelayedExit, but now with a file property.
+    -- We use the file property to trigger the state re-evaluation.
+    -- The condition that LastChangeDT must be at least 1 second ago is to make sure state ProcessFile exits.
+    -- Without it, if execution is slow enough, we may never see the exit of ProcessFile.
+    -- We would be past LastChangeDT immediately.
+    -- Because time passes automatically but does not trigger re-evaluation through readSensor, 
+    -- * ProcessTheFile is not registered on the role instance, while
+    -- * the condition holds true nevertheless (after 1 second).
+    -- * So if we then upload the file, triggering re-evaluation, state ProcessTheFile is entered again.
+    -- The upshot is that here we have a mechanism to trigger an automatic action by uploading a file (even the same file).
+    thing RoleWithFile
+      on entry
+        do for Manager
+          LastChangeDT = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime
+          NrOfUploads = 0
+
+      state ProcessTheFile = (exists TheFile) and (callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime > LastChangeDT + 1 seconds)
+        on entry
+          do for Manager after 1 Seconds
+            LastChangeDT = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime
+            NrOfUploads = NrOfUploads + 1
+          notify Manager
+            "Processing {Name}"
+
+      property LastChangeDT (DateTime)
+      property TheFile (File)
+      property Name (String)
+      property NrOfUploads (Number)

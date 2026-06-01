@@ -1178,10 +1178,10 @@ domain model://perspectives.domains#CouchdbManagement@12.2
       -- This state triggers UploadToRepository.
       state ProcessArc = AutoUpload 
               and (exists ArcSource) 
-              and ((callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime > LastChangeDT + 10 seconds) or not exists LastChangeDT)
+              and ((callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime > LastChangeDT + 1 seconds) or not exists LastChangeDT)
               and (IsTheOnlyVersion or (exists context >> BasedOnVersion))
         on entry
-          do for Author
+          do for Author after 500 Milliseconds
             -- If BasedOnVersion is not set, the PDR will generate new CUIDs.
             ArcFeedback = callExternal p:ParseAndCompileArc( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI ) returns String
             -- Even though we set LastChangeDT, state ProcessArc is not exited.
