@@ -338,7 +338,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
             { state: FILLED
             , fileName: parsedPropertyValue.fileName || ""
             , mimeType: parsedPropertyValue.mimeType || ""
-            , database: parsedPropertyValue.database
+            , database: parsedPropertyValue.database || ""
             , roleFileName: parsedPropertyValue.roleFileName
           });  
         }
@@ -355,6 +355,11 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
   saveFileAndProperty(theFile : File)
   {
     const component = this;
+    const currentDatabase =
+      component.state.database
+      || (component.props.propertyValues?.values[0]
+        ? (JSON.parse(component.props.propertyValues.values[0]) as PerspectivesFileType).database
+        : undefined);
     return PDRproxy.then( pproxy => 
       {
         return pproxy
@@ -363,7 +368,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
             { fileName: theFile.name
             , propertyType: component.props.serialisedProperty.id
             , mimeType: component.mapMimeType( theFile.type, theFile.name )
-            , database: undefined
+            , database: currentDatabase
             // By construction we know that the roleId is present.
             , roleFileName: component.props.roleId!
             },
@@ -372,7 +377,11 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
           )
           .then( perspectivesFile => 
             {
-              return component.setState({ database: perspectivesFile.database });
+              const parsedFile = JSON.parse(perspectivesFile) as PerspectivesFileType;
+              return component.setState(
+                { database: parsedFile.database || currentDatabase
+                , roleFileName: parsedFile.roleFileName || component.state.roleFileName
+                });
             })
           .catch(e => UserMessagingPromise.then( um => 
             um.addMessageForEndUser(
@@ -449,9 +458,10 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
     {
       event.preventDefault();
       event.stopPropagation();
-      const selectedFile = document.getElementById(component.props.serialisedProperty.id + '_selectedFile');
+      const selectedFile = document.getElementById(component.props.serialisedProperty.id + '_selectedFile') as HTMLInputElement;
       if (selectedFile)
       {
+        selectedFile.value = '';  // Reset so onChange fires even when the same file is re-selected.
         selectedFile.click();   
       }
     }

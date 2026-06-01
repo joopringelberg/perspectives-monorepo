@@ -23,6 +23,19 @@ export default [
       'no-unused-vars': 'warn',
     },
   },
+  {
+    files: [
+      'packages/mycontexts/src/buildMeta.js',
+      'packages/mycontexts/src/generateManifest.js',
+      'packages/mycontexts/src/syncPublicAssets.js'
+    ],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly'
+      }
+    }
+  },
   // TypeScript specific rules
   {
     files: ['**/*.ts', '**/*.tsx'],
@@ -53,6 +66,7 @@ export default [
         BroadcastChannel: 'readonly',
         URL: 'readonly',
         clients: 'readonly',
+        Client: 'readonly',
         Promise: 'readonly',
         navigator: 'readonly',
         window: 'readonly',

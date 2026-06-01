@@ -58,7 +58,7 @@ import Perspectives.Instances.Environment (_pushFrame)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, getFilledRoles) as OG
 import Perspectives.Instances.ObjectGetters (binding, context, roleType_)
 import Perspectives.Instances.Values (writePerspectivesFile)
-import Perspectives.Logging (errorCompiler, errorCompiler)
+import Perspectives.Logging (errorCompiler)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Parsing.Messages (PerspectivesError)
 import Perspectives.Persistent (getPerspectRol)

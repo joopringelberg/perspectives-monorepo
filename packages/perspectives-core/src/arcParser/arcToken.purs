@@ -179,6 +179,8 @@ perspectDef = LanguageDef
 
       -- Queries
       , "filter"
+      , "selectFrom"
+      , "just"
 
       -- Expressions
       , "remove"
@@ -238,6 +240,9 @@ perspectDef = LanguageDef
       , "when"
       , "table"
       , "chat"
+      , "typeaheadfiller"
+      , "typeaheadform"
+      , "typeaheadfillfrom"
       , "messages"
       , "media"
       , "who"
@@ -247,6 +252,7 @@ perspectDef = LanguageDef
       , "detail"
       , "without"
       , "fillfrom"
+      , "fillproperty"
       , "fields"
       , "minLines"
       , "maxLines"

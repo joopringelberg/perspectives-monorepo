@@ -28,7 +28,7 @@ import Data.Array (length, mapWithIndex)
 import Data.Either (Either(..))
 import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (class Newtype)
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple(..))
@@ -78,12 +78,37 @@ data ScreenElementDef
   | MarkDownElementD MarkDownDef
   | ChatElementD ChatDef
   | WhenElementD WhenDef
+  | TypeAheadFillerElementD TypeAheadFillerDef
+  | TypeAheadFormElementD TypeAheadFormDef
 
 newtype RowDef = RowDef (Array ScreenElementDef)
 newtype ColumnDef = ColumnDef (Array ScreenElementDef)
 newtype WhenDef = WhenDef { condition :: QueryFunctionDescription, elements :: Array ScreenElementDef }
 newtype TableDef = TableDef { markdown :: Array MarkDownDef, widgetCommonFields :: WidgetCommonFieldsDef }
 newtype FormDef = FormDef { markdown :: Array MarkDownDef, widgetCommonFields :: WidgetCommonFieldsDef }
+
+-- | A type alias for a single filter value candidate entry returned from the FilterValue view.
+type FilterValueEntry = { filterValue :: String, roleId :: String }
+
+-- | A widget that shows a typeahead input allowing the user to search for a role instance
+-- | to fill the target role. Candidate entries are populated from the FilterValue CouchDB
+-- | view at context serialisation time, avoiding loading full role instances into memory.
+newtype TypeAheadFillerDef = TypeAheadFillerDef
+  { widgetCommonFields :: WidgetCommonFieldsDef
+  , candidates :: Array FilterValueEntry
+  }
+
+-- | A widget that shows a typeahead input for searching and selecting a role instance,
+-- | and then presents the selected instance in a form. Candidates are fetched from the
+-- | FilterValue CouchDB view. After selection the React component fetches the perspective
+-- | on demand via GetPerspective so that no full role-instance list is sent at build time.
+-- | `displayName` is the human-readable role-type label used for the aria-label.
+newtype TypeAheadFormDef = TypeAheadFormDef
+  { widgetCommonFields :: WidgetCommonFieldsDef
+  , displayName :: Maybe String
+  , candidates :: Array FilterValueEntry
+  }
+
 data MarkDownDef
   = MarkDownConstantDef { text :: String, condition :: Maybe QueryFunctionDescription, domain :: String }
   | MarkDownPerspectiveDef { widgetFields :: WidgetCommonFieldsDef, conditionProperty :: Maybe PropertyType }
@@ -115,12 +140,29 @@ type WidgetCommonFieldsDefWithoutPerspective f =
   -- `perspectiveId` replaces the RoleIdentification from the WidgetCommonFields.
   -- By construction, a screen can only be specified for Perspectives that have a Just value for RoleType.
   , perspectiveId :: PerspectiveId
+  -- The role type that is the object of this widget's perspective (ENR or CR).
+  -- For typeaheadfiller it is the role being filled; for typeaheadform it is the role
+  -- whose instances are searched and displayed.  Used to derive FilterValue candidates
+  -- without re-analysing the perspective's object QFD at runtime.
+  -- Nothing for older serialised DomeinFiles that pre-date this field.
+  , objectRoleType :: Maybe RoleType
   , fillFrom :: Maybe QueryFunctionDescription
+  , fillPropertyFrom :: Maybe PropertyValueFillers
+  -- The role type whose instances provide typeahead candidates when `typeaheadfillfrom` is
+  -- used in the master/detail context.  Nothing = ordinary fillfrom or no fill at all.
+  -- Nothing for older serialised DomeinFiles that pre-date this field.
+  , typeAheadFillFrom :: Maybe RoleType
+  -- Pre-fetched FilterValue candidates for typeaheadfillfrom.
+  -- Nothing for older serialised DomeinFiles; empty array means no candidates found.
+  , typeAheadFillFromCandidates :: Maybe (Array FilterValueEntry)
   -- The runtime  has a perspective serialisation.
   -- These three fields are not serialised runtime; they are used to
   -- create the restricted serialised perspective.
   , propertyRestrictions :: Maybe PropertyRestrictions
   , withoutProperties :: Maybe (Array PropertyType)
+  -- When set, the client should display properties in this order.
+  -- Populated from `with props` in a screen definition.
+  , requiredProperties :: Maybe (Array PropertyType)
   , roleVerbs :: Maybe (Array RoleVerb)
   , userRole :: RoleType
   -- Per-property display constraints (minLines, maxLines for textareas)
@@ -131,6 +173,7 @@ type WidgetCommonFieldsDefWithoutPerspective f =
 -- | The keys are the string representations of PropertyTypes.
 -- | The values are the PropertyVerbs that are EXCLUDED for that property.
 type PropertyRestrictions = EncodableMap PropertyType (Array PropertyVerb)
+type PropertyValueFillers = EncodableMap PropertyType QueryFunctionDescription
 
 -- For en- and decoding. This discharges us from implementing a lot of instances for
 -- SerialisedPerspective'.
@@ -193,6 +236,8 @@ derive instance Generic TableFormOrWhenDef _
 derive instance Generic What _
 derive instance Generic Who _
 derive instance Generic WhereTo _
+derive instance Generic TypeAheadFillerDef _
+derive instance Generic TypeAheadFormDef _
 
 -----------------------------------------------------------
 -- SHOW INSTANCES
@@ -246,6 +291,12 @@ instance Show Who where
   show = genericShow
 
 instance Show WhereTo where
+  show = genericShow
+
+instance Show TypeAheadFillerDef where
+  show = genericShow
+
+instance Show TypeAheadFormDef where
   show = genericShow
 
 -----------------------------------------------------------
@@ -302,6 +353,12 @@ instance Eq Who where
 instance Eq WhereTo where
   eq = genericEq
 
+instance Eq TypeAheadFillerDef where
+  eq = genericEq
+
+instance Eq TypeAheadFormDef where
+  eq = genericEq
+
 -----------------------------------------------------------
 -- WRITEFOREIGN INSTANCES
 -----------------------------------------------------------
@@ -317,6 +374,8 @@ instance writeForeignScreenElementDef :: WriteForeign ScreenElementDef where
   writeImpl (MarkDownElementD f) = write { elementType: "MarkDownElementD", element: f }
   writeImpl (ChatElementD c) = write { elementType: "ChatElementD", element: c }
   writeImpl (WhenElementD w) = write { elementType: "WhenElementD", element: w }
+  writeImpl (TypeAheadFillerElementD t) = write { elementType: "TypeAheadFillerElementD", element: t }
+  writeImpl (TypeAheadFormElementD t) = write { elementType: "TypeAheadFormElementD", element: t }
 
 instance writeForeignTabDef :: WriteForeign TabDef where
   writeImpl (TabDef widgetCommonFields) = write widgetCommonFields
@@ -372,6 +431,12 @@ instance WriteForeign What where
 instance WriteForeign WhereTo where
   writeImpl (WhereTo { markdown, contextRoles }) = write { tag: "WhereTo", markdown, contextRoles }
 
+instance WriteForeign TypeAheadFillerDef where
+  writeImpl (TypeAheadFillerDef { widgetCommonFields, candidates }) = write { tag: "TypeAheadFillerDef", widgetCommonFields, candidates }
+
+instance WriteForeign TypeAheadFormDef where
+  writeImpl (TypeAheadFormDef { widgetCommonFields, displayName, candidates }) = write { tag: "TypeAheadFormDef", widgetCommonFields, displayName: fromMaybe "" displayName, candidates }
+
 -----------------------------------------------------------
 -- READFOREIGN INSTANCES
 -----------------------------------------------------------
@@ -393,6 +458,8 @@ instance ReadForeign ScreenElementDef where
           "MarkDownExpressionDef" -> MarkDownElementD <<< MarkDownExpressionDef <$> ((read' subElement) :: F { textQuery :: QueryFunctionDescription, condition :: Maybe QueryFunctionDescription, text :: Maybe String })
       "ChatElementD" -> ChatElementD <$> ((read' element) :: F ChatDef)
       "WhenElementD" -> WhenElementD <$> ((read' element) :: F WhenDef)
+      "TypeAheadFillerElementD" -> TypeAheadFillerElementD <$> ((read' element) :: F TypeAheadFillerDef)
+      "TypeAheadFormElementD" -> TypeAheadFormElementD <$> ((read' element) :: F TypeAheadFormDef)
 
 instance ReadForeign ScreenKey where
   readImpl f = do
@@ -507,6 +574,20 @@ instance ReadForeign WhereTo where
     case tag of
       "WhereTo" -> pure $ WhereTo { markdown, contextRoles }
       _ -> fail (TypeMismatch "WhereTo" tag)
+
+instance ReadForeign TypeAheadFillerDef where
+  readImpl f = do
+    ({ tag, widgetCommonFields, candidates } :: { tag :: String, widgetCommonFields :: WidgetCommonFieldsDef, candidates :: Array FilterValueEntry }) <- read' f
+    case tag of
+      "TypeAheadFillerDef" -> pure $ TypeAheadFillerDef { widgetCommonFields, candidates }
+      _ -> fail (TypeMismatch "TypeAheadFillerDef" tag)
+
+instance ReadForeign TypeAheadFormDef where
+  readImpl f = do
+    ({ tag, widgetCommonFields, candidates } :: { tag :: String, widgetCommonFields :: WidgetCommonFieldsDef, candidates :: Array FilterValueEntry }) <- read' f
+    case tag of
+      "TypeAheadFormDef" -> pure $ TypeAheadFormDef { widgetCommonFields, displayName: Nothing, candidates }
+      _ -> fail (TypeMismatch "TypeAheadFormDef" tag)
 
 -------------------------------------------------------------------------------
 ---- SCREENKEY

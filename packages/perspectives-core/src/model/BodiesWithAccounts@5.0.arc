@@ -7,7 +7,7 @@
 --  * a fee due for Accountship;
 -- Because types in this model are only used as Aspects, we do not create an entry for it in StartContexts.
 
-domain model://perspectives.domains#BodiesWithAccounts
+domain model://perspectives.domains#BodiesWithAccounts@5.0
   use sys for model://perspectives.domains#System
   use bwa for model://perspectives.domains#BodiesWithAccounts
   use util for model://perspectives.domains#Utilities
@@ -15,7 +15,6 @@ domain model://perspectives.domains#BodiesWithAccounts
   case BodiesWithAccountsApp
     aspect sys:RootContext
     external
-      aspect sys:RootContext$External
 
   case Body
 

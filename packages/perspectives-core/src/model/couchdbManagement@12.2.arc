@@ -483,7 +483,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
               without props (IsPublic, Repositories$NameSpace)
             detail
 
-    context PublicRepositories = filter Repositories with IsPublic
+    context PublicRepositories = (filter Repositories with IsPublic) >> binding
 
     -- A Repositories instance comes complete with an (empty) Admin role.
     -- Moreover, as a side effect, both a read- and write database are created
@@ -554,7 +554,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
             bind context >> Admin to Admin in binding >> context
 
     context BespokeDatabases (relational) filledBy BespokeDatabase
-    context MyBespokeDatabases = filter BespokeDatabases with binding >> context >> Owner filledBy sys:Me
+    context MyBespokeDatabases = (filter BespokeDatabases with binding >> context >> Owner filledBy sys:Me) >> binding
     aspect thing sys:ContextWithNotification$Notifications
   -------------------------------------------------------------------------------
   ---- BESPOKEDATABASE
@@ -1178,10 +1178,10 @@ domain model://perspectives.domains#CouchdbManagement@12.2
       -- This state triggers UploadToRepository.
       state ProcessArc = AutoUpload 
               and (exists ArcSource) 
-              and ((callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime > LastChangeDT + 10 seconds) or not exists LastChangeDT)
+              and ((callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime > LastChangeDT + 1 seconds) or not exists LastChangeDT)
               and (IsTheOnlyVersion or (exists context >> BasedOnVersion))
         on entry
-          do for Author
+          do for Author after 500 Milliseconds
             -- If BasedOnVersion is not set, the PDR will generate new CUIDs.
             ArcFeedback = callExternal p:ParseAndCompileArc( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI ) returns String
             -- Even though we set LastChangeDT, state ProcessArc is not exited.

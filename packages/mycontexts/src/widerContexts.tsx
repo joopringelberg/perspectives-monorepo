@@ -53,24 +53,32 @@ export class WiderContexts extends PerspectivesComponent<WiderContextsProps, Wid
       return null
     }
     else {
-      return  (<div className="mb-2" ref={component.domEl}>
-                <h3 className="column-heading">{i18next.t("wider_context", {ns: 'mycontexts'})}</h3>
-                <ListGroup defaultActiveKey="#link1">
-                {
-                  this.state.widerContexts.map(({ externalRole, readableName }) => {
-                    const isPublic = isInPublicScheme(externalRole);
-                    return (
-                      <ListGroup.Item 
-                        key={externalRole} 
-                        action 
-                        onDoubleClick={(_ : any) => component.openContext(externalRole)}
-                        className={ isPublic ? "public-role" : "" }>
-                        {readableName}
-                      </ListGroup.Item>
-                    );
-                  })
-                }
-                </ListGroup>
+      return  (<div ref={component.domEl}>
+                <Accordion>
+                  <Accordion.Item eventKey="0">
+                    <Accordion.Header className="py-1">
+                      {i18next.t("wider_context", {ns: 'mycontexts'})}
+                    </Accordion.Header>
+                    <Accordion.Body className="p-0">
+                      <ListGroup variant="flush">
+                      {
+                        this.state.widerContexts.map(({ externalRole, readableName }) => {
+                          const isPublic = isInPublicScheme(externalRole);
+                          return (
+                            <ListGroup.Item 
+                              key={externalRole} 
+                              action 
+                              onDoubleClick={(_ : any) => component.openContext(externalRole)}
+                              className={ isPublic ? "public-role" : "" }>
+                              {readableName}
+                            </ListGroup.Item>
+                          );
+                        })
+                      }
+                      </ListGroup>
+                    </Accordion.Body>
+                  </Accordion.Item>
+                </Accordion>
               </div>)
     }
   }

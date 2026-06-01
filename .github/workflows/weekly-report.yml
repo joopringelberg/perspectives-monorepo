@@ -5,6 +5,9 @@ on:
     - cron: '0 15 * * 2'
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   create-report-issue:
     runs-on: ubuntu-latest
@@ -62,21 +65,39 @@ jobs:
               '',
               '---',
               '',
-              '@copilot Please analyze these merged PRs and create a management-level progress report covering:',
+              '@copilot Please analyze these merged PRs and create a **brief executive summary**.',
               '',
-              '1. **Key achievements** this week',
-              '2. **Features added** or **bugs fixed**',
-              '3. **Impact** on the project',
-              '4. **Notable patterns** or concerns',
-              '5. **Recommended focus areas** for next week',
+              '## Required Format:',
               '',
-              'Please provide a concise summary suitable for management review.',
-              'Try to keep the report under 2000 words.',
+              '### 🎯 Top Achievements (Max 5)',
+              '- [Maximally two sentences per achievement]',
+              '',
+              '### 🐛 Key Bugs Fixed (Max 3)',
+              '- [Maximally two sentences per bug]',
+              '',
+              '### 📊 Impact (2-3 sentences total)',
+              '[Brief impact summary]',
+              '',
+              '### ⚠️ Concerns (If any, max 3)',
+              '- [Maximally two sentences per concern]',
+              '',
+              '### 🎯 Focus for Next Week (Max 3)',
+              '- [Maximally two sentences per focus area]',
+              '',
+              '**Guidelines:**',
+              '- Skip minor/trivial changes',
+              '- Maximally two sentences per bullet point',
+              '- Prioritize business impact over technical details',
+              '- Keep total report under 500 words',
+              'Store the report in perspectives-monorepo/reports',
             ].join('\n');
             
-            await github.rest.issues.create({
+            const issue = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `📊 Weekly Progress Report - ${today}`,
               body: issueBody,
+              labels: ['report', 'weekly'],
             });
+            
+            console.log(`Created issue #${issue.data.number}`);

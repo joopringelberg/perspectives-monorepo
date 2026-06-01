@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider, Modal, OverlayTrigger, Tooltip, Button, Form } from 'react-bootstrap';
+import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider, Modal, OverlayTrigger, Tooltip, Button, Form, Nav } from 'react-bootstrap';
 
 // Add axe to the Window interface for TypeScript
 declare global {
@@ -42,7 +42,7 @@ interface WWWComponentState {
   isSmallScreen: boolean;
   title: string;
   doubleSection: Section;
-  whatOnly: boolean;
+  colWidths: [number, number, number];
   showNotifications: boolean;
   leftPanelContent: 'about' | 'me' | 'settings' | 'apps' | 'myroles' | false;
   activeSection: Section;
@@ -81,7 +81,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       { isSmallScreen: false
       , title: 'MyContexts'
       , doubleSection: 'what'
-      , whatOnly: false
+      , colWidths: [25, 50, 25]
       , showNotifications: false
       , leftPanelContent: false
       , activeSection: 'what' 
@@ -295,6 +295,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   componentWillUnmount() {
     window.removeEventListener('resize', this.checkScreenSize);
     document.removeEventListener('keydown', this.handleKeyboardNavigation);
+    window.removeEventListener('mousemove', this.onColumnDragMove);
+    window.removeEventListener('mouseup', this.onColumnDragEnd);
   }
 
   // Inspector helpers
@@ -362,26 +364,10 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   }
 
   checkScreenSize(){
-    function computeDoubleSection( )
-    {
-      if (window.innerWidth < 768)
-      {
-        return "none";
-      }
-      else if (component.state.isSmallScreen)
-      {
-        return "what";
-      }
-      else
-      {
-        return component.state.doubleSection;
-      }
-    }
     const component = this;
     const topNavbar = document.querySelector('#top-navbar');
     const bottomNavbar = document.querySelector('#bottom-navbar');
     const mobileTabs = document.querySelector('#mobile-tabs');
-    const whoHeader = document.querySelector('#whoHeader');
     // Includes the padding of the navbar.
     const topNavbarHeight = topNavbar ? (topNavbar as HTMLElement).offsetHeight : 40;
     const bottomNavbarHeight = bottomNavbar ? (bottomNavbar as HTMLElement).offsetHeight : 40;
@@ -394,9 +380,9 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     document.documentElement.style.setProperty('--bottom-navbar-height', `${bottomNavbarHeight}px`);
     document.documentElement.style.setProperty('--tabs-height', `${mobileTabsHeight}px`); 
     document.documentElement.style.setProperty('--mobile-content-height', `${mobileContentHeight}px`); 
-    document.documentElement.style.setProperty('--who-header-height', `${whoHeader ? (whoHeader as HTMLElement).offsetHeight : 0}px`);  
+    document.documentElement.style.setProperty('--who-header-height', '0px');
     this.setState(
-      { isSmallScreen: window.innerWidth < 768, doubleSection: computeDoubleSection() } );
+      { isSmallScreen: window.innerWidth < 768 } );
   }
 
   prepareMyContextsScreen( systemUserOverride?: RoleInstanceT )
@@ -703,7 +689,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               role="navigation"
               aria-label="Section navigation"
               >
-              <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
+              <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-body full-mobile-height px-2 scrollable-content'>
                 { this.state.screen?.whoWhatWhereScreen ?
                   <Who 
                     screenelements={ this.state.screen.whoWhatWhereScreen.who } 
@@ -713,14 +699,14 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   <p className='bg-light-subtle'>Ga ergens heen</p>
                 }
               </Tab>
-              <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
+              <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-body full-mobile-height px-2 scrollable-content'>
                 { this.state.screen?.whoWhatWhereScreen ? 
                     <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "what"}/>
                     : 
                   <div>Ga ergens heen.</div>
                 }
               </Tab>
-              <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
+              <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-body full-mobile-height px-2 scrollable-content'>
               { this.state.screen?.whoWhatWhereScreen ? 
                 <Where 
                   screenelements={ this.state.screen.whoWhatWhereScreen.whereto } 
@@ -748,11 +734,11 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   renderTopNavBar() {
     const component = this;
     return (<header> {/* Add header landmark */}
-      <Navbar bg="primary" expand="xs" className="py-0 ps-2" id="top-navbar" role="navigation" aria-label="Main navigation">
+      <Navbar bg="body" expand="xs" className="py-0 ps-2 border-bottom" id="top-navbar" role="navigation" aria-label="Main navigation">
       <NavDropdown 
         title={
           <>
-            <i className="bi bi-list text-light fs-2" aria-hidden="true"></i>
+            <i className="bi bi-list text-body fs-2" aria-hidden="true"></i>
             <span className="visually-hidden">{i18next.t("mainMenu", {ns: "mycontexts"})}</span>
           </>
         } 
@@ -765,22 +751,33 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'apps'})}>Apps</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'settings'})}>Settings</NavDropdown.Item>
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.setState( {leftPanelContent: 'myroles'} ) }>{ i18next.t("www_myroles", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
-        <DropdownDivider />
-        <NavDropdown.Item onClick={() => component.setState({showImportTransaction: true})}>{ i18next.t("www_importTransaction", {ns: 'mycontexts'}) }</NavDropdown.Item>
-        { component.state.actions && Object.keys( component.state.actions ).length > 0 ?
-          <>
-          <DropdownDivider />
-          { Object.keys( component.state.actions ).map( action => <NavDropdown.Item key={action} onClick={() => component.runAction(action)}>{ component.state.actions![action]}</NavDropdown.Item>) }
-          </>
-          : null }
-        { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
-        { component.state.openContext ? <NavDropdown.Item onClick={ () => component.copyContext( component.state.openContext! ) }>{ i18next.t("www_copycontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
-      <Navbar.Brand href="#home" className='me-auto text-light navbar-title'>
+        <NavDropdown
+          title={
+            <>
+              <span>{i18next.t("www_contextActions", {ns: "mycontexts"})}</span>
+            </>
+          }
+          className="hide-caret px-2 py-1"
+          id="context-actions-dropdown"
+        >
+          { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
+          { component.state.openContext ? <NavDropdown.Item onClick={ () => component.copyContext( component.state.openContext! ) }>{ i18next.t("www_copycontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
+          <NavDropdown.Item onClick={() => component.setState({showImportTransaction: true})}>{ i18next.t("www_importTransaction", {ns: 'mycontexts'}) }</NavDropdown.Item>
+          { component.state.actions && Object.keys( component.state.actions ).length > 0 ? 
+            <>
+              <NavDropdown.Divider />
+              {Object.keys( component.state.actions ).map( action => <NavDropdown.Item key={action} onClick={() => component.runAction(action)}>{ component.state.actions![action]}</NavDropdown.Item>)}
+            </>
+            :
+            null }
+        </NavDropdown>
+      <Navbar.Brand href="#home" className='me-auto text-body navbar-title'>
         {/* TODO If the available width is large enough, display both context- and role name. */}
         <FlippingTitle
           title={this.state.title} 
           userRoleType={this.state.screen ? this.state.screen.userRole : (this.state.openContextUserType ? deconstructLocalName(this.state.openContextUserType) : '')} 
+          showTitleClass="text-primary"
         />
 
       </Navbar.Brand>
@@ -974,14 +971,14 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
     return (
       <nav aria-label="History navigation"> {/* Add nav landmark */}
-        <Navbar id="bottom-navbar" fixed="bottom" bg="primary" expand="xs" className="justify-content-between py-0 px-3">
+        <Navbar id="bottom-navbar" fixed="bottom" bg="body" expand="xs" className="justify-content-between py-0 px-3 border-top">
           <Navbar.Brand 
             onClick={e => {window.history.back(); e.stopPropagation();}} 
             onKeyDown={(e) => {if (e.key === ' ' || e.key === 'Enter') window.history.back(); e.stopPropagation();}} 
             role="button" 
             tabIndex={0} 
             aria-label={i18next.t("bottom_goBack", {ns: 'mycontexts'})}>
-              <i className="bi bi-arrow-left text-light"></i>
+              <i className="bi bi-arrow-left text-body"></i>
           </Navbar.Brand>
           <Navbar.Brand 
             onClick={e => { component.setState({ showNotifications: true }); e.stopPropagation(); }} 
@@ -989,7 +986,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
             role="button" 
             tabIndex={0} 
             aria-label={i18next.t("bottom_showNotifications", {ns: 'mycontexts'})}>
-              <i className="bi bi-arrow-up text-light"></i>
+              <i className="bi bi-arrow-up text-body"></i>
           </Navbar.Brand>
           <Navbar.Brand 
             onClick={e => {window.history.forward(); e.stopPropagation();}} 
@@ -997,7 +994,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
             role="button" 
             tabIndex={0} 
             aria-label={i18next.t("bottom_goForward", {ns: 'mycontexts'})}>
-              <i className="bi bi-arrow-right text-light"></i>
+              <i className="bi bi-arrow-right text-body"></i>
           </Navbar.Brand>
         </Navbar>
       </nav>
@@ -1053,8 +1050,92 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           );
   }
 
+  // Draggable column divider state (not in React state to avoid re-renders during drag)
+  private _dragState: { divider: 0 | 1; startX: number; startWidths: [number, number, number] } | null = null;
+
+  private static readonly MIN_COLUMN_WIDTH = 10; // minimum % each column may occupy
+  private static readonly KEYBOARD_STEP = 5;     // % moved per arrow-key press
+
+  private computeDoubleSectionFromWidths(widths: [number, number, number]): Section {
+    const sections: Section[] = ['who', 'what', 'where'];
+    const max = Math.max(...widths);
+    const leading = sections[widths.indexOf(max)];
+    // Preserve the current doubleSection if it is tied for widest.
+    return leading !== this.state.doubleSection
+      && widths[sections.indexOf(this.state.doubleSection)] === max
+      ? this.state.doubleSection
+      : leading;
+  }
+
+  private cloneColWidths(): [number, number, number] {
+    return [...this.state.colWidths] as [number, number, number];
+  }
+
+  startColumnDrag = (divider: 0 | 1, e: React.MouseEvent) => {
+    e.preventDefault();
+    this._dragState = {
+      divider,
+      startX: e.clientX,
+      startWidths: [...this.state.colWidths] as [number, number, number],
+    };
+    window.addEventListener('mousemove', this.onColumnDragMove);
+    window.addEventListener('mouseup', this.onColumnDragEnd);
+  };
+
+  onColumnDragMove = (e: MouseEvent) => {
+    if (!this._dragState) return;
+    const { divider, startX, startWidths } = this._dragState;
+    const containerWidth = window.innerWidth;
+    const deltaPercent = ((e.clientX - startX) / containerWidth) * 100;
+    const MIN = WWWComponent.MIN_COLUMN_WIDTH;
+    const newWidths: [number, number, number] = [...startWidths] as [number, number, number];
+
+    if (divider === 0) {
+      const sum = startWidths[0] + startWidths[1];
+      const left = Math.min(Math.max(startWidths[0] + deltaPercent, MIN), sum - MIN);
+      newWidths[0] = left;
+      newWidths[1] = sum - left;
+    } else {
+      const sum = startWidths[1] + startWidths[2];
+      const mid = Math.min(Math.max(startWidths[1] + deltaPercent, MIN), sum - MIN);
+      newWidths[1] = mid;
+      newWidths[2] = sum - mid;
+    }
+
+    this.setState({ colWidths: newWidths, doubleSection: this.computeDoubleSectionFromWidths(newWidths) });
+  };
+
+  onColumnDragEnd = () => {
+    this._dragState = null;
+    window.removeEventListener('mousemove', this.onColumnDragMove);
+    window.removeEventListener('mouseup', this.onColumnDragEnd);
+  };
+
+  adjustColumnWithKeyboard = (divider: 0 | 1, e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const delta = e.key === 'ArrowRight' ? WWWComponent.KEYBOARD_STEP : -WWWComponent.KEYBOARD_STEP;
+    const MIN = WWWComponent.MIN_COLUMN_WIDTH;
+    const newWidths = this.cloneColWidths();
+
+    if (divider === 0) {
+      const sum = newWidths[0] + newWidths[1];
+      const left = Math.min(Math.max(newWidths[0] + delta, MIN), sum - MIN);
+      newWidths[0] = left;
+      newWidths[1] = sum - left;
+    } else {
+      const sum = newWidths[1] + newWidths[2];
+      const mid = Math.min(Math.max(newWidths[1] + delta, MIN), sum - MIN);
+      newWidths[1] = mid;
+      newWidths[2] = sum - mid;
+    }
+
+    this.setState({ colWidths: newWidths, doubleSection: this.computeDoubleSectionFromWidths(newWidths) });
+  };
+
   renderDesktop() {
     const component = this;
+    const [w0, w1, w2] = this.state.colWidths;
     return (
       <PSContext.Provider value={
         { contextinstance: deconstructContext( this.state.openContext!) as ContextInstanceT
@@ -1064,65 +1145,69 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           {component.renderTopNavBar()}
           <main id="main-content">
             <div tabIndex={0} className="content-section-area">
-              <Row className='mx-0 px-0'>
-                <Col 
-                  className='bg-primary full-height animated-column' 
-                  xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "who" ? 6 : 3 } 
-                  style={{'--bs-bg-opacity': '.1'} as React.CSSProperties}>
-                  <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}>
-                    <h2 className='text-center text-dark column-heading' aria-keyshortcuts="alt+1" tabIndex={0}>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h2>
-                  </Row>
-                  <Row className='px-1 full-www-content-height scrollable-content px-0'>
-                    { this.state.screen?.whoWhatWhereScreen ?
-                      <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } 
-                        showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "who"}
-                      />
-                      :
-                      <p className='bg-light-subtle'>Ga ergens heen</p>
-                    }
-                  </Row>
-                </Col>
-                <Col 
-                  className='bg-primary animated-column' 
-                  xs={ this.state.whatOnly ? 10 : this.state.doubleSection === "what" ? 6 : 3} 
-                  style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
-                  <Row onClick={() => component.setState( {'doubleSection': "what"} )}
-                    onDoubleClick={() => component.setState( {'whatOnly': !component.state.whatOnly} )}
-                  >
-                    <h2 className='text-center column-heading' aria-keyshortcuts="alt+2" tabIndex={0}>{ i18next.t("www_what", {ns: 'mycontexts'}) }</h2>
-                  </Row>
-                  {/* In the desktop, MSComponent will render a row with px-1 */}
-                  {/* Here we render either an arbitrary screen: {tag: "FreeFormScreen", elements: MainScreenElements}, or all TableFormDef elements in the {tag: "TableForms", elements: TableFormDef[]} variant of What. */}
-                  <Row className="full-www-content-height scrollable-content px-0">
+              <div className='www-columns full-height mx-0 px-0'>
+                {/* WHO column */}
+                <div
+                  className='bg-body full-height scrollable-content'
+                  style={{ width: `${w0}%`, minWidth: 0 }}
+                >
+                  { this.state.screen?.whoWhatWhereScreen ?
+                    <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } 
+                      showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "who"}
+                    />
+                    :
+                    <p className='bg-light-subtle'>Ga ergens heen</p>
+                  }
+                </div>
+                {/* Divider 0: who | what */}
+                <div
+                  className='www-column-divider'
+                  onMouseDown={(e) => component.startColumnDrag(0, e)}
+                  onKeyDown={(e) => component.adjustColumnWithKeyboard(0, e)}
+                  role="separator"
+                  tabIndex={0}
+                  aria-orientation="vertical"
+                  aria-label="Resize who and what columns"
+                />
+                {/* WHAT column */}
+                <div
+                  className='bg-body full-height scrollable-content'
+                  style={{ width: `${w1}%`, minWidth: 0 }}
+                >
                   {this.state.screen?.whoWhatWhereScreen ? 
-                        <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "what"}/>
-                        : 
-                      <div>Ga ergens heen.</div>
-                      }
-                  </Row>
-                </Col>
-                <Col 
-                  className='bg-primary full-height animated-column'
-                  xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "where" ? 6 : 3} 
-                  style={{'--bs-bg-opacity': '.3'} as React.CSSProperties}>
-                  <Row onClick={() => component.setState( {'doubleSection': "where"} )}>
-                    <h2 className='text-center column-heading' aria-keyshortcuts="alt+3" tabIndex={0}>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h2>
-                  </Row>  
-                  <Row className="px-1 full-www-content-height scrollable-content px-0" style={{overflow: 'auto'}}>
+                    <What screenelements={ this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "what"}/>
+                    : 
+                    <div>Ga ergens heen.</div>
+                  }
+                </div>
+                {/* Divider 1: what | where */}
+                <div
+                  className='www-column-divider'
+                  onMouseDown={(e) => component.startColumnDrag(1, e)}
+                  onKeyDown={(e) => component.adjustColumnWithKeyboard(1, e)}
+                  role="separator"
+                  tabIndex={0}
+                  aria-orientation="vertical"
+                  aria-label="Resize what and where columns"
+                />
+                {/* WHERE column */}
+                <div
+                  className='bg-body full-height scrollable-content'
+                  style={{ width: `${w2}%`, minWidth: 0 }}
+                >
                   { this.state.screen?.whoWhatWhereScreen ? 
                     <Where 
-                      screenelements={  this.state.screen.whoWhatWhereScreen.whereto } 
+                      screenelements={ this.state.screen.whoWhatWhereScreen.whereto } 
                       showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "where"} 
                       systemUser={component.state.systemUser}
                       systemIdentifier={component.state.systemIdentifier}
                       openContext={component.state.openContext}
                     />
                     : 
-                      <div>Ga ergens heen.</div>
-                    }
-                  </Row>
-                </Col>
-              </Row>
+                    <div>Ga ergens heen.</div>
+                  }
+                </div>
+              </div>
             </div>
           </main>
           { component.renderBottomNavBar() }
@@ -1144,19 +1229,6 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         e.preventDefault();
         return;
       }
-    }
-    if (e.altKey && e.key === '¡') {
-      // Focus Who section
-      this.setState({'doubleSection': "who"});
-      e.preventDefault();
-    } else if (e.altKey && e.key === '€') {
-      // Focus What section
-      this.setState({'doubleSection': "what"});
-      e.preventDefault();
-    } else if (e.altKey && e.key === '£') {
-      // Focus Where section
-      this.setState({'doubleSection': "where"});
-      e.preventDefault();
     }
   };
 

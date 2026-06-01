@@ -27,7 +27,7 @@ export class About extends PerspectivesComponent<object, object> {
             className="accessible-form-control" 
             type="text" 
             readOnly 
-            value={__BUILD__}
+            value={__BUILD_ID__}
           />
         </Form.Group>
         <Form.Group className="mb-3">
@@ -67,11 +67,28 @@ const checkForUpdates = () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistration().then(registration => {
       if (registration) {
-        registration.update();
+        registration.update()
+          .then(() => {
+            UserMessagingPromise.then(um => {
+              um.addMessageForEndUser({
+                title: i18next.t("update_checking_title", {ns: 'mycontexts'}),
+                message: i18next.t("update_checking_message", {ns: 'mycontexts'})
+              });
+            });
+          })
+          .catch((err: Error) => {
+            UserMessagingPromise.then(um => {
+              um.addMessageForEndUser({
+                title: i18next.t("update_checking_title", {ns: 'mycontexts'}),
+                message: `Update check failed: ${err.message}`
+              });
+            });
+          });
+      } else {
         UserMessagingPromise.then(um => {
           um.addMessageForEndUser({
             title: i18next.t("update_checking_title", {ns: 'mycontexts'}),
-            message: i18next.t("update_checking_message", {ns: 'mycontexts'})
+            message: "No service worker registration found."
           });
         });
       }

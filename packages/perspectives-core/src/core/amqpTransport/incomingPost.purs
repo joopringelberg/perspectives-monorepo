@@ -22,6 +22,7 @@
 module Perspectives.AMQP.IncomingPost
   ( incomingPost
   , retrieveBrokerService
+  , pendingIncomingPostMessage
   ) where
 
 import Control.Coroutine (Consumer, Producer, await, runProcess, ($$))
@@ -32,11 +33,12 @@ import Data.Either (Either(..))
 import Data.List.NonEmpty (head)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Data.String (take)
 import Data.Traversable (for, traverse)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Foreign (ForeignError(..), MultipleErrors)
-import Perspectives.AMQP.Stomp (StructuredMessage, acknowledge, messageProducer, sendToTopic)
+import Perspectives.AMQP.Stomp (StructuredMessage, acknowledge, createStompClient, markHandled, messageProducer, sendToTopic)
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.CoreTypes (BrokerService, MonadPerspectives, MonadPerspectivesQuery, (##>))
 import Perspectives.Identifiers (buitenRol)
@@ -45,7 +47,7 @@ import Perspectives.ModelDependencies (accountHolder, accountHolderName, account
 import Perspectives.Names (getMySystem, lookupIndexedContext)
 import Perspectives.Persistence.API (cleanupDeletedDocs, deleteDocument, documentsInDatabase, excludeDocs, getDocument_)
 import Perspectives.Persistent (postDatabaseName)
-import Perspectives.PerspectivesState (getBrokerService, getPerspectivesUser, getStompClientFactory, pushMessage, removeMessage, setBrokerService, setStompClient, stompClient, transactionLevel)
+import Perspectives.PerspectivesState (getBrokerService, getCurrentLanguage, getPerspectivesUser, getStompClientFactory, pushMessage, removeMessage, setBrokerService, setStompClient, stompClient, transactionLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyFunction, getRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
@@ -54,7 +56,7 @@ import Perspectives.RunMonadPerspectivesTransaction (detectPublicStateChanges, r
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer)
-import Prelude (Unit, bind, pure, show, unit, void, ($), (>=>), (>>=), discard, (*>), (<>), (>>>), map, (<$>), (<<<))
+import Prelude (Unit, bind, pure, show, unit, void, ($), (*>), (<$>), (<>), (==), (>), (>>=), (<<<), (>=>), (>>>), discard, map)
 import Simple.JSON (writeJSON)
 
 incomingPost :: MonadPerspectives Unit
@@ -92,13 +94,14 @@ incomingPost = do
           ForeignError "connection" -> lift $ setConnectionState true *> sendOutgoingPost
           TypeMismatch "receipt" docId -> void $ lift $ deleteDocument postDB docId Nothing
           _ -> log ("Perspectives.AMQP.IncomingPost.transactionConsumer: " <> show me)
-        Right { body, ack } -> do
+        Right { body, ack, markHandled: markHandled_, pendingCount } -> do
           -- NOTE. Transaction execution seems to be so slow, that the connection can be lOst before we acknowledge.
           -- In that case, the broker resends the message.
           -- That is why we acknowledge first.
           -- The risk is that the PDR may not handle the message fully and then it is lost.
           lift $ acknowledge ack
           lift do
+            showPendingIncomingTransactions pendingCount
             padding <- transactionLevel
             log $ padding <> "Executing incoming post transaction"
             runMonadPerspectivesTransaction'
@@ -106,6 +109,8 @@ incomingPost = do
               (ENR $ EnumeratedRoleType sysUser)
               (executeTransaction body)
             detectPublicStateChanges
+            remainingCount <- markHandled markHandled_
+            showPendingIncomingTransactions remainingCount
 
   setConnectionState :: Boolean -> MonadPerspectives Unit
   setConnectionState c = do
@@ -169,3 +174,20 @@ constructBrokerServiceForUser accountHolder = do
     , vhost
     , url
     }
+
+showPendingIncomingTransactions :: Int -> MonadPerspectives Unit
+showPendingIncomingTransactions pendingCount =
+  if pendingCount > 0 then do
+    language <- getCurrentLanguage
+    pushMessage (pendingIncomingPostMessage language pendingCount)
+  else
+    removeMessage "pending incoming transactions"
+
+pendingIncomingPostMessage :: String -> Int -> String
+pendingIncomingPostMessage language pendingCount =
+  if take 2 language == "nl" then
+    show pendingCount <> " nog niet verwerkte gegevensberichten"
+  else if pendingCount == 1 then
+    "1 unprocessed data message"
+  else
+    show pendingCount <> " unprocessed data messages"

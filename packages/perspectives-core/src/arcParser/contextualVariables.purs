@@ -37,7 +37,7 @@ import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetABinding(..), LetStep(..), Statements(..), endOfAssignment, startOfAssignment)
 import Perspectives.Query.QueryTypes (RoleInContext(..))
 import Perspectives.Representation.ADT (ADT(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType)
+import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..), roletype2string)
 import Prelude (($), (<$>), (<>), (==), (||))
 
 --------------------------------------------------------------------------
@@ -167,6 +167,11 @@ makeTypeTimeOnlyRoleStep varName (SUM alternatives) pos = case head alternatives
   Just r -> makeTypeTimeOnlyRoleStep varName r pos
 makeTypeTimeOnlyRoleStep varName (PROD alternatives) pos = case head alternatives of
   Just r -> makeTypeTimeOnlyRoleStep varName r pos
+
+makeTypeTimeOnlyRoleTypeStep :: VarName -> RoleType -> ContextType -> ArcPosition -> VarBinding
+makeTypeTimeOnlyRoleTypeStep varName roleType ctxt pos = case roleType of
+  ENR rt -> VarBinding varName (Simple $ TypeTimeOnlyEnumeratedRole pos (unwrap ctxt) (roletype2string roleType))
+  CR rt -> VarBinding varName (Simple $ TypeTimeOnlyCalculatedRole pos (roletype2string roleType))
 
 -- | Produces a step that takes the context of its origin.
 makeContextStep :: VarName -> ArcPosition -> VarBinding
