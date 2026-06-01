@@ -483,7 +483,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
               without props (IsPublic, Repositories$NameSpace)
             detail
 
-    context PublicRepositories = filter Repositories with IsPublic
+    context PublicRepositories = (filter Repositories with IsPublic) >> binding
 
     -- A Repositories instance comes complete with an (empty) Admin role.
     -- Moreover, as a side effect, both a read- and write database are created
@@ -554,7 +554,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
             bind context >> Admin to Admin in binding >> context
 
     context BespokeDatabases (relational) filledBy BespokeDatabase
-    context MyBespokeDatabases = filter BespokeDatabases with binding >> context >> Owner filledBy sys:Me
+    context MyBespokeDatabases = (filter BespokeDatabases with binding >> context >> Owner filledBy sys:Me) >> binding
     aspect thing sys:ContextWithNotification$Notifications
   -------------------------------------------------------------------------------
   ---- BESPOKEDATABASE
