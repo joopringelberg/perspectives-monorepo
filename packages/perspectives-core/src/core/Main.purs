@@ -31,7 +31,7 @@ import Data.DateTime.Instant (Instant, instant, unInstant)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Function.Uncurried (Fn2, runFn2)
-import Data.Map (insert)
+import Data.Map (delete, insert)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Nullable (Nullable, toMaybe, toNullable)
@@ -320,10 +320,12 @@ runPDR_ usr rawPouchdbUser options callback = do
         f <- forkAff
           ( do
               delay (fromDuration startMoment)
+              unregisterTransactionFiber instanceId stateId state
               _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
               pure unit
           )
         registerTransactionFiber f instanceId stateId state
+        forkTimedTransactions repeatingTransactionAVar state
       (TransactionWithTiming t@{ instanceId, stateId, startMoment, endMoment }) -> do
         f <- forkAff
           ( do
@@ -406,6 +408,11 @@ runPDR_ usr rawPouchdbUser options callback = do
   registerTransactionFiber f instanceId stateId stateAVar = do
     s@{ transactionFibers } <- take stateAVar
     put s { transactionFibers = insert (Tuple instanceId stateId) f transactionFibers } stateAVar
+
+  unregisterTransactionFiber :: String -> StateIdentifier -> AVar PerspectivesState -> Aff Unit
+  unregisterTransactionFiber instanceId stateId stateAVar = do
+    s@{ transactionFibers } <- take stateAVar
+    put s { transactionFibers = delete (Tuple instanceId stateId) transactionFibers } stateAVar
 
 forkDatabasePersistence :: AVar PerspectivesState -> Aff Unit
 forkDatabasePersistence state = do
