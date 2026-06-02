@@ -96,7 +96,7 @@ import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUser, serialisedTableFormForContextAndUser)
 import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableName, perspectiveForContextAndUser, perspectivesForContextAndUser, settingsPerspective)
-import Perspectives.Types.ObjectGetters (findPerspective, getAction, getContextAction, getContextActionFromUnqualifiedName, isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
+import Perspectives.Types.ObjectGetters (findPerspective, getAction, getActionFromUnqualifiedName, getContextAction, getContextActionFromUnqualifiedName, isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
 import Prelude (Unit, bind, discard, eq, identity, map, negate, pure, show, unit, void, ($), (&&), (/=), (<$>), (<<<), (<>), (==), (>=>), (>>=))
 import Simple.JSON (read, readJSON_, unsafeStringify, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
@@ -887,7 +887,12 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
           Left err -> sendResponse (Error corrId ("Incorrectly formed description of Action on applying an action in context instance '" <> object <> "' and object role instance '" <> predicate <> "'. Errors: " <> show err)) setter
           Right ({ perspectiveId, actionName } :: { perspectiveId :: String, actionName :: String }) -> do
             -- Find the action from the authoringRole, the perspective id, the Action name.
-            maction <- (map $ getAction actionName) <$> (findPerspective authoringRole (\(Perspective { id }) -> pure $ id `eq` perspectiveId))
+            maction <- map
+              ( \perspective ->
+                  getAction actionName perspective
+                    <|> getActionFromUnqualifiedName actionName perspective
+              )
+              <$> findPerspective authoringRole (\(Perspective { id }) -> pure $ id `eq` perspectiveId)
             mauthoringRoleInstance <- (ContextInstance object) ##> getMeInRoleAndContext authoringRole
             case mauthoringRoleInstance, maction of
               Just author, Just (Just (ACTION.Action { qfd: action })) -> do
