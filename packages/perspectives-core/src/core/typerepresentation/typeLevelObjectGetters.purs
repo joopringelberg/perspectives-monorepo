@@ -905,6 +905,31 @@ getAction actionName (Perspective { actions }) = LIST.foldl
   Nothing
   (Map.values $ unwrap actions)
 
+getActionFromUnqualifiedName :: ActionName -> Perspective -> Maybe Action
+getActionFromUnqualifiedName actionName (Perspective { actions }) = LIST.foldl
+  ( \(maction :: Maybe Action) (stateDepActions :: OBJ.Object Action) -> case maction of
+      -- Found already
+      Just action -> Just action
+      -- Compare each key (a fully qualified action name) with the unqualified action name.
+      -- If the former ends with the latter, we have a match.
+      -- Use that key to lookup the action.
+      Nothing ->
+        foldl
+          ( \(foundAction :: Maybe Action) act@(Action { readable }) ->
+              if isJust foundAction then foundAction
+              -- Check whether the fully qualified name ends with the unqualified name.
+              else case typeUri2LocalName readable of
+                Nothing -> Nothing
+                Just localName ->
+                  if localName == actionName then Just act
+                  else Nothing
+          )
+          Nothing
+          (values stateDepActions)
+  )
+  Nothing
+  (Map.values $ unwrap actions)
+
 -- | Note that we assume action names are unique over states for the perspective a user role has on an object.
 getContextAction :: ActionName -> RoleType -> MonadPerspectives (Maybe Action)
 getContextAction actionName userRoleType = do
@@ -952,4 +977,3 @@ roleGroundState (EnumeratedRoleType id) = StateIdentifier id
 
 contextGroundState :: ContextType -> StateIdentifier
 contextGroundState (ContextType id) = StateIdentifier id
-
