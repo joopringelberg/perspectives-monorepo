@@ -58,14 +58,24 @@ module Test.Layer3 where
 
 import Prelude
 
+import Control.Monad.Cont (lift)
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
-import Perspectives.ModelDependencies (sysMe)
-import Perspectives.Names (lookupIndexedRole)
+import Effect.Aff (Milliseconds(..))
+import Effect.Class.Console (logShow)
+import Perspectives.Assignment.RunAction (runContextAction)
+import Perspectives.CoreTypes ((##>))
+import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances)
+import Perspectives.ModelDependencies (outgoingInvitationsType, sysMe, sysUser)
+import Perspectives.Names (getMySystem, lookupIndexedRole)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (tryGetPerspectRol)
 import Perspectives.PerspectivesState (defaultRuntimeOptions)
-import Test.PDRInstance (connectPDRs, noBus, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
+import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
+import Perspectives.Sidecar.ToStable (toStable)
+import Test.PDRInstance (connectPDRs, noBus, pollUntil, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
 import Test.Unit (suite, test, testOnly)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -116,3 +126,32 @@ main = runTest do
                 Just me1InB, Just me2InA -> assert "Both PDRs should have each others' Person instance" true
                 _, _ -> assert "Both PDRs should have each others' Person instance" false
             _, _ -> assert "Both PDRs should have a `me` instance" false
+
+    test "start a PDR instance and create an invitation" do
+      let user = testPouchdbUser "alice"
+      -- -----------------------------------------------------------------------
+      -- PDR1: Step 1 — create the Invitation via context action
+      -- -----------------------------------------------------------------------
+      withPDR user defaultRuntimeOptions noBus \pdr -> do
+        runInPDR pdr $
+          runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+            ( do
+                mySystem1 <- lift $ getMySystem
+                runContextAction sysUser "CreateInvitation" mySystem1
+            )
+        -- -----------------------------------------------------------------------
+        -- PDR1: Step 2 — obtain the new Invitation context instance
+        -- Poll until the state-entry bot has created and stored it.
+        -- -----------------------------------------------------------------------
+        void $ pollUntil 100 (Milliseconds 100.0)
+          "Invitation context to appear in PerspectivesSystem$OutgoingInvitations"
+          ( runInPDR pdr
+              ( do
+                  mySystem1 <- getMySystem
+                  (ContextInstance mySystem1) ##>
+                    ( getEnumeratedRoleInstances (EnumeratedRoleType outgoingInvitationsType)
+                        >=> binding
+                        >=> context
+                    )
+              )
+          )

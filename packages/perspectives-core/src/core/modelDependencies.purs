@@ -374,3 +374,20 @@ actualSharedFileServer = "model://perspectives.domains#xjrfkxrzyt$p6irsi0fot$ee6
 fileShareCredentials :: String
 fileShareCredentials = "model://perspectives.domains#xjrfkxrzyt$z685qvaro6$r7vvr6u68p"
 
+------------------------------------------------------------------------------------
+-- USED IN TESTS
+------------------------------------------------------------------------------------
+outgoingInvitationsType :: String
+outgoingInvitationsType = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$mgp2b54oym"
+
+inviterType :: String
+inviterType = "model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$h65m7d31n8"
+
+inviteeType :: String
+inviteeType = "model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$qzucadvv8p"
+
+invitationMessageProp :: String
+invitationMessageProp = "model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$External$rr9p8rvjp8"
+
+serialisedInvitationProp :: String
+serialisedInvitationProp = "model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$External$t8txixzv0y"

@@ -76,7 +76,7 @@ import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getProperty)
-import Perspectives.ModelDependencies (connectedToAMQPBroker, sysMe, sysUser)
+import Perspectives.ModelDependencies (connectedToAMQPBroker, sysMe, sysUser, outgoingInvitationsType, invitationMessageProp, inviterType, inviteeType, serialisedInvitationProp)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem, lookupIndexedRole)
 import Perspectives.Persistence.API (PouchdbUser)
@@ -313,23 +313,6 @@ withTwoPDRs user1 opts1 user2 opts2 f = do
 -- CONNECT TWO PDR INSTANCES VIA INVITATION
 -----------------------------------------------------------
 
--- | Role and property type identifiers for the Invitation mechanism.
--- | Human-readable form; the PDR translates these to stable CUIDs via `toStable`.
-outgoingInvitationsType :: String
-outgoingInvitationsType = "model://perspectives.domains#System$PerspectivesSystem$OutgoingInvitations"
-
-inviterType :: String
-inviterType = "model://perspectives.domains#System$Invitation$Inviter"
-
-inviteeType :: String
-inviteeType = "model://perspectives.domains#System$Invitation$Invitee"
-
-invitationMessageProp :: String
-invitationMessageProp = "model://perspectives.domains#System$Invitation$External$Message"
-
-serialisedInvitationProp :: String
-serialisedInvitationProp = "model://perspectives.domains#System$Invitation$External$SerialisedInvitation"
-
 -- | Connect two PDR instances using the Invitation mechanism from
 -- | `model://perspectives.domains#System`.
 -- |
@@ -396,6 +379,13 @@ connectPDRs pdr1 pdr2 = do
         (EnumeratedPropertyType invitationMessageProp)
         Nothing
         [ Value "Hello there" ]
+
+  messageText <- pollUntil 30 (Milliseconds 200.0)
+    "Message property to be set"
+    ( do
+        runInPDR pdr1
+          (invExternal ##> getProperty (EnumeratedPropertyType invitationMessageProp))
+    )
 
   -- -----------------------------------------------------------------------
   -- PDR1: Step 4 — run the Inviter's CreateInvitation object action
