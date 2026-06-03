@@ -5,14 +5,19 @@
 // FileReader and File are not available in Node.js; we use Buffer instead.
 
 export function bytesToBase64DataUrlImpl(bytes) {
-  return Promise.resolve(
-    'data:application/octet-stream;base64,' + Buffer.from(bytes).toString('base64')
-  );
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return Promise.resolve('data:application/octet-stream;base64,' + btoa(binary));
 }
 
 export function dataUrlToBytesImpl(dataUrl) {
-  // Data URLs have the form: data:<mime>;base64,<data>
-  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
-  const buf = Buffer.from(base64, 'base64');
-  return Promise.resolve(new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength));
+  const base64 = dataUrl.split(',')[1];
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return Promise.resolve(bytes);
 }
