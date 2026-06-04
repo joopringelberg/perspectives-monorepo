@@ -24,25 +24,26 @@ module Perspectives.Assignment.RunAction where
 
 import Prelude
 
+import Control.Alt ((<|>))
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Trans.Class (lift)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Effect.Exception (error)
+import Partial.Unsafe (unsafePartial)
 import Perspectives.CompileAssignment (compileAssignment)
 import Perspectives.CompileRoleAssignment (compileAssignmentFromRole)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (##>))
 import Perspectives.Identifiers (isTypeUri)
 import Perspectives.Instances.Me (getMeInRoleAndContext)
+import Perspectives.Instances.ObjectGetters (roleType_)
 import Perspectives.PerspectivesState (addBinding, pushFrame, restoreFrame)
 import Perspectives.Representation.Action (Action(..)) as ACTION
-import Perspectives.Instances.ObjectGetters (roleType_)
 import Perspectives.Representation.Class.Role (getRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.TypeIdentifiers (RoleType(..))
-import Perspectives.Types.ObjectGetters (findPerspective, findPerspectiveForObject, getAction, getContextAction, getContextActionFromUnqualifiedName)
-import Partial.Unsafe (unsafePartial)
+import Perspectives.Types.ObjectGetters (findPerspective, findPerspectiveForObject, getAction, getActionFromUnqualifiedName, getContextAction, getContextActionFromUnqualifiedName)
 
 -- | Execute a context action on behalf of a user role type in a context instance.
 -- | Parameters:
@@ -81,7 +82,16 @@ runContextAction user actionName context = do
 -- | Throws an error when the action or the authoring role instance cannot be found.
 runAction :: RoleType -> String -> String -> String -> String -> MonadPerspectivesTransaction Unit
 runAction authoringRole perspectiveId actionName context object = do
-  maction <- lift $ (map $ getAction actionName) <$> (findPerspective authoringRole (\(Perspective { id }) -> pure $ id == perspectiveId))
+  -- maction <- lift $ (map $ getAction actionName) <$> (findPerspective authoringRole (\(Perspective { id }) -> pure $ id == perspectiveId))
+  maction <-
+    lift $
+      map
+        ( \perspective ->
+            getAction actionName perspective
+              <|> getActionFromUnqualifiedName actionName perspective
+        )
+        <$> findPerspective authoringRole (\(Perspective { id }) -> pure $ id `eq` perspectiveId)
+
   mauthoringRoleInstance <- lift ((ContextInstance context) ##> getMeInRoleAndContext authoringRole)
   case mauthoringRoleInstance, maction of
     Just author, Just (Just (ACTION.Action { qfd: action })) -> do
@@ -112,7 +122,9 @@ runActionForObject :: RoleType -> String -> String -> String -> MonadPerspective
 runActionForObject authoringRole actionName context object = do
   objectRoleType <- lift $ roleType_ (RoleInstance object)
   mperspective <- lift $ unsafePartial $ findPerspectiveForObject authoringRole (ENR objectRoleType)
-  maction <- pure $ mperspective >>= getAction actionName
+  -- maction <- pure $ mperspective >>= getAction actionName
+  maction <- pure $ mperspective >>= \perspective ->
+    (getAction actionName perspective <|> getActionFromUnqualifiedName actionName perspective)
   mauthoringRoleInstance <- lift ((ContextInstance context) ##> getMeInRoleAndContext authoringRole)
   case mauthoringRoleInstance, maction of
     Just author, Just (ACTION.Action { qfd: action }) -> do
