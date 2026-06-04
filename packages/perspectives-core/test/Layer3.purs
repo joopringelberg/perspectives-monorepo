@@ -62,19 +62,17 @@ import Control.Monad.Cont (lift)
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Aff (Milliseconds(..))
-import Effect.Class.Console (logShow)
 import Perspectives.Assignment.RunAction (runContextAction)
-import Perspectives.CoreTypes ((##>))
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##>))
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances)
 import Perspectives.ModelDependencies (outgoingInvitationsType, sysMe, sysUser)
 import Perspectives.Names (getMySystem, lookupIndexedRole)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (tryGetPerspectRol)
-import Perspectives.PerspectivesState (defaultRuntimeOptions)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
-import Perspectives.Sidecar.ToStable (toStable)
 import Test.PDRInstance (connectPDRs, noBus, pollUntil, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
 import Test.Unit (suite, test, testOnly)
 import Test.Unit.Assert (assert)
@@ -114,6 +112,18 @@ main = runTest do
         (testPouchdbUser "bob")
         defaultRuntimeOptions
         \pdrA pdrB -> do
+          runInPDR pdrA
+            ( do
+                setTopicLogLevel STATE Trace
+                setTopicLogLevel BROKER Trace
+                setTopicLogLevel MODEL Trace
+            )
+          runInPDR pdrB
+            ( do
+                setTopicLogLevel STATE Trace
+                setTopicLogLevel BROKER Trace
+                setTopicLogLevel MODEL Trace
+            )
           connectPDRs pdrA pdrB
           -- Two Persons instances.
           mMe1 <- runInPDR pdrA $ lookupIndexedRole sysMe
