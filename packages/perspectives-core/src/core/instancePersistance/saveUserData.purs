@@ -98,7 +98,7 @@ import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (allUnlinkedRoles, isUnlinked_)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..), RoleBindingDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Prelude (Unit, bind, discard, not, pure, unit, void, ($), (&&), (<$>), (<<<), (<>), (==), (>>=), (||))
+import Prelude (Unit, bind, discard, not, pure, unit, void, ($), (&&), (<$>), (<<<), (<>), (==), (>>=), (||), (/=))
 import Simple.JSON (writeJSON)
 
 synchronise :: Boolean
@@ -626,9 +626,8 @@ handleNewPeer roleInstance = (lift $ try $ getPerspectRol roleInstance) >>=
     \(PerspectRol { context, pspType }) -> do
       (EnumeratedRole { kindOfRole }) <- lift $ getEnumeratedRole pspType
       me <- lift $ isMe roleInstance
-      if kindOfRole == UserRole && not me && unwrap roleInstance /= "def:#serializationuser"
-        then context `serialisedAsDeltasFor` roleInstance
-        else pure unit
+      if kindOfRole == UserRole && not me && unwrap roleInstance /= "def:#serializationuser" then context `serialisedAsDeltasFor` roleInstance
+      else pure unit
 
 -- | PERSISTENCE of binding role and old binding, through the call to `changeRoleBinding`.
 -- | CURRENTUSER for roleId and its context, through the call to `changeRoleBinding`.

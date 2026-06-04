@@ -887,12 +887,13 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
           Left err -> sendResponse (Error corrId ("Incorrectly formed description of Action on applying an action in context instance '" <> object <> "' and object role instance '" <> predicate <> "'. Errors: " <> show err)) setter
           Right ({ perspectiveId, actionName } :: { perspectiveId :: String, actionName :: String }) -> do
             -- Find the action from the authoringRole, the perspective id, the Action name.
-            maction <- map
-              ( \perspective ->
-                  getAction actionName perspective
-                    <|> getActionFromUnqualifiedName actionName perspective
-              )
-              <$> findPerspective authoringRole (\(Perspective { id }) -> pure $ id `eq` perspectiveId)
+            maction <-
+              map
+                ( \perspective ->
+                    getAction actionName perspective
+                      <|> getActionFromUnqualifiedName actionName perspective
+                )
+                <$> findPerspective authoringRole (\(Perspective { id }) -> pure $ id `eq` perspectiveId)
             mauthoringRoleInstance <- (ContextInstance object) ##> getMeInRoleAndContext authoringRole
             case mauthoringRoleInstance, maction of
               Just author, Just (Just (ACTION.Action { qfd: action })) -> do

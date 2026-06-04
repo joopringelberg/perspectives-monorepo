@@ -26,7 +26,7 @@ import Control.Monad.AvarMonadAsk (modify, gets) as AA
 import Control.Monad.State.Trans (StateT, execStateT, get, lift, modify, put)
 import Data.Array (catMaybes, concat, elemIndex, filter, filterA, foldl, head, insertAt, length, nub, null, snoc, union)
 import Data.DateTime.Instant (toDateTime)
-import Data.Map (Map, empty, insert, lookup) as Map
+import Data.Map (Map, empty, insert, lookup, filter) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (over, unwrap)
 import Data.Traversable (for, for_)
@@ -68,7 +68,7 @@ import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), Transactio
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), addToTransactionForPeer, transactieID)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
-import Prelude (Unit, add, bind, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>))
+import Prelude (Unit, add, bind, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>), (/=))
 import Simple.JSON (writeJSON)
 
 -- | Splits the transaction in versions specific for each peer and sends them.
@@ -201,12 +201,12 @@ computeUserRoleBottom :: RoleInstance -> MonadPerspectives (Array (Tuple RoleIns
 computeUserRoleBottom rid =
   if unwrap rid == "def:#serializationuser" then pure []
   else ((map ENR <<< roleType_ >=> isPublicProxy) rid) >>=
-  if _ then pure [ Tuple rid (PublicDestination rid) ]
-  else perspectivesUsersRole_ rid >>= case _ of
-    Nothing -> pure []
-    Just perspectivesUser -> ((perspectivesUser2RoleInstance perspectivesUser) ##> getProperty (EnumeratedPropertyType perspectivesUsersCancelled)) >>= case _ of
-      Just (Value "true") -> pure []
-      _ -> pure [ Tuple rid (Peer $ unschemePerspectivesUser perspectivesUser) ]
+    if _ then pure [ Tuple rid (PublicDestination rid) ]
+    else perspectivesUsersRole_ rid >>= case _ of
+      Nothing -> pure []
+      Just perspectivesUser -> ((perspectivesUser2RoleInstance perspectivesUser) ##> getProperty (EnumeratedPropertyType perspectivesUsersCancelled)) >>= case _ of
+        Just (Value "true") -> pure []
+        _ -> pure [ Tuple rid (Peer $ unschemePerspectivesUser perspectivesUser) ]
 
 -- | Add the delta at the end of the array, unless it is already in the transaction or there are no users (and ignore the own user).
 -- | Only include 
