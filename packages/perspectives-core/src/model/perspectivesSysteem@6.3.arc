@@ -909,7 +909,8 @@ domain model://perspectives.domains#System@6.3
       property IWantToInviteAnUnconnectedUser (Boolean)
       property CorrectCodeEntered = ConfirmationCode == EnteredCode
       state Message = exists Message
-      state CreateInvitation = exists ConfirmationCode
+      -- Without a last name, the Inviter will not be serialised completely.
+      state CreateInvitation = exists ConfirmationCode and (exists context >> Inviter >> LastName)
         on entry
           do for Inviter
             letA
