@@ -24,9 +24,9 @@ module Perspectives.Deltas where
 
 import Control.Monad.AvarMonadAsk (modify, gets) as AA
 import Control.Monad.State.Trans (StateT, execStateT, get, lift, modify, put)
-import Data.Array (catMaybes, concat, elemIndex, filterA, foldl, head, insertAt, length, nub, null, snoc, union)
+import Data.Array (catMaybes, concat, elemIndex, filter, filterA, foldl, head, insertAt, length, nub, null, snoc, union)
 import Data.DateTime.Instant (toDateTime)
-import Data.Map (Map, empty, filter, insert, lookup) as Map
+import Data.Map (Map, empty, insert, lookup) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (over, unwrap)
 import Data.Traversable (for, for_)
@@ -196,8 +196,11 @@ addDomeinFileToTransactie dfId = AA.modify
 -- | Onlookers instances represent TCP subscribers (Transaction Collection Points) reached via RabbitMQ.
 -- | Otherwise return an empty array.
 -- | Also return an empty array if the PerspectivesUser has been cancelled.
+-- | Also return an empty array for the fictive serialization user (def:#serializationuser), which is never a real peer.
 computeUserRoleBottom :: RoleInstance -> MonadPerspectives (Array (Tuple RoleInstance TransactionDestination))
-computeUserRoleBottom rid = ((map ENR <<< roleType_ >=> isPublicProxy) rid) >>=
+computeUserRoleBottom rid =
+  if unwrap rid == "def:#serializationuser" then pure []
+  else ((map ENR <<< roleType_ >=> isPublicProxy) rid) >>=
   if _ then pure [ Tuple rid (PublicDestination rid) ]
   else perspectivesUsersRole_ rid >>= case _ of
     Nothing -> pure []
@@ -218,7 +221,8 @@ addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
   isExecuting <- AA.gets (\(Transaction tr) -> tr.isExecutingIncomingDeltas)
   when (not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
-  users' <- lift $ filterA notIsMe users
+  -- Also filter out the fictive serialization user (def:#serializationuser), which is never a real peer.
+  users' <- filter (\r -> unwrap r /= "def:#serializationuser") <$> (lift $ filterA notIsMe users)
   if null users' then pure unit
   else do
     newUserBottoms <- lift (concat <$> for users' computeUserRoleBottom)
@@ -245,7 +249,8 @@ insertDelta (DeltaInTransaction deltarecord@{ users, delta }) i = do
   isExecuting <- AA.gets (\(Transaction tr) -> tr.isExecutingIncomingDeltas)
   when (not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
-  users' <- lift $ filterA notIsMe users
+  -- Also filter out the fictive serialization user (def:#serializationuser), which is never a real peer.
+  users' <- filter (\r -> unwrap r /= "def:#serializationuser") <$> (lift $ filterA notIsMe users)
   if null users' then pure unit
   else do
     (newUserBottoms :: Array (Tuple RoleInstance TransactionDestination)) <- lift (concat <$> for users' computeUserRoleBottom)
