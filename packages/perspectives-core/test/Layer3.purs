@@ -64,7 +64,7 @@ import Effect (Effect)
 import Effect.Aff (Milliseconds(..))
 import Perspectives.Assignment.RunAction (runContextAction)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##>))
-import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances)
+import Perspectives.Instances.ObjectGetters (binding, binding_, context, getEnumeratedRoleInstances)
 import Perspectives.ModelDependencies (outgoingInvitationsType, sysMe, sysUser)
 import Perspectives.Names (getMySystem, lookupIndexedRole)
 import Perspectives.Persistence.State (getSystemIdentifier)
@@ -114,26 +114,31 @@ main = runTest do
         \pdrA pdrB -> do
           runInPDR pdrA
             ( do
-                setTopicLogLevel STATE Trace
                 setTopicLogLevel BROKER Trace
-                setTopicLogLevel MODEL Trace
             )
           runInPDR pdrB
             ( do
-                setTopicLogLevel STATE Trace
                 setTopicLogLevel BROKER Trace
-                setTopicLogLevel MODEL Trace
             )
           connectPDRs pdrA pdrB
           -- Two Persons instances.
-          mMe1 <- runInPDR pdrA $ lookupIndexedRole sysMe
-          mMe2 <- runInPDR pdrB $ lookupIndexedRole sysMe
-          case mMe1, mMe2 of
-            Just me1, Just me2 -> do
-              mMe1InB <- runInPDR pdrB $ tryGetPerspectRol me1
-              mMe2InA <- runInPDR pdrA $ tryGetPerspectRol me2
-              case mMe1InB, mMe2InA of
-                Just me1InB, Just me2InA -> assert "Both PDRs should have each others' Person instance" true
+          malice <- runInPDR pdrA do
+            muser <- lookupIndexedRole sysMe
+            case muser of
+              Just user -> binding_ user
+              Nothing -> pure Nothing
+          mbob <- runInPDR pdrB do
+            muser <- lookupIndexedRole sysMe
+            case muser of
+              Just user -> binding_ user
+              Nothing -> pure Nothing
+          case malice, mbob of
+            Just alice, Just bob -> do
+              maliceForBob <- runInPDR pdrB $ tryGetPerspectRol alice
+              mbobForAlice <- runInPDR pdrA $ tryGetPerspectRol bob
+              case maliceForBob, mbobForAlice of
+                Just _, Just _ -> assert "Both PDRs should have each others' Person instance" true
+                Just _, Nothing -> assert "Bobs' Person instance should be visible for Alice, too" false
                 _, _ -> assert "Both PDRs should have each others' Person instance" false
             _, _ -> assert "Both PDRs should have a `me` instance" false
 
