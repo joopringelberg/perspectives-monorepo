@@ -291,7 +291,12 @@ foreign import viewCleanupImpl :: EffectFn1 PouchdbDatabase Foreign
 -----------------------------------------------------------
 -- cleanupDatabase :: forall f. DatabaseName -> MonadPouchdb f Unit
 cleanupDeletedDocs :: forall f. DatabaseName -> MonadPouchdb f Unit
-cleanupDeletedDocs = cleanupDeletedDocs_ >>> Promise.toAffE >>> liftAff
+cleanupDeletedDocs dbName = do
+  liftAff $ Promise.toAffE $ cleanupDeletedDocs_ dbName
+  -- cleanupDeletedDocs_ destroys and recreates the underlying in-memory database.
+  -- Any connector cached in state now points to the destroyed store; remove it
+  -- so that the next withDatabase call creates a fresh connector.
+  modify \(s@{ databases }) -> s { databases = delete dbName databases }
 
 cleanupDeletedDocs_ :: DatabaseName -> Effect (Promise.Promise Unit)
 cleanupDeletedDocs_ = runEffectFn1 cleanupDeletedDocsImpl
