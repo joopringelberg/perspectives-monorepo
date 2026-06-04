@@ -120,52 +120,54 @@ function noop() {}
  */
 export function makeStompClientFactory(bus) {
   return function createStubClient(_url) {
-    const client = {
-      // Set by connectAndSubscribeImpl
-      connectHeaders: {},
-      debug: function() {},
-      emitToPurescript: null,
+    return function() {
+      const client = {
+        // Set by connectAndSubscribeImpl
+        connectHeaders: {},
+        debug: function() {},
+        emitToPurescript: null,
 
-      // Called by connectAndSubscribeImpl
-      subscribe(destination, callback, headers) {
-        const topic = stripPrefix(destination);
-        const queueId = (headers && headers["x-queue-name"]) || topic;
-        bus.subscribe(topic, queueId, callback);
-        return { id: queueId, unsubscribe: () => bus.unsubscribe(queueId) };
-      },
+        // Called by connectAndSubscribeImpl
+        subscribe(destination, callback, headers) {
+          const topic = stripPrefix(destination);
+          const queueId = (headers && headers["x-queue-name"]) || topic;
+          bus.subscribe(topic, queueId, callback);
+          return { id: queueId, unsubscribe: () => bus.unsubscribe(queueId) };
+        },
 
-      // Called by sendImpl
-      publish({ destination, body, headers }) {
-        const topic = stripPrefix(destination);
-        const receiptId = (headers && headers.receipt) || "";
-        bus.publish(client, topic, receiptId, body);
-      },
+        // Called by sendImpl
+        publish({ destination, body, headers }) {
+          const topic = stripPrefix(destination);
+          const receiptId = (headers && headers.receipt) || "";
+          bus.publish(client, topic, receiptId, body);
+        },
 
-      // Called by connectAndSubscribeImpl
-      watchForReceipt(_receiptId, _callback) {
-        // Receipts are handled synchronously in bus.publish, so this is a no-op.
-        // The receipt is emitted directly by bus.publish via emitToPurescript.
-      },
+        // Called by connectAndSubscribeImpl
+        watchForReceipt(_receiptId, _callback) {
+          // Receipts are handled synchronously in bus.publish, so this is a no-op.
+          // The receipt is emitted directly by bus.publish via emitToPurescript.
+        },
 
-      unsubscribe(queueId) {
-        bus.unsubscribe(queueId);
-      },
+        unsubscribe(queueId) {
+          bus.unsubscribe(queueId);
+        },
 
-      // Called by connectAndSubscribeImpl to start the connection.
-      // The stub connects immediately (synchronous), calling onConnect at once.
-      activate() {
-        if (typeof client.onConnect === "function") {
-          client.onConnect();
-        }
-      },
+        // Called by connectAndSubscribeImpl to start the connection.
+        // The stub connects immediately (synchronous), calling onConnect at once.
+        activate() {
+          if (typeof client.onConnect === "function") {
+            client.onConnect();
+          }
+        },
 
-      onConnect: null,
-      onStompError: null,
-      onDisconnect: null,
-      onWebSocketClose: null,
-      onUnhandledMessage: null,
-    };
-    return client;
+        onConnect: null,
+        onStompError: null,
+        onDisconnect: null,
+        onWebSocketClose: null,
+        onUnhandledMessage: null,
+      };
+      return client;
+    }
   };
 }
 
