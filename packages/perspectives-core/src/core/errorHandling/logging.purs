@@ -61,6 +61,7 @@ module Perspectives.Logging
   , infoUpgrade
   , pdrLog
   , traceBroker
+  , traceModel
   , tracePersistence
   , traceQuery
   , traceState
@@ -169,6 +170,9 @@ warnAuth = pdrLog AUTH Warn
 -----------------------------------------------------------
 -- MODEL
 -----------------------------------------------------------
+traceModel :: String -> MonadPerspectives Unit
+traceModel = pdrLog MODEL Trace
+
 debugModel :: String -> MonadPerspectives Unit
 debugModel = pdrLog MODEL Debug
 

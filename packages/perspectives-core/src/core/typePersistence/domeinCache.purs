@@ -49,7 +49,7 @@ import Perspectives.Couchdb (DeleteCouchdbDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ErrorLogging (warnModeller)
-import Perspectives.Logging (warnModel)
+import Perspectives.Logging (warnModel, traceModel)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.ModelDependencies (build, patch, versionToInstall)
@@ -156,8 +156,10 @@ retrieveDomeinFile m@(ModelUri modelUri') = do
             Nothing -> map _.semver <$> getVersionToInstall domeinFileId
             Just v -> pure $ Just v
           modelToLoadAVar <- getModelToLoad
+          traceModel $ "retrieveDomeinFile' requesting JIT load of: " <> modelUri
           liftAff $ put (LoadModel (ModelUri ((unversionedModelUri modelUri) <> (maybe "" ((<>) "@") version)))) modelToLoadAVar
           result <- liftAff $ take modelToLoadAVar
+          traceModel $ "retrieveDomeinFile' got response from JIT loader for: " <> modelUri
           -- Now the forking process waits (blocks) until retrieveFromDomeinFile fills it with another LoadModel request.
           case result of
             -- We now take up communication with the forked process that actually loads the model:
