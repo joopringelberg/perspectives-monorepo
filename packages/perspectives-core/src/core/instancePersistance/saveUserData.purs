@@ -98,7 +98,7 @@ import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (allUnlinkedRoles, isUnlinked_)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..), RoleBindingDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Prelude (Unit, bind, discard, not, pure, unit, void, ($), (&&), (<$>), (<<<), (<>), (==), (>>=), (||))
+import Prelude (Unit, bind, discard, not, pure, unit, void, ($), (&&), (<$>), (<<<), (<>), (==), (>>=), (||), (/=))
 import Simple.JSON (writeJSON)
 
 synchronise :: Boolean
@@ -618,13 +618,15 @@ setFirstBindingWithMode mode filled filler msignedDelta = (lift $ try $ getPersp
 -- | according to his perspective.
 -- | Notice that in order to establish whether this role represents `sys:SocialMe`,
 -- | it needs a binding!
+-- | The fictive serialization user (def:#serializationuser) is excluded: it is never a real peer
+-- | and should never receive context serialisations.
 handleNewPeer :: RoleInstance -> MonadPerspectivesTransaction Unit
 handleNewPeer roleInstance = (lift $ try $ getPerspectRol roleInstance) >>=
   handlePerspectRolError "handleNewPeer"
     \(PerspectRol { context, pspType }) -> do
       (EnumeratedRole { kindOfRole }) <- lift $ getEnumeratedRole pspType
       me <- lift $ isMe roleInstance
-      if kindOfRole == UserRole && not me then context `serialisedAsDeltasFor` roleInstance
+      if kindOfRole == UserRole && not me && unwrap roleInstance /= "def:#serializationuser" then context `serialisedAsDeltasFor` roleInstance
       else pure unit
 
 -- | PERSISTENCE of binding role and old binding, through the call to `changeRoleBinding`.
