@@ -24,7 +24,7 @@ module Perspectives.Deltas where
 
 import Control.Monad.AvarMonadAsk (modify, gets) as AA
 import Control.Monad.State.Trans (StateT, execStateT, get, lift, modify, put)
-import Data.Array (catMaybes, concat, elemIndex, filter, filterA, foldl, head, insertAt, length, nub, null, snoc, union)
+import Data.Array (catMaybes, concat, elemIndex, filterA, foldl, head, insertAt, length, nub, null, snoc, union)
 import Data.DateTime.Instant (toDateTime)
 import Data.Map (Map, empty, insert, lookup, filter) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust)
@@ -46,6 +46,7 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Me (notIsMe)
 import Perspectives.Instances.ObjectGetters (deltaAuthor2ResourceIdentifier, getProperty, perspectivesUsersRole_, roleType_)
+import Perspectives.Logging (traceSync)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, userChannel) as DEP
 import Perspectives.ModelDependencies (perspectivesUsersCancelled, perspectivesUsersPublicKey)
 import Perspectives.Names (getMySystem)
@@ -68,7 +69,7 @@ import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), Transactio
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), addToTransactionForPeer, transactieID)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
-import Prelude (Unit, add, bind, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>), (/=))
+import Prelude (Unit, add, bind, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>))
 import Simple.JSON (writeJSON)
 
 -- | Splits the transaction in versions specific for each peer and sends them.
@@ -128,6 +129,7 @@ sendTransactieToUserUsingAMQP perspectivesUser t = do
         saveTransactionInOutgoingPost perspectivesUser messageId t
         -- Just send the message to the topic that is the addressees PerspectivesUser instance.
         -- Each system will listen to a queue that is bound to that topic upon subscription.
+        traceSync $ "Sending transaction for user " <> unwrap perspectivesUser <> " to AMQP broker with messageId " <> messageId
         liftEffect $ sendToTopic stompClient perspectivesUser messageId (writeJSON t)
       otherwise -> saveTransactionInOutgoingPost perspectivesUser messageId t
   else saveTransactionInOutgoingPost perspectivesUser messageId t
@@ -141,6 +143,7 @@ sendTransactieToUserUsingAMQP perspectivesUser t = do
 
 saveTransactionInOutgoingPost :: UnschemedResourceIdentifier -> String -> TransactionForPeer -> MonadPerspectives Unit
 saveTransactionInOutgoingPost userId messageId t = do
+  traceSync $ "Saving transaction for user " <> unwrap userId <> " in OutgoingTransactions post database with messageId " <> messageId
   postDB <- postDatabaseName
   void $ addDocument postDB (OutgoingTransaction { _id: messageId, receiver: userId, transaction: t }) messageId
 

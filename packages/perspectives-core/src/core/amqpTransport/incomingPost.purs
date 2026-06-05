@@ -93,7 +93,9 @@ incomingPost = do
         Left me -> case head me of
           ForeignError "noConnection" -> lift $ setConnectionState false
           ForeignError "connection" -> lift $ setConnectionState true *> sendOutgoingPost
-          TypeMismatch "receipt" docId -> void $ lift $ deleteDocument postDB docId Nothing
+          TypeMismatch "receipt" docId -> do 
+            lift $ traceBroker $ "Received receipt for message with id " <> show docId <> ", deleting from post database"
+            void $ lift $ deleteDocument postDB docId Nothing
           _ -> lift $ traceBroker ("Perspectives.AMQP.IncomingPost.transactionConsumer: " <> show me)
         Right { body, ack, markHandled: markHandled_, pendingCount } -> do
           -- NOTE. Transaction execution seems to be so slow, that the connection can be lOst before we acknowledge.
@@ -104,7 +106,7 @@ incomingPost = do
           lift do
             showPendingIncomingTransactions pendingCount
             padding <- transactionLevel
-            traceBroker $ padding <> "Executing incoming post transaction"
+            traceBroker $ padding <> "Executing incoming post transaction from author " <> unwrap (unwrap body).author <> " and timestamp " <> show (unwrap body).timeStamp
             runMonadPerspectivesTransaction'
               false
               (ENR $ EnumeratedRoleType sysUser)
