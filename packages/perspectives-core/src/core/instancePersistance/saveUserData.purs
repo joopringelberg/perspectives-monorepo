@@ -529,6 +529,7 @@ setFirstBindingWithMode mode filled filler msignedDelta = (lift $ try $ getPersp
             pure $ case mexact of
               Just exactFiller -> exactFiller
               Nothing -> filler
+          -- Notice that we assume here that the filler provided in the signed delta is already the most specific compliant filler.
           Just _ -> pure filler
       if rol_binding filledRole == Just actualFiller then pure []
       else (lift $ try $ getPerspectRol actualFiller) >>=

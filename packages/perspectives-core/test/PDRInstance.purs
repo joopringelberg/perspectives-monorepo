@@ -76,10 +76,11 @@ import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
+import Perspectives.Instances.Me (computeMe_)
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getProperty)
-import Perspectives.ModelDependencies (connectedToAMQPBroker, identifiableFirstName, invitationMessageProp, inviteeType, inviterType, outgoingInvitationsType, serialisedInvitationProp, sysMe, sysUser)
+import Perspectives.ModelDependencies (connectedToAMQPBroker, identifiableFirstName, invitationMessageProp, inviteeType, inviterType, outgoingInvitationsType, serialisedInvitationProp, sysUser)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
-import Perspectives.Names (getMySystem, getUserIdentifier, lookupIndexedRole)
+import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (saveMarkedResources)
@@ -480,14 +481,10 @@ connectPDRs pdr1 pdr2 = do
   -- -----------------------------------------------------------------------
   -- PDR2: Step 7 — create Invitee role filled with PDR2's me
   -- -----------------------------------------------------------------------
-  mMe2 <- runInPDR pdr2 $ lookupIndexedRole sysMe
 
-  case mMe2 of
-    Nothing -> throwError $ error
-      "connectPDRs: cannot find indexed role 'me' in PDR2"
-    Just me2 ->
-      runInPDR pdr2
-        $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+  runInPDR pdr2 do
+      me2 <- computeMe_
+      runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
         $ void
         $ createAndAddRoleInstance
             (EnumeratedRoleType inviteeType)
