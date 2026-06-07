@@ -32,7 +32,7 @@ module Perspectives.InvertedQuery where
 
 import Prelude
 
-import Data.Array (cons, delete, null, union, elemIndex)
+import Data.Array (cons, delete, elemIndex, head, null, union)
 import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
 import Data.Map (Map, lookup) as MAP
@@ -95,6 +95,13 @@ instance prettyPrintInvertedQuery :: PrettyPrint InvertedQuery where
       <> prettyPrint' (t <> "    ") statesPerProperty
       <> ("\n" <> t <> "    calculatedUserRoleType:")
       <> show calculatedUserRoleType
+
+userRoleTypeOfInvertedQuery :: Partial => InvertedQuery -> RoleType
+userRoleTypeOfInvertedQuery (InvertedQuery { users }) = case head users of
+  Just user -> user
+
+invertedQueryHasRoleType :: InvertedQuery -> Boolean
+invertedQueryHasRoleType (InvertedQuery { users }) = not $ null users
 
 equalDescriptions :: InvertedQuery -> InvertedQuery -> Boolean
 equalDescriptions (InvertedQuery { description: d1 }) (InvertedQuery { description: d2 }) = d1 == d2
