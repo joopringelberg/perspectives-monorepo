@@ -60,7 +60,7 @@ import Perspectives.InvertedQuery (RelevantProperties(..))
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ContextActionE(..), NotificationE(..), PropertyVerbE(..), RoleVerbE(..), ScreenE, SelfOnly(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..)) as AST
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ContextActionE(..), NotificationE(..), PerspectivePosition(..), PropertyVerbE(..), RoleVerbE(..), ScreenE, SelfOnly(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..)) as AST
 import Perspectives.Parsing.Arc.AST (RoleIdentification(..), SegmentedPath, SentenceE(..), SentencePartE(..), StateTransitionE(..), roleIdentification2context, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AspectInference (inferFromAspectRoles)
 import Perspectives.Parsing.Arc.CheckSynchronization (checkSynchronization) as SYNC
@@ -601,6 +601,7 @@ handlePostponedStateQualifiedParts = do
   isPerspectiveContribution (AST.R _) = true
   isPerspectiveContribution (AST.P _) = true
   isPerspectiveContribution (AST.SO _) = true
+  isPerspectiveContribution (AST.PP _) = true
   isPerspectiveContribution _ = false
 
   collectRoleInContexts :: RoleIdentification -> PhaseThree (ADT QT.RoleInContext)
@@ -727,6 +728,16 @@ handlePostponedStateQualifiedParts = do
 
   -- | Modifies the DomeinFile in PhaseTwoState.
   handlePart :: Partial => AST.StateQualifiedPart -> PhaseThree Unit
+
+  -- | Modifies the DomeinFile in PhaseTwoState.
+  handlePart (AST.PP (AST.PerspectivePosition { subject, object, start })) = do
+    qualifiedUsers <- collectRoles subject
+    objectQfd <- roleIdentificationToQueryFunctionDescription object start
+    objectMustBeRole (Just objectQfd) start start
+    for_ qualifiedUsers
+      ( modifyPerspective objectQfd object start start
+          (\(Perspective pr) -> Perspective pr { perspectiveStartPosition = Just start })
+      )
 
   -- Compiles and distributes all expressions in the automatic effect.
   -- | Modifies the DomeinFile in PhaseTwoState.
@@ -1408,6 +1419,7 @@ handlePostponedStateQualifiedParts = do
                   , authorOnly: false
                   , isSelfPerspective
                   , automaticStates: []
+                  , perspectiveStartPosition: Just start
                   }
               Just i -> pure (unsafePartial $ fromJust $ index perspectives i)
             modifyDF \dfr@{ enumeratedRoles } -> dfr
@@ -1443,6 +1455,7 @@ handlePostponedStateQualifiedParts = do
                   , authorOnly: false
                   , isSelfPerspective
                   , automaticStates: []
+                  , perspectiveStartPosition: Just start
                   }
               Just i -> pure (unsafePartial $ fromJust $ index perspectives i)
             modifyDF \dfr@{ calculatedRoles } -> dfr
@@ -1573,12 +1586,12 @@ invertPerspectiveObjects = do
       else for_ (filter perspectiveMustBeSynchronized perspectives) (addInvertedQueriesForPerspectiveObject (CR id))
 
     addInvertedQueriesForPerspectiveObject :: RoleType -> Perspective -> PhaseThree Unit
-    addInvertedQueriesForPerspectiveObject roleType p@(Perspective { object, propertyVerbs, selfOnly, authorOnly }) = do
+    addInvertedQueriesForPerspectiveObject roleType p@(Perspective { object, propertyVerbs, selfOnly, authorOnly, perspectiveStartPosition }) = do
       -- Sets the inverted queries directly in the EnumeratedRoles and Properties in the
       -- DomeinFile we keep in PhaseTwoState.
       sPerProp <- lift2 $ statesPerProperty p
       runReaderT
-        (setInvertedQueries [ roleType ] sPerProp ((roleStates p) `union` (automaticStates p) `union` (actionStates p) `union` (stateSpec2StateIdentifier <$> (fromFoldable $ EM.keys propertyVerbs))) object selfOnly authorOnly)
+        (setInvertedQueries [ roleType ] sPerProp ((roleStates p) `union` (automaticStates p) `union` (actionStates p) `union` (stateSpec2StateIdentifier <$> (fromFoldable $ EM.keys propertyVerbs))) object selfOnly authorOnly perspectiveStartPosition)
         (unsafePartial createModificationSummary p)
 
     explicitSet2RelevantProperties :: ExplicitSet PropertyType -> RelevantProperties

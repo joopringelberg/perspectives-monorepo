@@ -61,7 +61,7 @@ import Perspectives.Parsing.Arc.PhaseTwo.TypeCombination (compileContextTypeComb
 import Perspectives.Parsing.Arc.PhaseTwoDefs (CurrentlyCalculated(..), PhaseThree, addBinding, getsDF, isBeingCalculated, isIndexedContextInCurrentCompilation, isIndexedRoleInCurrentCompilation, lift2, lookupVariableBinding, loopErrorMessage, throwError, withCurrentCalculation, withFrame)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), context2RoleInContextADT, domain, domain2roleType, equalDomainKinds, functional, makeComposition, mandatory, productOfDomains, range, replaceContext, replaceRange, roleInContext2Role, setCardinality, sumOfDomains, traverseQfd)
+import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), context2RoleInContextADT, domain, equalDomainKinds, functional, makeComposition, mandatory, productOfDomains, range, replaceContext, replaceRange, roleInContext2Role, setCardinality, sumOfDomains, traverseQfd)
 import Perspectives.Query.QueryTypes (Range) as QT
 import Perspectives.Representation.ADT (ADT(..), commonLeavesInADT)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
@@ -105,14 +105,14 @@ compileExpression domain stp = compileStep domain stp >>= traverseQfd (qualifyRe
 -- | in the domeinCache.
 makeRoleGetter :: Partial => Domain -> RoleType -> PhaseThree QueryFunctionDescription
 makeRoleGetter currentDomain rt@(CR ct) = do
-  (adt :: ADT RoleInContext) <- do
+  rdom <- do
     crole@(CalculatedRole { calculation }) <- lift2 $ getCalculatedRole ct
     case calculation of
-      Q qfd -> lift2 $ roleADT crole
+      Q qfd -> lift2 $ RDOM <$> roleADT crole
       S step isFunctional -> compileAndSaveRole currentDomain step crole isFunctional
   isF <- lift2 $ roleTypeIsFunctional rt
   isM <- lift2 $ roleTypeIsMandatory rt
-  pure $ SQD currentDomain (QF.RolGetter rt) (RDOM adt) (bool2threeValued isF) (bool2threeValued isM)
+  pure $ SQD currentDomain (QF.RolGetter rt) rdom (bool2threeValued isF) (bool2threeValued isM)
 
 makeRoleGetter currentDomain@(CDOM contextAdt) rt@(ENR et) = do
   unlinked <- lift2 $ isUnlinked_ et
@@ -124,33 +124,53 @@ makeRoleGetter currentDomain@(CDOM contextAdt) rt@(ENR et) = do
 -- | Compiles the parsed expression (type Step) that defines the CalculatedRole.
 -- | Saves it in the DomainCache.
 -- | Returns the range of the calculation.
-compileAndSaveRole :: Domain -> Step -> CalculatedRole -> Boolean -> PhaseThree (ADT RoleInContext)
+compileAndSaveRole :: Domain -> Step -> CalculatedRole -> Boolean -> PhaseThree Domain
 compileAndSaveRole dom step (CalculatedRole cr@{ id, kindOfRole, pos }) considerFunctional = withFrame do
   loops <- isBeingCalculated (Role id)
   if loops then throwError $ (RecursiveDefinition $ loopErrorMessage (Role id) pos pos)
-  else withCurrentCalculation (Role id)
-    do
-      expressionWithEnvironment <- pure $ addContextualBindingsToExpression
-        [ makeIdentityStep "currentcontext" (startOf step)
-        , makeIdentityStep "origin" (startOf step)
-        ]
-        step
-      compiledExpression <- compileExpression dom expressionWithEnvironment
-      compiledExpression' <-
-        if considerFunctional then pure $ setCardinality compiledExpression True
-        else pure compiledExpression
-      roleRange <- case range compiledExpression' of
-        RDOM roleRange -> pure roleRange
-        r ->
-          if kindOfRole == RTI.ContextRole then
-            throwError $ NotAContextRole (startOf step) (endOf step)
-          else throwError $ NotARoleDomain r (startOf step) (endOf step)
-      if kindOfRole == RTI.ContextRole && contextRoleRangeHasNonExternalRole roleRange then
-        throwError $ NotAContextRole (startOf step) (endOf step)
-      else do
-        -- Save the result in DomeinCache.
-        lift2 $ void $ modifyCalculatedRoleInDomeinFile (ModelUri $ unsafePartial fromJust $ typeUri2ModelUri (unwrap id)) (CalculatedRole cr { calculation = Q compiledExpression' })
-        pure roleRange
+  else withCurrentCalculation (Role id) do
+    expressionWithEnvironment <- pure $ addContextualBindingsToExpression
+      [ makeIdentityStep "currentcontext" (startOf step)
+      , makeIdentityStep "origin" (startOf step)
+      ]
+      step
+
+    compiledExpression <- compileExpression dom expressionWithEnvironment
+    compiledExpression' <-
+      if considerFunctional then pure $ setCardinality compiledExpression True
+      else pure compiledExpression
+
+    let start = startOf step
+    let end = endOf step
+    roleDomain <- validateCalculatedRoleRange kindOfRole start end (range compiledExpression')
+
+    lift2 $ void $
+      modifyCalculatedRoleInDomeinFile
+        (ModelUri $ unsafePartial fromJust $ typeUri2ModelUri (unwrap id))
+        (CalculatedRole cr { calculation = Q compiledExpression' })
+
+    pure roleDomain
+
+validateCalculatedRoleRange
+  :: RTI.RoleKind
+  -> ArcPosition
+  -> ArcPosition
+  -> Domain
+  -> PhaseThree Domain
+validateCalculatedRoleRange kindOfRole start end = case _ of
+  r@(RDOM roleRange) ->
+    if kindOfRole == RTI.ContextRole && contextRoleRangeHasNonExternalRole roleRange then
+      throwError $ NotAContextRole start end
+    else
+      pure r
+  AnyRoleType ->
+    -- Range identity unknown: cannot rule out External role.
+    pure AnyRoleType
+  r ->
+    if kindOfRole == RTI.ContextRole then
+      throwError $ NotAContextRole start end
+    else
+      throwError $ NotARoleDomain r start end
 
 contextRoleRangeHasNonExternalRole :: ADT RoleInContext -> Boolean
 contextRoleRangeHasNonExternalRole = any nonExternalRole <<< commonLeavesInADT
@@ -309,7 +329,7 @@ compileAndDistributeStep dom stp stateIdentifiers = do
   -- log ("compileAndDistributeStep:\n" <> "  step = " <> show stp <> "\n  users = " <> show users <> "\n  stateIdentifiers = " <> show stateIdentifiers)
   descr <- compileExpression dom stp
   runReaderT
-    (setInvertedQueries [] empty stateIdentifiers descr notSelfOnly notAuthorOnly)
+    (setInvertedQueries [] empty stateIdentifiers descr notSelfOnly notAuthorOnly Nothing)
     { modifiesRoleInstancesOf: []
     , modifiesRoleBindingOf: []
     , modifiesPropertiesOf: empty
