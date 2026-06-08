@@ -661,7 +661,7 @@ domain model://perspectives.domains#System@6.3
         do for User
           callDestructiveEffect cdb:RemoveModelFromLocalStore ( ModelToRemove )
     
-    context ModelsToUpdate = filter ModelsInUse with isInState InstallUpdate or isInState InstallBuild
+    thing ModelsToUpdate = (filter ModelsInUse with isInState InstallUpdate or isInState InstallBuild)
 
     -- context ModelsToUpdate = filter ModelsInUse with 
     --   -- Compare the Patch part of the Semantic Versioning string (the least or rightmost part).
@@ -698,7 +698,7 @@ domain model://perspectives.domains#System@6.3
         -- By default, if a StartContext has no value for IsSystemModel, that is interpreted as false.
         -- Hence `not IsSystemModel` will be true. In other words, by default all StartContexts are shown,
         -- irrespective of the value of ShowSystemApps.
-        filter StartContexts with ((not IsSystemModel) or showsystemapps)
+        (filter StartContexts with ((not IsSystemModel) or showsystemapps)) >> binding
 
     context PendingInvitations = callExternal cdb:PendingInvitations() returns sys:Invitation$External
 
@@ -709,9 +709,9 @@ domain model://perspectives.domains#System@6.3
       property Identifier (mandatory, String)
 
     -- A calculated role representing all available Notifications (from any context).
-    context AllNotifications = callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithNotification$Notifications" ) returns sys:ContextWithNotification$Notifications
+    thing AllNotifications = (callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithNotification$Notifications" ) returns sys:ContextWithNotification$Notifications)
 
-    context AllSettings = callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithSettings$External" ) returns sys:ContextWithSettings$External
+    context AllSettings = (callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithSettings$External" ) returns sys:ContextWithSettings$External) >> binding
 
     -- PDRDEPENDENCY
     context PinnedContexts (relational)
