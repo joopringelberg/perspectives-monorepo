@@ -736,7 +736,7 @@ handlePostponedStateQualifiedParts = do
     objectMustBeRole (Just objectQfd) start start
     for_ qualifiedUsers
       ( modifyPerspective objectQfd object start start
-          (\(Perspective pr) -> Perspective pr { perspectiveStartPosition = start })
+          (\(Perspective pr) -> Perspective pr { perspectiveStartPosition = Just start })
       )
 
   -- Compiles and distributes all expressions in the automatic effect.
@@ -1419,7 +1419,7 @@ handlePostponedStateQualifiedParts = do
                   , authorOnly: false
                   , isSelfPerspective
                   , automaticStates: []
-                  , perspectiveStartPosition: start
+                  , perspectiveStartPosition: Just start
                   }
               Just i -> pure (unsafePartial $ fromJust $ index perspectives i)
             modifyDF \dfr@{ enumeratedRoles } -> dfr
@@ -1455,7 +1455,7 @@ handlePostponedStateQualifiedParts = do
                   , authorOnly: false
                   , isSelfPerspective
                   , automaticStates: []
-                  , perspectiveStartPosition: start
+                  , perspectiveStartPosition: Just start
                   }
               Just i -> pure (unsafePartial $ fromJust $ index perspectives i)
             modifyDF \dfr@{ calculatedRoles } -> dfr
@@ -1591,7 +1591,7 @@ invertPerspectiveObjects = do
       -- DomeinFile we keep in PhaseTwoState.
       sPerProp <- lift2 $ statesPerProperty p
       runReaderT
-        (setInvertedQueries [ roleType ] sPerProp ((roleStates p) `union` (automaticStates p) `union` (actionStates p) `union` (stateSpec2StateIdentifier <$> (fromFoldable $ EM.keys propertyVerbs))) object selfOnly authorOnly (Just perspectiveStartPosition))
+        (setInvertedQueries [ roleType ] sPerProp ((roleStates p) `union` (automaticStates p) `union` (actionStates p) `union` (stateSpec2StateIdentifier <$> (fromFoldable $ EM.keys propertyVerbs))) object selfOnly authorOnly perspectiveStartPosition)
         (unsafePartial createModificationSummary p)
 
     explicitSet2RelevantProperties :: ExplicitSet PropertyType -> RelevantProperties
