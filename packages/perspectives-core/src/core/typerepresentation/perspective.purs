@@ -35,6 +35,7 @@ import Data.Tuple (Tuple(..))
 import Foreign.Object (Object)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Data.EncodableMap (EncodableMap, isEmpty)
+import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription, RoleInContext(..), range)
 import Perspectives.Representation.ADT (ADT, commonLeavesInADT)
 import Perspectives.Representation.Action (Action)
@@ -76,6 +77,7 @@ type PerspectiveRecord =
   , authorOnly :: Boolean
   , isSelfPerspective :: Boolean
   , automaticStates :: Array StateIdentifier
+  , perspectiveStartPosition :: ArcPosition
   }
 
 derive instance genericRepPerspective :: Generic Perspective _

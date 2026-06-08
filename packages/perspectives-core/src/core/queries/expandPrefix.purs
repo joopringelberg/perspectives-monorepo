@@ -29,7 +29,7 @@ import Data.Traversable (traverse)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.Identifiers (isTypeUri, typeUri2typeNameSpace)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyVerbE(..), PropsOrView(..), RoleIdentification(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), TypeAheadFillerE(..), TypeAheadFormE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PerspectivePosition(..), PropertyVerbE(..), PropsOrView(..), RoleIdentification(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), TypeAheadFillerE(..), TypeAheadFormE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), FilledByAttribute(..), PureLetStep(..), SimpleStep(..), Step(..), TypeCombination(..), UnaryStep(..), VarBinding(..))
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo', expandNamespace)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetABinding(..), LetStep(..), Statements(..))
@@ -240,6 +240,10 @@ instance containsPrefixesStateQualifiedPart :: ScanSymbols StateQualifiedPart wh
     object' <- scan object
     state' <- scan state
     pure (PO (AuthorOnly r { subject = subject', object = object', state = state' }))
+  scan (PP (PerspectivePosition r@{ subject, object })) = do
+    subject' <- scan subject
+    object' <- scan object
+    pure (PP (PerspectivePosition r { subject = subject', object = object' }))
   scan (N (NotificationE r@{ user, transition, message, object })) = do
     user' <- scan user
     transition' <- scan transition

@@ -48,9 +48,9 @@ import Parsing.Indent.Monadic (checkIndent, sameOrIndented, withPos)
 import Parsing.String (char, satisfy)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch, isModelUri)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FillPropertyValueE, FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), TypeAheadFillerE(..), TypeAheadFormE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), ContextE(..), ContextPart(..), FieldConstraintE, FillPropertyValueE, FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PerspectivePosition(..), PropertyE(..), PropertyFacet(..), PropertyMapping(..), PropertyPart(..), PropertyVerbE(..), PropsOrView(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), TypeAheadFillerE(..), TypeAheadFormE(..), ViewE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhiteSpaceRegime(..), WhoWhatWhereScreenE(..), WidgetCommonFields, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
-import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, step, typeCombinations)
+import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, startOf, step, typeCombinations)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseName, prefixedName, qualifiedName, reserved, stringUntilNewline)
 import Perspectives.Parsing.Arc.IndentParser (IP, arcPosition2Position, containsTab, entireBlock, entireBlock1, getArcParserState, getCurrentContext, getCurrentState, getObject, getPosition, getStateIdentifier, getSubject, inSubContext, isEof, isIndented, isNextLine, nestedBlock, protectObject, protectOnEntry, protectOnExit, protectSubject, sameOrOutdented', setObject, setOnEntry, setOnExit, setSubject, withArcParserState, withEntireBlock)
@@ -897,7 +897,6 @@ stateE = withPos do
 -- |     <perspectivePart>*
 perspectiveOn :: IP (List StateQualifiedPart)
 perspectiveOn = try $ withPos do
-  pos <- getPosition
   (stp :: Step) <- perspectiveOnKeywords *> step
   protectObject do
     ctxt <- getCurrentContext
@@ -905,9 +904,13 @@ perspectiveOn = try $ withPos do
     case stp of
       Simple (ArcIdentifier ps ident) -> setObject (ExplicitRole ctxt (ENR $ EnumeratedRoleType ident) ps)
       _ -> setObject (ImplicitRole ctxt stp)
+    subject <- getSubject
+    object <- getObject
+    let perspectiveStart = roleIdentificationStart object
     -- TODO. Ik denk dat hier ook de state gezet moet worden.
     -- If 'perspectivePart' fails, nestedBlock will fail and thus perspectiveOn will fail.
-    concat <$> nestedBlock perspectivePart
+    parts <- concat <$> nestedBlock perspectivePart
+    pure $ singleton (PP (PerspectivePosition { subject, object, start: perspectiveStart })) <> parts
 
 -- In contrast, with the non-determinate expression outcommented below,
 -- if perspectivePart fails, perspectiveOn succeeds.
@@ -927,7 +930,14 @@ perspectiveOf = try $ withPos do
     -- We cannot establish, at this point, whether the string that identifies the role we carry out the effect for
     -- is calculated or enumerated. Hence we arbitrarily choose enumerated and fix it in PhaseThree.
     setSubject (ExplicitRole ctxt (ENR $ EnumeratedRoleType subject) pos)
-    concat <$> nestedBlock perspectivePart
+    perspectiveSubject <- getSubject
+    object <- getObject
+    parts <- concat <$> nestedBlock perspectivePart
+    pure $ singleton (PP (PerspectivePosition { subject: perspectiveSubject, object, start: roleIdentificationStart perspectiveSubject })) <> parts
+
+roleIdentificationStart :: RoleIdentification -> ArcPosition
+roleIdentificationStart (ExplicitRole _ _ position) = position
+roleIdentificationStart (ImplicitRole _ stp) = startOf stp
 
 -- | perspectivePart =
 -- |   defaults

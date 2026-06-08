@@ -243,6 +243,7 @@ data StateQualifiedPart
   | CA ContextActionE
   | SO SelfOnly
   | PO AuthorOnly
+  | PP PerspectivePosition
   | N NotificationE
   | AE AutomaticEffectE
   | SUBSTATE StateE
@@ -323,6 +324,15 @@ newtype AuthorOnly = AuthorOnly
   , state :: StateSpecification
   , start :: ArcPosition
   , end :: ArcPosition
+  }
+
+--------------------------------------------------------------------------------
+---- PERSPECTIVEPOSITION
+--------------------------------------------------------------------------------
+newtype PerspectivePosition = PerspectivePosition
+  { subject :: RoleIdentification
+  , object :: RoleIdentification
+  , start :: ArcPosition
   }
 
 --------------------------------------------------------------------------------
@@ -658,6 +668,10 @@ instance showSelfOnly :: Show SelfOnly where
 
 derive instance Generic AuthorOnly _
 instance Show AuthorOnly where
+  show = genericShow
+
+derive instance Generic PerspectivePosition _
+instance Show PerspectivePosition where
   show = genericShow
 
 derive instance genericPropertyE :: Generic PropertyE _

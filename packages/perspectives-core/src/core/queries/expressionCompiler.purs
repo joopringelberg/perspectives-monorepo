@@ -309,7 +309,7 @@ compileAndDistributeStep dom stp stateIdentifiers = do
   -- log ("compileAndDistributeStep:\n" <> "  step = " <> show stp <> "\n  users = " <> show users <> "\n  stateIdentifiers = " <> show stateIdentifiers)
   descr <- compileExpression dom stp
   runReaderT
-    (setInvertedQueries [] empty stateIdentifiers descr notSelfOnly notAuthorOnly)
+    (setInvertedQueries [] empty stateIdentifiers descr notSelfOnly notAuthorOnly Nothing)
     { modifiesRoleInstancesOf: []
     , modifiesRoleBindingOf: []
     , modifiesPropertiesOf: empty
