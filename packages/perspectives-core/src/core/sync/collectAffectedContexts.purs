@@ -160,7 +160,7 @@ usersWithPerspectiveOnRoleInstance roleType roleInstance contextInstance runForw
   -- | The inverted query stems from a self-perspective on a multi(user) role.
   -- | This means that the new role instance can be a new peer. Only that peer should be sent the role and context deltas.
   handleSelfOnlyQuery :: InvertedQuery -> RoleInstance -> MonadPerspectivesTransaction (Array RoleInstance)
-  handleSelfOnlyQuery (InvertedQuery { backwardsCompiled, forwardsCompiled, description, users: userTypes, statesPerProperty }) newRoleInstance = do
+  handleSelfOnlyQuery (InvertedQuery { backwardsCompiled, forwardsCompiled, description, users: userTypes, statesPerProperty, perspectiveStartPosition }) newRoleInstance = do
     case backwardsCompiled of
       -- This case should not happen, as we start from a role instance.
       Nothing -> pure []
@@ -186,7 +186,9 @@ usersWithPerspectiveOnRoleInstance roleType roleInstance contextInstance runForw
                     lift $ traceSync $
                       "Peer "
                         <> unwrap peer
-                        <> " has a perspective through a self-perspective."
+                        <> " has a perspective through a self-perspective("
+                        <> perspectivePositionText perspectiveStartPosition
+                        <> ")."
                     -- For each path that was used to compute this peer: serialise it.
                     for_ (allPaths rinstance) (serialiseDependencies [ peer ])
                     -- Compute properties for this peer in this perspective and serialise the dependencies.
@@ -211,13 +213,16 @@ usersToTrace :: InvertedQuery -> Array RoleInstance -> Boolean
 usersToTrace iq users = invertedQueryHasRoleType iq && not (null users)
 
 traceUsersWithPerspective :: InvertedQuery -> Array RoleInstance -> String -> MonadPerspectivesTransaction Unit
-traceUsersWithPerspective iq users message = do
+traceUsersWithPerspective iq@(InvertedQuery{ perspectiveStartPosition }) users message = do
   readableRoleType <- lift $ toReadable (unsafePartial userRoleTypeOfInvertedQuery iq)
   lift $ traceSync $
     "These users "
       <> show (map unwrap users)
       <> " of type "
       <> roletype2string readableRoleType
+      <> "(based on perspective starting at "
+      <> perspectivePositionText perspectiveStartPosition
+      <> ") "
       <> " "
       <>
         message
