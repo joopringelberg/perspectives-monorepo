@@ -108,6 +108,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , modelUnderCompilation: Nothing
   , modelUris: Map.empty
   , logConfig: defaultLogLevels
+  , logColor: Nothing
   }
 
 defaultRuntimeOptions :: RuntimeOptions

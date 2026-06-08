@@ -146,8 +146,8 @@ testPouchdbUser userName =
 -- |
 -- | The caller is responsible for calling `shutdown` when the instance is no
 -- | longer needed.  Use `withPDR` / `withTwoPDRs` to get automatic cleanup.
-startPDRInstance :: PouchdbUser -> RuntimeOptions -> Maybe InProcessBus -> Aff PDRInstance
-startPDRInstance pouchdbUser runtimeOptions bus = do
+startPDRInstance :: PouchdbUser -> RuntimeOptions -> Maybe String -> Maybe InProcessBus -> Aff PDRInstance
+startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
   -- AVars required by PerspectivesState.
   transactionFlag <- new true
   brokerService <- (empty :: Aff (AVar BrokerService))
@@ -170,6 +170,11 @@ startPDRInstance pouchdbUser runtimeOptions bus = do
     missingResource
     typeToBeFixed
     userIntegrityChoice
+
+  -- Optionally color all structured log lines produced by this PDR instance.
+  runPerspectivesWithState
+    (modify \s -> s { logColor = mLogColor })
+    state
 
   -- If we have a bus, replace the default real StompClient factory with the in-process stub.
   -- Also populate the brokerService AVar so incomingPost can proceed past getBrokerService.
@@ -311,11 +316,12 @@ withPDR
   :: forall a
    . PouchdbUser
   -> RuntimeOptions
+  -> Maybe String
   -> Maybe InProcessBus
   -> (PDRInstance -> Aff a)
   -> Aff a
-withPDR pouchdbUser runtimeOptions mbus =
-  bracket (startPDRInstance pouchdbUser runtimeOptions mbus) _.shutdown
+withPDR pouchdbUser runtimeOptions mLogColor mbus =
+  bracket (startPDRInstance pouchdbUser runtimeOptions mLogColor mbus) _.shutdown
 
 -- TODO. Een functie met dezelfde naam bestaat in TestUtils.purs (Test.Sync.Utils). Deze versie moet prevaleren.
 -- | Start two PDR instances, run `f`, then shut down both — even if `f` throws.
@@ -328,14 +334,16 @@ withTwoPDRs
   :: forall a
    . PouchdbUser
   -> RuntimeOptions
+  -> Maybe String
   -> PouchdbUser
   -> RuntimeOptions
+  -> Maybe String
   -> (PDRInstance -> PDRInstance -> Aff a)
   -> Aff a
-withTwoPDRs user1 opts1 user2 opts2 f = do
+withTwoPDRs user1 opts1 color1 user2 opts2 color2 f = do
   bus <- liftEffect createInProcessBus
-  withPDR user1 opts1 (Just bus) \pdr1 ->
-    withPDR user2 opts2 (Just bus) \pdr2 ->
+  withPDR user1 opts1 color1 (Just bus) \pdr1 ->
+    withPDR user2 opts2 color2 (Just bus) \pdr2 ->
       f pdr1 pdr2
 
 -----------------------------------------------------------

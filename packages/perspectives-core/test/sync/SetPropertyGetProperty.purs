@@ -72,6 +72,7 @@ import Effect.Aff.Class (liftAff)
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.CoreTypes ((##>))
 import Perspectives.Instances.ObjectGetters (getProperty)
+import Perspectives.Logging (ansiBlue, ansiRed)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.PerspectivesState (defaultRuntimeOptions)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
@@ -118,8 +119,10 @@ theSuite = suiteSkip "SetProperty (PDR-A) → GetProperty (PDR-B)" do
     withTwoPDRs
       (testPouchdbUser "userA")
       defaultRuntimeOptions
+      (Just ansiRed)
       (testPouchdbUser "userB")
       defaultRuntimeOptions
+      (Just ansiBlue)
       \pdrA pdrB -> do
 
         -- -----------------------------------------------------------------------
@@ -159,8 +162,10 @@ theSuite = suiteSkip "SetProperty (PDR-A) → GetProperty (PDR-B)" do
     withTwoPDRs
       (testPouchdbUser "userA")
       defaultRuntimeOptions
+      (Just ansiRed)
       (testPouchdbUser "userB")
       defaultRuntimeOptions
+      (Just ansiBlue)
       \pdrA pdrB -> do
 
         -- TODO: prerequisite setup (see Test 1 above).

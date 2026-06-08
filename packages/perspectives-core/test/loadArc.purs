@@ -12,6 +12,7 @@ import Effect.Class.Console (log, logShow)
 import Perspectives.DomeinCache (removeDomeinFileFromCouchdb)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol)
+import Perspectives.Logging (noColor)
 import Perspectives.Persistent (tryGetPerspectRol)
 import Perspectives.PerspectivesState (defaultRuntimeOptions)
 import Perspectives.Representation.Class.PersistentType (typeExists)
@@ -36,7 +37,7 @@ theSuite = suite "Perspectives.loadArc" do
 
   test "Install PDR in memory and fetch a System type" do
     let user = testPouchdbUser "alice"
-    withPDR user defaultRuntimeOptions noBus \pdr -> do
+    withPDR user defaultRuntimeOptions noColor noBus \pdr -> do
       runInPDR pdr do
         typeExists (ContextType "model://perspectives.domains#System") >>= case _ of
           false -> liftAff $ assert "System context should be available" false
@@ -44,7 +45,7 @@ theSuite = suite "Perspectives.loadArc" do
 
   testOnly "Install PDR in memory and fetch a System type" do
     let user = testPouchdbUser "alice"
-    withPDR user defaultRuntimeOptions noBus \pdr -> do
+    withPDR user defaultRuntimeOptions noColor noBus \pdr -> do
       runInPDR pdr do
         tryGetPerspectRol (RoleInstance $ createDefaultIdentifier $ buitenRol user.systemIdentifier) >>= case _ of
           Nothing -> liftAff $ assert "The perspect rol for the user should be available" false

@@ -93,7 +93,7 @@ incomingPost = do
         Left me -> case head me of
           ForeignError "noConnection" -> lift $ setConnectionState false
           ForeignError "connection" -> lift $ setConnectionState true *> sendOutgoingPost
-          TypeMismatch "receipt" docId -> do 
+          TypeMismatch "receipt" docId -> do
             lift $ traceBroker $ "Received receipt for message with id " <> show docId <> ", deleting from post database"
             void $ lift $ deleteDocument postDB docId Nothing
           _ -> lift $ traceBroker ("Perspectives.AMQP.IncomingPost.transactionConsumer: " <> show me)

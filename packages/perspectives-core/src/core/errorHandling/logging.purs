@@ -37,6 +37,16 @@
 
 module Perspectives.Logging
   ( debugBroker
+  , ansiBlack
+  , ansiBlue
+  , ansiCyan
+  , ansiGreen
+  , ansiMagenta
+  , ansiRed
+  , ansiReset
+  , ansiWhite
+  , ansiYellow
+  , noColor
   , debugCompiler
   , debugInstall
   , debugModel
@@ -77,7 +87,7 @@ module Perspectives.Logging
 
 import Control.Monad.AvarMonadAsk (gets)
 import Data.Map (lookup) as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log) as Console
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives)
@@ -90,10 +100,48 @@ import Prelude (Unit, bind, show, when, ($), (>=), (<>))
 pdrLog :: LogTopic -> LogLevel -> String -> MonadPerspectives Unit
 pdrLog topic level message = do
   { defaultLevel, topicLevels } <- gets _.logConfig
+  logColor <- gets _.logColor
   let threshold = fromMaybe defaultLevel (Map.lookup topic topicLevels)
   when (level >= threshold) do
     let prefix = "[" <> show level <> "] [" <> show topic <> "] "
-    liftEffect $ Console.log (prefix <> message)
+    let completeMessage = prefix <> message
+    let
+      styledMessage = case logColor of
+        Just color -> color <> completeMessage <> ansiReset
+        Nothing -> completeMessage
+    liftEffect $ Console.log styledMessage
+
+-- | ANSI reset code.
+ansiReset :: String
+ansiReset = "\x1b[0m"
+
+-- | ANSI foreground color codes.
+ansiBlack :: String
+ansiBlack = "\x1b[30m"
+
+ansiRed :: String
+ansiRed = "\x1b[31m"
+
+ansiGreen :: String
+ansiGreen = "\x1b[32m"
+
+ansiYellow :: String
+ansiYellow = "\x1b[33m"
+
+ansiBlue :: String
+ansiBlue = "\x1b[34m"
+
+ansiMagenta :: String
+ansiMagenta = "\x1b[35m"
+
+ansiCyan :: String
+ansiCyan = "\x1b[36m"
+
+ansiWhite :: String
+ansiWhite = "\x1b[37m"
+
+noColor :: Maybe String
+noColor = Nothing
 
 -----------------------------------------------------------
 -- SYNC

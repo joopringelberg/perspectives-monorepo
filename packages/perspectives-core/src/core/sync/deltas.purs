@@ -202,8 +202,7 @@ addDomeinFileToTransactie dfId = AA.modify
 -- | Also return an empty array for the fictive serialization user (def:#serializationuser), which is never a real peer.
 computeUserRoleBottom :: RoleInstance -> MonadPerspectives (Array (Tuple RoleInstance TransactionDestination))
 computeUserRoleBottom rid =
-  if unwrap rid == "def:#serializationuser" 
-    then pure []
+  if unwrap rid == "def:#serializationuser" then pure []
   else ((map ENR <<< roleType_ >=> isPublicProxy) rid) >>=
     if _ then pure [ Tuple rid (PublicDestination rid) ]
     else perspectivesUsersRole_ rid >>= case _ of
@@ -226,8 +225,7 @@ addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
   when (not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
   users' <- (lift $ filterA notIsMe users)
-  if null users' 
-    then pure unit
+  if null users' then pure unit
   else do
     newUserBottoms <- lift (concat <$> for users' computeUserRoleBottom)
     newDelta <- pure (DeltaInTransaction deltarecord { users = users' })
@@ -254,8 +252,7 @@ insertDelta (DeltaInTransaction deltarecord@{ users, delta }) i = do
   when (not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
   users' <- (lift $ filterA notIsMe users)
-  if null users' 
-    then pure unit
+  if null users' then pure unit
   else do
     (newUserBottoms :: Array (Tuple RoleInstance TransactionDestination)) <- lift (concat <$> for users' computeUserRoleBottom)
     newDelta <- pure (DeltaInTransaction deltarecord { users = users' })

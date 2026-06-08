@@ -287,6 +287,10 @@ type PerspectivesExtraState =
   , modelUris :: Map (ModelUri Readable) (ModelUri Stable)
 
   , logConfig :: LogConfig
+
+  -- | Optional ANSI color escape prefix used to color full log messages for this PDR instance.
+  -- | Use `Nothing` for uncolored output.
+  , logColor :: Maybe String
   )
 
 type Warning = { message :: String, error :: String, externalRoleId :: String, contextName :: String }

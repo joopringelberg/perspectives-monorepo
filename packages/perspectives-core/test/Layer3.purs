@@ -60,17 +60,19 @@ import Prelude
 
 import Control.Monad.Cont (lift)
 import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
 import Effect (Effect)
 import Effect.Aff (Milliseconds(..))
 import Perspectives.Assignment.RunAction (runContextAction)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##>))
-import Perspectives.Instances.ObjectGetters (binding, binding_, context, getEnumeratedRoleInstances)
-import Perspectives.ModelDependencies (outgoingInvitationsType, sysMe, sysUser)
-import Perspectives.Names (getMySystem, lookupIndexedRole)
+import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances)
+import Perspectives.Logging (ansiMagenta, ansiRed)
+import Perspectives.ModelDependencies (outgoingInvitationsType, sysUser)
+import Perspectives.Names (getMySystem)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (tryGetPerspectRol)
-import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..))
+import Perspectives.PerspectivesState (defaultRuntimeOptions, getPerspectivesUser, setTopicLogLevel)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
 import Test.PDRInstance (connectPDRs, noBus, pollUntil, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
@@ -86,7 +88,7 @@ main = runTest do
     -- | the value we passed in, then shut down.
     test "start a single PDR instance and read its system identifier" do
       let user = testPouchdbUser "alice"
-      withPDR user defaultRuntimeOptions noBus \pdr -> do
+      withPDR user defaultRuntimeOptions (Just ansiRed) noBus \pdr -> do
         sysId <- runInPDR pdr getSystemIdentifier
         assert "system identifier should equal alice_macbook" (sysId == "alice_macbook")
 
@@ -96,8 +98,10 @@ main = runTest do
       withTwoPDRs
         (testPouchdbUser "alice")
         defaultRuntimeOptions
+        (Just ansiRed)
         (testPouchdbUser "bob")
         defaultRuntimeOptions
+        (Just ansiMagenta) 
         \pdrA pdrB -> do
           sysA <- runInPDR pdrA getSystemIdentifier
           sysB <- runInPDR pdrB getSystemIdentifier
@@ -109,29 +113,36 @@ main = runTest do
       withTwoPDRs
         (testPouchdbUser "alice")
         defaultRuntimeOptions
+        (Just ansiRed)
         (testPouchdbUser "bob")
         defaultRuntimeOptions
+        (Just ansiMagenta)
         \pdrA pdrB -> do
           runInPDR pdrA
             ( do
                 setTopicLogLevel BROKER Trace
+                setTopicLogLevel SYNC Trace
             )
           runInPDR pdrB
             ( do
                 setTopicLogLevel BROKER Trace
+                setTopicLogLevel SYNC Trace
             )
           connectPDRs pdrA pdrB
           -- Two Persons instances.
-          malice <- runInPDR pdrA do
-            muser <- lookupIndexedRole sysMe
-            case muser of
-              Just user -> binding_ user
-              Nothing -> pure Nothing
-          mbob <- runInPDR pdrB do
-            muser <- lookupIndexedRole sysMe
-            case muser of
-              Just user -> binding_ user
-              Nothing -> pure Nothing
+          -- Controleer op PerspectivesUsers in plaats daarvan.
+          malice <- runInPDR pdrA $ Just <<< RoleInstance <<< unwrap <$> getPerspectivesUser
+          -- malice <- runInPDR pdrA do
+          --   muser <- lookupIndexedRole sysMe
+          --   case muser of
+          --     Just user -> binding_ user
+          --     Nothing -> pure Nothing
+          mbob <- runInPDR pdrB $ Just <<< RoleInstance <<< unwrap <$> getPerspectivesUser
+          -- mbob <- runInPDR pdrB do
+          --   muser <- lookupIndexedRole sysMe
+          --   case muser of
+          --     Just user -> binding_ user
+          --     Nothing -> pure Nothing
           case malice, mbob of
             Just alice, Just bob -> do
               maliceForBob <- runInPDR pdrB $ tryGetPerspectRol alice
@@ -147,7 +158,7 @@ main = runTest do
       -- -----------------------------------------------------------------------
       -- PDR1: Step 1 — create the Invitation via context action
       -- -----------------------------------------------------------------------
-      withPDR user defaultRuntimeOptions noBus \pdr -> do
+      withPDR user defaultRuntimeOptions (Just ansiRed) noBus \pdr -> do
         runInPDR pdr $
           runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
             ( do
