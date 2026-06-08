@@ -234,7 +234,7 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (ValueExpressionNotAllowed dom start end) = "(ValueExpressionNotAllowed) This expression has type: " <> show dom <> " but a Value is not allowed here " <> showPosition start end
   show (NotAStringDomain qfd start end) = "(NotAStringDomain) This expression should have a string type: " <> show qfd <> ", between " <> show start <> " and " <> show end
   show (DomainTypeRequired domains dom start end) = "(DomainTypeRequired) This expression should result in a " <> domains <> ", but instead is a " <> show dom <> showPosition start end
-  show (NotAContextRole start end) = "(NotAContextRole) This expression should be result in a sequence of external roles (representing contexts), between " <> show start <> " and " <> show end
+  show (NotAContextRole start end) = "(NotAContextRole) This expression should result in a sequence of external roles (representing contexts), between " <> show start <> " and " <> show end
   show (NotAContextDomain qfd dom start end) = "(NotAContextDomain) This expression:\n" <> prettyPrint qfd <> "\nshould return a context type, but has instead: " <> show dom <> ", between " <> show start <> " and " <> show end
   show (NotFunctional start end qfd) = "(NotFunctional) This expression is not a single value, between " <> show start <> " and " <> show end
   show (MaybeNotFunctional start end qfd) = "(MaybeNotFunctional) This expression might not be a single value, between " <> show start <> " and " <> show end

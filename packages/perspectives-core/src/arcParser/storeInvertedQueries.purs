@@ -34,6 +34,7 @@ import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Data.EncodableMap (EncodableMap(..))
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, forwards)
 import Perspectives.InvertedQueryKey (serializeInvertedQueryKey)
+import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo', addStorableInvertedQuery, getsDF, throwError)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.QueryTypes (Domain, QueryFunctionDescription(..), Range, RoleInContext(..), domain, domain2roleInContext, makeComposition, mandatory, range)
@@ -55,8 +56,9 @@ storeInvertedQuery
   -> Map.Map PropertyType (Array StateIdentifier)
   -> Boolean
   -> Boolean
+  -> Maybe ArcPosition
   -> WithModificationSummary Unit
-storeInvertedQuery qwk users roleStates statesPerProperty selfOnly authorOnly = storeInvertedQuery' qwk users roleStates statesPerProperty selfOnly authorOnly Nothing Nothing
+storeInvertedQuery qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition = storeInvertedQuery' qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition Nothing Nothing
 
 -- | Modifies the DomeinFile in PhaseTwoState.
 storeInvertedQuery'
@@ -66,10 +68,11 @@ storeInvertedQuery'
   -> Map.Map PropertyType (Array StateIdentifier)
   -> Boolean
   -> Boolean
+  -> Maybe ArcPosition
   -> Maybe QueryFunctionDescription
   -> Maybe RoleType
   -> WithModificationSummary Unit
-storeInvertedQuery' qwk@(ZQ backward forward) users roleStates statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType = do
+storeInvertedQuery' qwk@(ZQ backward forward) users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType = do
   -- What is confusing about what follows is that it just seems to handle the first step of an inverted query.
   -- What about the steps that follow?
   -- Reflect that we have generated *separate inverted queries* for all these steps, each 'kinking' the original query
@@ -105,6 +108,7 @@ storeInvertedQuery' qwk@(ZQ backward forward) users roleStates statesPerProperty
               statesPerProperty
               selfOnly
               authorOnly
+              perspectiveStartPosition
               Nothing
               mCalcUserRoleType
           -- Regular case: drop the filter to detect changes even when the filter evaluates to
@@ -121,6 +125,7 @@ storeInvertedQuery' qwk@(ZQ backward forward) users roleStates statesPerProperty
               statesPerProperty
               selfOnly
               authorOnly
+              perspectiveStartPosition
               Nothing
               mCalcUserRoleType
             -- prepend the filter to the source. Store {first source step} << filter criterium.
@@ -131,6 +136,7 @@ storeInvertedQuery' qwk@(ZQ backward forward) users roleStates statesPerProperty
               statesPerProperty
               selfOnly
               authorOnly
+              perspectiveStartPosition
               (Just filter)
               mCalcUserRoleType
       -- unsafePartial $ setPathForStep 
@@ -141,9 +147,9 @@ storeInvertedQuery' qwk@(ZQ backward forward) users roleStates statesPerProperty
       --   statesPerProperty 
       --   selfOnly 
       --   (Just filter)
-      _ -> unsafePartial $ setPathForStep qfd1 qwk users roleStates statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType
-    (Just b@(SQD _ _ _ _ _)) -> unsafePartial $ setPathForStep b qwk users roleStates statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType
-    (Just b@(MQD _ _ _ _ _ _)) -> unsafePartial $ setPathForStep b qwk users roleStates statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType
+      _ -> unsafePartial $ setPathForStep qfd1 qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType
+    (Just b@(SQD _ _ _ _ _)) -> unsafePartial $ setPathForStep b qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType
+    (Just b@(MQD _ _ _ _ _ _)) -> unsafePartial $ setPathForStep b qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType
     otherwise -> lift $ throwError (Custom $ "impossible case in setInvertedQueries:\n" <> prettyPrint otherwise)
 
 -- | The function is partial, because we just handle the SQD and MQD cases.
@@ -160,10 +166,11 @@ setPathForStep
   -> Map.Map PropertyType (Array StateIdentifier)
   -> Boolean
   -> Boolean
+  -> Maybe ArcPosition
   -> Maybe QueryFunctionDescription
   -> Maybe RoleType
   -> WithModificationSummary Unit
-setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType = do
+setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType = do
   model <- getsDF _.id
   { modifiesRoleInstancesOf, modifiesRoleBindingOf, modifiesPropertiesOf } <- ask
   case qf of
@@ -194,6 +201,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                     , states
                     , selfOnly
                     , authorOnly
+                    , perspectiveStartPosition
                     , calculatedUserRoleType: mCalcUserRoleType
                     }
                 )
@@ -251,6 +259,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                     , states
                     , selfOnly
                     , authorOnly
+                    , perspectiveStartPosition
                     , calculatedUserRoleType: mCalcUserRoleType
                     }
                 )
@@ -304,6 +313,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                   , states
                   , selfOnly
                   , authorOnly
+                  , perspectiveStartPosition
                   , calculatedUserRoleType: mCalcUserRoleType
                   }
               )
@@ -311,7 +321,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
           }
 
     -- Treat the variant with a context restriction in exactly the same way as without that restriction.
-    QF.DataTypeGetterWithParameter QF.FillerF _ -> setPathForStep (SQD dom (QF.DataTypeGetter QF.FillerF) ran fun man) qWithAK users states statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType
+    QF.DataTypeGetterWithParameter QF.FillerF _ -> setPathForStep (SQD dom (QF.DataTypeGetter QF.FillerF) ran fun man) qWithAK users states statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType
 
     QF.RolGetter roleType -> case roleType of
       ENR role ->
@@ -352,6 +362,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                         , states
                         , selfOnly
                         , authorOnly
+                        , perspectiveStartPosition
                         , calculatedUserRoleType: mCalcUserRoleType
                         }
                     )
@@ -382,6 +393,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                 , states
                 , selfOnly
                 , authorOnly
+                , perspectiveStartPosition
                 , calculatedUserRoleType: mCalcUserRoleType
                 }
             )
@@ -439,6 +451,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                       , states
                       , selfOnly
                       , authorOnly
+                      , perspectiveStartPosition
                       , calculatedUserRoleType: mCalcUserRoleType
                       }
                   )
@@ -451,7 +464,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
 
     _ -> lift $ throwError $ Custom "setPathForStep: there should be no other cases. This is a system programming error."
 
-setPathForStep (MQD _ qf _ _ _ _) qWithAK users states statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType =
+setPathForStep (MQD _ qf _ _ _ _) qWithAK users states statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType =
   case qf of
     -- ExternalCoreRoleGetter is the inversion of a role individual step, such as sys:Me,
     -- and there are no other query steps that invert to it.
@@ -541,4 +554,4 @@ storeCalculatedUserInvertedQuery
   -> QueryWithAKink
   -> WithModificationSummary Unit
 storeCalculatedUserInvertedQuery calcUserRoleType qwk =
-  storeInvertedQuery' qwk [] [] Map.empty false false Nothing (Just calcUserRoleType)
+  storeInvertedQuery' qwk [] [] Map.empty false false Nothing Nothing (Just calcUserRoleType)

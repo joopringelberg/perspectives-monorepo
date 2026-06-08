@@ -48,6 +48,7 @@ import Perspectives.Instances.ObjectGetters (context, contextType, roleType) as 
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwards, forwardStartsWithFilter, isCalculatedUserQuery, shouldResultInContextStateQuery, shouldResultInRoleStateQuery, startsWithFilter)
 import Perspectives.InvertedQuery.Storable (getContextQueries, getFilledQueries, getFillerQueries, getPropertyQueries, getRoleQueries)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey)
+import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Logging (errorSync)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
@@ -194,10 +195,10 @@ isForSelfOnly (InvertedQuery { selfOnly }) = selfOnly
 -- | The 'own' user is not one of them.
 -- | INVARIANT TO RESPECT: both the backward- and forward part of the InvertedQuery should have been compiled.
 handleBackwardQuery :: RoleInstance -> InvertedQuery -> MonadPerspectivesTransaction (Array ContextWithUsers)
-handleBackwardQuery roleInstance iq@(InvertedQuery { description, backwardsCompiled, users: userTypes, states, forwardsCompiled }) = catchError
+handleBackwardQuery roleInstance iq@(InvertedQuery { description, backwardsCompiled, users: userTypes, states, forwardsCompiled, perspectiveStartPosition }) = catchError
   ( case backwardsCompiled of
       Nothing -> do
-        lift $ errorSync ("Backwards is not compiled on " <> prettyPrint description)
+        lift $ errorSync ("Backwards is not compiled on " <> prettyPrint description <> perspectivePositionText perspectiveStartPosition)
         pure []
       _ -> do
         if unsafePartial shouldResultInContextStateQuery iq then createContextStateQuery *> pure []
@@ -946,15 +947,19 @@ addDeltasForPropertyChange roleWithPropertyValue property replacementProperty = 
 -- | Errors:
 -- | - Logs an error if the backwards function cannot be compiled.
 compileBoth :: InvertedQuery -> MP InvertedQuery
-compileBoth ac@(InvertedQuery iqr@{ description, backwardsCompiled, forwardsCompiled }) = case backwardsCompiled of
+compileBoth ac@(InvertedQuery iqr@{ description, backwardsCompiled, forwardsCompiled, perspectiveStartPosition }) = case backwardsCompiled of
   Just c -> pure ac
   Nothing -> do
     backwards' <- traverse getHiddenFunction (backwards description)
     forwards' <- traverse getHiddenFunction (forwards description)
     -- It is an error if backwards' is Nothing.
-    if isNothing backwards' then errorSync ("compileBoth: backwards is nothing for \n" <> prettyPrint description)
+    if isNothing backwards' then errorSync ("compileBoth: backwards is nothing for \n" <> prettyPrint description <> perspectivePositionText perspectiveStartPosition)
     else pure unit
     pure $ InvertedQuery iqr { backwardsCompiled = backwards', forwardsCompiled = forwards' }
+
+perspectivePositionText :: Maybe ArcPosition -> String
+perspectivePositionText Nothing = ""
+perspectivePositionText (Just position) = "\nPerspective source position: " <> show position
 
 -- The backwards part of the query with a kink should have a compatible domain
 invertedQueryHasRoleDomain :: ContextType -> EnumeratedRoleType -> InvertedQuery -> MP Boolean
