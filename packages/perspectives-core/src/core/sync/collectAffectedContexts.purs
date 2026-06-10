@@ -946,8 +946,12 @@ aisInPropertyDelta
     -- A state condition in terms of properties of other roles is then not supported.
     -- allCalculations <- lift $ filterA (invertedQueryHasRoleRange cType propertyBearingType) allCalculations'
 
-    -- `handleBackwardQuery` will actually not return any users since we have no property queries for properties in a perspective and a perspective itself is always on a role.
-    -- However, there may be state queries that must be re-evaluated. We conveniently capture both role- and context state queries through handleBackwardQuery
+    -- RTPropertyKey queries carry `users = []` (state queries only). Perspective synchronisation
+    -- for property changes is handled separately by `addDeltasForPropertyChange` below, which uses
+    -- RTContextKey queries.  `handleBackwardQuery` therefore returns no users here but may record
+    -- ContextStateQuery / RoleStateQuery results for state-condition re-evaluation.
+    -- The Value2Role first-backward step compiles to identity at runtime, so applying the backward
+    -- to `propertyBearingInstance` (a RoleInstance) is correct regardless of the VDOM domain annotation.
     -- For Calculated User queries whose forward part is a filter (forwardStartsWithFilter), apply
     -- handleNewCalculatedUsersForBinding so that the filter is evaluated against the
     -- property-bearing role instance to detect newly satisfying Calculated User instances.
@@ -1063,7 +1067,11 @@ compileBoth ac@(InvertedQuery iqr@{ description, backwardsCompiled, forwardsComp
     else pure unit
     pure $ InvertedQuery iqr { backwardsCompiled = backwards', forwardsCompiled = forwards' }
 
--- The backwards part of the query with a kink should have a compatible domain
+-- The backwards part of the query with a kink should have a compatible domain.
+-- After the first backward step is removed (for RTRoleKey, RTFillerKey, RTFilledKey), the domain
+-- of the remaining backward equals the range of the removed step — which is always RDOM.
+-- The filter checks that the runtime role instance's type+context *specialises* the stored
+-- domain, so that queries indexed under an Aspect type also fire for concrete specialising roles.
 invertedQueryHasRoleDomain :: ContextType -> EnumeratedRoleType -> InvertedQuery -> MP Boolean
 invertedQueryHasRoleDomain context role (InvertedQuery { description }) = case description of
   ZQ (Just qfd) _ -> case domain qfd of

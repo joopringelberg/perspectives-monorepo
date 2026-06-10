@@ -552,3 +552,230 @@ When a Calculated User role CU has _both_ (a) another user U with a perspective 
 These two records have the same `description` but serve different purposes. The first is for synchronising U; the second is for detecting new CU instances. They cannot be merged because they carry different metadata.
 
 A future optimisation could detect this overlap and avoid the redundant backwards traversal by sharing the backwards query execution while dispatching to both purposes. This is deferred alongside the broader per-user merging optimisation described above.
+
+---
+
+## §3 Correctness Analysis: Compile-time / Runtime Alignment
+
+This section formally documents the correctness of the five inverted-query categories: key alignment between compile time and runtime, and domain/range ("kind") compatibility between what is stored and what is applied at runtime.
+
+### §3.1 The `qfd` Invariant in `setPathForStep`
+
+A frequently misread aspect of `storeInvertedQuery` / `setPathForStep` is what `qfd` represents. In
+`setPathForStep qfd qwk …`, the first argument `qfd` is **the first step of the backwards path** of
+`qwk` — which is the **inverse of the original query step at the kink point**. It is _not_ the
+original kinked step itself.
+
+Concretely, if the original query had a `ContextF` step at the kink, then `qfd` is an `RolGetter`
+step (the inverse of `ContextF`). If the original query had a `RolGetter role` step at the kink,
+then `qfd` is a `ContextF` step (the inverse of `RolGetter`).
+
+This identity matters when reading the domain / range of `qfd`:
+
+| Original kinked step | `qfd` (first backward step) | `domain qfd` | `range qfd` |
+|---|---|---|---|
+| `RolGetter (ENR role)` in context `ctx` | `ContextF` | `RDOM role` | `CDOM ctx` |
+| `ContextF` on role `role` in `ctx` | `RolGetter role` | `CDOM ctx` | `RDOM role` |
+| `FillerF` on filled `fld` | `FilledF fld ctx` | `RDOM filler` | `RDOM filled` |
+| `FilledF` on filler `flr` | `FillerF` | `RDOM filled` | `RDOM filler` |
+| property getter `p` on role `role` | `Value2Role p` | `VDOM p` | `RDOM role` |
+
+### §3.2 RTPropertyKey — property value changes
+
+**Compile-time key** (`typeLevelKeyForPropertyQueries`):
+`qfd` is a `Value2Role pt` step (domain `VDOM pt`, range `RDOM roleType`).
+The key is `RTPropertyKey { property: pt, role: roleType }`, derived from the range of `qfd`.
+
+**Runtime key** (`runtimeIndexForPropertyQueries`):
+Constructed from `(typeOfInstanceOnPath, propertyBearingType, property, replacementProperty)`.
+Produces the same `RTPropertyKey { property, role }` structure, accounting for Aspect property
+aliases.
+
+**Description stored**: `qWithAK` unmodified (the full `ZQ backward forward`).
+The backward starts with `Value2Role pt` (domain `VDOM pt`).
+
+**At runtime** (`aisInPropertyDelta`):
+`handleBackwardQuery propertyBearingInstance iq` is called.
+At runtime `Value2Role` compiles to the identity function, so the `propertyBearingInstance`
+(a `RoleInstance`) is passed through unchanged.
+
+**Purpose**: RTPropertyKey queries are exclusively **state queries** (`users = []`). Perspective
+synchronisation for property changes is handled separately by `addDeltasForPropertyChange`, which
+uses RTContextKey queries (see §3.3). The comment in `aisInPropertyDelta` confirms:
+`handleBackwardQuery` will not return any users for property queries.
+
+**Domain/range invariant**: The `VDOM` domain annotation on `Value2Role` is a compile-time type
+label only; at runtime the compiled function is identity regardless of domain. ✓
+
+### §3.3 RTContextKey — role instance added/removed (ContextF kink)
+
+**Kink point**: A `RolGetter (ENR role)` step in the original query — the query traverses _from_
+a context _to_ a role instance.
+
+**`qfd`** (first backward step): A `ContextF` step (inverse of `RolGetter`).
+- `domain qfd = RDOM (ST (RoleInContext { context: ctx, role: roleType }))` — the role instance
+  that the context step starts from.
+- `range qfd = CDOM ctx` — the context it navigates to.
+
+**Compile-time key** (`typeLevelKeyForContextQueries`):
+`roleDomain qfd` extracts `RDOM roleType` and produces
+`RTContextKey { role_origin: roleType, context_destination: ctx }`.
+
+**Runtime key** (`runtimeIndexForContextQueries`):
+Called with `(r: EnumeratedRoleType, c: ContextInstance)` (the role type and context type of the
+changed role instance). Produces the same `RTContextKey { role_origin, context_destination }`.
+Multiple keys are emitted for Aspect role types via `roleContextCombinations`.
+
+**Description stored**: `qWithAK` unmodified — the backward starts with `ContextF` (domain `RDOM role`).
+
+**Filter** (`invertedQueryHasRoleDomain cType rType`):
+Checks `domain (backwards description) = RDOM adt` where `(cType, rType)` is the actual
+role+context at runtime. Uses `equalsOrSpecialisesRoleInContext` so that a query stored for an
+Aspect role also fires for its specialisations.
+
+**At runtime** (`usersWithPerspectiveOnRoleInstance` — CONTEXT STEP branch):
+`handleBackwardQuery roleInstance iq` is called with the newly added/removed role instance.
+The backward's first step is `ContextF` (domain `RDOM role`) — exactly the kind of value
+that `roleInstance` represents. ✓
+
+### §3.4 RTRoleKey — role instance added/removed (RolGetter kink)
+
+**Kink point**: A `ContextF` step in the original query — the query traverses _from_ a role
+_to_ its context.
+
+**`qfd`** (first backward step): A `RolGetter (ENR role)` step (inverse of `ContextF`).
+- `domain qfd = CDOM ctx` — a context instance.
+- `range qfd = RDOM (ST (RoleInContext { context: ctx, role: roleType }))`.
+
+**Compile-time key** (`typeLevelKeyForRoleQueries`):
+`roleRange qfd` extracts `RDOM roleType` and produces
+`RTRoleKey { context_origin: ctx, role_destination: roleType }`.
+
+**Runtime key** (`runTimeIndexForRoleQueries`):
+Called with `(r: EnumeratedRoleType, c: ContextType)` when a role instance of type `r` is
+added/removed from context `c`. Produces the same `RTRoleKey { context_origin: c, role_destination: r }`.
+
+**Description transformation** (`removeFirstBackwardsStep` with compensating `ContextF`):
+The `RolGetter` first-backward step has domain `CDOM ctx`, but at runtime we start from a
+**role instance**, not a context. Therefore the first step is dropped. To compensate, a `ContextF`
+step (domain `RDOM role`) is prepended to the forwards part so that the forward computation can
+still reach the original context.
+
+After removal: `domain (new backward) = range (RolGetter) = RDOM roleType`.
+
+**Filter** (`invertedQueryHasRoleDomain cType rType`):
+After step removal the backward's domain is `RDOM (ST (RoleInContext {context, role}))`.
+The filter checks that the runtime role+context specialises this stored domain. ✓
+
+**Special case** — when `removeFirstBackwardsStep` produces `ZQ Nothing _` (the full backward
+consisted of only one `RolGetter` step), the description is silently discarded (`pure unit`).
+This is correct: a backward path of only `RolGetter` means the query started at `ContextF` with
+nothing preceding it. After removal there is nothing left to navigate, so no useful inverted query
+can be formed.
+
+**At runtime** (`usersWithPerspectiveOnRoleInstance` — ROLE STEP branch):
+`handleBackwardQuery roleInstance iq` is called. After step removal, backward has domain `RDOM`
+— matching the `roleInstance` argument. ✓
+
+### §3.5 RTFillerKey — role binding changed (FillerF kink)
+
+**Kink point**: A `FilledF` step in the original query — the query traverses _from_ a filler
+role _to_ a filled role.
+
+**`qfd`** (first backward step): A `FillerF` step (inverse of `FilledF`).
+- `domain qfd = RDOM (ST (RoleInContext { ... filled role type ... }))` — the filled role.
+- `range qfd = RDOM (ST (RoleInContext { ... filler role type ... }))` — the filler role.
+
+**Compile-time key** (`typeLevelKeyForFillerQueries`):
+`domain qfd` gives the filled role; `range qfd` gives the filler role.
+Produces `RTFillerKey { filledRole_origin, filledContext_origin, fillerRole_destination, fillerContext_destination }`.
+The query is **stored under the filled role type**, even though the filler is what changes.
+
+**Runtime key** (`runtimeIndexForFillerQueries'`):
+Called with `(filledType, filledContextType)` — the type of the role whose filler changed.
+Produces the same `RTFillerKey { filledRole_origin = filledType, ... }`.
+
+**Description transformation** (`removeFirstBackwardsStep` with no compensating step):
+After removal: `domain (new backward) = range (FillerF) = RDOM fillerType`.
+
+**Filter** (`invertedQueryHasRoleDomain fillerContextType fillerType`):
+After step removal the backward's domain is `RDOM filler`. The filter checks that the runtime
+filler type+context specialises this stored domain. ✓
+
+**At runtime** (`usersWithPerspectiveOnRoleBinding'` — FILLER STEP branch):
+`handleBackwardQuery filler iq` is called. After step removal, backward has domain `RDOM filler`
+— matching the `filler` argument. ✓
+
+**Single-step degenerate case**: When the original backward consists only of `FillerF`, step
+removal produces `ZQ Nothing fwd`. In this case the stored description replaces `Nothing` with an
+identity step `SQD ran IdentityF ran`, so the backward is always defined. ✓
+
+### §3.6 RTFilledKey — role binding changed (FilledF kink)
+
+**Kink point**: A `FillerF` step in the original query — the query traverses _from_ a filled
+role _to_ its filler.
+
+**`qfd`** (first backward step): A `FilledF fld ctx` step (inverse of `FillerF`).
+- `domain qfd = RDOM (ST (RoleInContext { ... filler role type ... }))` — the filler role.
+- `range qfd = RDOM (ST (RoleInContext { context: ctx, role: fld }))` — the filled role.
+
+**Compile-time key** (`typeLevelKeyForFilledQueries`):
+`domain qfd` gives the filler type; `range qfd` gives the filled type.
+Produces `RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }`.
+The query is stored under the filled role (the one that receives the filler).
+
+**Runtime key** (`runtimeIndexForFilledQueries'`):
+Called with `(filledType, filledContextType)`.
+Produces the same `RTFilledKey { ..., filledRole_destination = filledType, ... }`.
+
+**Description transformation** (`removeFirstBackwardsStep` with no compensating step):
+After removal: `domain (new backward) = range (FilledF) = RDOM filledType`.
+
+**Filter** (`invertedQueryHasRoleDomain filledContextType filledType`):
+After step removal the backward's domain is `RDOM filled`. The filter checks that the runtime
+filled type+context specialises this stored domain. ✓
+
+**At runtime** (`usersWithPerspectiveOnRoleBinding'` — FILLED STEP branch):
+`handleBackwardQuery filled iq` is called. After step removal, backward has domain `RDOM filled`
+— matching the `filled` argument. ✓
+
+**Single-step degenerate case**: Same treatment as RTFillerKey — replaced with an identity step. ✓
+
+### §3.7 The `invertedQueryHasRoleDomain` Filter
+
+The filter `invertedQueryHasRoleDomain :: ContextType -> EnumeratedRoleType -> InvertedQuery -> MP Boolean`
+is used for RTContextKey, RTRoleKey, RTFillerKey and RTFilledKey categories. It checks:
+
+```
+domain (backwards (description iq)) = RDOM adt
+  where (ST (RoleInContext { context, role })) `equalsOrSpecialisesRoleInContext` adt
+```
+
+The direction of specialisation is: **runtime type specialises stored type**. This is correct
+because:
+- Stored queries may be indexed on Aspect types (more general).
+- At runtime we encounter concrete (possibly more specific) role types.
+- A concrete role that specialises an Aspect should trigger all queries stored for that Aspect.
+
+`equalsOrSpecialisesRoleInContext` converts both sides to Conjunctive Normal Form using the full
+Aspect hierarchy, making the check complete for all levels of specialisation.
+
+### §3.8 Summary: Correctness Status
+
+All five categories are correctly implemented. The table below summarises the key invariants:
+
+| Category | Key indexed by | Domain of backward at runtime | Applied to |
+|---|---|---|---|
+| RTPropertyKey | property + role bearing the property | `VDOM` (identity at runtime) | `propertyBearingInstance` |
+| RTContextKey | role type + context type | `RDOM role` | role instance (ContextF step) |
+| RTRoleKey | context type + role type | `RDOM role` (after removing RolGetter) | role instance |
+| RTFillerKey | filled role type | `RDOM filler` (after removing FillerF) | filler instance |
+| RTFilledKey | filled role type | `RDOM filled` (after removing FilledF) | filled instance |
+
+No keys are missed at runtime, no domain/range mismatches exist, and all filter conditions are
+correctly directed.
+
+The one architectural asymmetry worth noting: for RTFillerKey, the runtime filler type is used for
+filtering (`invertedQueryHasRoleDomain fillerContextType fillerType`) but the **key itself is
+indexed by the filled type**. This is by design: the query is stored under the filled role so that
+it fires whenever that filled role's filler changes, regardless of the concrete filler type.
