@@ -216,7 +216,7 @@ usersToTrace :: InvertedQuery -> Array RoleInstance -> Boolean
 usersToTrace iq users = invertedQueryHasRoleType iq && not (null users)
 
 traceUsersWithPerspective :: InvertedQuery -> Array RoleInstance -> String -> MonadPerspectivesTransaction Unit
-traceUsersWithPerspective iq@(InvertedQuery{ perspectiveStartPosition }) users message = do
+traceUsersWithPerspective iq@(InvertedQuery { perspectiveStartPosition }) users message = do
   isSharing <- AA.gets (\(Transaction { isSharing }) -> isSharing)
   if isSharing then do
     readableRoleType <- lift $ toReadable (unsafePartial userRoleTypeOfInvertedQuery iq)
@@ -430,6 +430,11 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
   fillerType <- lift (filler ##>> OG.roleType)
   filledContextType <- lift $ enumeratedRoleContextType filledType
   fillerContextType <- lift $ enumeratedRoleContextType fillerType
+  -- `storeInvertedQueries` removes the first backward binding step before persisting
+  -- both `RTFillerKey` and `RTFilledKey` queries.  Runtime therefore starts from the
+  -- role instances carried by the RoleBindingDelta itself and only evaluates the
+  -- remaining backward part after checking that the current type/context still
+  -- specialises the stored domain.
   -- Includes calculations from all types of filledType.
   (ArrayUnions fillerKeys) <- lift $ runtimeIndexForFillerQueries' filledType filledContextType
   fillerCalculations <- lift
@@ -440,7 +445,9 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
   let regularFillerCalculations = filter (not <<< isCalculatedUserQuery) fillerCalculations
   let calcUserFillerCalculations = filter isCalculatedUserQuery fillerCalculations
   -- FILLER step
-  -- These are inverted queries that begin with the filler step starting from filled.
+  -- These are queries whose original backwards part started with `filler`
+  -- (stored under `RTFillerKey`).  After compile-time step removal their
+  -- remaining backward part must be applied to the filler instance directly.
   (users1 :: Array RoleInstance) <- concat <$> for regularFillerCalculations
     -- Find all affected contexts, starting from the filler instance of the Delta (on storing the query, we left out the filler step).
     ( \iq -> do
@@ -476,6 +483,9 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
   -- Separate Calculated User detection queries from regular synchronisation/state queries.
   let regularFilledCalculations = filter (not <<< isCalculatedUserQuery) filledCalculations
   let calcUserFilledCalculations = filter isCalculatedUserQuery filledCalculations
+  -- These are queries whose original backwards part started with `filled`
+  -- (stored under `RTFilledKey`).  After compile-time step removal their
+  -- remaining backward part must be applied to the filled instance directly.
   (users2 :: Array RoleInstance) <- concat <$> for regularFilledCalculations
     ( \iq -> do
         users <-
