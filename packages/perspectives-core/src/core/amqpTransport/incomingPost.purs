@@ -28,7 +28,7 @@ module Perspectives.AMQP.IncomingPost
 import Control.Coroutine (Consumer, Producer, await, runProcess, ($$))
 import Control.Monad.Rec.Class (forever)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (nub, sort)
+import Data.Array (length, nub, sort)
 import Data.Either (Either(..))
 import Data.List.NonEmpty (head)
 import Data.Maybe (Maybe(..))
@@ -36,18 +36,18 @@ import Data.Newtype (unwrap)
 import Data.String (take)
 import Data.Traversable (for, traverse)
 import Effect.Class (liftEffect)
-import Effect.Class.Console (log)
 import Foreign (ForeignError(..), MultipleErrors)
-import Perspectives.AMQP.Stomp (StructuredMessage, acknowledge, createStompClient, markHandled, messageProducer, sendToTopic)
+import Perspectives.AMQP.Stomp (StructuredMessage, acknowledge, markHandled, messageProducer, sendToTopic)
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.CoreTypes (BrokerService, MonadPerspectives, MonadPerspectivesQuery, (##>))
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.ObjectGetters (context, externalRole, getProperty)
+import Perspectives.Logging (debugBroker, warnBroker)
 import Perspectives.ModelDependencies (accountHolder, accountHolderName, accountHolderPassword, accountHolderQueueName, brokerEndpoint, brokerServiceContractInUse, brokerServiceExchange, connectedToAMQPBroker, myBrokers, sysUser)
 import Perspectives.Names (getMySystem, lookupIndexedContext)
 import Perspectives.Persistence.API (cleanupDeletedDocs, deleteDocument, documentsInDatabase, excludeDocs, getDocument_)
 import Perspectives.Persistent (postDatabaseName)
-import Perspectives.PerspectivesState (getBrokerService, getCurrentLanguage, getPerspectivesUser, pushMessage, removeMessage, setBrokerService, setStompClient, stompClient, transactionLevel)
+import Perspectives.PerspectivesState (getBrokerService, getCurrentLanguage, getPerspectivesUser, getStompClientFactory, pushMessage, removeMessage, setBrokerService, setStompClient, stompClient, transactionLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyFunction, getRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
@@ -67,8 +67,9 @@ incomingPost = do
   removeMessage "Cleaning up post database"
   setConnectionState false
   { topic, queueId, login, passcode, vhost, url } <- getBrokerService
-  -- Create a Stomp Client: url
-  stpClient <- liftEffect $ createStompClient (url)
+  -- Create a Stomp Client using the factory stored in state (real or test stub).
+  factory <- getStompClientFactory
+  stpClient <- liftEffect $ factory url
   -- Save the client in state.
   setStompClient stpClient
   -- Create a messageProducer: ConnectAndSubscriptionParameters
@@ -79,6 +80,7 @@ incomingPost = do
     , passcode
     , vhost
     }
+  debugBroker "Starting transaction consumer"
   void $ runProcess $ transactionProducer $$ transactionConsumer
 
   where
@@ -91,8 +93,10 @@ incomingPost = do
         Left me -> case head me of
           ForeignError "noConnection" -> lift $ setConnectionState false
           ForeignError "connection" -> lift $ setConnectionState true *> sendOutgoingPost
-          TypeMismatch "receipt" docId -> void $ lift $ deleteDocument postDB docId Nothing
-          _ -> log ("Perspectives.AMQP.IncomingPost.transactionConsumer: " <> show me)
+          TypeMismatch "receipt" docId -> do
+            lift $ debugBroker $ "Received receipt for message with id " <> show docId <> ", deleting from post database"
+            void $ lift $ deleteDocument postDB docId Nothing
+          _ -> lift $ warnBroker ("Perspectives.AMQP.IncomingPost.transactionConsumer: " <> show me)
         Right { body, ack, markHandled: markHandled_, pendingCount } -> do
           -- NOTE. Transaction execution seems to be so slow, that the connection can be lOst before we acknowledge.
           -- In that case, the broker resends the message.
@@ -102,7 +106,7 @@ incomingPost = do
           lift do
             showPendingIncomingTransactions pendingCount
             padding <- transactionLevel
-            log $ padding <> "Executing incoming post transaction"
+            debugBroker $ padding <> "Executing incoming post transaction from author " <> unwrap (unwrap body).author <> " and timestamp " <> show (unwrap body).timeStamp
             runMonadPerspectivesTransaction'
               false
               (ENR $ EnumeratedRoleType sysUser)
@@ -115,7 +119,7 @@ incomingPost = do
   setConnectionState c = do
     mySystem <- getMySystem
     padding <- transactionLevel
-    log $ padding <> "Setting connection state to " <> show c
+    debugBroker $ padding <> "Setting connection state to " <> show c
     void $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser) (setProperty [ RoleInstance $ buitenRol mySystem ] (EnumeratedPropertyType connectedToAMQPBroker) Nothing [ Value $ show c ])
     pure unit
 
@@ -130,6 +134,9 @@ incomingPost = do
       Just stompClient -> do
         (transactions :: Array OutgoingTransaction) <- sort <<< nub <$> traverse (getDocument_ postDB) waitingTransactions
         -- We do not delete here; only when we receive the receipt.
+        if length transactions > 0 then
+          debugBroker $ "Sending " <> show (length transactions) <> " outgoing transactions that were waiting in the post database"
+        else pure unit
         void $ for transactions \(OutgoingTransaction { _id, receiver, transaction }) -> liftEffect $ sendToTopic stompClient receiver _id (writeJSON transaction)
       _ -> pure unit
 
@@ -165,6 +172,7 @@ constructBrokerServiceForUser accountHolder = do
   -- RabbitMQ will forward the messages sent to this topic to the various queues the user has, 
   -- one for each PerspectivesSystem (i.e. one for each installation).
   perspectivesUser <- lift $ lift $ getPerspectivesUser
+  lift $ lift $ debugBroker $ "Constructing BrokerService for user: " <> show (unwrap perspectivesUser)
   pure $
     { topic: (takeGuid $ unwrap perspectivesUser)
     , queueId
@@ -178,6 +186,7 @@ showPendingIncomingTransactions :: Int -> MonadPerspectives Unit
 showPendingIncomingTransactions pendingCount =
   if pendingCount > 0 then do
     language <- getCurrentLanguage
+    debugBroker $ "There are " <> show pendingCount <> " pending incoming transactions"
     pushMessage (pendingIncomingPostMessage language pendingCount)
   else
     removeMessage "pending incoming transactions"

@@ -58,17 +58,27 @@ module Test.Layer3 where
 
 import Prelude
 
+import Control.Monad.Cont (lift)
+import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
 import Effect (Effect)
+import Effect.Aff (Milliseconds(..))
+import Perspectives.Assignment.RunAction (runContextAction)
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##>))
+import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances)
+import Perspectives.Logging (ansiMagenta, ansiRed)
+import Perspectives.ModelDependencies (outgoingInvitationsType, sysUser)
+import Perspectives.Names (getMySystem)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.PerspectivesState (defaultRuntimeOptions)
-import Test.PDRInstance (runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
+import Perspectives.Persistent (tryGetPerspectRol)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, getPerspectivesUser, setTopicLogLevel)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
+import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
+import Test.PDRInstance (connectPDRs, noBus, pollUntil, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
 import Test.Unit (suite, test, testOnly)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
-
--- TODO: uncomment once the stub AMQP transport is available
--- import Test.Sync.Channel (theSuite) as CHA
--- import Test.Sync.HandleTransaction (theSuite) as HTA  -- advanced sync scenarios
 
 main :: Effect Unit
 main = runTest do
@@ -78,21 +88,97 @@ main = runTest do
     -- | the value we passed in, then shut down.
     test "start a single PDR instance and read its system identifier" do
       let user = testPouchdbUser "alice"
-      withPDR user defaultRuntimeOptions \pdr -> do
+      withPDR user defaultRuntimeOptions (Just ansiRed) noBus \pdr -> do
         sysId <- runInPDR pdr getSystemIdentifier
         assert "system identifier should equal alice_macbook" (sysId == "alice_macbook")
 
     -- | Smoke test: start two PDR instances in the same process, verify that
     -- | they have distinct system identifiers.
-    testOnly "start two PDR instances with distinct identifiers" do
+    test "start two PDR instances with distinct identifiers" do
       withTwoPDRs
         (testPouchdbUser "alice")
         defaultRuntimeOptions
+        (Just ansiRed)
         (testPouchdbUser "bob")
         defaultRuntimeOptions
+        (Just ansiMagenta) 
         \pdrA pdrB -> do
           sysA <- runInPDR pdrA getSystemIdentifier
           sysB <- runInPDR pdrB getSystemIdentifier
           assert "PDR-A system identifier should equal alice_macbook" (sysA == "alice_macbook")
           assert "PDR-B system identifier should equal bob_macbook" (sysB == "bob_macbook")
           assert "PDR-A and PDR-B should have distinct identifiers" (sysA /= sysB)
+
+    testOnly "start two PDR instances with distinct identifiers" do
+      withTwoPDRs
+        (testPouchdbUser "alice")
+        defaultRuntimeOptions
+        (Just ansiRed)
+        (testPouchdbUser "bob")
+        defaultRuntimeOptions
+        (Just ansiMagenta)
+        \pdrA pdrB -> do
+          runInPDR pdrA
+            ( do
+                setTopicLogLevel BROKER Debug
+                setTopicLogLevel SYNC Debug
+            )
+          runInPDR pdrB
+            ( do
+                setTopicLogLevel BROKER Debug
+                setTopicLogLevel SYNC Debug
+                setTopicLogLevel STATE Debug
+            )
+          connectPDRs pdrA pdrB
+          -- Two Persons instances.
+          -- Controleer op PerspectivesUsers in plaats daarvan.
+          malice <- runInPDR pdrA $ Just <<< RoleInstance <<< unwrap <$> getPerspectivesUser
+          -- malice <- runInPDR pdrA do
+          --   muser <- lookupIndexedRole sysMe
+          --   case muser of
+          --     Just user -> binding_ user
+          --     Nothing -> pure Nothing
+          mbob <- runInPDR pdrB $ Just <<< RoleInstance <<< unwrap <$> getPerspectivesUser
+          -- mbob <- runInPDR pdrB do
+          --   muser <- lookupIndexedRole sysMe
+          --   case muser of
+          --     Just user -> binding_ user
+          --     Nothing -> pure Nothing
+          case malice, mbob of
+            Just alice, Just bob -> do
+              maliceForBob <- runInPDR pdrB $ tryGetPerspectRol alice
+              mbobForAlice <- runInPDR pdrA $ tryGetPerspectRol bob
+              case maliceForBob, mbobForAlice of
+                Just _, Just _ -> assert "Both PDRs should have each others' Person instance" true
+                Just _, Nothing -> assert "Bobs' Person instance should be visible for Alice, too" false
+                _, _ -> assert "Both PDRs should have each others' Person instance" false
+            _, _ -> assert "Both PDRs should have a `me` instance" false
+
+    test "start a PDR instance and create an invitation" do
+      let user = testPouchdbUser "alice"
+      -- -----------------------------------------------------------------------
+      -- PDR1: Step 1 — create the Invitation via context action
+      -- -----------------------------------------------------------------------
+      withPDR user defaultRuntimeOptions (Just ansiRed) noBus \pdr -> do
+        runInPDR pdr $
+          runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+            ( do
+                mySystem1 <- lift $ getMySystem
+                runContextAction sysUser "CreateInvitation" mySystem1
+            )
+        -- -----------------------------------------------------------------------
+        -- PDR1: Step 2 — obtain the new Invitation context instance
+        -- Poll until the state-entry bot has created and stored it.
+        -- -----------------------------------------------------------------------
+        void $ pollUntil 100 (Milliseconds 100.0)
+          "Invitation context to appear in PerspectivesSystem$OutgoingInvitations"
+          ( runInPDR pdr
+              ( do
+                  mySystem1 <- getMySystem
+                  (ContextInstance mySystem1) ##>
+                    ( getEnumeratedRoleInstances (EnumeratedRoleType outgoingInvitationsType)
+                        >=> binding
+                        >=> context
+                    )
+              )
+          )

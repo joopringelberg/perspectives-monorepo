@@ -137,7 +137,6 @@ selectedClipboardItem = "model://perspectives.domains#System$PerspectivesSystem$
 chatAspect :: String
 chatAspect = "model://perspectives.domains#System$Chat"
 
-
 -- | The Filter role aspect. Roles that carry this aspect have a FilterValue property
 -- | which can be used to find them via the filterValueView.
 -- | NOTE: these URIs must match the actual URIs generated for the Filter aspect
@@ -375,3 +374,20 @@ actualSharedFileServer = "model://perspectives.domains#SharedFileServices$Shared
 fileShareCredentials :: String
 fileShareCredentials = "model://perspectives.domains#SharedFileServices$SharedFileService$FileShareCredentials"
 
+------------------------------------------------------------------------------------
+-- USED IN TESTS
+------------------------------------------------------------------------------------
+outgoingInvitationsType :: String
+outgoingInvitationsType = "model://perspectives.domains#System$PerspectivesSystem$OutgoingInvitations"
+
+inviterType :: String
+inviterType = "model://perspectives.domains#System$Invitation$Inviter"
+
+inviteeType :: String
+inviteeType = "model://perspectives.domains#System$Invitation$Invitee"
+
+invitationMessageProp :: String
+invitationMessageProp = "model://perspectives.domains#System$Invitation$External$Message"
+
+serialisedInvitationProp :: String
+serialisedInvitationProp = "model://perspectives.domains#System$Invitation$External$SerialisedInvitation"

@@ -31,7 +31,7 @@ import Data.Map as MAP
 import Data.Maybe (Maybe(..), fromJust, isNothing)
 import Data.Newtype (over, unwrap)
 import Data.Set as Set
-import Data.Traversable (for, traverse)
+import Data.Traversable (for)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..))
 import Data.Unfoldable (replicate)
@@ -43,13 +43,13 @@ import Perspectives.ContextStateCompiler (enteringState, evaluateContextState, e
 import Perspectives.CoreTypes (MPT, MonadPerspectives, MonadPerspectivesTransaction, liftToInstanceLevel, (##=), (##>), (##>>))
 import Perspectives.Deltas (TransactionPerUser, distributeTransaction)
 import Perspectives.DependencyTracking.Dependency (lookupActiveSupportedEffect)
-import Perspectives.Logging (debugState, warnState)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionNArgs)
 import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.Identifiers (hasLocalName)
 import Perspectives.Instances.Combinators (exists')
 import Perspectives.Instances.Me (getMyType)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context, contextType, filler2filledFromDatabase_, getActiveRoleStates, getActiveStates, roleType, roleType_)
+import Perspectives.Logging (debugState, warnState)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (tryRemoveEntiteit)
 import Perspectives.PerspectivesState (addBinding, addWarning, clearPublicRolesJustLoaded, decreaseTransactionLevel, getPublicRolesJustLoaded, increaseTransactionLevel, nextTransactionNumber, pushFrame, restoreFrame, transactionFlag, transactionLevel)
@@ -97,7 +97,7 @@ runMonadPerspectivesTransaction'
   -> RoleType
   -> MonadPerspectivesTransaction o
   -> (MonadPerspectives o)
-runMonadPerspectivesTransaction' share authoringRole a = (lift $ createTransaction authoringRole) >>= lift <<< new >>= runReaderT whenFlagIsDown
+runMonadPerspectivesTransaction' share authoringRole a = (lift $ createTransaction authoringRole share) >>= lift <<< new >>= runReaderT whenFlagIsDown
   where
   -- | Wait until the TransactionFlag can be taken down, then run the action; raise it again.
   whenFlagIsDown :: MonadPerspectivesTransaction o
@@ -307,11 +307,11 @@ phase2 share authoringRole r = do
     (publicRoleTransactions :: TransactionPerUser) <-
       if share then lift $ distributeTransaction ft
       else pure MAP.empty
-
     -- Collect all deltas in order, add the public resource schemes and remove doubles. Then execute.
     void $ forWithIndex publicRoleTransactions
       \destination publicRoleTransaction -> case destination of
         (PublicDestination userId) -> do
+          lift $ debugState $ padding <> "Processing public role transaction for user " <> show userId <> " in transaction " <> show transactionNumber
           userType <- lift $ roleType_ userId
           mUrl <- lift $ publicUrl_ userType
           case mUrl of
@@ -329,7 +329,7 @@ phase2 share authoringRole r = do
                   -- Run embedded, do not share.
                   lift $ runEmbeddedIfNecessary false authoringRole (executeDeltas deltas)
                 -- If the URL is not computed, we log this and do nothing. In this installation, there probably should not be a proxy for the public role anyway; but we don't have a way of knowing that on constructing the context.
-                Nothing -> lift $ toReadable userType >>= \readableUserType -> debugState (padding <> "Cannot compute a URL to publish to for this user role type and instance: " <> show readableUserType <> " ('" <> show userId <> "'")
+                Nothing -> lift $ toReadable userType >>= \readableUserType -> debugState (padding <> "Cannot compute a URL to publish to for this user role type and instance: " <> show readableUserType <> " ('" <> show userId <> "')")
             Just (S _ _) -> throwError (error ("Attempt to acces QueryFunctionDescription of the url of a public role before the expression has been compiled. This counts as a system programming error. User type = " <> (show userType)))
         Peer _ -> pure unit
     -- Remove the deltas; we don't want to execute them again.
@@ -359,8 +359,11 @@ phase2 share authoringRole r = do
               -- logShow corrId
               lift $ runner unit
         -- As this is the end of execution of this Transaction, we don't bother with removing the postponedStateEvaluations.
+        lift $ debugState (padding <> "Exiting phase 2 for transaction " <> show transactionNumber <> ".")
         pure r
-      else pure r
+      else do
+        lift $ debugState (padding <> "Exiting phase 2 for transaction " <> show transactionNumber <> ".")
+        pure r
     else do
       lift $ debugState $ padding <> "Re-evaluating state evaluations that depend on a removed resource: " <> (show postponedStateEvaluations)
       if null postponedStateEvaluations then pure unit
@@ -468,8 +471,10 @@ exitContext (ContextRemoval ctxt authorizedRole) = do
 recursivelyEvaluateStates :: Array InvertedQueryResult -> MonadPerspectivesTransaction Unit
 recursivelyEvaluateStates invertedQueryResults = do
   padding <- lift transactionLevel
-  lift $ debugState $ padding <> "Evaluate states"
-  (stateEvaluations :: Array StateEvaluation) <- lift $ join <$> traverse computeStateEvaluations invertedQueryResults
+  lift $ debugState $ padding <> "Evaluate states - processing " <> show (length invertedQueryResults) <> " invertedQueryResults"
+  stateEvaluations <- lift $ join <$> for invertedQueryResults \iqr -> do
+    debugState (padding <> "  computing state evaluations for: " <> show iqr)
+    computeStateEvaluations iqr
   let deduped = dedupeStateEvaluations stateEvaluations
   if null deduped then pure unit
   else lift $ debugState (padding <> "==========RUNNING " <> (show $ length deduped) <> " UNIQUE STATE EVALUATIONS============")
@@ -510,7 +515,7 @@ evaluateStates stateEvaluations' =
 -- | Run and discard the transaction.
 runSterileTransaction :: forall o. MonadPerspectivesTransaction o -> (MonadPerspectives o)
 runSterileTransaction a =
-  (lift $ createTransaction (ENR $ EnumeratedRoleType sysUser))
+  (lift $ createTransaction (ENR $ EnumeratedRoleType sysUser) false)
     >>= lift <<< new
     >>= runReaderT a
 

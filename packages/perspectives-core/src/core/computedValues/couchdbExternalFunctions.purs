@@ -68,15 +68,15 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError, handleExternalFunctionError, handleExternalStatementError)
-import Perspectives.Logging (debugInstall, errorInstall, infoInstall)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance, createAndAddRoleInstance_)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.Instances.Me (computeMe_)
 import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesDatabase, getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries)
+import Perspectives.Logging (debugInstall, errorInstall, infoInstall)
 import Perspectives.ModelDependencies as DEP
-import Perspectives.Names (getMySystem)
+import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addDocument_, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, splitRepositoryFileUrl, tryGetDocument_, withDatabase)
 import Perspectives.Persistence.API (deleteDocument, documentsInDatabase, excludeDocs) as Persistence
 import Perspectives.Persistence.Authentication (addCredentials) as Authentication
@@ -627,7 +627,7 @@ initSystem = do
     -- Now create the user role (the instance of sys:PerspectivesSystem$User; it is cached automatically).
     -- This will also create the IndexedRole in the System instance, filled with the new User instance.
     sysId <- lift getMySystem
-    userId <- pure (sysId <> "$User")
+    userId <- lift getUserIdentifier
     sysUser <- createAndAddRoleInstance_ (EnumeratedRoleType DEP.sysUser) sysId
       ( RolSerialization
           { id: Just userId

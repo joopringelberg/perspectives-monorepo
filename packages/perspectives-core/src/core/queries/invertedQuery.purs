@@ -32,7 +32,7 @@ module Perspectives.InvertedQuery where
 
 import Prelude
 
-import Data.Array (cons, delete, null, union, elemIndex)
+import Data.Array (cons, delete, elemIndex, head, null, union)
 import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
 import Data.Map (Map, lookup) as MAP
@@ -58,6 +58,7 @@ newtype InvertedQuery = InvertedQuery
   , backwardsCompiled :: (Maybe HiddenFunction)
   , forwardsCompiled :: (Maybe HiddenFunction)
   -- TODO #9 There is only a single user in InvertedQuery.
+  -- This is the user having the original perspective. This perspective must be defined in the same model as the user role.
   , users :: Array RoleType
   -- True iff the user can modify the structural element where the InvertedQuery is attached.
   , modifies :: Boolean
@@ -99,6 +100,13 @@ instance prettyPrintInvertedQuery :: PrettyPrint InvertedQuery where
       <> show perspectiveStartPosition
       <> ("\n" <> t <> "    calculatedUserRoleType:")
       <> show calculatedUserRoleType
+
+userRoleTypeOfInvertedQuery :: Partial => InvertedQuery -> RoleType
+userRoleTypeOfInvertedQuery (InvertedQuery { users }) = case head users of
+  Just user -> user
+
+invertedQueryHasRoleType :: InvertedQuery -> Boolean
+invertedQueryHasRoleType (InvertedQuery { users }) = not $ null users
 
 equalDescriptions :: InvertedQuery -> InvertedQuery -> Boolean
 equalDescriptions (InvertedQuery { description: d1 }) (InvertedQuery { description: d2 }) = d1 == d2
