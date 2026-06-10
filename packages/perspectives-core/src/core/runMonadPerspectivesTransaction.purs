@@ -97,7 +97,7 @@ runMonadPerspectivesTransaction'
   -> RoleType
   -> MonadPerspectivesTransaction o
   -> (MonadPerspectives o)
-runMonadPerspectivesTransaction' share authoringRole a = (lift $ createTransaction authoringRole) >>= lift <<< new >>= runReaderT whenFlagIsDown
+runMonadPerspectivesTransaction' share authoringRole a = (lift $ createTransaction authoringRole share) >>= lift <<< new >>= runReaderT whenFlagIsDown
   where
   -- | Wait until the TransactionFlag can be taken down, then run the action; raise it again.
   whenFlagIsDown :: MonadPerspectivesTransaction o
@@ -515,7 +515,7 @@ evaluateStates stateEvaluations' =
 -- | Run and discard the transaction.
 runSterileTransaction :: forall o. MonadPerspectivesTransaction o -> (MonadPerspectives o)
 runSterileTransaction a =
-  (lift $ createTransaction (ENR $ EnumeratedRoleType sysUser))
+  (lift $ createTransaction (ENR $ EnumeratedRoleType sysUser) false)
     >>= lift <<< new
     >>= runReaderT a
 
