@@ -210,21 +210,20 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
         CP _ -> pure unit
 
     -- FILLED STEP
+    -- NOTE: qfd here is a `FilledF enr ctxt` step, which is the INVERSE of the original
+    -- `FillerF` step at the kink point.  Its domain is RDOM filler, its range is RDOM filled.
+    -- We remove this first step so that at runtime the remaining backward is applied to the
+    -- *filled* role instance (range of FilledF) rather than the filler.  The key is stored
+    -- under the filled role type so that it fires whenever that filled role acquires a new filler.
+    -- No compensating step is added to the forward part because `usersWithPerspectiveOnRoleBinding`
+    -- applies the forward to the filler directly.
+    -- After step removal: domain(new backward) = range(FilledF) = RDOM filled.
+    -- The query is indexed under the **FILLED** role for two reasons:
+    --  * the filler may well be in another model, leading to an InvertedQuery for another domain;
+    --  * if at runtime a filler is used that is a specialisation of the required type, it will
+    --    still trigger the inverted query.
     QF.FilledF enr ctxt ->
-      -- Compute the keys on the base of the original backwards query.
-      -- The domain can be a complex ADT RoleInContext. The range is always an ST RoleInContext.
       let
-        -- We remove the first step of the backwards path, because we apply it (runtime) not to the filler
-        -- but to the filled. We skip the fills step because its cardinality is larger than one. It would
-        -- cause a fan-out while we know, when applying the inverted query when handling a RoleBindingDelta, the exact
-        -- path to follow.
-        -- The function `usersWithPerspectiveOnRoleBinding` applies the forward part to the filler. Hence we don't 
-        -- have to adapt the forward part.
-        -- We add the inverted query to the **FILLED** role, not the filler role.
-        -- This has two reasons:
-        --  * the filler may well be in another model, leading to an InvertedQuery for another domain;
-        --  * if runtime a filler is used that is a specialisation of the required role, it will still trigger
-        --    the inverted query.
         oneStepLess = removeFirstBackwardsStep qWithAK (\_ _ _ -> Nothing)
         description = case mfilter of
           Nothing -> case oneStepLess of
@@ -267,14 +266,17 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
             }
 
     -- FILLER STEP
+    -- NOTE: qfd here is a `FillerF` step, which is the INVERSE of the original `FilledF` step
+    -- at the kink point.  Its domain is RDOM filled, its range is RDOM filler.
+    -- We remove this first step so that at runtime the remaining backward is applied to the
+    -- *filler* role instance (range of FillerF) rather than the filled role.
+    -- The key is stored under the filled role type (domain of FillerF) so that it fires whenever
+    -- that filled role acquires a new filler.  No compensating step is added to the forward part.
+    -- After step removal: domain(new backward) = range(FillerF) = RDOM filler.
     QF.DataTypeGetter QF.FillerF -> do
       (ArrayUnions keys) <- lift $ lift $ lift $ typeLevelKeyForFillerQueries qfd
       oneStepLess <- pure $ removeFirstBackwardsStep qWithAK (\_ _ _ -> Nothing)
       description <- pure $ case mfilter of
-        -- We remove the first step of the backwards path, because we apply it (runtime) not to the filled
-        -- but to the filler. We skip the fills step because we can: we don't have to compute the filler from the 
-        -- filled, because it is already in the Delta.
-        -- We add the inverted query to the **FILLED** role, not the filler role.
         Nothing -> case oneStepLess of
           -- If backwards of oneStepLess is Nothing, the backwards step of qWithAK (== qfd) consisted of just
           -- a single step and that was FillerF.
@@ -323,14 +325,18 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
     -- Treat the variant with a context restriction in exactly the same way as without that restriction.
     QF.DataTypeGetterWithParameter QF.FillerF _ -> setPathForStep (SQD dom (QF.DataTypeGetter QF.FillerF) ran fun man) qWithAK users states statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType
 
+    -- NOTE: qfd here is a `RolGetter (ENR role)` step, which is the INVERSE of the original
+    -- `ContextF` step at the kink point.  Its domain is CDOM ctx, its range is RDOM roleType.
+    -- At runtime the RTRoleKey query is applied starting from a role *instance*, not a context.
+    -- Therefore we drop the RolGetter step (domain CDOM).  After removal the remaining backward
+    -- has domain = range(RolGetter) = RDOM roleType — correct for a role-instance argument.
+    -- Because the forward part was designed to start from the context (range of ContextF), we
+    -- compensate by prepending a ContextF step to the forward part.
+    -- When the full backward consisted of only this single RolGetter step (ZQ Nothing _), there
+    -- is nothing meaningful left to store, so we silently discard the description.
     QF.RolGetter roleType -> case roleType of
       ENR role ->
         let
-          -- We remove the first step of the backwards path, because we apply it runtime not to the context, but to
-          -- the new role instance. We skip the RolGetter step because its cardinality is larger than one.
-          -- Because the forward part will be applied to that same role (instead of the context), we have to compensate
-          -- for that by prepending it with the inversal of the first backward step - which is, by construction, a
-          -- `context` step.
           oneStepLess = removeFirstBackwardsStep
             qWithAK
             (\ran' dom' man' -> Just $ SQD ran' (QF.DataTypeGetter ContextF) dom' True man')
@@ -370,8 +376,11 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                 }
       CR _ -> lift $ throwError $ Custom "Implement the handling of Calculated Roles in setPathForStep."
 
-    -- We could omit the first backwards step, as in runtime we have the context of a role instance at hand.
-    -- However, we handle that situation by `handlebackwardsQuery` and that function expects a RoleInstance.
+    -- NOTE: qfd here is a `ContextF` step, which is the INVERSE of the original `RolGetter
+    -- (ENR role)` step at the kink point.  Its domain is RDOM roleType, its range is CDOM ctx.
+    -- At runtime the RTContextKey backward is applied starting from a role *instance*.  Because
+    -- the ContextF step's domain is already RDOM, we do NOT need to remove it; `handleBackwardQuery`
+    -- passes the role instance directly as the starting point.
     QF.DataTypeGetter QF.ContextF -> do
       description <- case mfilter of
         Nothing -> pure qWithAK
