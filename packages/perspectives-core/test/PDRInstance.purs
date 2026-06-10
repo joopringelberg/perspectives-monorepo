@@ -71,25 +71,26 @@ import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (getPrivateKey)
-import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), MonadPerspectives, MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction, RuntimeOptions, TypeFix, (##>))
+import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction, RuntimeOptions, TypeFix, (##>))
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Me (computeMe_)
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getProperty)
+import Perspectives.Logging (ansiReset)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, identifiableFirstName, invitationMessageProp, inviteeType, inviterType, outgoingInvitationsType, serialisedInvitationProp, sysUser)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (saveMarkedResources)
-import Perspectives.PerspectivesState (newPerspectivesState, setBrokerService, setStompClientFactory)
+import Perspectives.PerspectivesState (newPerspectivesState, setBrokerService, setStompClientFactory, setTopicLogLevel)
 import Perspectives.Representation.Class.PersistentType (EnumeratedPropertyType(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
-import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
+import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runMonadPerspectivesTransaction', shareWithPeers)
 import Perspectives.RunPerspectives (runPerspectivesWithState)
 import Perspectives.SetupCouchdb (createUserDatabases)
 import Perspectives.SetupUser (setupUser)
@@ -220,7 +221,7 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
         -- Set the firstname of the user's main role instance, so that invitations get serialised with a complete Inviter.
         -- Get the User instance from System
         me <- getUserIdentifier
-        runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+        runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
           ( setProperty
               [ RoleInstance me ]
               (EnumeratedPropertyType identifiableFirstName)
@@ -229,7 +230,7 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
           )
         saveMarkedResources
         case bus of
-          Just b -> runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+          Just b -> runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
             ( setProperty
                 [ RoleInstance $ createDefaultIdentifier $ buitenRol pouchdbUser.systemIdentifier ]
                 (EnumeratedPropertyType connectedToAMQPBroker)
@@ -281,7 +282,7 @@ runInPDR pdr mp = do
 runTransactionInPDR :: PDRInstance -> MonadPerspectivesTransaction Unit -> Aff Unit
 runTransactionInPDR pdr mpt =
   void $ runPerspectivesWithState
-    (runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser) mpt)
+    (runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser) mpt)
     pdr.stateAVar
 
 -- | Poll `action` every `interval` until it returns `Just a`, or throw an error
@@ -320,8 +321,11 @@ withPDR
   -> Maybe InProcessBus
   -> (PDRInstance -> Aff a)
   -> Aff a
-withPDR pouchdbUser runtimeOptions mLogColor mbus =
-  bracket (startPDRInstance pouchdbUser runtimeOptions mLogColor mbus) _.shutdown
+withPDR pouchdbUser runtimeOptions mLogColor mbus f = do
+  case mLogColor of
+    Just color -> log (color <> "Starting PDR instance for user: " <> pouchdbUser.systemIdentifier <> ansiReset)
+    Nothing -> log ("Starting PDR instance for user: " <> pouchdbUser.systemIdentifier)
+  bracket (startPDRInstance pouchdbUser runtimeOptions mLogColor mbus) _.shutdown f
 
 -- TODO. Een functie met dezelfde naam bestaat in TestUtils.purs (Test.Sync.Utils). Deze versie moet prevaleren.
 -- | Start two PDR instances, run `f`, then shut down both — even if `f` throws.
@@ -383,11 +387,11 @@ connectPDRs pdr1 pdr2 = do
   -- -----------------------------------------------------------------------
   mySystem1 <- runInPDR pdr1 getMySystem
 
+  log "connectPDRs: Running CreateInvitation context action in PDR1"
   runInPDR pdr1
-    $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+    $ runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
     $
       runContextAction sysUser "CreateInvitation" mySystem1
-  log "connectPDRs: CreateInvitation context action run in PDR1"
 
   -- -----------------------------------------------------------------------
   -- PDR1: Step 2 — obtain the new Invitation context instance
@@ -410,8 +414,9 @@ connectPDRs pdr1 pdr2 = do
   -- -----------------------------------------------------------------------
   -- PDR1: Step 3 — set the Message property on Invitation$External
   -- -----------------------------------------------------------------------
+  log "connectPDRs: Setting message property in PDR1"
   runInPDR pdr1
-    $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType inviterType)
+    $ runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType inviterType)
     $
       setProperty
         [ invExternal ]
@@ -425,21 +430,21 @@ connectPDRs pdr1 pdr2 = do
         runInPDR pdr1
           (invExternal ##> getProperty (EnumeratedPropertyType invitationMessageProp))
     )
-  log "connectPDRs: Message property set in PDR1"
+  log $ "connectPDRs: Message property set in PDR1, value: " <> show messageText
 
   -- -----------------------------------------------------------------------
   -- PDR1: Step 4 — run the Inviter's CreateInvitation object action
   -- (sets ConfirmationCode → bot creates SerialisedInvitation file)
   -- -----------------------------------------------------------------------
+  log "connectPDRs: Running CreateInvitation object action in PDR1"
   runInPDR pdr1
-    $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType inviterType)
+    $ runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType inviterType)
     $
       runActionForObject
         (ENR $ EnumeratedRoleType inviterType)
         "CreateInvitation"
         (unwrap invCtx)
         (unwrap invExternal)
-  log "connectPDRs: CreateInvitation object action run in PDR1"
 
   -- -----------------------------------------------------------------------
   -- PDR1: Step 5 — read the SerialisedInvitation file content
@@ -471,11 +476,13 @@ connectPDRs pdr1 pdr2 = do
       "connectPDRs: failed to parse TransactionForPeer: " <> show err
     Right x -> pure x
 
+  log "connectPDRs: Executing TransactionForPeer in PDR2"
+  -- Alice receives a transaction from bob while bob reads the invitation. Trace in detail what Alice constructs.
+  runInPDR pdr2 (setTopicLogLevel SYNC Trace)
   runInPDR pdr2
-    $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+    $ runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
     $
       executeTransaction tfp
-  log "connectPDRs: TransactionForPeer executed in PDR2"
 
   -- Poll until the Inviter role is accessible in PDR2, confirming that the
   -- transaction and any state-entry bots have completed.
@@ -490,17 +497,17 @@ connectPDRs pdr1 pdr2 = do
   -- PDR2: Step 7 — create Invitee role filled with PDR2's me
   -- -----------------------------------------------------------------------
 
+  log "connectPDRs: Creating Invitee role in PDR2"
   runInPDR pdr2 do
-      me2 <- computeMe_
-      runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
-        $ void
-        $ createAndAddRoleInstance
-            (EnumeratedRoleType inviteeType)
-            (unwrap invCtx)
-            ( RolSerialization
-                { id: Nothing
-                , properties: PropertySerialization OBJ.empty
-                , binding: Just (unwrap me2)
-                }
-            )
-  log "connectPDRs: Invitee role created in PDR2"
+    me2 <- computeMe_
+    runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+      $ void
+      $ createAndAddRoleInstance
+          (EnumeratedRoleType inviteeType)
+          (unwrap invCtx)
+          ( RolSerialization
+              { id: Nothing
+              , properties: PropertySerialization OBJ.empty
+              , binding: Just (unwrap me2)
+              }
+          )

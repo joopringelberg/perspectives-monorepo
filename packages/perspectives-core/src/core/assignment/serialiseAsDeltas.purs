@@ -27,6 +27,7 @@ module Perspectives.Assignment.SerialiseAsDeltas
   , serialisedAsDeltasFor
   , serialisedAsDeltasForUserType
   , serialisedAsDeltasFor_
+  , perspectivePositionText
   ) where
 
 import Control.Monad.AvarMonadAsk (get) as AMA
@@ -42,6 +43,7 @@ import Data.Foldable (for_, traverse_)
 import Data.List.NonEmpty (NonEmptyList, foldM, head)
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (unwrap)
+import Data.Traversable (traverse)
 import Effect.Aff.AVar (new)
 import Effect.Class.Console (log)
 import Partial.Unsafe (unsafePartial)
@@ -51,8 +53,10 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding_, roleType_)
+import Perspectives.Logging (debugSync)
 import Perspectives.ModelDependencies (perspectivesUsersPublicKey, sysUser)
 import Perspectives.Names (getMySystem, getUserIdentifier)
+import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (getPerspectContext, getPerspectRol)
@@ -66,8 +70,9 @@ import Perspectives.Representation.Class.Property (propertyTypeIsAuthorOnly, pro
 import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.ResourceIdentifiers (isInPublicScheme)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
@@ -113,7 +118,7 @@ serialisedAsDeltasForUserType cid userType = do
     -> MonadPerspectivesTransaction o
     -> MonadPerspectives Transaction
   execMonadPerspectivesTransaction authoringRole a =
-    (lift $ createTransaction authoringRole)
+    (lift $ createTransaction authoringRole false)
       >>= lift <<< new
       >>= runReaderT run
     where
@@ -140,10 +145,25 @@ serialisePerspectiveForUser
   -> RoleType
   -> Perspective
   -> MonadPerspectivesTransaction Unit
-serialisePerspectiveForUser cid users userRoleType p@(Perspective { object, propertyVerbs, selfOnly, authorOnly, isSelfPerspective }) =
+serialisePerspectiveForUser cid users userRoleType p@(Perspective { object, propertyVerbs, selfOnly, authorOnly, isSelfPerspective, perspectiveStartPosition, roleTypes }) =
   if authorOnly then pure unit
   else do
-    (visiblePropertyTypes :: Array PropertyType) <- liftToMPT $ propertiesInPerspective p
+    (visiblePropertyTypes :: Array PropertyType) <- liftToMPT (propertiesInPerspective p)
+    readableVisiblePropertyTypes <- liftToMPT (traverse toReadable visiblePropertyTypes)
+    readableUserRoleType <- liftToMPT (toReadable userRoleType)
+    readableRoleTypes <- liftToMPT (traverse toReadable roleTypes)
+    lift $ debugSync $
+      "Serialising perspective for users "
+       <> show (unwrap <$> toArray users)
+       <> " of type "
+       <> roletype2string readableUserRoleType
+       <> "(based on perspective starting at "
+       <> perspectivePositionText perspectiveStartPosition
+      <> " on role types "
+       <> show (roletype2string <$> readableRoleTypes)
+       <> ") with properties "
+       <> show (propertytype2string <$> readableVisiblePropertyTypes)
+       <> "."
     serialiseRoleInstancesAndProperties cid users object (nub visiblePropertyTypes) selfOnly isSelfPerspective
 
 -- | MODEL DEPENDENCY IN THIS FUNCTION. The correct operation of this function depends on
@@ -164,6 +184,10 @@ serialiseRoleInstancesAndProperties
   -> -- true iff the object of the perspective equals its subject.
   MonadPerspectivesTransaction Unit
 serialiseRoleInstancesAndProperties cid users object properties selfOnly isPerspectiveOnSelf = do
+  -- TODO. Pas traceSync hier toe en gebruik:
+  --   - Perspective.roleTypes (waar het perspectief op is)
+  --   - userRoleType (wie het perspectief heeft)
+  --   - positie van het perspectief in de brontekst.
   -- We know that object has a role range.
   properties' <-
     if isPerspectiveOnSelf
@@ -205,6 +229,10 @@ serialiseRoleInstancesAndProperties cid users object properties selfOnly isPersp
                   )
               )
             else for_ (join (allPaths <$> vals)) (serialiseDependencies (toArray users))
+
+perspectivePositionText :: Maybe ArcPosition -> String
+perspectivePositionText Nothing = ""
+perspectivePositionText (Just position) = "Perspective source position: " <> show position
 
 getPropertyValues :: PropertyType -> DependencyPath ~~> DependencyPath
 getPropertyValues pt dep = (lift $ lift $ propertyTypeIsAuthorOnly pt) >>=

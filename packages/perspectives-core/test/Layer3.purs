@@ -120,13 +120,14 @@ main = runTest do
         \pdrA pdrB -> do
           runInPDR pdrA
             ( do
-                setTopicLogLevel BROKER Trace
-                setTopicLogLevel SYNC Trace
+                setTopicLogLevel BROKER Debug
+                setTopicLogLevel SYNC Debug
             )
           runInPDR pdrB
             ( do
-                setTopicLogLevel BROKER Trace
-                setTopicLogLevel SYNC Trace
+                setTopicLogLevel BROKER Debug
+                setTopicLogLevel SYNC Debug
+                setTopicLogLevel STATE Debug
             )
           connectPDRs pdrA pdrB
           -- Two Persons instances.
