@@ -154,16 +154,16 @@ serialisePerspectiveForUser cid users userRoleType p@(Perspective { object, prop
     readableRoleTypes <- liftToMPT (traverse toReadable roleTypes)
     lift $ debugSync $
       "Serialising perspective for users "
-       <> show (unwrap <$> toArray users)
-       <> " of type "
-       <> roletype2string readableUserRoleType
-       <> "(based on perspective starting at "
-       <> perspectivePositionText perspectiveStartPosition
-      <> " on role types "
-       <> show (roletype2string <$> readableRoleTypes)
-       <> ") with properties "
-       <> show (propertytype2string <$> readableVisiblePropertyTypes)
-       <> "."
+        <> show (unwrap <$> toArray users)
+        <> " of type "
+        <> roletype2string readableUserRoleType
+        <> "(based on perspective starting at "
+        <> perspectivePositionText perspectiveStartPosition
+        <> " on role types "
+        <> show (roletype2string <$> readableRoleTypes)
+        <> ") with properties "
+        <> show (propertytype2string <$> readableVisiblePropertyTypes)
+        <> "."
     serialiseRoleInstancesAndProperties cid users object (nub visiblePropertyTypes) selfOnly isSelfPerspective
 
 -- | MODEL DEPENDENCY IN THIS FUNCTION. The correct operation of this function depends on
