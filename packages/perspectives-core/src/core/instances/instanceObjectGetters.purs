@@ -54,7 +54,7 @@ import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..), ex
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.InstanceRepresentation.PublicUrl (PublicUrl)
 import Perspectives.Instances.Combinators (orElse)
-import Perspectives.ModelDependencies (nonPerspectivesUsers, perspectivesUsers)
+import Perspectives.ModelDependencies (onlookers, perspectivesUsers)
 import Perspectives.Persistence.API (Keys(..))
 import Perspectives.Persistent (entitiesDatabaseName, getPerspectContext, getPerspectRol)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase, getSafeViewOnDatabase_)
@@ -274,21 +274,16 @@ bottom_ r = do
 perspectivesUsersRole_ :: RoleInstance -> MP (Maybe PerspectivesUser)
 perspectivesUsersRole_ r = do
   EnumeratedRoleType rt <- roleType_ r
-  if rt == perspectivesUsers then pure $ Just (roleInstance2PerspectivesUser r)
-  else do
-    (mbinding :: Maybe RoleInstance) <- binding_ r
-    case mbinding of
-      Nothing ->
-        -- Bottom of the chain. NonPerspectivesUsers have no AMQP account and are excluded.
-        -- Other UserRole types (e.g. Onlookers) are recognised as valid AMQP peers.
-        -- The isUserRole guard protects against non-UserRole instances (e.g. ExternalRole)
-        -- accidentally appearing at the bottom of a binding chain.
-        if rt == nonPerspectivesUsers then pure Nothing
-        else do
-          isUser <- isUserRole r
-          if isUser then pure $ Just (roleInstance2PerspectivesUser r)
-          else pure Nothing
-      Just b -> perspectivesUsersRole_ b
+  if rt == perspectivesUsers
+  then pure $ Just (roleInstance2PerspectivesUser r)
+  else if rt == onlookers
+    then pure $ Just (roleInstance2PerspectivesUser r)
+    else do
+      (mbinding :: Maybe RoleInstance) <- binding_ r
+      case mbinding of
+        -- Bottom of the chain.
+        Nothing -> pure Nothing
+        Just b -> perspectivesUsersRole_ b
 
 -- | From the instance of a Role (fillerId) of any kind, find the instances of the Role of the given
 -- | type (filledType) that are filled with it. The type of filledType (EnumeratedRoleType) may
