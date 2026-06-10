@@ -20,18 +20,6 @@
 
 -- END LICENSE
 
--- TODO
---  A case expression contains unreachable cases:
---
---   (MQD dom fun args ran _ _)                 a
---   (BQD _ (BinaryCombinator g) f1 f2 ran _ _) a
---   (BQD _ (BinaryCombinator g) f1 f2 _ _ _)   a
---   (BQD _ (BinaryCombinator g) f1 f2 ran _ _) a
---   (BQD _ (BinaryCombinator g) f1 f2 _ _ _)   a
---   ...
---
--- in binding group interpret, getterFromPropertyType, getDynamicPropertyGetter
-
 module Perspectives.Query.Interpreter where
 
 import Control.Bind (join)
@@ -41,6 +29,7 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
 import Control.Plus (empty)
 import Data.Array (concat, elemIndex, foldl, head, index, length, null, union, unsafeIndex)
+import Data.String.Regex (Regex, match)
 import Data.Either (Either(..))
 import Data.Foldable (any)
 import Data.List (List(..))
@@ -64,14 +53,15 @@ import Perspectives.Identifiers (isExternalRole)
 import Perspectives.InstanceRepresentation (PerspectRol)
 import Perspectives.Instances.Combinators (available', not_)
 import Perspectives.Instances.Environment (_pushFrame)
-import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding, binding_, context, contextModelName, contextType, contextType_, externalRole, filledBy, fills, getAllFilledRoles_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
+import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding, binding_, context, contextModelName, contextType, contextType_, externalRole, filledBy, fills, getAllFilledRoles_, getActiveRoleStates_, getActiveStates_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
 import Perspectives.Instances.Values (bool2Value, parseNumber, value2Date, value2Number)
-import Perspectives.ModelDependencies (roleWithId)
+import Perspectives.ModelDependencies (roleWithId, socialEnvironment, socialEnvironmentPersons)
 import Perspectives.Names (lookupIndexedRole)
+import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Parsing.Arc.Position (arcParserStartPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistent (getPerspectRol)
-import Perspectives.PerspectivesState (addBinding, getVariableBindings, pushFrame, restoreFrame)
+import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getVariableBindings, pushFrame, restoreFrame)
 import Perspectives.Query.Interpreter.Dependencies (Dependency(..), DependencyPath, addAsSupportingPaths, allPaths, appendPaths, applyValueFunction, composePaths, consOnMainPath, dependencyToValue, domain2Dependency, functionOnBooleans, functionOnStrings, singletonPath, snocOnMainPath, (#>>))
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain2PropertyRange, domain2roleType, range)
 import Perspectives.Query.UnsafeCompiler (lookup, mapDurationOperator, mapNumericOperator, orderFunction, performNumericOperation')
@@ -79,14 +69,14 @@ import Perspectives.Representation.ADT (ADT(..), commonLeavesInADT, equalsOrSpec
 import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty)
 import Perspectives.Representation.CalculatedRole (CalculatedRole)
-import Perspectives.Representation.Class.PersistentType (getEnumeratedRole, getPerspectType)
+import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getEnumeratedRole, getPerspectType)
 import Perspectives.Representation.Class.Property (calculation) as PC
 import Perspectives.Representation.Class.Property (getPropertyType)
 import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, calculation, toConjunctiveNormalForm_)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..), isDateOrTime, isPDuration)
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextAspectsClosure, contextTypeModelName', equalsOrSpecialisesRoleInContext, propertyAliases, roleTypeModelName', generalisesRoleType)
 import Prelude (Unit, bind, discard, eq, flip, map, notEq, pure, show, unit, ($), (&&), (+), (<#>), (<$>), (<<<), (<=), (<>), (==), (>=>), (>>=), (||), void)
 import Simple.JSON (readJSON)
@@ -233,6 +223,30 @@ interpretBQD (BQD _ (BinaryCombinator FilledByF) sourceOfFilledRoles sourceOfFil
             ]
         _, _ -> throwError (error $ "'binds' expects two roles, but got: " <> show filledRolesh.head <> " and " <> show fillerRolesh.head)
     Just filledRolesh, Just fillerRolesh -> throwError (error $ "'binds' expects at most a single role instance on both the left and right side")
+    _, _ -> pure
+      [ { head: (V "" (Value "false"))
+        , mainPath: Nothing
+        , supportingPaths: []
+        }
+      ]
+
+interpretBQD (BQD _ (BinaryCombinator FillsF) sourceOfFillerRoles sourceOfFilledRoles _ _ _) a = ArrayT do
+  (fillerRoles :: Array DependencyPath) <- runArrayT $ interpret sourceOfFillerRoles a
+  (filledRoles :: Array DependencyPath) <- runArrayT $ interpret sourceOfFilledRoles a
+  -- fillerRoles and filledRoles must be functional.
+  case head fillerRoles, head filledRoles of
+    Just fillerRolesh, Just filledRolesh | length fillerRoles <= 1 && length filledRoles <= 1 ->
+      case fillerRolesh.head, filledRolesh.head of
+        R filler, R filled -> do
+          result <- lift ((Filled_ filled) ##>> fills (Filler_ filler))
+          pure
+            [ { head: (V "" (Value $ show result))
+              , mainPath: Nothing
+              , supportingPaths: allPaths fillerRolesh `union` allPaths filledRolesh
+              }
+            ]
+        _, _ -> throwError (error $ "'fills' expects two roles, but got: " <> show fillerRolesh.head <> " and " <> show filledRolesh.head)
+    Just fillerRolesh, Just filledRolesh -> throwError (error $ "'fills' expects at most a single role instance on both the left and right side")
     _, _ -> pure
       [ { head: (V "" (Value "false"))
         , mainPath: Nothing
@@ -545,6 +559,25 @@ interpretSQD (SQD dom (VariableLookup varName) range _ _) a = do
   -- as we recorded them before actually storing the result in the variable.
   pure a { head = domain2Dependency range r }
 
+interpretSQD (SQD _ (DataTypeGetter MeF) _ _ _) a = do
+  PerspectivesUser pUser <- lift $ lift getPerspectivesUser
+  (flip consOnMainPath a) <<< R <$> getFilledRoles (ContextType socialEnvironment) (EnumeratedRoleType socialEnvironmentPersons) (RoleInstance pUser)
+
+interpretSQD (SQD _ (RoleTypeConstant qname) _ _ _) a = pure $ consOnMainPath (RT qname) a
+
+interpretSQD (SQD _ (ContextTypeConstant qname) _ _ _) a = pure $ consOnMainPath (CT qname) a
+
+interpretSQD (SQD _ (PublicRole individual) _ _ _) a = pure $ consOnMainPath (R individual) a
+
+interpretSQD (SQD _ (PublicContext individual) _ _ _) a = pure $ consOnMainPath (C individual) a
+
+interpretSQD (SQD _ (RegExMatch (RegExP reg)) _ _ _) a = pure $ consOnMainPath (V "RegExMatch" (Value result)) a
+  where
+  val = unwrap $ unsafePartial dependencyToValue a.head
+  result = case match reg val of
+    Nothing -> "false"
+    Just _ -> "true"
+
 interpretSQD qfd a = case a.head of
   -----------------------------------------------------------
   -- ContextInstance
@@ -568,6 +601,10 @@ interpretSQD qfd a = case a.head of
     (SQD _ (DataTypeGetter IndexedContextName) _ _ _) -> (flip consOnMainPath a) <<< V "IndexedContextName" <$> (indexedContextName cid)
     (SQD _ TranslateContextType _ _ _) -> (flip consOnMainPath a) <<< V "translation" <<< Value <$> (lift $ lift $ (contextType_ cid >>= translateType))
     (SQD _ (DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeName) _ _ _) -> (flip consOnMainPath a) <<< R <$> getUnlinkedRoleInstances (EnumeratedRoleType roleTypeName) cid
+    (SQD _ (DataTypeGetterWithParameter IsInStateF parameter) _ _ _) -> do
+      states <- lift $ lift $ getActiveStates_ cid
+      let result = isJust $ elemIndex (StateIdentifier parameter) states
+      pure $ consOnMainPath (V "IsInStateF" (Value $ show result)) a
 
     otherwise -> throwError (error $ "(head=ContextInstance) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show cid)
 
@@ -612,6 +649,10 @@ interpretSQD qfd a = case a.head of
       if parameter == "direct" then composePaths a <$> getDirectFillerType rid
       else composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
     (SQD _ (FilledF roleType contextType) _ _ _) -> composePaths a <$> getRecursivelyFilledRoles contextType roleType rid
+    (SQD _ (DataTypeGetterWithParameter IsInStateF parameter) _ _ _) -> do
+      states <- lift $ lift $ getActiveRoleStates_ rid
+      let result = isJust $ elemIndex (StateIdentifier parameter) states
+      pure $ consOnMainPath (V "IsInStateF" (Value $ show result)) a
 
     otherwise -> throwError (error $ "(head=RoleInstance) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show rid)
 

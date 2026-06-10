@@ -733,35 +733,31 @@ getCalculatedRoleInstances rt@(CalculatedRoleType ident) c = case lookupRoleGett
 
 **Fix direction:** Replace the plain `Object` values with a mutable reference (e.g. `Ref` or an `AVar` stored in `PerspectivesState`), or use the existing LRU cache infrastructure already used for other caches in `PerspectivesState`.
 
-### 10.2 Unreachable cases in the interpreter
+### 10.2 Unreachable cases in the interpreter; `IncompleteExhaustivityCheck` in the compiler
 
-**Module:** `Perspectives.Query.Interpreter`  
-**Severity:** Low (compiler warning, not a runtime bug)
+**Status: Resolved**
 
-The file begins with this comment:
+**Interpreter:** The stale TODO comment at the top of `Perspectives.Query.Interpreter` has been removed. It referred to unreachable patterns from an earlier version of the code, before the large `interpret` function was refactored into separate `Partial` sub-functions (`interpretUQD`, `interpretBQD`, `interpretMQD`, `interpretSQD`). Those patterns no longer exist in the current binding group.
 
-```
--- TODO
---  A case expression contains unreachable cases:
---
---   (MQD dom fun args ran _ _)                 a
---   (BQD _ (BinaryCombinator g) f1 f2 ran _ _) a
---   ...
--- in binding group interpret, getterFromPropertyType, getDynamicPropertyGetter
-```
-
-The Purescript compiler reports unreachable patterns in several `case` expressions. This likely arises from the combination of `Partial` constraints and catch-all patterns that are logically unreachable. The code functions correctly at runtime, but the warnings indicate potential dead code or imprecise pattern structure.
+**UnsafeCompiler:** The PureScript compiler issued an `IncompleteExhaustivityCheck` warning for the mutually recursive binding group `{getterFromPropertyType, getDynamicPropertyGetter_, getDynamicPropertyGetter, compileFunction}`. The case space was too large for exhaustiveness analysis. The fix: `compileFunction` has been split into a thin total dispatcher (one equation: `compileFunction qfd = unsafePartial $ compileFunction_ qfd`) and a `Partial` helper `compileFunction_` that contains all the original equations. Because `Partial` functions are exempt from exhaustiveness checking, the checker now only needs to verify the four small non-`Partial` functions in the binding group, each of which has at most two equations.
 
 ### 10.3 Interpreter coverage gaps compared to the compiler
 
-The interpreter currently handles the most common operations but has some gaps compared to the full compiler:
+**Status: Resolved**
 
-- **`ContextIndividual`** in `interpretSQD`: always returns an empty array (`pure []`). The compiler produces a value for this. This is a known gap: context individuals may not be meaningful at instance level.
-- **`AnyRoleType`** domain: only partially handled. Several `interpretSQD` dispatch arms cover only `C`, `R`, `V`, `CT`, and `RT`; an `AnyRoleTypeDependency` head will throw a runtime error.
-- **State-related query functions** (`GetActiveStates`, `GetActiveRoleStates`): these are handled in the compiler but not mentioned in the interpreter dispatch. They may fall through to the `otherwise -> throwError` catch-all, causing a runtime error if the interpreter is called on a query that includes state conditions.
-- **`MeF`** (current user): handled in the compiler but not explicitly matched in `interpretSQD`. It would fall to the `otherwise` catch-all in the `C cid` branch.
+The following previously missing handlers have been added to `interpretSQD`:
 
-The comment in the TODO block at the top of the file suggests the authors are aware of these gaps.
+- **`MeF`** (current user): added as a top-level `SQD` pattern; retrieves the current `PerspectivesUser` and returns the matching role in `socialEnvironment`.
+- **`RoleTypeConstant qname`**: returns `RT qname` on the main path.
+- **`ContextTypeConstant qname`**: returns `CT qname` on the main path.
+- **`PublicRole individual`**: returns `R individual` on the main path.
+- **`PublicContext individual`**: returns `C individual` on the main path.
+- **`RegExMatch (RegExP reg)`**: evaluates the regex against the string value at the head and returns a boolean `Value`.
+- **`IsInStateF`**: added to both the `C cid` (context instance) branch and the `R rid` (role instance) branch; checks whether the given state identifier is active for the given context or role.
+
+In addition, **`BQD FillsF`** has been added to `interpretBQD`, mirroring the existing `FilledByF` handler.
+
+The `ContextIndividual` case intentionally returns `[]`. Context individuals are private to the local `PerspectivesUser`; the serialisation interpreter must not propagate them, so that receiving peers substitute their own instance.
 
 ### 10.4 External function arity limit
 
