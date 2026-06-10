@@ -58,6 +58,7 @@ newtype InvertedQuery = InvertedQuery
   , backwardsCompiled :: (Maybe HiddenFunction)
   , forwardsCompiled :: (Maybe HiddenFunction)
   -- TODO #9 There is only a single user in InvertedQuery.
+  -- This is the user having the original perspective. This perspective must be defined in the same model as the user role.
   , users :: Array RoleType
   -- True iff the user can modify the structural element where the InvertedQuery is attached.
   , modifies :: Boolean

@@ -22,7 +22,7 @@
 
 module Perspectives.CollectAffectedContexts where
 
-import Control.Monad.AvarMonadAsk (modify) as AA
+import Control.Monad.AvarMonadAsk (modify, gets) as AA
 import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Reader (lift)
 import Data.Array (concat, cons, difference, elemIndex, filter, filterA, foldM, head, nub, null, union)
@@ -36,7 +36,7 @@ import Effect.Exception (error)
 import Partial.Unsafe (unsafePartial)
 import Perspective.InvertedQuery.Indices (runTimeIndexForRoleQueries, runtimeIndexForContextQueries, runtimeIndexForFilledQueries', runtimeIndexForFillerQueries', runtimeIndexForPropertyQueries)
 import Perspectives.ArrayUnions (ArrayUnions(..))
-import Perspectives.Assignment.SerialiseAsDeltas (getPropertyValues, serialiseDependencies, serialisedAsDeltasFor_)
+import Perspectives.Assignment.SerialiseAsDeltas (getPropertyValues, serialiseDependencies, serialisedAsDeltasFor_, perspectivePositionText)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MonadPerspectivesTransaction, runMonadPerspectivesQuery, (##=), (##>), (##>>))
 import Perspectives.Data.EncodableMap (EncodableMap, filterKeys, lookup)
 import Perspectives.Deltas (addDelta)
@@ -48,8 +48,7 @@ import Perspectives.Instances.ObjectGetters (context, contextType, roleType) as 
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwardStartsWithFilter, forwards, isCalculatedUserQuery, shouldResultInContextStateQuery, shouldResultInRoleStateQuery, startsWithFilter, userRoleTypeOfInvertedQuery, invertedQueryHasRoleType)
 import Perspectives.InvertedQuery.Storable (getContextQueries, getFilledQueries, getFillerQueries, getPropertyQueries, getRoleQueries)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey)
-import Perspectives.Parsing.Arc.Position (ArcPosition)
-import Perspectives.Logging (errorSync, traceSync)
+import Perspectives.Logging (debugSync, errorSync)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, tryGetPerspectEntiteit)
@@ -177,18 +176,22 @@ usersWithPerspectiveOnRoleInstance roleType roleInstance contextInstance runForw
               -- calculation of that role must equal the forward part.
               -- Neither do we need the backward part to gather dependencies. It will all be in the calculation of the role type.
               (rinstances :: Array (DependencyPath)) <- lift (calculationOfRoleType userType >>= \calc -> singletonPath (C cid) ##= interpret calc)
-              concat <$> for rinstances \rinstance -> case rinstance.head of
+              concat <$> for (nub rinstances) \rinstance -> case rinstance.head of
                 R peer ->
                   if peer == newRoleInstance
                   -- Regardless of whether the userType is Enumerated or Calculated, only the newRoleInstance may be informed. 
                   -- Notice that this must be a 'new peer' situation.
                   then do
-                    lift $ traceSync $
-                      "Peer "
-                        <> unwrap peer
-                        <> " has a perspective through a self-perspective("
-                        <> perspectivePositionText perspectiveStartPosition
-                        <> ")."
+                    -- Do this only for a sharing transaction.
+                    isSharing <- AA.gets (\(Transaction { isSharing }) -> isSharing)
+                    if isSharing then do
+                      lift $ debugSync $
+                        "Peer "
+                          <> unwrap peer
+                          <> " has a perspective through a self-perspective("
+                          <> perspectivePositionText perspectiveStartPosition
+                          <> ")."
+                    else pure unit
                     -- For each path that was used to compute this peer: serialise it.
                     for_ (allPaths rinstance) (serialiseDependencies [ peer ])
                     -- Compute properties for this peer in this perspective and serialise the dependencies.
@@ -214,18 +217,21 @@ usersToTrace iq users = invertedQueryHasRoleType iq && not (null users)
 
 traceUsersWithPerspective :: InvertedQuery -> Array RoleInstance -> String -> MonadPerspectivesTransaction Unit
 traceUsersWithPerspective iq@(InvertedQuery{ perspectiveStartPosition }) users message = do
-  readableRoleType <- lift $ toReadable (unsafePartial userRoleTypeOfInvertedQuery iq)
-  lift $ traceSync $
-    "These users "
-      <> show (map unwrap users)
-      <> " of type "
-      <> roletype2string readableRoleType
-      <> "(based on perspective starting at "
-      <> perspectivePositionText perspectiveStartPosition
-      <> ") "
-      <> " "
-      <>
-        message
+  isSharing <- AA.gets (\(Transaction { isSharing }) -> isSharing)
+  if isSharing then do
+    readableRoleType <- lift $ toReadable (unsafePartial userRoleTypeOfInvertedQuery iq)
+    lift $ debugSync $
+      "These users "
+        <> show (map unwrap users)
+        <> " of type "
+        <> roletype2string readableRoleType
+        <> "(based on perspective starting at "
+        <> perspectivePositionText perspectiveStartPosition
+        <> ") "
+        <> " "
+        <>
+          message
+  else pure unit
 
 traceUsersWithPerspectiveFromContexts :: InvertedQuery -> Array ContextWithUsers -> String -> MonadPerspectivesTransaction Unit
 traceUsersWithPerspectiveFromContexts iq cwus message = traceUsersWithPerspective iq (concat (snd <$> cwus)) message
@@ -1056,10 +1062,6 @@ compileBoth ac@(InvertedQuery iqr@{ description, backwardsCompiled, forwardsComp
     if isNothing backwards' then errorSync ("compileBoth: backwards is nothing for \n" <> prettyPrint description <> perspectivePositionText perspectiveStartPosition)
     else pure unit
     pure $ InvertedQuery iqr { backwardsCompiled = backwards', forwardsCompiled = forwards' }
-
-perspectivePositionText :: Maybe ArcPosition -> String
-perspectivePositionText Nothing = ""
-perspectivePositionText (Just position) = "\nPerspective source position: " <> show position
 
 -- The backwards part of the query with a kink should have a compatible domain
 invertedQueryHasRoleDomain :: ContextType -> EnumeratedRoleType -> InvertedQuery -> MP Boolean
