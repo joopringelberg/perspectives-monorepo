@@ -40,7 +40,7 @@ import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), lastIndexOf, stripSuffix, length) as STRING
 import Data.String.Regex (Regex, match, test)
-import Data.String.Regex.Flags (noFlags)
+import Data.String.Regex.Flags (noFlags) 
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for, maximum, minimum, traverse)
 import Effect.Exception (error)
@@ -89,24 +89,34 @@ import Prelude (class Eq, class Ord, add, bind, discard, eq, identity, mul, nega
 import Simple.JSON (readJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
+compileFunction :: QueryFunctionDescription -> MP (String ~~> String)
+compileFunction qfd = case qfd of
+  SQD _ _ _ _ _ -> unsafePartial $ compileSQD qfd
+  MQD _ _ _ _ _ _ -> unsafePartial $ compileMQD qfd
+  UQD _ _ _ _ _ _ -> unsafePartial $ compileUQD qfd
+  BQD _ _ _ _ _ _ _ -> unsafePartial $ compileBQD qfd
+
+---------------------------------------------------------------------------------------------------
+-- COMPILESQD
+---------------------------------------------------------------------------------------------------
 -- TODO. String dekt de lading niet sinds we RoleTypes toelaten. Een variabele zou
 -- beter zijn.
-compileFunction :: QueryFunctionDescription -> MP (String ~~> String)
+compileSQD :: Partial => QueryFunctionDescription -> MP (String ~~> String)
 
-compileFunction (SQD _ (RolGetter (ENR (EnumeratedRoleType r))) _ _ _) =
+compileSQD (SQD _ (RolGetter (ENR (EnumeratedRoleType r))) _ _ _) =
   if isExternalRole r then pure $ unsafeCoerce $ externalRole
   else pure $ unsafeCoerce $ getEnumeratedRoleInstances (EnumeratedRoleType r)
 
-compileFunction (SQD _ (RolGetter (CR cr)) _ _ _) = do
+compileSQD (SQD _ (RolGetter (CR cr)) _ _ _) = do
   (ct :: CalculatedRole) <- getPerspectType cr
   -- TODO moeten we hier de currentcontext pushen?
   RC.calculation ct >>= compileFunction
 
-compileFunction (SQD (RDOM roleAdt) (PropertyGetter (ENP prop@(EnumeratedPropertyType pt))) _ _ _) = do
+compileSQD (SQD (RDOM roleAdt) (PropertyGetter (ENP prop@(EnumeratedPropertyType pt))) _ _ _) = do
   -- g <- getDynamicPropertyGetter pt (roleInContext2Role <$> roleAdt)
   pure $ unsafeCoerce (getPropertyFromTelescope prop)
 
-compileFunction (SQD (RDOM roleAdt) (PropertyGetter (CP (CalculatedPropertyType pt))) _ _ _) = do
+compileSQD (SQD (RDOM roleAdt) (PropertyGetter (CP (CalculatedPropertyType pt))) _ _ _) = do
   g <- getDynamicPropertyGetter pt (roleInContext2Role <$> roleAdt)
   pure $ unsafeCoerce g
 
@@ -122,17 +132,17 @@ compileFunction (SQD (RDOM roleAdt) (PropertyGetter (CP (CalculatedPropertyType 
 --       pure getter
 --     Just getter -> pure (unsafeCoerce getter)
 
-compileFunction (SQD _ (DataTypeGetter ExternalRoleF) _ _ _) = pure $ unsafeCoerce externalRole
+compileSQD (SQD _ (DataTypeGetter ExternalRoleF) _ _ _) = pure $ unsafeCoerce externalRole
 
-compileFunction (SQD _ (DataTypeGetter IndexedContextName) _ _ _) = pure $ unsafeCoerce indexedContextName
+compileSQD (SQD _ (DataTypeGetter IndexedContextName) _ _ _) = pure $ unsafeCoerce indexedContextName
 
-compileFunction (SQD _ (DataTypeGetter IndexedRoleName) _ _ _) = pure $ unsafeCoerce (indexedRoleName)
+compileSQD (SQD _ (DataTypeGetter IndexedRoleName) _ _ _) = pure $ unsafeCoerce (indexedRoleName)
 
-compileFunction (SQD _ (DataTypeGetter ContextF) _ _ _) = pure $ unsafeCoerce context
+compileSQD (SQD _ (DataTypeGetter ContextF) _ _ _) = pure $ unsafeCoerce context
 
-compileFunction (SQD _ (DataTypeGetter IdentityF) _ _ _) = pure $ (pure <<< identity)
+compileSQD (SQD _ (DataTypeGetter IdentityF) _ _ _) = pure $ (pure <<< identity)
 
-compileFunction (SQD dom (DataTypeGetter ModelNameF) _ _ _) = case dom of
+compileSQD (SQD dom (DataTypeGetter ModelNameF) _ _ _) = case dom of
   RDOM _ -> pure $ unsafeCoerce roleModelName
   CDOM _ -> pure $ unsafeCoerce contextModelName
   VDOM _ (Just pt) -> pure \_ -> pure $ propertytype2string pt
@@ -140,49 +150,99 @@ compileFunction (SQD dom (DataTypeGetter ModelNameF) _ _ _) = case dom of
   RoleKind -> pure $ unsafeCoerce roleTypeModelName'
   _ -> throwError (error $ "UnsaveCompiler: cannot retrieve modelname from " <> show dom)
 
-compileFunction (SQD _ (DataTypeGetter MeF) _ _ _) = pure $ \_ -> do
+compileSQD (SQD _ (DataTypeGetter MeF) _ _ _) = pure $ \_ -> do
   PerspectivesUser pUser <- lift $ lift getPerspectivesUser
   unwrap <$> getFilledRoles (ContextType socialEnvironment) (EnumeratedRoleType socialEnvironmentPersons) (RoleInstance pUser)
 
-compileFunction (SQD _ (TypeGetter TypeOfContextF) _ _ _) = pure $ unsafeCoerce contextType
+compileSQD (SQD _ (TypeGetter TypeOfContextF) _ _ _) = pure $ unsafeCoerce contextType
 
-compileFunction (SQD _ (TypeGetter TypeOfRoleF) _ _ _) = pure $ unsafeCoerce roleType
+compileSQD (SQD _ (TypeGetter TypeOfRoleF) _ _ _) = pure $ unsafeCoerce roleType
 
-compileFunction (SQD _ TranslateContextType _ _ _) = pure $ lift <<< lift <<< translateType <<< ContextType
+compileSQD (SQD _ TranslateContextType _ _ _) = pure $ lift <<< lift <<< translateType <<< ContextType
 
-compileFunction (SQD _ TranslateRoleType _ _ _) = pure $ lift <<< lift <<< translateType <<< EnumeratedRoleType
+compileSQD (SQD _ TranslateRoleType _ _ _) = pure $ lift <<< lift <<< translateType <<< EnumeratedRoleType
 
-compileFunction (SQD _ (RoleTypeConstant qname) RoleKind _ _) = pure ((\_ -> pure $ roletype2string qname))
+compileSQD (SQD _ (RoleTypeConstant qname) RoleKind _ _) = pure ((\_ -> pure $ roletype2string qname))
 
-compileFunction (SQD _ (ContextTypeConstant qname) ContextKind _ _) = pure $ (\_ -> pure $ unwrap qname)
+compileSQD (SQD _ (ContextTypeConstant qname) ContextKind _ _) = pure $ (\_ -> pure $ unwrap qname)
 
-compileFunction (SQD _ (TypeGetter RoleTypesF) _ _ _) = pure $ (unsafeCoerce (liftToInstanceLevel allRoleTypesInContext)) >=> pure <<< roletype2string
+compileSQD (SQD _ (TypeGetter RoleTypesF) _ _ _) = pure $ (unsafeCoerce (liftToInstanceLevel allRoleTypesInContext)) >=> pure <<< roletype2string
 
-compileFunction (SQD _ (DataTypeGetter FillerF) ran _ _) = pure $ unsafeCoerce (getFillerTypeRecursively $ unsafePartial domain2roleType ran)
+compileSQD (SQD _ (DataTypeGetter FillerF) ran _ _) = pure $ unsafeCoerce (getFillerTypeRecursively $ unsafePartial domain2roleType ran)
 
-compileFunction (SQD dom (Constant range value) _ _ _) = pure \_ -> pure value
+compileSQD (SQD dom (Constant range value) _ _ _) = pure \_ -> pure value
 
 -- compileFunction (SQD dom (RoleIndividual individual) _ _ _) = pure $ unsafeCoerce (\x -> lift $ lift $ maybe [] identity (lookupIndexedRole (unwrap individual)) :: MPQ RoleInstance)
 
-compileFunction (SQD dom (RoleIndividual individual) _ _ _) = pure $ unsafeCoerce \x -> ArrayT do
+compileSQD (SQD dom (RoleIndividual individual) _ _ _) = pure $ unsafeCoerce \x -> ArrayT do
   mi <- ((lift $ lookupIndexedRole (unwrap individual)) :: (WriterT (Array Assumption) MonadPerspectives) (Maybe RoleInstance))
   case mi of
     Nothing -> pure []
     Just i -> pure [ unwrap i ]
 
-compileFunction (SQD dom (ContextIndividual (ContextInstance ident)) _ _ _) = pure $ unsafeCoerce \x -> ArrayT do
+compileSQD (SQD dom (ContextIndividual (ContextInstance ident)) _ _ _) = pure $ unsafeCoerce \x -> ArrayT do
   mi <- ((lift $ lookupIndexedContext ident) :: (WriterT (Array Assumption) MonadPerspectives) (Maybe ContextInstance))
   case mi of
     Nothing -> pure []
     Just i -> pure [ unwrap i ]
 
-compileFunction (SQD dom (PublicRole individual) _ _ _) = pure $ unsafeCoerce (\x -> (pure $ unwrap individual :: MonadPerspectivesQuery String))
+compileSQD (SQD dom (PublicRole individual) _ _ _) = pure $ unsafeCoerce (\x -> (pure $ unwrap individual :: MonadPerspectivesQuery String))
 
-compileFunction (SQD dom (PublicContext individual) _ _ _) = pure $ unsafeCoerce (\x -> (pure $ unwrap individual :: MonadPerspectivesQuery String))
+compileSQD (SQD dom (PublicContext individual) _ _ _) = pure $ unsafeCoerce (\x -> (pure $ unwrap individual :: MonadPerspectivesQuery String))
 
-compileFunction (SQD dom (Value2Role _) _ _ _) = pure $ unsafeCoerce (\x -> pure x :: MPQ String)
+compileSQD (SQD dom (Value2Role _) _ _ _) = pure $ unsafeCoerce (\x -> pure x :: MPQ String)
 
-compileFunction (MQD _ (ExternalCoreContextGetter functionName) _ ran _ _) = do
+compileSQD (SQD dom (VariableLookup varName) range _ _) = pure $ lookup varName
+
+compileSQD (SQD _ (RoleTypeFilter adtString) _ _ _) = case readJSON adtString of
+  Left e -> throwError (error $ "Cannot read RoleTypeFilter ADT: " <> show e)
+  Right adt -> pure \roleId -> do
+    passes <- lift $ lift $ roleMatchesTypeFilter (RoleInstance roleId) adt
+    guard passes
+    pure roleId
+
+compileSQD (SQD _ (ContextTypeFilter adtString) _ _ _) = case readJSON adtString of
+  Left e -> throwError (error $ "Cannot read ContextTypeFilter ADT: " <> show e)
+  Right adt -> pure \contextId -> do
+    passes <- lift $ lift $ contextMatchesTypeFilter (ContextInstance contextId) adt
+    guard passes
+    pure contextId
+
+compileSQD (SQD _ (FilledF enumeratedRoleType contextType) _ _ _) = pure $ unsafeCoerce (getRecursivelyFilledRoles' contextType enumeratedRoleType)
+
+compileSQD (SQD _ (DataTypeGetterWithParameter functionName parameter) ran _ _) = do
+  case functionName of
+    FillerF ->
+      if parameter == "direct" then pure $ unsafeCoerce binding
+      else pure $ unsafeCoerce (bindingInContext (ContextType parameter) (unsafePartial domain2roleType ran))
+    -- SpecialisesRoleTypeF -> pure $ unsafeCoerce $ liftToInstanceLevel (\specialiser -> specialiser `specialisesRoleType` (ENR $ EnumeratedRoleType parameter))
+    SpecialisesRoleTypeF -> pure $ unsafeCoerce $ liftToInstanceLevel
+      ( \specialiser -> do
+          specialiser' <- lift $ string2RoleType specialiser
+          specialiser' `specialisesRoleType` (ENR $ EnumeratedRoleType parameter)
+      )
+
+    IsInStateF -> do
+      (STATE.State { stateFulObject }) <- getState (StateIdentifier parameter)
+      case stateFulObject of
+        STATE.Cnt ct -> pure $ \contextId -> lift $ lift $ getActiveStates_ (ContextInstance contextId) >>= pure <<< show <<< isJust <<< elemIndex (StateIdentifier parameter)
+        STATE.Orole rt -> pure $ \roleId -> lift $ lift $ getActiveRoleStates_ (RoleInstance roleId) >>= pure <<< show <<< isJust <<< elemIndex (StateIdentifier parameter)
+        STATE.Srole rt -> pure $ \roleId -> lift $ lift $ getActiveRoleStates_ (RoleInstance roleId) >>= pure <<< show <<< isJust <<< elemIndex (StateIdentifier parameter)
+    GetRoleInstancesForContextFromDatabaseF -> pure $ unsafeCoerce $ getUnlinkedRoleInstances (EnumeratedRoleType parameter)
+
+    _ -> throwError (error $ "Unknown function for DataTypeGetterWithParameter: " <> show functionName)
+
+compileSQD (SQD _ (RegExMatch (RegExP (reg :: Regex))) _ _ _) = pure \s -> do
+  case match reg s of
+    Nothing -> pure "false"
+    otherwise -> pure "true"
+
+---------------------------------------------------------------------------------------------------
+-- COMPILEMQD
+---------------------------------------------------------------------------------------------------
+compileMQD :: Partial => QueryFunctionDescription -> MP (String ~~> String)
+
+compileMQD (MQD _ (ExternalCoreContextGetter functionName) _ ran _ _) = do
   (f :: HiddenFunction) <- pure $ unsafeCoerce $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
   pure $ unsafeCoerce f [ ctype ran ]
   where
@@ -191,7 +251,7 @@ compileFunction (MQD _ (ExternalCoreContextGetter functionName) _ ran _ _) = do
     ST (ContextType ct) -> ct
     UET (ContextType ct) -> ct
 
-compileFunction (MQD dom (ExternalCoreRoleGetter functionName) args _ _ _) = do
+compileMQD (MQD dom (ExternalCoreRoleGetter functionName) args _ _ _) = do
   (f :: HiddenFunction) <- pure $ unsafeCoerce $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
   (argFunctions) <- traverse compileFunction args
   pure
@@ -241,7 +301,7 @@ compileFunction (MQD dom (ExternalCoreRoleGetter functionName) args _ _ _) = do
           _ -> throwError (error "Too many arguments for external core module: maximum is 6")
     )
 
-compileFunction (MQD dom (ExternalCorePropertyGetter functionName) args _ _ _) = do
+compileMQD (MQD dom (ExternalCorePropertyGetter functionName) args _ _ _) = do
   (f :: HiddenFunction) <- pure $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
   (argFunctions :: Array (String ~~> String)) <- traverse compileFunction args
   pure
@@ -289,12 +349,59 @@ compileFunction (MQD dom (ExternalCorePropertyGetter functionName) args _ _ _) =
           _ -> throwError (error "Too many arguments for external core module: maximum is 6")
     )
 
-compileFunction (SQD dom (VariableLookup varName) range _ _) = pure $ lookup varName
+---------------------------------------------------------------------------------------------------
+-- COMPILEUQD
+---------------------------------------------------------------------------------------------------
+compileUQD :: Partial => QueryFunctionDescription -> MP (String ~~> String)
+
+compileUQD (UQD _ FilterF criterium _ _ _) = do
+  (criterium' :: String ~~> String) <- (compileFunction criterium)
+  pure \r -> do
+    passes <- criterium' r
+    guard (passes == "true")
+    pure r
+
+compileUQD (UQD _ (BindVariable varName) f1 _ _ _) = do
+  f1' <- compileFunction f1
+  pure (addBinding_ varName f1')
+
+compileUQD (UQD _ WithFrame f1 _ _ _) = do
+  f1' <- compileFunction f1
+  pure \c -> withFrame_ f1' c
+
+compileUQD (UQD _ (UnaryCombinator ExistsF) f1 _ _ _) = do
+  f1' <- compileFunction f1
+  pure (unsafeCoerce $ exists f1')
+
+compileUQD (UQD _ (UnaryCombinator FilledByF) sourceOfFillerRoles _ _ _) = do
+  sourceOfFillerRoles' <- compileFunction sourceOfFillerRoles
+  pure (unsafeCoerce $ filledByCombinator (unsafeCoerce sourceOfFillerRoles'))
+
+compileUQD (UQD _ (UnaryCombinator FillsF) sourceOfFilledRoles _ _ _) = do
+  sourceOfFilledRoles' <- compileFunction sourceOfFilledRoles
+  pure (unsafeCoerce $ fillsCombinator (unsafeCoerce sourceOfFilledRoles'))
+
+compileUQD (UQD _ (UnaryCombinator AvailableF) f1 _ _ _) = do
+  f1' <- compileFunction f1
+  pure (unsafeCoerce $ available_ f1')
+
+compileUQD (UQD _ (UnaryCombinator ContextIndividualF) contextExpr _ _ _) = compileFunction contextExpr
+
+compileUQD (UQD _ (UnaryCombinator RoleIndividualF) contextExpr _ _ _) = compileFunction contextExpr
+
+compileUQD (UQD _ (UnaryCombinator NotF) f1 _ _ _) = do
+  (f1' :: String ~~> Value) <- unsafeCoerce (compileFunction f1)
+  pure (unsafeCoerce $ not f1')
+
+---------------------------------------------------------------------------------------------------
+-- COMPILEBQD
+---------------------------------------------------------------------------------------------------
+compileBQD :: Partial => QueryFunctionDescription -> MP (String ~~> String)
 
 -- If the second term is a constant, we can ignore the left term. This is an optimalisation.
-compileFunction (BQD _ (BinaryCombinator ComposeF) f1 f2@(SQD _ (Constant _ _) _ _ _) _ _ _) = compileFunction f2
+compileBQD (BQD _ (BinaryCombinator ComposeF) f1 f2@(SQD _ (Constant _ _) _ _ _) _ _ _) = compileFunction f2
 
-compileFunction (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 _ _ _) = do
+compileBQD (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 _ _ _) = do
   (f1' :: String ~~> String) <- compileFunction f1
   (f2' :: Array String ~~> String) <- compileSequenceFunction f2
   pure \s -> ArrayT do
@@ -304,7 +411,7 @@ compileFunction (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 _ _ _) = do
 -- If the domain of f1 is a Value, ignore f1 and just compile f2.
 -- This is an edge case that arises when we invert queries that have a Value as range.
 -- The inverted query has a Value as domain. We then completely ignore that first step.
-compileFunction (BQD _ (BinaryCombinator ComposeF) f1 f2 _ _ _) =
+compileBQD (BQD _ (BinaryCombinator ComposeF) f1 f2 _ _ _) =
   if isValueDomain $ domain f1 then compileFunction f2
   else do
     f1' <- compileFunction f1
@@ -316,28 +423,7 @@ compileFunction (BQD _ (BinaryCombinator ComposeF) f1 f2 _ _ _) =
   isValueDomain (VDOM _ _) = true
   isValueDomain _ = false
 
-compileFunction (UQD _ FilterF criterium _ _ _) = do
-  (criterium' :: String ~~> String) <- (compileFunction criterium)
-  pure \r -> do
-    passes <- criterium' r
-    guard (passes == "true")
-    pure r
-
-compileFunction (SQD _ (RoleTypeFilter adtString) _ _ _) = case readJSON adtString of
-  Left e -> throwError (error $ "Cannot read RoleTypeFilter ADT: " <> show e)
-  Right adt -> pure \roleId -> do
-    passes <- lift $ lift $ roleMatchesTypeFilter (RoleInstance roleId) adt
-    guard passes
-    pure roleId
-
-compileFunction (SQD _ (ContextTypeFilter adtString) _ _ _) = case readJSON adtString of
-  Left e -> throwError (error $ "Cannot read ContextTypeFilter ADT: " <> show e)
-  Right adt -> pure \contextId -> do
-    passes <- lift $ lift $ contextMatchesTypeFilter (ContextInstance contextId) adt
-    guard passes
-    pure contextId
-
-compileFunction (BQD _ (BinaryCombinator SequenceF) f1 f2 _ _ _) = do
+compileBQD (BQD _ (BinaryCombinator SequenceF) f1 f2 _ _ _) = do
   if (typeTimeOnly f1)
   -- Skip all VarBindings that were meant for the description compiler only.
   -- These will be bindings that are added by the core in the StateCompilers.
@@ -361,57 +447,57 @@ compileFunction (BQD _ (BinaryCombinator SequenceF) f1 f2 _ _ _) = do
         results <- runArrayT $ f2' c
         pure results
 
-compileFunction (BQD _ (BinaryCombinator IntersectionF) f1 f2 _ _ _) = do
+compileBQD (BQD _ (BinaryCombinator IntersectionF) f1 f2 _ _ _) = do
   f1' <- compileFunction f1
   f2' <- compileFunction f2
   pure $ Combinators.intersection f1' f2'
 
-compileFunction (BQD _ (BinaryCombinator FilledByF) sourceOfFilledRoles sourceOfFillerRoles _ _ _) = do
+compileBQD (BQD _ (BinaryCombinator FilledByF) sourceOfFilledRoles sourceOfFillerRoles _ _ _) = do
   sourceOfFilledRoles' <- compileFunction sourceOfFilledRoles
   sourceOfFillerRoles' <- compileFunction sourceOfFillerRoles
   pure $ (unsafeCoerce filledByOperator (unsafeCoerce sourceOfFilledRoles') (unsafeCoerce sourceOfFillerRoles'))
 
-compileFunction (BQD _ (BinaryCombinator FillsF) sourceOfFilledRoles sourceOfFillerRoles _ _ _) = do
+compileBQD (BQD _ (BinaryCombinator FillsF) sourceOfFilledRoles sourceOfFillerRoles _ _ _) = do
   sourceOfFilledRoles' <- compileFunction sourceOfFilledRoles
   sourceOfFillerRoles' <- compileFunction sourceOfFillerRoles
   pure $ (unsafeCoerce fillsOperator (unsafeCoerce sourceOfFilledRoles') (unsafeCoerce sourceOfFillerRoles'))
 
-compileFunction (BQD _ (BinaryCombinator UnionF) f1 f2 _ _ _) = do
+compileBQD (BQD _ (BinaryCombinator UnionF) f1 f2 _ _ _) = do
   f1' <- compileFunction f1
   f2' <- compileFunction f2
   pure $ Combinators.conjunction f1' f2'
 
-compileFunction (BQD _ (BinaryCombinator OrElseF) f1 f2 _ _ _) = do
+compileBQD (BQD _ (BinaryCombinator OrElseF) f1 f2 _ _ _) = do
   f1' <- compileFunction f1
   f2' <- compileFunction f2
   pure $ Combinators.orElse f1' f2'
 
 -- The compiler only allows f1 and f2 if they're functional.
-compileFunction (BQD _ (BinaryCombinator g) f1 f2 _ _ _) | isJust $ elemIndex g [ EqualsF, NotEqualsF ] = do
+compileBQD (BQD _ (BinaryCombinator g) f1 f2 _ _ _) | isJust $ elemIndex g [ EqualsF, NotEqualsF ] = do
   f1' <- compileFunction f1
   f2' <- compileFunction f2
 
   pure $ unsafeCoerce $ compare f1' f2' (unsafePartial $ compareFunction g)
 
-compileFunction (BQD _ (BinaryCombinator g) f1 f2 _ _ _) | isJust $ elemIndex g [ LessThanF, LessThanEqualF, GreaterThanF, GreaterThanEqualF ] = do
+compileBQD (BQD _ (BinaryCombinator g) f1 f2 _ _ _) | isJust $ elemIndex g [ LessThanF, LessThanEqualF, GreaterThanF, GreaterThanEqualF ] = do
   f1' <- compileFunction f1
   f2' <- compileFunction f2
   -- NOTE. We transform the string representation of Value to types that can be compared according to their Range types.
   -- Check for each new type added to Range in Perspectives.Representation.Range.
   pure $ order (range f1) f1' f2' g
 
-compileFunction (BQD _ (BinaryCombinator g) f1 f2 _ _ _) | g `eq` AndF = do
+compileBQD (BQD _ (BinaryCombinator g) f1 f2 _ _ _) | g `eq` AndF = do
   (f1' :: String ~~> Value) <- unsafeCoerce $ compileFunction f1
   (f2' :: String ~~> Value) <- unsafeCoerce $ compileFunction f2
   pure (unsafeCoerce (logicalAnd f1' f2'))
 
-compileFunction (BQD _ (BinaryCombinator g) f1 f2 _ _ _) | g `eq` OrF = do
+compileBQD (BQD _ (BinaryCombinator g) f1 f2 _ _ _) | g `eq` OrF = do
   (f1' :: String ~~> Value) <- unsafeCoerce $ compileFunction f1
   (f2' :: String ~~> Value) <- unsafeCoerce $ compileFunction f2
   pure (unsafeCoerce (logicalOr f1' f2'))
 
 -- Add and subtract for numbers and strings. Divide and multiply just for numbers.
-compileFunction (BQD _ (BinaryCombinator g) f1 f2 ran _ _) | isJust $ elemIndex g [ AddF, SubtractF, DivideF, MultiplyF ] = do
+compileBQD (BQD _ (BinaryCombinator g) f1 f2 ran _ _) | isJust $ elemIndex g [ AddF, SubtractF, DivideF, MultiplyF ] = do
   f1' <- compileFunction f1
   f2' <- compileFunction f2
   -- If both ranges are equal:
@@ -419,70 +505,6 @@ compileFunction (BQD _ (BinaryCombinator g) f1 f2 ran _ _) | isJust $ elemIndex 
   -- Otherwise we know one of the ranges is a PDate and the other is a PDuration and the function is AddF or SubtractF.
   else if isDateOrTime (unsafePartial domain2PropertyRange $ range f1) && isPDuration (unsafePartial domain2PropertyRange $ range f2) then pure $ performNumericOperation g ran f1' f2' (unsafePartial $ mapDurationOperator g (range f2))
   else pure $ performNumericOperation g ran f2' f1' (unsafePartial $ mapDurationOperator g (range f1))
-
-compileFunction (UQD _ (BindVariable varName) f1 _ _ _) = do
-  f1' <- compileFunction f1
-  pure (addBinding_ varName f1')
-
-compileFunction (UQD _ WithFrame f1 _ _ _) = do
-  f1' <- compileFunction f1
-  pure \c -> withFrame_ f1' c
-
-compileFunction (UQD _ (UnaryCombinator ExistsF) f1 _ _ _) = do
-  f1' <- compileFunction f1
-  pure (unsafeCoerce $ exists f1')
-
-compileFunction (UQD _ (UnaryCombinator FilledByF) sourceOfFillerRoles _ _ _) = do
-  sourceOfFillerRoles' <- compileFunction sourceOfFillerRoles
-  pure (unsafeCoerce $ filledByCombinator (unsafeCoerce sourceOfFillerRoles'))
-
-compileFunction (UQD _ (UnaryCombinator FillsF) sourceOfFilledRoles _ _ _) = do
-  sourceOfFilledRoles' <- compileFunction sourceOfFilledRoles
-  pure (unsafeCoerce $ fillsCombinator (unsafeCoerce sourceOfFilledRoles'))
-
-compileFunction (UQD _ (UnaryCombinator AvailableF) f1 _ _ _) = do
-  f1' <- compileFunction f1
-  pure (unsafeCoerce $ available_ f1')
-
-compileFunction (UQD _ (UnaryCombinator ContextIndividualF) contextExpr _ _ _) = compileFunction contextExpr
-
-compileFunction (UQD _ (UnaryCombinator RoleIndividualF) contextExpr _ _ _) = compileFunction contextExpr
-
-compileFunction (UQD _ (UnaryCombinator NotF) f1 _ _ _) = do
-  (f1' :: String ~~> Value) <- unsafeCoerce (compileFunction f1)
-  pure (unsafeCoerce $ not f1')
-
-compileFunction (SQD _ (FilledF enumeratedRoleType contextType) _ _ _) = pure $ unsafeCoerce (getRecursivelyFilledRoles' contextType enumeratedRoleType)
-
-compileFunction (SQD _ (DataTypeGetterWithParameter functionName parameter) ran _ _) = do
-  case functionName of
-    FillerF ->
-      if parameter == "direct" then pure $ unsafeCoerce binding
-      else pure $ unsafeCoerce (bindingInContext (ContextType parameter) (unsafePartial domain2roleType ran))
-    -- SpecialisesRoleTypeF -> pure $ unsafeCoerce $ liftToInstanceLevel (\specialiser -> specialiser `specialisesRoleType` (ENR $ EnumeratedRoleType parameter))
-    SpecialisesRoleTypeF -> pure $ unsafeCoerce $ liftToInstanceLevel
-      ( \specialiser -> do
-          specialiser' <- lift $ string2RoleType specialiser
-          specialiser' `specialisesRoleType` (ENR $ EnumeratedRoleType parameter)
-      )
-
-    IsInStateF -> do
-      (STATE.State { stateFulObject }) <- getState (StateIdentifier parameter)
-      case stateFulObject of
-        STATE.Cnt ct -> pure $ \contextId -> lift $ lift $ getActiveStates_ (ContextInstance contextId) >>= pure <<< show <<< isJust <<< elemIndex (StateIdentifier parameter)
-        STATE.Orole rt -> pure $ \roleId -> lift $ lift $ getActiveRoleStates_ (RoleInstance roleId) >>= pure <<< show <<< isJust <<< elemIndex (StateIdentifier parameter)
-        STATE.Srole rt -> pure $ \roleId -> lift $ lift $ getActiveRoleStates_ (RoleInstance roleId) >>= pure <<< show <<< isJust <<< elemIndex (StateIdentifier parameter)
-    GetRoleInstancesForContextFromDatabaseF -> pure $ unsafeCoerce $ getUnlinkedRoleInstances (EnumeratedRoleType parameter)
-
-    _ -> throwError (error $ "Unknown function for DataTypeGetterWithParameter: " <> show functionName)
-
-compileFunction (SQD _ (RegExMatch (RegExP (reg :: Regex))) _ _ _) = pure \s -> do
-  case match reg s of
-    Nothing -> pure "false"
-    otherwise -> pure "true"
-
--- Catch all
-compileFunction qd = throwError (error $ "Cannot create a function out of '" <> prettyPrint qd <> "'.")
 
 ---------------------------------------------------------------------------------------------------
 -- COMPILESEQUENCEFUNCTION
