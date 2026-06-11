@@ -173,8 +173,8 @@ interpretBQD (BQD _ (BinaryCombinator ComposeF) f1 f2@(SQD _ (Constant _ _) _ _ 
 interpretBQD (BQD _ (BinaryCombinator ComposeF) f1 f2 _ _ _) a =
   case f1, f2 of
     (SQD _ (DataTypeGetter IdentityF) _ _ _), (SQD _ (DataTypeGetter IdentityF) _ _ _) -> pure a
-    _, (SQD _ (DataTypeGetter IdentityF) _ _ _) -> interpret f1 a
     (SQD _ (DataTypeGetter IdentityF) _ _ _), _ -> interpret f2 a
+    _, (SQD _ (DataTypeGetter IdentityF) _ _ _) -> interpret f1 a
     _, _ -> (interpret f1 >=> interpret f2) a
 interpretBQD (BQD _ (BinaryCombinator SequenceF) f1 f2 _ _ _) a = ArrayT $ do
   (f1r :: Array DependencyPath) <- runArrayT $ interpret f1 a
@@ -259,7 +259,12 @@ interpretBQD (BQD _ (BinaryCombinator OrElseF) f1 f2 ran fun man) a = ArrayT do
   if null fr1 then runArrayT (interpret f2 a)
   else pure fr1
 
-interpretBQD (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _ _) a = ArrayT
+interpretBQD qfd@(BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _ _) a = interpretComposeSequenceF qfd a
+
+interpretBQD qfd@(BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = interpretBQDOtherFunctions qfd a
+
+interpretComposeSequenceF :: Partial => QueryFunctionDescription -> DependencyPath ~~> DependencyPath
+interpretComposeSequenceF (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _ _) a = ArrayT
   case f2 of
     -- f2 results from the expression that follows `>>=` (must have been: "sum", "product", etc.).
     -- This was parsed as `SequenceFunction f` and is now compiled as `UnaryCombinator f` in an SQD.
@@ -367,7 +372,9 @@ interpretBQD (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _ _) a = Array
         }
       ]
 
-interpretBQD (BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = case fun of
+
+interpretBQDOtherFunctions :: Partial => QueryFunctionDescription -> DependencyPath ~~> DependencyPath
+interpretBQDOtherFunctions (BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = case fun of
 
   -- The compiler only allows f1 and f2 if they're functional.
   g | isJust $ elemIndex g [ EqualsF, NotEqualsF ] -> ArrayT do
