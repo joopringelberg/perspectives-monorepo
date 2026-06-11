@@ -63,7 +63,8 @@ incomingPost :: MonadPerspectives Unit
 incomingPost = do
   post <- postDatabaseName
   pushMessage "Cleaning up post database"
-  cleanupDeletedDocs post
+  nrOfKeptDocs <- cleanupDeletedDocs post
+  debugBroker $ "Cleanup complete. Kept " <> show nrOfKeptDocs <> " non-deleted documents."
   removeMessage "Cleaning up post database"
   setConnectionState false
   { topic, queueId, login, passcode, vhost, url } <- getBrokerService

@@ -54,6 +54,7 @@ module Perspectives.Logging
   , debugQuery
   , debugState
   , debugSync
+  , debugTest
   , debugUpgrade
   , errorBroker
   , errorCompiler
@@ -64,12 +65,14 @@ module Perspectives.Logging
   , errorParser
   , errorPersistence
   , errorSync
+  , errorTest
   , errorUpgrade
   , infoBroker
   , infoDelta
   , infoInstall
   , infoModel
   , infoSync
+  , infoTest
   , infoUpgrade
   , noColor
   , pdrLog
@@ -80,6 +83,7 @@ module Perspectives.Logging
   , traceQuery
   , traceState
   , traceSync
+  , traceTest
   , warnAuth
   , warnBroker
   , warnDelta
@@ -88,7 +92,9 @@ module Perspectives.Logging
   , warnPersistence
   , warnState
   , warnSync
-  ) where
+  , warnTest
+  )
+  where
 
 import Control.Monad.AvarMonadAsk (gets)
 import Data.Map (lookup) as Map
@@ -315,3 +321,21 @@ warnDelta = pdrLog DELTA Warn
 
 errorDelta :: String -> MonadPerspectives Unit
 errorDelta = pdrLog DELTA Error
+
+-----------------------------------------------------------
+-- TEST
+-----------------------------------------------------------
+traceTest :: String -> MonadPerspectives Unit
+traceTest = pdrLog TEST Trace
+
+debugTest :: String -> MonadPerspectives Unit
+debugTest = pdrLog TEST Debug
+
+infoTest :: String -> MonadPerspectives Unit
+infoTest = pdrLog TEST Info
+
+warnTest :: String -> MonadPerspectives Unit
+warnTest = pdrLog TEST Warn
+
+errorTest :: String -> MonadPerspectives Unit
+errorTest = pdrLog TEST Error

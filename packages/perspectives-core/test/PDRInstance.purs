@@ -71,14 +71,14 @@ import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (getPrivateKey)
-import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction, RuntimeOptions, TypeFix, (##>))
+import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), MonadPerspectives, MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction, RuntimeOptions, TypeFix, (##>))
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Me (computeMe_)
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getProperty)
-import Perspectives.Logging (ansiReset)
+import Perspectives.Logging (ansiReset, debugTest, infoTest)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, identifiableFirstName, invitationGuestType, invitationMessageProp, inviteeType, inviterType, outgoingInvitationsType, serialisedInvitationProp, sysUser)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem, getUserIdentifier)
@@ -174,7 +174,11 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
 
   -- Optionally color all structured log lines produced by this PDR instance.
   runPerspectivesWithState
-    (modify \s -> s { logColor = mLogColor })
+    do
+      (modify \s -> s { logColor = mLogColor })
+      case mLogColor of
+        Just color -> infoTest (color <> "Starting PDR instance for user: " <> pouchdbUser.systemIdentifier <> ansiReset)
+        Nothing -> infoTest ("Starting PDR instance for user: " <> pouchdbUser.systemIdentifier)
     state
 
   -- If we have a bus, replace the default real StompClient factory with the in-process stub.
@@ -274,8 +278,13 @@ noBus = Nothing
 -- | Run a `MonadPerspectives` action against a PDR instance.
 runInPDR :: forall a. PDRInstance -> MonadPerspectives a -> Aff a
 runInPDR pdr mp = do
-  log $ "Running action in PDR instance: " <> pdr.name
-  runPerspectivesWithState mp pdr.stateAVar
+  
+  runPerspectivesWithState 
+    ( do
+        debugTest $ "Running action in PDR instance: " <> pdr.name
+        mp 
+    )
+    pdr.stateAVar
 
 -- | Run a `MonadPerspectivesTransaction` against a PDR instance.
 -- | Peer sharing is disabled (suitable for isolated single-instance tests).
@@ -322,9 +331,6 @@ withPDR
   -> (PDRInstance -> Aff a)
   -> Aff a
 withPDR pouchdbUser runtimeOptions mLogColor mbus f = do
-  case mLogColor of
-    Just color -> log (color <> "Starting PDR instance for user: " <> pouchdbUser.systemIdentifier <> ansiReset)
-    Nothing -> log ("Starting PDR instance for user: " <> pouchdbUser.systemIdentifier)
   bracket (startPDRInstance pouchdbUser runtimeOptions mLogColor mbus) _.shutdown f
 
 -- TODO. Een functie met dezelfde naam bestaat in TestUtils.purs (Test.Sync.Utils). Deze versie moet prevaleren.
@@ -387,11 +393,11 @@ connectPDRs pdr1 pdr2 = do
   -- -----------------------------------------------------------------------
   mySystem1 <- runInPDR pdr1 getMySystem
 
-  log "connectPDRs: Running CreateInvitation context action in PDR1"
-  runInPDR pdr1
-    $ runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
-    $
-      runContextAction sysUser "CreateInvitation" mySystem1
+  runInPDR pdr1 do
+      debugTest "connectPDRs: Running CreateInvitation context action in PDR1"
+      runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
+        $
+        runContextAction sysUser "CreateInvitation" mySystem1
 
   -- -----------------------------------------------------------------------
   -- PDR1: Step 2 — obtain the new Invitation context instance
@@ -400,24 +406,26 @@ connectPDRs pdr1 pdr2 = do
   invCtx <- pollUntil 100 (Milliseconds 100.0)
     "Invitation context to appear in PerspectivesSystem$OutgoingInvitations"
     ( runInPDR pdr1
-        ( (ContextInstance mySystem1) ##>
-            ( getEnumeratedRoleInstances (EnumeratedRoleType outgoingInvitationsType)
-                >=> binding
-                >=> context
-            )
+        ( do 
+            r <- (ContextInstance mySystem1) ##>
+              ( getEnumeratedRoleInstances (EnumeratedRoleType outgoingInvitationsType)
+                  >=> binding
+                  >=> context
+              )
+            debugTest "connectPDRs: Invitation context obtained in PDR1"
+            pure r
         )
     )
 
   let invExternal = externalRole invCtx
-  log "connectPDRs: Invitation context obtained in PDR1"
-
+  
   -- -----------------------------------------------------------------------
   -- PDR1: Step 3 — set the Message property on Invitation$External
   -- -----------------------------------------------------------------------
-  log "connectPDRs: Setting message property in PDR1"
-  runInPDR pdr1
-    $ runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType inviterType)
-    $
+  runInPDR pdr1 do
+    debugTest "connectPDRs: Setting message property in PDR1"
+    runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType inviterType)
+      $
       setProperty
         [ invExternal ]
         (EnumeratedPropertyType invitationMessageProp)
@@ -426,25 +434,26 @@ connectPDRs pdr1 pdr2 = do
 
   messageText <- pollUntil 30 (Milliseconds 200.0)
     "Message property to be set"
-    ( do
-        runInPDR pdr1
-          (invExternal ##> getProperty (EnumeratedPropertyType invitationMessageProp))
+    ( runInPDR pdr1
+        do
+          r <- (invExternal ##> getProperty (EnumeratedPropertyType invitationMessageProp))
+          debugTest "connectPDRs: Running CreateInvitation context action in PDR1"
+          pure r
     )
-  log $ "connectPDRs: Message property set in PDR1, value: " <> show messageText
-
+  
   -- -----------------------------------------------------------------------
   -- PDR1: Step 4 — run the Inviter's CreateInvitation object action
   -- (sets ConfirmationCode → bot creates SerialisedInvitation file)
   -- -----------------------------------------------------------------------
-  log "connectPDRs: Running CreateInvitation object action in PDR1"
-  runInPDR pdr1
-    $ runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType inviterType)
-    $
-      runActionForObject
-        (ENR $ EnumeratedRoleType inviterType)
-        "CreateInvitation"
-        (unwrap invCtx)
-        (unwrap invExternal)
+  runInPDR pdr1 do
+    debugTest "connectPDRs: Running CreateInvitation object action in PDR1"
+    runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType inviterType)
+      $
+        runActionForObject
+          (ENR $ EnumeratedRoleType inviterType)
+          "CreateInvitation"
+          (unwrap invCtx)
+          (unwrap invExternal)
 
   -- -----------------------------------------------------------------------
   -- PDR1: Step 5 — read the SerialisedInvitation file content
@@ -457,10 +466,15 @@ connectPDRs pdr1 pdr2 = do
           (invExternal ##> getProperty (EnumeratedPropertyType serialisedInvitationProp))
         case mPFileStr of
           Nothing -> pure Nothing
-          Just (Value v) -> runInPDR pdr1 $ getPFileTextValue v
+          Just (Value v) -> runInPDR pdr1 do 
+              mt <- getPFileTextValue v
+              case mt of 
+                Nothing -> pure Nothing
+                Just t -> do
+                  debugTest "connectPDRs: SerialisedInvitation property and file content obtained in PDR1"
+                  pure (Just t)
     )
-  log "connectPDRs: SerialisedInvitation property and file content obtained in PDR1"
-
+  
   -- -----------------------------------------------------------------------
   -- PDR2: Step 6 — parse invitation JSON and execute the transaction
   -- -----------------------------------------------------------------------
@@ -476,27 +490,31 @@ connectPDRs pdr1 pdr2 = do
       "connectPDRs: failed to parse TransactionForPeer: " <> show err
     Right x -> pure x
 
-  log "connectPDRs: Executing TransactionForPeer in PDR2"
-  runInPDR pdr2
-    $ runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
-    $
-      executeTransaction tfp
+  runInPDR pdr2 do
+    debugTest "connectPDRs: Executing TransactionForPeer in PDR2"
+    runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+      $
+        executeTransaction tfp
 
   -- Poll until the Inviter role is accessible in PDR2, confirming that the
   -- transaction and any state-entry bots have completed.
   void $ pollUntil 30 (Milliseconds 100.0)
     "Inviter role to be accessible in PDR2 after executeTransaction"
-    ( runInPDR pdr2
-        (invCtx ##> getEnumeratedRoleInstances (EnumeratedRoleType inviterType))
+    ( runInPDR pdr2 do
+        r <- (invCtx ##> getEnumeratedRoleInstances (EnumeratedRoleType inviterType))
+        case r of
+          Just x -> do
+            debugTest "connectPDRs: Inviter role accessible in PDR2 after executeTransaction"
+            pure (Just x)
+          Nothing -> pure Nothing
     )
-  log "connectPDRs: Inviter role accessible in PDR2 after executeTransaction"
 
   -- -----------------------------------------------------------------------
   -- PDR2: Step 7 — create Invitee role filled with PDR2's me
   -- -----------------------------------------------------------------------
 
-  log "connectPDRs: Creating Invitee role in PDR2"
   runInPDR pdr2 do
+    debugTest "connectPDRs: Creating Invitee role in PDR2"
     me2 <- computeMe_
     runMonadPerspectivesTransaction' shareWithPeers (CR $ CalculatedRoleType invitationGuestType)
       $ void

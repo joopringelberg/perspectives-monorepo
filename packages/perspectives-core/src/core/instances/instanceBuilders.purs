@@ -52,7 +52,6 @@ import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), snd)
 import Effect.Aff.AVar (put)
 import Effect.Aff.Class (liftAff)
-import Effect.Class.Console (log)
 import Foreign.Object (empty, insert)
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor)
@@ -65,6 +64,7 @@ import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.Instances.CreateRole (constructEmptyRole)
 import Perspectives.Instances.Me (isMe)
+import Perspectives.Logging (debugInstall)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Parsing.Messages (PerspectivesError)
 import Perspectives.Persistent (saveEntiteit, tryGetPerspectEntiteit)
@@ -272,7 +272,7 @@ lookupOrCreateRoleInstance rtype id roleConstructor = do
   executeConstructor :: String -> MonadPerspectivesTransaction RoleInstance
   executeConstructor indexedName = do
     rid <- roleConstructor
-    liftAff $ log $ "Adding indexed role " <> indexedName
+    lift $ debugInstall $ "Adding indexed role " <> indexedName
     lift $ modify \ps -> ps { indexedRoles = insert indexedName rid ps.indexedRoles }
     scheduleIndexedResourceCreation (IndexedRole rid indexedName)
     pure rid
@@ -311,7 +311,8 @@ lookupOrCreateContextInstance ctype id contextConstructor = do
   executeConstructor :: String -> ExceptT PerspectivesError MonadPerspectivesTransaction ContextInstance
   executeConstructor indexedName = do
     cid <- contextConstructor
-    liftAff $ log $ "Adding indexed context " <> indexedName
+    lift $ lift $ debugInstall $ "Adding indexed context " <> indexedName
+
     lift $ lift $ modify \ps -> ps { indexedContexts = insert indexedName cid ps.indexedContexts }
     lift $ scheduleIndexedResourceCreation (IndexedContext cid indexedName)
     -- QUERY UPDATES

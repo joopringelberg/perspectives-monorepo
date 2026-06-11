@@ -203,13 +203,12 @@ export function cleanupDeletedDocsImpl (dbName) {
     .then(() => {
       const rebuiltDb = createDatabaseImpl(dbName);
       if (!docsToKeep.length) {
-        return Promise.resolve({});
+        return Promise.resolve(0);
       }
       return rebuiltDb.bulkDocs(docsToKeep);
     })
     .then(() => {
-      console.log(`Cleanup complete. Kept ${docsToKeep.length} non-deleted documents.`);
-      return {};
+      return docsToKeep.length;
     })
     .catch(err => {
       console.error(`Error during cleanup:`, convertPouchError(err));

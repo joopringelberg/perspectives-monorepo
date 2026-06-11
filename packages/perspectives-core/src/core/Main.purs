@@ -67,6 +67,7 @@ import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (context, externalRole)
+import Perspectives.Logging (debugInstall)
 import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, onStartUp, sysUser, userWithCredentialsAuthorizedDomain, userWithCredentialsPassword, userWithCredentialsUsername)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.ModelUpgrade (runModelUpgrades)
@@ -484,7 +485,7 @@ forkJustInTimeModelLoader modelToLoadAVar state = run
                 doNotShareWithPeers
                 (ENR $ EnumeratedRoleType sysUser)
                 ( do
-                    log ("Will just-in-time load " <> show dfId)
+                    lift $ debugInstall $ "Will just-in-time load " <> show dfId
                     void $ addModelToLocalStore dfId isInitialLoad
                 )
             )
