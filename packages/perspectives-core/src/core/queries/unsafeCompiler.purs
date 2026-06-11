@@ -40,12 +40,11 @@ import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), lastIndexOf, stripSuffix, length) as STRING
 import Data.String.Regex (Regex, match, test)
-import Data.String.Regex.Flags (noFlags)
+import Data.String.Regex.Flags (noFlags) 
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for, maximum, minimum, traverse)
 import Effect.Exception (error)
 import Foreign.Object (empty, lookup) as OBJ
-import Partial (class Partial)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ContextAndRole (rol_binding, rol_context, rol_id, rol_pspType)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), Assumption, AssumptionTracking, InformedAssumption(..), MP, MPQ, MonadPerspectives, MonadPerspectivesQuery, liftToInstanceLevel, (###=), (##>), (##>>))
