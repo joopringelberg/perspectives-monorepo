@@ -79,16 +79,16 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Me (computeMe_)
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getProperty)
 import Perspectives.Logging (ansiReset)
-import Perspectives.ModelDependencies (connectedToAMQPBroker, identifiableFirstName, invitationMessageProp, inviteeType, inviterType, outgoingInvitationsType, serialisedInvitationProp, sysUser)
+import Perspectives.ModelDependencies (connectedToAMQPBroker, identifiableFirstName, invitationGuestType, invitationMessageProp, inviteeType, inviterType, outgoingInvitationsType, serialisedInvitationProp, sysUser)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (saveMarkedResources)
-import Perspectives.PerspectivesState (newPerspectivesState, setBrokerService, setStompClientFactory, setTopicLogLevel)
+import Perspectives.PerspectivesState (newPerspectivesState, setBrokerService, setStompClientFactory, setTopicLogLevel, noTransactionIsRunning)
 import Perspectives.Representation.Class.PersistentType (EnumeratedPropertyType(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runMonadPerspectivesTransaction', shareWithPeers)
 import Perspectives.RunPerspectives (runPerspectivesWithState)
@@ -500,7 +500,7 @@ connectPDRs pdr1 pdr2 = do
   log "connectPDRs: Creating Invitee role in PDR2"
   runInPDR pdr2 do
     me2 <- computeMe_
-    runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+    runMonadPerspectivesTransaction' shareWithPeers (CR $ CalculatedRoleType invitationGuestType)
       $ void
       $ createAndAddRoleInstance
           (EnumeratedRoleType inviteeType)
@@ -511,3 +511,13 @@ connectPDRs pdr1 pdr2 = do
               , binding: Just (unwrap me2)
               }
           )
+  waitUntilAllTransactionsComplete pdr2
+  waitUntilAllTransactionsComplete pdr1
+  log "connectPDRs: Connection process completed."
+
+waitUntilAllTransactionsComplete :: PDRInstance -> Aff Unit
+waitUntilAllTransactionsComplete pdr = do
+  pollUntil 30 (Milliseconds 100.0)
+    "no transaction is running in PDR instance"
+    ( runInPDR pdr noTransactionIsRunning >>= \b -> if b then pure (Just unit) else pure Nothing
+    )

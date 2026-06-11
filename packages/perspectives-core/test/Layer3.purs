@@ -60,19 +60,18 @@ import Prelude
 
 import Control.Monad.Cont (lift)
 import Data.Maybe (Maybe(..))
-import Data.Newtype (unwrap)
 import Effect (Effect)
 import Effect.Aff (Milliseconds(..))
 import Perspectives.Assignment.RunAction (runContextAction)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##>))
-import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances)
+import Perspectives.Instances.ObjectGetters (binding, binding_, context, getEnumeratedRoleInstances)
 import Perspectives.Logging (ansiMagenta, ansiRed)
-import Perspectives.ModelDependencies (outgoingInvitationsType, sysUser)
-import Perspectives.Names (getMySystem)
+import Perspectives.ModelDependencies (outgoingInvitationsType, sysMe, sysUser)
+import Perspectives.Names (getMySystem, lookupIndexedRole)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (tryGetPerspectRol)
-import Perspectives.PerspectivesState (defaultRuntimeOptions, getPerspectivesUser, setTopicLogLevel)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
+import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
 import Test.PDRInstance (connectPDRs, noBus, pollUntil, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
@@ -121,29 +120,27 @@ main = runTest do
           runInPDR pdrA
             ( do
                 setTopicLogLevel BROKER Debug
-                setTopicLogLevel SYNC Debug
+                setTopicLogLevel SYNC Trace
             )
           runInPDR pdrB
             ( do
                 setTopicLogLevel BROKER Debug
                 setTopicLogLevel SYNC Debug
-                setTopicLogLevel STATE Debug
+                setTopicLogLevel DELTA Info
             )
           connectPDRs pdrA pdrB
           -- Two Persons instances.
           -- Controleer op PerspectivesUsers in plaats daarvan.
-          malice <- runInPDR pdrA $ Just <<< RoleInstance <<< unwrap <$> getPerspectivesUser
-          -- malice <- runInPDR pdrA do
-          --   muser <- lookupIndexedRole sysMe
-          --   case muser of
-          --     Just user -> binding_ user
-          --     Nothing -> pure Nothing
-          mbob <- runInPDR pdrB $ Just <<< RoleInstance <<< unwrap <$> getPerspectivesUser
-          -- mbob <- runInPDR pdrB do
-          --   muser <- lookupIndexedRole sysMe
-          --   case muser of
-          --     Just user -> binding_ user
-          --     Nothing -> pure Nothing
+          malice <- runInPDR pdrA do
+            muser <- lookupIndexedRole sysMe
+            case muser of
+              Just user -> binding_ user
+              Nothing -> pure Nothing
+          mbob <- runInPDR pdrB do
+            muser <- lookupIndexedRole sysMe
+            case muser of
+              Just user -> binding_ user
+              Nothing -> pure Nothing
           case malice, mbob of
             Just alice, Just bob -> do
               maliceForBob <- runInPDR pdrB $ tryGetPerspectRol alice
