@@ -48,9 +48,9 @@ data PerspectivesWarning
   | ConstructingExternalRole String
   -- Transaction version-management messages
   | TransactionBlockedByVersionGaps
-  | SkippingOutdatedDelta String Int Int
-  | VersionConflictIncomingWins String Int String
-  | VersionConflictIncomingLoses String Int String
+  | SkippingOutdatedDelta String String Int Int
+  | VersionConflictIncomingWins String String Int String
+  | VersionConflictIncomingLoses String String Int String
   | ModifyWinsOverDeleteSuppressed String
   | ModifyWinsOverDeleteRestoring String
   -- User interaction
@@ -74,9 +74,9 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ExecutingUniverseRoleDelta deltaType contextId roleInstance roleType subject) = "(ExecutingUniverseRoleDelta) " <> deltaType <> " for/from " <> contextId <> " with id " <> roleInstance <> " with type " <> roleType <> " for user role " <> subject
   show (ConstructingExternalRole contextId) = "(ConstructingExternalRole) ConstructExternalRole in " <> contextId
   show TransactionBlockedByVersionGaps = "(TransactionBlockedByVersionGaps) Transaction blocked: version gaps detected. Storing as pending."
-  show (SkippingOutdatedDelta resourceKey resourceVersion localVersion) = "(SkippingOutdatedDelta) Skipping outdated delta for " <> resourceKey <> " (version " <> show resourceVersion <> " < local " <> show localVersion <> ")"
-  show (VersionConflictIncomingWins resourceKey resourceVersion author) = "(VersionConflictIncomingWins) Version conflict for " <> resourceKey <> " at version " <> show resourceVersion <> ": incoming author " <> author <> " wins."
-  show (VersionConflictIncomingLoses resourceKey resourceVersion author) = "(VersionConflictIncomingLoses) Version conflict for " <> resourceKey <> " at version " <> show resourceVersion <> ": incoming author " <> author <> " loses."
+  show (SkippingOutdatedDelta resourceKey deltaType resourceVersion localVersion) = "(SkippingOutdatedDelta) Skipping outdated delta for " <> resourceKey <> " (" <> deltaType <> ") (incoming version " <> show resourceVersion <> " < local " <> show localVersion <> ")"
+  show (VersionConflictIncomingWins resourceKey deltaType resourceVersion author) = "(VersionConflictIncomingWins) Version conflict for " <> resourceKey <> " (" <> deltaType <> ") at version " <> show resourceVersion <> ": incoming author " <> author <> " wins."
+  show (VersionConflictIncomingLoses resourceKey deltaType resourceVersion author) = "(VersionConflictIncomingLoses) Version conflict for " <> resourceKey <> " (" <> deltaType <> ") at version " <> show resourceVersion <> ": incoming author " <> author <> " loses."
   show (ModifyWinsOverDeleteSuppressed resourceKey) = "(ModifyWinsOverDeleteSuppressed) Modify-wins-over-delete: suppressing deletion of " <> resourceKey <> " because concurrent sub-resource modifications exist."
   show (ModifyWinsOverDeleteRestoring roleInstanceId) = "(ModifyWinsOverDeleteRestoring) Modify-wins-over-delete: restoring role " <> roleInstanceId <> " to apply incoming modification."
   show (MissingResource resourceKind instanceDisplay typeName) =

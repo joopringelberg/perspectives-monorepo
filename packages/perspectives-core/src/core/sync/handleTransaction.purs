@@ -511,7 +511,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           }
       else if resourceVersion < localVersion then do
         -- Outdated delta: version is behind local version. Store but don't execute.
-        lift $ renderPerspectivesWarning >=> traceSync $ (SkippingOutdatedDelta resourceKey resourceVersion localVersion)
+        lift $ renderPerspectivesWarning >=> traceSync $ (SkippingOutdatedDelta resourceKey deltaType resourceVersion localVersion)
         lift $ storeDelta $ DeltaStoreRecord
           { _id: deltaStoreDocId resourceKey resourceVersion author
           , _rev: Nothing
@@ -552,7 +552,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           let incomingAuthorWins = not (hasAuthorGreaterOrEqual author sameVersionDeltas)
           if incomingAuthorWins then do
             -- Incoming author wins: execute the delta (overwriting the current value).
-            lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingWins resourceKey resourceVersion (show author))
+            lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingWins resourceKey deltaType resourceVersion (show author))
             executeDelta s (Just stringified)
             lift $ storeDelta $ DeltaStoreRecord
               { _id: deltaStoreDocId resourceKey resourceVersion author
@@ -567,7 +567,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               }
           else do
             -- Existing author wins: store but don't execute.
-            lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingLoses resourceKey resourceVersion (show author))
+            lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingLoses resourceKey deltaType resourceVersion (show author))
             lift $ storeDelta $ DeltaStoreRecord
               { _id: deltaStoreDocId resourceKey resourceVersion author
               , _rev: Nothing

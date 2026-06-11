@@ -85,7 +85,7 @@ import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (saveMarkedResources)
-import Perspectives.PerspectivesState (newPerspectivesState, setBrokerService, setStompClientFactory, setTopicLogLevel, noTransactionIsRunning)
+import Perspectives.PerspectivesState (newPerspectivesState, setBrokerService, setStompClientFactory, noTransactionIsRunning)
 import Perspectives.Representation.Class.PersistentType (EnumeratedPropertyType(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
@@ -477,8 +477,6 @@ connectPDRs pdr1 pdr2 = do
     Right x -> pure x
 
   log "connectPDRs: Executing TransactionForPeer in PDR2"
-  -- Alice receives a transaction from bob while bob reads the invitation. Trace in detail what Alice constructs.
-  runInPDR pdr2 (setTopicLogLevel SYNC Trace)
   runInPDR pdr2
     $ runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
     $
