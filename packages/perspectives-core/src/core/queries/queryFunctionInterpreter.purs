@@ -372,7 +372,6 @@ interpretComposeSequenceF (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _
         }
       ]
 
-
 interpretBQDOtherFunctions :: Partial => QueryFunctionDescription -> DependencyPath ~~> DependencyPath
 interpretBQDOtherFunctions (BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = case fun of
 

@@ -174,6 +174,9 @@ transactionNumber = gets _.transactionNumber
 transactionFlag :: MonadPerspectives (AVar Boolean)
 transactionFlag = gets _.transactionFlag
 
+noTransactionIsRunning :: MonadPerspectives Boolean
+noTransactionIsRunning = transactionFlag >>= lift <<< read
+
 nextTransactionNumber :: MonadPerspectives Int
 nextTransactionNumber = do
   n <- transactionNumber

@@ -298,7 +298,7 @@ type Warning = { message :: String, error :: String, externalRoleId :: String, c
 -----------------------------------------------------------
 -- STRUCTURED LOGGING
 -----------------------------------------------------------
-data LogTopic = SYNC | BROKER | QUERY | PERSISTENCE | STATE | AUTH | MODEL | UPGRADE | PARSER | COMPILER | INSTALL | OTHER
+data LogTopic = SYNC | BROKER | QUERY | PERSISTENCE | STATE | AUTH | MODEL | UPGRADE | PARSER | COMPILER | INSTALL | DELTA | OTHER
 
 instance Show LogTopic where
   show SYNC = "SYNC"
@@ -312,6 +312,7 @@ instance Show LogTopic where
   show PARSER = "PARSER"
   show COMPILER = "COMPILER"
   show INSTALL = "INSTALL"
+  show DELTA = "DELTA"
   show OTHER = "OTHER"
 
 instance Eq LogTopic where

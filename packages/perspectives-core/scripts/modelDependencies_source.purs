@@ -386,6 +386,9 @@ inviterType = "model://perspectives.domains#System$Invitation$Inviter"
 inviteeType :: String
 inviteeType = "model://perspectives.domains#System$Invitation$Invitee"
 
+invitationGuestType :: String
+invitationGuestType = "model://perspectives.domains#System$Invitation$Guest"
+
 invitationMessageProp :: String
 invitationMessageProp = "model://perspectives.domains#System$Invitation$External$Message"
 

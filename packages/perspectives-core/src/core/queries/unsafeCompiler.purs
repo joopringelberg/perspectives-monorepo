@@ -40,7 +40,7 @@ import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), lastIndexOf, stripSuffix, length) as STRING
 import Data.String.Regex (Regex, match, test)
-import Data.String.Regex.Flags (noFlags) 
+import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for, maximum, minimum, traverse)
 import Effect.Exception (error)

@@ -46,7 +46,7 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Me (notIsMe)
 import Perspectives.Instances.ObjectGetters (deltaAuthor2ResourceIdentifier, getProperty, perspectivesUsersRole_, roleType_)
-import Perspectives.Logging (debugSync)
+import Perspectives.Logging (debugSync, infoDelta)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, userChannel) as DEP
 import Perspectives.ModelDependencies (perspectivesUsersCancelled, perspectivesUsersPublicKey)
 import Perspectives.Names (getMySystem)
@@ -229,6 +229,7 @@ addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
   else do
     newUserBottoms <- lift (concat <$> for users' computeUserRoleBottom)
     newDelta <- pure (DeltaInTransaction deltarecord { users = users' })
+    lift $ infoDelta $ "Adding a delta to transaction for users " <> show users' <> " with user role bottoms " <> show newUserBottoms
     AA.modify
       ( over Transaction \t@{ deltas, userRoleBottoms, insertionPoint } -> t
           { deltas =
@@ -256,6 +257,7 @@ insertDelta (DeltaInTransaction deltarecord@{ users, delta }) i = do
   else do
     (newUserBottoms :: Array (Tuple RoleInstance TransactionDestination)) <- lift (concat <$> for users' computeUserRoleBottom)
     newDelta <- pure (DeltaInTransaction deltarecord { users = users' })
+    lift $ infoDelta $ "Inserting a delta into transaction at position " <> show i <> " for users " <> show users' <> " with user role bottoms " <> show newUserBottoms
     AA.modify
       ( over Transaction \t@{ deltas, userRoleBottoms } -> t
           { deltas =

@@ -36,8 +36,7 @@
 -- | can be changed at runtime without restarting.
 
 module Perspectives.Logging
-  ( debugBroker
-  , ansiBlack
+  ( ansiBlack
   , ansiBlue
   , ansiCyan
   , ansiGreen
@@ -46,8 +45,9 @@ module Perspectives.Logging
   , ansiReset
   , ansiWhite
   , ansiYellow
-  , noColor
+  , debugBroker
   , debugCompiler
+  , debugDelta
   , debugInstall
   , debugModel
   , debugPersistence
@@ -57,6 +57,7 @@ module Perspectives.Logging
   , debugUpgrade
   , errorBroker
   , errorCompiler
+  , errorDelta
   , errorInstall
   , errorModel
   , errorOther
@@ -65,12 +66,15 @@ module Perspectives.Logging
   , errorSync
   , errorUpgrade
   , infoBroker
+  , infoDelta
   , infoInstall
   , infoModel
   , infoSync
   , infoUpgrade
+  , noColor
   , pdrLog
   , traceBroker
+  , traceDelta
   , traceModel
   , tracePersistence
   , traceQuery
@@ -78,6 +82,7 @@ module Perspectives.Logging
   , traceSync
   , warnAuth
   , warnBroker
+  , warnDelta
   , warnModel
   , warnOther
   , warnPersistence
@@ -292,3 +297,21 @@ warnPersistence = pdrLog PERSISTENCE Warn
 -----------------------------------------------------------
 warnState :: String -> MonadPerspectives Unit
 warnState = pdrLog STATE Warn
+
+-----------------------------------------------------------
+-- DELTA
+-----------------------------------------------------------
+traceDelta :: String -> MonadPerspectives Unit
+traceDelta = pdrLog DELTA Trace
+
+debugDelta :: String -> MonadPerspectives Unit
+debugDelta = pdrLog DELTA Debug
+
+infoDelta :: String -> MonadPerspectives Unit
+infoDelta = pdrLog DELTA Info
+
+warnDelta :: String -> MonadPerspectives Unit
+warnDelta = pdrLog DELTA Warn
+
+errorDelta :: String -> MonadPerspectives Unit
+errorDelta = pdrLog DELTA Error
