@@ -1,4 +1,4 @@
-import React, { createRef, useContext, useEffect, useRef } from "react";
+import React, { createRef, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import PerspectivesComponent from "./perspectivesComponent";
 import {mapRoleVerbsToBehaviourNames} from "./maproleverbstobehaviours.js";
 import TableRow from "./tablerow.js";
@@ -46,12 +46,32 @@ const RowContextMenu: React.FC<{
   const menuRef = useRef<HTMLDivElement | null>(null);
   const isActive = !!(visible && position && roleId);
 
+  // Start invisible so the first render does not flash at an uncorrected position.
+  const [computedTop, setComputedTop] = useState<number | null>(null);
+
+  // After each render, check whether the menu overflows the viewport bottom.
+  // If so, flip it upward so its bottom edge aligns with the trigger point.
+  useLayoutEffect(() => {
+    if (!isActive || !position || !menuRef.current) {
+      setComputedTop(null);
+      return;
+    }
+    const menuHeight = menuRef.current.getBoundingClientRect().height;
+    const viewportHeight = window.innerHeight;
+    const top =
+      position.y + menuHeight > viewportHeight
+        ? Math.max(0, position.y - menuHeight)
+        : position.y;
+    setComputedTop(top);
+  }, [isActive, position?.x, position?.y]);
+
   const style: React.CSSProperties = isActive && position
     ? {
         position: "fixed",
-        top: position.y,
+        top: computedTop !== null ? computedTop : position.y,
         left: position.x,
-        zIndex: 2000
+        zIndex: 2000,
+        visibility: computedTop !== null ? "visible" : "hidden"
       }
     : {
         position: "fixed",
