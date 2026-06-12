@@ -59,22 +59,30 @@ module Test.Layer3 where
 import Prelude
 
 import Control.Monad.Cont (lift)
+import Control.Monad.Error.Class (throwError)
 import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
+import Data.Traversable (for, for_)
 import Effect (Effect)
-import Effect.Aff (Milliseconds(..))
+import Effect.Aff (error)
+import Foreign.Object (empty) as OBJ
+import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runContextAction)
-import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##>))
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##=), (##>>))
+import Perspectives.Extern.Couchdb (addModelToLocalStore_)
+import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (binding, binding_, context, getEnumeratedRoleInstances)
-import Perspectives.Logging (ansiMagenta, ansiRed)
-import Perspectives.ModelDependencies (outgoingInvitationsType, sysMe, sysUser)
-import Perspectives.Names (getMySystem, lookupIndexedRole)
+import Perspectives.Logging (ansiMagenta, ansiRed, debugTest)
+import Perspectives.ModelDependencies (sysMe, sysUser)
+import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (tryGetPerspectRol)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
-import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
-import Test.PDRInstance (connectPDRs, noBus, pollUntil, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
+import Perspectives.Query.UnsafeCompiler (getPropertyValues)
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
+import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
+import Test.PDRInstance (connectPDRs, noBus, runInPDR, testPouchdbUser, waitUntilAllTransactionsComplete, withPDR, withTwoPDRs)
 import Test.Unit (suite, test, testOnly)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -108,7 +116,7 @@ main = runTest do
           assert "PDR-B system identifier should equal bob_macbook" (sysB == "bob_macbook")
           assert "PDR-A and PDR-B should have distinct identifiers" (sysA /= sysB)
 
-    testOnly "start two PDR instances with distinct identifiers" do
+    test "start two PDR instances and connect them" do
       withTwoPDRs
         (testPouchdbUser "alice")
         defaultRuntimeOptions
@@ -150,31 +158,132 @@ main = runTest do
                 _, _ -> assert "Both PDRs should have each others' Person instance" false
             _, _ -> assert "Both PDRs should have a `me` instance" false
 
-    test "start a PDR instance and create an invitation" do
-      let user = testPouchdbUser "alice"
-      -- -----------------------------------------------------------------------
-      -- PDR1: Step 1 — create the Invitation via context action
-      -- -----------------------------------------------------------------------
-      withPDR user defaultRuntimeOptions (Just ansiRed) noBus \pdr -> do
-        runInPDR pdr $
-          runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser)
+    testOnly "start two PDR instances and load testmodel" do
+      withTwoPDRs
+        (testPouchdbUser "alice")
+        defaultRuntimeOptions
+        (Just ansiRed)
+        (testPouchdbUser "bob")
+        defaultRuntimeOptions
+        (Just ansiMagenta)
+        \pdrA pdrB -> do
+
+          runInPDR pdrA
             ( do
-                mySystem1 <- lift $ getMySystem
-                runContextAction sysUser "CreateInvitation" mySystem1
+                setTopicLogLevel BROKER Debug
+                setTopicLogLevel INSTALL Trace
+                setTopicLogLevel SYNC Info
             )
-        -- -----------------------------------------------------------------------
-        -- PDR1: Step 2 — obtain the new Invitation context instance
-        -- Poll until the state-entry bot has created and stored it.
-        -- -----------------------------------------------------------------------
-        void $ pollUntil 100 (Milliseconds 100.0)
-          "Invitation context to appear in PerspectivesSystem$OutgoingInvitations"
-          ( runInPDR pdr
-              ( do
-                  mySystem1 <- getMySystem
-                  (ContextInstance mySystem1) ##>
-                    ( getEnumeratedRoleInstances (EnumeratedRoleType outgoingInvitationsType)
-                        >=> binding
-                        >=> context
-                    )
-              )
-          )
+          runInPDR pdrB
+            ( do
+                setTopicLogLevel BROKER Debug
+                setTopicLogLevel INSTALL Trace
+                setTopicLogLevel SYNC Info
+            )
+
+          connectPDRs pdrA pdrB
+
+          -- Get Alice's and Bob's Persons instances for later use.
+          alice <- runInPDR pdrA do
+            muser <- lookupIndexedRole sysMe
+            case muser of
+              Just user -> binding_ user >>= case _ of 
+                  Just alice -> pure alice
+                  Nothing -> throwError $ error "Alice should have a `me` instance in her PDR"
+              Nothing -> throwError $ error "Alice should have a `me` instance in her PDR"
+          bob <- runInPDR pdrB do
+            muser <- lookupIndexedRole sysMe
+            case muser of
+              Just user -> binding_ user >>= case _ of
+                  Just bob -> pure bob
+                  Nothing -> throwError $ error "Bob should have a `me` instance in his PDR"
+              Nothing -> throwError $ error "Bob should have a `me` instance in his PDR"
+
+          -- Alice loads test model in pdrA.
+          runInPDR pdrA do
+            debugTest "Alice Loads test model in PDRA"
+            runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+              $
+                addModelToLocalStore_ [testModel] (RoleInstance "Ignored")
+          
+          waitUntilAllTransactionsComplete pdrA
+
+          -- Retrieve all individual tests.
+          testExternalRoles <- runInPDR pdrA do
+            debugTest "Retrieve all individual tests in PDRA"
+            -- Get the indexed test context instance.
+            mTestCtx <- lookupIndexedContext indexedTestContext
+            case mTestCtx of
+              Nothing -> throwError $ error "Test context instance should be indexed in Alice's PDR"
+              Just testCtx -> testCtx ##= getEnumeratedRoleInstances (EnumeratedRoleType testsType) >=> binding
+          
+          -- Alice gives Bob the role Follower in all tests.
+          runInPDR pdrA $
+            runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType testLeaderType)
+            $ for_ testExternalRoles (\testExternalRole -> do
+                lift $ debugTest "Alice gives Bob the Follower role in a test in PDRA"
+                theTest <- lift (testExternalRole ##>> context )
+                createAndAddRoleInstance
+                  (EnumeratedRoleType testFollowerType)
+                  (unwrap theTest)
+                  ( RolSerialization
+                      { id: Nothing
+                      , properties: PropertySerialization OBJ.empty
+                      , binding: Just (unwrap bob)
+                      }
+                  ))
+          -- Wait for Bob to digest this.
+          waitUntilAllTransactionsComplete pdrB
+
+          -- Alice executes all tests, bringing the test role in state Executed.
+          runInPDR pdrA $
+            runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType testLeaderType)
+            $ for_ testExternalRoles (\testExternalRole -> do
+                lift $ debugTest "Alice executes a test in PDRA"
+                theTest <- lift (testExternalRole ##>> context )
+                runContextAction testLeaderType "RunTest" (unwrap theTest)
+            )
+
+          -- Wait.
+          waitUntilAllTransactionsComplete pdrA
+          waitUntilAllTransactionsComplete pdrB
+
+          -- Bob checks that all tests are in state Executed.
+          testResults <- runInPDR pdrB $
+            for testExternalRoles (\testExternalRole -> do
+              debugTest "Bob checks that all tests are in state Executed in PDRB"
+              -- Get the value of Calculated property TestSucceeded of the external role of the test.
+              testSucceeded <- testExternalRole ##>> getPropertyValues (CP $ CalculatedPropertyType testSucceededProperty)
+              testName <- testExternalRole ##>> getPropertyValues (ENP $ EnumeratedPropertyType testNameProperty)
+              pure {testName, testSucceeded}
+            )
+          
+          for_ testResults \({testName, testSucceeded}) -> do
+            assert ("Bob should see that test '" <> (unwrap testName) <> "' succeeded") (unwrap testSucceeded == "true")
+
+testModel :: String
+testModel = "model://joopringelberg.nl#SynchronisationTestModel@1.0"
+
+indexedTestContext :: String
+-- indexedTestContext = "model://joopringelberg.nl#SynchronisationTestModel$TestSyncApp"
+indexedTestContext = "model://joopringelberg.nl#hj1bh3wydo$sxzzlm7ew3$s1nrgv6dbu"
+
+testLeaderType :: String
+-- testLeaderType = "model://joopringelberg.nl#SynchronisationTestModel$Test$Leader"
+testLeaderType = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg$zc16eb7hki"
+
+testFollowerType :: String
+-- testFollowerType = "model://joopringelberg.nl#SynchronisationTestModel$Test$Follower"
+testFollowerType = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg$e21r6td06a"
+
+testsType :: String
+-- testsType = "model://joopringelberg.nl#SynchronisationTestModel$TestApp$Tests"
+testsType = "model://joopringelberg.nl#hj1bh3wydo$sxzzlm7ew3$qde7w03jms"
+
+testSucceededProperty :: String
+-- testSucceededProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test$External$TestSucceeded"
+testSucceededProperty = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg$External$jvgngnhi6g"
+
+testNameProperty :: String
+-- testNameProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test$External$TestName"
+testNameProperty = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg$External$jvgngnhi6g"
