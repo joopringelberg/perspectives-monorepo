@@ -58,7 +58,8 @@ every real message.
 ```purescript
 data LogTopic
   = SYNC | BROKER | QUERY | PERSISTENCE | STATE | AUTH
-  | MODEL | UPGRADE | PARSER | COMPILER | INSTALL | OTHER
+  | MODEL | UPGRADE | PARSER | COMPILER | INSTALL | 
+  | DELTA | TEST | OTHER
 ```
 
 | Topic         | Subsystem |
@@ -74,6 +75,8 @@ data LogTopic
 | `PARSER`      | ARC parser errors |
 | `COMPILER`    | ARC compiler (Phases 1–3) |
 | `INSTALL`     | Model installation, Couchdb setup |
+| `DELTA`       | Creating Deltas and storing them in a Transaction |
+| `TEST`        | Test development |
 | `OTHER`       | Anything that does not fit another topic |
 
 ### 2.3 `LogConfig`

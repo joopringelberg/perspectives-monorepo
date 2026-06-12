@@ -93,8 +93,7 @@ module Perspectives.Logging
   , warnState
   , warnSync
   , warnTest
-  )
-  where
+  ) where
 
 import Control.Monad.AvarMonadAsk (gets)
 import Data.Map (lookup) as Map

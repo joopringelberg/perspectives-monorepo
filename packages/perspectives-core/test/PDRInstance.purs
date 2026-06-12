@@ -537,3 +537,8 @@ waitUntilAllTransactionsComplete pdr = do
     "no transaction is running in PDR instance"
     ( runInPDR pdr noTransactionIsRunning >>= \b -> if b then pure (Just unit) else pure Nothing
     )
+  -- To make sure, wait a bit more. A 100 msec gap should be enought for any waiting fiber to grab the stage.
+  pollUntil 30 (Milliseconds 100.0)
+    "no transaction is running in PDR instance"
+    ( runInPDR pdr noTransactionIsRunning >>= \b -> if b then pure (Just unit) else pure Nothing
+    )    
