@@ -172,13 +172,13 @@ main = runTest do
             ( do
                 setTopicLogLevel BROKER Debug
                 setTopicLogLevel INSTALL Trace
-                setTopicLogLevel SYNC Info
+                setTopicLogLevel SYNC Trace
             )
           runInPDR pdrB
             ( do
                 setTopicLogLevel BROKER Debug
                 setTopicLogLevel INSTALL Trace
-                setTopicLogLevel SYNC Info
+                setTopicLogLevel SYNC Trace
             )
 
           connectPDRs pdrA pdrB
