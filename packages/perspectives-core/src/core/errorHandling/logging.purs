@@ -78,6 +78,7 @@ module Perspectives.Logging
   , pdrLog
   , traceBroker
   , traceDelta
+  , traceInstall
   , traceModel
   , tracePersistence
   , traceQuery
@@ -275,6 +276,9 @@ debugInstall = pdrLog INSTALL Debug
 
 infoInstall :: String -> MonadPerspectives Unit
 infoInstall = pdrLog INSTALL Info
+
+traceInstall :: String -> MonadPerspectives Unit
+traceInstall = pdrLog INSTALL Trace
 
 -----------------------------------------------------------
 -- OTHER

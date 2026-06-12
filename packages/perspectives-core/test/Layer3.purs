@@ -60,10 +60,16 @@ import Prelude
 
 import Control.Monad.Cont (lift)
 import Control.Monad.Error.Class (throwError)
+import Control.Monad.Error.Class (throwError)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Traversable (for, for_)
+import Data.Newtype (unwrap)
+import Data.Traversable (for, for_)
 import Effect (Effect)
+import Effect.Aff (error)
+import Foreign.Object (empty) as OBJ
+import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Effect.Aff (error)
 import Foreign.Object (empty) as OBJ
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
@@ -71,13 +77,24 @@ import Perspectives.Assignment.RunAction (runContextAction)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##=), (##>>))
 import Perspectives.Extern.Couchdb (addModelToLocalStore_)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##=), (##>>))
+import Perspectives.Extern.Couchdb (addModelToLocalStore_)
+import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (binding, binding_, context, getEnumeratedRoleInstances)
+import Perspectives.Logging (ansiMagenta, ansiRed, debugTest)
+import Perspectives.ModelDependencies (sysMe, sysUser)
+import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Logging (ansiMagenta, ansiRed, debugTest)
 import Perspectives.ModelDependencies (sysMe, sysUser)
 import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (tryGetPerspectRol)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
+import Perspectives.Query.UnsafeCompiler (getPropertyValues)
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
+import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
+import Test.PDRInstance (connectPDRs, noBus, runInPDR, testPouchdbUser, waitUntilAllTransactionsComplete, withPDR, withTwoPDRs)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
@@ -116,6 +133,7 @@ main = runTest do
           assert "PDR-B system identifier should equal bob_macbook" (sysB == "bob_macbook")
           assert "PDR-A and PDR-B should have distinct identifiers" (sysA /= sysB)
 
+    test "start two PDR instances and connect them" do
     test "start two PDR instances and connect them" do
       withTwoPDRs
         (testPouchdbUser "alice")
@@ -173,14 +191,12 @@ main = runTest do
                 setTopicLogLevel BROKER Debug
                 setTopicLogLevel INSTALL Trace
                 setTopicLogLevel SYNC Trace
-                setTopicLogLevel INSTALL Trace
             )
           runInPDR pdrB
             ( do
                 setTopicLogLevel BROKER Debug
                 setTopicLogLevel INSTALL Trace
                 setTopicLogLevel SYNC Trace
-                setTopicLogLevel INSTALL Trace
             )
 
           connectPDRs pdrA pdrB

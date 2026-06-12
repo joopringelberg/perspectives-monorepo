@@ -74,7 +74,7 @@ import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstan
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.Instances.Me (computeMe_)
 import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesDatabase, getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries)
-import Perspectives.Logging (debugInstall, errorInstall, infoInstall)
+import Perspectives.Logging (debugInstall, errorInstall, infoInstall, traceInstall)
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addDocument_, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, splitRepositoryFileUrl, tryGetDocument_, withDatabase)
@@ -452,6 +452,7 @@ createInitialInstances unversionedModelname versionedModelName patch build versi
     Right { context: ctxt } -> do
       lift $ void $ saveEntiteit_ (identifier ctxt) ctxt
       addCreatedContextToTransaction (identifier ctxt)
+      lift $ traceInstall ("Created model root context for " <> versionedModelName)
   me <- lift $ getPerspectivesUser
   minstallerId <- createAndAddRoleInstance (EnumeratedRoleType DEP.installer) cid
     ( RolSerialization

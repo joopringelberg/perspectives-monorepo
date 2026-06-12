@@ -77,7 +77,6 @@ import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Ver
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, isInPublicScheme, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.SaveUserData (removeBinding, removeContextIfUnbound, replaceBinding, scheduleContextRemoval, scheduleRoleRemoval, setFirstBinding, synchronise)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
-import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
 import Perspectives.Sync.LegacyDeltas (extractLegacyResourceKey, toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
@@ -130,7 +129,7 @@ executeRoleBindingDelta (RoleBindingDelta { filled, filler, deltaType, subject }
 -- TODO. Wat met SetPropertyValue?
 executeRolePropertyDelta :: RolePropertyDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeRolePropertyDelta d@(RolePropertyDelta { id, roleType, deltaType, values, property, subject }) signedDelta = do
-  lift $ toReadable property >>= \readableProperty -> renderPerspectivesWarning >=> traceSync $ (ExecutingRolePropertyDelta (show deltaType) (show id) (show readableProperty))
+  lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingRolePropertyDelta deltaType id property)
   case deltaType of
     AddProperty -> do
       -- we need not check whether the model is known if we assume valid transactions:
@@ -230,7 +229,7 @@ checkForGaps deltaInfos = do
 -- | role for. Hence we only have to check whether the external role exists.
 executeUniverseContextDelta :: UniverseContextDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, subject }) signedDelta = do
-  lift $ toReadable contextType >>= \readableContextType -> renderPerspectivesWarning >=> traceSync $ (ExecutingUniverseContextDelta (show deltaType) (show id) (show readableContextType))
+  lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingUniverseContextDelta deltaType id contextType)
   allTypes <- lift (contextType ###= contextAspectsClosure)
   externalRoleExists <- lift $ entityExists (RoleInstance $ buitenRol $ unwrap id)
   if externalRoleExists then case deltaType of
@@ -275,9 +274,7 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 executeUniverseRoleDelta :: UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, authorizedRole, deltaType, subject }) s = do
-  readableRoleType <- lift $ toReadable roleType
-  readableSubject <- lift $ toReadable subject
-  lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingUniverseRoleDelta (show deltaType) (show id) (show roleInstance) (show readableRoleType) (show readableSubject))
+  lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingUniverseRoleDelta deltaType id roleInstance roleType subject)
   void $ lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ $ unwrap roleType)
   case deltaType of
     ConstructEmptyRole -> do

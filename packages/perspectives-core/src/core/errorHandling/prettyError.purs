@@ -156,6 +156,16 @@ humanizePerspectivesWarning w = case w of
     pure (RoleBindingSynchronizationIncomplete role' source' destinations')
   NotificationError sid -> NotificationError <$> toReadable sid
   AutomaticActionError sid -> AutomaticActionError <$> toReadable sid
+  ExecutingRolePropertyDelta deltaType roleId property -> do
+    property' <- toReadable property
+    pure (ExecutingRolePropertyDelta deltaType roleId property')
+  ExecutingUniverseContextDelta deltaType contextId contextType -> do
+    contextType' <- toReadable contextType
+    pure (ExecutingUniverseContextDelta deltaType contextId contextType')
+  ExecutingUniverseRoleDelta deltaType contextId roleInstance roleType subject -> do
+    roleType' <- toReadable roleType
+    subject' <- toReadable subject
+    pure (ExecutingUniverseRoleDelta deltaType contextId roleInstance roleType' subject')
   _ -> pure w
 
 -- | Convert a PerspectivesWarning to a human-friendly string.

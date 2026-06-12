@@ -26,7 +26,9 @@ import Prelude
 
 import Data.Foldable (intercalate)
 import Data.Newtype (unwrap)
-import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType, EnumeratedRoleType, RoleType, StateIdentifier, roletype2string)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
+import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, RoleType, StateIdentifier, roletype2string)
+import Perspectives.TypesForDeltas (RolePropertyDeltaType, UniverseContextDeltaType, UniverseRoleDeltaType)
 
 data PerspectivesWarning
   = ModelLacksModelId String
@@ -42,9 +44,9 @@ data PerspectivesWarning
   -- Delta execution informational messages
   | ExecutingContextDelta String String String
   | ExecutingRoleBindingDelta String String String
-  | ExecutingRolePropertyDelta String String String
-  | ExecutingUniverseContextDelta String String String
-  | ExecutingUniverseRoleDelta String String String String String
+  | ExecutingRolePropertyDelta RolePropertyDeltaType RoleInstance EnumeratedPropertyType
+  | ExecutingUniverseContextDelta UniverseContextDeltaType ContextInstance ContextType
+  | ExecutingUniverseRoleDelta UniverseRoleDeltaType ContextInstance RoleInstance EnumeratedRoleType RoleType
   | ConstructingExternalRole String
   -- Transaction version-management messages
   | TransactionBlockedByVersionGaps
@@ -69,9 +71,9 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (NonCriticalError) = "(NonCriticalError) An error occurred, but it was caught and handled, so the system can continue running. Check the error message for details."
   show (ExecutingContextDelta deltaType contextInstance roleInstance) = "(ExecutingContextDelta) " <> deltaType <> " to/from " <> contextInstance <> " and " <> roleInstance
   show (ExecutingRoleBindingDelta deltaType filled filler) = "(ExecutingRoleBindingDelta) " <> deltaType <> " of " <> filled <> " (to) " <> filler
-  show (ExecutingRolePropertyDelta deltaType roleId property) = "(ExecutingRolePropertyDelta) " <> deltaType <> " for " <> roleId <> " and property " <> property
-  show (ExecutingUniverseContextDelta deltaType contextId contextType) = "(ExecutingUniverseContextDelta) " <> deltaType <> " with id " <> contextId <> " and with type " <> contextType
-  show (ExecutingUniverseRoleDelta deltaType contextId roleInstance roleType subject) = "(ExecutingUniverseRoleDelta) " <> deltaType <> " for/from " <> contextId <> " with id " <> roleInstance <> " with type " <> roleType <> " for user role " <> subject
+  show (ExecutingRolePropertyDelta deltaType roleId property) = "(ExecutingRolePropertyDelta) " <> show deltaType <> " for " <> show roleId <> " and property " <> show property
+  show (ExecutingUniverseContextDelta deltaType contextId contextType) = "(ExecutingUniverseContextDelta) " <> show deltaType <> " with id " <> show contextId <> " and with type " <> show contextType
+  show (ExecutingUniverseRoleDelta deltaType contextId roleInstance roleType subject) = "(ExecutingUniverseRoleDelta) " <> show deltaType <> " for/from " <> show contextId <> " with id " <> show roleInstance <> " with type " <> show roleType <> " for user role " <> show subject
   show (ConstructingExternalRole contextId) = "(ConstructingExternalRole) ConstructExternalRole in " <> contextId
   show TransactionBlockedByVersionGaps = "(TransactionBlockedByVersionGaps) Transaction blocked: version gaps detected. Storing as pending."
   show (SkippingOutdatedDelta resourceKey deltaType resourceVersion localVersion) = "(SkippingOutdatedDelta) Skipping outdated delta for " <> resourceKey <> " (" <> deltaType <> ") (incoming version " <> show resourceVersion <> " < local " <> show localVersion <> ")"
