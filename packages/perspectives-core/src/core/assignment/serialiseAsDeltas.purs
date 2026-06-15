@@ -22,27 +22,30 @@
 
 module Perspectives.Assignment.SerialiseAsDeltas
   ( getPropertyValues
+  , orderCreationDeltas
+  , perspectivePositionText
   , serialiseDependencies
   , serialiseRoleInstancesAndProperties
   , serialisedAsDeltasFor
   , serialisedAsDeltasForUserType
   , serialisedAsDeltasFor_
-  , perspectivePositionText
-  ) where
+  )
+  where
 
 import Control.Monad.AvarMonadAsk (get) as AMA
 import Control.Monad.Error.Class (try)
 import Control.Monad.Reader (runReaderT)
-import Control.Monad.State (StateT, gets, runStateT)
+import Control.Monad.State (StateT, gets, runStateT, modify)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (cons, head) as ARR
-import Data.Array (elemIndex, nub)
+import Data.Array (elemIndex, nub, snoc, sortBy)
 import Data.Array.NonEmpty (NonEmptyArray, singleton) as NA
 import Data.Array.NonEmpty (toArray)
 import Data.Foldable (for_, traverse_)
 import Data.List.NonEmpty (NonEmptyList, foldM, head)
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (unwrap)
+import Data.Ord (Ordering)
 import Data.Traversable (traverse)
 import Effect.Aff.AVar (new)
 import Effect.Class.Console (log)
@@ -77,7 +80,7 @@ import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (perspectivesClosure_, propertiesInPerspective)
-import Prelude (Unit, bind, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
+import Prelude (Unit, bind, compare, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
 import Simple.JSON (unsafeStringify, write)
 
 serialisedAsDeltasFor :: ContextInstance -> RoleInstance -> MonadPerspectivesTransaction Unit
@@ -291,7 +294,9 @@ serialiseDependency users mpreviousDependency currentDependency = do
       else do
         seenBefore <- gets \depsSeenBefore -> isJust $ elemIndex currentDependency depsSeenBefore
         if seenBefore then pure unit
-        else lift $ addDeltasForRole roleId
+        else do
+          void $ modify \depsSeenBefore -> snoc depsSeenBefore currentDependency
+          lift $ addDeltasForRole roleId
     otherwise -> pure unit
 
   case mpreviousDependency, currentDependency of
@@ -346,15 +351,12 @@ serialiseDependency users mpreviousDependency currentDependency = do
                 -- ORDER IS OF THE ESSENCE, HERE!!
                 -- Get creation deltas for external role.
                 extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
-                for_ extRoleDeltas \(DeltaStoreRecord { signedDelta }) ->
-                  addDelta $ DeltaInTransaction { users, delta: signedDelta }
                 -- Get creation deltas for context.
                 contextDeltas <- lift $ getDeltasForResource (unwrap context)
-                for_ contextDeltas \(DeltaStoreRecord { signedDelta }) ->
-                  addDelta $ DeltaInTransaction { users, delta: signedDelta }
                 -- Get creation deltas for this role.
                 roleDeltas <- lift $ getDeltasForResource (unwrap roleId)
-                for_ roleDeltas \(DeltaStoreRecord { signedDelta }) ->
+                let orderedCreationDeltas = orderCreationDeltas (extRoleDeltas <> contextDeltas <> roleDeltas)
+                for_ orderedCreationDeltas \(DeltaStoreRecord { signedDelta }) ->
                   addDelta $ DeltaInTransaction { users, delta: signedDelta }
 
   withContext :: Boolean
@@ -364,3 +366,25 @@ serialiseDependency users mpreviousDependency currentDependency = do
   withoutContext = false
 
 type PropertyName = String
+
+-- | Deterministic execution order for creation/linking deltas.
+-- | ConstructExternalRole must precede ConstructEmptyContext.
+-- | ContextDelta linking must come after the creation deltas.
+orderCreationDeltas :: Array DeltaStoreRecord -> Array DeltaStoreRecord
+orderCreationDeltas = sortBy compareCreationDeltas
+
+compareCreationDeltas :: DeltaStoreRecord -> DeltaStoreRecord -> Ordering
+compareCreationDeltas (DeltaStoreRecord r1) (DeltaStoreRecord r2) =
+  compare (deltaTypePriority r1.deltaType) (deltaTypePriority r2.deltaType)
+    <> compare r1.resourceVersion r2.resourceVersion
+    <> compare r1._id r2._id
+
+deltaTypePriority :: String -> Int
+deltaTypePriority dt
+  | dt == "ConstructExternalRole" = 0
+  | dt == "ConstructEmptyContext" = 1
+  | dt == "ConstructEmptyRole" = 2
+  | dt == "AddExternalRole" = 3
+  | dt == "AddRoleInstancesToContext" = 4
+  | dt == "MoveRoleInstancesToAnotherContext" = 5
+  | true = 99
