@@ -391,7 +391,7 @@ runSharing share authoringRole t =
     padding <- lift transactionLevel
     transactionNumber <- AA.gets (\(Transaction tr) -> tr.transactionNumber)
     lift $ debugState $ padding <> "run sharing transaction from nonsharing transaction " <> show transactionNumber
-    r <- lift $ runEmbeddedTransaction shareWithPeers authoringRole t
+    r <- lift $ runEmbeddedIfNecessary shareWithPeers authoringRole t
     lift $ debugState $ padding <> "returning to nonsharing transaction " <> show transactionNumber <> " from sharing transaction."
     pure r
 
@@ -537,7 +537,7 @@ runEmbeddedTransaction share authoringRole a = do
   t <- transactionFlag
   flagIsDown <- isNothing <$> (lift $ tryRead t)
   if flagIsDown then do
-    -- Because the transactionFlag AVar is empty (== the flag is down), we know a transaction is running.
+    -- Because the transactionFlag AVar is empty (== the flag is down), we know a transaction is not running.
     -- 1. Raise the flag.
     increaseTransactionLevel
     padding <- transactionLevel
@@ -573,7 +573,7 @@ runEmbeddedIfNecessary share authoringRole a = do
   t <- transactionFlag
   flagIsDown <- isNothing <$> (lift $ tryRead t)
   if flagIsDown then do
-    -- Because the transactionFlag AVar is empty (== the flag is down), we know a transaction is running.
+    -- Because the transactionFlag AVar is empty (== the flag is down), we know a transaction is not running.
     -- 1. Raise the flag.
     _ <- lift $ put true t
     increaseTransactionLevel
@@ -593,7 +593,7 @@ runEmbeddedIfNecessary share authoringRole a = do
         decreaseTransactionLevel
         _ <- lift $ take t
         throwError e
-
+  -- Otherwise, since a transaction is already running, we queue up behind it.
   else runMonadPerspectivesTransaction' share authoringRole a
 
 -----------------------------------------------------------
