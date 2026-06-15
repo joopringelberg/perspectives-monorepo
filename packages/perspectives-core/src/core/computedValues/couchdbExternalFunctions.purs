@@ -319,6 +319,7 @@ addModelToLocalStore_ modelNames _ = try (for_ modelNames (flip addModelToLocalS
 -- | The modelName may be UNVERSIONED or VERSIONED.
 addModelToLocalStore :: ModelUri Stable -> Boolean -> MonadPerspectivesTransaction Unit
 addModelToLocalStore dfid isInitialLoad' = do
+  lift $ traceInstall ("Entering `addModelToLocalStore` for " <> unwrap dfid)
   mDomeinFile :: Maybe (DomeinFile Stable) <- (lift $ tryGetPerspectEntiteit (ModelUri $ unversionedModelUri (unwrap dfid)))
   case mDomeinFile of
     Just _ -> pure unit
@@ -385,6 +386,7 @@ computeVersionedAndUnversiondName (ModelUri modelname) = do
 -- | Also saves the attachments.
 installModelLocally :: (Tuple (DomeinFileRecord Stable) AttachmentFiles) -> Boolean -> StoredQueries -> MonadPerspectivesTransaction Unit
 installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects, _attachments } attachmentFiles) isInitialLoad' storedQueries = do
+  lift $ traceInstall ("Entering `installModelLocally` for " <> unwrap namespace)
   { patch, build, versionedModelName, unversionedModelname, versionedModelManifest } <- lift $ computeVersionedAndUnversiondName id
   -- Store the model in Couchdb, that is: in the local store of models.
   -- Save it with the revision of the local version that we have, if any (do not use the repository version).
@@ -434,6 +436,7 @@ installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQue
 
 createInitialInstances :: String -> String -> String -> String -> Maybe RoleInstance -> MonadPerspectivesTransaction Unit
 createInitialInstances unversionedModelname versionedModelName patch build versionedModelManifest = do
+  lift $ traceInstall ("Entering `createInitialInstances` for " <> versionedModelName)
   -- If and only if the model we load is model:System, create both the system context and the system user.
   -- This is part of the installation routine.
   if unversionedModelname == DEP.systemModelName then initSystem

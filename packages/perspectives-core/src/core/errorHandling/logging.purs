@@ -82,6 +82,7 @@ module Perspectives.Logging
   , traceModel
   , tracePersistence
   , traceQuery
+  , traceResource
   , traceState
   , traceSync
   , traceTest
@@ -342,3 +343,9 @@ warnTest = pdrLog TEST Warn
 
 errorTest :: String -> MonadPerspectives Unit
 errorTest = pdrLog TEST Error
+
+-----------------------------------------------------------
+-- RESOURCE-RELATED WARNINGS
+-----------------------------------------------------------
+traceResource :: String -> MonadPerspectives Unit
+traceResource = pdrLog RESOURCE Trace

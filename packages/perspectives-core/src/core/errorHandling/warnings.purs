@@ -25,6 +25,7 @@ module Perspectives.Warning where
 import Prelude
 
 import Data.Foldable (intercalate)
+import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, RoleType, StateIdentifier, roletype2string)
@@ -57,6 +58,7 @@ data PerspectivesWarning
   | ModifyWinsOverDeleteRestoring String
   -- User interaction
   | MissingResource String String String
+  | ConstructContext ContextType (Maybe RoleType) ContextInstance
 
 instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ModelLacksModelId dfid) = "(ModelLacksModelId) The model '" <> dfid <> "' lacks a value for the property ModelIdentification on its Model instance."
@@ -90,3 +92,10 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
       <> " Wil je deze "
       <> resourceKind
       <> " definitief verwijderen of juist herstellen?"
+  show (ConstructContext contextType mAuthorizedRole contextInstance) =
+    "(ConstructContext) Constructing context of type " <> show contextType
+      <> " with id "
+      <> show contextInstance
+      <> case mAuthorizedRole of
+        Just authorizedRole -> " in authorized role " <> show authorizedRole
+        Nothing -> ""

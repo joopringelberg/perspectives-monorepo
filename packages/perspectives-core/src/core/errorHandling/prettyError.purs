@@ -166,6 +166,10 @@ humanizePerspectivesWarning w = case w of
     roleType' <- toReadable roleType
     subject' <- toReadable subject
     pure (ExecutingUniverseRoleDelta deltaType contextId roleInstance roleType' subject')
+  ConstructContext contextType mAuthorizedRole contextInstance -> do
+    contextType' <- toReadable contextType
+    mRoleType' <- traverse toReadable mAuthorizedRole
+    pure (ConstructContext contextType' mRoleType' contextInstance)
   _ -> pure w
 
 -- | Convert a PerspectivesWarning to a human-friendly string.
