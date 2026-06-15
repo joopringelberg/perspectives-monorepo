@@ -231,17 +231,24 @@ addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
     newDelta <- pure (DeltaInTransaction deltarecord { users = users' })
     lift $ infoDelta $ "Adding a delta to transaction for users " <> show users' <> " with user role bottoms " <> show newUserBottoms
     AA.modify
-      ( over Transaction \t@{ deltas, userRoleBottoms, insertionPoint } -> t
-          { deltas =
-              if isJust $ elemIndex newDelta deltas then deltas
-              else case insertionPoint of
-                Nothing -> snoc deltas newDelta
-                Just i -> case insertAt i newDelta deltas of
-                  Nothing -> snoc deltas newDelta
-                  Just deltas' -> deltas'
-          , userRoleBottoms = foldl (\userBottoms' (Tuple role user) -> Map.insert role user userBottoms') userRoleBottoms newUserBottoms
-          , insertionPoint = (add 1) <$> insertionPoint
-          }
+      ( over Transaction \t@{ deltas, userRoleBottoms, insertionPoint } ->
+          let
+            alreadyPresent = isJust $ elemIndex newDelta deltas
+            insertionPoint' =
+              if alreadyPresent then insertionPoint
+              else (add 1) <$> insertionPoint
+          in
+            t
+              { deltas =
+                  if alreadyPresent then deltas
+                  else case insertionPoint of
+                    Nothing -> snoc deltas newDelta
+                    Just i -> case insertAt i newDelta deltas of
+                      Nothing -> snoc deltas newDelta
+                      Just deltas' -> deltas'
+              , userRoleBottoms = foldl (\userBottoms' (Tuple role user) -> Map.insert role user userBottoms') userRoleBottoms newUserBottoms
+              , insertionPoint = insertionPoint'
+              }
       )
 
 -- | Insert the delta at the index, unless it is already in the transaction or there are no users (and ignore the own user).
@@ -262,6 +269,7 @@ insertDelta (DeltaInTransaction deltarecord@{ users, delta }) i = do
       ( over Transaction \t@{ deltas, userRoleBottoms } -> t
           { deltas =
               if isJust $ elemIndex newDelta deltas then deltas
+              -- insertAt semantics is such that if i equals the number of elements in the array, the new element is appended to the end of the array.
               else case insertAt i newDelta deltas of
                 Nothing -> snoc deltas newDelta
                 Just deltas' -> deltas'
