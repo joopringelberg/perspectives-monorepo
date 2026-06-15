@@ -22,16 +22,17 @@
 
 module Perspectives.PerspectivesState where
 
+import Control.Alt (map)
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (cons)
 import Data.List (elem)
 import Data.Map (Map, empty, insert, lookup, values) as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), isNothing)
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
 import Effect (Effect)
-import Effect.Aff.AVar (AVar, put, read)
+import Effect.Aff.AVar (AVar, put, read, tryRead)
 import Effect.Class (liftEffect)
 import Foreign.Object (empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
@@ -174,8 +175,9 @@ transactionNumber = gets _.transactionNumber
 transactionFlag :: MonadPerspectives (AVar Boolean)
 transactionFlag = gets _.transactionFlag
 
+-- Non-blocking check to see if a transaction is currently running. 
 noTransactionIsRunning :: MonadPerspectives Boolean
-noTransactionIsRunning = transactionFlag >>= lift <<< read
+noTransactionIsRunning = transactionFlag >>= lift <<< map isNothing <<< tryRead
 
 nextTransactionNumber :: MonadPerspectives Int
 nextTransactionNumber = do
