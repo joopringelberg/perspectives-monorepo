@@ -82,6 +82,7 @@ import Perspectives.Persistence.API (deleteDocument, documentsInDatabase, exclud
 import Perspectives.Persistence.Authentication (addCredentials) as Authentication
 import Perspectives.Persistence.CouchdbFunctions (addRoleToUser, concatenatePathSegments, removeRoleFromUser, user2couchdbuser)
 import Perspectives.Persistence.CouchdbFunctions as CDB
+import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (UserName, Password)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit)
@@ -452,9 +453,12 @@ createInitialInstances unversionedModelname versionedModelName patch build versi
     Nothing
   case r of
     Left e -> lift $ errorInstall (show e)
-    Right { context: ctxt } -> do
+    Right { context: ctxt, universeContextDelta, externalUniverseRoleDelta, externalContextDelta } -> do
       lift $ void $ saveEntiteit_ (identifier ctxt) ctxt
       addCreatedContextToTransaction (identifier ctxt)
+      lift $ storeDeltaFromSignedDelta externalUniverseRoleDelta
+      lift $ storeDeltaFromSignedDelta universeContextDelta
+      lift $ storeDeltaFromSignedDelta externalContextDelta
       lift $ traceInstall ("Created model root context for " <> versionedModelName)
   me <- lift $ getPerspectivesUser
   minstallerId <- createAndAddRoleInstance (EnumeratedRoleType DEP.installer) cid
@@ -572,6 +576,7 @@ initSystem = do
                   }
               )
               true
+            -- Redundantly sets isMe on the role instance but also sets the `me` of the context.
             roleIsMe puser world
             -- Now create the SocialEnvironment.
             socialEnvResult <- runExceptT $ constructContext Nothing
