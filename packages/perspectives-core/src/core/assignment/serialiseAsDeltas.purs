@@ -29,8 +29,7 @@ module Perspectives.Assignment.SerialiseAsDeltas
   , serialisedAsDeltasFor
   , serialisedAsDeltasForUserType
   , serialisedAsDeltasFor_
-  )
-  where
+  ) where
 
 import Control.Monad.AvarMonadAsk (get) as AMA
 import Control.Monad.Error.Class (try)
@@ -38,7 +37,7 @@ import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (StateT, gets, runStateT, modify)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (cons, head) as ARR
-import Data.Array (elemIndex, nub, snoc, sortBy)
+import Data.Array (elemIndex, length, nub, null, snoc, sortBy)
 import Data.Array.NonEmpty (NonEmptyArray, singleton) as NA
 import Data.Array.NonEmpty (toArray)
 import Data.Foldable (for_, traverse_)
@@ -56,7 +55,7 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding_, roleType_)
-import Perspectives.Logging (debugSync)
+import Perspectives.Logging (debugSync, errorDelta)
 import Perspectives.ModelDependencies (perspectivesUsersPublicKey, sysUser)
 import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
@@ -80,7 +79,7 @@ import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.Types.ObjectGetters (perspectivesClosure_, propertiesInPerspective)
-import Prelude (Unit, bind, compare, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
+import Prelude (Unit, bind, compare, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||), (<))
 import Simple.JSON (unsafeStringify, write)
 
 serialisedAsDeltasFor :: ContextInstance -> RoleInstance -> MonadPerspectivesTransaction Unit
@@ -351,10 +350,16 @@ serialiseDependency users mpreviousDependency currentDependency = do
                 -- ORDER IS OF THE ESSENCE, HERE!!
                 -- Get creation deltas for external role.
                 extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
+                -- We expect at least two deltas for the external role: the ConstructExternalRole delta and the ContextDelta that links it to the context. If there are less than two, something is wrong.
+                if length extRoleDeltas < 2 then lift $ errorDelta ("No deltas found for external role " <> show buitenRol) else pure unit
                 -- Get creation deltas for context.
                 contextDeltas <- lift $ getDeltasForResource (unwrap context)
+                -- We expect at least one delta for the context: the ConstructEmptyContext delta. If there are none, something is wrong.
+                if null contextDeltas then lift $ errorDelta ("No deltas found for context " <> show context) else pure unit
                 -- Get creation deltas for this role.
                 roleDeltas <- lift $ getDeltasForResource (unwrap roleId)
+                -- We expect at least one delta for the role: the ConstructEmptyRole delta. If there are none, something is wrong.
+                if null roleDeltas then lift $ errorDelta ("No deltas found for role " <> show roleId) else pure unit
                 let orderedCreationDeltas = orderCreationDeltas (extRoleDeltas <> contextDeltas <> roleDeltas)
                 for_ orderedCreationDeltas \(DeltaStoreRecord { signedDelta }) ->
                   addDelta $ DeltaInTransaction { users, delta: signedDelta }
