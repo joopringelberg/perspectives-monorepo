@@ -51,16 +51,17 @@ module Test.PDRInstance where
 
 import Prelude
 
-import Control.Monad.AvarMonadAsk (modify)
+import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (throwError)
+import Control.Monad.Trans.Class (lift)
 import Control.Promise (Promise, toAffE)
 import Data.Either (Either(..))
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (unwrap)
 import Data.Traversable (traverse_)
 import Effect (Effect)
 import Effect.Aff (Aff, Error, Milliseconds(..), bracket, delay, error, forkAff, killFiber)
-import Effect.Aff.AVar (AVar, empty, new, put)
+import Effect.Aff.AVar (AVar, empty, new, put, tryRead)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Foreign.Object (empty) as OBJ
@@ -531,14 +532,63 @@ connectPDRs pdr1 pdr2 = do
   waitUntilAllTransactionsComplete pdr1
   log "connectPDRs: Connection process completed."
 
+type QuiescenceSnapshot =
+  { noTransactionRunning :: Boolean
+  , transactionNumber :: Int
+  , pendingTimedTransaction :: Boolean
+  , pendingModelLoad :: Boolean
+  , pendingIndexedResource :: Boolean
+  , pendingIntegrityFix :: Boolean
+  , pendingTypeFix :: Boolean
+  }
+
+readQuiescenceSnapshot :: PDRInstance -> Aff QuiescenceSnapshot
+readQuiescenceSnapshot pdr = runInPDR pdr do
+  noTransactionRunning <- noTransactionIsRunning
+  transactionNumber <- gets _.transactionNumber
+  timedTx <- gets _.transactionWithTiming >>= lift <<< tryRead
+  modelLoad <- gets _.modelToLoad >>= lift <<< tryRead
+  indexedResource <- gets _.indexedResourceToCreate >>= lift <<< tryRead
+  missingResource <- gets _.missingResource >>= lift <<< tryRead
+  typeFix <- gets _.typeToBeFixed >>= lift <<< tryRead
+  pure
+    { noTransactionRunning
+    , transactionNumber
+    , pendingTimedTransaction: isJust timedTx
+    , pendingModelLoad: isJust modelLoad
+    , pendingIndexedResource: isJust indexedResource
+    , pendingIntegrityFix: isJust missingResource
+    , pendingTypeFix: isJust typeFix
+    }
+
+isStableSnapshot :: QuiescenceSnapshot -> QuiescenceSnapshot -> Boolean
+isStableSnapshot previous current =
+  previous.transactionNumber == current.transactionNumber
+    && current.noTransactionRunning
+    && (not current.pendingTimedTransaction)
+    && (not current.pendingModelLoad)
+    && (not current.pendingIndexedResource)
+    && (not current.pendingIntegrityFix)
+    && (not current.pendingTypeFix)
+
+-- More robust than checking only `noTransactionIsRunning` once:
+-- verify a quiet period in which no new transactions start and no internal
+-- work queues (AVars) have pending items.
 waitUntilAllTransactionsComplete :: PDRInstance -> Aff Unit
 waitUntilAllTransactionsComplete pdr = do
-  pollUntil 30 (Milliseconds 100.0)
-    "no transaction is running in PDR instance"
-    ( runInPDR pdr noTransactionIsRunning >>= \b -> if b then pure (Just unit) else pure Nothing
-    )
-  -- To make sure, wait a bit more. A 100 msec gap should be enought for any waiting fiber to grab the stage.
-  pollUntil 30 (Milliseconds 100.0)
-    "no transaction is running in PDR instance"
-    ( runInPDR pdr noTransactionIsRunning >>= \b -> if b then pure (Just unit) else pure Nothing
-    )    
+  let
+    attempts = 60
+    interval = Milliseconds 100.0
+    stableWindows = 3
+
+    loop :: Int -> Int -> Aff Unit
+    loop 0 _ = throwError $ error "waitUntilAllTransactionsComplete timed out while waiting for quiescence"
+    loop n stableCount = do
+      delay interval
+      -- A non blocking check.
+      quiet <- runInPDR pdr noTransactionIsRunning
+      let nextStableCount = if quiet then stableCount + 1 else 0
+      if nextStableCount >= stableWindows then pure unit
+      else loop (n - 1) nextStableCount
+
+  loop attempts 0

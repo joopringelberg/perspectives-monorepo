@@ -60,11 +60,13 @@ import Prelude
 
 import Control.Monad.Cont (lift)
 import Control.Monad.Error.Class (throwError)
+import Data.Array (null)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Data.Time.Duration (Milliseconds(..))
 import Data.Traversable (for, for_)
 import Effect (Effect)
-import Effect.Aff (error)
+import Effect.Aff (delay, error)
 import Foreign.Object (empty) as OBJ
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runContextAction)
@@ -80,9 +82,9 @@ import Perspectives.Persistent (tryGetPerspectRol)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
-import Test.PDRInstance (connectPDRs, noBus, runInPDR, testPouchdbUser, waitUntilAllTransactionsComplete, withPDR, withTwoPDRs)
+import Test.PDRInstance (connectPDRs, noBus, pollUntil, runInPDR, testPouchdbUser, waitUntilAllTransactionsComplete, withPDR, withTwoPDRs)
 import Test.Unit (suite, test, testOnly)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -116,7 +118,7 @@ main = runTest do
           assert "PDR-B system identifier should equal bob_macbook" (sysB == "bob_macbook")
           assert "PDR-A and PDR-B should have distinct identifiers" (sysA /= sysB)
 
-    test "start two PDR instances and connect them" do
+    testOnly "start two PDR instances and connect them" do
       withTwoPDRs
         (testPouchdbUser "alice")
         defaultRuntimeOptions
@@ -128,12 +130,20 @@ main = runTest do
           runInPDR pdrA
             ( do
                 setTopicLogLevel BROKER Debug
-                -- setTopicLogLevel SYNC Trace
+                setTopicLogLevel INSTALL Trace
+                setTopicLogLevel SYNC Trace
+                setTopicLogLevel TEST Debug
+                setTopicLogLevel RESOURCE Debug
+                -- setTopicLogLevel DELTA Info
             )
           runInPDR pdrB
             ( do
                 setTopicLogLevel BROKER Debug
-                -- setTopicLogLevel SYNC Trace
+                setTopicLogLevel INSTALL Trace
+                setTopicLogLevel SYNC Trace
+                setTopicLogLevel TEST Debug
+                setTopicLogLevel RESOURCE Debug
+                -- setTopicLogLevel DELTA Info
             )
           connectPDRs pdrA pdrB
           -- Two Persons instances.
@@ -158,7 +168,7 @@ main = runTest do
                 _, _ -> assert "Both PDRs should have each others' Person instance" false
             _, _ -> assert "Both PDRs should have a `me` instance" false
 
-    testOnly "start two PDR instances and load testmodel" do
+    test "start two PDR instances and load testmodel" do
       withTwoPDRs
         (testPouchdbUser "alice")
         defaultRuntimeOptions
@@ -168,20 +178,27 @@ main = runTest do
         (Just ansiMagenta)
         \pdrA pdrB -> do
 
+          connectPDRs pdrA pdrB
+
           runInPDR pdrA
             ( do
                 setTopicLogLevel BROKER Debug
                 setTopicLogLevel INSTALL Trace
-                setTopicLogLevel SYNC Trace
+                setTopicLogLevel SYNC Debug
+                -- setTopicLogLevel STATE Debug
+                setTopicLogLevel TEST Debug
+                setTopicLogLevel RESOURCE Debug
+                setTopicLogLevel DELTA Info
             )
           runInPDR pdrB
             ( do
                 setTopicLogLevel BROKER Debug
                 setTopicLogLevel INSTALL Trace
                 setTopicLogLevel SYNC Trace
+                -- setTopicLogLevel STATE Debug
+                setTopicLogLevel TEST Debug
+                setTopicLogLevel RESOURCE Debug
             )
-
-          connectPDRs pdrA pdrB
 
           -- Get Alice's and Bob's Persons instances for later use.
           alice <- runInPDR pdrA do
@@ -205,18 +222,35 @@ main = runTest do
             runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
               $
                 addModelToLocalStore_ [testModel] (RoleInstance "Ignored")
-          
-          waitUntilAllTransactionsComplete pdrA
 
-          -- Retrieve all individual tests.
-          testExternalRoles <- runInPDR pdrA do
-            debugTest "Retrieve all individual tests in PDRA"
-            -- Get the indexed test context instance.
-            mTestCtx <- lookupIndexedContext indexedTestContext
-            case mTestCtx of
-              Nothing -> throwError $ error "Test context instance should be indexed in Alice's PDR"
-              Just testCtx -> testCtx ##= getEnumeratedRoleInstances (EnumeratedRoleType testsType) >=> binding
+          -- waitUntilAllTransactionsComplete pdrA
           
+          testCtx <- pollUntil 100 (Milliseconds 100.0)
+            "Indexed test context to appear in pdrA after loading test model"
+            ( runInPDR pdrA
+                ( lookupIndexedContext indexedTestContext )
+            )
+          
+          -- Alice creates a test.
+          runInPDR pdrA do
+            debugTest "Alice creates a test in PDRA"
+            runMonadPerspectivesTransaction' shareWithPeers (CR $ CalculatedRoleType testAppManager)
+              $
+              runContextAction testAppManager "CreateTest" (unwrap testCtx)
+
+
+          -- Retrieve all individual tests, waiting until they are available.
+          testExternalRoles <- pollUntil 100 (Milliseconds 100.0)
+            "At least one individual test role to appear in pdrA"
+            ( runInPDR pdrA do
+                debugTest "Retrieve all individual tests in PDRA"
+                roles <- testCtx ##= getEnumeratedRoleInstances (EnumeratedRoleType testsType) >=> binding
+                if null roles then pure Nothing else pure (Just roles)
+            )
+          
+          -- There should be tests
+          assert "There should be tests in the test model" (not (null testExternalRoles))
+
           -- Alice gives Bob the role Follower in all tests.
           runInPDR pdrA $
             runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType testLeaderType)
@@ -232,9 +266,21 @@ main = runTest do
                       , binding: Just (unwrap bob)
                       }
                   ))
-          -- Wait for Bob to digest this.
+
+          -- Wait.
+          waitUntilAllTransactionsComplete pdrA
           waitUntilAllTransactionsComplete pdrB
 
+          bobAsFollowerInTests <- pollUntil 100 (Milliseconds 100.0)
+            "Bob to have the Follower role in all tests in pdrB"
+            ( runInPDR pdrB do
+                debugTest "Bob checks that he has the Follower role in all tests in PDRB"
+                roles <- for testExternalRoles \testExternalRole -> do
+                  theTest <- testExternalRole ##>> context
+                  theTest ##= getEnumeratedRoleInstances (EnumeratedRoleType testFollowerType)
+                if null roles then pure Nothing else pure (Just roles)
+            )
+          
           -- Alice executes all tests, bringing the test role in state Executed.
           runInPDR pdrA $
             runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType testLeaderType)
@@ -268,6 +314,10 @@ testModel = "model://joopringelberg.nl#hj1bh3wydo@1.0"
 indexedTestContext :: String
 -- indexedTestContext = "model://joopringelberg.nl#SynchronisationTestModel$TestSyncApp"
 indexedTestContext = "model://joopringelberg.nl#hj1bh3wydo$sxzzlm7ew3$s1nrgv6dbu"
+
+testAppManager :: String
+-- testAppManager = "model://joopringelberg.nl#SynchronisationTestModel$TestApp$Manager"
+testAppManager = "model://joopringelberg.nl#hj1bh3wydo$sxzzlm7ew3$ftd5ohdwz6"
 
 testLeaderType :: String
 -- testLeaderType = "model://joopringelberg.nl#SynchronisationTestModel$Test$Leader"
