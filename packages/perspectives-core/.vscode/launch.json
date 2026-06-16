@@ -78,6 +78,17 @@
         "NODE_EXTRA_CA_CERTS": "/Users/joopringelberg/Library/Application Support/mkcert/rootCA.pem",
         "NODE_TLS_REJECT_UNAUTHORIZED": "0"
       }
+    },
+    {
+      "type": "node-terminal",
+      "request": "launch",
+      "name": "debug-Layer3-to-file",
+      "command": "node --enable-source-maps ./dist/test.layer3.node.js > ./test/sync/debug.layer3.log 2>&1",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "/Users/joopringelberg/Library/Application Support/mkcert/rootCA.pem",
+        "NODE_TLS_REJECT_UNAUTHORIZED": "0"
+      }
     }
   ]
 }
