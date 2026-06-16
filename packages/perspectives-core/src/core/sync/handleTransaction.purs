@@ -64,7 +64,7 @@ import Perspectives.Logging (traceSync, warnSync)
 import Perspectives.ModelDependencies (rootContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
-import Perspectives.Persistence.DeltaStore (extractDeltaInfo, storeDelta, getDeltasForResource, getDeltasForRoleInstance, updateDeltaApplied, deltaStoreDocId, safeKey)
+import Perspectives.Persistence.DeltaStore (extractDeltaInfo, storeDelta, getDeltasForResource, getDeltasForRoleInstance, storeDeltaFromSignedDelta, updateDeltaApplied, deltaStoreDocId, safeKey)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, incrementResourceVersion, setResourceVersion)
@@ -444,7 +444,11 @@ executeTransaction' :: Map.Map PerspectivesUser CryptoKey -> TransactionForPeer 
 executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) = do
 
   -- Add all public key information (possibly leading to more TheWorld$PerspectivesUsers instances).
-  for_ (unwrap publicKeys) \{ deltas: keyDeltas } -> void $ for keyDeltas \s@(SignedDelta { encryptedDelta }) -> executeDelta s (Just encryptedDelta)
+  -- Key deltas are executed directly (not through executeDeltaWithVersionTracking),
+  -- so persist them explicitly in the DeltaStore first.
+  for_ (unwrap publicKeys) \{ deltas: keyDeltas } -> void $ for keyDeltas \s@(SignedDelta { encryptedDelta }) -> do
+    lift $ storeDeltaFromSignedDelta s
+    executeDelta s (Just encryptedDelta)
 
   -- STEP 1: Verify and extract ordering info from all deltas.
   -- Use the keys collected during verifyTransaction to avoid re-querying the entity store

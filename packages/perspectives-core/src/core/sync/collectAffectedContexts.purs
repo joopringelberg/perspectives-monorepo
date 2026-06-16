@@ -773,7 +773,6 @@ runForwardsComputation roleInstance (InvertedQuery { description, forwardsCompil
 -- if the state condition is met. This is similar but not equal to the treatment
 -- of the case above where there was no forwards query.
 -- Do this only for inverted queries that result in a role domain.
--- info om globaal te volgen; debug voor meer detail en trace voor alle detail.
 computeProperties :: Array (DependencyPath) -> EncodableMap PropertyType (Array StateIdentifier) -> (Array ContextWithUsers) -> MonadPerspectivesTransaction Unit
 computeProperties rinstances statesPerProperty cwus = forWithIndex_ (unwrap statesPerProperty) g
   where
