@@ -41,7 +41,7 @@ module Perspectives.Instances.Builders
 import Control.Monad.AvarMonadAsk (modify)
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Writer (WriterT, lift, runWriterT, tell)
-import Data.Array (catMaybes, elemIndex, length)
+import Data.Array (catMaybes, elemIndex)
 import Data.Array.NonEmpty (NonEmptyArray, toArray)
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -58,7 +58,7 @@ import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor)
 import Perspectives.Assignment.Update (addRoleInstanceToContext, setProperty)
 import Perspectives.ContextAndRole (changeRol_isMe, getNextRolIndex)
 import Perspectives.CoreTypes (IndexedResource(..), MonadPerspectivesTransaction, (###=), (##=))
-import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, deltaIndex, insertDelta)
+import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, addDelta)
 import Perspectives.DependencyTracking.Dependency (findIndexedContextNamesRequests)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.CreateContext (constructEmptyContext)
@@ -78,9 +78,8 @@ import Perspectives.Representation.TypeIdentifiers (ResourceType(..), RoleKind(.
 import Perspectives.ResourceIdentifiers (createResourceIdentifier, createResourceIdentifier', guid, isInPublicScheme)
 import Perspectives.SaveUserData (FillBindingMode(..), setFirstBinding, setFirstBindingWithMode)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
-import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (indexedContextName, indexedRoleName, publicUserRole)
-import Prelude (Unit, bind, discard, eq, pure, unit, void, ($), (*>), (+), (<$>), (<<<), (<>), (>>=), (&&), (-))
+import Prelude (Unit, bind, discard, eq, pure, unit, void, ($), (*>), (<$>), (<<<), (<>), (>>=), (&&))
 
 -- | Construct a context from the serialization. If a context with the given id exists, returns a PerspectivesError.
 -- | Calls setFirstBinding on each role.
@@ -102,9 +101,6 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
         -- RULE TRIGGERING
         { context: contextResource, universeContextDelta, externalUniverseRoleDelta, externalContextDelta } <- constructEmptyContext contextInstanceId ctype localName externeProperties mbindingRoleType
         let (PerspectContext { buitenRol }) = contextResource
-        -- Get the number of deltas in the transaction. Insert the
-        -- UniverseContextDelta and the UniverseRoleDelta after that point.
-        i <- lift deltaIndex
         -- Add instances for each role type to the new empty context.
         (Tuple rolInstances users) <- runWriterT $ forWithIndex rollen \rolTypeId rolDescriptions -> do
           -- Construct all instances of this type without binding first, then add them to the context.
@@ -144,12 +140,10 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
                 (unwrap contextInstanceId)
                 (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
 
-        -- Add a UniverseRoleDelta to the Transaction for the external role.
-        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: externalUniverseRoleDelta }) (i)
-        -- Add a UniverseContextDelta to the Transaction with the union of the users of the RoleBindingDeltas.
-        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: universeContextDelta }) (i + 1)
-        -- Add the ContextDelta for the external role to the transaction.
-        lift $ insertDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: externalContextDelta }) (i + 2)
+        -- Add creation deltas for the external role, the context, and its ContextDelta to the transaction.
+        lift $ addDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: externalUniverseRoleDelta })
+        lift $ addDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: universeContextDelta })
+        lift $ addDelta (DeltaInTransaction { users: users <> publicRoleInstances, delta: externalContextDelta })
         -- Add the context as a createdContext to the transaction
         lift $ addCreatedContextToTransaction contextInstanceId
         -- As the proxy of the public role is just another user, we have to make sure it will receive all deltas necessary
@@ -183,7 +177,7 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
       Just bnd -> do
         expandedBinding <- RoleInstance <$> (lift $ lift $ lift $ expandDefaultNamespaces bnd)
         -- setFirstBinding saves, too.
-        lift $ lift $ withRoleInsertionPoint (setFirstBinding roleInstance expandedBinding Nothing)
+        lift $ lift $ setFirstBinding roleInstance expandedBinding Nothing
     case properties of
       (PropertySerialization props) -> forWithIndex_ props \propertyTypeId values ->
         lift $ lift $ setProperty [ roleInstance ] (EnumeratedPropertyType propertyTypeId) Nothing (Value <$> values)
@@ -229,7 +223,7 @@ createAndAddRoleInstance_ roleType@(EnumeratedRoleType rtype) contextId (RolSeri
       Nothing -> pure unit
       Just bnd -> do
         expandedBinding <- RoleInstance <$> (lift $ expandDefaultNamespaces bnd)
-        void $ withRoleInsertionPoint (setFirstBindingWithMode FillWithProvidedType roleInstance expandedBinding Nothing)
+        void $ setFirstBindingWithMode FillWithProvidedType roleInstance expandedBinding Nothing
     -- Then add the properties
     case properties of
       (PropertySerialization props) -> forWithIndex_ props \propertyTypeId values ->
@@ -319,16 +313,3 @@ lookupOrCreateContextInstance ctype id contextConstructor = do
     mysystem <- lift $ lift $ getMySystem
     lift ((lift $ findIndexedContextNamesRequests (ContextInstance mysystem)) >>= addCorrelationIdentifiersToTransactie)
     pure cid
-
--- | Computes the value in MonadPerspectivesTransaction with an insertion point such that all deltas
--- | added during the computation will end up __before__ the last two deltas added before the computation.
--- | This accommodates the case that we add a role to a context that turns out to be a peer.
--- | The serialisation of the context necessary for the peer will be in the transaction (right) before the 
--- | serialisation of the peer itself. Without this, the peer will receive a transaction that starts with 
--- | adding himself to a context he does not yet have constructed locally.
-withRoleInsertionPoint :: forall a. MonadPerspectivesTransaction a -> MonadPerspectivesTransaction a
-withRoleInsertionPoint x = do
-  modify \(Transaction tr@{ deltas }) -> Transaction $ tr { insertionPoint = Just $ (length deltas) - 2 }
-  result <- x
-  modify \(Transaction tr) -> Transaction $ tr { insertionPoint = Nothing }
-  pure result

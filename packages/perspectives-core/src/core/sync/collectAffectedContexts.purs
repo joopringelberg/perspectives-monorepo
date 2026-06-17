@@ -36,7 +36,7 @@ import Effect.Exception (error)
 import Partial.Unsafe (unsafePartial)
 import Perspective.InvertedQuery.Indices (runTimeIndexForRoleQueries, runtimeIndexForContextQueries, runtimeIndexForFilledQueries', runtimeIndexForFillerQueries', runtimeIndexForPropertyQueries)
 import Perspectives.ArrayUnions (ArrayUnions(..))
-import Perspectives.Assignment.SerialiseAsDeltas (getPropertyValues, serialiseDependencies, serialisedAsDeltasFor_, perspectivePositionText, orderCreationDeltas)
+import Perspectives.Assignment.SerialiseAsDeltas (getPropertyValues, serialiseDependencies, serialisedAsDeltasFor_, perspectivePositionText)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MonadPerspectivesTransaction, runMonadPerspectivesQuery, (##=), (##>), (##>>))
 import Perspectives.Data.EncodableMap (EncodableMap, filterKeys, lookup)
 import Perspectives.Deltas (addDelta)
@@ -611,11 +611,10 @@ handleNewCalculatedUsersForBinding bwStart fwStart iq@(InvertedQuery { backwards
       for_ contextInstances \contextInstance -> do
         let buitenRol = externalRole contextInstance
         for_ newCalcUsers \calcUserInstance -> do
-          -- Collect and order creation/linking deltas deterministically before adding.
+          -- Collect creation/linking deltas before adding (they will be sorted at distribution time).
           extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
           ctxDeltas <- lift $ getDeltasForResource (unwrap contextInstance)
-          let orderedCreationDeltas = orderCreationDeltas (extRoleDeltas <> ctxDeltas)
-          for_ orderedCreationDeltas \(DeltaStoreRecord { signedDelta }) ->
+          for_ (extRoleDeltas <> ctxDeltas) \(DeltaStoreRecord { signedDelta }) ->
             addDelta $ DeltaInTransaction { users: [ calcUserInstance ], delta: signedDelta }
           -- Serialise all perspectives of the Calculated User for this context.
           serialisedAsDeltasFor_ contextInstance calcUserInstance calcUserRoleType
@@ -921,16 +920,15 @@ magic ctxt roleInstances rtype users = do
   (try $ lift $ getPerspectContext ctxt) >>=
     handlePerspectContextError "Perspectives.CollectAffectedContexts.magic"
       \(PerspectContext { buitenRol }) -> do
-        -- Collect and order creation/linking deltas deterministically before adding.
+        -- Collect creation/linking deltas (they will be sorted at distribution time).
         contextDeltas <- lift $ getDeltasForResource (unwrap ctxt)
         extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
-        let orderedContextCreationDeltas = orderCreationDeltas (contextDeltas <> extRoleDeltas)
-        for_ orderedContextCreationDeltas \(DeltaStoreRecord { signedDelta }) ->
+        for_ (contextDeltas <> extRoleDeltas) \(DeltaStoreRecord { signedDelta }) ->
           addDelta $ DeltaInTransaction { users, delta: signedDelta }
         -- Get creation deltas for each role instance.
         for_ roleInstances \roleInstance -> do
           roleDeltas <- lift $ getDeltasForResource (unwrap roleInstance)
-          for_ (orderCreationDeltas roleDeltas) \(DeltaStoreRecord { signedDelta }) ->
+          for_ roleDeltas \(DeltaStoreRecord { signedDelta }) ->
             addDelta $ DeltaInTransaction { users, delta: signedDelta }
 
 -- | Adds users for SYNCHRONISATION, guarantees RULE TRIGGERING.
