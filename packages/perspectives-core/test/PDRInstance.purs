@@ -51,17 +51,16 @@ module Test.PDRInstance where
 
 import Prelude
 
-import Control.Monad.AvarMonadAsk (gets, modify)
+import Control.Monad.AvarMonadAsk (modify)
 import Control.Monad.Error.Class (throwError)
-import Control.Monad.Trans.Class (lift)
 import Control.Promise (Promise, toAffE)
 import Data.Either (Either(..))
-import Data.Maybe (Maybe(..), isJust)
+import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Traversable (traverse_)
 import Effect (Effect)
 import Effect.Aff (Aff, Error, Milliseconds(..), bracket, delay, error, forkAff, killFiber)
-import Effect.Aff.AVar (AVar, empty, new, put, tryRead)
+import Effect.Aff.AVar (AVar, empty, new, put)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Foreign.Object (empty) as OBJ
@@ -79,7 +78,7 @@ import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Me (computeMe_)
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getProperty)
-import Perspectives.Logging (ansiReset, debugTest, infoTest)
+import Perspectives.Logging (ansiReset, debugTest, infoTest, traceTest)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, identifiableFirstName, invitationGuestType, invitationMessageProp, inviteeType, inviterType, outgoingInvitationsType, serialisedInvitationProp, sysUser)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem, getUserIdentifier)
@@ -282,7 +281,7 @@ runInPDR pdr mp = do
   
   runPerspectivesWithState 
     ( do
-        debugTest $ "Running action in PDR instance: " <> pdr.name
+        traceTest $ "Running in PDR instance: " <> pdr.name
         mp 
     )
     pdr.stateAVar
@@ -299,6 +298,8 @@ runTransactionInPDR pdr mpt =
 -- | after `maxAttempts` attempts.  Use this to wait for asynchronous PDR
 -- | side-effects (state-entry bots, persistence fibers) to complete before
 -- | proceeding to the next test step.
+-- | The fiber executing pollUntil suspends and cannot proceed to the next line until quiescence is reached or the timeout occurs.
+-- | However, other fibers are not blocked and can continue to run, so this function is non-blocking with respect to other fibers.
 pollUntil
   :: forall a
    . Int
@@ -528,8 +529,8 @@ connectPDRs pdr1 pdr2 = do
               , binding: Just (unwrap me2)
               }
           )
-  waitUntilAllTransactionsComplete pdr2
-  waitUntilAllTransactionsComplete pdr1
+  waitUntilAllTransactionsComplete 6 pdr2
+  waitUntilAllTransactionsComplete 6 pdr1
   log "connectPDRs: Connection process completed."
 
 type QuiescenceSnapshot =
@@ -542,42 +543,16 @@ type QuiescenceSnapshot =
   , pendingTypeFix :: Boolean
   }
 
-readQuiescenceSnapshot :: PDRInstance -> Aff QuiescenceSnapshot
-readQuiescenceSnapshot pdr = runInPDR pdr do
-  noTransactionRunning <- noTransactionIsRunning
-  transactionNumber <- gets _.transactionNumber
-  timedTx <- gets _.transactionWithTiming >>= lift <<< tryRead
-  modelLoad <- gets _.modelToLoad >>= lift <<< tryRead
-  indexedResource <- gets _.indexedResourceToCreate >>= lift <<< tryRead
-  missingResource <- gets _.missingResource >>= lift <<< tryRead
-  typeFix <- gets _.typeToBeFixed >>= lift <<< tryRead
-  pure
-    { noTransactionRunning
-    , transactionNumber
-    , pendingTimedTransaction: isJust timedTx
-    , pendingModelLoad: isJust modelLoad
-    , pendingIndexedResource: isJust indexedResource
-    , pendingIntegrityFix: isJust missingResource
-    , pendingTypeFix: isJust typeFix
-    }
-
-isStableSnapshot :: QuiescenceSnapshot -> QuiescenceSnapshot -> Boolean
-isStableSnapshot previous current =
-  previous.transactionNumber == current.transactionNumber
-    && current.noTransactionRunning
-    && (not current.pendingTimedTransaction)
-    && (not current.pendingModelLoad)
-    && (not current.pendingIndexedResource)
-    && (not current.pendingIntegrityFix)
-    && (not current.pendingTypeFix)
-
--- More robust than checking only `noTransactionIsRunning` once:
--- verify a quiet period in which no new transactions start and no internal
--- work queues (AVars) have pending items.
-waitUntilAllTransactionsComplete :: PDRInstance -> Aff Unit
-waitUntilAllTransactionsComplete pdr = do
+-- | Wait until all transactions have completed and the PDR instance is
+-- | quiescent.  Throws an error if quiescence is not reached within a
+-- | reasonable time (currently 6 seconds).
+-- | The fiber executing waitUntilAllTransactionsComplete suspends and cannot proceed to the next line until quiescence is reached or the timeout occurs.
+-- | However, other fibers are not blocked and can continue to run, so this function is non-blocking with respect to other fibers.
+-- | Careful with this test. A PDR might still be executing some fiber (but no transactions).
+waitUntilAllTransactionsComplete :: Int -> PDRInstance -> Aff Unit
+waitUntilAllTransactionsComplete secs pdr = do
   let
-    attempts = 60
+    attempts = secs * 10 -- check every 100ms
     interval = Milliseconds 100.0
     stableWindows = 3
 
@@ -588,7 +563,8 @@ waitUntilAllTransactionsComplete pdr = do
       -- A non blocking check.
       quiet <- runInPDR pdr noTransactionIsRunning
       let nextStableCount = if quiet then stableCount + 1 else 0
-      if nextStableCount >= stableWindows then pure unit
+      if nextStableCount >= stableWindows then 
+        runInPDR pdr $ debugTest ("waitUntilAllTransactionsComplete: PDR instance " <> pdr.name <> " is quiescent.")
       else loop (n - 1) nextStableCount
 
   loop attempts 0
