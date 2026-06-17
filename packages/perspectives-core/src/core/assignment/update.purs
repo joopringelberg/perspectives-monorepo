@@ -70,6 +70,7 @@ import Perspectives.Identifiers (startsWithSegments, typeUri2LocalName_, typeUri
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding_, contextType, getProperty, roleType, roleType_)
 import Perspectives.Instances.Values (parsePerspectivesFile, writePerspectivesFile)
+import Perspectives.Logging (debugResource, warnResource)
 import Perspectives.Persistence.API (toFile)
 import Perspectives.Persistence.DeltaStore (getDeltasForResourceByDeltaType)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
@@ -83,6 +84,7 @@ import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType, StateIdentifier(..))
 import Perspectives.ResourceIdentifiers (databaseLocation, resourceIdentifier2DocLocator)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.SignedDelta (SignedDelta)
@@ -532,7 +534,10 @@ setProperty rids propertyName mdelta values = do
       for_ rids' \rid' -> do
         mrid <- lift $ getPropertyBearingRoleInstance propertyName rid'
         case mrid of
-          Nothing -> pure unit
+          Nothing -> do
+            readablePropertyName <- lift $ toReadable propertyName
+            lift $ warnResource ("setProperty: property " <> unwrap readablePropertyName <> " not found on role instance " <> unwrap rid')
+            pure unit
           Just (RoleProp rid replacementProperty) -> (lift $ try $ getPerspectRol rid) >>=
             handlePerspectRolError
               "setProperty"
@@ -565,6 +570,8 @@ setProperty rids propertyName mdelta values = do
                 addDelta (DeltaInTransaction { users, delta: signedDelta })
                 (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
                 (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
+                readablePropertyName <- lift $ toReadable propertyName
+                lift $ debugResource ("setProperty: set property " <> unwrap readablePropertyName <> " to values " <> show values)
 
 -----------------------------------------------------------
 -- SAVEFILE

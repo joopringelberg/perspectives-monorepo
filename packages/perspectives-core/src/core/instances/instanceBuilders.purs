@@ -47,6 +47,7 @@ import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.Newtype (unwrap)
+import Data.Show (show)
 import Data.Traversable (for, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), snd)
@@ -64,7 +65,7 @@ import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.Instances.CreateRole (constructEmptyRole)
 import Perspectives.Instances.Me (isMe)
-import Perspectives.Logging (debugInstall)
+import Perspectives.Logging (debugInstall, traceResource)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Parsing.Messages (PerspectivesError)
 import Perspectives.Persistent (saveEntiteit, tryGetPerspectEntiteit)
@@ -77,6 +78,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Rol
 import Perspectives.Representation.TypeIdentifiers (ResourceType(..), RoleKind(..), RoleType(..), roletype2string)
 import Perspectives.ResourceIdentifiers (createResourceIdentifier, createResourceIdentifier', guid, isInPublicScheme)
 import Perspectives.SaveUserData (FillBindingMode(..), setFirstBinding, setFirstBindingWithMode)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Types.ObjectGetters (indexedContextName, indexedRoleName, publicUserRole)
 import Prelude (Unit, bind, discard, eq, pure, unit, void, ($), (*>), (<$>), (<<<), (<>), (>>=), (&&))
@@ -149,6 +151,8 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
         -- As the proxy of the public role is just another user, we have to make sure it will receive all deltas necessary
         -- according to its perspectives.
         for_ publicRoleInstances \proxy -> lift (contextInstanceId `serialisedAsDeltasFor` proxy)
+        readableContextType <- lift $ lift $ toReadable (ContextType ctype)
+        lift $ lift $ traceResource $ "Created context instance " <> unwrap contextInstanceId <> " of type " <> show readableContextType
         pure contextInstanceId
   where
 
@@ -228,6 +232,8 @@ createAndAddRoleInstance_ roleType@(EnumeratedRoleType rtype) contextId (RolSeri
     case properties of
       (PropertySerialization props) -> forWithIndex_ props \propertyTypeId values ->
         setProperty [ roleInstance ] (EnumeratedPropertyType propertyTypeId) Nothing (Value <$> values)
+    readableRoleType <- lift $ toReadable roleType
+    lift $ traceResource $ "Created role instance " <> unwrap roleInstance <> " of type " <> show readableRoleType <> " in context " <> unwrap contextInstanceId
     pure roleInstance
 
 scheduleIndexedResourceCreation :: IndexedResource -> MonadPerspectivesTransaction Unit

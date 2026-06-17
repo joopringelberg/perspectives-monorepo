@@ -52,6 +52,7 @@ module Perspectives.Logging
   , debugModel
   , debugPersistence
   , debugQuery
+  , debugResource
   , debugState
   , debugSync
   , debugTest
@@ -64,6 +65,7 @@ module Perspectives.Logging
   , errorOther
   , errorParser
   , errorPersistence
+  , errorResource
   , errorSync
   , errorTest
   , errorUpgrade
@@ -71,6 +73,7 @@ module Perspectives.Logging
   , infoDelta
   , infoInstall
   , infoModel
+  , infoResource
   , infoSync
   , infoTest
   , infoUpgrade
@@ -92,10 +95,12 @@ module Perspectives.Logging
   , warnModel
   , warnOther
   , warnPersistence
+  , warnResource
   , warnState
   , warnSync
   , warnTest
-  ) where
+  )
+  where
 
 import Control.Monad.AvarMonadAsk (gets)
 import Data.Map (lookup) as Map
@@ -349,3 +354,15 @@ errorTest = pdrLog TEST Error
 -----------------------------------------------------------
 traceResource :: String -> MonadPerspectives Unit
 traceResource = pdrLog RESOURCE Trace
+
+debugResource :: String -> MonadPerspectives Unit 
+debugResource = pdrLog RESOURCE Debug
+
+infoResource :: String -> MonadPerspectives Unit
+infoResource = pdrLog RESOURCE Info
+
+warnResource :: String -> MonadPerspectives Unit
+warnResource = pdrLog RESOURCE Warn
+
+errorResource :: String -> MonadPerspectives Unit
+errorResource = pdrLog RESOURCE Error

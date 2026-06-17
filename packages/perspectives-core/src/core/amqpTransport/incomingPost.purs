@@ -189,7 +189,8 @@ showPendingIncomingTransactions pendingCount =
     language <- getCurrentLanguage
     debugBroker $ "There are " <> show pendingCount <> " pending incoming transactions"
     pushMessage (pendingIncomingPostMessage language pendingCount)
-  else
+  else do
+    debugBroker "There are no pending incoming transactions"
     removeMessage "pending incoming transactions"
 
 pendingIncomingPostMessage :: String -> Int -> String

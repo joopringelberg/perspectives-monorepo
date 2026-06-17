@@ -77,6 +77,7 @@ data LogTopic
 | `INSTALL`     | Model installation, Couchdb setup |
 | `DELTA`       | Creating Deltas and storing them in a Transaction |
 | `TEST`        | Test development |
+| `RESOURCE`    | Context and role creation |
 | `OTHER`       | Anything that does not fit another topic |
 
 ### 2.3 `LogConfig`

@@ -49,9 +49,9 @@ import Perspectives.Couchdb (DeleteCouchdbDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ErrorLogging (warnModeller)
-import Perspectives.Logging (warnModel, traceModel)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
+import Perspectives.Logging (traceInstall, traceModel, warnModel)
 import Perspectives.ModelDependencies (build, patch, versionToInstall)
 import Perspectives.Persistence.API (addAttachment, fromBlob, getAttachment, tryGetDocument)
 import Perspectives.Persistent (forceSaveDomeinFile, getDomeinFile, getPerspectRol, modelDatabaseName, removeEntiteit, saveEntiteit, tryGetPerspectEntiteit, tryRemoveEntiteit, updateRevision)
@@ -147,7 +147,9 @@ retrieveDomeinFile m@(ModelUri modelUri') = do
     mdf <- tryReadEntiteitFromCache (ModelUri $ unversionedModelUri modelUri)
     case mdf of
       -- The DomeinFile is in the cache, meaning we have loaded the translations table before.
-      Just df -> pure df
+      Just df -> do
+        traceModel $ "retrieveDomeinFile' found model in cache: " <> modelUri
+        pure df
       -- The DomeinFile is not in the cache, so we have to load the translations table.
       Nothing -> tryGetPerspectEntiteit (ModelUri $ unversionedModelUri modelUri) >>= case _ of
         -- the DomeinFile is not available in the local database. Retrieve it from a remote repository and store it in the local "models" database of this user.
@@ -156,10 +158,10 @@ retrieveDomeinFile m@(ModelUri modelUri') = do
             Nothing -> map _.semver <$> getVersionToInstall domeinFileId
             Just v -> pure $ Just v
           modelToLoadAVar <- getModelToLoad
-          traceModel $ "retrieveDomeinFile' requesting JIT load of: " <> modelUri
+          traceInstall $ "retrieveDomeinFile' requesting JIT load of: " <> modelUri
           liftAff $ put (LoadModel (ModelUri ((unversionedModelUri modelUri) <> (maybe "" ((<>) "@") version)))) modelToLoadAVar
           result <- liftAff $ take modelToLoadAVar
-          traceModel $ "retrieveDomeinFile' got response from JIT loader for: " <> modelUri
+          traceInstall $ "retrieveDomeinFile' got response from JIT loader for: " <> modelUri
           -- Now the forking process waits (blocks) until retrieveFromDomeinFile fills it with another LoadModel request.
           case result of
             -- We now take up communication with the forked process that actually loads the model:
@@ -169,13 +171,17 @@ retrieveDomeinFile m@(ModelUri modelUri') = do
                 -- The stop condition for this recursion is tryGetPerspectEntiteit!
                 -- It will now find the model in the local database (but not yet in cache)
                 -- the recursive call will then load the translations table.
-                ModelLoaded -> retrieveDomeinFile domeinFileId
+                ModelLoaded -> do
+                  traceInstall $ "retrieveDomeinFile' succesfully JIT loaded model, will proceed to load it: " <> modelUri
+                  retrieveDomeinFile domeinFileId
                 LoadingFailed reason -> throwError (error $ "Cannot get " <> modelUri <> " from a repository. Reason: " <> reason)
                 _ -> throwError (error $ "Model retrieval from repository was not executed for " <> modelUri <> ".")
             -- This should not happen
             _ -> throwError (error $ "Wrong communication from the forked model loading process!")
         -- The model was available in the local database, but as it was not in cache, we have to load the translations.
-        Just df -> fetchTranslations' df
+        Just df -> do
+          traceModel $ "retrieveDomeinFile' found model in local database but not in cache: " <> modelUri
+          fetchTranslations' df
 
   fetchTranslations' :: DomeinFile Stable -> MonadPerspectives (DomeinFile Stable)
   fetchTranslations' df = do
