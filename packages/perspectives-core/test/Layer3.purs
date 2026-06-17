@@ -60,21 +60,21 @@ import Prelude
 
 import Control.Monad.Cont (lift)
 import Control.Monad.Error.Class (throwError)
-import Data.Array (null)
+import Data.Array (head, null)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Traversable (for, for_)
 import Effect (Effect)
-import Effect.Aff (delay, error)
+import Effect.Aff (error)
 import Foreign.Object (empty) as OBJ
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runContextAction)
-import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##=), (##>>))
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##=), (##>>), (##>))
 import Perspectives.Extern.Couchdb (addModelToLocalStore_)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (binding, binding_, context, getEnumeratedRoleInstances)
-import Perspectives.Logging (ansiMagenta, ansiRed, debugTest)
+import Perspectives.Logging (ansiMagenta, ansiRed, infoTest)
 import Perspectives.ModelDependencies (sysMe, sysUser)
 import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Persistence.State (getSystemIdentifier)
@@ -84,7 +84,7 @@ import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
-import Test.PDRInstance (connectPDRs, noBus, pollUntil, runInPDR, testPouchdbUser, waitUntilAllTransactionsComplete, withPDR, withTwoPDRs)
+import Test.PDRInstance (connectPDRs, noBus, pollUntil, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
 import Test.Unit (suite, test, testOnly)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -118,7 +118,7 @@ main = runTest do
           assert "PDR-B system identifier should equal bob_macbook" (sysB == "bob_macbook")
           assert "PDR-A and PDR-B should have distinct identifiers" (sysA /= sysB)
 
-    testOnly "start two PDR instances and connect them" do
+    test "start two PDR instances and connect them" do
       withTwoPDRs
         (testPouchdbUser "alice")
         defaultRuntimeOptions
@@ -134,7 +134,7 @@ main = runTest do
                 setTopicLogLevel SYNC Trace
                 setTopicLogLevel TEST Debug
                 setTopicLogLevel RESOURCE Debug
-                -- setTopicLogLevel DELTA Info
+                setTopicLogLevel DELTA Warn
             )
           runInPDR pdrB
             ( do
@@ -143,7 +143,7 @@ main = runTest do
                 setTopicLogLevel SYNC Trace
                 setTopicLogLevel TEST Debug
                 setTopicLogLevel RESOURCE Debug
-                -- setTopicLogLevel DELTA Info
+                setTopicLogLevel DELTA Warn
             )
           connectPDRs pdrA pdrB
           -- Two Persons instances.
@@ -168,7 +168,7 @@ main = runTest do
                 _, _ -> assert "Both PDRs should have each others' Person instance" false
             _, _ -> assert "Both PDRs should have a `me` instance" false
 
-    test "start two PDR instances and load testmodel" do
+    testOnly "start two PDR instances and load testmodel" do
       withTwoPDRs
         (testPouchdbUser "alice")
         defaultRuntimeOptions
@@ -177,27 +177,25 @@ main = runTest do
         defaultRuntimeOptions
         (Just ansiMagenta)
         \pdrA pdrB -> do
-
           connectPDRs pdrA pdrB
 
           runInPDR pdrA
             ( do
-                setTopicLogLevel BROKER Debug
-                setTopicLogLevel INSTALL Trace
-                setTopicLogLevel SYNC Debug
-                -- setTopicLogLevel STATE Debug
+                -- setTopicLogLevel BROKER Debug
+                -- setTopicLogLevel INSTALL Debug
+                -- setTopicLogLevel SYNC Info
                 setTopicLogLevel TEST Debug
-                setTopicLogLevel RESOURCE Debug
-                setTopicLogLevel DELTA Info
+                -- setTopicLogLevel RESOURCE Trace
             )
           runInPDR pdrB
             ( do
-                setTopicLogLevel BROKER Debug
-                setTopicLogLevel INSTALL Trace
-                setTopicLogLevel SYNC Trace
-                -- setTopicLogLevel STATE Debug
+                -- setTopicLogLevel BROKER Debug
+                -- setTopicLogLevel INSTALL Trace
+                -- setTopicLogLevel MODEL Debug
+                -- setTopicLogLevel SYNC Trace
                 setTopicLogLevel TEST Debug
-                setTopicLogLevel RESOURCE Debug
+                -- setTopicLogLevel RESOURCE Trace
+                -- setTopicLogLevel DELTA Trace
             )
 
           -- Get Alice's and Bob's Persons instances for later use.
@@ -216,15 +214,17 @@ main = runTest do
                   Nothing -> throwError $ error "Bob should have a `me` instance in his PDR"
               Nothing -> throwError $ error "Bob should have a `me` instance in his PDR"
 
+          -- Hier zijn Alice en Bob beiden getermineerd.
+
           -- Alice loads test model in pdrA.
           runInPDR pdrA do
-            debugTest "Alice Loads test model in PDRA"
+            infoTest "Alice Loads test model in PDRA"
             runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
               $
                 addModelToLocalStore_ [testModel] (RoleInstance "Ignored")
 
-          -- waitUntilAllTransactionsComplete pdrA
-          
+          -- Hier al termineert Alice niet al haar transacties.
+
           testCtx <- pollUntil 100 (Milliseconds 100.0)
             "Indexed test context to appear in pdrA after loading test model"
             ( runInPDR pdrA
@@ -233,7 +233,7 @@ main = runTest do
           
           -- Alice creates a test.
           runInPDR pdrA do
-            debugTest "Alice creates a test in PDRA"
+            infoTest "Alice creates a test in PDRA"
             runMonadPerspectivesTransaction' shareWithPeers (CR $ CalculatedRoleType testAppManager)
               $
               runContextAction testAppManager "CreateTest" (unwrap testCtx)
@@ -243,19 +243,16 @@ main = runTest do
           testExternalRoles <- pollUntil 100 (Milliseconds 100.0)
             "At least one individual test role to appear in pdrA"
             ( runInPDR pdrA do
-                debugTest "Retrieve all individual tests in PDRA"
+                infoTest "Retrieve all individual tests in PDRA"
                 roles <- testCtx ##= getEnumeratedRoleInstances (EnumeratedRoleType testsType) >=> binding
                 if null roles then pure Nothing else pure (Just roles)
             )
-          
-          -- There should be tests
-          assert "There should be tests in the test model" (not (null testExternalRoles))
 
           -- Alice gives Bob the role Follower in all tests.
           runInPDR pdrA $
             runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType testLeaderType)
             $ for_ testExternalRoles (\testExternalRole -> do
-                lift $ debugTest "Alice gives Bob the Follower role in a test in PDRA"
+                lift $ infoTest "Alice gives Bob the Follower role in a test in PDRA"
                 theTest <- lift (testExternalRole ##>> context )
                 createAndAddRoleInstance
                   (EnumeratedRoleType testFollowerType)
@@ -266,38 +263,56 @@ main = runTest do
                       , binding: Just (unwrap bob)
                       }
                   ))
+          
+          void $ pollUntil 100 (Milliseconds 100.0)
+            "Bob checks whether he has at least one Test external role"
+            ( runInPDR pdrB do
+                infoTest "Try to find at least one Test external role in PDRB"
+                case head testExternalRoles of
+                  Just testExternalRole -> tryGetPerspectRol testExternalRole
+                  _ -> pure Nothing
+            )
 
-          -- Wait.
-          waitUntilAllTransactionsComplete pdrA
-          waitUntilAllTransactionsComplete pdrB
-
-          bobAsFollowerInTests <- pollUntil 100 (Milliseconds 100.0)
+          void $ pollUntil 100 (Milliseconds 100.0)
             "Bob to have the Follower role in all tests in pdrB"
             ( runInPDR pdrB do
-                debugTest "Bob checks that he has the Follower role in all tests in PDRB"
                 roles <- for testExternalRoles \testExternalRole -> do
                   theTest <- testExternalRole ##>> context
                   theTest ##= getEnumeratedRoleInstances (EnumeratedRoleType testFollowerType)
-                if null roles then pure Nothing else pure (Just roles)
+                if null roles then pure Nothing else do
+                  infoTest "Bob checks that he has the Follower role in all tests in PDRB"
+                  pure (Just roles)
             )
           
           -- Alice executes all tests, bringing the test role in state Executed.
           runInPDR pdrA $
             runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType testLeaderType)
             $ for_ testExternalRoles (\testExternalRole -> do
-                lift $ debugTest "Alice executes a test in PDRA"
+                lift $ infoTest "Alice executes a test in PDRA"
                 theTest <- lift (testExternalRole ##>> context )
                 runContextAction testLeaderType "RunTest" (unwrap theTest)
             )
 
-          -- Wait.
-          waitUntilAllTransactionsComplete pdrA
-          waitUntilAllTransactionsComplete pdrB
+
+          void $ pollUntil 100 (Milliseconds 100.0)
+            "Bob to have a value for the property Name of the external role of the test"
+            ( runInPDR pdrB $
+                case head testExternalRoles of
+                  Just testExternalRole -> do
+                    testName <- testExternalRole ##> getPropertyValues (ENP $ EnumeratedPropertyType testNameProperty)
+                    case testName of
+                      Just _ -> do 
+                        infoTest "Bob has verified that the property Name of the external role of the test has a value in PDRB"
+                        pure (Just testName)
+                      Nothing -> pure Nothing
+                  Nothing -> pure Nothing
+
+            )
 
           -- Bob checks that all tests are in state Executed.
           testResults <- runInPDR pdrB $
             for testExternalRoles (\testExternalRole -> do
-              debugTest "Bob checks that all tests are in state Executed in PDRB"
+              infoTest "Bob checks that all tests are in state Executed in PDRB"
               -- Get the value of Calculated property TestSucceeded of the external role of the test.
               testSucceeded <- testExternalRole ##>> getPropertyValues (CP $ CalculatedPropertyType testSucceededProperty)
               testName <- testExternalRole ##>> getPropertyValues (ENP $ EnumeratedPropertyType testNameProperty)
@@ -337,4 +352,4 @@ testSucceededProperty = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg$Externa
 
 testNameProperty :: String
 -- testNameProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test$External$TestName"
-testNameProperty = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg$External$jvgngnhi6g"
+testNameProperty = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg$External$nrrlsgh0u0"

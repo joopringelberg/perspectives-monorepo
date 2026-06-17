@@ -66,17 +66,22 @@ domain model://joopringelberg.nl#SynchronisationTestModel@1.0
       perspective on TestRole1
         only (Create)
         props (P) verbs (Consult, SetPropertyValue)
+      perspective on extern
+        props (TestName) verbs (SetPropertyValue, Consult)
       action RunTest
         letA
           tr <- create role TestRole1
         in
           P = 1 for tr
+          TestName = "Test1" for extern
 
     user Follower filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
       perspective on Leader
         props (FirstName) verbs (Consult)
       perspective on TestRole1
         props (P) verbs (Consult)
+      perspective on extern
+        props (TestName, TestSucceeded) verbs (Consult)
 
     thing TestRole1
       property P (Number)
