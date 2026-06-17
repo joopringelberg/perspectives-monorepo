@@ -120,7 +120,7 @@ sendTransactieToUserUsingCouchdb cdbUrl userId t = do
 -- |   * a model://perspectives.domains#System$PerspectivesSystem$User instance, or
 -- |   * an instance of the Visitor role.
 sendTransactieToUserUsingAMQP :: UnschemedResourceIdentifier -> TransactionForPeer -> MonadPerspectives Unit
-sendTransactieToUserUsingAMQP perspectivesUser t = do
+sendTransactieToUserUsingAMQP perspectivesUser t@(TransactionForPeer {timeStamp}) = do
   connected <- connectedToAMQPBroker
   n <- liftEffect $ now
   dt <- pure $ SerializableDateTime (toDateTime n)
@@ -132,7 +132,7 @@ sendTransactieToUserUsingAMQP perspectivesUser t = do
         saveTransactionInOutgoingPost perspectivesUser messageId t
         -- Just send the message to the topic that is the addressees PerspectivesUser instance.
         -- Each system will listen to a queue that is bound to that topic upon subscription.
-        debugBroker $ "Sending transaction for user " <> unwrap perspectivesUser <> " to AMQP broker with messageId " <> messageId
+        debugBroker $ "Sending transaction for user " <> unwrap perspectivesUser <> " to AMQP broker with transaction timestamp " <> show timeStamp
         liftEffect $ sendToTopic stompClient perspectivesUser messageId (writeJSON t)
       otherwise -> saveTransactionInOutgoingPost perspectivesUser messageId t
   else saveTransactionInOutgoingPost perspectivesUser messageId t
@@ -145,8 +145,8 @@ sendTransactieToUserUsingAMQP perspectivesUser t = do
     pure $ mConnected == (Just $ Value "true")
 
 saveTransactionInOutgoingPost :: UnschemedResourceIdentifier -> String -> TransactionForPeer -> MonadPerspectives Unit
-saveTransactionInOutgoingPost userId messageId t = do
-  debugBroker $ "Saving transaction for user " <> unwrap userId <> " in OutgoingTransactions post database with messageId " <> messageId
+saveTransactionInOutgoingPost userId messageId t@(TransactionForPeer {timeStamp}) = do
+  debugBroker $ "Saving transaction for user " <> unwrap userId <> " in OutgoingTransactions post database with transaction timestamp " <> show timeStamp
   postDB <- postDatabaseName
   void $ addDocument postDB (OutgoingTransaction { _id: messageId, receiver: userId, transaction: t }) messageId
 
@@ -320,17 +320,17 @@ deltaTypeSortPriority :: String -> Int
 deltaTypeSortPriority dt
   | dt == "ConstructExternalRole" = 0
   | dt == "ConstructEmptyContext" = 1
-  | dt == "ConstructEmptyRole" = 1
+  | dt == "ConstructEmptyRole" = 2
   | dt == "AddExternalRole" = 2
-  | dt == "AddRoleInstancesToContext" = 2
-  | dt == "SetFirstBinding" = 3
-  | dt == "AddProperty" = 3
-  | dt == "SetProperty" = 3
-  | dt == "UploadFile" = 3
-  | dt == "MoveRoleInstancesToAnotherContext" = 4
-  | dt == "RemoveRoleInstance" = 5
-  | dt == "RemoveUnboundExternalRoleInstance" = 5
-  | dt == "RemoveExternalRoleInstance" = 5
+  | dt == "AddRoleInstancesToContext" = 3
+  | dt == "SetFirstBinding" = 4
+  | dt == "AddProperty" = 5
+  | dt == "SetProperty" = 5
+  | dt == "UploadFile" = 5
+  | dt == "MoveRoleInstancesToAnotherContext" = 5
+  | dt == "RemoveRoleInstance" = 6
+  | dt == "RemoveUnboundExternalRoleInstance" = 6
+  | dt == "RemoveExternalRoleInstance" = 6
   | dt == "RemoveBinding" = 6
   | dt == "ReplaceBinding" = 6
   | dt == "RemoveProperty" = 7
@@ -359,5 +359,5 @@ sortTransactionDeltas = sortBy compareDeltaInTransaction
       key2 = maybe "" _.resourceKey mInfo2
     in
       compare priority1 priority2
-        <> compare version1 version2
-        <> compare key1 key2
+        -- <> compare version1 version2
+        -- <> compare key1 key2
