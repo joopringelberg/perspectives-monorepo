@@ -318,8 +318,8 @@ addPublicKeysToTransaction (Transaction tr@{ deltas }) = do
 -- | - RolePropertyDelta: AddProperty/SetProperty/UploadFile before RemoveProperty/DeleteProperty
 deltaTypeSortPriority :: String -> Int
 deltaTypeSortPriority dt
-  | dt == "ConstructEmptyContext" = 0
-  | dt == "ConstructExternalRole" = 1
+  | dt == "ConstructExternalRole" = 0
+  | dt == "ConstructEmptyContext" = 1
   | dt == "ConstructEmptyRole" = 1
   | dt == "AddExternalRole" = 2
   | dt == "AddRoleInstancesToContext" = 2
