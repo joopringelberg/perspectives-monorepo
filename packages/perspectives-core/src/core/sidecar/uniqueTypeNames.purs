@@ -876,12 +876,12 @@ updateStableMappingForModel (ModelUri stableModelUri) modelCuid correctedDFR mMa
 -- | Called automatically at the start of every merge and plan step.
 pruneStaleAliases
   :: forall r1 r2 r3 r4 r5 r6 rest
-   . { contexts  :: OBJ.Object r1
-     , roles     :: OBJ.Object r2
+   . { contexts :: OBJ.Object r1
+     , roles :: OBJ.Object r2
      , properties :: OBJ.Object r3
-     , views     :: OBJ.Object r4
-     , states    :: OBJ.Object r5
-     , actions   :: OBJ.Object r6
+     , views :: OBJ.Object r4
+     , states :: OBJ.Object r5
+     , actions :: OBJ.Object r6
      | rest
      }
   -> StableIdMapping
@@ -889,28 +889,28 @@ pruneStaleAliases
 pruneStaleAliases cur mapping =
   let
     -- Collect alias keys that are now canonical (will be evicted from both alias and CUID maps)
-    staleCtx  = filter (\k -> OBJ.member k mapping.contexts)   (OBJ.keys cur.contexts)
-    staleRol  = filter (\k -> OBJ.member k mapping.roles)      (OBJ.keys cur.roles)
+    staleCtx = filter (\k -> OBJ.member k mapping.contexts) (OBJ.keys cur.contexts)
+    staleRol = filter (\k -> OBJ.member k mapping.roles) (OBJ.keys cur.roles)
     staleProp = filter (\k -> OBJ.member k mapping.properties) (OBJ.keys cur.properties)
-    staleView = filter (\k -> OBJ.member k mapping.views)      (OBJ.keys cur.views)
-    staleSt   = filter (\k -> OBJ.member k mapping.states)     (OBJ.keys cur.states)
-    staleAct  = filter (\k -> OBJ.member k mapping.actions)    (OBJ.keys cur.actions)
+    staleView = filter (\k -> OBJ.member k mapping.views) (OBJ.keys cur.views)
+    staleSt = filter (\k -> OBJ.member k mapping.states) (OBJ.keys cur.states)
+    staleAct = filter (\k -> OBJ.member k mapping.actions) (OBJ.keys cur.actions)
     removeAll ks obj = foldl (\acc k -> OBJ.delete k acc) obj ks
   in
     mapping
-      { contexts      = removeAll staleCtx  mapping.contexts
-      , roles         = removeAll staleRol  mapping.roles
-      , properties    = removeAll staleProp mapping.properties
-      , views         = removeAll staleView mapping.views
-      , states        = removeAll staleSt   mapping.states
-      , actions       = removeAll staleAct  mapping.actions
+      { contexts = removeAll staleCtx mapping.contexts
+      , roles = removeAll staleRol mapping.roles
+      , properties = removeAll staleProp mapping.properties
+      , views = removeAll staleView mapping.views
+      , states = removeAll staleSt mapping.states
+      , actions = removeAll staleAct mapping.actions
       -- Also remove CUID entries for stale alias keys so the reintroduced type gets a fresh CUID
-      , contextCuids  = removeAll staleCtx  mapping.contextCuids
-      , roleCuids     = removeAll staleRol  mapping.roleCuids
+      , contextCuids = removeAll staleCtx mapping.contextCuids
+      , roleCuids = removeAll staleRol mapping.roleCuids
       , propertyCuids = removeAll staleProp mapping.propertyCuids
-      , viewCuids     = removeAll staleView mapping.viewCuids
-      , stateCuids    = removeAll staleSt   mapping.stateCuids
-      , actionCuids   = removeAll staleAct  mapping.actionCuids
+      , viewCuids = removeAll staleView mapping.viewCuids
+      , stateCuids = removeAll staleSt mapping.stateCuids
+      , actionCuids = removeAll staleAct mapping.actionCuids
       }
 
 -- Merge the current key snapshots with the previous sidecar to generate/update alias maps.

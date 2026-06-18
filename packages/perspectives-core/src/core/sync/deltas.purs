@@ -120,7 +120,7 @@ sendTransactieToUserUsingCouchdb cdbUrl userId t = do
 -- |   * a model://perspectives.domains#System$PerspectivesSystem$User instance, or
 -- |   * an instance of the Visitor role.
 sendTransactieToUserUsingAMQP :: UnschemedResourceIdentifier -> TransactionForPeer -> MonadPerspectives Unit
-sendTransactieToUserUsingAMQP perspectivesUser t@(TransactionForPeer {timeStamp}) = do
+sendTransactieToUserUsingAMQP perspectivesUser t@(TransactionForPeer { timeStamp }) = do
   connected <- connectedToAMQPBroker
   n <- liftEffect $ now
   dt <- pure $ SerializableDateTime (toDateTime n)
@@ -145,7 +145,7 @@ sendTransactieToUserUsingAMQP perspectivesUser t@(TransactionForPeer {timeStamp}
     pure $ mConnected == (Just $ Value "true")
 
 saveTransactionInOutgoingPost :: UnschemedResourceIdentifier -> String -> TransactionForPeer -> MonadPerspectives Unit
-saveTransactionInOutgoingPost userId messageId t@(TransactionForPeer {timeStamp}) = do
+saveTransactionInOutgoingPost userId messageId t@(TransactionForPeer { timeStamp }) = do
   debugBroker $ "Saving transaction for user " <> unwrap userId <> " in OutgoingTransactions post database with transaction timestamp " <> show timeStamp
   postDB <- postDatabaseName
   void $ addDocument postDB (OutgoingTransaction { _id: messageId, receiver: userId, transaction: t }) messageId
@@ -359,5 +359,5 @@ sortTransactionDeltas = sortBy compareDeltaInTransaction
       key2 = maybe "" _.resourceKey mInfo2
     in
       compare priority1 priority2
-        -- <> compare version1 version2
-        -- <> compare key1 key2
+-- <> compare version1 version2
+-- <> compare key1 key2
