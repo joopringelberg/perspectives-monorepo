@@ -99,8 +99,7 @@ module Perspectives.Logging
   , warnState
   , warnSync
   , warnTest
-  )
-  where
+  ) where
 
 import Control.Monad.AvarMonadAsk (gets)
 import Data.Map (lookup) as Map
@@ -355,7 +354,7 @@ errorTest = pdrLog TEST Error
 traceResource :: String -> MonadPerspectives Unit
 traceResource = pdrLog RESOURCE Trace
 
-debugResource :: String -> MonadPerspectives Unit 
+debugResource :: String -> MonadPerspectives Unit
 debugResource = pdrLog RESOURCE Debug
 
 infoResource :: String -> MonadPerspectives Unit

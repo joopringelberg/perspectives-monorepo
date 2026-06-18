@@ -47,6 +47,7 @@ module Perspectives.Sidecar.UniqueTypeNames
   , extractKeysFromDfr
   , planCuidAssignments
   , finalizeCuidAssignments
+  , pruneStaleAliases
   -- Refactor target: end-to-end mapping update with CUID minting for a model
   , updateStableMappingForModel
   ) where
@@ -867,6 +868,51 @@ updateStableMappingForModel (ModelUri stableModelUri) modelCuid correctedDFR mMa
 
   pure mapping3
 
+-- | Remove alias map entries whose key is now a canonical type in the current model, and
+-- | the corresponding CUID entries so that the reintroduced type receives a fresh identifier.
+-- | An alias entry (oldFqn -> canonicalFqn) is stale when oldFqn itself now appears as a
+-- | canonical FQN — the name has been reused for a new type and must not silently redirect
+-- | to the previously renamed type.
+-- | Called automatically at the start of every merge and plan step.
+pruneStaleAliases
+  :: forall r1 r2 r3 r4 r5 r6 rest
+   . { contexts :: OBJ.Object r1
+     , roles :: OBJ.Object r2
+     , properties :: OBJ.Object r3
+     , views :: OBJ.Object r4
+     , states :: OBJ.Object r5
+     , actions :: OBJ.Object r6
+     | rest
+     }
+  -> StableIdMapping
+  -> StableIdMapping
+pruneStaleAliases cur mapping =
+  let
+    -- Collect alias keys that are now canonical (will be evicted from both alias and CUID maps)
+    staleCtx = filter (\k -> OBJ.member k mapping.contexts) (OBJ.keys cur.contexts)
+    staleRol = filter (\k -> OBJ.member k mapping.roles) (OBJ.keys cur.roles)
+    staleProp = filter (\k -> OBJ.member k mapping.properties) (OBJ.keys cur.properties)
+    staleView = filter (\k -> OBJ.member k mapping.views) (OBJ.keys cur.views)
+    staleSt = filter (\k -> OBJ.member k mapping.states) (OBJ.keys cur.states)
+    staleAct = filter (\k -> OBJ.member k mapping.actions) (OBJ.keys cur.actions)
+    removeAll ks obj = foldl (\acc k -> OBJ.delete k acc) obj ks
+  in
+    mapping
+      { contexts = removeAll staleCtx mapping.contexts
+      , roles = removeAll staleRol mapping.roles
+      , properties = removeAll staleProp mapping.properties
+      , views = removeAll staleView mapping.views
+      , states = removeAll staleSt mapping.states
+      , actions = removeAll staleAct mapping.actions
+      -- Also remove CUID entries for stale alias keys so the reintroduced type gets a fresh CUID
+      , contextCuids = removeAll staleCtx mapping.contextCuids
+      , roleCuids = removeAll staleRol mapping.roleCuids
+      , propertyCuids = removeAll staleProp mapping.propertyCuids
+      , viewCuids = removeAll staleView mapping.viewCuids
+      , stateCuids = removeAll staleSt mapping.stateCuids
+      , actionCuids = removeAll staleAct mapping.actionCuids
+      }
+
 -- Merge the current key snapshots with the previous sidecar to generate/update alias maps.
 mergeStableIdMapping
   :: forall r
@@ -882,6 +928,9 @@ mergeStableIdMapping
   -> StableIdMapping
 mergeStableIdMapping cur mapping0 =
   let
+    -- Remove aliases that now conflict with a freshly (re-)introduced canonical type
+    mapping0' = pruneStaleAliases cur mapping0
+
     candidatesC :: Array (Tuple String ContextKey)
     candidatesC = objToArrayWith snapshotToContextKeyCurrent cur.contexts
 
@@ -926,7 +975,7 @@ mergeStableIdMapping cur mapping0 =
       in
         OBJ.fromFoldable (collect.exact <> uniqueNsPairs)
 
-    contextKeys = OBJ.values mapping0.contextKeys
+    contextKeys = OBJ.values mapping0'.contextKeys
 
     -- Sort contextKeys topologically first!
     toposortedContexts = _.fqn <$> case sortTopologicallyEither _.fqn (singleton <<< typeUri2typeNameSpace_ <<< _.fqn) contextKeys of
@@ -937,19 +986,19 @@ mergeStableIdMapping cur mapping0 =
     ctxAliases' = buildContextAliasesTopologically
       defaultContextWeights
       0.5
-      mapping0.contextKeys
+      mapping0'.contextKeys
       candidatesC
-      mapping0.contexts
-    rolAliases' = buildAliases defaultRoleWeights 0.5 mapping0.roleKeys (snapshotToRoleKeyOld ctxAliases') candidatesR mapping0.roles
-    propAliases' = buildAliases defaultPropertyWeights 0.7 mapping0.propertyKeys (snapshotToPropertyKeyOld rolAliases') candidatesP mapping0.properties
-    viewAliases' = buildAliases defaultViewWeights 0.7 mapping0.viewKeys (snapshotToViewKeyOld rolAliases') candidatesV mapping0.views
-    ctxCuids' = assignCuids ctxAliases' mapping0.contextCuids (OBJ.keys cur.contexts)
-    rolCuids' = assignCuids rolAliases' mapping0.roleCuids (OBJ.keys cur.roles)
-    propCuids' = assignCuids propAliases' mapping0.propertyCuids (OBJ.keys cur.properties)
-    viewCuids' = assignCuids viewAliases' mapping0.viewCuids (OBJ.keys cur.views)
+      mapping0'.contexts
+    rolAliases' = buildAliases defaultRoleWeights 0.5 mapping0'.roleKeys (snapshotToRoleKeyOld ctxAliases') candidatesR mapping0'.roles
+    propAliases' = buildAliases defaultPropertyWeights 0.7 mapping0'.propertyKeys (snapshotToPropertyKeyOld rolAliases') candidatesP mapping0'.properties
+    viewAliases' = buildAliases defaultViewWeights 0.7 mapping0'.viewKeys (snapshotToViewKeyOld rolAliases') candidatesV mapping0'.views
+    ctxCuids' = assignCuids ctxAliases' mapping0'.contextCuids (OBJ.keys cur.contexts)
+    rolCuids' = assignCuids rolAliases' mapping0'.roleCuids (OBJ.keys cur.roles)
+    propCuids' = assignCuids propAliases' mapping0'.propertyCuids (OBJ.keys cur.properties)
+    viewCuids' = assignCuids viewAliases' mapping0'.viewCuids (OBJ.keys cur.views)
 
     -- State aliasing: process old snapshots topologically by namespace and normalize parent namespaces through known context/state aliases.
-    stateAliases' = buildStateAliasesTopologically mapping0.stateKeys ctxAliases' mapping0.states candStatesIndex
+    stateAliases' = buildStateAliasesTopologically mapping0'.stateKeys ctxAliases' mapping0'.states candStatesIndex
 
     -- Action aliases: normalize through state alias map only; preserve existing aliases otherwise.
     -- Be robust to older sidecars that had no actionKeys: synthesize minimal snapshots from previous actionCuids keys.
@@ -964,12 +1013,12 @@ mergeStableIdMapping cur mapping0 =
           in
             Tuple fqn { fqn, declaringRoleFqn: rolFqn, localName: nm, qfdHash: "" }
       in
-        OBJ.fromFoldable (OBJ.keys mapping0.actionCuids <#> toSnap)
-    oldActionsForAliasing = OBJ.union mapping0.actionKeys letOldActionsFromCuids
-    actionAliases' = buildActionAliases oldActionsForAliasing mapping0.actions cur.actions rolAliases'
-    actionCuids' = assignCuids actionAliases' mapping0.actionCuids (OBJ.keys cur.actions)
+        OBJ.fromFoldable (OBJ.keys mapping0'.actionCuids <#> toSnap)
+    oldActionsForAliasing = OBJ.union mapping0'.actionKeys letOldActionsFromCuids
+    actionAliases' = buildActionAliases oldActionsForAliasing mapping0'.actions cur.actions rolAliases'
+    actionCuids' = assignCuids actionAliases' mapping0'.actionCuids (OBJ.keys cur.actions)
   in
-    mapping0
+    mapping0'
       { contexts = ctxAliases'
       , roles = rolAliases'
       , properties = propAliases'
@@ -1348,23 +1397,26 @@ planCuidAssignments
      }
 planCuidAssignments cur mapping0 =
   let
+    -- Remove aliases that now conflict with a freshly (re-)introduced canonical type
+    mapping0' = pruneStaleAliases cur mapping0
+
     candidatesC = objToArrayWith snapshotToContextKeyCurrent cur.contexts
     candidatesR = objToArrayWith snapshotToRoleKeyCurrent cur.roles
     candidatesP = objToArrayWith snapshotToPropertyKeyCurrent cur.properties
     candidatesV = objToArrayWith snapshotToViewKeyCurrent cur.views
 
-    contextKeys = OBJ.values mapping0.contextKeys
+    contextKeys = OBJ.values mapping0'.contextKeys
 
     ctxAliases' = buildContextAliasesTopologically
       defaultContextWeights
       0.5
-      mapping0.contextKeys
+      mapping0'.contextKeys
       candidatesC
-      mapping0.contexts
+      mapping0'.contexts
 
-    rolAliases' = buildAliases defaultRoleWeights 0.5 mapping0.roleKeys (snapshotToRoleKeyOld ctxAliases') candidatesR mapping0.roles (OBJ.keys mapping0.roleKeys)
-    propAliases' = buildAliases defaultPropertyWeights 0.7 mapping0.propertyKeys (snapshotToPropertyKeyOld rolAliases') candidatesP mapping0.properties (OBJ.keys mapping0.propertyKeys)
-    viewAliases' = buildAliases defaultViewWeights 0.7 mapping0.viewKeys (snapshotToViewKeyOld rolAliases') candidatesV mapping0.views (OBJ.keys mapping0.viewKeys)
+    rolAliases' = buildAliases defaultRoleWeights 0.5 mapping0'.roleKeys (snapshotToRoleKeyOld ctxAliases') candidatesR mapping0'.roles (OBJ.keys mapping0'.roleKeys)
+    propAliases' = buildAliases defaultPropertyWeights 0.7 mapping0'.propertyKeys (snapshotToPropertyKeyOld rolAliases') candidatesP mapping0'.properties (OBJ.keys mapping0'.propertyKeys)
+    viewAliases' = buildAliases defaultViewWeights 0.7 mapping0'.viewKeys (snapshotToViewKeyOld rolAliases') candidatesV mapping0'.views (OBJ.keys mapping0'.viewKeys)
 
     -- state aliases (relaxed): build index with both exact (fqn#hash) and namespace-level (ns#hash)
     candStatesIndex :: OBJ.Object String
@@ -1396,7 +1448,7 @@ planCuidAssignments cur mapping0 =
       in
         OBJ.fromFoldable (collect.exact <> uniqueNsPairs)
 
-    stateAliases' = buildStateAliasesTopologically mapping0.stateKeys ctxAliases' mapping0.states candStatesIndex
+    stateAliases' = buildStateAliasesTopologically mapping0'.stateKeys ctxAliases' mapping0'.states candStatesIndex
 
     -- action aliases: match by (normalized role, qfdHash) with fallback to localName for legacy
     letOldActionsFromCuids =
@@ -1410,11 +1462,11 @@ planCuidAssignments cur mapping0 =
           in
             Tuple fqn { fqn, declaringRoleFqn: rolFqn, localName: nm, qfdHash: "" }
       in
-        OBJ.fromFoldable (OBJ.keys mapping0.actionCuids <#> toSnap)
-    oldActionsForAliasing = OBJ.union mapping0.actionKeys letOldActionsFromCuids
-    actionAliases' = buildActionAliases oldActionsForAliasing mapping0.actions cur.actions rolAliases'
+        OBJ.fromFoldable (OBJ.keys mapping0'.actionCuids <#> toSnap)
+    oldActionsForAliasing = OBJ.union mapping0'.actionKeys letOldActionsFromCuids
+    actionAliases' = buildActionAliases oldActionsForAliasing mapping0'.actions cur.actions rolAliases'
 
-    mappingWithAliases = mapping0
+    mappingWithAliases = mapping0'
       { contexts = ctxAliases'
       , roles = rolAliases'
       , properties = propAliases'
@@ -1442,26 +1494,26 @@ planCuidAssignments cur mapping0 =
       in
         filter (\fqn -> not (hasPrev fqn) && reusedFromAlias fqn == Nothing) (OBJ.keys current)
 
-    needCtx = needs cur.contexts mapping0.contextCuids ctxAliases'
-    needRol = needs cur.roles mapping0.roleCuids rolAliases'
-    needProp = needs cur.properties mapping0.propertyCuids propAliases'
-    needView = needs cur.views mapping0.viewCuids viewAliases'
+    needCtx = needs cur.contexts mapping0'.contextCuids ctxAliases'
+    needRol = needs cur.roles mapping0'.roleCuids rolAliases'
+    needProp = needs cur.properties mapping0'.propertyCuids propAliases'
+    needView = needs cur.views mapping0'.viewCuids viewAliases'
     -- For states, plan CUIDs for current canonical states with no cuid and not reusable from alias
     needState =
       let
-        hasPrev fqn = OBJ.lookup fqn mapping0.stateCuids /= Nothing
+        hasPrev fqn = OBJ.lookup fqn mapping0'.stateCuids /= Nothing
         reusedFromAlias fqn = findFirstJust (OBJ.keys stateAliases') \oldFqn ->
           case OBJ.lookup oldFqn stateAliases' of
-            Just tgt | tgt == fqn -> OBJ.lookup oldFqn mapping0.stateCuids
+            Just tgt | tgt == fqn -> OBJ.lookup oldFqn mapping0'.stateCuids
             _ -> Nothing
       in
         filter (\fqn -> not (hasPrev fqn) && reusedFromAlias fqn == Nothing) (OBJ.keys cur.states)
     needAction =
       let
-        hasPrev fqn = OBJ.lookup fqn mapping0.actionCuids /= Nothing
+        hasPrev fqn = OBJ.lookup fqn mapping0'.actionCuids /= Nothing
         reusedFromAlias fqn = findFirstJust (OBJ.keys actionAliases') \oldFqn ->
           case OBJ.lookup oldFqn actionAliases' of
-            Just tgt | tgt == fqn -> OBJ.lookup oldFqn mapping0.actionCuids
+            Just tgt | tgt == fqn -> OBJ.lookup oldFqn mapping0'.actionCuids
             _ -> Nothing
       in
         filter (\fqn -> not (hasPrev fqn) && reusedFromAlias fqn == Nothing) (OBJ.keys cur.actions)
@@ -1470,7 +1522,7 @@ planCuidAssignments cur mapping0 =
     contextIndividualAliases :: OBJ.Object String
     contextIndividualAliases =
       let
-        olds = mapping0.contextIndividualKeys
+        olds = mapping0'.contextIndividualKeys
         news = cur.contextIndividualKeys
       in
         foldl
@@ -1485,7 +1537,7 @@ planCuidAssignments cur mapping0 =
     roleIndividualAliases :: OBJ.Object String
     roleIndividualAliases =
       let
-        olds = mapping0.roleIndividualKeys
+        olds = mapping0'.roleIndividualKeys
         news = cur.roleIndividualKeys
       in
         foldl
@@ -1508,8 +1560,8 @@ planCuidAssignments cur mapping0 =
       in
         filter (\nm -> not (hasPrev nm) && reusedFromAlias nm == Nothing) current
 
-    needContextIndividuals = needsIndividuals cur.contextIndividuals mapping0.contextIndividuals contextIndividualAliases
-    needRoleIndividuals = needsIndividuals cur.roleIndividuals mapping0.roleIndividuals roleIndividualAliases
+    needContextIndividuals = needsIndividuals cur.contextIndividuals mapping0'.contextIndividuals contextIndividualAliases
+    needRoleIndividuals = needsIndividuals cur.roleIndividuals mapping0'.roleIndividuals roleIndividualAliases
   in
     { mappingWithAliases
     , needCuids: { contexts: needCtx, roles: needRol, properties: needProp, views: needView, states: needState, actions: needAction, contextIndividuals: needContextIndividuals, roleIndividuals: needRoleIndividuals }
