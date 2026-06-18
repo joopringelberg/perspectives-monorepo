@@ -59,10 +59,9 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
     -- To check if a test has succeeded, retrieve the value of TestSucceeded in the second PDR.
     context Tests (relational) filledBy Test1
 
-  case Test1
+  case Test
     external
       property TestName (String)
-      property TestSucceeded = context >> TestRole1 >> P == 1
     
     context App (functional) = extern >> binder Tests >> context >> extern
     user AppFollower (functional) = extern >> binder Tests >> context >> Follower
@@ -74,11 +73,25 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
       perspective on Follower
         only (Create, Fill)
         props (FirstName) verbs (Consult)
+      perspective on extern
+        props (TestName) verbs (SetPropertyValue, Consult)
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+      perspective on Leader
+        props (FirstName) verbs (Consult)
+      perspective on extern
+        props (TestName) verbs (Consult)
+
+  case Test1
+    aspect mm:Test
+    external
+      property TestSucceeded = context >> TestRole1 >> P == 1
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+      aspect mm:Test$Leader
       perspective on TestRole1
         only (Create)
         props (P) verbs (Consult, SetPropertyValue)
-      perspective on extern
-        props (TestName) verbs (SetPropertyValue, Consult)
       action RunTest
         letA
           tr <- create role TestRole1
@@ -87,12 +100,11 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
           TestName = "Test1" for extern
 
     user Follower filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
-      perspective on Leader
-        props (FirstName) verbs (Consult)
+      aspect mm:Test$Follower
       perspective on TestRole1
         props (P) verbs (Consult)
       perspective on extern
-        props (TestName, TestSucceeded) verbs (Consult)
+        props (TestSucceeded) verbs (Consult)
 
     thing TestRole1
       property P (Number)
