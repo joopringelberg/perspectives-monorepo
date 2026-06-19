@@ -10,6 +10,7 @@ import Data.List (List(..))
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
+import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (logShow)
 import Foreign.Object (lookup)
 import Node.Encoding as ENC
@@ -31,6 +32,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), queryFunction, range)
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Action (effectOfAction)
+import Perspectives.Representation.CNF (toConjunctiveNormalForm)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
@@ -38,6 +40,8 @@ import Perspectives.Representation.Perspective (StateSpec(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.Range (Range(..))
+import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
+import Perspectives.Representation.Class.Role (completeDeclaredType, expandUnexpandedLeaves, toConjunctiveNormalForm_)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), propertytype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.Representation.View (View(..))
@@ -53,6 +57,27 @@ withDomeinFile ns df mpa = do
   r <- mpa
   removeDomeinFileFromCache (ModelUri ns)
   pure r
+
+completeTypeNormalisationSuite :: Free TestF Unit
+completeTypeNormalisationSuite = test "PhaseThree completeType matches on-the-fly normalisation." do
+  (r :: Either ParseError ContextE) <- runIndentParser "domain MyTestDomain\n  thing Base (mandatory)\n  thing Filler2 (mandatory)\n  thing Filler1 (mandatory) filledBy Filler2\n  thing Binder (mandatory) filledBy Filler1\n    aspect Base" ARC.domain
+  case r of
+    Left e -> assert (show e) false
+    Right ctxt@(ContextE { id }) -> do
+      runPhaseTwo' (traverseDomain ctxt) >>= \(Tuple phaseTwoResult state) ->
+        case phaseTwoResult of
+          Left e -> assert (show e) false
+          Right (DomeinFile dr') ->
+            runP (phaseThree dr' state.postponedStateQualifiedParts Nil) >>=
+              case _ of
+                Left e -> assert (show e) false
+                Right (Tuple correctedDFR _) ->
+                  runP $ withDomeinFile id (DomeinFile correctedDFR) do
+                    role@(EnumeratedRole { completeType }) <- getEnumeratedRole (EnumeratedRoleType "model:MyTestDomain$Binder")
+                    expandedDnf <- completeDeclaredType role >>= expandUnexpandedLeaves >>= pure <<< toConjunctiveNormalForm
+                    cachedDnf <- completeDeclaredType role >>= toConjunctiveNormalForm_
+                    liftAff $ assert "expanding the declared type yields the stored completeType" (expandedDnf == completeType)
+                    liftAff $ assert "cached normalisation yields the stored completeType" (cachedDnf == completeType)
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
@@ -200,6 +225,8 @@ theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
                   (Left [ (UnknownRole _ _) ]) -> assert "" true
                   otherwise -> do
                     assert "The binding of 'Binder' is not defined and that should have been detected." false
+
+  completeTypeNormalisationSuite
 
   test "Testing qualifyBindings: two candidates for binding." do
     (r :: Either ParseError ContextE) <- {-pure $ unwrap $-}  runIndentParser "domain MyTestDomain\n  thing Binder (mandatory) filledBy Bound\n  thing Bound (mandatory)\n  case Nested\n    thing Bound (mandatory)" ARC.domain
