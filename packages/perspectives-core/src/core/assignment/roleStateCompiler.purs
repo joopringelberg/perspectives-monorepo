@@ -53,13 +53,14 @@ import Perspectives.Assignment.StateCache (CompiledAutomaticAction, CompiledNoti
 import Perspectives.Assignment.Update (ConditionResult(..), isUndetermined, setActiveRoleState, setInActiveRoleState)
 import Perspectives.CompileRoleAssignment (compileAssignmentFromRole, withAuthoringRole)
 import Perspectives.CompileTimeFacets (addTimeFacets)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), MP, MonadPerspectives, MonadPerspectivesTransaction, Updater, WithAssumptions, liftToInstanceLevel, runMonadPerspectivesQuery, (##=), (##>>), (###>>))
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), LogLevel(..), LogTopic(..), MP, MonadPerspectives, MonadPerspectivesTransaction, Updater, WithAssumptions, liftToInstanceLevel, runMonadPerspectivesQuery, (##=), (##>>), (###>>))
+import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter, not') as COMB
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), contextType, filledBy, getActiveRoleStates_, roleType_)
-import Perspectives.Logging (traceState)
+import Perspectives.Logging (logWhen, traceState)
 import Perspectives.ModelDependencies (contextWithNotification, notificationMessage, notifications)
 import Perspectives.Names (getMySystem)
 import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, pushFrame, restoreFrame, transactionLevel)
@@ -77,6 +78,7 @@ import Perspectives.ScheduledAssignment (StateEvaluation(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (hasContextAspect, roleRootState, subStates_)
+import Perspectives.Warning (PerspectivesWarning(..))
 
 -- | This function has a Partial constraint because it only handles the AutomaticRoleAction case of AutomaticAction,
 -- | and idem of Notification and StateDependentPerspective.
@@ -144,14 +146,17 @@ evaluateRoleState roleId stateId = do
       if roleIsInState then do
         roleWasInState <- lift $ isActive stateId roleId
         if roleWasInState then do
-          lift $ toReadable stateId >>= \readableStateId -> traceState (padding <> "Already in role state " <> unwrap readableStateId <> ": " <> unwrap roleId)
+          lift $ logWhen Trace STATE
+            ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ AlreadyInRoleState roleId stateId)))
           subStates <- lift $ subStates_ stateId
           for_ subStates (evaluateRoleState roleId)
         else enteringRoleState roleId stateId
       else do
         roleWasInState <- lift $ isActive stateId roleId
         if roleWasInState then exitingRoleState roleId stateId
-        else pure unit
+        else do
+          lift $ logWhen Trace STATE
+            ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ RoleStateNotValid roleId stateId)))
     Undetermined -> modify
       ( \t -> over Transaction
           (\tr -> tr { postponedStateEvaluations = cons (RoleStateEvaluation stateId roleId) tr.postponedStateEvaluations })
