@@ -30,7 +30,7 @@ import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo', toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), queryFunction, range)
-import Perspectives.Representation.ADT (ADT(..))
+import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
 import Perspectives.Representation.Action (effectOfAction)
 import Perspectives.Representation.CNF (toConjunctiveNormalForm)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -82,6 +82,27 @@ completeTypeNormalisationSuite = test "PhaseThree completeType matches on-the-fl
                       liftAff $ assert ("declaredType expands to completeExpandedType for " <> roleId) (declaredExpanded == completeExpanded)
                       liftAff $ assert ("expanding the declared type yields the stored completeType for " <> roleId) (expandedDnf == completeType)
                       liftAff $ assert ("cached normalisation yields the stored completeType for " <> roleId) (cachedDnf == completeType)
+
+recursiveFillerComparisonSuite :: Free TestF Unit
+recursiveFillerComparisonSuite = test "Recursive filler matching uses the filler role type, not the filler runtime chain." do
+  (r :: Either ParseError ContextE) <- runIndentParser "domain MyTestDomain\n  thing Person (mandatory)\n  thing Employee (mandatory)\n  thing Binder (mandatory) filledBy Employee" ARC.domain
+  case r of
+    Left e -> assert (show e) false
+    Right ctxt@(ContextE { id }) -> do
+      runPhaseTwo' (traverseDomain ctxt) >>= \(Tuple phaseTwoResult state) ->
+        case phaseTwoResult of
+          Left e -> assert (show e) false
+          Right (DomeinFile dr') ->
+            runP (phaseThree dr' state.postponedStateQualifiedParts Nil) >>=
+              case _ of
+                Left e -> assert (show e) false
+                Right (Tuple correctedDFR _) ->
+                  runP $ withDomeinFile id (DomeinFile correctedDFR) do
+                    employeeRole@(EnumeratedRole { completeType: employeeType }) <- getEnumeratedRole (EnumeratedRoleType "model:MyTestDomain$Employee")
+                    personRole@(EnumeratedRole { completeType: personType }) <- getEnumeratedRole (EnumeratedRoleType "model:MyTestDomain$Person")
+                    employeeRuntimeType <- toConjunctiveNormalForm_ (PROD [ declaredType employeeRole, declaredType personRole ])
+                    liftAff $ assert "Employee itself is not a Person for recursive filler matching." (not $ employeeType `equalsOrSpecialises_` personType)
+                    liftAff $ assert "An Employee filled by a Person would match Person only via its runtime filler chain." (employeeRuntimeType `equalsOrSpecialises_` personType)
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
