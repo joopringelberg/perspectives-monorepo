@@ -31,7 +31,7 @@ import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, concat, filter, filterA, head, index, length, nub, singleton, union, unsafeIndex)
+import Data.Array (catMaybes, concat, filter, filterA, head, index, length, nub, null, singleton, union, unsafeIndex)
 import Data.Either (Either(..), hush)
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), fromJust, maybe)
@@ -44,10 +44,10 @@ import Foreign.Object (empty)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..), defaultContextSerializationRecord)
 import Perspectives.Assignment.Update (addProperty, deleteProperty, moveRoleInstanceToAnotherContext, removeProperty, roleContextualisations, saveFile, setProperty)
-import Perspectives.CoreTypes (type (~~>), MP, MPT, Updater, MonadPerspectivesTransaction, (###>>), (##=), (##>), (##>>))
+import Perspectives.CoreTypes (type (~~>), LogLevel(..), LogTopic(..), MP, MPT, MonadPerspectivesTransaction, Updater, (###>>), (##=), (##>), (##>>))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.Error.Boundaries (handlePerspectRolError)
-import Perspectives.Error.Pretty (renderPerspectivesError)
+import Perspectives.Error.Pretty (humanizePerspectivesWarning, renderPerspectivesError)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunctionNArgs, lookupHiddenFunction)
 import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.Identifiers (buitenRol)
@@ -58,7 +58,7 @@ import Perspectives.Instances.Environment (_pushFrame)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, getFilledRoles) as OG
 import Perspectives.Instances.ObjectGetters (binding, context, roleType_)
 import Perspectives.Instances.Values (writePerspectivesFile)
-import Perspectives.Logging (errorCompiler)
+import Perspectives.Logging (errorCompiler, logWhen)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Parsing.Messages (PerspectivesError)
 import Perspectives.Persistent (getPerspectRol)
@@ -79,6 +79,7 @@ import Perspectives.SaveUserData (removeBinding, scheduleContextRemoval, schedul
 import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (computesDatabaseQueryRole, hasContextAspect, isDatabaseQueryRole)
+import Perspectives.Warning (PerspectivesWarning(..))
 import Unsafe.Coerce (unsafeCoerce)
 
 -- Deletes, from all contexts, the role instance.
@@ -187,7 +188,13 @@ compileAssignment (BQD _ (QF.Bind qualifiedRoleIdentifier) bindings contextToBin
   (bindingsGetter :: (ContextInstance ~~> RoleInstance)) <- context2role bindings
   pure \contextId -> do
     ctxts <- lift (contextId ##= contextGetter)
+    if null ctxts then lift $ logWhen Trace RESOURCE
+      (show <$> (humanizePerspectivesWarning $ NoContextToBindIn qualifiedRoleIdentifier contextId))
+    else pure unit
     (bindings' :: Array RoleInstance) <- lift (contextId ##= bindingsGetter)
+    if null bindings' then lift $ logWhen Trace RESOURCE
+      (show <$> (humanizePerspectivesWarning $ NoBindings qualifiedRoleIdentifier contextId))
+    else pure unit
     for_ ctxts \ctxt -> do
       roleTypesToCreate' <- roleContextualisations ctxt qualifiedRoleIdentifier
       for_ roleTypesToCreate' \objectType ->
@@ -201,7 +208,15 @@ compileAssignment (BQD _ QF.Bind_ binding binder _ _ _) = do
   (binderGetter :: (ContextInstance ~~> RoleInstance)) <- context2role binder
   pure \contextId -> do
     (binding' :: Maybe RoleInstance) <- lift (contextId ##> bindingGetter)
+    case binding' of
+      Nothing -> lift $ logWhen Trace RESOURCE
+        (show <$> (humanizePerspectivesWarning $ NoBinding contextId))
+      Just _ -> pure unit
     (binder' :: Maybe RoleInstance) <- lift (contextId ##> binderGetter)
+    case binder' of
+      Nothing -> lift $ logWhen Trace RESOURCE
+        (show <$> (humanizePerspectivesWarning $ NoBinder contextId))
+      Just _ -> pure unit
     -- setBinding caches, saves, sets isMe and me.
     void $ case binding', binder' of
       Just binding'', Just binder'' -> setBinding binder'' binding'' Nothing

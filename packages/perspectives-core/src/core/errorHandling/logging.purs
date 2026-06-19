@@ -77,6 +77,8 @@ module Perspectives.Logging
   , infoSync
   , infoTest
   , infoUpgrade
+  , logActive
+  , logWhen
   , noColor
   , pdrLog
   , traceBroker
@@ -107,7 +109,7 @@ import Data.Maybe (Maybe(..), fromMaybe)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log) as Console
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives)
-import Prelude (Unit, bind, show, when, ($), (>=), (<>))
+import Prelude (Unit, bind, show, when, ($), (>=), (<>), pure)
 
 -- | Emit a log message for the given topic at the given level.
 -- | The message is only written to the console when `level >= threshold`,
@@ -126,6 +128,20 @@ pdrLog topic level message = do
         Just color -> color <> completeMessage <> ansiReset
         Nothing -> completeMessage
     liftEffect $ Console.log styledMessage
+
+-- | Check whether logging is active for the given topic and level.
+logActive :: LogTopic -> LogLevel -> MonadPerspectives Boolean
+logActive topic level = do
+  { defaultLevel, topicLevels } <- gets _.logConfig
+  let threshold = fromMaybe defaultLevel (Map.lookup topic topicLevels)
+  pure (level >= threshold)
+
+logWhen :: LogLevel -> LogTopic -> MonadPerspectives String -> MonadPerspectives Unit
+logWhen level topic message = do
+  active <- logActive topic level
+  when active do
+    msg <- message
+    pdrLog topic level msg
 
 -- | ANSI reset code.
 ansiReset :: String

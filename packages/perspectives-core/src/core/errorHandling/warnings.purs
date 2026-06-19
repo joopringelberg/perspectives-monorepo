@@ -59,6 +59,17 @@ data PerspectivesWarning
   -- User interaction
   | MissingResource String String String
   | ConstructContext ContextType (Maybe RoleType) ContextInstance
+  -- Resource creation
+  | FilledRoleInstance RoleInstance EnumeratedRoleType RoleInstance EnumeratedRoleType
+  -- State transitions
+  | ContextStateNotValid ContextInstance StateIdentifier
+  | AlreadyInContextState ContextInstance StateIdentifier
+  | RoleStateNotValid RoleInstance StateIdentifier
+  | AlreadyInRoleState RoleInstance StateIdentifier
+  | NoContextToBindIn EnumeratedRoleType ContextInstance
+  | NoBindings EnumeratedRoleType ContextInstance
+  | NoBinding ContextInstance
+  | NoBinder ContextInstance
 
 instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ModelLacksModelId dfid) = "(ModelLacksModelId) The model '" <> dfid <> "' lacks a value for the property ModelIdentification on its Model instance."
@@ -99,3 +110,21 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
       <> case mAuthorizedRole of
         Just authorizedRole -> " in authorized role " <> show authorizedRole
         Nothing -> ""
+  show (FilledRoleInstance filled filledType filler fillerType) =
+    "(FilledRoleInstance) Filled role instance " <> show filled <> " of type " <> " " <> show filledType <> " by filler " <> show filler <> " of type " <> " " <> show fillerType
+  show (ContextStateNotValid contextInstance stateId) =
+    "(ContextStateNotValid) Context " <> show contextInstance <> " is not in state " <> show stateId
+  show (AlreadyInContextState contextInstance stateId) =
+    "(AlreadyInContextState) Context " <> show contextInstance <> " is already in state " <> show stateId
+  show (RoleStateNotValid roleInstance stateId) =
+    "(RoleStateNotValid) Role " <> show roleInstance <> " is not in state " <> show stateId
+  show (AlreadyInRoleState roleInstance stateId) =
+    "(AlreadyInRoleState) Role " <> show roleInstance <> " is already in state " <> show stateId
+  show (NoContextToBindIn qualifiedRoleIdentifier contextId) =
+    "(NoContextToBindIn) No context to create and fill a role " <> show qualifiedRoleIdentifier <> " in context " <> show contextId
+  show (NoBindings qualifiedRoleIdentifier contextId) =
+    "(NoBindings) No role instances found to create and fill role of type " <> show qualifiedRoleIdentifier <> " in context " <> show contextId
+  show (NoBinding contextId) =
+    "(NoBinding) No filler found in context " <> show contextId
+  show (NoBinder contextId) =
+    "(NoBinder) No role instance found to fill in context " <> show contextId

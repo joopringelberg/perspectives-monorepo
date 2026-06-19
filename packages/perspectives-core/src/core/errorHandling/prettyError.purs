@@ -170,6 +170,29 @@ humanizePerspectivesWarning w = case w of
     contextType' <- toReadable contextType
     mRoleType' <- traverse toReadable mAuthorizedRole
     pure (ConstructContext contextType' mRoleType' contextInstance)
+  FilledRoleInstance filled filledType filler fillerType -> do
+    filledType' <- toReadable filledType
+    fillerType' <- toReadable fillerType
+    pure (FilledRoleInstance filled filledType' filler fillerType')
+  ContextStateNotValid contextInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (ContextStateNotValid contextInstance stateId')
+  AlreadyInContextState contextInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (AlreadyInContextState contextInstance stateId')
+  RoleStateNotValid roleInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (RoleStateNotValid roleInstance stateId')
+  AlreadyInRoleState roleInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (AlreadyInRoleState roleInstance stateId')
+  NoContextToBindIn qualifiedRoleIdentifier contextId -> do
+    qualifiedRoleIdentifier' <- toReadable qualifiedRoleIdentifier
+    pure (NoContextToBindIn qualifiedRoleIdentifier' contextId)
+  NoBindings qualifiedRoleIdentifier contextId -> do
+    qualifiedRoleIdentifier' <- toReadable qualifiedRoleIdentifier
+    pure (NoBindings qualifiedRoleIdentifier' contextId)
+  -- Default: leave unchanged.
   _ -> pure w
 
 -- | Convert a PerspectivesWarning to a human-friendly string.

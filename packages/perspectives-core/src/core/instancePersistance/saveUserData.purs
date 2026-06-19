@@ -58,6 +58,7 @@ import Control.Monad.State (lift)
 import Data.Array (concat, cons, delete, elemIndex, find, nub, union)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (over, unwrap)
+import Data.Show (show)
 import Data.Traversable (for, for_, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Foreign.Object (Object, values)
@@ -67,17 +68,19 @@ import Perspectives.Authenticate (signDelta)
 import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
 import Perspectives.CollectAffectedContexts (addDeltasForPerspectiveObjects, usersWithPerspectiveOnRoleBinding, usersWithPerspectiveOnRoleBinding', usersWithPerspectiveOnRoleInstance)
 import Perspectives.ContextAndRole (changeContext_me, context_buitenRol, context_pspType, modifyContext_rolInContext, rol_binding, rol_context, rol_isMe, rol_pspType)
-import Perspectives.CoreTypes (MonadPerspectivesTransaction, Updater, MonadPerspectives, (###=), (##=), (##>), (##>>))
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, Updater, (###=), (##=), (##>), (##>>))
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addDelta)
 import Perspectives.DependencyTracking.Dependency (findBindingRequests, findFilledRoleRequests, findMeRequests, findResourceDependencies, findRoleRequests)
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
+import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, typeUri2ModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.AutoRemoveWithFiller (emptyRolesToRemove)
 import Perspectives.Instances.Clipboard (allItemsOnClipboard)
 import Perspectives.Instances.Me (getMyType, isMe)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, binding_, context, contextType, contextType_, getUnlinkedRoleInstances, roleType_)
+import Perspectives.Logging (logWhen)
 import Perspectives.Names (findIndexedContextName, findIndexedRoleName, removeIndexedContext, removeIndexedRole)
 import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Persistence.ResourceVersionStore (incrementResourceVersion)
@@ -98,6 +101,7 @@ import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (allUnlinkedRoles, isUnlinked_)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..), RoleBindingDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
+import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (Unit, bind, discard, not, pure, unit, void, ($), (&&), (<$>), (<<<), (<>), (==), (>>=), (||), (/=))
 import Simple.JSON (writeJSON)
 
@@ -604,7 +608,8 @@ setFirstBindingWithMode mode filled filler msignedDelta = (lift $ try $ getPersp
             addDelta (DeltaInTransaction { users, delta: signedDelta })
 
             void $ addDeltasForPerspectiveObjects filled
-
+            lift $ logWhen Trace RESOURCE
+              (show <$> (humanizePerspectivesWarning $ FilledRoleInstance filled (rol_pspType filledRole) actualFiller fillerType))
             pure users
 
   where
