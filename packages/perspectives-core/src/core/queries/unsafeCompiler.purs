@@ -73,7 +73,7 @@ import Perspectives.Representation.CalculatedRole (CalculatedRole)
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getEnumeratedRole, getPerspectType, getState)
 import Perspectives.Representation.Class.Property (calculation, functional, mandatory) as PC
 import Perspectives.Representation.Class.Property (getPropertyType)
-import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, completeExpandedType, expandUnexpandedLeaves)
+import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, expandUnexpandedLeaves)
 import Perspectives.Representation.Class.Role (calculation) as RC
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
@@ -1066,7 +1066,7 @@ getFillerTypeRecursively adt r = do
       Nothing -> pure []
       Just b -> do
         bRole <- lift $ getPerspectRol b
-        roleDnf <- lift (getEnumeratedRole (rol_pspType bRole) >>= completeExpandedType >>= pure <<< toConjunctiveNormalForm)
+        roleDnf <- lift (getEnumeratedRole (rol_pspType bRole) >>= pure <<< _.completeType <<< unwrap)
         -- adtDnf -> roleDnf
         -- e.g. adtDnf is an aspect of roleDnf or fills it.
         if roleDnf `equalsOrSpecialises_` adtDnf then pure [ b ]

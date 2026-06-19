@@ -12,7 +12,7 @@ import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (logShow)
-import Foreign.Object (lookup)
+import Foreign.Object (keys, lookup)
 import Node.Encoding as ENC
 import Node.FS.Aff (readTextFile)
 import Node.Path as Path
@@ -41,7 +41,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
-import Perspectives.Representation.Class.Role (completeDeclaredType, expandUnexpandedLeaves, toConjunctiveNormalForm_)
+import Perspectives.Representation.Class.Role (completeDeclaredType, completeExpandedType, declaredType, expandUnexpandedLeaves, toConjunctiveNormalForm_)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), propertytype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.Representation.View (View(..))
@@ -73,11 +73,15 @@ completeTypeNormalisationSuite = test "PhaseThree completeType matches on-the-fl
                 Left e -> assert (show e) false
                 Right (Tuple correctedDFR _) ->
                   runP $ withDomeinFile id (DomeinFile correctedDFR) do
-                    role@(EnumeratedRole { completeType }) <- getEnumeratedRole (EnumeratedRoleType "model:MyTestDomain$Binder")
-                    expandedDnf <- completeDeclaredType role >>= expandUnexpandedLeaves >>= pure <<< toConjunctiveNormalForm
-                    cachedDnf <- completeDeclaredType role >>= toConjunctiveNormalForm_
-                    liftAff $ assert "expanding the declared type yields the stored completeType" (expandedDnf == completeType)
-                    liftAff $ assert "cached normalisation yields the stored completeType" (cachedDnf == completeType)
+                    for_ (keys correctedDFR.enumeratedRoles) \roleId -> do
+                      role@(EnumeratedRole { completeType }) <- getEnumeratedRole (EnumeratedRoleType roleId)
+                      declaredExpanded <- expandUnexpandedLeaves (declaredType role)
+                      completeExpanded <- completeExpandedType role
+                      expandedDnf <- completeDeclaredType role >>= expandUnexpandedLeaves >>= pure <<< toConjunctiveNormalForm
+                      cachedDnf <- completeDeclaredType role >>= toConjunctiveNormalForm_
+                      liftAff $ assert ("declaredType expands to completeExpandedType for " <> roleId) (declaredExpanded == completeExpanded)
+                      liftAff $ assert ("expanding the declared type yields the stored completeType for " <> roleId) (expandedDnf == completeType)
+                      liftAff $ assert ("cached normalisation yields the stored completeType for " <> roleId) (cachedDnf == completeType)
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do

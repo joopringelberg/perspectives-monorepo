@@ -72,7 +72,7 @@ import Perspectives.Representation.CalculatedRole (CalculatedRole)
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getEnumeratedRole, getPerspectType)
 import Perspectives.Representation.Class.Property (calculation) as PC
 import Perspectives.Representation.Class.Property (getPropertyType)
-import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, calculation, completeExpandedType, expandUnexpandedLeaves)
+import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, calculation, expandUnexpandedLeaves)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..), isDateOrTime, isPDuration)
@@ -731,7 +731,7 @@ getFillerTypeRecursively adt r = do
       Nothing -> pure []
       Just b -> do
         bRole <- lift $ getPerspectRol b
-        roleCnf <- lift (getEnumeratedRole (rol_pspType bRole) >>= completeExpandedType >>= pure <<< toConjunctiveNormalForm)
+        roleCnf <- lift (getEnumeratedRole (rol_pspType bRole) >>= pure <<< _.completeType <<< unwrap)
         if roleCnf `equalsOrSpecialises_` adtCnf then pure [ snocOnMainPath (singletonPath (R b)) (R $ rol_id role) ]
         else map (flip snocOnMainPath (R $ rol_id role)) <$> depthFirst adtCnf bRole
 
