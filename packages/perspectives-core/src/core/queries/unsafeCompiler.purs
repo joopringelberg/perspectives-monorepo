@@ -68,12 +68,12 @@ import Perspectives.Persistent (getPerspectRol)
 import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getVariableBindings, lookupVariableBinding)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), Range, RoleInContext(..), domain, domain2PropertyRange, domain2contextType, domain2roleType, range, roleInContext2Role)
 import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
-import Perspectives.Representation.CNF (CNF)
+import Perspectives.Representation.CNF (CNF, toConjunctiveNormalForm)
 import Perspectives.Representation.CalculatedRole (CalculatedRole)
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getEnumeratedRole, getPerspectType, getState)
 import Perspectives.Representation.Class.Property (calculation, functional, mandatory) as PC
 import Perspectives.Representation.Class.Property (getPropertyType)
-import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, toConjunctiveNormalForm_)
+import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, expandUnexpandedLeaves)
 import Perspectives.Representation.Class.Role (calculation) as RC
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
@@ -1055,7 +1055,7 @@ getDynamicPropertyGetterFromLocalName ln adt = do
 
 getFillerTypeRecursively :: ADT RoleInContext -> RoleInstance ~~> RoleInstance
 getFillerTypeRecursively adt r = do
-  adtDnf <- lift $ lift $ (toConjunctiveNormalForm_ adt)
+  adtDnf <- lift $ lift $ (expandUnexpandedLeaves adt >>= pure <<< toConjunctiveNormalForm)
   ArrayT $ (lift $ try $ getPerspectRol r) >>=
     handlePerspectRolError' "binding" [] (depthFirst adtDnf)
   where

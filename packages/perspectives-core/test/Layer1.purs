@@ -58,7 +58,7 @@ import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTT
 -- perform in-memory AST transformations; no database access
 import Test.Parsing.Arc (theSuite) as TPA
 import Test.Parsing.Arc.PhaseTwo (theSuite) as TPA2
-import Test.Parsing.Arc.PhaseThree (theSuite) as TPA3
+import Test.Parsing.Arc.PhaseThree (completeTypeNormalisationSuite, recursiveFillerComparisonSuite) as TPA3
 import Test.Parsing.Arc.Model (theSuite) as TPAM
 
 -- Query description compiler — uses an in-memory DomeinFile cache; no CouchDB
@@ -82,6 +82,8 @@ main = runTest do
 -- TPA.theSuite         -- Phase 1 — tokenise + parse
 -- TPA2.theSuite        -- Phase 2 — name resolution / type inference
 -- TPA3.theSuite        -- Phase 3 — inverted query indexing
+  TPA3.completeTypeNormalisationSuite
+  TPA3.recursiveFillerComparisonSuite
 
 -- -- ── Query description compiler (in-memory DomeinFile cache) ────────────────
 -- QDC.theSuite

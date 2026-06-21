@@ -66,13 +66,13 @@ import Perspectives.Query.Interpreter.Dependencies (Dependency(..), DependencyPa
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain2PropertyRange, domain2roleType, range)
 import Perspectives.Query.UnsafeCompiler (lookup, mapDurationOperator, mapNumericOperator, orderFunction, performNumericOperation')
 import Perspectives.Representation.ADT (ADT(..), commonLeavesInADT, equalsOrSpecialises_)
-import Perspectives.Representation.CNF (CNF)
+import Perspectives.Representation.CNF (CNF, toConjunctiveNormalForm)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty)
 import Perspectives.Representation.CalculatedRole (CalculatedRole)
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getEnumeratedRole, getPerspectType)
 import Perspectives.Representation.Class.Property (calculation) as PC
 import Perspectives.Representation.Class.Property (getPropertyType)
-import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, calculation, toConjunctiveNormalForm_)
+import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, calculation, expandUnexpandedLeaves)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..), isDateOrTime, isPDuration)
@@ -721,7 +721,7 @@ getDirectFillerType rid = binding rid >>= \b -> pure $ snocOnMainPath (singleton
 
 getFillerTypeRecursively :: ADT RoleInContext -> RoleInstance ~~> DependencyPath
 getFillerTypeRecursively adt r = do
-  adtCnf <- lift $ lift $ toConjunctiveNormalForm_ adt
+  adtCnf <- lift $ lift $ (expandUnexpandedLeaves adt >>= pure <<< toConjunctiveNormalForm)
   ArrayT $ (lift $ try $ getPerspectRol r) >>=
     handlePerspectRolError' "getFillerTypeRecursively" [] (depthFirst adtCnf)
   where
