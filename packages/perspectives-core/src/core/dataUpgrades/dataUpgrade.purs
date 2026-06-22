@@ -67,7 +67,7 @@ import Data.Tuple (Tuple(..), fst)
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign (unsafeToForeign)
-import Foreign.Object (Object, empty, fromFoldable, lookup)
+import Foreign.Object (Object, empty, fromFoldable, lookup, toUnfoldable)
 import IDBKeyVal (idbGet, idbSet)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..), executeInTopologicalOrder, recompileModel)
 import Partial.Unsafe (unsafePartial)
@@ -661,6 +661,55 @@ migrateLegacySystemUserIdentifier _ = do
           entitiesDb <- entitiesDatabaseName
           void $ addDocument_ entitiesDb migratedDoc (unwrap $ unschemeRoleInstance migratedRole)
           void $ deleteDocument entitiesDb (unwrap $ unschemeRoleInstance legacyRole) Nothing
+      migrateRoleInstanceBacklinks legacyRole migratedRole
+
+migrateRoleInstanceBacklinks :: RoleInstance -> RoleInstance -> MonadPerspectives Unit
+migrateRoleInstanceBacklinks oldRoleId newRoleId = do
+  entitiesDb <- entitiesDatabaseName
+  { rows: allEntities } <- documentsInDatabase entitiesDb includeDocs
+  for_ allEntities \{ doc } ->
+    unsafePartial case read <$> doc of
+      Just (Right rol@(PerspectRol rec)) -> do
+        let
+          binding' = map (replaceRoleReference oldRoleId newRoleId) rec.binding
+          filledRoles' = replaceRoleReferenceInFilledRoles oldRoleId newRoleId rec.filledRoles
+        if binding' == rec.binding && filledRoles' == rec.filledRoles then pure unit
+        else void $ saveEntiteit_ (identifier rol) (PerspectRol rec { binding = binding', filledRoles = filledRoles' })
+      Just _ -> case read <$> doc of
+        Just (Right ctxt@(PerspectContext rec)) -> do
+          let
+            buitenRol' = replaceRoleReference oldRoleId newRoleId rec.buitenRol
+            me' = map (replaceRoleReference oldRoleId newRoleId) rec.me
+            rolInContext' = replaceRoleReferenceInRoleMap oldRoleId newRoleId rec.rolInContext
+          if buitenRol' == rec.buitenRol && me' == rec.me && rolInContext' == rec.rolInContext then pure unit
+          else void $ saveEntiteit_ (identifier ctxt) (PerspectContext rec { buitenRol = buitenRol', me = me', rolInContext = rolInContext' })
+        _ -> pure unit
+  saveMarkedResources
+
+replaceRoleReference :: RoleInstance -> RoleInstance -> RoleInstance -> RoleInstance
+replaceRoleReference oldRoleId newRoleId roleId =
+  if roleId == oldRoleId then newRoleId
+  else roleId
+
+replaceRoleReferenceInRoleMap :: RoleInstance -> RoleInstance -> Object (Array RoleInstance) -> Object (Array RoleInstance)
+replaceRoleReferenceInRoleMap oldRoleId newRoleId roleMap =
+  fromFoldable
+    ( map
+        ( \(Tuple key roleIds) ->
+            Tuple key (map (replaceRoleReference oldRoleId newRoleId) roleIds)
+        )
+        (toUnfoldable roleMap :: Array (Tuple String (Array RoleInstance)))
+    )
+
+replaceRoleReferenceInFilledRoles :: RoleInstance -> RoleInstance -> Object (Object (Array RoleInstance)) -> Object (Object (Array RoleInstance))
+replaceRoleReferenceInFilledRoles oldRoleId newRoleId filledRoles =
+  fromFoldable
+    ( map
+        ( \(Tuple contextType roleMap) ->
+            Tuple contextType (replaceRoleReferenceInRoleMap oldRoleId newRoleId roleMap)
+        )
+        (toUnfoldable filledRoles :: Array (Tuple String (Object (Array RoleInstance))))
+    )
 
 -- | Stable identifier for the (now obsolete) indexed role sys:SocialMe.
 socialMeStableId :: String
