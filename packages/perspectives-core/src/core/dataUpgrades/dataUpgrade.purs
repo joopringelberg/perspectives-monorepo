@@ -100,7 +100,7 @@ import Perspectives.ModelDependencies (filterValueProperty, identifiableLastName
 import Perspectives.Names (getMySystem, lookupIndexedContext)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (toReadableDomeinFile, toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (Keys(..), databaseInfo, documentsInDatabase, includeDocs, resetViewIndex)
+import Perspectives.Persistence.API (Keys(..), addDocument_, databaseInfo, deleteDocument, documentsInDatabase, includeDocs, resetViewIndex)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspectRol, saveEntiteit_, saveMarkedResources, tryGetPerspectEntiteit, tryGetPerspectRol, tryRemoveEntiteit)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
@@ -116,6 +116,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable
 import Perspectives.Sidecar.NormalizeTypeNames (fqn2tid, normalize, normalizeTypeNames)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping, fromRepository, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
 import Perspectives.Sidecar.ToStable (toStable)
+import Perspectives.UnschemedIdentifiers (unschemeRoleInstance)
 import Simple.JSON (read)
 import Simple.JSON as JSON
 import Unsafe.Coerce (unsafeCoerce)
@@ -399,6 +400,9 @@ runDataUpgrades = do
     ( \_ -> void recompileLocalModels
     )
 
+  runUpgrade installedVersion "3.3.4"
+    migrateLegacySystemUserIdentifier
+
   -- runMonadPerspectivesTransaction'
   --   false
   --   (ENR $ EnumeratedRoleType sysUser)
@@ -632,6 +636,31 @@ removeSocialMeIndexedRole _ = do
               void $ saveEntiteit_ (ContextInstance systemId) cleanedContext
               saveMarkedResources
               log "removeSocialMeIndexedRole: removed IndexedRoles instance for sys:SocialMe"
+
+-- | Migrates a legacy system User role identifier from "$User" to "$auftu9ldl2".
+-- | If no legacy resource exists, no migration is performed.
+migrateLegacySystemUserIdentifier :: Upgrade
+migrateLegacySystemUserIdentifier _ = do
+  systemId <- getMySystem
+  let
+    legacyRoleId = systemId <> "$User"
+    migratedRoleId = systemId <> "$auftu9ldl2"
+    legacyRole = RoleInstance legacyRoleId
+    migratedRole = RoleInstance migratedRoleId
+
+  mlegacyUserRole <- tryGetPerspectRol legacyRole
+  case mlegacyUserRole of
+    Nothing -> pure unit
+    Just (PerspectRol rec) -> do
+      mMigratedUserRole <- tryGetPerspectRol migratedRole
+      case mMigratedUserRole of
+        -- New id already exists; remove legacy duplicate.
+        Just _ -> tryRemoveEntiteit legacyRole
+        Nothing -> do
+          let migratedDoc = PerspectRol rec { _id = unwrap $ unschemeRoleInstance migratedRole, id = migratedRole, _rev = Nothing }
+          entitiesDb <- entitiesDatabaseName
+          void $ addDocument_ entitiesDb migratedDoc (unwrap $ unschemeRoleInstance migratedRole)
+          void $ deleteDocument entitiesDb (unwrap $ unschemeRoleInstance legacyRole) Nothing
 
 -- | Stable identifier for the (now obsolete) indexed role sys:SocialMe.
 socialMeStableId :: String
