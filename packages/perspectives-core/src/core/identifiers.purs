@@ -430,8 +430,9 @@ getSecondMatch regex s = case match regex s of
 -- THE MODEL:USER DOMEIN
 -----------------------------------------------------------
 -- | Matches all segments of the name (the string after the first "$")
+-- | "auftu9ldl2" is the CUID for the System$User role.
 userNameRegEx :: Regex
-userNameRegEx = unsafeRegex "^def:#(.*)\\$User" noFlags
+userNameRegEx = unsafeRegex "^def:#(.*)\\$auftu9ldl2" noFlags
 
 -- Used in module Perspectives.Persistence.CouchdbFunctions. Returns the schemeless system identifier.
 -- Will probably be OBSOLETE now since we have new resource identifiers.

@@ -155,7 +155,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
               // Compute systemUser immediately and store it; do not wait for clipboard subscription.
               // const resolvedSystemUser = (systemIdentifier + "$" + deconstructLocalName( ModelDependencies.sysUser)) as RoleInstanceT
-              const resolvedSystemUser = (systemIdentifier + "$User") as RoleInstanceT
+              const resolvedSystemUser = (systemIdentifier + "$auftu9ldl2") as RoleInstanceT
               component.setState({ systemIdentifier, systemUser: resolvedSystemUser })
 
               component.addUnsubscriber(

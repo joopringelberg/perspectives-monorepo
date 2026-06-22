@@ -56,7 +56,7 @@ expandDefaultNamespaces n = case expandNamespaces defaultNamespaces n of
     names <- defaultIndexedNames
     pure $ expandIndexedNames names expandedName
 
--- | Replace model:System$Me by "def:#<guid>$User".
+-- | Replace model:System$Me by "def:#<guid>.
 expandIndexedNames :: OBJ.Object String -> String -> String
 expandIndexedNames defaults expandedName =
   case OBJ.lookup expandedName defaults of
