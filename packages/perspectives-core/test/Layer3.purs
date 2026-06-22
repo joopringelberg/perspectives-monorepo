@@ -61,11 +61,11 @@ import Prelude
 import Control.Monad.Cont (lift)
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except.Trans (runExceptT)
-import Data.Array (head, null)
+import Data.Array (null)
+import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Time.Duration (Milliseconds(..))
-import Data.Traversable (for, for_)
 import Effect (Effect)
 import Effect.Aff (error)
 import Foreign.Object (empty) as OBJ
@@ -73,16 +73,17 @@ import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..
 import Perspectives.Assignment.RunAction (runContextAction)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##=), (##>>), (##>))
 import Perspectives.Extern.Couchdb (addModelToLocalStore_)
+import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
-import Perspectives.Instances.ObjectGetters (binding, binding_, context, getEnumeratedRoleInstances)
+import Perspectives.Instances.ObjectGetters (binding, binding_, getEnumeratedRoleInstances)
 import Perspectives.Logging (ansiMagenta, ansiRed, infoTest)
 import Perspectives.ModelDependencies (sysMe, sysUser)
 import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistent (tryGetPerspectRol)
-import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
+import Perspectives.Persistent (tryGetPerspectContext, tryGetPerspectRol)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel, getPerspectivesUser)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
-import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
 import Test.PDRInstance (connectPDRs, noBus, pollUntil, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
@@ -186,8 +187,8 @@ main = runTest do
                 -- setTopicLogLevel INSTALL Debug
                 -- setTopicLogLevel SYNC Info
                 setTopicLogLevel TEST Debug
-            -- setTopicLogLevel RESOURCE Trace
-            -- setTopicLogLevel STATE Trace
+                -- setTopicLogLevel RESOURCE Trace
+                -- setTopicLogLevel STATE Trace
             )
           runInPDR pdrB
             ( do
@@ -200,21 +201,9 @@ main = runTest do
             -- setTopicLogLevel DELTA Trace
             )
 
-          -- Get Alice's and Bob's Persons instances for later use.
-          alice <- runInPDR pdrA do
-            muser <- lookupIndexedRole sysMe
-            case muser of
-              Just user -> binding_ user >>= case _ of
-                Just alice -> pure alice
-                Nothing -> throwError $ error "Alice should have a `me` instance in her PDR"
-              Nothing -> throwError $ error "Alice should have a `me` instance in her PDR"
-          bob <- runInPDR pdrB do
-            muser <- lookupIndexedRole sysMe
-            case muser of
-              Just user -> binding_ user >>= case _ of
-                Just bob -> pure bob
-                Nothing -> throwError $ error "Bob should have a `me` instance in his PDR"
-              Nothing -> throwError $ error "Bob should have a `me` instance in his PDR"
+          -- Get Alice's and Bob's PerspectivesUsers instances for later use.
+          alice <- runInPDR pdrA getPerspectivesUser
+          bob <- runInPDR pdrB getPerspectivesUser
 
           -- Alice loads test model in pdrA.
           runInPDR pdrA do
@@ -230,94 +219,113 @@ main = runTest do
             )
 
           -- Alice gives Bob the role Follower in the App.
-          runInPDR pdrA
-            $ runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType testLeaderType)
-            $ void
-            $ createAndAddRoleInstance
-                (EnumeratedRoleType testAppFollowerType)
-                (unwrap testCtx)
-                ( RolSerialization
-                    { id: Nothing
-                    , properties: PropertySerialization OBJ.empty
-                    , binding: Just (unwrap bob)
-                    }
-                )
-
-          -- Alice creates a test.
           runInPDR pdrA do
+            infoTest "Alice gives Bob the role Follower in the App in PDRA"
+            runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType testLeaderType)
+              $ do
+                void $ createAndAddRoleInstance
+                  (EnumeratedRoleType testAppFollowerType)
+                  (unwrap testCtx)
+                  ( RolSerialization
+                      { id: Nothing
+                      , properties: PropertySerialization OBJ.empty
+                      , binding: Just (unwrap bob)
+                      }
+                  )
+
+          void $ pollUntil 100 (Milliseconds 100.0)
+            "Alice checks that the Follower role has been constructed in pdrA"
+            ( runInPDR pdrA do
+                infoTest "Alice checks that the Follower role has been constructed and filled in pdrA"
+                roles <- testCtx ##= getEnumeratedRoleInstances (EnumeratedRoleType testAppFollowerType) >=> binding
+                if null roles then pure Nothing
+                else pure (Just roles)
+            )
+
+          runInPDR pdrA
+            ( do
+                setTopicLogLevel RESOURCE Trace
+                setTopicLogLevel STATE Trace
+                setTopicLogLevel SYNC Trace
+                setTopicLogLevel BROKER Trace
+            )
+          runInPDR pdrB
+            ( do
+                setTopicLogLevel RESOURCE Trace
+                -- setTopicLogLevel STATE Trace
+                setTopicLogLevel BROKER Trace
+            )
+
+          -- Hier wordt het specifiek per test.
+          -- Alice creates a Test1 context and fills a new TestApp$Tests role with it.
+          -- The "Test" aspect context creates both the Leader and the Follower role, 
+          -- and binds Alice to the Leader and Bob to the Follower. 
+          theTest <- runInPDR pdrA do
             infoTest "Alice creates a test in PDRA"
             runMonadPerspectivesTransaction' shareWithPeers (CR $ CalculatedRoleType testAppManager)
-              $
-                runContextAction testAppManager "CreateTest" (unwrap testCtx)
+              do
+                result <- runExceptT $ constructContext (Just (ENR $ EnumeratedRoleType testsType))
+                  $ ContextSerialization
+                    { id: Nothing
+                    , ctype: testContextType
+                    , prototype: Nothing
+                    , rollen: OBJ.empty
+                    , externeProperties: PropertySerialization OBJ.empty
+                    }
+                case result of
+                  Left err -> throwError $ error ("Failed to create test context: " <> show err)
+                  Right test -> do
+                    void $ createAndAddRoleInstance (EnumeratedRoleType testsType) (unwrap testCtx)
+                      ( RolSerialization
+                          { id: Nothing
+                          , properties: PropertySerialization OBJ.empty
+                          , binding: Just $ buitenRol (unwrap test)
+                          }
+                      )
+                    pure test
 
-          -- Retrieve all individual tests, waiting until they are available.
-          testExternalRoles <- pollUntil 100 (Milliseconds 100.0)
-            "At least one individual test role to appear in pdrA"
-            ( runInPDR pdrA do
-                infoTest "Retrieve all individual tests in PDRA"
-                roles <- testCtx ##= getEnumeratedRoleInstances (EnumeratedRoleType testsType) >=> binding
-                if null roles then pure Nothing else pure (Just roles)
-            )
+          testExternalRole <- pure $ RoleInstance $ buitenRol (unwrap theTest)
 
+          -- Wait for Bob to have the Follower role in the test in pdrB.
           void $ pollUntil 100 (Milliseconds 100.0)
-            "Bob checks whether he has at least one Test external role"
+            "Bob to have the test and the Follower role in it in pdrB"
             ( runInPDR pdrB do
-                infoTest "Try to find at least one Test external role in PDRB"
-                case head testExternalRoles of
-                  Just testExternalRole -> tryGetPerspectRol testExternalRole
-                  _ -> pure Nothing
+                mtheTest <- tryGetPerspectContext theTest
+                case mtheTest of
+                  Nothing -> pure Nothing
+                  Just _ -> do
+                    infoTest "Bob has verified that he has the test context in PDRB"
+                    -- NOTICE we check for the specialised Follower role, not the Aspect Follower role.
+                    roles <- theTest ##= getEnumeratedRoleInstances (EnumeratedRoleType test1FollowerType)
+                    if null roles then pure Nothing
+                    else do
+                      infoTest "Bob has verified that he has the Follower role in the test in PDRB"
+                      pure (Just roles)
             )
 
-          void $ pollUntil 100 (Milliseconds 100.0)
-            "Bob to have the Follower role in all tests in pdrB"
-            ( runInPDR pdrB do
-                roles <- for testExternalRoles \testExternalRole -> do
-                  theTest <- testExternalRole ##>> context
-                  theTest ##= getEnumeratedRoleInstances (EnumeratedRoleType testFollowerType)
-                if null roles then pure Nothing
-                else do
-                  infoTest "Bob checks that he has the Follower role in all tests in PDRB"
-                  pure (Just roles)
-            )
-
-          -- Alice executes all tests, bringing the test role in state Executed.
+          -- Alice executes the test, bringing the test role in state Executed.
           runInPDR pdrA
             $ runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType testLeaderType)
-            $ for_ testExternalRoles
-                ( \testExternalRole -> do
-                    lift $ infoTest "Alice executes a test in PDRA"
-                    theTest <- lift (testExternalRole ##>> context)
-                    runContextAction testLeaderType "RunTest" (unwrap theTest)
-                )
+            $ do
+                lift $ infoTest "Alice executes a test in PDRA"
+                runContextAction testLeaderType "RunTest" (unwrap theTest)
 
-          void $ pollUntil 100 (Milliseconds 100.0)
+          testResult <- pollUntil 100 (Milliseconds 100.0)
             "Bob to have a value for the property Name of the external role of the test"
             ( runInPDR pdrB $
-                case head testExternalRoles of
-                  Just testExternalRole -> do
-                    testName <- testExternalRole ##> getPropertyValues (ENP $ EnumeratedPropertyType testNameProperty)
-                    case testName of
-                      Just _ -> do
-                        infoTest "Bob has verified that the property Name of the external role of the test has a value in PDRB"
-                        pure (Just testName)
-                      Nothing -> pure Nothing
-                  Nothing -> pure Nothing
+                do
+                  mtestName <- testExternalRole ##> getPropertyValues (ENP $ EnumeratedPropertyType testNameProperty)
+                  case mtestName of
+                    Just (Value testName) -> do
+                      -- Get the value of Calculated property TestSucceeded of the external role of the test.
+                      testSucceeded <- testExternalRole ##>> getPropertyValues (CP $ CalculatedPropertyType testSucceededProperty)
+                      pure (Just { testName, testSucceeded })
+                    Nothing -> pure Nothing
 
             )
 
-          -- Bob checks that all tests are in state Executed.
-          testResults <- runInPDR pdrB $
-            for testExternalRoles
-              ( \testExternalRole -> do
-                  infoTest "Bob checks that all tests are in state Executed in PDRB"
-                  -- Get the value of Calculated property TestSucceeded of the external role of the test.
-                  testSucceeded <- testExternalRole ##>> getPropertyValues (CP $ CalculatedPropertyType testSucceededProperty)
-                  testName <- testExternalRole ##>> getPropertyValues (ENP $ EnumeratedPropertyType testNameProperty)
-                  pure { testName, testSucceeded }
-              )
-
-          for_ testResults \({ testName, testSucceeded }) -> do
-            assert ("Bob should see that test '" <> (unwrap testName) <> "' succeeded") (unwrap testSucceeded == "true")
+          case testResult of 
+            { testName, testSucceeded } -> assert ("Bob should see that test '" <> testName <> "' succeeded") (unwrap testSucceeded == "true")
 
 testModel :: String
 -- testModel = "model://joopringelberg.nl#SynchronisationTestModel@2.0"
@@ -343,9 +351,9 @@ testAppFollowerType :: String
 -- testAppFollowerType = "model://joopringelberg.nl#SynchronisationTestModel$TestApp$Follower"
 testAppFollowerType = "model://joopringelberg.nl#hj1bh3wydo$sxzzlm7ew3$onxv7kdh0q"
 
-testFollowerType :: String
--- testFollowerType = "model://joopringelberg.nl#SynchronisationTestModel$Test$Follower"
-testFollowerType = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg$e21r6td06a"
+test1FollowerType :: String
+-- test1FollowerType = "model://joopringelberg.nl#SynchronisationTestModel$Test1$Follower"
+test1FollowerType = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg$e21r6td06a"
 
 testsType :: String
 -- testsType = "model://joopringelberg.nl#SynchronisationTestModel$TestApp$Tests"

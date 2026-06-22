@@ -47,47 +47,59 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
         props (FirstName) verbs (Consult)
       
       -- Create new Tests, ready with a Leader.
+      -- NOTE: Follower should be available before running this action.
       action CreateTest
-        letA
-          test <- create context Test1 bound to Tests
-        in
-          bind me to Leader in test >> binding >> context
+        create context Test1 bound to Tests
     
-    user Follower filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+    -- We need to synchronise, hence PerspectivesUsers and not Persons.
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
     
     -- To execute any test, run the action RunTest in the first PDR.
     -- To check if a test has succeeded, retrieve the value of TestSucceeded in the second PDR.
-    context Tests (relational) filledBy Test1
+    context Tests (relational) filledBy Test
 
   case Test
+    -- The automatic actions are contextualised in their specialisations,
+    -- meaning that specialisations of Follower and Leader are created.
+    on entry 
+      do for Initializer
+        bind me to Leader
+
+    -- Why not on entry of Test, like we do for the Leader?
+    -- The Test instance may not yet be bound to Tests, so AppFollower is not yet reachable.
+    state AppfollowerReachable = exists extern >> binder Tests
+      on entry
+        do for Initializer
+          bind AppFollower >> binding to Follower
+
     external
       property TestName (String)
     
-    context App (functional) = extern >> binder Tests >> context >> extern
     user AppFollower (functional) = extern >> binder Tests >> context >> Follower
-
-    user Leader filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
-      on entry
-        do
-          bind context >> AppFollower to Follower
+    user Initializer = me
+      perspective on Leader
+        only (Create, Fill)
       perspective on Follower
         only (Create, Fill)
-        props (FirstName) verbs (Consult)
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
       perspective on extern
         props (TestName) verbs (SetPropertyValue, Consult)
 
-    user Follower filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       perspective on Leader
         props (FirstName) verbs (Consult)
       perspective on extern
         props (TestName) verbs (Consult)
+      perspective on Follower
+        props (FirstName) verbs (Consult)
 
   case Test1
     aspect mm:Test
     external
       property TestSucceeded = context >> TestRole1 >> P == 1
 
-    user Leader filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Leader
       perspective on TestRole1
         only (Create)
@@ -97,9 +109,9 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
           tr <- create role TestRole1
         in
           P = 1 for tr
-          TestName = "Test1" for extern
+          TestName = "Set a property" for extern
 
-    user Follower filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
       perspective on TestRole1
         props (P) verbs (Consult)
