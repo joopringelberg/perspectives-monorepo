@@ -67,7 +67,7 @@ import Data.Tuple (Tuple(..), fst)
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign (unsafeToForeign)
-import Foreign.Object (Object, empty, fromFoldable, lookup)
+import Foreign.Object (Object, empty, fromFoldable, lookup, toUnfoldable)
 import IDBKeyVal (idbGet, idbSet)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..), executeInTopologicalOrder, recompileModel)
 import Partial.Unsafe (unsafePartial)
@@ -100,7 +100,7 @@ import Perspectives.ModelDependencies (filterValueProperty, identifiableLastName
 import Perspectives.Names (getMySystem, lookupIndexedContext)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (toReadableDomeinFile, toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (Keys(..), databaseInfo, documentsInDatabase, includeDocs, resetViewIndex)
+import Perspectives.Persistence.API (Keys(..), addDocument_, databaseInfo, deleteDocument, documentsInDatabase, includeDocs, resetViewIndex)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspectRol, saveEntiteit_, saveMarkedResources, tryGetPerspectEntiteit, tryGetPerspectRol, tryRemoveEntiteit)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
@@ -116,6 +116,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable
 import Perspectives.Sidecar.NormalizeTypeNames (fqn2tid, normalize, normalizeTypeNames)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping, fromRepository, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
 import Perspectives.Sidecar.ToStable (toStable)
+import Perspectives.UnschemedIdentifiers (unschemeRoleInstance)
 import Simple.JSON (read)
 import Simple.JSON as JSON
 import Unsafe.Coerce (unsafeCoerce)
@@ -399,6 +400,9 @@ runDataUpgrades = do
     ( \_ -> void recompileLocalModels
     )
 
+  runUpgrade installedVersion "3.3.4"
+    migrateLegacySystemUserIdentifier
+
   -- runMonadPerspectivesTransaction'
   --   false
   --   (ENR $ EnumeratedRoleType sysUser)
@@ -632,6 +636,80 @@ removeSocialMeIndexedRole _ = do
               void $ saveEntiteit_ (ContextInstance systemId) cleanedContext
               saveMarkedResources
               log "removeSocialMeIndexedRole: removed IndexedRoles instance for sys:SocialMe"
+
+-- | Migrates a legacy system User role identifier from "$User" to "$auftu9ldl2".
+-- | If no legacy resource exists, no migration is performed.
+migrateLegacySystemUserIdentifier :: Upgrade
+migrateLegacySystemUserIdentifier _ = do
+  systemId <- getMySystem
+  let
+    legacyRoleId = systemId <> "$User"
+    migratedRoleId = systemId <> "$auftu9ldl2"
+    legacyRole = RoleInstance legacyRoleId
+    migratedRole = RoleInstance migratedRoleId
+
+  mlegacyUserRole <- tryGetPerspectRol legacyRole
+  case mlegacyUserRole of
+    Nothing -> pure unit
+    Just (PerspectRol rec) -> do
+      mMigratedUserRole <- tryGetPerspectRol migratedRole
+      case mMigratedUserRole of
+        -- New id already exists; remove legacy duplicate.
+        Just _ -> tryRemoveEntiteit legacyRole
+        Nothing -> do
+          let migratedDoc = PerspectRol rec { _id = unwrap $ unschemeRoleInstance migratedRole, id = migratedRole, _rev = Nothing }
+          entitiesDb <- entitiesDatabaseName
+          void $ addDocument_ entitiesDb migratedDoc (unwrap $ unschemeRoleInstance migratedRole)
+          void $ deleteDocument entitiesDb (unwrap $ unschemeRoleInstance legacyRole) Nothing
+      migrateRoleInstanceBacklinks legacyRole migratedRole
+
+migrateRoleInstanceBacklinks :: RoleInstance -> RoleInstance -> MonadPerspectives Unit
+migrateRoleInstanceBacklinks oldRoleId newRoleId = do
+  entitiesDb <- entitiesDatabaseName
+  { rows: allEntities } <- documentsInDatabase entitiesDb includeDocs
+  for_ allEntities \{ doc } ->
+    unsafePartial case read <$> doc of
+      Just (Right rol@(PerspectRol rec)) -> do
+        let
+          binding' = map (replaceRoleReference oldRoleId newRoleId) rec.binding
+          filledRoles' = replaceRoleReferenceInFilledRoles oldRoleId newRoleId rec.filledRoles
+        if binding' == rec.binding && filledRoles' == rec.filledRoles then pure unit
+        else void $ saveEntiteit_ (identifier rol) (PerspectRol rec { binding = binding', filledRoles = filledRoles' })
+      Just _ -> case read <$> doc of
+        Just (Right ctxt@(PerspectContext rec)) -> do
+          let
+            buitenRol' = replaceRoleReference oldRoleId newRoleId rec.buitenRol
+            me' = map (replaceRoleReference oldRoleId newRoleId) rec.me
+            rolInContext' = replaceRoleReferenceInRoleMap oldRoleId newRoleId rec.rolInContext
+          if buitenRol' == rec.buitenRol && me' == rec.me && rolInContext' == rec.rolInContext then pure unit
+          else void $ saveEntiteit_ (identifier ctxt) (PerspectContext rec { buitenRol = buitenRol', me = me', rolInContext = rolInContext' })
+        _ -> pure unit
+  saveMarkedResources
+
+replaceRoleReference :: RoleInstance -> RoleInstance -> RoleInstance -> RoleInstance
+replaceRoleReference oldRoleId newRoleId roleId =
+  if roleId == oldRoleId then newRoleId
+  else roleId
+
+replaceRoleReferenceInRoleMap :: RoleInstance -> RoleInstance -> Object (Array RoleInstance) -> Object (Array RoleInstance)
+replaceRoleReferenceInRoleMap oldRoleId newRoleId roleMap =
+  fromFoldable
+    ( map
+        ( \(Tuple key roleIds) ->
+            Tuple key (map (replaceRoleReference oldRoleId newRoleId) roleIds)
+        )
+        (toUnfoldable roleMap :: Array (Tuple String (Array RoleInstance)))
+    )
+
+replaceRoleReferenceInFilledRoles :: RoleInstance -> RoleInstance -> Object (Object (Array RoleInstance)) -> Object (Object (Array RoleInstance))
+replaceRoleReferenceInFilledRoles oldRoleId newRoleId filledRoles =
+  fromFoldable
+    ( map
+        ( \(Tuple contextType roleMap) ->
+            Tuple contextType (replaceRoleReferenceInRoleMap oldRoleId newRoleId roleMap)
+        )
+        (toUnfoldable filledRoles :: Array (Tuple String (Object (Array RoleInstance))))
+    )
 
 -- | Stable identifier for the (now obsolete) indexed role sys:SocialMe.
 socialMeStableId :: String
