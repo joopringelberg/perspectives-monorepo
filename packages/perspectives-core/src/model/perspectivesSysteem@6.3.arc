@@ -711,7 +711,7 @@ domain model://perspectives.domains#System@6.3
     -- A calculated role representing all available Notifications (from any context).
     thing AllNotifications = (callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithNotification$Notifications" ) returns sys:ContextWithNotification$Notifications)
 
-    context AllSettings = (callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithSettings$External" ) returns sys:ContextWithSettings$External) >> binding
+    context AllSettings = (callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithSettings$External" ) returns sys:ContextWithSettings$External)
 
     -- PDRDEPENDENCY
     context PinnedContexts (relational)
@@ -910,7 +910,7 @@ domain model://perspectives.domains#System@6.3
       property CorrectCodeEntered = ConfirmationCode == EnteredCode
       state Message = exists Message
       -- Without a last name, the Inviter will not be serialised completely.
-      state CreateInvitation = exists ConfirmationCode and (exists context >> Inviter >> LastName)
+      state CreateInvitation = (exists ConfirmationCode) and (exists context >> Inviter >> LastName)
         on entry
           do for Inviter
             letA
