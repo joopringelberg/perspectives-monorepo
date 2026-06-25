@@ -233,7 +233,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
     {
       if (component.state.editable)
       {
-        switch( event.code )
+        switch( event.key )
         {
           // Stop editing, allow event to bubble.
           // Content has been restored in the SmartFieldControl.
@@ -246,7 +246,7 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
       }
       else if (!event.shiftKey && (!component.propertyOnlyConsultable()) || component.fillFromDropdownAllowed() || component.typeAheadFillFromAllowed() || component.fillFromTypeAheadAllowed())
       {
-        switch(event.code){
+        switch(event.key){
           case "Enter":
             component.setState({editable:true});
             event.preventDefault();

@@ -102,9 +102,9 @@ export const addOpenContextOrRoleForm : BehaviourAdder = (domEl, component) => {
   }
 
   function handleKeyDown(e: KeyboardEvent) {
-    switch (e.code) {
+    switch (e.key) {
       case "Enter": // Return
-      case "Space": // Space
+      case " ": // Space
         if (component.context.isselected) {
           if (e.shiftKey) {
             handle(e.altKey);
@@ -299,7 +299,7 @@ export const addFillARole : BehaviourAdder = (domEl, component, title) => {
 
 export const addRemoveFiller : BehaviourAdder = (domEl, component) => {
   function handleKeyDown(event: KeyboardEvent) {
-    switch (event.code) {
+    switch (event.key) {
       case "Backspace": // Backspace
         if (event.shiftKey) {
           PDRproxy.then(pproxy =>
@@ -352,7 +352,7 @@ export const addRemoveFiller : BehaviourAdder = (domEl, component) => {
 // Adds keydown behaviour for shift-delete.
 export const addRemoveRoleFromContext : BehaviourAdder = (domEl, component) => {
   function handleKeyDown(event: KeyboardEvent) {
-    switch (event.code) {
+    switch (event.key) {
       case 'Backspace':
         event.preventDefault();
         event.stopPropagation();
@@ -396,7 +396,7 @@ export const addRemoveRoleFromContext : BehaviourAdder = (domEl, component) => {
 // Adds keydown behaviour for shift-delete.
 export const addRemoveContext : BehaviourAdder = (domEl, component) => {
   function handleKeyDown(event: KeyboardEvent) {
-    switch (event.code) {
+    switch (event.key) {
       case "Backspace": // Backspace
         event.preventDefault();
         event.stopPropagation();

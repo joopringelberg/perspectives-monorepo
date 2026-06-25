@@ -141,9 +141,9 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
   handleKeyDownInReadOnly(event : React.KeyboardEvent)
   {
     const component = this;
-    switch(event.keyCode){
+    switch(event.key){
 
-      case 39: // right arrow
+      case "ArrowRight": // right arrow
         // If we have a file (as can be seen from the url property), we may move to the download button.
         if (component.state.roleFileName)
         {
@@ -159,10 +159,10 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
   {
     const component = this;
     let fileName, mimeType, newFile : File;
-    switch(event.keyCode){
-      // case 9: // horizontal tab; vertical tab is 11
-      // case 37: // left arrow
-      case 39: // right arrow
+    switch(event.key){
+      // case "Tab": // horizontal tab; vertical tab is 11
+      // case "ArrowLeft": // left arrow
+      case "ArrowRight": // right arrow
         if (component.state.selectedField == FILENAME)
         {
           event.preventDefault();
@@ -185,7 +185,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
         }
         break;
 
-      case 13: // Enter
+      case "Enter": // Enter
         // Use values to create a file.
         // Both fields must be filled.
         event.preventDefault();
@@ -210,7 +210,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
       
         break;
 
-      case 27: // Escape
+      case "Escape": // Escape
         // Discard changes.
         event.preventDefault();
         event.stopPropagation();   
@@ -224,8 +224,8 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
   handleKeyDownInFilled(event : React.KeyboardEvent)
   {
     const component = this;
-    switch(event.keyCode){
-      case 13: // Enter
+    switch(event.key){
+      case "Enter": // Enter
         event.preventDefault();
         event.stopPropagation();      
 
@@ -233,7 +233,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
         component.setState({state: EDITABLE, selectedField: FILENAME})
         break;
 
-      case 39: // right arrow
+      case "ArrowRight": // right arrow
         // If we have a file (as can be seen from the url property), we may move to the download button.
         if (component.state.roleFileName)
         {
@@ -250,9 +250,9 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
     const component = this;
     let parsedPropertyValue = undefined;
     let fileNameOnProps = undefined;
-    switch(event.keyCode){
-      // case 9: // horizontal tab; vertical tab is 11
-      case 39: // right arrow
+    switch(event.key){
+      // case "Tab": // horizontal tab; vertical tab is 11
+      case "ArrowRight": // right arrow
         if (component.state.selectedField == FILENAME)
         {
           event.preventDefault();
@@ -281,7 +281,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
         }
         break;
 
-      case 13: // Enter
+      case "Enter": // Enter
         event.preventDefault();
         event.stopPropagation();      
 
@@ -326,7 +326,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
         }
         break;
 
-      case 27: // Escape
+      case "Escape": // Escape
         // Discard changes (revert to saved values, if any)
         event.preventDefault();
         event.stopPropagation();   
@@ -465,7 +465,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
         selectedFile.click();   
       }
     }
-    if (event instanceof KeyboardEvent && event.code === "Space") {
+    if (event instanceof KeyboardEvent && event.key === " ") {
       doit();
     }
     if (event.type == "click")
@@ -546,7 +546,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
             }
           });
     }
-    if (event instanceof KeyboardEvent && event.code === "Space") {
+    if (event instanceof KeyboardEvent && event.key === " ") {
       doit();
     }
     if ( this.state.roleFileName && event.type == "click")
