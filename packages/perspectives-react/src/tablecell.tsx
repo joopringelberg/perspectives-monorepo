@@ -65,18 +65,13 @@ const receiveFocusByKeyboard = 0;
 // Popper config used for both filler dropdowns in TableCell.
 // `strategy: 'fixed'` makes the menu overlay ancestor overflow/clipping (e.g. accordion-item).
 // The custom `sameWidth` modifier sizes the menu to exactly match the toggle (column) width
-// so the menu does not expand to fill the whole viewport.
+// so the menu does not expand to fill the whole viewport. A follow-up update after mount
+// keeps the menu anchored after focus/open slightly changes the page scroll position.
 const MAX_VISIBLE = 20;
 
 const columnWidthPopperConfig = {
   strategy: 'fixed' as const,
   modifiers: [
-    {
-      name: 'computeStyles',
-      options: {
-        adaptive: false,
-      },
-    },
     {
       name: 'sameWidth',
       enabled: true,
@@ -89,6 +84,26 @@ const columnWidthPopperConfig = {
       effect({ state }: { state: any })
       {
         state.elements.popper.style.width = `${(state.elements.reference as HTMLElement).offsetWidth}px`;
+      },
+    },
+    {
+      name: 'updateAfterOpen',
+      enabled: true,
+      phase: 'afterWrite' as const,
+      fn() {},
+      effect({ instance }: { instance: { update: () => Promise<unknown> | void } })
+      {
+        if (typeof window === 'undefined')
+        {
+          return;
+        }
+
+        const frame = window.requestAnimationFrame(() =>
+        {
+          void instance.update();
+        });
+
+        return () => window.cancelAnimationFrame(frame);
       },
     },
   ],
