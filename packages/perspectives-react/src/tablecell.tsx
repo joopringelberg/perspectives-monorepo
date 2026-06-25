@@ -72,6 +72,12 @@ const columnWidthPopperConfig = {
   strategy: 'fixed' as const,
   modifiers: [
     {
+      name: 'computeStyles',
+      options: {
+        adaptive: false,
+      },
+    },
+    {
       name: 'sameWidth',
       enabled: true,
       phase: 'beforeWrite' as const,

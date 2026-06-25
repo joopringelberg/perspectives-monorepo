@@ -138,7 +138,9 @@ renders a typeahead text-input with a Bootstrap `Dropdown` instead of the normal
 The candidate list is filtered client-side as the user types. Full keyboard navigation
 (ArrowDown / ArrowUp / Enter / Escape) is supported. The Bootstrap `Dropdown.Menu` uses
 `popperConfig={{ strategy: 'fixed' }}` plus a custom `sameWidth` Popper modifier so the popup
-overlays all accordion items and is constrained to the column width.
+overlays all accordion items and is constrained to the column width. The Popper
+`computeStyles` modifier has `adaptive: false` so slight page scrolling does not move the
+menu to the bottom of the viewport.
 
 ---
 
