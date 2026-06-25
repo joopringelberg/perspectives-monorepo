@@ -410,7 +410,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
     const roleIds = Object.keys( component.props.perspective.roleInstances ) as RoleInstanceT[];
     const rowIndex = roleIds.indexOf( component.state.row );
 
-    switch(event.code){
+    switch(event.key){
       case "ArrowDown": // Down arrow
         if ( rowIndex < roleIds.length - 1 )
         {

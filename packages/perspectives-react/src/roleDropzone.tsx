@@ -130,9 +130,9 @@ class RoleDropZone_ extends PerspectivesComponent
   handleKeyDown ( event : React.KeyboardEvent<HTMLDivElement> )
   {
     const component = this;
-    switch(event.code){
+    switch(event.key){
       case "Enter": // Enter
-      case "Space": // space
+      case " ": // space
         PDRproxy.then( pproxy => pproxy.getSelectedRoleFromClipboard().then(
           function( roleDataAndBehaviour : RoleOnClipboard | null )
           {

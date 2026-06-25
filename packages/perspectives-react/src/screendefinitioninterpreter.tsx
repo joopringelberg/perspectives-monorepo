@@ -166,9 +166,9 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
   handleKeyDown (event : React.KeyboardEvent, perspective : Perspective)
   {
     const component = this;
-      switch(event.code){
+      switch(event.key){
         case "Enter":
-        case "Space":
+        case " ":
           component.createRoleInstance( perspective );
           event.preventDefault();
           event.stopPropagation();

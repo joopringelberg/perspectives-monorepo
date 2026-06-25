@@ -100,8 +100,8 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
 
   handleKeyDown (event : React.KeyboardEvent)
   {
-    switch (event.code) {
-      case "Space":
+    switch (event.key) {
+      case " ":
         if (event.shiftKey) {
           event.preventDefault();
           event.stopPropagation();
@@ -127,9 +127,9 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
           }));
         }
         break;
-      default:
+      case "F10":
         // Also support Shift+F10 as a fallback shortcut
-        if (event.key === "F10" && event.shiftKey) {
+        if (event.shiftKey) {
           event.preventDefault();
           event.stopPropagation();
           if (this.ref.current) {
