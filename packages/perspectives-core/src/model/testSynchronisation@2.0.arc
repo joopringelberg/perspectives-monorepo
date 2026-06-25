@@ -74,6 +74,7 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
 
     external
       property TestName (String)
+      property TestSucceeded (Boolean)
     
     user AppFollower (functional) = extern >> binder Tests >> context >> Follower
     user Initializer = me
@@ -91,13 +92,17 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
         props (FirstName) verbs (Consult)
       perspective on extern
         props (TestName) verbs (Consult)
+        props (TestSucceeded) verbs (Consult, SetPropertyValue)
       perspective on Follower
         props (FirstName) verbs (Consult)
 
   case Test1
     aspect mm:Test
     external
-      property TestSucceeded = context >> TestRole1 >> P == 1
+      state TestSucceeded = context >> TestRole1 >> P == 1
+        on entry
+          do for Follower
+            TestSucceeded = true
 
     user Leader filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Leader
@@ -115,8 +120,6 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
       aspect mm:Test$Follower
       perspective on TestRole1
         props (P) verbs (Consult)
-      perspective on extern
-        props (TestSucceeded) verbs (Consult)
 
     thing TestRole1
       property P (Number)

@@ -67,7 +67,7 @@ import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
-import Effect.Aff (error)
+import Effect.Aff (Aff, error)
 import Foreign.Object (empty) as OBJ
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runContextAction)
@@ -83,10 +83,10 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (tryGetPerspectContext, tryGetPerspectRol)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel, getPerspectivesUser)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
-import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser, RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
-import Test.PDRInstance (connectPDRs, noBus, pollUntil, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
+import Test.PDRInstance (PDRInstance, connectPDRs, noBus, pollUntil, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
 import Test.Unit (suite, test, testOnly)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -255,77 +255,82 @@ main = runTest do
                 -- setTopicLogLevel STATE Trace
                 setTopicLogLevel BROKER Trace
             )
+          
+          executeModelTest pdrA pdrB testCtx alice bob test1 test1FollowerType
 
-          -- Hier wordt het specifiek per test.
-          -- Alice creates a Test1 context and fills a new TestApp$Tests role with it.
-          -- The "Test" aspect context creates both the Leader and the Follower role, 
-          -- and binds Alice to the Leader and Bob to the Follower. 
-          theTest <- runInPDR pdrA do
-            infoTest "Alice creates a test in PDRA"
-            runMonadPerspectivesTransaction' shareWithPeers (CR $ CalculatedRoleType testAppManager)
-              do
-                result <- runExceptT $ constructContext (Just (ENR $ EnumeratedRoleType testsType))
-                  $ ContextSerialization
-                    { id: Nothing
-                    , ctype: testContextType
-                    , prototype: Nothing
-                    , rollen: OBJ.empty
-                    , externeProperties: PropertySerialization OBJ.empty
-                    }
-                case result of
-                  Left err -> throwError $ error ("Failed to create test context: " <> show err)
-                  Right test -> do
-                    void $ createAndAddRoleInstance (EnumeratedRoleType testsType) (unwrap testCtx)
-                      ( RolSerialization
-                          { id: Nothing
-                          , properties: PropertySerialization OBJ.empty
-                          , binding: Just $ buitenRol (unwrap test)
-                          }
-                      )
-                    pure test
+executeModelTest :: PDRInstance -> PDRInstance -> ContextInstance -> PerspectivesUser -> PerspectivesUser -> String -> String -> Aff Unit
+executeModelTest pdrA pdrB testCtx alice bob testContextType testFollowerType = do
 
-          testExternalRole <- pure $ RoleInstance $ buitenRol (unwrap theTest)
+  -- Hier wordt het specifiek per test.
+  -- Alice creates a Test1 context and fills a new TestApp$Tests role with it.
+  -- The "Test" aspect context creates both the Leader and the Follower role, 
+  -- and binds Alice to the Leader and Bob to the Follower. 
+  theTest <- runInPDR pdrA do
+    infoTest "Alice creates a test in PDRA"
+    runMonadPerspectivesTransaction' shareWithPeers (CR $ CalculatedRoleType testAppManager)
+      do
+        result <- runExceptT $ constructContext (Just (ENR $ EnumeratedRoleType testsType))
+          $ ContextSerialization
+            { id: Nothing
+            , ctype: testContextType
+            , prototype: Nothing
+            , rollen: OBJ.empty
+            , externeProperties: PropertySerialization OBJ.empty
+            }
+        case result of
+          Left err -> throwError $ error ("Failed to create test context: " <> show err)
+          Right test -> do
+            void $ createAndAddRoleInstance (EnumeratedRoleType testsType) (unwrap testCtx)
+              ( RolSerialization
+                  { id: Nothing
+                  , properties: PropertySerialization OBJ.empty
+                  , binding: Just $ buitenRol (unwrap test)
+                  }
+              )
+            pure test
 
-          -- Wait for Bob to have the Follower role in the test in pdrB.
-          void $ pollUntil 100 (Milliseconds 100.0)
-            "Bob to have the test and the Follower role in it in pdrB"
-            ( runInPDR pdrB do
-                mtheTest <- tryGetPerspectContext theTest
-                case mtheTest of
-                  Nothing -> pure Nothing
-                  Just _ -> do
-                    infoTest "Bob has verified that he has the test context in PDRB"
-                    -- NOTICE we check for the specialised Follower role, not the Aspect Follower role.
-                    roles <- theTest ##= getEnumeratedRoleInstances (EnumeratedRoleType test1FollowerType)
-                    if null roles then pure Nothing
-                    else do
-                      infoTest "Bob has verified that he has the Follower role in the test in PDRB"
-                      pure (Just roles)
-            )
+  testExternalRole <- pure $ RoleInstance $ buitenRol (unwrap theTest)
 
-          -- Alice executes the test, bringing the test role in state Executed.
-          runInPDR pdrA
-            $ runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType testLeaderType)
-            $ do
-                lift $ infoTest "Alice executes a test in PDRA"
-                runContextAction testLeaderType "RunTest" (unwrap theTest)
+  -- Wait for Bob to have the Follower role in the test in pdrB.
+  void $ pollUntil 100 (Milliseconds 100.0)
+    "Bob to have the test and the Follower role in it in pdrB"
+    ( runInPDR pdrB do
+        mtheTest <- tryGetPerspectContext theTest
+        case mtheTest of
+          Nothing -> pure Nothing
+          Just _ -> do
+            infoTest "Bob has verified that he has the test context in PDRB"
+            -- NOTICE we check for the specialised Follower role, not the Aspect Follower role.
+            roles <- theTest ##= getEnumeratedRoleInstances (EnumeratedRoleType testFollowerType)
+            if null roles then pure Nothing
+            else do
+              infoTest "Bob has verified that he has the Follower role in the test in PDRB"
+              pure (Just roles)
+    )
 
-          testResult <- pollUntil 100 (Milliseconds 100.0)
-            "Bob to have a value for the property Name of the external role of the test"
-            ( runInPDR pdrB $
-                do
-                  mtestName <- testExternalRole ##> getPropertyValues (ENP $ EnumeratedPropertyType testNameProperty)
-                  case mtestName of
-                    Just (Value testName) -> do
-                      -- Get the value of Calculated property TestSucceeded of the external role of the test.
-                      testSucceeded <- testExternalRole ##>> getPropertyValues (CP $ CalculatedPropertyType testSucceededProperty)
-                      pure (Just { testName, testSucceeded })
-                    Nothing -> pure Nothing
+  -- Alice executes the test, bringing the test role in state Executed.
+  runInPDR pdrA
+    $ runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType testLeaderType)
+    $ do
+        lift $ infoTest "Alice executes a test in PDRA"
+        runContextAction testLeaderType "RunTest" (unwrap theTest)
 
-            )
+  testResult <- pollUntil 100 (Milliseconds 100.0)
+    "Bob to have a value for the property Name of the external role of the test"
+    ( runInPDR pdrB $
+        do
+          mtestName <- testExternalRole ##> getPropertyValues (ENP $ EnumeratedPropertyType testNameProperty)
+          case mtestName of
+            Just (Value testName) -> do
+              -- Get the value of Calculated property TestSucceeded of the external role of the test.
+              testSucceeded <- testExternalRole ##>> getPropertyValues (CP $ CalculatedPropertyType testSucceededProperty)
+              pure (Just { testName, testSucceeded })
+            Nothing -> pure Nothing
 
-          case testResult of 
-            { testName, testSucceeded } -> assert ("Bob should see that test '" <> testName <> "' succeeded") (unwrap testSucceeded == "true")
+    )
+
+  case testResult of 
+    { testName, testSucceeded } -> assert ("Bob should see that test '" <> testName <> "' succeeded") (unwrap testSucceeded == "true")
 
 testModel :: String
 -- testModel = "model://joopringelberg.nl#SynchronisationTestModel@2.0"
@@ -339,10 +344,6 @@ testAppManager :: String
 -- testAppManager = "model://joopringelberg.nl#SynchronisationTestModel$TestApp$Manager"
 testAppManager = "model://joopringelberg.nl#hj1bh3wydo$sxzzlm7ew3$ftd5ohdwz6"
 
-testContextType :: String
--- testContextType = "model://joopringelberg.nl#SynchronisationTestModel$Test1"
-testContextType = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg"
-
 testLeaderType :: String
 -- testLeaderType = "model://joopringelberg.nl#SynchronisationTestModel$Test$Leader"
 testLeaderType = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg$zc16eb7hki"
@@ -351,18 +352,27 @@ testAppFollowerType :: String
 -- testAppFollowerType = "model://joopringelberg.nl#SynchronisationTestModel$TestApp$Follower"
 testAppFollowerType = "model://joopringelberg.nl#hj1bh3wydo$sxzzlm7ew3$onxv7kdh0q"
 
-test1FollowerType :: String
--- test1FollowerType = "model://joopringelberg.nl#SynchronisationTestModel$Test1$Follower"
-test1FollowerType = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg$e21r6td06a"
-
 testsType :: String
 -- testsType = "model://joopringelberg.nl#SynchronisationTestModel$TestApp$Tests"
 testsType = "model://joopringelberg.nl#hj1bh3wydo$sxzzlm7ew3$qde7w03jms"
 
 testSucceededProperty :: String
--- testSucceededProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test$External$TestSucceeded"
+-- testSucceededProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test1$External$TestSucceeded"
 testSucceededProperty = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg$External$jvgngnhi6g"
 
 testNameProperty :: String
 -- testNameProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test$External$TestName"
 testNameProperty = "model://joopringelberg.nl#hj1bh3wydo$bkbe0cg3h2$External$x50lipiazl"
+
+-------------------------------------------------------------------------------
+---- THE TESTS
+-------------------------------------------------------------------------------
+
+test1 :: String
+-- testContextType = "model://joopringelberg.nl#SynchronisationTestModel$Test1"
+test1 = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg"
+
+test1FollowerType :: String
+-- test1FollowerType = "model://joopringelberg.nl#SynchronisationTestModel$Test1$Follower"
+test1FollowerType = "model://joopringelberg.nl#hj1bh3wydo$qncdjftskg$e21r6td06a"
+
