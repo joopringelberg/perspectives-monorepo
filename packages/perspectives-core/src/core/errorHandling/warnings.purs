@@ -70,6 +70,7 @@ data PerspectivesWarning
   | NoBindings EnumeratedRoleType ContextInstance
   | NoBinding ContextInstance
   | NoBinder ContextInstance
+  | NoRoleTypesToCreate EnumeratedRoleType ContextInstance RoleType
 
 instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ModelLacksModelId dfid) = "(ModelLacksModelId) The model '" <> dfid <> "' lacks a value for the property ModelIdentification on its Model instance."
@@ -128,3 +129,5 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
     "(NoBinding) No filler found in context " <> show contextId
   show (NoBinder contextId) =
     "(NoBinder) No role instance found to fill in context " <> show contextId
+  show (NoRoleTypesToCreate qualifiedRoleIdentifier ctxt roleType) =
+    "(NoRoleTypesToCreate) User " <> show roleType <> " has no perspective on role " <> show qualifiedRoleIdentifier <> " or its specialisations in context " <> show ctxt

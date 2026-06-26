@@ -61,16 +61,17 @@ import Persistence.Attachment (class Attachment)
 import Perspectives.Authenticate (signDelta)
 import Perspectives.CollectAffectedContexts (aisInPropertyDelta, usersWithPerspectiveOnRoleInstance)
 import Perspectives.ContextAndRole (addRol_property, changeContext_me, changeContext_preferredUserRoleType, context_pspType, context_rolInContext, deleteRol_property, modifyContext_rolInContext, popContext_state, popRol_state, pushContext_state, pushRol_state, removeRol_property, rol_context, rol_isMe, rol_pspType, setRol_property)
-import Perspectives.CoreTypes (class Persistent, InformedAssumption(..), MonadPerspectives, Updater, MonadPerspectivesTransaction, (###=), (##=), (##>), (##>>))
+import Perspectives.CoreTypes (class Persistent, InformedAssumption(..), LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, Updater, (###=), (##=), (##>), (##>>))
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addDelta)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DependencyTracking.Dependency (findContextStateRequests, findMeRequests, findPropertyRequests, findRoleRequests, findRoleStateRequests)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
+import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.Identifiers (startsWithSegments, typeUri2LocalName_, typeUri2couchdbFilename)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding_, contextType, getProperty, roleType, roleType_)
 import Perspectives.Instances.Values (parsePerspectivesFile, writePerspectivesFile)
-import Perspectives.Logging (debugResource, warnResource)
+import Perspectives.Logging (debugResource, logWhen, warnResource)
 import Perspectives.Persistence.API (toFile)
 import Perspectives.Persistence.DeltaStore (getDeltasForResourceByDeltaType)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
@@ -91,6 +92,7 @@ import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (getRoleAspectSpecialisations, hasPerspectiveOnRole, isUnlinked_, propertyAliases)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
+import Perspectives.Warning (PerspectivesWarning(..))
 import Simple.JSON (class WriteForeign, writeJSON)
 
 -----------------------------------------------------------
@@ -794,7 +796,11 @@ roleContextualisations ctxt qualifiedRoleIdentifier = do
   -- Get the user role type that is executing.
   (user :: RoleType) <- gets (_.authoringRole <<< unwrap)
   -- Filter the object role types, keeping only those that the user role type has a perspective on.
-  lift $ concat <$> runArrayT (filterA (unsafePartial hasPerspectiveOnRole user) roleTypesToCreate')
+  result <- lift $ concat <$> runArrayT (filterA (unsafePartial hasPerspectiveOnRole user) roleTypesToCreate')
+  if null result then lift $ logWhen Trace RESOURCE
+  (show <$> (humanizePerspectivesWarning $ NoRoleTypesToCreate qualifiedRoleIdentifier ctxt user))
+  else pure unit
+  pure result
 
 -- | A state condition may be fully determined, or it may not yet be determinable due to 
 -- | resource removal.

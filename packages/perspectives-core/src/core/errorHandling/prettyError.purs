@@ -192,6 +192,11 @@ humanizePerspectivesWarning w = case w of
   NoBindings qualifiedRoleIdentifier contextId -> do
     qualifiedRoleIdentifier' <- toReadable qualifiedRoleIdentifier
     pure (NoBindings qualifiedRoleIdentifier' contextId)
+  NoRoleTypesToCreate eroleType ctxt userRoleType -> do
+    eroleType' <- toReadable eroleType
+    userRoleType' <- toReadable userRoleType
+    pure (NoRoleTypesToCreate eroleType' ctxt userRoleType')
+
   -- Default: leave unchanged.
   _ -> pure w
 
