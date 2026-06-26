@@ -46,7 +46,7 @@ import Data.Traversable (for, maximum, minimum, traverse)
 import Effect.Exception (error)
 import Foreign.Object (empty, lookup) as OBJ
 import Partial.Unsafe (unsafePartial)
-import Perspectives.ContextAndRole (rol_binding, rol_context, rol_id, rol_pspType)
+import Perspectives.ContextAndRole (rol_context, rol_pspType)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), Assumption, AssumptionTracking, InformedAssumption(..), MP, MPQ, MonadPerspectives, MonadPerspectivesQuery, liftToInstanceLevel, (###=), (##>), (##>>))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), firstOfSequence, runArrayT)
 import Perspectives.Error.Boundaries (handlePerspectRolError')
@@ -58,7 +58,7 @@ import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Combinators (available_, exists, logicalAnd, logicalOr, not)
 import Perspectives.Instances.Combinators (conjunction, intersection, orElse) as Combinators
 import Perspectives.Instances.Environment (_pushFrame)
-import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextModelName, contextType, contextType_, externalRole, filledByCombinator, filledByOperator, fillsCombinator, fillsOperator, getActiveRoleStates_, getActiveStates_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getRecursivelyFilledRoles', getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
+import Perspectives.Instances.ObjectGetters (binding, binding_, completeRuntimeType, context, contextModelName, contextType, contextType_, externalRole, filledByCombinator, filledByOperator, fillsCombinator, fillsOperator, getActiveRoleStates_, getActiveStates_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getRecursivelyFilledRoles', getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
 import Perspectives.Instances.Values (parseBool, parseNumber)
 import Perspectives.ModelDependencies (roleWithId, socialEnvironment, socialEnvironmentPersons)
 import Perspectives.Names (expandDefaultNamespaces, lookupIndexedContext, lookupIndexedRole)
@@ -68,7 +68,7 @@ import Perspectives.Persistent (getPerspectRol)
 import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getVariableBindings, lookupVariableBinding)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), Range, RoleInContext(..), domain, domain2PropertyRange, domain2contextType, domain2roleType, range, roleInContext2Role)
 import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
-import Perspectives.Representation.CNF (CNF, toConjunctiveNormalForm)
+import Perspectives.Representation.CNF (toConjunctiveNormalForm)
 import Perspectives.Representation.CalculatedRole (CalculatedRole)
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getEnumeratedRole, getPerspectType, getState)
 import Perspectives.Representation.Class.Property (calculation, functional, mandatory) as PC
@@ -1056,21 +1056,10 @@ getDynamicPropertyGetterFromLocalName ln adt = do
 getFillerTypeRecursively :: ADT RoleInContext -> RoleInstance ~~> RoleInstance
 getFillerTypeRecursively adt r = do
   adtDnf <- lift $ lift $ (expandUnexpandedLeaves adt >>= pure <<< toConjunctiveNormalForm)
-  ArrayT $ (lift $ try $ getPerspectRol r) >>=
-    handlePerspectRolError' "binding" [] (depthFirst adtDnf)
-  where
-  depthFirst :: CNF RoleInContext -> PerspectRol -> AssumptionTracking (Array RoleInstance)
-  depthFirst adtDnf role = do
-    tell $ ArrayWithoutDoubles [ Filler $ rol_id role ]
-    case rol_binding role of
-      Nothing -> pure []
-      Just b -> do
-        bRole <- lift $ getPerspectRol b
-        roleDnf <- lift (getEnumeratedRole (rol_pspType bRole) >>= pure <<< _.completeType <<< unwrap)
-        -- adtDnf -> roleDnf
-        -- e.g. adtDnf is an aspect of roleDnf or fills it.
-        if roleDnf `equalsOrSpecialises_` adtDnf then pure [ b ]
-        else depthFirst adtDnf bRole
+  filler <- binding r
+  adtFiller <- lift $ lift $ completeRuntimeType filler >>= expandUnexpandedLeaves >>= pure <<< toConjunctiveNormalForm
+  guard (adtFiller `equalsOrSpecialises_` adtDnf)
+  pure filler
 
 -- | Just the fillers that come from instances of a particular ContextType.
 bindingInContext :: ContextType -> ADT RoleInContext -> RoleInstance ~~> RoleInstance

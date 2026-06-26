@@ -22,14 +22,14 @@
 
 module Perspectives.Query.Interpreter where
 
+import Control.Alternative (guard)
 import Control.Bind (join)
 import Control.Monad.AvarMonadAsk (modify)
-import Control.Monad.Error.Class (catchError, throwError, try)
+import Control.Monad.Error.Class (catchError, throwError)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
 import Control.Plus (empty)
 import Data.Array (concat, elemIndex, foldl, head, index, length, null, union, unsafeIndex)
-import Data.String.Regex (match)
 import Data.Either (Either(..))
 import Data.Foldable (any)
 import Data.List (List(..))
@@ -38,22 +38,21 @@ import Data.List.Types (List, NonEmptyList)
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (unwrap)
 import Data.Set (fromFoldable, member) as SET
+import Data.String.Regex (match)
 import Data.Traversable (for_, maximum, minimum, traverse)
 import Effect.Exception (error)
 import Foreign.Object (empty, lookup) as OBJ
 import Partial.Unsafe (unsafePartial)
-import Perspectives.ContextAndRole (rol_binding, rol_context, rol_id, rol_pspType)
+import Perspectives.ContextAndRole (rol_context, rol_pspType)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MPQ, AssumptionTracking, liftToInstanceLevel, (###=), (##>>), (##=))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
-import Perspectives.Error.Boundaries (handlePerspectRolError')
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionNArgs)
 import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isExternalRole)
-import Perspectives.InstanceRepresentation (PerspectRol)
 import Perspectives.Instances.Combinators (available', not_)
 import Perspectives.Instances.Environment (_pushFrame)
-import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding, binding_, context, contextModelName, contextType, contextType_, externalRole, filledBy, fills, getAllFilledRoles_, getActiveRoleStates_, getActiveStates_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
+import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding, binding_, completeRuntimeType, context, contextModelName, contextType, contextType_, externalRole, filledBy, fills, getActiveRoleStates_, getActiveStates_, getAllFilledRoles_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
 import Perspectives.Instances.Values (bool2Value, parseNumber, value2Date, value2Number)
 import Perspectives.ModelDependencies (roleWithId, socialEnvironment, socialEnvironmentPersons)
 import Perspectives.Names (lookupIndexedRole)
@@ -66,10 +65,10 @@ import Perspectives.Query.Interpreter.Dependencies (Dependency(..), DependencyPa
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain2PropertyRange, domain2roleType, range)
 import Perspectives.Query.UnsafeCompiler (lookup, mapDurationOperator, mapNumericOperator, orderFunction, performNumericOperation')
 import Perspectives.Representation.ADT (ADT(..), commonLeavesInADT, equalsOrSpecialises_)
-import Perspectives.Representation.CNF (CNF, toConjunctiveNormalForm)
+import Perspectives.Representation.CNF (toConjunctiveNormalForm)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty)
 import Perspectives.Representation.CalculatedRole (CalculatedRole)
-import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getEnumeratedRole, getPerspectType)
+import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getPerspectType)
 import Perspectives.Representation.Class.Property (calculation) as PC
 import Perspectives.Representation.Class.Property (getPropertyType)
 import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, calculation, expandUnexpandedLeaves)
@@ -78,7 +77,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.Range (Range(..), isDateOrTime, isPDuration)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string)
 import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextAspectsClosure, contextTypeModelName', equalsOrSpecialisesRoleInContext, propertyAliases, roleTypeModelName', generalisesRoleType)
-import Prelude (Unit, bind, discard, eq, flip, map, notEq, pure, show, unit, ($), (&&), (+), (<#>), (<$>), (<<<), (<=), (<>), (==), (>=>), (>>=), (||), void)
+import Prelude (Unit, bind, discard, eq, flip, notEq, pure, show, unit, void, ($), (&&), (+), (<#>), (<$>), (<<<), (<=), (<>), (==), (>=>), (>>=), (||))
 import Simple.JSON (readJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -721,19 +720,11 @@ getDirectFillerType rid = binding rid >>= \b -> pure $ snocOnMainPath (singleton
 
 getFillerTypeRecursively :: ADT RoleInContext -> RoleInstance ~~> DependencyPath
 getFillerTypeRecursively adt r = do
-  adtCnf <- lift $ lift $ (expandUnexpandedLeaves adt >>= pure <<< toConjunctiveNormalForm)
-  ArrayT $ (lift $ try $ getPerspectRol r) >>=
-    handlePerspectRolError' "getFillerTypeRecursively" [] (depthFirst adtCnf)
-  where
-  depthFirst :: CNF RoleInContext -> PerspectRol -> AssumptionTracking (Array DependencyPath)
-  depthFirst adtCnf role =
-    case rol_binding role of
-      Nothing -> pure []
-      Just b -> do
-        bRole <- lift $ getPerspectRol b
-        roleCnf <- lift (getEnumeratedRole (rol_pspType bRole) >>= pure <<< _.completeType <<< unwrap)
-        if roleCnf `equalsOrSpecialises_` adtCnf then pure [ snocOnMainPath (singletonPath (R b)) (R $ rol_id role) ]
-        else map (flip snocOnMainPath (R $ rol_id role)) <$> depthFirst adtCnf bRole
+  adtDnf <- lift $ lift $ (expandUnexpandedLeaves adt >>= pure <<< toConjunctiveNormalForm)
+  filler <- binding r
+  adtFiller <- lift $ lift $ completeRuntimeType filler >>= expandUnexpandedLeaves >>= pure <<< toConjunctiveNormalForm
+  guard (adtFiller `equalsOrSpecialises_` adtDnf)
+  pure (singletonPath (R filler))
 
 roleMatchesTypeFilter :: RoleInstance -> ADT RoleInContext -> MP Boolean
 roleMatchesTypeFilter roleId roleFilter = do

@@ -63,7 +63,7 @@ import Perspectives.Query.QueryTypes (RoleInContext)
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Action (Action)
 import Perspectives.Representation.Class.PersistentType (getContext, getEnumeratedRole)
-import Perspectives.Representation.Class.Role (actionsOfRoleType, completeDeclaredFillerRestriction, declaredTypeWithoutFiller, kindOfRole)
+import Perspectives.Representation.Class.Role (actionsOfRoleType, declaredType, kindOfRole)
 import Perspectives.Representation.Context (Context(..)) as CONTEXT
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser(..), RoleInstance(..), Value(..), roleInstance2PerspectivesUser)
@@ -229,18 +229,12 @@ binding_ r = (try $ getPerspectRol r) >>=
         Nothing -> pure Nothing
         (Just b) -> pure $ Just b
 
+-- | The product of the declared types of the role and all of its actual fillers.
 completeRuntimeType :: RoleInstance -> MP (ADT RoleInContext)
 completeRuntimeType rid = do
-  role <- roleType_ rid >>= getEnumeratedRole
-  crt <- declaredTypeWithoutFiller role
-  mb <- binding_ rid
-  case mb of
-    Nothing -> do
-      mrestrictions <- completeDeclaredFillerRestriction role
-      case mrestrictions of
-        Nothing -> pure crt
-        Just restrictions -> pure $ PROD [ crt, restrictions ]
-    Just b -> (\adt -> PROD [ crt, adt ]) <$> completeRuntimeType b
+  fillers <- allFillers rid
+  allDeclaredTypes <- for (cons rid fillers) (roleType_ >=> getEnumeratedRole)
+  pure $ PROD $ declaredType <$> allDeclaredTypes
 
 allFillers :: RoleInstance -> MonadPerspectives (Array RoleInstance)
 allFillers rid = do
