@@ -79,13 +79,13 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Me (computeMe_)
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getProperty)
 import Perspectives.Logging (ansiReset, debugTest, infoTest, traceTest)
-import Perspectives.ModelDependencies (connectedToAMQPBroker, identifiableFirstName, invitationGuestType, invitationMessageProp, inviteeType, inviterType, outgoingInvitationsType, serialisedInvitationProp, sysUser)
+import Perspectives.ModelDependencies (connectedToAMQPBroker, identifiableFirstName, identifiableLastName, invitationGuestType, invitationMessageProp, inviteeType, inviterType, outgoingInvitationsType, serialisedInvitationProp, sysUser)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (saveMarkedResources)
-import Perspectives.PerspectivesState (newPerspectivesState, setBrokerService, setStompClientFactory, noTransactionIsRunning)
+import Perspectives.PerspectivesState (newPerspectivesState, noTransactionIsRunning, setBrokerService, setStompClientFactory)
 import Perspectives.Representation.Class.PersistentType (EnumeratedPropertyType(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
@@ -226,11 +226,17 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
         -- Get the User instance from System
         me <- getUserIdentifier
         runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
-          ( setProperty
+          (do 
+             setProperty
               [ RoleInstance me ]
               (EnumeratedPropertyType identifiableFirstName)
               Nothing
               [ Value pouchdbUser.perspectivesUser ]
+             setProperty
+              [ RoleInstance me ]
+              (EnumeratedPropertyType identifiableLastName)
+              Nothing
+              [ Value $ pouchdbUser.perspectivesUser <> "_last" ]
           )
         saveMarkedResources
         case bus of
@@ -439,7 +445,7 @@ connectPDRs pdr1 pdr2 = do
     ( runInPDR pdr1
         do
           r <- (invExternal ##> getProperty (EnumeratedPropertyType invitationMessageProp))
-          debugTest "connectPDRs: Running CreateInvitation context action in PDR1"
+          debugTest "connectPDRs: Message property obtained in PDR1"
           pure r
     )
   
@@ -532,16 +538,6 @@ connectPDRs pdr1 pdr2 = do
   waitUntilAllTransactionsComplete 6 pdr2
   waitUntilAllTransactionsComplete 6 pdr1
   log "connectPDRs: Connection process completed."
-
-type QuiescenceSnapshot =
-  { noTransactionRunning :: Boolean
-  , transactionNumber :: Int
-  , pendingTimedTransaction :: Boolean
-  , pendingModelLoad :: Boolean
-  , pendingIndexedResource :: Boolean
-  , pendingIntegrityFix :: Boolean
-  , pendingTypeFix :: Boolean
-  }
 
 -- | Wait until all transactions have completed and the PDR instance is
 -- | quiescent.  Throws an error if quiescence is not reached within a
