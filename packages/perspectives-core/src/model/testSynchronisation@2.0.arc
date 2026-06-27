@@ -45,12 +45,7 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
       perspective on Follower
         only (Create, Fill)
         props (FirstName) verbs (Consult)
-      
-      -- Create new Tests, ready with a Leader.
-      -- NOTE: Follower should be available before running this action.
-      action CreateTest
-        create context Test1 bound to Tests
-    
+          
     -- We need to synchronise, hence PerspectivesUsers and not Persons.
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
     
@@ -96,7 +91,45 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
       perspective on Follower
         props (FirstName) verbs (Consult)
 
-  case Test1
+  ------------------------------------------------------------------------------
+  ---- TESTS. All these tests construct something in pdrA and check if it is synchronised in pdrB.
+  ------------------------------------------------------------------------------
+  
+  ------------------------------------------------------------------------------
+  ---- Create a role that is in scope of the Follower. Because it has no property, it is not synchronised.
+  ------------------------------------------------------------------------------
+  case Test_CreateRole
+    aspect mm:Test
+    external
+      property TestFinished (Boolean)
+      state TestSucceeded = TestFinished and (not exists context >> TestRole1)
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on TestRole1
+        only (Create)
+      perspective on extern
+        props (TestFinished) verbs (SetPropertyValue, Consult)
+      action RunTest
+        create role TestRole1
+        TestName = "Create a role" for extern
+        TestFinished = true for extern
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on TestRole1
+      perspective on extern
+        props (TestFinished) verbs (Consult)
+
+    thing TestRole1
+
+  ------------------------------------------------------------------------------
+  ---- Create a role that is in scope of the Follower and has a property. Because it has a property, it is synchronised.
+  ------------------------------------------------------------------------------
+  case Test_SetProperty
     aspect mm:Test
     external
       state TestSucceeded = context >> TestRole1 >> P == 1
@@ -123,3 +156,34 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
 
     thing TestRole1
       property P (Number)
+
+  ------------------------------------------------------------------------------
+  ---- Create a role that is in scope of the Follower and fill it. The Follower should be able to see that it is filled.
+  ------------------------------------------------------------------------------
+  case Test_BindRole
+    aspect mm:Test
+    external
+      state TestSucceeded = exists context >> RoleToFill >> binding
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on RoleToFill
+        only (Create, Fill)
+      action RunTest
+        letA
+          rtf <- create role RoleToFill
+        in
+          bind_ me to rtf
+          TestName = "Bind a role" for extern
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on RoleToFill
+        props (FirstName) verbs (Consult)
+    
+    user RoleToFill filledBy sys:TheWorld$PerspectivesUsers
+
+  

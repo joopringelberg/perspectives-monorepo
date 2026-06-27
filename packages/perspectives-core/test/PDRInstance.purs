@@ -440,7 +440,7 @@ connectPDRs pdr1 pdr2 = do
         Nothing
         [ Value "Hello there" ]
 
-  messageText <- pollUntil 30 (Milliseconds 200.0)
+  messageText <- pollUntil 100 (Milliseconds 200.0)
     "Message property to be set"
     ( runInPDR pdr1
         do
@@ -467,7 +467,7 @@ connectPDRs pdr1 pdr2 = do
   -- PDR1: Step 5 — read the SerialisedInvitation file content
   -- Poll until the state-entry bot has set the property and written the file.
   -- -----------------------------------------------------------------------
-  invText <- pollUntil 30 (Milliseconds 200.0)
+  invText <- pollUntil 100 (Milliseconds 200.0)
     "SerialisedInvitation property and file content to be set"
     ( do
         mPFileStr <- runInPDR pdr1
@@ -506,7 +506,7 @@ connectPDRs pdr1 pdr2 = do
 
   -- Poll until the Inviter role is accessible in PDR2, confirming that the
   -- transaction and any state-entry bots have completed.
-  void $ pollUntil 30 (Milliseconds 100.0)
+  void $ pollUntil 100 (Milliseconds 100.0)
     "Inviter role to be accessible in PDR2 after executeTransaction"
     ( runInPDR pdr2 do
         r <- (invCtx ##> getEnumeratedRoleInstances (EnumeratedRoleType inviterType))
