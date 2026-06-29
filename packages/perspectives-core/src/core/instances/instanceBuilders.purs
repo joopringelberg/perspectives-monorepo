@@ -55,7 +55,7 @@ import Effect.Aff.AVar (put)
 import Effect.Aff.Class (liftAff)
 import Foreign.Object (empty, insert)
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
-import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor)
+import Perspectives.Assignment.SerialiseAsDeltas (noNewPeer, serialisedAsDeltasFor)
 import Perspectives.Assignment.Update (addRoleInstanceToContext, setProperty)
 import Perspectives.ContextAndRole (changeRol_isMe, getNextRolIndex)
 import Perspectives.CoreTypes (IndexedResource(..), MonadPerspectivesTransaction, (###=), (##=))
@@ -150,7 +150,7 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
         lift $ addCreatedContextToTransaction contextInstanceId
         -- As the proxy of the public role is just another user, we have to make sure it will receive all deltas necessary
         -- according to its perspectives.
-        for_ publicRoleInstances \proxy -> lift (contextInstanceId `serialisedAsDeltasFor` proxy)
+        for_ publicRoleInstances \proxy -> lift $ (contextInstanceId `serialisedAsDeltasFor` proxy) noNewPeer
         readableContextType <- lift $ lift $ toReadable (ContextType ctype)
         lift $ lift $ traceResource $ "Created context instance " <> unwrap contextInstanceId <> " of type " <> show readableContextType
         pure contextInstanceId

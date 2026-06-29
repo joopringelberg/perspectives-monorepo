@@ -49,7 +49,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ApiEffect, RequestType(..)) as Api
 import Perspectives.ApiTypes (ContextSerialization(..), ContextsSerialisation(..), PropertySerialization(..), RecordWithCorrelationidentifier(..), Request(..), RequestRecord, Response(..), ResponseWithWarnings(..), RolSerialization(..), ApiEffect, mkApiEffect, showRequestRecord)
 import Perspectives.Assignment.RunAction (runAction, runContextAction)
-import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor_)
+import Perspectives.Assignment.SerialiseAsDeltas (noNewPeer, serialisedAsDeltasFor_)
 import Perspectives.Assignment.Update (RoleProp(..), addProperty, deleteProperty, getPropertyBearingRoleInstance, saveFile, setPreferredUserRoleType, setProperty)
 import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
 import Perspectives.CoreTypes (MP, MonadPerspectives, MonadPerspectivesTransaction, PropertyValueGetter, RoleGetter, liftToInstanceLevel, (##=), (##>), (##>>), (###=))
@@ -945,10 +945,10 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
           case kind of
             Public -> do
               proxyInstance <- (ContextInstance subject) ##>> getRoleInstances (ENR $ EnumeratedRoleType (object <> "Proxy"))
-              void $ runMonadPerspectivesTransaction authoringRole (serialisedAsDeltasFor_ (ContextInstance subject) proxyInstance (ENR $ EnumeratedRoleType (object <> "Proxy")))
+              void $ runMonadPerspectivesTransaction authoringRole (serialisedAsDeltasFor_ (ContextInstance subject) proxyInstance (ENR $ EnumeratedRoleType (object <> "Proxy")) noNewPeer)
               sendResponse (Result corrId []) setter
             _ -> do
-              void $ runMonadPerspectivesTransaction authoringRole (serialisedAsDeltasFor_ (ContextInstance subject) (RoleInstance predicate) roleType)
+              void $ runMonadPerspectivesTransaction authoringRole (serialisedAsDeltasFor_ (ContextInstance subject) (RoleInstance predicate) roleType noNewPeer)
               sendResponse (Result corrId []) setter
       )
       \e -> sendResponse (Error corrId (show e)) setter

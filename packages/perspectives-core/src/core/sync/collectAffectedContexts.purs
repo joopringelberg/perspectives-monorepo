@@ -36,7 +36,7 @@ import Effect.Exception (error)
 import Partial.Unsafe (unsafePartial)
 import Perspective.InvertedQuery.Indices (runTimeIndexForRoleQueries, runtimeIndexForContextQueries, runtimeIndexForFilledQueries', runtimeIndexForFillerQueries', runtimeIndexForPropertyQueries)
 import Perspectives.ArrayUnions (ArrayUnions(..))
-import Perspectives.Assignment.SerialiseAsDeltas (getPropertyValues, serialiseDependencies, serialisedAsDeltasFor_, perspectivePositionText)
+import Perspectives.Assignment.SerialiseAsDeltas (getPropertyValues, noNewPeer, perspectivePositionText, serialiseDependencies, serialisedAsDeltasFor_)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MonadPerspectivesTransaction, runMonadPerspectivesQuery, (##=), (##>), (##>>))
 import Perspectives.Data.EncodableMap (EncodableMap, filterKeys, lookup)
 import Perspectives.Deltas (addDelta)
@@ -617,7 +617,7 @@ handleNewCalculatedUsersForBinding bwStart fwStart iq@(InvertedQuery { backwards
           for_ (extRoleDeltas <> ctxDeltas) \(DeltaStoreRecord { signedDelta }) ->
             addDelta $ DeltaInTransaction { users: [ calcUserInstance ], delta: signedDelta }
           -- Serialise all perspectives of the Calculated User for this context.
-          serialisedAsDeltasFor_ contextInstance calcUserInstance calcUserRoleType
+          serialisedAsDeltasFor_ contextInstance calcUserInstance calcUserRoleType noNewPeer
     _, _ -> pure unit
 handleNewCalculatedUsersForBinding _ _ _ = pure unit
 

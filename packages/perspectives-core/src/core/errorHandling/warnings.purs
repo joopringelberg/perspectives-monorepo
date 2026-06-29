@@ -71,6 +71,8 @@ data PerspectivesWarning
   | NoBinding ContextInstance
   | NoBinder ContextInstance
   | NoRoleTypesToCreate EnumeratedRoleType ContextInstance RoleType
+  | CannotConstructMinimalSelfPerspective ContextType RoleType
+  | ConstructedMinimalSelfPerspective ContextType RoleType
 
 instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ModelLacksModelId dfid) = "(ModelLacksModelId) The model '" <> dfid <> "' lacks a value for the property ModelIdentification on its Model instance."
@@ -131,3 +133,7 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
     "(NoBinder) No role instance found to fill in context " <> show contextId
   show (NoRoleTypesToCreate qualifiedRoleIdentifier ctxt roleType) =
     "(NoRoleTypesToCreate) User " <> show roleType <> " has no perspective on role " <> show qualifiedRoleIdentifier <> " or its specialisations in context " <> show ctxt
+  show (CannotConstructMinimalSelfPerspective contextType roleType) =
+    "(CannotConstructMinimalSelfPerspective) Cannot construct a minimal self-perspective for context type " <> show contextType <> " and role type " <> show roleType
+  show (ConstructedMinimalSelfPerspective contextType roleType) =
+    "(ConstructedMinimalSelfPerspective) Constructed a minimal self-perspective for context type " <> show contextType <> " and role type " <> show roleType

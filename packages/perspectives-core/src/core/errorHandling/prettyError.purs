@@ -196,6 +196,14 @@ humanizePerspectivesWarning w = case w of
     eroleType' <- toReadable eroleType
     userRoleType' <- toReadable userRoleType
     pure (NoRoleTypesToCreate eroleType' ctxt userRoleType')
+  CannotConstructMinimalSelfPerspective contextType roleType -> do
+    contextType' <- toReadable contextType
+    roleType' <- toReadable roleType
+    pure (CannotConstructMinimalSelfPerspective contextType' roleType')
+  ConstructedMinimalSelfPerspective contextType roleType -> do
+    contextType' <- toReadable contextType
+    roleType' <- toReadable roleType
+    pure (ConstructedMinimalSelfPerspective contextType' roleType')
 
   -- Default: leave unchanged.
   _ -> pure w

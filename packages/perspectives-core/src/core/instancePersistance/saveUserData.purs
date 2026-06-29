@@ -62,7 +62,7 @@ import Data.Show (show)
 import Data.Traversable (for, for_, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Foreign.Object (Object, values)
-import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor)
+import Perspectives.Assignment.SerialiseAsDeltas (newPeer, serialisedAsDeltasFor)
 import Perspectives.Assignment.Update (cacheAndSave, getSubject)
 import Perspectives.Authenticate (signDelta)
 import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
@@ -632,7 +632,7 @@ handleNewPeer roleInstance = (lift $ try $ getPerspectRol roleInstance) >>=
     \(PerspectRol { context, pspType }) -> do
       (EnumeratedRole { kindOfRole }) <- lift $ getEnumeratedRole pspType
       me <- lift $ isMe roleInstance
-      if kindOfRole == UserRole && not me && unwrap roleInstance /= "def:#serializationuser" then context `serialisedAsDeltasFor` roleInstance
+      if kindOfRole == UserRole && not me && unwrap roleInstance /= "def:#serializationuser" then (context `serialisedAsDeltasFor` roleInstance) newPeer
       else pure unit
 
 -- | PERSISTENCE of binding role and old binding, through the call to `changeRoleBinding`.
