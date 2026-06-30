@@ -50,9 +50,6 @@
 -- | network access that is not available in the standard CI environment.
 -- | To run these tests manually, pass `--only` to the test runner or select them
 -- | from the test menu.
--- |
--- | TODO: Enable sync suites below once the stub AMQP transport is implemented.
--- |       See docsources/nodejs-testing-architecture.md §3 for the design.
 
 module Test.Layer3 where
 

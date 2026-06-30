@@ -36,11 +36,11 @@ import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Data.EncodableMap (EncodableMap(..))
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, forwards)
 import Perspectives.InvertedQueryKey (serializeInvertedQueryKey)
-import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo', addStorableInvertedQuery, getsDF, lift2, throwError)
+import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.Kinked (invert)
-import Perspectives.Query.QueryTypes (Domain, QueryFunctionDescription(..), Range, RoleInContext(..), composeOverMaybe, domain, domain2roleInContext, makeComposition, mandatory, range)
+import Perspectives.Query.QueryTypes (Domain, QueryFunctionDescription(..), Range, RoleInContext(..), addTermOnRight, domain, domain2roleInContext, makeComposition, mandatory, range)
 import Perspectives.Representation.ADT (allLeavesInADT)
 import Perspectives.Representation.Class.PersistentType (getCalculatedProperty)
 import Perspectives.Representation.Class.Property (calculation)
@@ -50,7 +50,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..), StateIdentifier)
 import Perspectives.Utilities (prettyPrint)
-import Prelude (Unit, bind, discard, flip, pure, unit, ($), (<$>), (<>), (==), (>=>))
+import Prelude (Unit, bind, discard, flip, pure, show, unit, ($), (<$>), (<>), (==), (>=>), (<*>))
 
 type WithModificationSummary = ReaderT ModificationSummary (PhaseTwo' MonadPerspectives)
 
@@ -430,7 +430,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                     case fwdProp of
                       Nothing ->
                         storeInvertedQuery
-                          (ZQ (composeOverMaybe bwProp (backwards qWithAK)) Nothing)
+                          (ZQ (addTermOnRight <$> bwProp <*> (backwards qWithAK)) Nothing)
                           users
                           propStates
                           (Map.singleton propType propStates)
@@ -528,6 +528,7 @@ setPathForStep (MQD _ qf _ _ _ _) qWithAK users states statesPerProperty selfOnl
     -- NOTICE: the inversion is useful, as it will be part of backwards queries - we just don't store the inverted query of such
     -- a query that is kinked at this step.
     QF.ExternalCoreContextGetter f -> pure unit
+    _ -> lift $ throwError $ Custom $ "setPathForStep: uncovered case:" <> show qf <> " in MQD. This is a system programming error."
 
 ------------------------------------------------------------------------------------------
 ---- REMOVE FIRST BACKWARDS STEP
