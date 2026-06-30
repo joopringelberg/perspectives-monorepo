@@ -65,6 +65,7 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
     state AppfollowerReachable = exists extern >> binder Tests
       on entry
         do for Initializer
+          -- Dit gaat fout als we Follower met AppFollower vullen in plaats van met de vuller van AppFollower.
           bind AppFollower >> binding to Follower
 
     external
@@ -88,8 +89,6 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
       perspective on extern
         props (TestName) verbs (Consult)
         props (TestSucceeded) verbs (Consult, SetPropertyValue)
-      perspective on Follower
-        props (FirstName) verbs (Consult)
 
   ------------------------------------------------------------------------------
   ---- TESTS. All these tests construct something in pdrA and check if it is synchronised in pdrB.
@@ -159,8 +158,9 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
 
   ------------------------------------------------------------------------------
   ---- Create a role that is in scope of the Follower and fill it. The Follower should be able to see that it is filled.
+  ---- This tests a query from context to role.
   ------------------------------------------------------------------------------
-  case Test_BindRole
+  case Test_BindRole_toRole
     aspect mm:Test
     external
       state TestSucceeded = exists context >> RoleToFill >> binding
@@ -177,7 +177,7 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
           rtf <- create role RoleToFill
         in
           bind_ me to rtf
-          TestName = "Bind a role" for extern
+          TestName = "Bind a role, query from context to role" for extern
 
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
@@ -186,4 +186,34 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
     
     user RoleToFill filledBy sys:TheWorld$PerspectivesUsers
 
-  
+  ------------------------------------------------------------------------------
+  ---- Create a role that is in scope of the Follower and fill it. The Follower should be able to see that it is filled.
+  ---- This tests a query from role to context.
+  ------------------------------------------------------------------------------
+  case Test_BindRole_toContext
+    aspect mm:Test
+    external
+      property Q (Boolean)
+      state TestSucceeded = context >> Leader >> P
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      property P = context >> extern >> Q
+      perspective on extern
+        props (Q) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "Bind a role, query from role to context" for extern
+        Q = true for extern
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on Leader
+        props (P) verbs (Consult)
+
+------------------------------------------------------------------------------
+---- This tests a query with traversal from a role to its filler.
+---- The crucial modification is to fill the role.
+------------------------------------------------------------------------------

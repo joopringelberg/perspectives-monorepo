@@ -233,9 +233,6 @@ traceUsersWithPerspective iq@(InvertedQuery { perspectiveStartPosition }) users 
           message
   else pure unit
 
-traceUsersWithPerspectiveFromContexts :: InvertedQuery -> Array ContextWithUsers -> String -> MonadPerspectivesTransaction Unit
-traceUsersWithPerspectiveFromContexts iq cwus message = traceUsersWithPerspective iq (concat (snd <$> cwus)) message
-
 -----------------------------------------------------------
 -- HANDLEBACKWARDQUERY
 -----------------------------------------------------------
