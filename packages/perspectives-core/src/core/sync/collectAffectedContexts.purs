@@ -955,17 +955,30 @@ aisInPropertyDelta
     -- A state condition in terms of properties of other roles is then not supported.
     -- allCalculations <- lift $ filterA (invertedQueryHasRoleRange cType propertyBearingType) allCalculations'
 
-    -- RTPropertyKey queries carry `users = []` (state queries only). Perspective synchronisation
-    -- for property changes is handled separately by `addDeltasForPropertyChange` below, which uses
-    -- RTContextKey queries.  `handleBackwardQuery` therefore returns no users here but may record
-    -- ContextStateQuery / RoleStateQuery results for state-condition re-evaluation.
+    -- Most RTPropertyKey queries carry `users = []` (state-condition queries only). Their backward
+    -- path ends in a context or role domain and `handleBackwardQuery` records state-query results.
+    -- Exception: RTPropertyKey queries stored for calculated property perspectives carry non-empty
+    -- `users`. Their backward path ends at the perspective object (RDOM), allowing `fromRoleResults`
+    -- to find context + user instances with full state checking. We then apply `backwardsCompiled`
+    -- once more to obtain the perspective object(s) and pass them to `computeProperties`, which
+    -- evaluates the calculated property on each perspective object and creates the necessary deltas.
     -- The Value2Role first-backward step compiles to identity at runtime, so applying the backward
     -- to `propertyBearingInstance` (a RoleInstance) is correct regardless of the VDOM domain annotation.
     -- For Calculated User queries whose forward part is a filter (forwardStartsWithFilter), apply
     -- handleNewCalculatedUsersForBinding so that the filter is evaluated against the
     -- property-bearing role instance to detect newly satisfying Calculated User instances.
-    for_ allCalculations \iq ->
+    for_ allCalculations \iq@(InvertedQuery { backwardsCompiled, statesPerProperty: spProp }) ->
       if isCalculatedUserQuery iq && forwardStartsWithFilter iq then handleNewCalculatedUsersForBinding propertyBearingInstance propertyBearingInstance iq
+      else if invertedQueryHasRoleType iq then do
+        -- Calculated property perspective query: backward ends at perspective object (RDOM).
+        -- handleBackwardQuery applies backward to find context+users (with state checking).
+        -- Apply backwardsCompiled again to get perspective objects for computeProperties.
+        cwus <- handleBackwardQuery propertyBearingInstance iq
+        case backwardsCompiled of
+          Just compiled -> do
+            perspectiveObjects <- lift (propertyBearingInstance ##= (unsafeCoerce compiled :: RoleInstance ~~> RoleInstance))
+            computeProperties (singletonPath <<< R <$> perspectiveObjects) spProp cwus
+          Nothing -> pure unit
       else void $ handleBackwardQuery propertyBearingInstance iq
     -- The property might fall in a perspective. Compute the users and add deltas to the transaction.
     users <- addDeltasForPropertyChange propertyBearingInstance property replacementProperty
