@@ -61,13 +61,14 @@ import Prelude
 import Control.Monad.Cont (lift)
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except.Trans (runExceptT)
-import Data.Array (index, null)
+import Data.Array (null)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Time.Duration (Milliseconds(..))
+import Data.Traversable (for_, traverse)
 import Effect (Effect)
-import Effect.Aff (Aff, Error, error, try)
+import Effect.Aff (Aff, error, launchAff_)
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, new, read, write)
 import Effect.Unsafe (unsafePerformEffect)
@@ -90,14 +91,27 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, Perspec
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
 import Perspectives.Sidecar.ToStable (toStable)
-import Test.PDRInstance (PDRInstance, connectPDRs, noBus, pollUntil, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
-import Test.Unit (suite, suiteSkip, test)
+import Test.PDRInstance (PDRInstance, SynchronisationResult, connectPDRs, noBus, pollUntil, pollUntilTestFinishes, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
+import Test.Unit (TestSuite, suite, suiteSkip, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
 
 main :: Effect Unit
-main = runTest do
-  suiteSkip "PDRInstance scaffold" do
+main = launchAff_ do
+  results <- getSynchronisationResults
+  liftEffect $ runTest do
+    scaffoldTests
+    suite "Synchronisation tests" do
+      for_ results \result -> case result of
+        Right { testName, testSucceeded } ->
+          test (testName <> " should succeed in Bob's PDR") do
+            assert ("Bob should see that test '" <> testName <> "' succeeded") testSucceeded
+        Left {testName, err} ->
+          test ("test '" <> testName <> "' failed with error") do
+            assert ("Bob should see that the test succeeded, but got error: " <> show err) false
+
+scaffoldTests :: TestSuite
+scaffoldTests = suiteSkip "PDRInstance scaffold" do
 
     -- | Smoke test: start one PDR instance, verify the system identifier matches
     -- | the value we passed in, then shut down.
@@ -174,36 +188,9 @@ main = runTest do
                 _, _ -> assert "Both PDRs should have each others' Person instance" false
             _, _ -> assert "Both PDRs should have a `me` instance" false
 
-    
-  suite "Synchronisation tests" do  
-    test "Test_CreateRole succeeds in Bob's PDR" do
-      assertSynchronisationResult 0 "Test_CreateRole"
-
-    test "Test_SetProperty succeeds in Bob's PDR" do
-      assertSynchronisationResult 1 "Test_SetProperty"
-
-    test "Test_BindRole succeeds in Bob's PDR" do
-      assertSynchronisationResult 2 "Test_BindRole"
-
--------------------------------------------------------------------------------
----- ASSERT A RESULT INDIVIDUALLY
--------------------------------------------------------------------------------
-assertSynchronisationResult :: Int -> String -> Aff Unit
-assertSynchronisationResult resultIndex label = do
-  results <- getSynchronisationResults
-  case index results resultIndex of
-    Just (Right { testName, testSucceeded }) ->
-      assert ("Bob should see that test '" <> testName <> "' succeeded") testSucceeded
-    Just (Left err) ->
-      assert ("Bob should see that the test succeeded, but got error: " <> show err) false
-    Nothing ->
-      assert ("Missing synchronisation result for " <> label) false
-
 -------------------------------------------------------------------------------
 ---- COMPUTE AND CACHE ALL RESULTS ONCE
 -------------------------------------------------------------------------------
-type SynchronisationResult = Either Error { testName :: String, testSucceeded :: Boolean }
-
 type SynchronisationResults = Array SynchronisationResult
 
 cachedSynchronisationResults :: Ref (Maybe SynchronisationResults)
@@ -267,9 +254,9 @@ getSynchronisationResults = do
           -- Alice gives Bob the role Follower in the App.
           runInPDR pdrA do
             infoTest "Alice gives Bob the role Follower in the App in PDRA"
-            testAppLeaderType' <- toStable (EnumeratedRoleType testAppLeaderType)
+            testAppManager' <- toStable (CalculatedRoleType testAppManager)
             testAppFollowerType' <- toStable (EnumeratedRoleType testAppFollowerType)
-            runMonadPerspectivesTransaction' shareWithPeers (ENR testAppLeaderType')
+            runMonadPerspectivesTransaction' shareWithPeers (CR testAppManager')
               do
                 void $ createAndAddRoleInstance
                   testAppFollowerType'
@@ -290,15 +277,18 @@ getSynchronisationResults = do
                 if null roles then pure Nothing
                 else pure (Just roles)
             )
-
+          let runATest = \testContextTypeName -> executeModelTest pdrA pdrB testAppContextA alice bob testContextTypeName
           -------------------------------------------------------------------------------
           ---- EXECUTE TESTS AND COLLECT RESULTS
           ---- Add a call for each test in model://joopringelberg.nl#SynchronisationTestModel
           -------------------------------------------------------------------------------
-          r1 <- executeModelTest pdrA pdrB testAppContextA alice bob test_CreateRole
-          r2 <- executeModelTest pdrA pdrB testAppContextA alice bob test_SetProperty
-          r3 <- executeModelTest pdrA pdrB testAppContextA alice bob test_BindRole
-          pure [r1, r2, r3]
+          traverse runATest 
+            [ test_CreateRole
+            , test_SetProperty
+            , test_BindRole
+            , test_BindRole_toContext
+            ]
+          
 
       liftEffect $ write (Just results) cachedSynchronisationResults
       pure results
@@ -306,23 +296,23 @@ getSynchronisationResults = do
 -------------------------------------------------------------------------------
 ---- RUN A SINGLE TEST AND RETURN THE RESULT
 -------------------------------------------------------------------------------
-executeModelTest :: PDRInstance -> PDRInstance -> ContextInstance -> PerspectivesUser -> PerspectivesUser -> String -> Aff (Either Error {testName :: String, testSucceeded :: Boolean})
+executeModelTest :: PDRInstance -> PDRInstance -> ContextInstance -> PerspectivesUser -> PerspectivesUser -> String -> Aff SynchronisationResult
 executeModelTest pdrA pdrB testAppContextA alice bob testContextTypeR = do
 
-  -- runInPDR pdrA
-  --   ( do
+  runInPDR pdrA
+    ( do
+        setTopicLogLevel RESOURCE Trace
+        -- setTopicLogLevel STATE Trace
+        setTopicLogLevel SYNC Trace
+    --     setTopicLogLevel BROKER Trace
+    )
+  runInPDR pdrB
+    ( do
   --       setTopicLogLevel RESOURCE Trace
   --       setTopicLogLevel STATE Trace
+        setTopicLogLevel BROKER Trace
   --       setTopicLogLevel SYNC Trace
-  --       setTopicLogLevel BROKER Trace
-  --   )
-  -- runInPDR pdrB
-  --   ( do
-  --       setTopicLogLevel RESOURCE Trace
-  --       setTopicLogLevel STATE Trace
-  --       setTopicLogLevel BROKER Trace
-  --       setTopicLogLevel SYNC Trace
-  --   )
+    )
   
   testContextType <- runInPDR pdrA
     (toStable (ContextType testContextTypeR))
@@ -387,24 +377,23 @@ executeModelTest pdrA pdrB testAppContextA alice bob testContextTypeR = do
           lift $ infoTest "Alice executes a test in PDRA"
           runContextAction (unwrap testLeaderType) "RunTest" (unwrap theTest))
 
-  try 
-    ( pollUntil 100 (Milliseconds 100.0)
-        "Bob to have a value for the test to succeed in pdrB"
-        ( runInPDR pdrB $
-            do
-              testNameProperty' <- toStable (EnumeratedPropertyType testNameProperty)
-              mtestName <- testExternalRole ##> getPropertyValues (ENP testNameProperty')
-              case mtestName of
-                Just (Value testName) -> do
-                  infoTest ("Bob sees that the test has a name: " <> show testName)
-                  -- Get the value of Enumerated property TestSucceeded of the external role of the test.
-                  testSucceededProperty' <- toStable (EnumeratedPropertyType testSucceededProperty)
-                  mtestSucceeded <- testExternalRole ##> getPropertyValues (ENP testSucceededProperty')
-                  case mtestSucceeded of
-                    Just (Value testSucceeded) -> pure (Just { testName, testSucceeded: testSucceeded == "true"})
-                    Nothing -> pure Nothing
-                Nothing -> pure Nothing
-        )
+  ( pollUntilTestFinishes 100 (Milliseconds 100.0)
+      "Bob to have a value for the test to succeed in pdrB"
+      ( runInPDR pdrB $
+          do
+            testNameProperty' <- toStable (EnumeratedPropertyType testNameProperty)
+            mtestName <- testExternalRole ##> getPropertyValues (ENP testNameProperty')
+            case mtestName of
+              Just (Value testName) -> do
+                infoTest ("Bob sees that the test has a name: " <> show testName)
+                -- Get the value of Enumerated property TestSucceeded of the external role of the test.
+                testSucceededProperty' <- toStable (EnumeratedPropertyType testSucceededProperty)
+                mtestSucceeded <- testExternalRole ##> getPropertyValues (ENP testSucceededProperty')
+                case mtestSucceeded of
+                  Just (Value testSucceeded) -> pure (Right { testName, testSucceeded: testSucceeded == "true"})
+                  Nothing -> pure (Left { testName, err: error "TestSucceeded property not found" })
+              Nothing -> pure (Left { testName: "unknown testname", err: error "TestName property not found" })
+      )
     )
 
 -------------------------------------------------------------------------------
@@ -441,13 +430,15 @@ testNameProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test$Exte
 ---- One entry for each test in model://joopringelberg.nl#SynchronisationTestModel
 -------------------------------------------------------------------------------
 
-test_SetProperty :: String
-test_SetProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test_SetProperty"
--- test_SetProperty = "model://joopringelberg.nl#hj1bh3wydo$kqartp53o1"
-
-test_BindRole :: String
-test_BindRole = "model://joopringelberg.nl#SynchronisationTestModel$Test_BindRole"
--- test_BindRole = "model://joopringelberg.nl#hj1bh3wydo$e5qbgiyk69"
-
 test_CreateRole :: String
 test_CreateRole = "model://joopringelberg.nl#SynchronisationTestModel$Test_CreateRole"
+
+test_SetProperty :: String
+test_SetProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test_SetProperty"
+
+test_BindRole :: String
+test_BindRole = "model://joopringelberg.nl#SynchronisationTestModel$Test_BindRole_toRole"
+
+test_BindRole_toContext :: String
+test_BindRole_toContext = "model://joopringelberg.nl#SynchronisationTestModel$Test_BindRole_toContext"
+

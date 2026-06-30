@@ -325,6 +325,27 @@ pollUntil maxAttempts interval description action = go maxAttempts
         delay interval
         go (n - 1)
 
+type SynchronisationResult = Either {testName :: String, err :: Error} { testName :: String, testSucceeded :: Boolean }
+
+pollUntilTestFinishes
+  :: Int
+  -> Milliseconds
+  -> String
+  -> Aff SynchronisationResult
+  -> Aff SynchronisationResult
+pollUntilTestFinishes maxAttempts interval description action = go 
+  maxAttempts 
+  ((Left {testName: description, err: error "pollUntilTestFinishes: initial state"}) :: SynchronisationResult)
+  where
+  go 0 previousResult = pure previousResult
+  go n _ = do
+    result <- action
+    case result of
+      Right _ -> pure result
+      Left a -> do
+        delay interval
+        go (n - 1) result
+
 -----------------------------------------------------------
 -- BRACKET UTILITIES
 -----------------------------------------------------------
