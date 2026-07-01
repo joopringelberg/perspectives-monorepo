@@ -973,6 +973,9 @@ aisInPropertyDelta
         -- Apply backwardsCompiled again to get perspective objects for computeProperties.
         case backwardsCompiled of
           Just compiled -> do
+            -- We assume the user type whose perspective included a calculated property on its object,
+            -- are in the same context as that perspective object.
+            -- This may not be true for calculated user role types, nor for calculated perspective objects.
             perspectiveObjects <- lift (propertyBearingInstance ##= (unsafeCoerce compiled :: RoleInstance ~~> RoleInstance))
             nub <<< join <$> for perspectiveObjects \perspectiveObject -> do
               ctxt <- lift (context' perspectiveObject)
