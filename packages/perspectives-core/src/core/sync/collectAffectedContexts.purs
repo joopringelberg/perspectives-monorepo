@@ -71,7 +71,7 @@ import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (enumeratedRoleContextType, equalsOrSpecialisesRoleInContext)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..), RoleBindingDeltaType(..))
 import Perspectives.Utilities (findM, prettyPrint)
-import Prelude (Unit, bind, discard, flip, join, map, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
+import Prelude (Unit, bind, discard, flip, join, map, not, pure, show, unit, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
 import Unsafe.Coerce (unsafeCoerce)
 
 -- TODO. #12 Check the way state-conditional verbs are combined to establish whether a peer should receive a delta.
@@ -960,29 +960,29 @@ aisInPropertyDelta
     -- Exception: RTPropertyKey queries stored for calculated property perspectives carry non-empty
     -- `users`. Their backward path ends at the perspective object (RDOM), allowing `fromRoleResults`
     -- to find context + user instances with full state checking. We then apply `backwardsCompiled`
-    -- once more to obtain the perspective object(s) and pass them to `computeProperties`, which
-    -- evaluates the calculated property on each perspective object and creates the necessary deltas.
-    -- The Value2Role first-backward step compiles to identity at runtime, so applying the backward
-    -- to `propertyBearingInstance` (a RoleInstance) is correct regardless of the VDOM domain annotation.
-    -- For Calculated User queries whose forward part is a filter (forwardStartsWithFilter), apply
-    -- handleNewCalculatedUsersForBinding so that the filter is evaluated against the
-    -- property-bearing role instance to detect newly satisfying Calculated User instances.
-    for_ allCalculations \iq@(InvertedQuery { backwardsCompiled, statesPerProperty: spProp }) ->
-      if isCalculatedUserQuery iq && forwardStartsWithFilter iq then handleNewCalculatedUsersForBinding propertyBearingInstance propertyBearingInstance iq
+    -- once more to obtain the perspective object(s) and use them to compute the instances of the user types from the inverted query
+    -- in the same context as the perspective object. We then return those users as part of the end result of this function.
+    -- An earlier version tried to compute properties and their underlying deltas right away, 
+    -- but that was wrong because the delta describing the property change itself is only created after
+    -- the current function returns the users to which it applies!
+    users1 :: Array RoleInstance <- join <$> for allCalculations \iq@(InvertedQuery { backwardsCompiled, statesPerProperty: spProp, users: userTypes }) ->
+      if isCalculatedUserQuery iq && forwardStartsWithFilter iq then handleNewCalculatedUsersForBinding propertyBearingInstance propertyBearingInstance iq *> pure []
       else if invertedQueryHasRoleType iq then do
         -- Calculated property perspective query: backward ends at perspective object (RDOM).
         -- handleBackwardQuery applies backward to find context+users (with state checking).
         -- Apply backwardsCompiled again to get perspective objects for computeProperties.
-        cwus <- handleBackwardQuery propertyBearingInstance iq
         case backwardsCompiled of
           Just compiled -> do
             perspectiveObjects <- lift (propertyBearingInstance ##= (unsafeCoerce compiled :: RoleInstance ~~> RoleInstance))
-            computeProperties (singletonPath <<< R <$> perspectiveObjects) spProp cwus
-          Nothing -> pure unit
-      else void $ handleBackwardQuery propertyBearingInstance iq
+            nub <<< join <$> for perspectiveObjects \perspectiveObject -> do
+              ctxt <- lift (context' perspectiveObject)
+              -- compute the users in the same context as the perspective object.
+              nub <<< join <$> for userTypes \userType -> lift (ctxt ##= getRoleInstances userType)
+          Nothing -> pure []
+      else handleBackwardQuery propertyBearingInstance iq *> pure []
     -- The property might fall in a perspective. Compute the users and add deltas to the transaction.
     users <- addDeltasForPropertyChange propertyBearingInstance property replacementProperty
-    pure (nub users)
+    pure (nub $ users <> users1)
 
 -- | If the role instance or any of the roles it fills is the object of a perspective, add deltas to the transaction for the user(s) of that perspective
 -- | so that they will receive deltas that inform them about the property change.

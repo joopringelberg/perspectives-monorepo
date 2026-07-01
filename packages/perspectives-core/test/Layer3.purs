@@ -296,20 +296,21 @@ getSynchronisationResults = do
 executeModelTest :: PDRInstance -> PDRInstance -> ContextInstance -> PerspectivesUser -> PerspectivesUser -> String -> Aff SynchronisationResult
 executeModelTest pdrA pdrB testAppContextA alice bob testContextTypeR = do
 
-  runInPDR pdrA
-    ( do
-        setTopicLogLevel RESOURCE Trace
-        -- setTopicLogLevel STATE Trace
-        setTopicLogLevel SYNC Trace
-    --     setTopicLogLevel BROKER Trace
-    )
-  runInPDR pdrB
-    ( do
+  -- runInPDR pdrA
+  --   ( do
+  --       setTopicLogLevel RESOURCE Trace
+  --       setTopicLogLevel DELTA Trace
+  --       setTopicLogLevel STATE Trace
+  --       setTopicLogLevel SYNC Trace
+  --       setTopicLogLevel BROKER Trace
+  --   )
+  -- runInPDR pdrB
+  --   ( do
   --       setTopicLogLevel RESOURCE Trace
   --       setTopicLogLevel STATE Trace
-        setTopicLogLevel BROKER Trace
+  --       setTopicLogLevel BROKER Trace
   --       setTopicLogLevel SYNC Trace
-    )
+  --   )
   
   testContextType <- runInPDR pdrA
     (toStable (ContextType testContextTypeR))
