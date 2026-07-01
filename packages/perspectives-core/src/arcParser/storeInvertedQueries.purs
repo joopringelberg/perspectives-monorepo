@@ -432,19 +432,14 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                     -- By postpending the inverted perspective object to the property bearing role query, we get a complete inversion 
                     -- from the enumerated property to the context holding the subject (users).
                     -- As the first step of the complete inversion is a Value2Role step, it will be stored as a RTPropertyKey query.
-
-                    -- TODO: doe dit voor alle inverted queries.
-                    case fwdProp of
-                      Nothing ->
-                        storeInvertedQuery
-                          (ZQ (addTermOnRight <$> bwProp <*> (backwards qWithAK)) Nothing)
-                          users
-                          propStates
-                          (Map.singleton propType propStates)
-                          selfOnly
-                          authorOnly
-                          perspectiveStartPosition
-                      Just _ -> pure unit
+                    storeInvertedQuery
+                      (ZQ (addTermOnRight <$> bwProp <*> (backwards qWithAK)) fwdProp)
+                      users
+                      propStates
+                      (Map.singleton propType propStates)
+                      selfOnly
+                      authorOnly
+                      perspectiveStartPosition
                 ENP _ -> pure unit
         Just _ -> pure unit
 

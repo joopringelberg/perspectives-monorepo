@@ -976,10 +976,6 @@ aisInPropertyDelta
             -- backwards part computes from the property-bearing role instance the context of the users that should be informed.
             ctxts <- lift (propertyBearingInstance ##= (unsafeCoerce compiled :: RoleInstance ~~> ContextInstance))
             nub <<< join <$> for ctxts \ctxt -> nub <<< join <$> for userTypes \userType -> lift (ctxt ##= getRoleInstances userType)
-          -- nub <<< join <$> for perspectiveObjects \perspectiveObject -> do
-          --   ctxt <- lift (context' perspectiveObject)
-          --   -- compute the users in the same context as the perspective object.
-          --   nub <<< join <$> for userTypes \userType -> lift (ctxt ##= getRoleInstances userType)
           Nothing -> pure []
       else handleBackwardQuery propertyBearingInstance iq *> pure []
     -- The property might fall in a perspective. Compute the users and add deltas to the transaction.

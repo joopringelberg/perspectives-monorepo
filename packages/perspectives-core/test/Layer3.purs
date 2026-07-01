@@ -284,6 +284,7 @@ getSynchronisationResults = do
             , test_SetProperty
             , test_BindRole
             , test_BindRole_toContext
+            , test_BindRole_toContext2
             ]
           
 
@@ -439,4 +440,7 @@ test_BindRole = "model://joopringelberg.nl#SynchronisationTestModel$Test_BindRol
 
 test_BindRole_toContext :: String
 test_BindRole_toContext = "model://joopringelberg.nl#SynchronisationTestModel$Test_BindRole_toContext"
+
+test_BindRole_toContext2 :: String
+test_BindRole_toContext2 = "model://joopringelberg.nl#SynchronisationTestModel$Test_BindRole_toContext2"
 
