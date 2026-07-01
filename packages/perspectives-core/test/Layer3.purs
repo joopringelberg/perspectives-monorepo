@@ -50,9 +50,6 @@
 -- | network access that is not available in the standard CI environment.
 -- | To run these tests manually, pass `--only` to the test runner or select them
 -- | from the test menu.
--- |
--- | TODO: Enable sync suites below once the stub AMQP transport is implemented.
--- |       See docsources/nodejs-testing-architecture.md §3 for the design.
 
 module Test.Layer3 where
 
@@ -287,6 +284,7 @@ getSynchronisationResults = do
             , test_SetProperty
             , test_BindRole
             , test_BindRole_toContext
+            , test_BindRole_toContext2
             ]
           
 
@@ -299,20 +297,21 @@ getSynchronisationResults = do
 executeModelTest :: PDRInstance -> PDRInstance -> ContextInstance -> PerspectivesUser -> PerspectivesUser -> String -> Aff SynchronisationResult
 executeModelTest pdrA pdrB testAppContextA alice bob testContextTypeR = do
 
-  runInPDR pdrA
-    ( do
-        setTopicLogLevel RESOURCE Trace
-        -- setTopicLogLevel STATE Trace
-        setTopicLogLevel SYNC Trace
-    --     setTopicLogLevel BROKER Trace
-    )
-  runInPDR pdrB
-    ( do
+  -- runInPDR pdrA
+  --   ( do
+  --       setTopicLogLevel RESOURCE Trace
+  --       setTopicLogLevel DELTA Trace
+  --       setTopicLogLevel STATE Trace
+  --       setTopicLogLevel SYNC Trace
+  --       setTopicLogLevel BROKER Trace
+  --   )
+  -- runInPDR pdrB
+  --   ( do
   --       setTopicLogLevel RESOURCE Trace
   --       setTopicLogLevel STATE Trace
-        setTopicLogLevel BROKER Trace
+  --       setTopicLogLevel BROKER Trace
   --       setTopicLogLevel SYNC Trace
-    )
+  --   )
   
   testContextType <- runInPDR pdrA
     (toStable (ContextType testContextTypeR))
@@ -441,4 +440,7 @@ test_BindRole = "model://joopringelberg.nl#SynchronisationTestModel$Test_BindRol
 
 test_BindRole_toContext :: String
 test_BindRole_toContext = "model://joopringelberg.nl#SynchronisationTestModel$Test_BindRole_toContext"
+
+test_BindRole_toContext2 :: String
+test_BindRole_toContext2 = "model://joopringelberg.nl#SynchronisationTestModel$Test_BindRole_toContext2"
 

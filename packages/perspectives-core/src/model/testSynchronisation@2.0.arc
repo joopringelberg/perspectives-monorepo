@@ -214,6 +214,48 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
         props (P) verbs (Consult)
 
 ------------------------------------------------------------------------------
+---- This tests a another case of a calculated property.
+---- Here the crucial step is not to set the property but to close the path to it by filling a role.
+---- The crucial modification is to fill the role.
+---- The backwards path from EndFiller$Q to Follower is: Q to EndFiller -> EndFiller to Intermediate -> Intermediate to context. And then we find Follower.
+---- The test is to close the gap between Intermediate and EndFiller.
+---- Only then should we sync Endfiller with Q to Follower.
+------------------------------------------------------------------------------
+  case Test_Filler_to_Filled
+    aspect mm:Test
+    external
+      on entry
+        do for Leader
+          letA
+            endfiller <- create role EndFiller
+          in
+            Q = true for endfiller
+      state TestSucceeded = context >> Leader >> P
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      property P = context >> Intermediate >> binding >> Q
+      perspective on EndFiller
+        only (Create, Fill)
+        props (Q) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "Bind a role, query from role to context that closes a calculated property gap" for extern
+        bind EndFiller to Intermediate
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on Leader
+        props (P) verbs (Consult)
+    
+    thing Intermediate filledBy EndFiller
+
+    thing EndFiller
+      property Q (Boolean)
+
+------------------------------------------------------------------------------
 ---- This tests a query with traversal from a role to its filler.
 ---- The crucial modification is to fill the role.
 ------------------------------------------------------------------------------

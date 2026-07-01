@@ -798,7 +798,7 @@ roleContextualisations ctxt qualifiedRoleIdentifier = do
   -- Filter the object role types, keeping only those that the user role type has a perspective on.
   result <- lift $ concat <$> runArrayT (filterA (unsafePartial hasPerspectiveOnRole user) roleTypesToCreate')
   if null result then lift $ logWhen Trace RESOURCE
-  (show <$> (humanizePerspectivesWarning $ NoRoleTypesToCreate qualifiedRoleIdentifier ctxt user))
+    (show <$> (humanizePerspectivesWarning $ NoRoleTypesToCreate qualifiedRoleIdentifier ctxt user))
   else pure unit
   pure result
 
