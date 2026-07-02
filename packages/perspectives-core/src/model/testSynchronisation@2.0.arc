@@ -92,6 +92,8 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
 
   ------------------------------------------------------------------------------
   ---- TESTS. All these tests construct something in pdrA and check if it is synchronised in pdrB.
+  ---- The test description and name mention the crucial step in the ORIGINAL query that is tested.
+  ---- I also mention the runtime inverted query key that is used to fetch the inverted query for the INVERTED step.
   ------------------------------------------------------------------------------
   
   ------------------------------------------------------------------------------
@@ -127,6 +129,7 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
 
   ------------------------------------------------------------------------------
   ---- Create a role that is in scope of the Follower and has a property. Because it has a property, it is synchronised.
+  ---- It specifically tests the property setting step, viz inverted queries fetched with a RTPropertyKey.
   ------------------------------------------------------------------------------
   case Test_SetProperty
     aspect mm:Test
@@ -146,7 +149,7 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
           tr <- create role TestRole1
         in
           P = 1 for tr
-          TestName = "Set a property" for extern
+          TestName = "Test property step for enumerated property on perspective object" for extern
 
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
@@ -157,10 +160,49 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
       property P (Number)
 
   ------------------------------------------------------------------------------
-  ---- Create a role that is in scope of the Follower and fill it. The Follower should be able to see that it is filled.
-  ---- This tests a query from context to role.
+  ---- Set a property on the filler of a role that is in scope of the Follower.
+  ---- It specifically tests the property setting step, viz inverted queries fetched with a RTPropertyKey.
   ------------------------------------------------------------------------------
-  case Test_BindRole_toRole
+  case Test_SetProperty_on_Filler
+    aspect mm:Test
+    on entry
+      do for Leader
+        letA
+          trfiller <- create role TestRole2Filler
+        in
+          bind trfiller to TestRole2
+    external
+      state TestSucceeded = context >> TestRole2 >> P == 1
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on TestRole2
+        only (Create, Fill)
+      perspective on TestRole2Filler
+        only (Create)
+        props (P) verbs (Consult, SetPropertyValue)
+      action RunTest
+        P = 1 for TestRole2Filler
+        TestName = "Test property step for enumerated property on filler of perspective object" for extern
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on TestRole2
+        props (P) verbs (Consult)
+
+    thing TestRole2  filledBy TestRole2Filler
+    
+    thing TestRole2Filler
+      property P (Number)
+
+  ------------------------------------------------------------------------------
+  ---- Create a role that is in scope of the Follower and fill it. The Follower should be able to see that it is filled.
+  ---- It specifically tests the binding step (filling a role), viz inverted queries fetched with a RTFilledKey.
+  ------------------------------------------------------------------------------
+  case Test_Binding_Step
     aspect mm:Test
     external
       state TestSucceeded = exists context >> RoleToFill >> binding
@@ -177,7 +219,7 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
           rtf <- create role RoleToFill
         in
           bind_ me to rtf
-          TestName = "Bind a role, query from context to role" for extern
+          TestName = "Test binding step for simplest perspective query" for extern
 
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
@@ -188,9 +230,10 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
 
   ------------------------------------------------------------------------------
   ---- Create a role that is in scope of the Follower and fill it. The Follower should be able to see that it is filled.
-  ---- This tests a query from role to context.
+  ---- This tests a calculated property query (setting a property that is not on the perspective object).
+  ---- Tests inverted queries fetched with a RTPropertyKey.
   ------------------------------------------------------------------------------
-  case Test_BindRole_toContext
+  case Test_SetProperty_in_CalculatedProperty
     aspect mm:Test
     external
       property Q (Boolean)
@@ -205,7 +248,7 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
       perspective on extern
         props (Q) verbs (SetPropertyValue, Consult)
       action RunTest
-        TestName = "Bind a role, query from role to context" for extern
+        TestName = "Test property step in calculated property" for extern
         Q = true for extern
 
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
@@ -214,14 +257,15 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
         props (P) verbs (Consult)
 
 ------------------------------------------------------------------------------
----- This tests a another case of a calculated property.
+---- This tests another case of a calculated property.
 ---- Here the crucial step is not to set the property but to close the path to it by filling a role.
 ---- The crucial modification is to fill the role.
 ---- The backwards path from EndFiller$Q to Follower is: Q to EndFiller -> EndFiller to Intermediate -> Intermediate to context. And then we find Follower.
 ---- The test is to close the gap between Intermediate and EndFiller.
 ---- Only then should we sync Endfiller with Q to Follower.
+---- Tests inverted queries fetched with a RTFilledKey.
 ------------------------------------------------------------------------------
-  case Test_Filler_to_Filled
+  case Test_Binding_in_CalculatedProperty
     aspect mm:Test
     external
       on entry
@@ -242,7 +286,7 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
         only (Create, Fill)
         props (Q) verbs (SetPropertyValue, Consult)
       action RunTest
-        TestName = "Bind a role, query from role to context that closes a calculated property gap" for extern
+        TestName = "Test binding step in calculated property" for extern
         bind EndFiller to Intermediate
 
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
@@ -256,6 +300,88 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
       property Q (Boolean)
 
 ------------------------------------------------------------------------------
----- This tests a query with traversal from a role to its filler.
+---- This tests a query with traversal from a role to a role that it fills.
 ---- The crucial modification is to fill the role.
+---- Tests inverted queries fetched with a RTFillerKey.
 ------------------------------------------------------------------------------
+  case Test_Binder_in_CalculatedProperty -- Test_FILLER_step
+    aspect mm:Test
+    external
+      on entry
+        do for Leader
+          letA
+            intermediate <- create role Intermediate1
+          in
+            Q = true for intermediate
+      state TestSucceeded = context >> EndFiller1 >> P
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on EndFiller1
+        only (Create, Fill)
+        props (P) verbs (Consult)
+      perspective on Intermediate1
+        only (Create, Fill)
+        props (Q) verbs (SetPropertyValue, Consult)
+      action RunTest
+        letA
+          endfiller <- create role EndFiller1
+        in
+          TestName = "Test binder step in a calculated property" for extern
+          bind_ endfiller to Intermediate1
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on EndFiller1
+        props (P) verbs (Consult)
+    
+    thing Intermediate1 filledBy EndFiller1
+      property Q (Boolean)
+
+    thing EndFiller1
+      property P = binder Intermediate1 >> Q
+
+------------------------------------------------------------------------------
+---- This tests a query with a binding step for a calculated role.
+---- It tests inverted queries fetched with a RTFilledKey.
+------------------------------------------------------------------------------
+  case Test_Binding_in_CalculatedRole
+    aspect mm:Test
+    external
+      on entry
+        do for Leader
+          letA
+            endfiller <- create role EndFiller2
+          in
+            Q = true for endfiller
+      state TestSucceeded = context >> EndFiller2 >> Q
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on EndFiller2
+        only (Create, Fill)
+        props (Q) verbs (SetPropertyValue, Consult)
+      perspective on Intermediate2
+        only (Create, Fill)
+      action RunTest
+        TestName = "Test binding step in calculated role" for extern
+        bind EndFiller2 to Intermediate2
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on CalculatedEndFiller
+        props (Q) verbs (Consult)
+      
+    thing CalculatedEndFiller = Intermediate2 >> binding
+    
+    thing Intermediate2 filledBy EndFiller2
+
+    thing EndFiller2
+      property Q (Boolean)
+

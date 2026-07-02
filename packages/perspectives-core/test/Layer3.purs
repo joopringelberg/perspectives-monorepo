@@ -279,14 +279,7 @@ getSynchronisationResults = do
           ---- EXECUTE TESTS AND COLLECT RESULTS
           ---- Add a call for each test in model://joopringelberg.nl#SynchronisationTestModel
           -------------------------------------------------------------------------------
-          traverse runATest 
-            [ test_CreateRole
-            , test_SetProperty
-            , test_BindRole
-            , test_BindRole_toContext
-            , test_BindRole_toContext2
-            ]
-          
+          traverse runATest allTests           
 
       liftEffect $ write (Just results) cachedSynchronisationResults
       pure results
@@ -429,18 +422,38 @@ testNameProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test$Exte
 ---- One entry for each test in model://joopringelberg.nl#SynchronisationTestModel
 -------------------------------------------------------------------------------
 
+allTests :: Array String
+allTests =
+  [ test_CreateRole
+  , test_SetProperty
+  , test_SetProperty_on_Filler
+  , test_Binding_Step
+  , test_SetProperty_in_CalculatedProperty
+  , test_Binding_in_CalculatedProperty
+  , test_Binder_in_CalculatedProperty
+  , test_Binding_in_CalculatedRole
+  ]
+
 test_CreateRole :: String
 test_CreateRole = "model://joopringelberg.nl#SynchronisationTestModel$Test_CreateRole"
 
 test_SetProperty :: String
 test_SetProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test_SetProperty"
 
-test_BindRole :: String
-test_BindRole = "model://joopringelberg.nl#SynchronisationTestModel$Test_BindRole_toRole"
+test_Binding_Step :: String
+test_Binding_Step = "model://joopringelberg.nl#SynchronisationTestModel$Test_Binding_Step"
 
-test_BindRole_toContext :: String
-test_BindRole_toContext = "model://joopringelberg.nl#SynchronisationTestModel$Test_BindRole_toContext"
+test_SetProperty_in_CalculatedProperty :: String
+test_SetProperty_in_CalculatedProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test_SetProperty_in_CalculatedProperty"
 
-test_BindRole_toContext2 :: String
-test_BindRole_toContext2 = "model://joopringelberg.nl#SynchronisationTestModel$Test_BindRole_toContext2"
+test_Binding_in_CalculatedProperty :: String
+test_Binding_in_CalculatedProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test_Binding_in_CalculatedProperty"
 
+test_Binder_in_CalculatedProperty :: String
+test_Binder_in_CalculatedProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test_Binder_in_CalculatedProperty"
+
+test_SetProperty_on_Filler :: String
+test_SetProperty_on_Filler = "model://joopringelberg.nl#SynchronisationTestModel$Test_SetProperty_on_Filler"
+
+test_Binding_in_CalculatedRole :: String
+test_Binding_in_CalculatedRole = "model://joopringelberg.nl#SynchronisationTestModel$Test_Binding_in_CalculatedRole"
