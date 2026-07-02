@@ -27,7 +27,7 @@ import Prelude
 import Data.Foldable (intercalate)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, RoleType, StateIdentifier, roletype2string)
 import Perspectives.TypesForDeltas (RolePropertyDeltaType, UniverseContextDeltaType, UniverseRoleDeltaType)
 
@@ -140,4 +140,4 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ConstructedMinimalSelfPerspective contextType roleType) =
     "(ConstructedMinimalSelfPerspective) Constructed a minimal self-perspective for context type " <> show contextType <> " and role type " <> show roleType
   show (NoRoleInstanceToSetProperty property value) = "(NoRoleInstanceToSetProperty) No role instance found for property " <> unwrap property <> " to set value " <> show value
-  show (RoleInstanceAlreadyHasPropertyValue roleInstance property value) = "(RoleInstanceAlreadyHasPropertyValue) Role instance " <> show roleInstance <> " already has value " <> show value <> " for property " <> unwrap property  
+  show (RoleInstanceAlreadyHasPropertyValue roleInstance property value) = "(RoleInstanceAlreadyHasPropertyValue) Role instance " <> show roleInstance <> " already has value " <> show value <> " for property " <> unwrap property

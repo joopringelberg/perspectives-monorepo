@@ -518,10 +518,11 @@ deleteProperty rids propertyName mdelta = case ARR.head rids of
 -- | QUERY UPDATES
 -- | CURRENTUSER: there can be no change to the current user.
 setProperty :: Array RoleInstance -> EnumeratedPropertyType -> Maybe SignedDelta -> (Updater (Array Value))
-setProperty rids propertyName mdelta values = if null rids then lift ((show <$> humanizePerspectivesWarning (NoRoleInstanceToSetProperty propertyName values)) >>= warnResource)
-else do
-  rids' <- filterA hasDifferentValues rids
-  setProperty' rids'
+setProperty rids propertyName mdelta values =
+  if null rids then lift ((show <$> humanizePerspectivesWarning (NoRoleInstanceToSetProperty propertyName values)) >>= warnResource)
+  else do
+    rids' <- filterA hasDifferentValues rids
+    setProperty' rids'
   where
   hasDifferentValues :: RoleInstance -> MonadPerspectivesTransaction Boolean
   hasDifferentValues rid = do
