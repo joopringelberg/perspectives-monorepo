@@ -28,6 +28,7 @@ import Data.Foldable (intercalate)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, RoleType, StateIdentifier, roletype2string)
 import Perspectives.TypesForDeltas (RolePropertyDeltaType, UniverseContextDeltaType, UniverseRoleDeltaType)
 

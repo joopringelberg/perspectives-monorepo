@@ -258,6 +258,16 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
         props (P) verbs (Consult)
 
 ------------------------------------------------------------------------------
+---- Test another case of a calculated property.
+---- Here the perspective query ends with a binding step.
+------------------------------------------------------------------------------
+
+------------------------------------------------------------------------------
+---- Test another case of a calculated property.
+---- Here the perspective query ends with a binder step.
+------------------------------------------------------------------------------
+
+------------------------------------------------------------------------------
 ---- This tests another case of a calculated property.
 ---- Here the crucial step is not to set the property but to close the path to it by filling a role.
 ---- The crucial modification is to fill the role.

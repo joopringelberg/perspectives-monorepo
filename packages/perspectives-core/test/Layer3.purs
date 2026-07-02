@@ -447,18 +447,19 @@ testNameProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test$Exte
 allTests :: Array ModelTest
 allTests =
   [ 
-  --   { testContextTypeName: test_CreateRole, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_SetProperty, logConfiguration: emptyLogConfiguration }
-   { testContextTypeName: test_SetProperty_on_Filler, logConfiguration: 
-      { pdrA: [ { topic: SYNC, logLevel: Trace }
-              , { topic: RESOURCE, logLevel: Trace }
-              , { topic: BROKER, logLevel: Trace }]
-      , pdrB: [ ]} }
+    { testContextTypeName: test_CreateRole, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_SetProperty, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_SetProperty_on_Filler, logConfiguration: emptyLogConfiguration }
+      -- { pdrA: [ { topic: SYNC, logLevel: Trace }
+      --         , { topic: RESOURCE, logLevel: Trace }
+      --         , { topic: BROKER, logLevel: Trace }]
+      -- , pdrB: [ { topic: SYNC, logLevel: Trace }
+      --         , { topic: BROKER, logLevel: Trace }]}
   , { testContextTypeName: test_Binding_Step, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_SetProperty_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_Binding_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_Binder_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_Binding_in_CalculatedRole, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_SetProperty_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Binding_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Binder_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Binding_in_CalculatedRole, logConfiguration: emptyLogConfiguration }
   ]
 
 allOn :: Array TopicLogLevelPair
