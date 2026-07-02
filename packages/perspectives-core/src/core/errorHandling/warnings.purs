@@ -27,7 +27,7 @@ import Prelude
 import Data.Foldable (intercalate)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, RoleType, StateIdentifier, roletype2string)
 import Perspectives.TypesForDeltas (RolePropertyDeltaType, UniverseContextDeltaType, UniverseRoleDeltaType)
 
@@ -73,6 +73,8 @@ data PerspectivesWarning
   | NoRoleTypesToCreate EnumeratedRoleType ContextInstance RoleType
   | CannotConstructMinimalSelfPerspective ContextType RoleType
   | ConstructedMinimalSelfPerspective ContextType RoleType
+  | NoRoleInstanceToSetProperty EnumeratedPropertyType (Array Value)
+  | RoleInstanceAlreadyHasPropertyValue RoleInstance EnumeratedPropertyType (Array Value)
 
 instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ModelLacksModelId dfid) = "(ModelLacksModelId) The model '" <> dfid <> "' lacks a value for the property ModelIdentification on its Model instance."
@@ -137,3 +139,5 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
     "(CannotConstructMinimalSelfPerspective) Cannot construct a minimal self-perspective for context type " <> show contextType <> " and role type " <> show roleType
   show (ConstructedMinimalSelfPerspective contextType roleType) =
     "(ConstructedMinimalSelfPerspective) Constructed a minimal self-perspective for context type " <> show contextType <> " and role type " <> show roleType
+  show (NoRoleInstanceToSetProperty property value) = "(NoRoleInstanceToSetProperty) No role instance found for property " <> unwrap property <> " to set value " <> show value
+  show (RoleInstanceAlreadyHasPropertyValue roleInstance property value) = "(RoleInstanceAlreadyHasPropertyValue) Role instance " <> show roleInstance <> " already has value " <> show value <> " for property " <> unwrap property  

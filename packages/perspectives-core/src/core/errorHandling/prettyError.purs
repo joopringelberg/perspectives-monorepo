@@ -204,6 +204,12 @@ humanizePerspectivesWarning w = case w of
     contextType' <- toReadable contextType
     roleType' <- toReadable roleType
     pure (ConstructedMinimalSelfPerspective contextType' roleType')
+  NoRoleInstanceToSetProperty property value -> do
+    property' <- toReadable property
+    pure (NoRoleInstanceToSetProperty property' value)
+  RoleInstanceAlreadyHasPropertyValue roleInstance property value -> do
+    property' <- toReadable property
+    pure (RoleInstanceAlreadyHasPropertyValue roleInstance property' value)
 
   -- Default: leave unchanged.
   _ -> pure w
