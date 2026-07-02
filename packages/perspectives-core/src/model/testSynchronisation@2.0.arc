@@ -165,12 +165,13 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
   ------------------------------------------------------------------------------
   case Test_SetProperty_on_Filler
     aspect mm:Test
-    on entry
-      do for Leader
-        letA
-          trfiller <- create role TestRole2Filler
-        in
-          bind trfiller to TestRole2
+    state LeaderExists = exists Leader
+      on entry
+        do for Leader
+          letA
+            trfiller <- create role TestRole2Filler
+          in
+            bind trfiller to TestRole2
     external
       state TestSucceeded = context >> TestRole2 >> P == 1
         on entry
@@ -255,6 +256,16 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
       aspect mm:Test$Follower
       perspective on Leader
         props (P) verbs (Consult)
+
+------------------------------------------------------------------------------
+---- Test another case of a calculated property.
+---- Here the perspective query ends with a binding step.
+------------------------------------------------------------------------------
+
+------------------------------------------------------------------------------
+---- Test another case of a calculated property.
+---- Here the perspective query ends with a binder step.
+------------------------------------------------------------------------------
 
 ------------------------------------------------------------------------------
 ---- This tests another case of a calculated property.
