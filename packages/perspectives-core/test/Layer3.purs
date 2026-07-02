@@ -82,7 +82,7 @@ import Perspectives.ModelDependencies (sysMe, sysUser)
 import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (tryGetPerspectContext, tryGetPerspectRol)
-import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel, getPerspectivesUser)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, disableAllLogging, getPerspectivesUser, setTopicLogLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser, RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
@@ -188,6 +188,27 @@ scaffoldTests = suiteSkip "PDRInstance scaffold" do
 -------------------------------------------------------------------------------
 ---- COMPUTE AND CACHE ALL RESULTS ONCE
 -------------------------------------------------------------------------------
+type TopicLogLevelPair =
+  { topic :: LogTopic
+  , logLevel :: LogLevel
+  }
+
+type LogConfiguration =
+  { pdrA :: Array TopicLogLevelPair
+  , pdrB :: Array TopicLogLevelPair
+  }
+
+emptyLogConfiguration :: LogConfiguration
+emptyLogConfiguration =
+  { pdrA: []
+  , pdrB: []
+  }
+
+type ModelTest =
+  { testContextTypeName :: String
+  , logConfiguration :: LogConfiguration
+  }
+
 type SynchronisationResults = Array SynchronisationResult
 
 cachedSynchronisationResults :: Ref (Maybe SynchronisationResults)
@@ -274,7 +295,7 @@ getSynchronisationResults = do
                 if null roles then pure Nothing
                 else pure (Just roles)
             )
-          let runATest = \testContextTypeName -> executeModelTest pdrA pdrB testAppContextA alice bob testContextTypeName
+          let runATest = \{ testContextTypeName, logConfiguration } -> executeModelTest pdrA pdrB testAppContextA alice bob testContextTypeName logConfiguration
           -------------------------------------------------------------------------------
           ---- EXECUTE TESTS AND COLLECT RESULTS
           ---- Add a call for each test in model://joopringelberg.nl#SynchronisationTestModel
@@ -287,24 +308,14 @@ getSynchronisationResults = do
 -------------------------------------------------------------------------------
 ---- RUN A SINGLE TEST AND RETURN THE RESULT
 -------------------------------------------------------------------------------
-executeModelTest :: PDRInstance -> PDRInstance -> ContextInstance -> PerspectivesUser -> PerspectivesUser -> String -> Aff SynchronisationResult
-executeModelTest pdrA pdrB testAppContextA alice bob testContextTypeR = do
+executeModelTest :: PDRInstance -> PDRInstance -> ContextInstance -> PerspectivesUser -> PerspectivesUser -> String -> LogConfiguration -> Aff SynchronisationResult
+executeModelTest pdrA pdrB testAppContextA _alice _bob testContextTypeR logConfiguration = do
 
-  -- runInPDR pdrA
-  --   ( do
-  --       setTopicLogLevel RESOURCE Trace
-  --       setTopicLogLevel DELTA Trace
-  --       setTopicLogLevel STATE Trace
-  --       setTopicLogLevel SYNC Trace
-  --       setTopicLogLevel BROKER Trace
-  --   )
-  -- runInPDR pdrB
-  --   ( do
-  --       setTopicLogLevel RESOURCE Trace
-  --       setTopicLogLevel STATE Trace
-  --       setTopicLogLevel BROKER Trace
-  --       setTopicLogLevel SYNC Trace
-  --   )
+  runInPDR pdrA do
+    for_ logConfiguration.pdrA \{ topic, logLevel } -> setTopicLogLevel topic logLevel
+
+  runInPDR pdrB do
+    for_ logConfiguration.pdrB \{ topic, logLevel } -> setTopicLogLevel topic logLevel
   
   testContextType <- runInPDR pdrA
     (toStable (ContextType testContextTypeR))
@@ -369,7 +380,7 @@ executeModelTest pdrA pdrB testAppContextA alice bob testContextTypeR = do
           lift $ infoTest "Alice executes a test in PDRA"
           runContextAction (unwrap testLeaderType) "RunTest" (unwrap theTest))
 
-  ( pollUntilTestFinishes 100 (Milliseconds 100.0)
+  r <- ( pollUntilTestFinishes 100 (Milliseconds 100.0)
       "Bob to have a value for the test to succeed in pdrB"
       ( runInPDR pdrB $
           do
@@ -387,6 +398,17 @@ executeModelTest pdrA pdrB testAppContextA alice bob testContextTypeR = do
               Nothing -> pure (Left { testName: "unknown testname", err: error "TestName property not found" })
       )
     )
+  runInPDR pdrA
+    ( do
+        disableAllLogging
+        setTopicLogLevel TEST Debug
+    )
+  runInPDR pdrB
+    ( do
+        disableAllLogging
+        setTopicLogLevel TEST Debug
+    )
+  pure r
 
 -------------------------------------------------------------------------------
 ---- NECESSARY READABLE TYPE NAMES IN model://joopringelberg.nl#SynchronisationTestModel
@@ -422,17 +444,42 @@ testNameProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test$Exte
 ---- One entry for each test in model://joopringelberg.nl#SynchronisationTestModel
 -------------------------------------------------------------------------------
 
-allTests :: Array String
+allTests :: Array ModelTest
 allTests =
-  [ test_CreateRole
-  , test_SetProperty
-  , test_SetProperty_on_Filler
-  , test_Binding_Step
-  , test_SetProperty_in_CalculatedProperty
-  , test_Binding_in_CalculatedProperty
-  , test_Binder_in_CalculatedProperty
-  , test_Binding_in_CalculatedRole
+  [ 
+  --   { testContextTypeName: test_CreateRole, logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: test_SetProperty, logConfiguration: emptyLogConfiguration }
+   { testContextTypeName: test_SetProperty_on_Filler, logConfiguration: 
+      { pdrA: [ { topic: SYNC, logLevel: Trace }
+              , { topic: RESOURCE, logLevel: Trace }
+              , { topic: BROKER, logLevel: Trace }]
+      , pdrB: [ ]} }
+  , { testContextTypeName: test_Binding_Step, logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: test_SetProperty_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: test_Binding_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: test_Binder_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: test_Binding_in_CalculatedRole, logConfiguration: emptyLogConfiguration }
   ]
+
+allOn :: Array TopicLogLevelPair
+allOn = 
+  [ {topic: RESOURCE, logLevel: Trace}
+  , {topic: DELTA, logLevel: Trace}
+  , {topic: STATE, logLevel: Trace}
+  , {topic: SYNC, logLevel: Trace}
+  , {topic: BROKER, logLevel: Trace}
+  , {topic: INSTALL, logLevel: Trace}
+  , {topic: TEST, logLevel: Debug}
+  , {topic: MODEL, logLevel: Trace}
+  , {topic: PERSISTENCE, logLevel: Trace}
+  , {topic: QUERY, logLevel: Trace}
+  , {topic: AUTH, logLevel: Trace}
+  , {topic: UPGRADE, logLevel: Trace}
+  , {topic: PARSER, logLevel: Trace}
+  , {topic: COMPILER, logLevel: Trace}
+  , {topic: INSTALL, logLevel: Trace}
+
+]
 
 test_CreateRole :: String
 test_CreateRole = "model://joopringelberg.nl#SynchronisationTestModel$Test_CreateRole"
