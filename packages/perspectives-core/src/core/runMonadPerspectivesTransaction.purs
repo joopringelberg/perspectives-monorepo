@@ -50,7 +50,7 @@ import Perspectives.Identifiers (hasLocalName)
 import Perspectives.Instances.Combinators (exists')
 import Perspectives.Instances.Me (getMyType)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context, contextType, filler2filledFromDatabase_, getActiveRoleStates, getActiveStates, roleType, roleType_)
-import Perspectives.Logging (debugState, warnState)
+import Perspectives.Logging (debugState, traceState, warnState)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (tryRemoveEntiteit)
 import Perspectives.PerspectivesState (addBinding, addWarning, clearPublicRolesJustLoaded, decreaseTransactionLevel, getPublicRolesJustLoaded, increaseTransactionLevel, nextTransactionNumber, pushFrame, restoreFrame, transactionFlag, transactionLevel)
@@ -496,7 +496,7 @@ evaluateStates stateEvaluations' =
       let k = stateKeyForContext stateId contextId
       already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
       -- Evaluate a state only once per transaction. If it has already been evaluated, we skip it.
-      if already then pure unit
+      if already then (lift $ humanizePerspectivesWarning (StateHasBeenEvaluatedBefore contextId stateId) >>= traceState <<< show) *> pure unit
       else do
         -- Provide a new frame for the current context variable binding.
         oldFrame <- lift pushFrame

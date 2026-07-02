@@ -213,6 +213,9 @@ humanizePerspectivesWarning w = case w of
   NoUserForContextStateEvaluation contextInstance stateIds -> do
     stateIds' <- traverse toReadable stateIds
     pure (NoUserForContextStateEvaluation contextInstance stateIds')
+  StateHasBeenEvaluatedBefore contextInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (StateHasBeenEvaluatedBefore contextInstance stateId')
 
   -- Default: leave unchanged.
   _ -> pure w

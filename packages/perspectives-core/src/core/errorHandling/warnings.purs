@@ -76,6 +76,7 @@ data PerspectivesWarning
   | NoRoleInstanceToSetProperty EnumeratedPropertyType (Array Value)
   | RoleInstanceAlreadyHasPropertyValue RoleInstance EnumeratedPropertyType (Array Value)
   | NoUserForContextStateEvaluation ContextInstance (Array StateIdentifier)
+  | StateHasBeenEvaluatedBefore ContextInstance StateIdentifier
 
 instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ModelLacksModelId dfid) = "(ModelLacksModelId) The model '" <> dfid <> "' lacks a value for the property ModelIdentification on its Model instance."
@@ -143,3 +144,4 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (NoRoleInstanceToSetProperty property value) = "(NoRoleInstanceToSetProperty) No role instance found for property " <> unwrap property <> " to set value " <> show value
   show (RoleInstanceAlreadyHasPropertyValue roleInstance property value) = "(RoleInstanceAlreadyHasPropertyValue) Role instance " <> show roleInstance <> " already has value " <> show value <> " for property " <> unwrap property  
   show (NoUserForContextStateEvaluation contextInstance stateIds) = "(NoUserForContextStateEvaluation) No user role instance found for context " <> show contextInstance <> " to evaluate states " <> show stateIds
+  show (StateHasBeenEvaluatedBefore contextInstance stateId) = "(StateHasBeenEvaluatedBefore) State " <> show stateId <> " has already been evaluated for context " <> show contextInstance
