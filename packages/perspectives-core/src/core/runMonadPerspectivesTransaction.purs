@@ -395,13 +395,12 @@ runSharing share authoringRole t =
     lift $ debugState $ padding <> "returning to nonsharing transaction " <> show transactionNumber <> " from sharing transaction."
     pure r
 
--- Add to each context or role instance the user role type and the RootState type.
+-- Use the specific StateIdentifier carried by each InvertedQueryResult to create a targeted StateEvaluation.
+-- This allows multiple distinct states of the same resource to be evaluated within a single transaction.
 computeStateEvaluations :: InvertedQueryResult -> MonadPerspectives (Array StateEvaluation)
-computeStateEvaluations (ContextStateQuery contextInstances) = join <$> do
+computeStateEvaluations (ContextStateQuery stateId contextInstances) = join <$> do
   activeInstances <- filterA (\rid -> rid ##>> exists' getActiveStates) contextInstances
   for activeInstances \cid -> do
-    -- States includes root states of Aspects.
-    states <- cid ##= contextType >=> liftToInstanceLevel contextRootStates
     -- Note that the user may play different roles in the various context instances.
     (mmyType :: Maybe RoleType) <- cid ##> getMyType
     case mmyType of
@@ -412,18 +411,16 @@ computeStateEvaluations (ContextStateQuery contextInstances) = join <$> do
           case mmguest of
             -- If the Guest role is not filled, don't execute bots on its behalf!
             Nothing -> pure []
-            otherwise -> pure $ (\state -> ContextStateEvaluation state cid) <$> states
-        else pure $ (\state -> ContextStateEvaluation state cid) <$> states
-      Just _ -> pure $ (\state -> ContextStateEvaluation state cid) <$> states
+            otherwise -> pure [ContextStateEvaluation stateId cid]
+        else pure [ContextStateEvaluation stateId cid]
+      Just _ -> pure [ContextStateEvaluation stateId cid]
 
-computeStateEvaluations (RoleStateQuery roleInstances) = join <$> do
+computeStateEvaluations (RoleStateQuery stateId roleInstances) = join <$> do
   activeInstances <- filterA (\rid -> rid ##>> exists' getActiveRoleStates) roleInstances
   -- If the roleInstance has no recorded states, this means it has been marked for removal
   -- and has exited all its states. We should not do that again!
   for activeInstances \rid -> do
     (mmyType :: Maybe RoleType) <- rid ##> context >=> getMyType
-    -- Neem aspecten hier ook mee!
-    states <- rid ##= roleType >=> liftToInstanceLevel roleRootStates
     case mmyType of
       Nothing -> pure []
       Just (CR myType) ->
@@ -431,9 +428,9 @@ computeStateEvaluations (RoleStateQuery roleInstances) = join <$> do
           (mmguest :: Maybe RoleInstance) <- rid ##> context >=> getCalculatedRoleInstances myType
           case mmguest of
             Nothing -> pure []
-            otherwise -> pure $ (\state -> RoleStateEvaluation state rid) <$> states
-        else pure $ (\state -> RoleStateEvaluation state rid) <$> states
-      Just _ -> pure $ (\state -> RoleStateEvaluation state rid) <$> states
+            otherwise -> pure [RoleStateEvaluation stateId rid]
+        else pure [RoleStateEvaluation stateId rid]
+      Just _ -> pure [RoleStateEvaluation stateId rid]
 
 isGuestRole :: CalculatedRoleType -> Boolean
 isGuestRole (CalculatedRoleType cr) = cr `hasLocalName` "Guest"

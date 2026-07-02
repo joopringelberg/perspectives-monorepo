@@ -25,7 +25,7 @@ module Perspectives.CollectAffectedContexts where
 import Control.Monad.AvarMonadAsk (modify, gets) as AA
 import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Reader (lift)
-import Data.Array (concat, cons, difference, elemIndex, filter, filterA, foldM, head, length, nub, null, union)
+import Data.Array (concat, cons, difference, elemIndex, filter, filterA, foldM, head, length, nub, null, union, unsafeIndex)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Map (isEmpty)
 import Data.Maybe (Maybe(..), fromJust, isJust, isNothing)
@@ -270,7 +270,7 @@ handleBackwardQuery roleInstance iq@(InvertedQuery { description, backwardsCompi
   createContextStateQuery = do
     (invertedQueryResults :: Array ContextInstance) <- lift (roleInstance ##= (unsafeCoerce (unsafePartial fromJust backwardsCompiled) :: RoleInstance ~~> ContextInstance))
     if null invertedQueryResults then pure unit
-    else addInvertedQueryResult $ ContextStateQuery invertedQueryResults
+    else addInvertedQueryResult $ ContextStateQuery (unsafePartial $ unsafeIndex states 0) invertedQueryResults
 
   -- | The InvertedQuery is based on a Role state condition.
   -- | This function adds, as a side effect, an InvertedQueryResult to the current transaction.
@@ -278,7 +278,7 @@ handleBackwardQuery roleInstance iq@(InvertedQuery { description, backwardsCompi
   createRoleStateQuery = do
     -- Apply the compiled backwards query.
     (affectedRoles :: Array RoleInstance) <- lift (roleInstance ##= (unsafeCoerce (unsafePartial fromJust backwardsCompiled) :: RoleInstance ~~> RoleInstance))
-    addInvertedQueryResult $ RoleStateQuery affectedRoles
+    addInvertedQueryResult $ RoleStateQuery (unsafePartial $ unsafeIndex states 0) affectedRoles
 
 -- | The InvertedQuery is based on an explicit or implicit perspective.
 -- | This function has no side effect but returns, bundled in their respective contexts, users with
@@ -385,12 +385,12 @@ usersWithAnActivePerspective roleInstance iq@(InvertedQuery { description, backw
 
 -- | Adds the InvertedQueryResult to the current Transaction, but only if the resource is not marked as (to be) removed.
 addInvertedQueryResult :: InvertedQueryResult -> MonadPerspectivesTransaction Unit
-addInvertedQueryResult (ContextStateQuery ctxts) = AA.modify \(Transaction r@{ invertedQueryResults, untouchableContexts }) -> case difference ctxts untouchableContexts of
+addInvertedQueryResult (ContextStateQuery sid ctxts) = AA.modify \(Transaction r@{ invertedQueryResults, untouchableContexts }) -> case difference ctxts untouchableContexts of
   nothing | null nothing -> Transaction r
-  ctxts' -> Transaction (r { invertedQueryResults = union [ ContextStateQuery ctxts' ] invertedQueryResults })
-addInvertedQueryResult (RoleStateQuery roles) = AA.modify \(Transaction r@{ invertedQueryResults, untouchableRoles }) -> case difference roles untouchableRoles of
+  ctxts' -> Transaction (r { invertedQueryResults = union [ ContextStateQuery sid ctxts' ] invertedQueryResults })
+addInvertedQueryResult (RoleStateQuery sid roles) = AA.modify \(Transaction r@{ invertedQueryResults, untouchableRoles }) -> case difference roles untouchableRoles of
   nothing | null nothing -> Transaction r
-  roles' -> Transaction (r { invertedQueryResults = union [ RoleStateQuery roles' ] invertedQueryResults })
+  roles' -> Transaction (r { invertedQueryResults = union [ RoleStateQuery sid roles' ] invertedQueryResults })
 
 -----------------------------------------------------------
 -- FOR ROLEBINDING DELTAS
