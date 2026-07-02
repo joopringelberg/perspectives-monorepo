@@ -40,7 +40,7 @@ import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo', addStorableInvertedQuer
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.Kinked (invert)
-import Perspectives.Query.QueryTypes (Domain, QueryFunctionDescription(..), Range, RoleInContext(..), addTermOnRight, domain, domain2roleInContext, makeComposition, mandatory, range)
+import Perspectives.Query.QueryTypes (Domain, QueryFunctionDescription(..), Range, RoleInContext(..), addTermOnRight, domain, domain2roleInContext, isRoleDomain, makeComposition, mandatory, range)
 import Perspectives.Representation.ADT (allLeavesInADT)
 import Perspectives.Representation.Class.PersistentType (getCalculatedProperty)
 import Perspectives.Representation.Class.Property (calculation)
@@ -413,35 +413,6 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
             )
         , model
         }
-      -- When the perspective object has been fully inverted (no remaining forward steps), also
-      -- handle calculated properties: invert each property's calculation and combine with the
-      -- backwards path so that peers are notified when the underlying enumerated properties change.
-      case forwards qWithAK of
-        Nothing ->
-          for_ (Map.toUnfoldable statesPerProperty :: Array (Tuple PropertyType (Array StateIdentifier)))
-            \(Tuple propType propStates) ->
-              case propType of
-                CP calcPropType -> do
-                  propCalc <- lift $ lift2 $ (getCalculatedProperty >=> calculation) calcPropType
-                  propInversions <- lift $ invert propCalc
-                  for_ propInversions \(ZQ bwProp fwdProp) ->
-                    -- Only handle complete inversions (kink at the leaf enumerated property) to avoid
-                    -- infinite recursion through nested calculated properties.  The backwards path
-                    -- `bwProp` ends at the perspective object (RDOM). 
-                    -- Let's call bwProp the "property to bearing role" query and the backwards path of the perspective object the "inverted perspective object"
-                    -- By postpending the inverted perspective object to the property bearing role query, we get a complete inversion 
-                    -- from the enumerated property to the context holding the subject (users).
-                    -- As the first step of the complete inversion is a Value2Role step, it will be stored as a RTPropertyKey query.
-                    storeInvertedQuery
-                      (ZQ (addTermOnRight <$> bwProp <*> (backwards qWithAK)) fwdProp)
-                      users
-                      propStates
-                      (Map.singleton propType propStates)
-                      selfOnly
-                      authorOnly
-                      perspectiveStartPosition
-                ENP _ -> pure unit
-        Just _ -> pure unit
 
     -- The query would be added to roleInvertedQueries of the context. Such inverse queries are run when a new
     -- instance of the role type is added to the context (or when it is removed). But the external role never changes,
@@ -507,6 +478,17 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
 
     _ -> lift $ throwError $ Custom "setPathForStep: there should be no other cases. This is a system programming error."
 
+  -- For any inversion step whose domain is a role domain and that has no remaining
+  -- forward path, also store calculated-property perspective queries.
+  storeCalculatedPropertyPerspectiveQueries
+    qfd
+    qWithAK
+    users
+    statesPerProperty
+    selfOnly
+    authorOnly
+    perspectiveStartPosition
+
 setPathForStep (MQD _ qf _ _ _ _) qWithAK users states statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType =
   case qf of
     -- ExternalCoreRoleGetter is the inversion of a role individual step, such as sys:Me,
@@ -531,6 +513,50 @@ setPathForStep (MQD _ qf _ _ _ _) qWithAK users states statesPerProperty selfOnl
     -- a query that is kinked at this step.
     QF.ExternalCoreContextGetter f -> pure unit
     _ -> lift $ throwError $ Custom $ "setPathForStep: uncovered case:" <> show qf <> " in MQD. This is a system programming error."
+
+-- | When an inversion step starts from a role domain and has no remaining forward
+-- | path, the perspective-object query has reached its destination role. In that
+-- | case, also index calculated-property queries so updates in their underlying
+-- | enumerated properties can trigger affected-user detection.
+storeCalculatedPropertyPerspectiveQueries
+  :: Partial
+  => QueryFunctionDescription
+  -> QueryWithAKink
+  -> Array RoleType
+  -> Map.Map PropertyType (Array StateIdentifier)
+  -> Boolean
+  -> Boolean
+  -> Maybe ArcPosition
+  -> WithModificationSummary Unit
+storeCalculatedPropertyPerspectiveQueries qfd qWithAK users statesPerProperty selfOnly authorOnly perspectiveStartPosition =
+  if isRoleDomain (domain qfd) then
+    case forwards qWithAK of
+      Nothing ->
+        for_ (Map.toUnfoldable statesPerProperty :: Array (Tuple PropertyType (Array StateIdentifier)))
+          \(Tuple propType propStates) ->
+            case propType of
+              CP calcPropType -> do
+                propCalc <- lift $ lift2 $ (getCalculatedProperty >=> calculation) calcPropType
+                propInversions <- lift $ invert propCalc
+                for_ propInversions \(ZQ bwProp fwdProp) ->
+                  -- Only handle complete inversions (kink at the leaf enumerated property) to avoid
+                  -- infinite recursion through nested calculated properties. The backwards path
+                  -- `bwProp` ends at the perspective object (RDOM).
+                  -- Let's call bwProp the "property to bearing role" query and the backwards path of the perspective object the "inverted perspective object"
+                  -- By postpending the inverted perspective object to the property bearing role query, we get a complete inversion
+                  -- from the enumerated property to the context holding the subject (users).
+                  -- As the first step of the complete inversion is a Value2Role step, it will be stored as a RTPropertyKey query.
+                  storeInvertedQuery
+                    (ZQ (addTermOnRight <$> bwProp <*> (backwards qWithAK)) fwdProp)
+                    users
+                    propStates
+                    (Map.singleton propType propStates)
+                    selfOnly
+                    authorOnly
+                    perspectiveStartPosition
+              ENP _ -> pure unit
+      Just _ -> pure unit
+  else pure unit
 
 ------------------------------------------------------------------------------------------
 ---- REMOVE FIRST BACKWARDS STEP
