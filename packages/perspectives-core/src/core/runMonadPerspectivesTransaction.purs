@@ -411,9 +411,9 @@ computeStateEvaluations (ContextStateQuery stateId contextInstances) = join <$> 
           case mmguest of
             -- If the Guest role is not filled, don't execute bots on its behalf!
             Nothing -> pure []
-            otherwise -> pure [ContextStateEvaluation stateId cid]
-        else pure [ContextStateEvaluation stateId cid]
-      Just _ -> pure [ContextStateEvaluation stateId cid]
+            otherwise -> pure [ ContextStateEvaluation stateId cid ]
+        else pure [ ContextStateEvaluation stateId cid ]
+      Just _ -> pure [ ContextStateEvaluation stateId cid ]
 
 computeStateEvaluations (RoleStateQuery stateId roleInstances) = join <$> do
   activeInstances <- filterA (\rid -> rid ##>> exists' getActiveRoleStates) roleInstances
@@ -428,9 +428,9 @@ computeStateEvaluations (RoleStateQuery stateId roleInstances) = join <$> do
           (mmguest :: Maybe RoleInstance) <- rid ##> context >=> getCalculatedRoleInstances myType
           case mmguest of
             Nothing -> pure []
-            otherwise -> pure [RoleStateEvaluation stateId rid]
-        else pure [RoleStateEvaluation stateId rid]
-      Just _ -> pure [RoleStateEvaluation stateId rid]
+            otherwise -> pure [ RoleStateEvaluation stateId rid ]
+        else pure [ RoleStateEvaluation stateId rid ]
+      Just _ -> pure [ RoleStateEvaluation stateId rid ]
 
 isGuestRole :: CalculatedRoleType -> Boolean
 isGuestRole (CalculatedRoleType cr) = cr `hasLocalName` "Guest"
