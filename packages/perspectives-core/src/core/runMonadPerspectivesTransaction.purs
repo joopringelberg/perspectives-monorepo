@@ -43,13 +43,14 @@ import Perspectives.ContextStateCompiler (enteringState, evaluateContextState, e
 import Perspectives.CoreTypes (MPT, MonadPerspectives, MonadPerspectivesTransaction, liftToInstanceLevel, (##=), (##>), (##>>))
 import Perspectives.Deltas (TransactionPerUser, distributeTransaction)
 import Perspectives.DependencyTracking.Dependency (lookupActiveSupportedEffect)
+import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionNArgs)
 import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.Identifiers (hasLocalName)
 import Perspectives.Instances.Combinators (exists')
 import Perspectives.Instances.Me (getMyType)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context, contextType, filler2filledFromDatabase_, getActiveRoleStates, getActiveStates, roleType, roleType_)
-import Perspectives.Logging (debugState, warnState)
+import Perspectives.Logging (debugState, traceState, warnState)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (tryRemoveEntiteit)
 import Perspectives.PerspectivesState (addBinding, addWarning, clearPublicRolesJustLoaded, decreaseTransactionLevel, getPublicRolesJustLoaded, increaseTransactionLevel, nextTransactionNumber, pushFrame, restoreFrame, transactionFlag, transactionLevel)
@@ -400,17 +401,19 @@ runSharing share authoringRole t =
 computeStateEvaluations :: InvertedQueryResult -> MonadPerspectives (Array StateEvaluation)
 computeStateEvaluations (ContextStateQuery stateId contextInstances) = join <$> do
   activeInstances <- filterA (\rid -> rid ##>> exists' getActiveStates) contextInstances
+  if null activeInstances then warnState ("No active context instances for state evaluation in " <> show contextInstances)
+  else pure unit
   for activeInstances \cid -> do
     -- Note that the user may play different roles in the various context instances.
     (mmyType :: Maybe RoleType) <- cid ##> getMyType
     case mmyType of
-      Nothing -> pure []
+      Nothing -> (humanizePerspectivesWarning (NoUserForContextStateEvaluation cid states) >>= warnState <<< show) *> pure []
       Just (CR myType) ->
         if isGuestRole myType then do
           (mmguest :: Maybe RoleInstance) <- cid ##> getCalculatedRoleInstances myType
           case mmguest of
             -- If the Guest role is not filled, don't execute bots on its behalf!
-            Nothing -> pure []
+            Nothing -> (humanizePerspectivesWarning (NoUserForContextStateEvaluation cid states) >>= warnState <<< show) *> pure []
             otherwise -> pure [ ContextStateEvaluation stateId cid ]
         else pure [ ContextStateEvaluation stateId cid ]
       Just _ -> pure [ ContextStateEvaluation stateId cid ]
@@ -488,14 +491,15 @@ evaluateStates stateEvaluations' =
     ContextStateEvaluation stateId contextId -> do
       let k = stateKeyForContext stateId contextId
       already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
-      if already then pure unit
+      -- Evaluate a state only once per transaction. If it has already been evaluated, we skip it.
+      if already then (lift $ humanizePerspectivesWarning (StateHasBeenEvaluatedBefore contextId stateId) >>= traceState <<< show) *> pure unit
       else do
         -- Provide a new frame for the current context variable binding.
         oldFrame <- lift pushFrame
         lift $ addBinding "currentcontext" [ unwrap contextId ]
         (evaluateContextState contextId stateId)
         lift $ restoreFrame oldFrame
-        -- Register that we executed automatic actions for this (state, context)
+        -- Register that we evaluated this (state, context)
         AA.modify \t -> over Transaction (\tr -> tr { executedStateKeys = Set.insert k tr.executedStateKeys }) t
     RoleStateEvaluation stateId roleId -> do
       let k = stateKeyForRole stateId roleId
