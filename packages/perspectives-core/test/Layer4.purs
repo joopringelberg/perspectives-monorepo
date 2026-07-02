@@ -284,11 +284,11 @@ testNameProperty = "model://joopringelberg.nl#StateTestModel$Test$External$TestN
 allTests :: Array ModelTest
 allTests =
   [
-  { testContextTypeName: test_ContextState_RoleExists, logConfiguration: 
-    { pdr: [ { topic: STATE, logLevel: Trace }
-            , { topic: RESOURCE, logLevel: Trace }
-           ]
-    } },
+  { testContextTypeName: test_ContextState_RoleExists, logConfiguration: emptyLogConfiguration },
+    -- { pdr: [ { topic: STATE, logLevel: Trace }
+    --         , { topic: RESOURCE, logLevel: Trace }
+    --        ]
+    -- } },
   { testContextTypeName: test_RoleState_RoleExists, logConfiguration: emptyLogConfiguration }
   ]
 
