@@ -252,29 +252,29 @@ executeModelTest pdr testAppContext testContextTypeR logConfiguration = do
 ---- READABLE TYPE NAMES IN THE TEST MODEL
 ---- Update these constants to match the names used in the test model.
 -------------------------------------------------------------------------------
--- | The URL of the single-PDR test model to load.
+-- | The URI of the single-PDR test model to load. This should be a stable identifier.
 testModel :: String
-testModel = "model://joopringelberg.nl#SinglePDRTestModel@1.0"
+testModel = "model://joopringelberg.nl#u01vncbjik@1.0"
 
 -- | The indexed context name for the root TestApp instance created by the model.
 indexedTestContext :: String
-indexedTestContext = "model://joopringelberg.nl#SinglePDRTestModel$TestApp"
+indexedTestContext = "model://joopringelberg.nl#StateTestModel$TestStateApp"
 
 -- | The calculated Manager role of the root TestApp.
 testAppManager :: String
-testAppManager = "model://joopringelberg.nl#SinglePDRTestModel$TestApp$Manager"
+testAppManager = "model://joopringelberg.nl#StateTestModel$TestApp$Manager"
 
 -- | The Tests role in the root TestApp.
 testsType :: String
-testsType = "model://joopringelberg.nl#SinglePDRTestModel$TestApp$Tests"
+testsType = "model://joopringelberg.nl#StateTestModel$TestApp$Tests"
 
 -- | The property that records whether a test succeeded ("true"/"false").
 testSucceededProperty :: String
-testSucceededProperty = "model://joopringelberg.nl#SinglePDRTestModel$Test$External$TestSucceeded"
+testSucceededProperty = "model://joopringelberg.nl#StateTestModel$Test$External$TestSucceeded"
 
 -- | The property that records the human-readable test name.
 testNameProperty :: String
-testNameProperty = "model://joopringelberg.nl#SinglePDRTestModel$Test$External$TestName"
+testNameProperty = "model://joopringelberg.nl#StateTestModel$Test$External$TestName"
 
 -------------------------------------------------------------------------------
 ---- THE TESTS
@@ -284,13 +284,17 @@ testNameProperty = "model://joopringelberg.nl#SinglePDRTestModel$Test$External$T
 allTests :: Array ModelTest
 allTests =
   [
-  -- Example — uncomment and replace with the actual test context type names:
-  -- { testContextTypeName: test_Example, logConfiguration: emptyLogConfiguration }
+  { testContextTypeName: test_ContextState_RoleExists, logConfiguration: 
+    { pdr: [ { topic: STATE, logLevel: Trace }
+            , { topic: RESOURCE, logLevel: Trace }
+           ]
+    } },
+  { testContextTypeName: test_RoleState_RoleExists, logConfiguration: emptyLogConfiguration }
   ]
 
 -- Example test context type name constant:
 -- test_Example :: String
--- test_Example = "model://joopringelberg.nl#SinglePDRTestModel$Test_Example"
+-- test_Example = "model://joopringelberg.nl#StateTestModel$Test_Example"
 
 allOn :: Array TopicLogLevelPair
 allOn =
@@ -309,3 +313,9 @@ allOn =
   , { topic: PARSER, logLevel: Trace }
   , { topic: COMPILER, logLevel: Trace }
   ]
+
+test_ContextState_RoleExists :: String
+test_ContextState_RoleExists = "model://joopringelberg.nl#StateTestModel$Test_ContextState_RoleExists"
+
+test_RoleState_RoleExists :: String
+test_RoleState_RoleExists = "model://joopringelberg.nl#StateTestModel$Test_RoleState_RoleExists"

@@ -210,6 +210,9 @@ humanizePerspectivesWarning w = case w of
   RoleInstanceAlreadyHasPropertyValue roleInstance property value -> do
     property' <- toReadable property
     pure (RoleInstanceAlreadyHasPropertyValue roleInstance property' value)
+  NoUserForContextStateEvaluation contextInstance stateIds -> do
+    stateIds' <- traverse toReadable stateIds
+    pure (NoUserForContextStateEvaluation contextInstance stateIds')
 
   -- Default: leave unchanged.
   _ -> pure w

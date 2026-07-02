@@ -165,12 +165,13 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
   ------------------------------------------------------------------------------
   case Test_SetProperty_on_Filler
     aspect mm:Test
-    on entry
-      do for Leader
-        letA
-          trfiller <- create role TestRole2Filler
-        in
-          bind trfiller to TestRole2
+    state LeaderExists = exists Leader
+      on entry
+        do for Leader
+          letA
+            trfiller <- create role TestRole2Filler
+          in
+            bind trfiller to TestRole2
     external
       state TestSucceeded = context >> TestRole2 >> P == 1
         on entry
