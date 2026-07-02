@@ -407,13 +407,13 @@ computeStateEvaluations (ContextStateQuery stateId contextInstances) = join <$> 
     -- Note that the user may play different roles in the various context instances.
     (mmyType :: Maybe RoleType) <- cid ##> getMyType
     case mmyType of
-      Nothing -> (humanizePerspectivesWarning (NoUserForContextStateEvaluation cid states) >>= warnState <<< show) *> pure []
+      Nothing -> (humanizePerspectivesWarning (NoUserForContextStateEvaluation cid stateId) >>= warnState <<< show) *> pure []
       Just (CR myType) ->
         if isGuestRole myType then do
           (mmguest :: Maybe RoleInstance) <- cid ##> getCalculatedRoleInstances myType
           case mmguest of
             -- If the Guest role is not filled, don't execute bots on its behalf!
-            Nothing -> (humanizePerspectivesWarning (NoUserForContextStateEvaluation cid states) >>= warnState <<< show) *> pure []
+            Nothing -> (humanizePerspectivesWarning (NoUserForContextStateEvaluation cid stateId) >>= warnState <<< show) *> pure []
             otherwise -> pure [ ContextStateEvaluation stateId cid ]
         else pure [ ContextStateEvaluation stateId cid ]
       Just _ -> pure [ ContextStateEvaluation stateId cid ]

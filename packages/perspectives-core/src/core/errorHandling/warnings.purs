@@ -28,7 +28,6 @@ import Data.Foldable (intercalate)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, RoleType, StateIdentifier, roletype2string)
 import Perspectives.TypesForDeltas (RolePropertyDeltaType, UniverseContextDeltaType, UniverseRoleDeltaType)
 
@@ -76,7 +75,7 @@ data PerspectivesWarning
   | ConstructedMinimalSelfPerspective ContextType RoleType
   | NoRoleInstanceToSetProperty EnumeratedPropertyType (Array Value)
   | RoleInstanceAlreadyHasPropertyValue RoleInstance EnumeratedPropertyType (Array Value)
-  | NoUserForContextStateEvaluation ContextInstance (Array StateIdentifier)
+  | NoUserForContextStateEvaluation ContextInstance StateIdentifier
   | StateHasBeenEvaluatedBefore ContextInstance StateIdentifier
 
 instance showPerspectivesWarning :: Show PerspectivesWarning where
@@ -143,6 +142,6 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ConstructedMinimalSelfPerspective contextType roleType) =
     "(ConstructedMinimalSelfPerspective) Constructed a minimal self-perspective for context type " <> show contextType <> " and role type " <> show roleType
   show (NoRoleInstanceToSetProperty property value) = "(NoRoleInstanceToSetProperty) No role instance found for property " <> unwrap property <> " to set value " <> show value
-  show (RoleInstanceAlreadyHasPropertyValue roleInstance property value) = "(RoleInstanceAlreadyHasPropertyValue) Role instance " <> show roleInstance <> " already has value " <> show value <> " for property " <> unwrap property  
+  show (RoleInstanceAlreadyHasPropertyValue roleInstance property value) = "(RoleInstanceAlreadyHasPropertyValue) Role instance " <> show roleInstance <> " already has value " <> show value <> " for property " <> unwrap property
   show (NoUserForContextStateEvaluation contextInstance stateIds) = "(NoUserForContextStateEvaluation) No user role instance found for context " <> show contextInstance <> " to evaluate states " <> show stateIds
   show (StateHasBeenEvaluatedBefore contextInstance stateId) = "(StateHasBeenEvaluatedBefore) State " <> show stateId <> " has already been evaluated for context " <> show contextInstance
