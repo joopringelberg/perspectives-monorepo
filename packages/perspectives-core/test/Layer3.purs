@@ -236,17 +236,15 @@ getSynchronisationResults = do
                 -- setTopicLogLevel INSTALL Debug
                 -- setTopicLogLevel SYNC Info
                 setTopicLogLevel TEST Debug
-                setTopicLogLevel RESOURCE Error
                 -- setTopicLogLevel STATE Trace
             )
           runInPDR pdrB
             ( do
                 -- setTopicLogLevel BROKER Debug
-                setTopicLogLevel INSTALL Silent
+                -- setTopicLogLevel INSTALL Silent
                 -- setTopicLogLevel MODEL Debug
                 -- setTopicLogLevel SYNC Trace
                 setTopicLogLevel TEST Debug
-                setTopicLogLevel RESOURCE Error
                 -- setTopicLogLevel DELTA Trace
             )
 
@@ -461,8 +459,14 @@ allTests =
   , { testContextTypeName: test_Binder_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Binding_in_CalculatedRole, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BindingStep, logConfiguration: 
-      { pdrA: [ { topic: RESOURCE, logLevel: Trace }]
-      , pdrB: [ { topic: SYNC, logLevel: Trace }]}
+      { pdrA: [ { topic: RESOURCE, logLevel: Trace }, 
+                {topic: BROKER, logLevel: Trace}, 
+                {topic: SYNC, logLevel: Trace }, 
+                {topic: PERSISTENCE, logLevel: Trace}]
+      , pdrB: [ {topic: RESOURCE, logLevel: Trace}, 
+                {topic: SYNC, logLevel: Trace }, 
+                {topic: BROKER, logLevel: Trace}, 
+                {topic: PERSISTENCE, logLevel: Trace}]}
    }
   ]
 

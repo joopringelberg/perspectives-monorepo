@@ -71,7 +71,8 @@ import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (getPrivateKey)
-import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), MonadPerspectives, MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction, RuntimeOptions, TypeFix, (##>))
+import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction, RuntimeOptions, TypeFix, (##>))
+import Perspectives.CoreTypes (LogLevel(..)) as CT
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol)
@@ -85,7 +86,7 @@ import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (saveMarkedResources)
-import Perspectives.PerspectivesState (newPerspectivesState, noTransactionIsRunning, setBrokerService, setStompClientFactory)
+import Perspectives.PerspectivesState (newPerspectivesState, noTransactionIsRunning, setBrokerService, setStompClientFactory, setTopicLogLevel)
 import Perspectives.Representation.Class.PersistentType (EnumeratedPropertyType(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
@@ -179,6 +180,7 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
       case mLogColor of
         Just color -> infoTest (color <> "Starting PDR instance for user: " <> pouchdbUser.systemIdentifier <> ansiReset)
         Nothing -> infoTest ("Starting PDR instance for user: " <> pouchdbUser.systemIdentifier)
+      setTopicLogLevel RESOURCE CT.Error
     state
 
   -- If we have a bus, replace the default real StompClient factory with the in-process stub.
