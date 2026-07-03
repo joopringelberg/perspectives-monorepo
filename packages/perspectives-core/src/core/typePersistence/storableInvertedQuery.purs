@@ -64,10 +64,10 @@ clearInvertedQueriesDatabase = do
   iqDatabaseName <- invertedQueryDatabaseName
   -- Actually delete all documents, because deleting the database will destroy the design document with queries too
   -- and we cannot import the function to recreate them here from SetupUser.
-  { rows } <- documentsInDatabase iqDatabaseName excludeDocs
+  { rows } <- wrap (documentsInDatabase iqDatabaseName excludeDocs)
   -- Don't delete the design document!
   documents :: Array { _id :: String, _rev :: String } <- pure $ (\{ id, value } -> { _id: id, _rev: value.rev }) <$> (filter (\{ id } -> id /= "_design/defaultViews") rows)
-  void $ deleteDocuments iqDatabaseName documents
+  void $ wrap (deleteDocuments iqDatabaseName documents)
 
 type QueryGetter = Array RunTimeInvertedQueryKey -> MonadPerspectives StoredQueries
 type QueryCompiler = InvertedQuery -> MonadPerspectives InvertedQuery
@@ -78,7 +78,7 @@ getQueries viewName queryCompiler = getQueriesFromCache queryCompiler getQueries
   getQueries' :: Array RunTimeInvertedQueryKey -> MonadPerspectives StoredQueries
   getQueries' qs = do
     db <- invertedQueryDatabaseName
-    getViewWithDocs db viewName (Keys (qs <#> serializeInvertedQueryKey))
+    wrap (getViewWithDocs db viewName (Keys (qs <#> serializeInvertedQueryKey)))
 
 getPropertyQueries :: QueryCompiler -> Array RunTimeInvertedQueryKey -> MonadPerspectives (Array InvertedQuery)
 getPropertyQueries = getQueries "defaultViews/RTPropertyKeyView"

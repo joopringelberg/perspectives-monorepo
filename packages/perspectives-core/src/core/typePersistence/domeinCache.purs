@@ -196,7 +196,7 @@ fetchTranslations (ModelUri namespace) = do
     Nothing -> do
       -- Retrieve the translations and store in state.
       { database, documentName } <- resourceIdentifier2DocLocator $ unversionedModelUri namespace
-      mtranslationsFromDb <- getAttachment database documentName "translationtable.json"
+      mtranslationsFromDb <- wrap (getAttachment database documentName "translationtable.json")
       case mtranslationsFromDb of
         Nothing -> warnModeller (NoTranslations namespace)
         Just f -> do
@@ -269,7 +269,7 @@ storeDomeinFileInCouchdbPreservingAttachments df@(DomeinFile dfr@{ id, _attachme
     Nothing -> pure empty
     Just atts -> traverseWithIndex
       -- Instead of fetching the attachment from the repository, we fetch it from the local models database.
-      (\attName { content_type } -> Tuple (MediaType content_type) <$> getAttachment modelsDb documentName attName)
+      (\attName { content_type } -> Tuple (MediaType content_type) <$> wrap (getAttachment modelsDb documentName attName))
       atts
   void $ storeDomeinFileInCache id df
   void $ saveCachedDomeinFile id
@@ -292,7 +292,7 @@ addAttachments documentUrl documentName attachments = do
           Nothing -> pure unit
           Just attachment -> do
             newRev <- State.get
-            DeleteCouchdbDocument { rev } <- lift $ addAttachment documentUrl documentName newRev attName attachment mimetype
+            DeleteCouchdbDocument { rev } <- lift $ wrap (addAttachment documentUrl documentName newRev attName attachment mimetype)
             State.put rev
     )
 

@@ -27,6 +27,7 @@ import Control.Monad.Error.Class (throwError)
 import Data.Array (head, mapMaybe)
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
+import Data.Newtype (wrap)
 import Effect.Exception (error)
 import Foreign.Object (Object, delete, filter, fromFoldable, keys, lookup) as OBJ
 import Foreign.Object (values)
@@ -249,5 +250,5 @@ getUserIdentifier = getMySystem >>= pure <<< flip append "$auftu9ldl2"
 -- | Returns a Perspectives Identifier of the form "def:#<guid>"
 -- | To be more precise: "def:#<SystemIdentifier>"
 getMySystem :: MonadPerspectives String
-getMySystem = getSystemIdentifier >>= \sysId -> pure $ "def:#" <> sysId
+getMySystem = wrap getSystemIdentifier >>= \sysId -> pure $ "def:#" <> sysId
 

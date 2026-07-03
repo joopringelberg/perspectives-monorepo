@@ -120,6 +120,7 @@ module Perspectives.CoreTypes
   , typeOfInstance
   ) where
 
+import Control.Alt (class Alt)
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (class MonadError, class MonadThrow)
 import Control.Monad.Reader (ReaderT, lift, runReaderT, class MonadAsk, class MonadReader)
@@ -465,6 +466,7 @@ derive newtype instance MonadReader (AVar PerspectivesState) MonadPerspectives
 derive newtype instance MonadThrow Error MonadPerspectives
 derive newtype instance MonadError Error MonadPerspectives
 derive newtype instance MonadRec MonadPerspectives
+derive newtype instance Alt MonadPerspectives
 
 -- | Run a MonadPerspectives action given the state AVar.
 runMonadPerspectives :: forall a. MonadPerspectives a -> AVar PerspectivesState -> Aff a

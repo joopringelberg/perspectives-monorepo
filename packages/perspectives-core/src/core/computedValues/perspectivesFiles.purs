@@ -3,11 +3,11 @@ module Perspectives.Extern.Files where
 import Prelude
 
 import Control.Monad.Error.Class (try)
-import Control.Monad.Trans.Class (lift)
+import Effect.Aff.Class (liftAff)
 import Data.Array (head, elemIndex)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), isJust)
-import Data.Newtype (unwrap)
+import Data.Newtype (unwrap, wrap)
 import Data.String.Regex (match)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
@@ -44,11 +44,11 @@ getPFileTextValue v = case parsePerspectivesFile v of
     if isATextType mimeType then do
       db <- case database of
         Just db -> pure db
-        Nothing -> entitiesDatabaseName
-      (ma :: Maybe Foreign) <- getAttachment db roleFileName (typeUri2couchdbFilename $ unwrap propertyType)
+        Nothing -> wrap entitiesDatabaseName
+      (ma :: Maybe Foreign) <- wrap (getAttachment db roleFileName (typeUri2couchdbFilename $ unwrap propertyType))
       case ma of
         Nothing -> pure Nothing
-        Just a -> Just <$> (lift $ fromBlob a)
+        Just a -> Just <$> liftAff (fromBlob a)
     else pure Nothing
   where
   isATextType :: String -> Boolean
