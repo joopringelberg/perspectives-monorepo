@@ -27,7 +27,6 @@ import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Reader (lift)
 import Data.Array (concat, cons, difference, elemIndex, filter, filterA, foldM, head, length, nub, null, union, unsafeIndex)
 import Data.FoldableWithIndex (forWithIndex_)
-import Data.Map (isEmpty)
 import Data.Maybe (Maybe(..), fromJust, isJust, isNothing)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, for_, traverse, traverse_)
@@ -709,8 +708,8 @@ runForwardsComputation roleInstance (InvertedQuery { description, forwardsCompil
         -- When there are no properties, we add the deltas for the role instance anyway.
         -- This covers the case of a new binding for a perspective without properties.
         PerspectRol { pspType, context } <- lift $ getPerspectRol roleInstance
-        if (isEmpty (unwrap statesPerProperty)) then magic context [ roleInstance ] pspType (join $ snd <$> cwus)
-        else pure unit
+        -- add the role instance in both cases, so we have it even when it has no properties in this perspective.
+        magic context [ roleInstance ] pspType (join $ snd <$> cwus)
         computeProperties [ singletonPath (R roleInstance) ] statesPerProperty cwus
 
       -- These are all other cases, where there still is some path to walk to the
