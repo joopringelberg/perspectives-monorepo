@@ -4,7 +4,6 @@ import Prelude
 
 import Control.Monad.Error.Class (catchError)
 import Data.Foldable (for_)
-import Data.Newtype (wrap)
 import Persistence.Attachment (class Attachment)
 import Perspectives.CoreTypes (class Persistent, MonadPerspectives)
 import Perspectives.Persistence.API (Keys, getViewOnDatabase, resetViewIndex)
@@ -43,7 +42,7 @@ getSafeViewOnDatabase_
   -> Keys key
   -> MonadPerspectives (Array result)
 getSafeViewOnDatabase_ f dbName viewname keys = do
-  (results :: Array result) <- wrap (getViewOnDatabase dbName viewname keys)
+  (results :: Array result) <- getViewOnDatabase dbName viewname keys
   -- Now try to put each instance in cache. 
   catchError
     ( do
@@ -52,7 +51,7 @@ getSafeViewOnDatabase_ f dbName viewname keys = do
     )
     ( \_ -> do
         -- Reset the view.
-        void $ wrap (resetViewIndex dbName viewname)
+        void $ resetViewIndex dbName viewname
         -- Try again.
-        wrap (getViewOnDatabase dbName viewname keys)
+        getViewOnDatabase dbName viewname keys
     )

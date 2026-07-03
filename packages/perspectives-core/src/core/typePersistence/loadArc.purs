@@ -25,6 +25,7 @@ module Perspectives.TypePersistence.LoadArc where
 import Control.Alt (void)
 import Control.Monad.Error.Class (catchError, throwError)
 import Control.Monad.Trans.Class (lift)
+import Effect.Aff.Class (liftAff)
 import Data.Array (delete, null)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
@@ -103,7 +104,7 @@ loadAndCompileArcFileWithSidecar_ :: ModelUri Stable -> Source -> Boolean -> May
 loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCache mMapping modelCuid modelUriReadable mversion =
   catchError
     ( do
-        (r :: Either ParseError ContextE) <- lift $ lift $ runIndentParser text domain
+        (r :: Either ParseError ContextE) <- lift $ liftAff $ runIndentParser text domain
         case r of
           Left e -> pure $ Left [ parseError2PerspectivesError e ]
           Right rec@(ContextE { id: sourceIdReadable }) -> do
@@ -125,11 +126,11 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
     if testModelName (unversionedModelUri sourceIdReadable) then do
       unversionedCtxt <- pure $ ContextE rec { id = unversionedModelUri sourceIdReadable }
       (Tuple result state :: Tuple (Either MultiplePerspectivesErrors (DomeinFile Readable)) PhaseTwoState) <-
-        lift $ lift $ runPhaseTwo_' (traverseDomain unversionedCtxt) defaultDomeinFileRecord empty empty Nil
+        lift $ liftAff $ runPhaseTwo_' (traverseDomain unversionedCtxt) defaultDomeinFileRecord empty empty Nil
       case result of
         Left e -> pure $ Left e
         Right (DomeinFile dr'@{ id }) -> do
-          dr''@{ referredModels } <- pure dr' { referredModels = (delete id state.referredModels) }
+          dr''@{ referredModels } <- pure $ dr' { referredModels = (delete id state.referredModels) }
           -- We should load referred models if they are missing (but not the model we're compiling!).
           -- Throw an error if a referred model is not installed. It will show up in the arc feedback.
           installedModelCuids <- lift $ getinstalledModelCuids fromLocalModels

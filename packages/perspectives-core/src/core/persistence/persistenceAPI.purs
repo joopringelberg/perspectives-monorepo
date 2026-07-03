@@ -36,7 +36,6 @@ import Affjax.Web as AJ
 import Control.Alt ((<|>))
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Except (runExcept)
-import Control.Monad.Reader (lift)
 import Control.Promise (Promise, toAffE)
 import Control.Promise as Promise
 import Data.Array.NonEmpty (index)
@@ -142,7 +141,7 @@ deleteDatabase dbName = withDatabase dbName
     modify \(s@{ databases }) -> s { databases = delete dbName databases }
     catchError
       do
-        f <- lift $ fromEffectFnAff $ deleteDatabaseImpl db
+        f <- liftAff $ fromEffectFnAff $ deleteDatabaseImpl db
         case (read f) of
           Left e -> throwError $ error ("deleteDatabase: error in decoding result: " <> show e)
           Right ({ ok } :: { ok :: Boolean }) ->
@@ -211,7 +210,7 @@ withDatabase dbName fun = do
         -- We have accessed this database before, but we don't know whether
         -- we still have a valid session.
         -- Access the database and throw error if unauthorized.
-        f <- lift $ fromEffectFnAff $ databaseInfoImpl db
+        f <- liftAff $ fromEffectFnAff $ databaseInfoImpl db
         case read f of
           Left e -> throwError (error "unauthorized")
           (Right (i :: DatabaseInfo)) -> pure unit
@@ -236,7 +235,7 @@ ensureDatabaseExists dbName = do
       Just db -> do
         infoOk <- catchError
           do
-            _ <- lift $ fromEffectFnAff $ databaseInfoImpl db
+            _ <- liftAff $ fromEffectFnAff $ databaseInfoImpl db
             pure true
           \e -> do
             ({ status } :: PouchError) <- parsePouchError "databaseInfo" dbUrl e
@@ -247,7 +246,7 @@ ensureDatabaseExists dbName = do
         else do
           -- Try to create and then re-probe once.
           createRemoteDatabaseIfMissing dbUrl
-          _ <- lift $ fromEffectFnAff $ databaseInfoImpl db
+          _ <- liftAff $ fromEffectFnAff $ databaseInfoImpl db
           pure unit
 
 -----------------------------------------------------------
@@ -264,7 +263,7 @@ databaseInfo :: forall f. DatabaseName -> MonadPouchdb f DatabaseInfo
 databaseInfo dbName = withDatabase dbName
   \db -> catchError
     do
-      f <- lift $ fromEffectFnAff $ databaseInfoImpl db
+      f <- liftAff $ fromEffectFnAff $ databaseInfoImpl db
       case (read f) of
         Left e -> throwError $ error ("databaseInfo: error in decoding result: " <> show e)
         Right info -> pure info
@@ -279,8 +278,8 @@ foreign import databaseInfoImpl :: PouchdbDatabase -> EffectFnAff Foreign
 compactDatabase :: forall f. DatabaseName -> MonadPouchdb f Unit
 compactDatabase dbName = withDatabase dbName
   \db -> do
-    _ <- lift $ fromEffectFnAff $ runEffectFnAff1 compactDatabaseImpl db
-    _ <- lift $ fromEffectFnAff $ runEffectFnAff1 viewCleanupImpl db
+    _ <- liftAff $ fromEffectFnAff $ runEffectFnAff1 compactDatabaseImpl db
+    _ <- liftAff $ fromEffectFnAff $ runEffectFnAff1 viewCleanupImpl db
     pure unit
 
 foreign import compactDatabaseImpl :: EffectFn1 PouchdbDatabase Foreign
@@ -319,7 +318,7 @@ refreshRecoveryPoint dbName lastSeq = withDatabase dbName
   \origin -> withDatabase (dbName <> "-recovery")
     \recovery -> do
       do
-        lift $ fromEffectFnAff $ runEffectFnAff3 replicateOnce origin recovery lastSeq
+        liftAff $ fromEffectFnAff $ runEffectFnAff3 replicateOnce origin recovery lastSeq
 
 foreign import replicateOnce
   :: EffectFn3
@@ -336,7 +335,7 @@ recoverFromRecoveryPoint dbName = withDatabase dbName
   \origin -> withDatabase (dbName <> "-recovery")
     \recovery -> do
       do
-        lift $ fromEffectFnAff $ runEffectFnAff3 replicateOnce recovery origin ""
+        liftAff $ fromEffectFnAff $ runEffectFnAff3 replicateOnce recovery origin ""
 
 -----------------------------------------------------------
 -- DOCUMENTSINDATABASE
@@ -352,7 +351,7 @@ documentsInDatabase :: forall f. DatabaseName -> Boolean -> MonadPouchdb f Pouch
 documentsInDatabase dbName include_docs = withDatabase dbName
   \db -> catchError
     do
-      f <- lift $ fromEffectFnAff $ runEffectFnAff2 documentsInDatabaseImpl db (unsafeToForeign { include_docs })
+      f <- liftAff $ fromEffectFnAff $ runEffectFnAff2 documentsInDatabaseImpl db (unsafeToForeign { include_docs })
       case (read f) of
         Left e -> throwError $ error ("documentsInDatabase: error in decoding result: " <> show e)
         Right r -> pure r
@@ -366,7 +365,7 @@ documentsInRange :: forall f. DatabaseName -> String -> String -> MonadPouchdb f
 documentsInRange dbName startkey endkey = withDatabase dbName
   \db -> catchError
     do
-      f <- lift $ fromEffectFnAff $ runEffectFnAff2 documentsInDatabaseImpl db (unsafeToForeign { include_docs: true, startkey, endkey })
+      f <- liftAff $ fromEffectFnAff $ runEffectFnAff2 documentsInDatabaseImpl db (unsafeToForeign { include_docs: true, startkey, endkey })
       case (read f) of
         Left e -> throwError $ error ("documentsInRange: error in decoding result: " <> show e)
         Right r -> pure r
@@ -396,7 +395,7 @@ addDocument dbName doc docName = withDatabase dbName
     doc' <- pure $ write doc
     catchError
       do
-        f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db doc' withoutForce
+        f <- liftAff $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db doc' withoutForce
         case PutCouchdbDocument <$> (read f) of
           Left e -> throwError $ error ("addDocument: error in decoding result: " <> show e)
           Right (PutCouchdbDocument { rev }) -> pure rev
@@ -422,7 +421,7 @@ addDocument_ :: forall d f. WriteForeign d => DatabaseName -> d -> DocumentName 
 addDocument_ dbName doc docName = withDatabase dbName
   \db -> catchError
     do
-      f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withoutForce
+      f <- liftAff $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withoutForce
       case PutCouchdbDocument <$> (read f) of
         Left e -> throwError $ error ("addDocument: error in decoding result: " <> show e)
         Right (PutCouchdbDocument { rev }) -> pure rev
@@ -438,13 +437,13 @@ resolveDocumentConflict dbName doc docName = withDatabase dbName
     -- If the document data is gone (e.g. manual IndexedDB deletion), fall back to forceCleanSave.
     catchError
       do
-        conflicts <- lift $ fromEffectFnAff $ runEffectFnAff3 getDocumentWithConflictsImpl db docName true
+        conflicts <- liftAff $ fromEffectFnAff $ runEffectFnAff3 getDocumentWithConflictsImpl db docName true
 
         -- Delete all conflict revisions
         case read conflicts of
           Right ({ _conflicts } :: DocumentConflicts) -> do
             _ <- traverse
-              (\rev -> lift $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName rev)
+              (\rev -> liftAff $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName rev)
               _conflicts
             pure unit
           _ -> pure unit
@@ -452,7 +451,7 @@ resolveDocumentConflict dbName doc docName = withDatabase dbName
         -- Now try to add the document
         catchError
           do
-            f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
+            f <- liftAff $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
             case PutCouchdbDocument <$> (read f) of
               Left e -> throwError $ error ("resolveDocumentConflict: error: " <> show e)
               Right (PutCouchdbDocument { rev }) -> pure rev
@@ -479,19 +478,19 @@ forceCleanSave dbName doc docName = withDatabase dbName
     log ("forceCleanSave: starting for '" <> docName <> "' in database '" <> dbName <> "'")
     -- First, explicitly try to delete any existing document, ignoring errors
     _ <- catchError
-      (lift $ void $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName "")
+      (liftAff $ void $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName "")
       (\e -> log ("forceCleanSave: deleteDocument failed for '" <> docName <> "' (ignored): " <> show e))
 
     -- Use PouchDB's internal purge functionality to completely remove document history
     _ <- catchError
-      (lift $ void $ fromEffectFnAff $ runEffectFnAff3 purgeDocumentImpl db docName Nothing)
+      (liftAff $ void $ fromEffectFnAff $ runEffectFnAff3 purgeDocumentImpl db docName Nothing)
       (\e -> log ("forceCleanSave: purgeDocument failed for '" <> docName <> "' (ignored): " <> show e))
 
     -- Then add the document as new
     log ("forceCleanSave: adding document '" <> docName <> "' with force")
     catchError
       do
-        f <- lift $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
+        f <- liftAff $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
         case PutCouchdbDocument <$> (read f) of
           Left e -> throwError $ error ("forceCleanSave: error in decoding result: " <> show e)
           Right (PutCouchdbDocument { rev }) -> do
@@ -514,7 +513,7 @@ addDocuments :: forall d f. WriteForeign d => DatabaseName -> Array d -> MonadPo
 addDocuments dbName docs = withDatabase dbName
   \db -> catchError
     do
-      f <- lift $ fromEffectFnAff $ runEffectFnAff3 bulkDocsImpl db (write docs) false
+      f <- liftAff $ fromEffectFnAff $ runEffectFnAff3 bulkDocsImpl db (write docs) false
       case map PutCouchdbDocument <$> (read f) of
         Left e -> throwError $ error ("addDocument: error in decoding result: " <> show e)
         Right resultsPerDoc -> pure resultsPerDoc
@@ -541,7 +540,7 @@ deleteDocument dbName docName mrev = case mrev of
     \db -> do
       catchError
         do
-          f <- lift $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName rev
+          f <- liftAff $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName rev
           case DeleteCouchdbDocument <$> (read f) of
             Left e -> pure false
             Right (DeleteCouchdbDocument { ok }) -> case ok of
@@ -564,7 +563,7 @@ deleteDocuments :: forall d f. WriteForeign d => DatabaseName -> Array d -> Mona
 deleteDocuments dbName docs = withDatabase dbName
   \db -> catchError
     do
-      f <- lift $ fromEffectFnAff $ runEffectFnAff3 bulkDocsImpl db (write docs) true
+      f <- liftAff $ fromEffectFnAff $ runEffectFnAff3 bulkDocsImpl db (write docs) true
       case map PutCouchdbDocument <$> (read f) of
         Left e -> throwError $ error ("addDocument: error in decoding result: " <> show e)
         Right resultsPerDoc -> pure resultsPerDoc
@@ -582,7 +581,7 @@ getDocument :: forall d f. Attachment d => Revision d => ReadForeign d => Databa
 getDocument dbName docName = withDatabase dbName
   \db -> do
     f <- catchError
-      (lift $ fromEffectFnAff $ runEffectFnAff2 getDocumentImpl db docName)
+      (liftAff $ fromEffectFnAff $ runEffectFnAff2 getDocumentImpl db docName)
       (handlePouchError "getDocument" docName)
     case read f of
       Left e -> throwError $ error ("getDocument : error in decoding result: " <> show e)
@@ -593,7 +592,7 @@ tryGetDocument dbName docName = withDatabase dbName
   \db -> do
     catchError
       do
-        f <- lift $ fromEffectFnAff $ runEffectFnAff2 getDocumentImpl db docName
+        f <- liftAff $ fromEffectFnAff $ runEffectFnAff2 getDocumentImpl db docName
         case read f of
           Left e -> throwError $ error ("tryGetDocument : error in decoding result: " <> show e)
           Right result -> pure $ Just result
@@ -607,7 +606,7 @@ getDocument_ dbName docName = withDatabase dbName
   \db -> do
     catchError
       do
-        f <- lift $ fromEffectFnAff $ runEffectFnAff2 getDocumentImpl db docName
+        f <- liftAff $ fromEffectFnAff $ runEffectFnAff2 getDocumentImpl db docName
         case read f of
           Left e -> throwError $ error ("getDocument_ : error in decoding result: " <> show e)
           Right result -> pure result
@@ -619,7 +618,7 @@ tryGetDocument_ :: forall d f. ReadForeign d => DatabaseName -> DocumentName -> 
 tryGetDocument_ dbName docName = withDatabase dbName
   \db -> catchError
     do
-      f <- lift $ fromEffectFnAff $ runEffectFnAff2 getDocumentImpl db docName
+      f <- liftAff $ fromEffectFnAff $ runEffectFnAff2 getDocumentImpl db docName
       case read f of
         Left e -> throwError $ error ("tryGetDocument_ : error in decoding result: " <> show e)
         Right result -> pure result
@@ -631,7 +630,7 @@ getDocument__ :: forall f. DatabaseName -> DocumentName -> MonadPouchdb f Foreig
 getDocument__ dbName docName = withDatabase dbName
   \db -> do
     catchError
-      (lift $ fromEffectFnAff $ runEffectFnAff2 getDocumentImpl db docName)
+      (liftAff $ fromEffectFnAff $ runEffectFnAff2 getDocumentImpl db docName)
       (handlePouchError "getDocument_" docName)
 
 foreign import getDocumentImpl
@@ -648,7 +647,7 @@ retrieveDocumentVersion dbName docName = withDatabase dbName
   \db -> do
     catchError
       do
-        f <- lift $ fromEffectFnAff $ runEffectFnAff2 getDocumentImpl db docName
+        f <- liftAff $ fromEffectFnAff $ runEffectFnAff2 getDocumentImpl db docName
         case read f of
           Left e -> throwError $ error ("retrieveDocumentVersion : error in decoding result: " <> show e)
           Right (a :: DocumentWithRevision) -> pure a._rev
@@ -664,7 +663,7 @@ addAttachment dbName docName rev attachmentName attachment mimetype = withDataba
   \db -> do
     catchError
       do
-        f <- lift $ fromEffectFnAff $ runEffectFnAff6 addAttachmentImpl db docName attachmentName (toNullable rev) attachment mimetype
+        f <- liftAff $ fromEffectFnAff $ runEffectFnAff6 addAttachmentImpl db docName attachmentName (toNullable rev) attachment mimetype
         case read f of
           Left e -> throwError $ error ("addAttachment : error in decoding result: " <> show e)
           Right d -> pure d
@@ -687,9 +686,9 @@ foreign import addAttachmentImpl
 getAttachment :: forall f. DatabaseName -> DocumentName -> AttachmentName -> MonadPouchdb f (Maybe Foreign)
 getAttachment dbName docName attachmentName = withDatabase dbName
   \db -> catchError
-    (lift $ Just <$> (fromEffectFnAff $ runEffectFnAff3 getAttachmentImpl db docName attachmentName))
+    (liftAff $ Just <$> (fromEffectFnAff $ runEffectFnAff3 getAttachmentImpl db docName attachmentName))
     -- do
-    -- f <- lift $ fromEffectFnAff $ runEffectFnAff3 getAttachmentImpl db docName attachmentName
+    -- f <- liftAff $ fromEffectFnAff $ runEffectFnAff3 getAttachmentImpl db docName attachmentName
     -- case runExcept $ decode f of
     --   Left e -> throwError $ error ("addAttachment : error in decoding result: " <> show e)
     --   Right d -> pure $ Just d
@@ -789,10 +788,10 @@ getViewWithDocs dbName viewname keys = withDatabase dbName
   \db -> catchError
     do
       f <- case keys of
-        NoKey -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write "") noKey includeDocs false
-        Key k -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (unsafeToForeign k) singleKey includeDocs false
+        NoKey -> liftAff $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write "") noKey includeDocs false
+        Key k -> liftAff $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (unsafeToForeign k) singleKey includeDocs false
         -- We have to provide an Array String to the Pouchdb query function when using 'keys'.
-        Keys ks -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (unsafeToForeign ks) multipleKeys includeDocs false
+        Keys ks -> liftAff $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (unsafeToForeign ks) multipleKeys includeDocs false
       case read f of
         Left e -> throwError $ error ("getViewWithDocs : error in decoding result: " <> show e)
         Right ((ViewDocResult { rows }) :: (ViewDocResult doc String)) -> do
@@ -826,9 +825,9 @@ getViewOnDatabase_ dbName viewname keys forceRefresh = withDatabase dbName
   \db -> catchError
     do
       f <- case keys of
-        NoKey -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write "") noKey false forceRefresh
-        Key k -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write k) singleKey false forceRefresh
-        Keys ks -> lift $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write ks) multipleKeys false forceRefresh
+        NoKey -> liftAff $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write "") noKey false forceRefresh
+        Key k -> liftAff $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write k) singleKey false forceRefresh
+        Keys ks -> liftAff $ fromEffectFnAff $ runEffectFnAff6 getViewOnDatabaseImpl db viewname (write ks) multipleKeys false forceRefresh
       case read f of
         Left e -> throwError $ error ("getViewOnDatabase : error in decoding result: " <> show e)
         Right ((ViewResult { rows }) :: (ViewResult Foreign key)) -> do
@@ -855,7 +854,7 @@ foreign import getViewOnDatabaseImpl
 -----------------------------------------------------------
 resetViewIndex :: forall f. DatabaseName -> ViewName -> MonadPouchdb f Boolean
 resetViewIndex dbName viewname = withDatabase dbName
-  \db -> lift $ toAffE (resetViewIndexImpl_ db viewname)
+  \db -> liftAff $ toAffE (resetViewIndexImpl_ db viewname)
 
 foreign import resetViewIndexImpl :: EffectFn2 PouchdbDatabase String (Promise Boolean)
 

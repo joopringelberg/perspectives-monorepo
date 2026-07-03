@@ -64,10 +64,10 @@ clearInvertedQueriesDatabase = do
   iqDatabaseName <- invertedQueryDatabaseName
   -- Actually delete all documents, because deleting the database will destroy the design document with queries too
   -- and we cannot import the function to recreate them here from SetupUser.
-  { rows } <- wrap (documentsInDatabase iqDatabaseName excludeDocs)
+  { rows } <- documentsInDatabase iqDatabaseName excludeDocs
   -- Don't delete the design document!
   documents :: Array { _id :: String, _rev :: String } <- pure $ (\{ id, value } -> { _id: id, _rev: value.rev }) <$> (filter (\{ id } -> id /= "_design/defaultViews") rows)
-  void $ wrap (deleteDocuments iqDatabaseName documents)
+  void $ deleteDocuments iqDatabaseName documents
 
 type QueryGetter = Array RunTimeInvertedQueryKey -> MonadPerspectives StoredQueries
 type QueryCompiler = InvertedQuery -> MonadPerspectives InvertedQuery
@@ -78,7 +78,7 @@ getQueries viewName queryCompiler = getQueriesFromCache queryCompiler getQueries
   getQueries' :: Array RunTimeInvertedQueryKey -> MonadPerspectives StoredQueries
   getQueries' qs = do
     db <- invertedQueryDatabaseName
-    wrap (getViewWithDocs db viewName (Keys (qs <#> serializeInvertedQueryKey)))
+    getViewWithDocs db viewName (Keys (qs <#> serializeInvertedQueryKey))
 
 getPropertyQueries :: QueryCompiler -> Array RunTimeInvertedQueryKey -> MonadPerspectives (Array InvertedQuery)
 getPropertyQueries = getQueries "defaultViews/RTPropertyKeyView"
@@ -119,12 +119,12 @@ getQueriesFromCache queryCompiler queryGetter ks = concat <$>
 saveInvertedQueries :: StoredQueries -> MonadPerspectives Unit
 saveInvertedQueries queries = do
   db <- invertedQueryDatabaseName
-  void $ wrap (addDocuments db queries)
+  void $ addDocuments db queries
 
 -- | Retrieve the inverted queries for a model from the Repository.
 getInvertedQueriesOfModel :: String -> String -> MonadPerspectives StoredQueries
 getInvertedQueriesOfModel database documentName = do
-  wrap (getAttachment database documentName "storedQueries.json") >>= case _ of
+  getAttachment database documentName "storedQueries.json" >>= case _ of
     Just f -> do
       x <- liftAff $ fromBlob f
       case readJSON x of
@@ -137,5 +137,5 @@ removeInvertedQueriesContributedByModel :: ModelUri Stable -> MonadPerspectives 
 removeInvertedQueriesContributedByModel (ModelUri dfid) = do
   db <- invertedQueryDatabaseName
   -- First retrieve all inverted queries from the local database contributed by the current model.
-  (modelQueries :: Array { _id :: String, _rev :: String }) <- wrap (getViewWithDocs db "defaultViews/modelView" (Key $ unversionedModelUri dfid))
-  void $ wrap (deleteDocuments db modelQueries)
+  (modelQueries :: Array { _id :: String, _rev :: String }) <- getViewWithDocs db "defaultViews/modelView" (Key $ unversionedModelUri dfid)
+  void $ deleteDocuments db modelQueries

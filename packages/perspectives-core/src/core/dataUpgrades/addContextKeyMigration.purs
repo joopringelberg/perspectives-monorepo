@@ -65,7 +65,7 @@ import Simple.JSON (read', readJSON')
 addContextKeyToDeltas :: Unit -> MonadPerspectives Unit
 addContextKeyToDeltas _ = do
   dbName <- deltaStoreDatabaseName
-  { rows } <- wrap (documentsInDatabase dbName includeDocs)
+  { rows } <- documentsInDatabase dbName includeDocs
   log ("AddContextKeyMigration: processing " <> show (length rows) <> " delta-store documents")
   void $ tailRecM (processChunk dbName 200) rows
 
@@ -96,7 +96,7 @@ processDoc dbName foreignDoc =
         case runExcept (readJSON' encDelta) of
           Right ({ contextInstance } :: { contextInstance :: String }) -> do
             let updated = DeltaStoreRecord r { contextKey = Just (safeKey contextInstance) }
-            void $ wrap (addDocument_ dbName updated r._id)
+            void $ addDocument_ dbName updated r._id
           Left _ -> pure unit -- Cannot parse; leave contextKey as Nothing.
       else pure unit
 

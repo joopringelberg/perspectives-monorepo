@@ -139,8 +139,8 @@ isSentinel (SignedDelta { author, encryptedDelta }) =
 -- | Runs in MonadPerspectives (no transaction needed since we don't re-sign).
 migrateDeltasToStore :: MonadPerspectives Unit
 migrateDeltasToStore = do
-  dbName <- wrap entitiesDatabaseName
-  { rows } <- wrap (documentsInDatabase dbName includeDocs)
+  dbName <- entitiesDatabaseName
+  { rows } <- documentsInDatabase dbName includeDocs
   log ("DeltasMigration: processing " <> show (length rows) <> " entity documents")
   for_ rows \{ doc } -> case doc of
     Nothing -> pure unit

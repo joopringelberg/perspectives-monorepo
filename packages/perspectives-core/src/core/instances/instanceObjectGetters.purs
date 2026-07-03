@@ -103,7 +103,7 @@ getUnlinkedRoleInstances rn c = ArrayT $
           ( do
               cache <- roleCache
               cachedRoleAvars <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-              cachedRoles <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              cachedRoles <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
               pure $ rol_id <$> filter (roleFromContextFilter rn c) cachedRoles
           )
         pure $ filledRolesInDatabase `union` filledRolesInCache
@@ -383,7 +383,7 @@ filler2filledFromDatabase_ (Filler_ filler) =
           ( do
               cache <- roleCache
               cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
               pure $ rol_id <$> filter (filler2filledFilter filler) cachedRoles
           )
         pure $ filledRolesInDatabase `union` filledRolesInCache
@@ -406,7 +406,7 @@ filled2fillerFromDatabase_ rid =
               cache <- roleCache
               cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
               -- There may be empty AVars.
-              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
               for (filter (filled2fillerFilter rid) cachedRoles)
                 ( \filler@(PerspectRol { id, pspType, context: cid }) -> do
                     filledContextType <- contextType_ cid
@@ -432,7 +432,7 @@ role2contextFromDatabase_ rid =
           ( do
               cache <- contextCache
               cachedContextAvars :: Array (AVar IP.PerspectContext) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-              cachedContexts :: Array IP.PerspectContext <- catMaybes <$> (lift $ traverse tryRead cachedContextAvars)
+              cachedContexts :: Array IP.PerspectContext <- catMaybes <$> (liftAff $ traverse tryRead cachedContextAvars)
               pure $ context_id <$> filter (context2RoleFilter rid) cachedContexts
           )
         pure $ contextInDatabase `union` contextInCache
@@ -453,7 +453,7 @@ context2roleFromDatabase_ cid =
           ( do
               cache <- roleCache
               cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
               pure $ rol_id <$> filter (role2ContextFilter cid) cachedRoles
           )
         pure $ contextRolesInDatabase `union` contextRolesInCache

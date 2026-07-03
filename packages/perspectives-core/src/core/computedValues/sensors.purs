@@ -32,7 +32,6 @@ import Control.Monad.Trans.Class (lift)
 import Data.Array (head, singleton)
 import Data.Map (Map, fromFoldable, lookup)
 import Data.Maybe (Maybe(..))
-import Data.Newtype (wrap)
 import Data.Tuple (Tuple(..))
 import Effect.Class (liftEffect)
 import Effect.Now (nowDateTime)
@@ -76,8 +75,8 @@ sensorFunctions = fromFoldable
   , Tuple (Tuple "domaincache" "size") (unsafePartial cacheSize)
   , Tuple (Tuple "querycache" "size") (unsafePartial cacheSize)
   , Tuple (Tuple "clock" "now") (unsafePartial currentDate)
-  , Tuple (Tuple "entities" "identifier") (unsafePartial \_ _ -> wrap entitiesDatabaseName)
-  , Tuple (Tuple "models" "identifier") (unsafePartial \_ _ -> wrap modelDatabaseName)
+  , Tuple (Tuple "entities" "identifier") (unsafePartial \_ _ -> entitiesDatabaseName)
+  , Tuple (Tuple "models" "identifier") (unsafePartial \_ _ -> modelDatabaseName)
   ]
 
 currentDate :: Partial => SensorFunction

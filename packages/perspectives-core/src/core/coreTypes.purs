@@ -123,6 +123,7 @@ module Perspectives.CoreTypes
 import Control.Alt (class Alt)
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (class MonadError, class MonadThrow)
+import Control.Monad.Except (ExceptT)
 import Control.Monad.Reader (ReaderT, lift, runReaderT, class MonadAsk, class MonadReader)
 import Control.Monad.Rec.Class (class MonadRec)
 import Control.Monad.Writer (WriterT, runWriterT)
@@ -157,7 +158,7 @@ import Perspectives.Instances.Environment (Environment)
 import Perspectives.InvertedQuery (InvertedQuery)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistence.Types (PouchdbState)
+import Perspectives.Persistence.Types (PouchdbState, MonadPouchdb(..))
 import Perspectives.Persistent.ChangesFeed (EventSource)
 import Perspectives.Repetition (Duration)
 import Perspectives.Representation.Class.Identifiable (class Identifiable, identifier)
@@ -447,30 +448,16 @@ instance Ord InformedAssumption where
 -----------------------------------------------------------
 -- MONADPERSPECTIVES
 -----------------------------------------------------------
--- | MonadPerspectives is a newtype over ReaderT (AVar PerspectivesState) Aff.
--- | It is an instance of MonadAff, MonadEffect, MonadAsk (AVar PerspectivesState),
--- | MonadReader (AVar PerspectivesState), MonadThrow Error, and MonadError Error.
+-- | MonadPerspectives is a type alias for MonadPouchdb PerspectivesExtraState.
+-- | It inherits all instances (Functor, Apply, Applicative, Bind, Monad, MonadEffect,
+-- | MonadAff, MonadAsk (AVar PerspectivesState), MonadReader (AVar PerspectivesState),
+-- | MonadThrow Error, MonadError Error, MonadRec, Alt) from MonadPouchdb.
 -- | Use runMonadPerspectives to run a MonadPerspectives computation given the state AVar.
-newtype MonadPerspectives a = MonadPerspectives (ReaderT (AVar PerspectivesState) Aff a)
-
-derive instance Newtype (MonadPerspectives a) _
-derive newtype instance Functor MonadPerspectives
-derive newtype instance Apply MonadPerspectives
-derive newtype instance Applicative MonadPerspectives
-derive newtype instance Bind MonadPerspectives
-derive newtype instance Monad MonadPerspectives
-derive newtype instance MonadEffect MonadPerspectives
-derive newtype instance MonadAff MonadPerspectives
-derive newtype instance MonadAsk (AVar PerspectivesState) MonadPerspectives
-derive newtype instance MonadReader (AVar PerspectivesState) MonadPerspectives
-derive newtype instance MonadThrow Error MonadPerspectives
-derive newtype instance MonadError Error MonadPerspectives
-derive newtype instance MonadRec MonadPerspectives
-derive newtype instance Alt MonadPerspectives
+type MonadPerspectives = MonadPouchdb PerspectivesExtraState
 
 -- | Run a MonadPerspectives action given the state AVar.
 runMonadPerspectives :: forall a. MonadPerspectives a -> AVar PerspectivesState -> Aff a
-runMonadPerspectives (MonadPerspectives mp) rf = runReaderT mp rf
+runMonadPerspectives (MonadPouchdb mp) rf = runReaderT mp rf
 
 type MP = MonadPerspectives
 
@@ -656,13 +643,15 @@ type MPT = MonadPerspectivesTransaction
 -- | can be called wherever a MonadPerspectivesClass constraint is satisfied.
 class (Monad m, MonadEffect m) <= MonadPerspectivesClass m
 
-instance monadPerspectivesClassMP :: MonadPerspectivesClass MonadPerspectives
+instance monadPerspectivesClassMP :: MonadPerspectivesClass (MonadPouchdb f)
 
-instance monadPerspectivesClassMPT :: MonadPerspectivesClass (ReaderT (AVar Transaction) MonadPerspectives)
+instance monadPerspectivesClassMPT :: MonadPerspectivesClass m => MonadPerspectivesClass (ReaderT e m)
 
-instance monadPerspectivesClassAssumptionTracking :: MonadPerspectivesClass (WriterT (ArrayWithoutDoubles InformedAssumption) MonadPerspectives)
+instance monadPerspectivesClassAssumptionTracking :: (Monoid w, MonadPerspectivesClass m) => MonadPerspectivesClass (WriterT w m)
 
-instance monadPerspectivesClassMPQ :: MonadPerspectivesClass (ArrayT (WriterT (ArrayWithoutDoubles InformedAssumption) MonadPerspectives))
+instance monadPerspectivesClassMPQ :: MonadPerspectivesClass m => MonadPerspectivesClass (ArrayT m)
+
+instance monadPerspectivesClassExceptT :: MonadPerspectivesClass m => MonadPerspectivesClass (ExceptT e m)
 
 -----------------------------------------------------------
 -- UPDATER
@@ -787,7 +776,7 @@ remove g k = do
   pure ma
 
 instance persistentInstanceDomeinFile :: Persistent (DomeinFile Stable) (ModelUri Stable) where
-  dbLocalName _ = wrap do
+  dbLocalName _ = do
     sysId <- getSystemIdentifier
     pure $ (sysId <> "_models")
   addPublicResource _ = pure unit
@@ -796,14 +785,14 @@ instance persistentInstanceDomeinFile :: Persistent (DomeinFile Stable) (ModelUr
   typeOfInstance dfid = Dfile dfid
 
 instance persistentInstancePerspectContext :: Persistent PerspectContext ContextInstance where
-  dbLocalName (ContextInstance id) = wrap (pouchdbDatabaseName id)
+  dbLocalName (ContextInstance id) = pouchdbDatabaseName id
   addPublicResource _ = pure unit
   resourceToBeStored ct = Ctxt $ identifier ct
   resourceIdToBeStored id = Ctxt id
   typeOfInstance cid = Ctxt cid
 
 instance persistentInstancePerspectRol :: Persistent PerspectRol RoleInstance where
-  dbLocalName (RoleInstance id) = wrap (pouchdbDatabaseName id)
+  dbLocalName (RoleInstance id) = pouchdbDatabaseName id
   addPublicResource rid = modify \s -> s { publicRolesJustLoaded = cons rid s.publicRolesJustLoaded }
   resourceToBeStored rl = Rle $ identifier rl
   resourceIdToBeStored id = Rle id

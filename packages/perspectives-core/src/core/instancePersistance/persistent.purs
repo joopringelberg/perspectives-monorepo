@@ -122,10 +122,10 @@ postDatabaseName :: forall f. MonadPouchdb f String
 postDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_post")
 
 modelDatabaseName :: MonadPerspectives String
-modelDatabaseName = wrap getSystemIdentifier >>= pure <<< (_ <> "_models")
+modelDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_models")
 
 invertedQueryDatabaseName :: MonadPerspectives String
-invertedQueryDatabaseName = wrap getSystemIdentifier >>= pure <<< (_ <> "_invertedqueries")
+invertedQueryDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_invertedqueries")
 
 getPerspectContext :: ContextInstance -> MP PerspectContext
 getPerspectContext = getPerspectEntiteit fix
@@ -163,7 +163,7 @@ removeEntiteit entId = do
 
 removeEntiteit_ :: forall a i. Persistent a i => i -> a -> MonadPerspectives a
 removeEntiteit_ entId entiteit =
-  wrap $ ensureAuthentication (Resource $ unwrap entId) \_ -> unwrap do
+  ensureAuthentication (Resource $ unwrap entId) \_ -> do
     -- If on the list of items to be saved, remove!
     modify \s@{ entitiesToBeStored } -> s { entitiesToBeStored = delete (resourceToBeStored entiteit) entitiesToBeStored }
     case (rev entiteit) of
@@ -171,7 +171,7 @@ removeEntiteit_ entId entiteit =
       (Just rev) -> do
         void $ removeInternally entId
         { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap entId)
-        void $ wrap (deleteDocument database documentName (Just rev))
+        void $ deleteDocument database documentName (Just rev)
         pure entiteit
 
 tryRemoveEntiteit :: forall a i. Attachment a => Persistent a i => i -> MonadPerspectives Unit
@@ -185,12 +185,11 @@ tryRemoveEntiteit entId = do
 -- | This function must only be called when there is no AVar in cache to represent the resource.
 -- | As an invariant side effect: there is either an AVar that holds the resource, or there is no AVar.
 fetchEntiteit :: forall a i. Attachment a => Persistent a i => Boolean -> i -> MonadPerspectives a
-fetchEntiteit tryToFix id = wrap $ ensureAuthentication (Resource $ unwrap id) \_ ->
-  unwrap $
+fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) \_ ->
   catchError
     do
       { database, documentName } <- resourceIdentifier2DocLocator (unwrap id)
-      doc <- wrap (getDocument database documentName)
+      doc <- getDocument database documentName
       -- Returns either the local database name or a URL.
       v <- representInternally id
       liftAff $ put doc v
@@ -328,7 +327,7 @@ saveCachedEntiteit r entId = do
   -- The cache is now blocked, so there is no way to modify the entity. It may be decached; but we have the modified entity in our hands, here.
   modify \s -> s { entitiesToBeStored = delete r s.entitiesToBeStored }
   { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap $ identifier entiteit)
-  mresult <- wrap (try $ addDocument database entiteit documentName)
+  mresult <- try $ addDocument database entiteit documentName
   case mresult of
     -- Restore the avar holding the resource to its filled state, to prevent the main fiber from blocking.
     -- Notice we do not put it back into entitiesToBeStared.
@@ -343,7 +342,7 @@ saveCachedEntiteit r entId = do
 updateRevision :: forall a i. Persistent a i => i -> MonadPerspectives Unit
 updateRevision entId = do
   { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap entId)
-  revision <- wrap (retrieveDocumentVersion database documentName)
+  revision <- retrieveDocumentVersion database documentName
   setRevision entId revision
 
 -----------------------------------------------------------
@@ -361,7 +360,7 @@ addAttachment i attachmentName attachment mimetype = do
   -- The resource identified by i is now in Couchdb and the revision number in cache equals that in couchdb.
   a :: a <- getPerspectEntiteit fix i
   { database, documentName } <- resourceIdentifier2DocLocator (identifier_ a)
-  DeleteCouchdbDocument { ok } <- wrap (P.addAttachment database documentName (rev a) attachmentName attachment mimetype)
+  DeleteCouchdbDocument { ok } <- P.addAttachment database documentName (rev a) attachmentName attachment mimetype
   -- The document in Couchdb now has a higher revision (unless the operation failed, which throws an exception not caught here).
   -- Remove the document from the cache, so it will be retrieved again before it can be used - including the new revision and attachments.
   void $ removeInternally i

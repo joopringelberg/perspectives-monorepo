@@ -91,7 +91,7 @@ migrateDeltaStoreKeys = do
 migrateDeltaStoreDocs :: MonadPerspectives Unit
 migrateDeltaStoreDocs = do
   dbName <- deltaStoreDatabaseName
-  { rows } <- wrap (documentsInDatabase dbName includeDocs)
+  { rows } <- documentsInDatabase dbName includeDocs
   log ("DeltaStoreKeyMigration: processing " <> show (length rows) <> " delta-store documents")
   for_ rows \{ doc } -> case doc of
     Nothing -> pure unit
@@ -106,7 +106,7 @@ migrateDeltaDoc dbName foreignDoc =
       let newId = deltaStoreDocId r.resourceKey r.resourceVersion r.author
       when (newId /= r._id) do
         -- Check whether the target document already exists (partial previous run).
-        (existing :: Maybe DeltaStoreRecord) <- wrap (tryGetDocument_ dbName newId)
+        (existing :: Maybe DeltaStoreRecord) <- tryGetDocument_ dbName newId
         case existing of
           Just _ -> pure unit -- Already migrated.
           Nothing -> do
@@ -116,9 +116,9 @@ migrateDeltaDoc dbName foreignDoc =
                 , _rev = Nothing
                 , resourceKey = safeKey r.resourceKey
                 }
-            void $ wrap (addDocument_ dbName newRec newId)
+            void $ addDocument_ dbName newRec newId
         -- Delete the old document.
-        void $ wrap (deleteDocument dbName r._id r._rev)
+        void $ deleteDocument dbName r._id r._rev
     Left _ -> pure unit -- Not a DeltaStoreRecord (e.g. design doc); skip.
 
 -----------------------------------------------------------
@@ -128,7 +128,7 @@ migrateDeltaDoc dbName foreignDoc =
 migrateResourceVersionDocs :: MonadPerspectives Unit
 migrateResourceVersionDocs = do
   dbName <- resourceVersionDatabaseName
-  { rows } <- wrap (documentsInDatabase dbName includeDocs)
+  { rows } <- documentsInDatabase dbName includeDocs
   log ("DeltaStoreKeyMigration: processing " <> show (length rows) <> " resource-version documents")
   for_ rows \{ doc } -> case doc of
     Nothing -> pure unit
@@ -140,11 +140,11 @@ migrateVersionDoc dbName foreignDoc =
     Right (ResourceVersionDoc r) -> do
       let newId = safeKey r._id
       when (newId /= r._id) do
-        (existing :: Maybe ResourceVersionDoc) <- wrap (tryGetDocument_ dbName newId)
+        (existing :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName newId
         case existing of
           Just _ -> pure unit
           Nothing -> do
             let newDoc = ResourceVersionDoc r { _id = newId, _rev = Nothing }
-            void $ wrap (addDocument_ dbName newDoc newId)
-        void $ wrap (deleteDocument dbName r._id r._rev)
+            void $ addDocument_ dbName newDoc newId
+        void $ deleteDocument dbName r._id r._rev
     Left _ -> pure unit -- Not a ResourceVersionDoc (e.g. design doc); skip.

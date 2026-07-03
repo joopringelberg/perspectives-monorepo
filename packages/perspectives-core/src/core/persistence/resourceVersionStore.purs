@@ -76,7 +76,7 @@ derive newtype instance ReadForeign ResourceVersionDoc
 -- | The name of the PouchDB database for resource versions.
 -- | Convention: {systemIdentifier}_resourceversions
 resourceVersionDatabaseName :: MonadPerspectives String
-resourceVersionDatabaseName = wrap getSystemIdentifier >>= pure <<< (_ <> "_resourceversions")
+resourceVersionDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_resourceversions")
 
 -----------------------------------------------------------
 -- CACHE HELPERS
@@ -109,7 +109,7 @@ getResourceVersion key = do
     Just v -> pure v
     Nothing -> do
       dbName <- resourceVersionDatabaseName
-      (mDoc :: Maybe ResourceVersionDoc) <- wrap (tryGetDocument_ dbName sk)
+      (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
       case mDoc of
         Nothing -> pure 0
         Just (ResourceVersionDoc { resourceVersion }) -> do
@@ -122,10 +122,10 @@ initResourceVersion :: ResourceKey -> MonadPerspectives Unit
 initResourceVersion key = do
   dbName <- resourceVersionDatabaseName
   let sk = safeKey key
-  (mDoc :: Maybe ResourceVersionDoc) <- wrap (tryGetDocument_ dbName sk)
+  (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
   case mDoc of
     Nothing -> do
-      _ <- wrap (addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev: Nothing, resourceVersion: 0 }) sk)
+      _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev: Nothing, resourceVersion: 0 }) sk
       cacheInsertVersion sk 0
     Just _ -> pure unit
 
@@ -136,13 +136,13 @@ setResourceVersion :: ResourceKey -> Int -> MonadPerspectives Unit
 setResourceVersion key version = do
   dbName <- resourceVersionDatabaseName
   let sk = safeKey key
-  (mDoc :: Maybe ResourceVersionDoc) <- wrap (tryGetDocument_ dbName sk)
+  (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
   case mDoc of
     Nothing -> do
-      _ <- wrap (addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev: Nothing, resourceVersion: version }) sk)
+      _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev: Nothing, resourceVersion: version }) sk
       cacheInsertVersion sk version
     Just (ResourceVersionDoc { _rev }) -> do
-      _ <- wrap (addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev, resourceVersion: version }) sk)
+      _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev, resourceVersion: version }) sk
       cacheInsertVersion sk version
 
 -- | Increment the version for a resource-key by 1 and return the new version.
@@ -155,14 +155,14 @@ incrementResourceVersion :: ResourceKey -> MonadPerspectives Int
 incrementResourceVersion key = do
   dbName <- resourceVersionDatabaseName
   let sk = safeKey key
-  (mDoc :: Maybe ResourceVersionDoc) <- wrap (tryGetDocument_ dbName sk)
+  (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
   case mDoc of
     Nothing -> do
-      _ <- wrap (addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev: Nothing, resourceVersion: 1 }) sk)
+      _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev: Nothing, resourceVersion: 1 }) sk
       cacheInsertVersion sk 1
       pure 1
     Just (ResourceVersionDoc { _rev, resourceVersion }) -> do
       let newVersion = resourceVersion + 1
-      _ <- wrap (addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev, resourceVersion: newVersion }) sk)
+      _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev, resourceVersion: newVersion }) sk
       cacheInsertVersion sk newVersion
       pure newVersion

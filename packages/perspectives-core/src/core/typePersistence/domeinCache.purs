@@ -196,7 +196,7 @@ fetchTranslations (ModelUri namespace) = do
     Nothing -> do
       -- Retrieve the translations and store in state.
       { database, documentName } <- resourceIdentifier2DocLocator $ unversionedModelUri namespace
-      mtranslationsFromDb <- wrap (getAttachment database documentName "translationtable.json")
+      mtranslationsFromDb <- getAttachment database documentName "translationtable.json"
       case mtranslationsFromDb of
         Nothing -> warnModeller (NoTranslations namespace)
         Just f -> do
@@ -218,7 +218,7 @@ getVersionToInstall m@(ModelUri modelUri) = case unsafePartial modelUri2Manifest
   -- To achieve this, we have an Enumerated property that reflects the version to install in the external role of the Manifest.
   -- We retrieve this role as a Couchdb document and read that value directly from its structure.
   { repositoryUrl, manifestName } -> do
-    mRol <- wrap (tryGetDocument repositoryUrl (buitenRol manifestName))
+    mRol <- tryGetDocument repositoryUrl (buitenRol manifestName)
     case mRol of
       Just (PerspectRol { id, properties }) -> case head $ maybe [] identity (lookup versionToInstall properties) of
         Just v -> pure $ Just { semver: unwrap v, versionedModelManifest: makeVersionedModelManifest (unwrap v) id }
@@ -269,7 +269,7 @@ storeDomeinFileInCouchdbPreservingAttachments df@(DomeinFile dfr@{ id, _attachme
     Nothing -> pure empty
     Just atts -> traverseWithIndex
       -- Instead of fetching the attachment from the repository, we fetch it from the local models database.
-      (\attName { content_type } -> Tuple (MediaType content_type) <$> wrap (getAttachment modelsDb documentName attName))
+      (\attName { content_type } -> Tuple (MediaType content_type) <$> getAttachment modelsDb documentName attName)
       atts
   void $ storeDomeinFileInCache id df
   void $ saveCachedDomeinFile id
@@ -292,7 +292,7 @@ addAttachments documentUrl documentName attachments = do
           Nothing -> pure unit
           Just attachment -> do
             newRev <- State.get
-            DeleteCouchdbDocument { rev } <- lift $ wrap (addAttachment documentUrl documentName newRev attName attachment mimetype)
+            DeleteCouchdbDocument { rev } <- lift $ addAttachment documentUrl documentName newRev attName attachment mimetype
             State.put rev
     )
 

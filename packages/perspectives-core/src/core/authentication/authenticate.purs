@@ -94,7 +94,7 @@ signDelta encryptedDelta = do
       , signature: Nothing
       }
     Just cryptoKey -> do
-      signatureBuff <- lift $ lift $ sign (ecdsa sha384) (unsafeCoerce cryptoKey) deltaBuff
+      signatureBuff <- lift $ liftAff $ sign (ecdsa sha384) (unsafeCoerce cryptoKey) deltaBuff
       (int8array :: Uint8Array) <- liftEffect $ whole signatureBuff
       (signature :: String) <- liftAff $ bytesToBase64DataUrl int8array
       sd <- pure $ SignedDelta
@@ -127,7 +127,7 @@ getPublicKey author = do
   mrawKey <- (perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier author) ##> getProperty (EnumeratedPropertyType perspectivesUsersPublicKey)
   case mrawKey of
     Nothing -> pure Nothing
-    Just (Value rawKey) -> lift (Just <$> deserializeJWK rawKey)
+    Just (Value rawKey) -> liftAff (Just <$> deserializeJWK rawKey)
 
 tryGetPublicKey :: PerspectivesUser -> MonadPerspectives (Maybe CryptoTypes.CryptoKey)
 tryGetPublicKey author = entityExists (perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier author) >>=
@@ -148,7 +148,7 @@ deserializeJWK rawKey = do
 getPrivateKey :: MonadPerspectives (Maybe CryptoTypes.CryptoKey)
 getPrivateKey = do
   PerspectivesUser id <- getPerspectivesUser
-  privateKey <- lift $ getCryptoKey $ (takeGuid id) <> privateKeyString
+  privateKey <- liftAff $ getCryptoKey $ (takeGuid id) <> privateKeyString
   pure privateKey
 
 -- | Get my public key. This will only be used on setting up an installation.
@@ -156,9 +156,9 @@ getPrivateKey = do
 getMyPublicKey :: MonadPerspectives (Maybe String)
 getMyPublicKey = do
   PerspectivesUser id <- getPerspectivesUser
-  publicKey <- lift $ getCryptoKey $ (takeGuid id) <> publicKeyString
+  publicKey <- liftAff $ getCryptoKey $ (takeGuid id) <> publicKeyString
   for publicKey
-    \key -> lift $ do
+    \key -> liftAff $ do
       jwk <- CryptoTypes.exportKey CryptoTypes.jwk key
       -- NOTE. The Purescript library Crypto.Subtle contains an error here. `exportKey` always returns an ArrayBuffer,
       -- but https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/exportKey#return_value clearly states that in case

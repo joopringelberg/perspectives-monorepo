@@ -265,7 +265,7 @@ setCurrentLanguage :: String -> MonadPerspectives Unit
 setCurrentLanguage lang = modify \s -> s { currentLanguage = lang }
 
 modelsDatabaseName :: MonadPerspectives String
-modelsDatabaseName = wrap getSystemIdentifier >>= pure <<< (_ <> "_models")
+modelsDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_models")
 
 getPDRStatusSetter :: MonadPerspectives (String -> String -> Unit)
 getPDRStatusSetter = gets _.setPDRStatus

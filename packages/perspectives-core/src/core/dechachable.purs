@@ -68,6 +68,6 @@ isWaitingToBeSaved r = do
 entityIsInDatabase :: forall a i. Attachment a => Persistent a i => i -> MonadPerspectives Boolean
 entityIsInDatabase id = do
   { database, documentName } <- resourceIdentifier2DocLocator (unwrap id)
-  (mdoc :: Maybe a) <- wrap (tryGetDocument database documentName)
+  (mdoc :: Maybe a) <- tryGetDocument database documentName
   pure $ isJust mdoc
 

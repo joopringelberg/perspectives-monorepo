@@ -36,6 +36,7 @@ import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..))
 import Data.Unfoldable (replicate)
 import Effect.Aff.AVar (new, put, take, tryRead)
+import Effect.Aff.Class (liftAff)
 import Effect.Exception (error)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CollectAffectedContexts (reEvaluatePublicFillerChanges)
@@ -98,14 +99,14 @@ runMonadPerspectivesTransaction'
   -> RoleType
   -> MonadPerspectivesTransaction o
   -> (MonadPerspectives o)
-runMonadPerspectivesTransaction' share authoringRole a = (lift $ createTransaction authoringRole share) >>= lift <<< new >>= runReaderT whenFlagIsDown
+runMonadPerspectivesTransaction' share authoringRole a = (liftAff $ createTransaction authoringRole share) >>= liftAff <<< new >>= runReaderT whenFlagIsDown
   where
   -- | Wait until the TransactionFlag can be taken down, then run the action; raise it again.
   whenFlagIsDown :: MonadPerspectivesTransaction o
   whenFlagIsDown = do
     -- 0. Only execute the transaction when we can take the flag down.
     t <- lift $ transactionFlag
-    lift $ lift $ void $ take t
+    lift $ liftAff $ void $ take t
     transactionNumber <- lift $ nextTransactionNumber
     AA.modify \trns -> over Transaction (\tr -> tr { transactionNumber = transactionNumber }) trns
     padding <- lift transactionLevel
@@ -116,12 +117,12 @@ runMonadPerspectivesTransaction' share authoringRole a = (lift $ createTransacti
         r <- a >>= phase1 share authoringRole
         -- 5. Raise the flag
         lift $ debugState (padding <> "Ending transaction " <> show transactionNumber)
-        _ <- lift $ lift $ put true t
+        _ <- lift $ liftAff $ put true t
         pure r
       \e -> do
         -- 5. Raise the flag
         lift $ debugState (padding <> "Ending transaction " <> show transactionNumber)
-        _ <- lift $ lift $ put true t
+        _ <- lift $ liftAff $ put true t
         throwError e
 
 -- | In phase1 we handle:
@@ -516,8 +517,8 @@ evaluateStates stateEvaluations' =
 -- | Run and discard the transaction.
 runSterileTransaction :: forall o. MonadPerspectivesTransaction o -> (MonadPerspectives o)
 runSterileTransaction a =
-  (lift $ createTransaction (ENR $ EnumeratedRoleType sysUser) false)
-    >>= lift <<< new
+  (liftAff $ createTransaction (ENR $ EnumeratedRoleType sysUser) false)
+    >>= liftAff <<< new
     >>= runReaderT a
 
 -- | Run a transaction even though another was already running.
@@ -536,13 +537,13 @@ runEmbeddedTransaction
   -> (MonadPerspectives o)
 runEmbeddedTransaction share authoringRole a = do
   t <- transactionFlag
-  flagIsDown <- isNothing <$> (lift $ tryRead t)
+  flagIsDown <- isNothing <$> (liftAff $ tryRead t)
   if flagIsDown then do
     -- Because the transactionFlag AVar is empty (== the flag is down), we know a transaction is not running.
     -- 1. Raise the flag.
     increaseTransactionLevel
     padding <- transactionLevel
-    _ <- lift $ put true t
+    _ <- liftAff $ put true t
     debugState $ padding <> "Starting embedded " <> (if share then "" else "non-") <> "sharing transaction."
     catchError
       do
@@ -553,12 +554,12 @@ runEmbeddedTransaction share authoringRole a = do
         -- 2. Lower it again.
         debugState $ padding <> "Ending embedded transaction."
         decreaseTransactionLevel
-        _ <- lift $ take t
+        _ <- liftAff $ take t
         pure result
       \e -> do
         debugState (padding <> "Ending embedded transaction in failure: " <> show e)
         decreaseTransactionLevel
-        _ <- lift $ take t
+        _ <- liftAff $ take t
         throwError e
   else throwError (error "runEmbeddedTransaction is not run inside another transaction.")
 
@@ -572,11 +573,11 @@ runEmbeddedIfNecessary
   -> (MonadPerspectives o)
 runEmbeddedIfNecessary share authoringRole a = do
   t <- transactionFlag
-  flagIsDown <- isNothing <$> (lift $ tryRead t)
+  flagIsDown <- isNothing <$> (liftAff $ tryRead t)
   if flagIsDown then do
     -- Because the transactionFlag AVar is empty (== the flag is down), we know a transaction is not running.
     -- 1. Raise the flag.
-    _ <- lift $ put true t
+    _ <- liftAff $ put true t
     increaseTransactionLevel
     padding <- transactionLevel
     debugState $ padding <> "Starting embedded " <> (if share then "" else "non-") <> "sharing transaction" <> " because it was necessary."
@@ -587,12 +588,12 @@ runEmbeddedIfNecessary share authoringRole a = do
         -- 2. Lower it again.
         debugState $ padding <> "Ending transaction that needed to be embedded."
         decreaseTransactionLevel
-        _ <- lift $ take t
+        _ <- liftAff $ take t
         pure result
       \e -> do
         debugState $ padding <> ("Ending transaction that needed to be embedded in failure. " <> show e)
         decreaseTransactionLevel
-        _ <- lift $ take t
+        _ <- liftAff $ take t
         throwError e
   -- Otherwise, since a transaction is already running, we queue up behind it.
   else runMonadPerspectivesTransaction' share authoringRole a
