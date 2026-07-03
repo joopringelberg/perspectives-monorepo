@@ -236,18 +236,18 @@ getSynchronisationResults = do
                 -- setTopicLogLevel INSTALL Debug
                 -- setTopicLogLevel SYNC Info
                 setTopicLogLevel TEST Debug
-                -- setTopicLogLevel RESOURCE Trace
+                setTopicLogLevel RESOURCE Error
                 -- setTopicLogLevel STATE Trace
             )
           runInPDR pdrB
             ( do
                 -- setTopicLogLevel BROKER Debug
-                -- setTopicLogLevel INSTALL Trace
+                setTopicLogLevel INSTALL Silent
                 -- setTopicLogLevel MODEL Debug
                 -- setTopicLogLevel SYNC Trace
                 setTopicLogLevel TEST Debug
-            -- setTopicLogLevel RESOURCE Trace
-            -- setTopicLogLevel DELTA Trace
+                setTopicLogLevel RESOURCE Error
+                -- setTopicLogLevel DELTA Trace
             )
 
           -- Get Alice's and Bob's PerspectivesUsers instances for later use.
@@ -460,6 +460,10 @@ allTests =
   , { testContextTypeName: test_Binding_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Binder_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Binding_in_CalculatedRole, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BindingStep, logConfiguration: 
+      { pdrA: [ { topic: RESOURCE, logLevel: Trace }]
+      , pdrB: [ { topic: SYNC, logLevel: Trace }]}
+   }
   ]
 
 allOn :: Array TopicLogLevelPair
@@ -478,7 +482,6 @@ allOn =
   , {topic: UPGRADE, logLevel: Trace}
   , {topic: PARSER, logLevel: Trace}
   , {topic: COMPILER, logLevel: Trace}
-  , {topic: INSTALL, logLevel: Trace}
 
 ]
 
@@ -505,3 +508,6 @@ test_SetProperty_on_Filler = "model://joopringelberg.nl#SynchronisationTestModel
 
 test_Binding_in_CalculatedRole :: String
 test_Binding_in_CalculatedRole = "model://joopringelberg.nl#SynchronisationTestModel$Test_Binding_in_CalculatedRole"
+
+test_SetProperty_in_CalculatedProperty_BindingStep :: String
+test_SetProperty_in_CalculatedProperty_BindingStep = "model://joopringelberg.nl#SynchronisationTestModel$Test_SetProperty_in_CalculatedProperty_BindingStep"

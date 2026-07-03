@@ -260,7 +260,47 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
 ------------------------------------------------------------------------------
 ---- Test another case of a calculated property.
 ---- Here the perspective query ends with a binding step.
+---- The crucial modification is to set the property.
 ------------------------------------------------------------------------------
+  case Test_SetProperty_in_CalculatedProperty_BindingStep
+    aspect mm:Test
+    state LeaderExists = exists Leader
+      on entry
+        do for Leader
+          letA
+            endfiller <- create role EndFiller3
+          in
+            bind endfiller to Intermediate3
+    external
+      property Q (Boolean)
+      state TestSucceeded = context >> EndFiller3 >> P
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on Intermediate3
+        only (Create, Fill)
+        props (Q) verbs (SetPropertyValue, Consult)
+      perspective on EndFiller3
+        only (Create)
+      action RunTest
+        TestName = "Test property step in calculated property on perspective query ending on binding step" for extern
+        Q = true for Intermediate3
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on CalculatedEndFiller3
+        props (P) verbs (Consult)
+    
+    thing Intermediate3 filledBy EndFiller3
+      property Q (Boolean)
+
+    thing EndFiller3
+      property P = binder Intermediate3 >> Q
+
+    thing CalculatedEndFiller3 = Intermediate3 >> binding     
 
 ------------------------------------------------------------------------------
 ---- Test another case of a calculated property.
