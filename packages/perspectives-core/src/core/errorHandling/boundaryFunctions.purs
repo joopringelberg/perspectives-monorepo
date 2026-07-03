@@ -24,9 +24,8 @@ module Perspectives.Error.Boundaries where
 
 import Control.Monad.Trans.Class (lift)
 import Data.Either (Either(..))
-import Effect.Class (class MonadEffect)
 import Effect.Exception (Error)
-import Perspectives.CoreTypes (MonadPerspectivesQuery, MonadPerspectivesTransaction)
+import Perspectives.CoreTypes (MonadPerspectivesQuery, MonadPerspectivesTransaction, class MonadPerspectivesClass)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.Error.Pretty (warnModellerWithErrorPretty)
 import Perspectives.ErrorLogging (logPerspectivesError)
@@ -34,7 +33,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (Unit, show, ($), pure, unit, bind, (*>))
 
-handlePerspectRolError :: forall a m r. MonadEffect m => String -> (r -> m a) -> Either Error r -> m Unit
+handlePerspectRolError :: forall a m r. MonadPerspectivesClass m => String -> (r -> m a) -> Either Error r -> m Unit
 handlePerspectRolError boundaryName f erole = case erole of
   Left err -> logPerspectivesError $ RolErrorBoundary boundaryName (show err)
   Right role -> do
@@ -43,12 +42,12 @@ handlePerspectRolError boundaryName f erole = case erole of
 
 -- | Error boundary with a default value. The default is returned instead of the result that the 
 -- | failed computation should have returned.
-handlePerspectRolError' :: forall a m r. MonadEffect m => String -> a -> (r -> m a) -> Either Error r -> m a
+handlePerspectRolError' :: forall a m r. MonadPerspectivesClass m => String -> a -> (r -> m a) -> Either Error r -> m a
 handlePerspectRolError' boundaryName default f erole = case erole of
   Left err -> (logPerspectivesError $ RolErrorBoundary boundaryName (show err)) *> pure default
   Right role -> f role
 
-handlePerspectContextError :: forall a m r. MonadEffect m => String -> (r -> m a) -> Either Error r -> m Unit
+handlePerspectContextError :: forall a m r. MonadPerspectivesClass m => String -> (r -> m a) -> Either Error r -> m Unit
 handlePerspectContextError boundaryName f econtext = case econtext of
   Left err -> logPerspectivesError $ ContextErrorBoundary boundaryName (show err)
   Right ctxt -> do
@@ -57,12 +56,12 @@ handlePerspectContextError boundaryName f econtext = case econtext of
 
 -- | Error boundary with a default value. The default is returned instead of the result that the 
 -- | failed computation should have returned.
-handlePerspectContextError' :: forall a m r. MonadEffect m => String -> a -> (r -> m a) -> Either Error r -> m a
+handlePerspectContextError' :: forall a m r. MonadPerspectivesClass m => String -> a -> (r -> m a) -> Either Error r -> m a
 handlePerspectContextError' boundaryName default f econtext = case econtext of
   Left err -> (logPerspectivesError $ ContextErrorBoundary boundaryName (show err)) *> pure default
   Right ctxt -> f ctxt
 
-handleDomeinFileError :: forall a m r. MonadEffect m => String -> (r -> m a) -> Either Error r -> m Unit
+handleDomeinFileError :: forall a m r. MonadPerspectivesClass m => String -> (r -> m a) -> Either Error r -> m Unit
 handleDomeinFileError boundaryName f dfile = case dfile of
   Left err -> logPerspectivesError $ DomeinFileErrorBoundary boundaryName (show err)
   Right ctxt -> do
@@ -71,7 +70,7 @@ handleDomeinFileError boundaryName f dfile = case dfile of
 
 -- | Error boundary with a default value. The default is returned instead of the result that the 
 -- | failed computation should have returned.
-handleDomeinFileError' :: forall a m r. MonadEffect m => String -> a -> (r -> m a) -> Either Error r -> m a
+handleDomeinFileError' :: forall a m r. MonadPerspectivesClass m => String -> a -> (r -> m a) -> Either Error r -> m a
 handleDomeinFileError' boundaryName default f dfile = case dfile of
   Left err -> (logPerspectivesError $ DomeinFileErrorBoundary boundaryName (show err)) *> pure default
   Right ctxt -> f ctxt

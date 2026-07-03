@@ -49,7 +49,7 @@ import Data.Array (catMaybes, elem, filter, head, last, length) as Arr
 import Data.Either (Either(..))
 import Data.Foldable (traverse_)
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Newtype (unwrap)
+import Data.Newtype (unwrap, wrap)
 import Data.String (Pattern(..), drop, indexOf, lastIndexOf, length, split, take) as Str
 import Effect.Class (liftEffect)
 import Foreign (Foreign)
@@ -70,7 +70,7 @@ import Simple.JSON (read', readJSON')
 -- | The name of the PouchDB database for the delta-store.
 -- | Convention: {systemIdentifier}_deltastore
 deltaStoreDatabaseName :: MonadPerspectives String
-deltaStoreDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_deltastore")
+deltaStoreDatabaseName = wrap getSystemIdentifier >>= pure <<< (_ <> "_deltastore")
 
 -----------------------------------------------------------
 -- URL-SAFE KEY
@@ -228,14 +228,14 @@ storeDelta :: DeltaStoreRecord -> MonadPerspectives Unit
 storeDelta rec@(DeltaStoreRecord { _id, resourceKey }) = do
   dbName <- deltaStoreDatabaseName
   -- Check if the delta already exists to avoid overwriting.
-  (existing :: Maybe DeltaStoreRecord) <- tryGetDocument_ dbName _id
+  (existing :: Maybe DeltaStoreRecord) <- wrap (tryGetDocument_ dbName _id)
   case existing of
     Just existingRec ->
       -- Delta already exists in DB; cache the stored record (which has the correct _rev).
       -- The result sets haven't changed, so no invalidation is needed.
       cacheInsertDelta _id existingRec
     Nothing -> do
-      _ <- addDocument_ dbName rec _id
+      _ <- wrap (addDocument_ dbName rec _id)
       cacheInsertDelta _id rec
       -- A new delta was written: evict the stale result-set caches.
       invalidateResultCachesForResource resourceKey
@@ -249,7 +249,7 @@ getDelta docId = do
     Just rec -> pure (Just rec)
     Nothing -> do
       dbName <- deltaStoreDatabaseName
-      (mRec :: Maybe DeltaStoreRecord) <- tryGetDocument_ dbName docId
+      (mRec :: Maybe DeltaStoreRecord) <- wrap (tryGetDocument_ dbName docId)
       case mRec of
         Nothing -> pure Nothing
         Just rec -> do
@@ -269,7 +269,7 @@ getDeltasForResource resourceKey = do
       dbName <- deltaStoreDatabaseName
       let startkey = sk <> "_v"
       let endkey = sk <> "_v\xFFFF"
-      result <- documentsInRange dbName startkey endkey
+      result <- wrap (documentsInRange dbName startkey endkey)
       let records = Arr.catMaybes $ map decodeDoc result.rows
       -- Populate both the result-set cache and the per-delta cache.
       cacheResourceDeltasInsert sk records
@@ -310,7 +310,7 @@ getDeltasForRoleInstance roleInstanceId = do
       let startkey = sk
       -- Use the highest unicode character as end sentinel to include all possible suffixes.
       let endkey = sk <> "\xFFFF"
-      result <- documentsInRange dbName startkey endkey
+      result <- wrap (documentsInRange dbName startkey endkey)
       let allDeltas = Arr.catMaybes $ map decodeDoc result.rows
       -- Keep only records where resourceKey is the role itself or one of its sub-resources.
       let filtered = Arr.filter (isRoleOrSubResource sk) allDeltas
@@ -342,12 +342,12 @@ getDeltasForRoleInstance roleInstanceId = do
 updateDeltaApplied :: String -> Boolean -> MonadPerspectives Unit
 updateDeltaApplied docId newApplied = do
   dbName <- deltaStoreDatabaseName
-  (existing :: Maybe DeltaStoreRecord) <- tryGetDocument_ dbName docId
+  (existing :: Maybe DeltaStoreRecord) <- wrap (tryGetDocument_ dbName docId)
   case existing of
     Nothing -> pure unit
     Just (DeltaStoreRecord r) -> do
       let updated = DeltaStoreRecord (r { applied = newApplied })
-      void $ addDocument_ dbName updated docId
+      void $ wrap (addDocument_ dbName updated docId)
       cacheInsertDelta docId updated
       -- Evict the stale result-set caches for this resource key.
       invalidateResultCachesForResource r.resourceKey
@@ -359,7 +359,7 @@ updateDeltaApplied docId newApplied = do
 getDeltasByDeltaTypes :: Array String -> MonadPerspectives (Array DeltaStoreRecord)
 getDeltasByDeltaTypes deltaTypes = do
   dbName <- deltaStoreDatabaseName
-  result <- documentsInRange dbName "" "\xFFFF"
+  result <- wrap (documentsInRange dbName "" "\xFFFF")
   let allRecords = Arr.catMaybes $ map decodeDoc result.rows
   pure $ Arr.filter (\(DeltaStoreRecord r) -> Arr.elem r.deltaType deltaTypes) allRecords
   where
@@ -380,7 +380,7 @@ getDeltasByDeltaTypes deltaTypes = do
 getDeltasForContextKey :: String -> MonadPerspectives (Array DeltaStoreRecord)
 getDeltasForContextKey contextKey = do
   dbName <- deltaStoreDatabaseName
-  result <- documentsInRange dbName "" "\xFFFF"
+  result <- wrap (documentsInRange dbName "" "\xFFFF")
   let allRecords = Arr.catMaybes $ map decodeDoc result.rows
   pure $ Arr.filter (\(DeltaStoreRecord r) -> r.contextKey == Just contextKey) allRecords
   where

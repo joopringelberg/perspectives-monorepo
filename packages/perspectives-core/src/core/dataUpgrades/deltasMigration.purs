@@ -51,7 +51,7 @@ import Data.Array (length, mapWithIndex)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
-import Data.Newtype (unwrap)
+import Data.Newtype (unwrap, wrap)
 import Data.Tuple (Tuple(..), snd)
 import Effect.Class.Console (log)
 import Foreign (Foreign)
@@ -139,8 +139,8 @@ isSentinel (SignedDelta { author, encryptedDelta }) =
 -- | Runs in MonadPerspectives (no transaction needed since we don't re-sign).
 migrateDeltasToStore :: MonadPerspectives Unit
 migrateDeltasToStore = do
-  dbName <- entitiesDatabaseName
-  { rows } <- documentsInDatabase dbName includeDocs
+  dbName <- wrap entitiesDatabaseName
+  { rows } <- wrap (documentsInDatabase dbName includeDocs)
   log ("DeltasMigration: processing " <> show (length rows) <> " entity documents")
   for_ rows \{ doc } -> case doc of
     Nothing -> pure unit

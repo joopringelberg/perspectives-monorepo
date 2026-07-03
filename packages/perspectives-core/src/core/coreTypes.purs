@@ -57,6 +57,8 @@ module Perspectives.CoreTypes
   , MonadPerspectives
   , MonadPerspectivesQuery
   , MonadPerspectivesTransaction
+  , class MonadPerspectivesClass
+  , runMonadPerspectives
   , ObjectsGetter
   , OrderedDelta(..)
   , PerspectivesExtraState
@@ -119,7 +121,9 @@ module Perspectives.CoreTypes
   ) where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
-import Control.Monad.Reader (ReaderT, lift)
+import Control.Monad.Error.Class (class MonadError, class MonadThrow)
+import Control.Monad.Reader (ReaderT, lift, runReaderT, class MonadAsk, class MonadReader)
+import Control.Monad.Rec.Class (class MonadRec)
 import Control.Monad.Writer (WriterT, runWriterT)
 import Data.Array (cons, foldMap, foldl, foldr, head, union)
 import Data.Eq.Generic (genericEq)
@@ -127,7 +131,7 @@ import Data.Foldable (class Foldable)
 import Data.Generic.Rep (class Generic)
 import Data.Map (Map)
 import Data.Maybe (Maybe(..))
-import Data.Newtype (class Newtype, unwrap)
+import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Nullable (Nullable)
 import Data.Ord.Generic (genericCompare)
 import Data.Show.Generic (genericShow)
@@ -135,9 +139,9 @@ import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, throwError)
 import Effect.Aff.AVar (AVar, empty)
-import Effect.Aff.Class (liftAff)
-import Effect.Class (liftEffect)
-import Effect.Exception (error)
+import Effect.Aff.Class (class MonadAff, liftAff)
+import Effect.Class (class MonadEffect, liftEffect)
+import Effect.Exception (Error, error)
 import Foreign.Object (Object)
 import Foreign.Object as F
 import LRUCache (Cache, defaultGetOptions, delete, get, set)
@@ -162,7 +166,7 @@ import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPrope
 import Perspectives.ResourceIdentifiers.Parser (pouchdbDatabaseName)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
 import Perspectives.Sync.Transaction (Transaction)
-import Prelude (class Eq, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, eq, pure, show, unit, ($), (<<<), (<>), (>>=))
+import Prelude (class Applicative, class Apply, class Bind, class Eq, class Functor, class Monad, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, eq, pure, show, unit, ($), (<<<), (<>), (>>=))
 import Simple.JSON (class ReadForeign, class WriteForeign)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -442,9 +446,29 @@ instance Ord InformedAssumption where
 -----------------------------------------------------------
 -- MONADPERSPECTIVES
 -----------------------------------------------------------
--- | MonadPerspectives is an instance of MonadAff.
--- | So, with liftAff we lift an operation in Aff to MonadPerspectives.
-type MonadPerspectives = ReaderT (AVar PerspectivesState) Aff
+-- | MonadPerspectives is a newtype over ReaderT (AVar PerspectivesState) Aff.
+-- | It is an instance of MonadAff, MonadEffect, MonadAsk (AVar PerspectivesState),
+-- | MonadReader (AVar PerspectivesState), MonadThrow Error, and MonadError Error.
+-- | Use runMonadPerspectives to run a MonadPerspectives computation given the state AVar.
+newtype MonadPerspectives a = MonadPerspectives (ReaderT (AVar PerspectivesState) Aff a)
+
+derive instance Newtype (MonadPerspectives a) _
+derive newtype instance Functor MonadPerspectives
+derive newtype instance Apply MonadPerspectives
+derive newtype instance Applicative MonadPerspectives
+derive newtype instance Bind MonadPerspectives
+derive newtype instance Monad MonadPerspectives
+derive newtype instance MonadEffect MonadPerspectives
+derive newtype instance MonadAff MonadPerspectives
+derive newtype instance MonadAsk (AVar PerspectivesState) MonadPerspectives
+derive newtype instance MonadReader (AVar PerspectivesState) MonadPerspectives
+derive newtype instance MonadThrow Error MonadPerspectives
+derive newtype instance MonadError Error MonadPerspectives
+derive newtype instance MonadRec MonadPerspectives
+
+-- | Run a MonadPerspectives action given the state AVar.
+runMonadPerspectives :: forall a. MonadPerspectives a -> AVar PerspectivesState -> Aff a
+runMonadPerspectives (MonadPerspectives mp) rf = runReaderT mp rf
 
 type MP = MonadPerspectives
 
@@ -621,6 +645,24 @@ type MonadPerspectivesTransaction = ReaderT (AVar Transaction) MonadPerspectives
 type MPT = MonadPerspectivesTransaction
 
 -----------------------------------------------------------
+-- MONADPERSPECTIVESCLASS
+-----------------------------------------------------------
+-- | Capability class for all monads in the Perspectives monad stack.
+-- | Restricts error boundary functions and other utilities to Perspectives-related monads
+-- | (MonadPerspectives, MonadPerspectivesTransaction, AssumptionTracking, MonadPerspectivesQuery).
+-- | Because MonadEffect is a superclass, any function that requires MonadEffect
+-- | can be called wherever a MonadPerspectivesClass constraint is satisfied.
+class (Monad m, MonadEffect m) <= MonadPerspectivesClass m
+
+instance monadPerspectivesClassMP :: MonadPerspectivesClass MonadPerspectives
+
+instance monadPerspectivesClassMPT :: MonadPerspectivesClass (ReaderT (AVar Transaction) MonadPerspectives)
+
+instance monadPerspectivesClassAssumptionTracking :: MonadPerspectivesClass (WriterT (ArrayWithoutDoubles InformedAssumption) MonadPerspectives)
+
+instance monadPerspectivesClassMPQ :: MonadPerspectivesClass (ArrayT (WriterT (ArrayWithoutDoubles InformedAssumption) MonadPerspectives))
+
+-----------------------------------------------------------
 -- UPDATER
 -----------------------------------------------------------
 type Updater s = s -> MonadPerspectivesTransaction Unit
@@ -743,7 +785,7 @@ remove g k = do
   pure ma
 
 instance persistentInstanceDomeinFile :: Persistent (DomeinFile Stable) (ModelUri Stable) where
-  dbLocalName _ = do
+  dbLocalName _ = wrap do
     sysId <- getSystemIdentifier
     pure $ (sysId <> "_models")
   addPublicResource _ = pure unit
@@ -752,14 +794,14 @@ instance persistentInstanceDomeinFile :: Persistent (DomeinFile Stable) (ModelUr
   typeOfInstance dfid = Dfile dfid
 
 instance persistentInstancePerspectContext :: Persistent PerspectContext ContextInstance where
-  dbLocalName (ContextInstance id) = pouchdbDatabaseName id
+  dbLocalName (ContextInstance id) = wrap (pouchdbDatabaseName id)
   addPublicResource _ = pure unit
   resourceToBeStored ct = Ctxt $ identifier ct
   resourceIdToBeStored id = Ctxt id
   typeOfInstance cid = Ctxt cid
 
 instance persistentInstancePerspectRol :: Persistent PerspectRol RoleInstance where
-  dbLocalName (RoleInstance id) = pouchdbDatabaseName id
+  dbLocalName (RoleInstance id) = wrap (pouchdbDatabaseName id)
   addPublicResource rid = modify \s -> s { publicRolesJustLoaded = cons rid s.publicRolesJustLoaded }
   resourceToBeStored rl = Rle $ identifier rl
   resourceIdToBeStored id = Rle id

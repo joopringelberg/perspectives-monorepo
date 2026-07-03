@@ -39,7 +39,7 @@ module Perspectives.Sidecar.StableIdMapping
 
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
-import Data.Newtype (unwrap)
+import Data.Newtype (unwrap, wrap)
 import Data.Show (show)
 import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (liftAff)
@@ -372,7 +372,7 @@ loadStableMapping :: ModelUri Stable -> Boolean -> MonadPerspectives (Maybe Stab
 loadStableMapping (ModelUri domeinFileName) fromRepo = do
   let split = unsafePartial modelUri2ModelUrl domeinFileName
   source <- if fromRepo then pure split.repositoryUrl else modelDatabaseName
-  mBlob <- getAttachment source split.documentName "stableIdMapping.json"
+  mBlob <- wrap (getAttachment source split.documentName "stableIdMapping.json")
   case mBlob of
     Nothing -> pure Nothing
     Just blob -> do
@@ -387,7 +387,7 @@ loadStableMapping (ModelUri domeinFileName) fromRepo = do
 
 loadStableMapping_ :: String -> String -> MonadPerspectives (Maybe StableIdMapping)
 loadStableMapping_ database documentName = do
-  getAttachment database documentName "stableIdMapping.json" >>= case _ of
+  wrap (getAttachment database documentName "stableIdMapping.json") >>= case _ of
     Just f -> do
       x <- liftAff $ fromBlob f
       case readJSON x of

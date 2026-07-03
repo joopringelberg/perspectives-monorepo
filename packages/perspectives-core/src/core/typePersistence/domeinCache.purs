@@ -34,7 +34,7 @@ import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Maybe (Maybe(..), maybe)
 import Data.MediaType (MediaType(..))
-import Data.Newtype (unwrap)
+import Data.Newtype (unwrap, wrap)
 import Data.Show (show)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
@@ -218,7 +218,7 @@ getVersionToInstall m@(ModelUri modelUri) = case unsafePartial modelUri2Manifest
   -- To achieve this, we have an Enumerated property that reflects the version to install in the external role of the Manifest.
   -- We retrieve this role as a Couchdb document and read that value directly from its structure.
   { repositoryUrl, manifestName } -> do
-    mRol <- tryGetDocument repositoryUrl (buitenRol manifestName)
+    mRol <- wrap (tryGetDocument repositoryUrl (buitenRol manifestName))
     case mRol of
       Just (PerspectRol { id, properties }) -> case head $ maybe [] identity (lookup versionToInstall properties) of
         Just v -> pure $ Just { semver: unwrap v, versionedModelManifest: makeVersionedModelManifest (unwrap v) id }

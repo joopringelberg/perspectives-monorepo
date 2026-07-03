@@ -28,6 +28,7 @@ import Control.Monad.Trans.Class (lift)
 import Data.Array.NonEmpty (index)
 import Data.Map (lookup)
 import Data.Maybe (Maybe(..), maybe)
+import Data.Newtype (wrap)
 import Data.String.Regex (Regex, match, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
@@ -122,7 +123,7 @@ classes Persistent and Cacheable.
 -----------------------------------------------------------
 -- | Returns the unique identifier for a resource that can be used in Deltas.
 guid :: ResourceIdentifier -> MonadPerspectives Guid
-guid = parseResourceIdentifier >=> pure <<< guid_
+guid = wrap <<< parseResourceIdentifier >=> pure <<< guid_
 
 guid_ :: DecomposedResourceIdentifier -> Guid
 guid_ (Default _ g) = g
@@ -161,7 +162,7 @@ type DocLocator =
 
 resourceIdentifier2DocLocator :: ResourceIdentifier -> MonadPerspectives DocLocator
 resourceIdentifier2DocLocator resId = do
-  decomposed <- parseResourceIdentifier resId
+  decomposed <- wrap (parseResourceIdentifier resId)
   pure
     { database: pouchdbDatabaseName_ decomposed
     , documentName: guid_ decomposed
@@ -169,7 +170,7 @@ resourceIdentifier2DocLocator resId = do
 
 resourceIdentifier2WriteDocLocator :: ResourceIdentifier -> MonadPerspectives DocLocator
 resourceIdentifier2WriteDocLocator resId = do
-  decomposed <- parseResourceIdentifier resId
+  decomposed <- wrap (parseResourceIdentifier resId)
   pure
     { database: pouchdbDatabaseName_ decomposed
     , documentName: guid_ decomposed
@@ -182,7 +183,7 @@ resourceIdentifier2WriteDocLocator resId = do
 -- | Such identifiers are only ever created when processing a Transaction for a publishing Proxy role.
 createResourceIdentifier :: ResourceType -> MonadPerspectivesTransaction ResourceIdentifier
 createResourceIdentifier ctype = do
-  s <- lift $ getSystemIdentifier
+  s <- lift $ wrap getSystemIdentifier
   g <- liftEffect $ cuid2 s
   createResourceIdentifier' ctype g
 
@@ -190,7 +191,7 @@ createResourceIdentifier ctype = do
 -- | Such identifiers are only ever created when processing a Transaction for a publishing Proxy role.
 createResourceIdentifier' :: ResourceType -> String -> MonadPerspectivesTransaction ResourceIdentifier
 createResourceIdentifier' ctype g = do
-  mstorageScheme <- lift $ gets \({ typeToStorage }) -> lookup ctype typeToStorage
+  mstorageScheme <- lift $ wrap (gets \({ typeToStorage }) -> lookup ctype typeToStorage)
   case mstorageScheme of
     Nothing -> pure $ createDefaultIdentifier g
     Just (CT.Default _) -> pure $ createDefaultIdentifier g
@@ -199,7 +200,7 @@ createResourceIdentifier' ctype g = do
 
 createCuid :: MonadPerspectives String
 createCuid = do
-  s <- getSystemIdentifier
+  s <- wrap getSystemIdentifier
   liftEffect $ cuid2 s
 
 createDefaultIdentifier :: String -> ResourceIdentifier

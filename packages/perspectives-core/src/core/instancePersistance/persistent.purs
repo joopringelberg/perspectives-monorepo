@@ -64,13 +64,13 @@ import Prelude
 
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (try)
-import Control.Monad.Except (catchError, lift, throwError)
+import Control.Monad.Except (catchError, throwError)
 import Data.Array (cons, delete, elemIndex)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.MediaType (MediaType)
-import Data.Newtype (unwrap)
+import Data.Newtype (unwrap, wrap)
 import Data.String.Regex (Regex, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
@@ -122,10 +122,10 @@ postDatabaseName :: forall f. MonadPouchdb f String
 postDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_post")
 
 modelDatabaseName :: MonadPerspectives String
-modelDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_models")
+modelDatabaseName = wrap getSystemIdentifier >>= pure <<< (_ <> "_models")
 
 invertedQueryDatabaseName :: MonadPerspectives String
-invertedQueryDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_invertedqueries")
+invertedQueryDatabaseName = wrap getSystemIdentifier >>= pure <<< (_ <> "_invertedqueries")
 
 getPerspectContext :: ContextInstance -> MP PerspectContext
 getPerspectContext = getPerspectEntiteit fix
@@ -163,7 +163,7 @@ removeEntiteit entId = do
 
 removeEntiteit_ :: forall a i. Persistent a i => i -> a -> MonadPerspectives a
 removeEntiteit_ entId entiteit =
-  ensureAuthentication (Resource $ unwrap entId) $ \_ -> do
+  wrap $ ensureAuthentication (Resource $ unwrap entId) \_ -> unwrap do
     -- If on the list of items to be saved, remove!
     modify \s@{ entitiesToBeStored } -> s { entitiesToBeStored = delete (resourceToBeStored entiteit) entitiesToBeStored }
     case (rev entiteit) of
@@ -171,7 +171,7 @@ removeEntiteit_ entId entiteit =
       (Just rev) -> do
         void $ removeInternally entId
         { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap entId)
-        void $ deleteDocument database documentName (Just rev)
+        void $ wrap (deleteDocument database documentName (Just rev))
         pure entiteit
 
 tryRemoveEntiteit :: forall a i. Attachment a => Persistent a i => i -> MonadPerspectives Unit
@@ -185,14 +185,15 @@ tryRemoveEntiteit entId = do
 -- | This function must only be called when there is no AVar in cache to represent the resource.
 -- | As an invariant side effect: there is either an AVar that holds the resource, or there is no AVar.
 fetchEntiteit :: forall a i. Attachment a => Persistent a i => Boolean -> i -> MonadPerspectives a
-fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
+fetchEntiteit tryToFix id = wrap $ ensureAuthentication (Resource $ unwrap id) \_ ->
+  unwrap $
   catchError
     do
       { database, documentName } <- resourceIdentifier2DocLocator (unwrap id)
-      doc <- getDocument database documentName
+      doc <- wrap (getDocument database documentName)
       -- Returns either the local database name or a URL.
       v <- representInternally id
-      lift $ put doc v
+      liftAff $ put doc v
       pure doc
 
     \e -> do
@@ -243,7 +244,7 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
 -- Instead, we want to notify the user that, being offline, some resources cannot be accessed.
 internetRequiredButMissing :: ResourceIdentifier -> MonadPerspectives Boolean
 internetRequiredButMissing s =
-  if isInPublicScheme s || isInRemoteScheme s then lift $ isOffLine
+  if isInPublicScheme s || isInRemoteScheme s then liftAff isOffLine
   else pure false
 
 -- | Saves a previously cached entity.
@@ -327,7 +328,7 @@ saveCachedEntiteit r entId = do
   -- The cache is now blocked, so there is no way to modify the entity. It may be decached; but we have the modified entity in our hands, here.
   modify \s -> s { entitiesToBeStored = delete r s.entitiesToBeStored }
   { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap $ identifier entiteit)
-  mresult <- try $ addDocument database entiteit documentName
+  mresult <- wrap (try $ addDocument database entiteit documentName)
   case mresult of
     -- Restore the avar holding the resource to its filled state, to prevent the main fiber from blocking.
     -- Notice we do not put it back into entitiesToBeStared.
@@ -342,7 +343,7 @@ saveCachedEntiteit r entId = do
 updateRevision :: forall a i. Persistent a i => i -> MonadPerspectives Unit
 updateRevision entId = do
   { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap entId)
-  revision <- retrieveDocumentVersion database documentName
+  revision <- wrap (retrieveDocumentVersion database documentName)
   setRevision entId revision
 
 -----------------------------------------------------------
@@ -360,7 +361,7 @@ addAttachment i attachmentName attachment mimetype = do
   -- The resource identified by i is now in Couchdb and the revision number in cache equals that in couchdb.
   a :: a <- getPerspectEntiteit fix i
   { database, documentName } <- resourceIdentifier2DocLocator (identifier_ a)
-  DeleteCouchdbDocument { ok } <- P.addAttachment database documentName (rev a) attachmentName attachment mimetype
+  DeleteCouchdbDocument { ok } <- wrap (P.addAttachment database documentName (rev a) attachmentName attachment mimetype)
   -- The document in Couchdb now has a higher revision (unless the operation failed, which throws an exception not caught here).
   -- Remove the document from the cache, so it will be retrieved again before it can be used - including the new revision and attachments.
   void $ removeInternally i

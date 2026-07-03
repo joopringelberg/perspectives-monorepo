@@ -39,6 +39,7 @@ import Prelude
 import Data.Array (concat, filter)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
+import Data.Newtype (wrap)
 import Data.Traversable (for)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -118,12 +119,12 @@ getQueriesFromCache queryCompiler queryGetter ks = concat <$>
 saveInvertedQueries :: StoredQueries -> MonadPerspectives Unit
 saveInvertedQueries queries = do
   db <- invertedQueryDatabaseName
-  void $ addDocuments db queries
+  void $ wrap (addDocuments db queries)
 
 -- | Retrieve the inverted queries for a model from the Repository.
 getInvertedQueriesOfModel :: String -> String -> MonadPerspectives StoredQueries
 getInvertedQueriesOfModel database documentName = do
-  getAttachment database documentName "storedQueries.json" >>= case _ of
+  wrap (getAttachment database documentName "storedQueries.json") >>= case _ of
     Just f -> do
       x <- liftAff $ fromBlob f
       case readJSON x of
@@ -136,5 +137,5 @@ removeInvertedQueriesContributedByModel :: ModelUri Stable -> MonadPerspectives 
 removeInvertedQueriesContributedByModel (ModelUri dfid) = do
   db <- invertedQueryDatabaseName
   -- First retrieve all inverted queries from the local database contributed by the current model.
-  (modelQueries :: Array { _id :: String, _rev :: String }) <- getViewWithDocs db "defaultViews/modelView" (Key $ unversionedModelUri dfid)
-  void $ deleteDocuments db modelQueries
+  (modelQueries :: Array { _id :: String, _rev :: String }) <- wrap (getViewWithDocs db "defaultViews/modelView" (Key $ unversionedModelUri dfid))
+  void $ wrap (deleteDocuments db modelQueries)
