@@ -44,7 +44,6 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Traversable (for, for_)
-import Effect.Class.Console (log)
 import Foreign.Object (mapWithKey)
 import Perspectives.Assignment.Update (cacheAndSave)
 import Perspectives.ContextAndRole (changeContext_me, context_buitenRol, context_displayName, context_me, removeRol_gevuldeRollen, rol_binding, rol_gevuldeRollen, setRol_gevuldeRollen)
@@ -55,6 +54,7 @@ import Perspectives.Identifiers (buitenRol)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol)
 import Perspectives.Instances.Clipboard (findItemOnClipboardWithRole)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context2roleFromDatabase_, contextType_, filled2fillerFromDatabase_, filler2filledFromDatabase_, role2contextFromDatabase_, roleType_)
+import Perspectives.Logging (warnResource)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, saveMarkedResources)
 import Perspectives.PerspectivesState (addWarning, transactionLevel)
@@ -144,7 +144,7 @@ fixReferences (Dfile _) = pure false
 fixContextReferences :: ContextInstance -> MonadPerspectives Unit
 fixContextReferences cid@(ContextInstance c) = do
   padding <- transactionLevel
-  log (padding <> "fixContextReferences: " <> show cid)
+  warnResource (padding <> "fixContextReferences: " <> show cid)
   -- As we look for dangling references in the database only, we should be sure that
   -- there is no difference between cache and database.
   saveMarkedResources
@@ -186,7 +186,7 @@ reEvaluateContextStates cid = (lift $ contextType_ cid) >>= evaluateContextState
 fixRoleReferences :: RoleInstance -> MonadPerspectives Unit
 fixRoleReferences roleId@(RoleInstance r) = do
   padding <- transactionLevel
-  log (padding <> "fixRoleReferences: " <> show roleId)
+  warnResource (padding <> "fixRoleReferences: " <> show roleId)
 
   -- As we look for dangling references in the database only, we should be sure that
   -- there is no difference between cache and database.
