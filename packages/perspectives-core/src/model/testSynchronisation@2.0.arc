@@ -474,3 +474,34 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
     thing EndFiller2
       property Q (Boolean)
 
+------------------------------------------------------------------------------
+---- This tests a query with a step from role to context, in a calculated role.
+---- It tests inverted queries fetched with a RTContextKey.
+---- The state condition that checks is the test succeeded looks whether a role instance exists.
+---- The crucial modification is to create a role instance.
+------------------------------------------------------------------------------
+  case Test_CreateRole_in_CalculatedRole
+    aspect mm:Test
+    external 
+      state TestSucceeded = exists context >> RoleToCreate
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on RoleToCreate
+        only (Create)
+      action RunTest
+        TestName = "Test create role in calculated role" for extern
+        create role RoleToCreate
+    
+    user Follower
+      aspect mm:Test$Follower
+      perspective on CalculatedRole1
+        props (P) verbs (Consult)
+        
+    thing CalculatedRole1 = RoleToCreate
+
+    thing RoleToCreate
+      property P (Boolean)
