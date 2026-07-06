@@ -306,6 +306,44 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
 ---- Test another case of a calculated property.
 ---- Here the perspective query ends with a binder step.
 ------------------------------------------------------------------------------
+  case Test_SetProperty_in_CalculatedProperty_BinderStep
+    aspect mm:Test
+    state LeaderExists = exists Leader
+      on entry
+        do for Leader
+          letA
+            endfiller <- create role EndFiller4
+          in
+            bind endfiller to Intermediate4
+    external
+      state TestSucceeded = context >> EndFiller4 >> Q
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on Intermediate4
+        only (Create, Fill)
+      perspective on EndFiller4
+        only (Create)
+        props (Q) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "Test property step in calculated property on perspective query ending on binder step" for extern
+        Q = true for EndFiller4
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on CalculatedIntermediate3
+        props (P) verbs (Consult)
+    
+    thing Intermediate4 filledBy EndFiller4
+      property P = binding >> Q
+      
+    thing EndFiller4
+      property Q (Boolean)
+
+    thing CalculatedIntermediate3 = EndFiller4 >> binder Intermediate4
 
 ------------------------------------------------------------------------------
 ---- This tests another case of a calculated property.

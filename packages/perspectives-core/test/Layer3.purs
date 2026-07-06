@@ -458,7 +458,8 @@ allTests =
   , { testContextTypeName: test_Binding_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Binder_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Binding_in_CalculatedRole, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BindingStep, logConfiguration: 
+  , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BindingStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BinderStep, logConfiguration: 
       { pdrA: [ {topic: BROKER, logLevel: Trace}
                 ]
       , pdrB: [ {topic: RESOURCE, logLevel: Trace}, 
@@ -512,3 +513,6 @@ test_Binding_in_CalculatedRole = "model://joopringelberg.nl#SynchronisationTestM
 
 test_SetProperty_in_CalculatedProperty_BindingStep :: String
 test_SetProperty_in_CalculatedProperty_BindingStep = "model://joopringelberg.nl#SynchronisationTestModel$Test_SetProperty_in_CalculatedProperty_BindingStep"
+
+test_SetProperty_in_CalculatedProperty_BinderStep :: String
+test_SetProperty_in_CalculatedProperty_BinderStep = "model://joopringelberg.nl#SynchronisationTestModel$Test_SetProperty_in_CalculatedProperty_BinderStep"
