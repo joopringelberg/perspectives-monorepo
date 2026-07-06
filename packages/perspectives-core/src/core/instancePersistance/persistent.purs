@@ -64,13 +64,13 @@ import Prelude
 
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (try)
-import Control.Monad.Except (catchError, lift, throwError)
+import Control.Monad.Except (catchError, throwError)
 import Data.Array (cons, delete, elemIndex)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.MediaType (MediaType)
-import Data.Newtype (unwrap)
+import Data.Newtype (unwrap, wrap)
 import Data.String.Regex (Regex, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
@@ -163,7 +163,7 @@ removeEntiteit entId = do
 
 removeEntiteit_ :: forall a i. Persistent a i => i -> a -> MonadPerspectives a
 removeEntiteit_ entId entiteit =
-  ensureAuthentication (Resource $ unwrap entId) $ \_ -> do
+  ensureAuthentication (Resource $ unwrap entId) \_ -> do
     -- If on the list of items to be saved, remove!
     modify \s@{ entitiesToBeStored } -> s { entitiesToBeStored = delete (resourceToBeStored entiteit) entitiesToBeStored }
     case (rev entiteit) of
@@ -185,14 +185,14 @@ tryRemoveEntiteit entId = do
 -- | This function must only be called when there is no AVar in cache to represent the resource.
 -- | As an invariant side effect: there is either an AVar that holds the resource, or there is no AVar.
 fetchEntiteit :: forall a i. Attachment a => Persistent a i => Boolean -> i -> MonadPerspectives a
-fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
+fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) \_ ->
   catchError
     do
       { database, documentName } <- resourceIdentifier2DocLocator (unwrap id)
       doc <- getDocument database documentName
       -- Returns either the local database name or a URL.
       v <- representInternally id
-      lift $ put doc v
+      liftAff $ put doc v
       pure doc
 
     \e -> do
@@ -243,7 +243,7 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
 -- Instead, we want to notify the user that, being offline, some resources cannot be accessed.
 internetRequiredButMissing :: ResourceIdentifier -> MonadPerspectives Boolean
 internetRequiredButMissing s =
-  if isInPublicScheme s || isInRemoteScheme s then lift $ isOffLine
+  if isInPublicScheme s || isInRemoteScheme s then liftAff isOffLine
   else pure false
 
 -- | Saves a previously cached entity.

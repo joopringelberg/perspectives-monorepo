@@ -24,14 +24,22 @@ module Perspectives.Persistence.Types where
 
 import Prelude
 
-import Control.Alt ((<|>))
+import Control.Alt (class Alt, (<|>))
+import Control.Plus (class Plus)
+import Control.Parallel.Class (class Parallel, parallel, sequential)
+import Control.Monad.Error.Class (class MonadError, class MonadThrow)
 import Control.Monad.Except (runExcept)
-import Control.Monad.Reader (ReaderT, runReaderT)
+import Control.Monad.Reader (ReaderT, mapReaderT, runReaderT, class MonadAsk, class MonadReader)
+import Control.Monad.Rec.Class (class MonadRec)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe, maybe)
+import Data.Newtype (class Newtype)
+import Effect (Effect)
 import Effect.AVar (AVar)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, Error, ParAff)
 import Effect.Aff.AVar (new)
+import Effect.Aff.Class (class MonadAff)
+import Effect.Class (class MonadEffect)
 import Foreign (Foreign, MultipleErrors)
 import Foreign.Object (Object, empty, singleton)
 import Perspectives.Couchdb.Revision (Revision_)
@@ -112,7 +120,40 @@ encodePouchdbUser' = write
 -----------------------------------------------------------
 -- MONADPOUCHDB
 -----------------------------------------------------------
-type MonadPouchdb f = ReaderT (AVar (PouchdbState f)) Aff
+-- | A newtype over ReaderT (AVar (PouchdbState f)) Aff.
+-- | `MonadPerspectives` (in `coreTypes.purs`) is a type alias for
+-- | `MonadPouchdb PerspectivesExtraState`.
+newtype MonadPouchdb (f :: Row Type) a = MonadPouchdb (ReaderT (AVar (PouchdbState f)) Aff a)
+
+derive instance Newtype (MonadPouchdb f a) _
+
+derive newtype instance Functor (MonadPouchdb f)
+derive newtype instance Apply (MonadPouchdb f)
+derive newtype instance Applicative (MonadPouchdb f)
+derive newtype instance Bind (MonadPouchdb f)
+derive newtype instance Monad (MonadPouchdb f)
+derive newtype instance MonadEffect (MonadPouchdb f)
+derive newtype instance MonadAff (MonadPouchdb f)
+derive newtype instance MonadAsk (AVar (PouchdbState f)) (MonadPouchdb f)
+derive newtype instance MonadReader (AVar (PouchdbState f)) (MonadPouchdb f)
+derive newtype instance MonadThrow Error (MonadPouchdb f)
+derive newtype instance MonadError Error (MonadPouchdb f)
+derive newtype instance MonadRec (MonadPouchdb f)
+derive newtype instance Alt (MonadPouchdb f)
+derive newtype instance Plus (MonadPouchdb f)
+
+-----------------------------------------------------------
+-- PARMONADPOUCHDB (Parallel counterpart of MonadPouchdb)
+-----------------------------------------------------------
+newtype ParMonadPouchdb (f :: Row Type) a = ParMonadPouchdb (ReaderT (AVar (PouchdbState f)) ParAff a)
+
+derive newtype instance Functor (ParMonadPouchdb f)
+derive newtype instance Apply (ParMonadPouchdb f)
+derive newtype instance Applicative (ParMonadPouchdb f)
+
+instance Parallel (ParMonadPouchdb f) (MonadPouchdb f) where
+  parallel (MonadPouchdb m) = ParMonadPouchdb (mapReaderT parallel m)
+  sequential (ParMonadPouchdb m) = MonadPouchdb (mapReaderT sequential m)
 
 -----------------------------------------------------------
 -- RUNMONADPOUCHDB
@@ -128,7 +169,7 @@ runMonadPouchdb
   -> Maybe Url
   -> MonadPouchdb () a
   -> Aff a
-runMonadPouchdb userName password perspectivesUser systemId couchdbUrl mp = do
+runMonadPouchdb userName password perspectivesUser systemId couchdbUrl (MonadPouchdb mp) = do
   (rf :: AVar (PouchdbState ())) <- new $
     { systemIdentifier: systemId
     , perspectivesUser

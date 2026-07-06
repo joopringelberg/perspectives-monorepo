@@ -42,7 +42,7 @@ theSuite = suite "Perspectives.Sync.Channel" do
     getter <- getPropertyFunction "model:System$PerspectivesSystem$User$Channel"
     me <- getUserIdentifier
     mdbname <- (RoleInstance me) ##> getter
-    lift $ logShow mdbname
+    logShow mdbname
     liftAff $ assert "We should be able to calculate the value of the Channel property for `me`" (isJust mdbname)
     case mdbname of
       Nothing -> pure unit
@@ -61,7 +61,7 @@ theSuite = suite "Perspectives.Sync.Channel" do
 
     getter <- getPropertyFunction "model:System$PerspectivesSystem$User$Channel"
     mdbname <- RoleInstance "model:User$joop$User" ##> getter
-    lift $ logShow mdbname
+    logShow mdbname
 
     liftAff $ assert "We should be able to calculate the value of the Channel property for `model:User$joop$User`" (isJust mdbname)
 

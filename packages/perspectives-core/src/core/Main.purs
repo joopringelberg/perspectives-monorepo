@@ -242,7 +242,7 @@ runPDR_ usr rawPouchdbUser options callback = do
       -- Compact the entities database 5 seconds after the PDR has started.
       void $ forkAff $ runPerspectivesWithState
         ( do
-            mraw :: Maybe Foreign <- lift $ idbGet "minimizeDatabasesOnStartup"
+            mraw :: Maybe Foreign <- liftAff $ idbGet "minimizeDatabasesOnStartup"
             case mraw of
               Nothing -> compactDatabases
               Just raw -> case JSON.read raw of
@@ -258,8 +258,8 @@ runPDR_ usr rawPouchdbUser options callback = do
   compactDatabases :: MonadPerspectives Unit
   compactDatabases = do
     currentDateTime :: DateTime <- liftEffect nowDateTime
-    lift $ idbSet "minimizeDatabasesOnStartup" (JSON.write (SerializableDateTime currentDateTime))
-    lift $ delay (Milliseconds 5000.0)
+    liftAff $ idbSet "minimizeDatabasesOnStartup" (JSON.write (SerializableDateTime currentDateTime))
+    liftAff $ delay (Milliseconds 5000.0)
     entities <- entitiesDatabaseName
     models <- modelsDatabaseName
     inverted <- invertedQueryDatabaseName

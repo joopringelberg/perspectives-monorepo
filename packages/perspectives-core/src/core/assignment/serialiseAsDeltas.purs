@@ -37,6 +37,7 @@ import Control.Monad.Error.Class (try)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (StateT, gets, runStateT, modify)
 import Control.Monad.Trans.Class (lift)
+import Effect.Aff.Class (liftAff)
 import Data.Array (cons, head) as ARR
 import Data.Array (elemIndex, filter, length, nub, null, snoc)
 import Data.Array.NonEmpty (NonEmptyArray, singleton) as NA
@@ -137,8 +138,8 @@ serialisedAsDeltasForUserType cid userType = do
     -> MonadPerspectivesTransaction o
     -> MonadPerspectives Transaction
   execMonadPerspectivesTransaction authoringRole a =
-    (lift $ createTransaction authoringRole false)
-      >>= lift <<< new
+    (liftAff $ createTransaction authoringRole false)
+      >>= liftAff <<< new
       >>= runReaderT run
     where
     run :: MonadPerspectivesTransaction Transaction

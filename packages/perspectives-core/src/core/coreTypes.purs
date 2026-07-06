@@ -42,7 +42,7 @@ module Perspectives.CoreTypes
   , InformedAssumption(..)
   , IntegrityFix(..)
   , JustInTimeModelLoad(..)
-  , LibEffect1
+  , class MonadPerspectivesWithState
   , LibEffect2
   , LibEffect3
   , LibFunc1
@@ -87,6 +87,8 @@ module Perspectives.CoreTypes
   , addPublicResource
   , assumption
   , class Cacheable
+  , class HasPerspectivesState
+  , class MonadPerspectivesClass
   , class Persistent
   , dbLocalName
   , evalMonadPerspectivesQuery
@@ -94,6 +96,7 @@ module Perspectives.CoreTypes
   , execMonadPerspectivesQuery
   , forceArray
   , forceTypeArray
+  , getPS
   , liftToInstanceLevel
   , mkLibEffect1
   , mkLibEffect2
@@ -101,11 +104,14 @@ module Perspectives.CoreTypes
   , mkLibFunc1
   , mkLibFunc2
   , mkLibFunc3
+  , modifyPS
+  , perspectivesState
   , removeInternally
   , representInternally
   , resourceIdToBeStored
   , resourceToBeStored
   , retrieveInternally
+  , runMonadPerspectives
   , runMonadPerspectivesQuery
   , runMonadPerspectivesQueryToObject
   , runTypeLevelToArray
@@ -119,7 +125,9 @@ module Perspectives.CoreTypes
   ) where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
-import Control.Monad.Reader (ReaderT, lift)
+import Control.Monad.Error.Class (class MonadError, class MonadThrow)
+import Control.Monad.Except (ExceptT)
+import Control.Monad.Reader (ReaderT, ask, lift, runReaderT)
 import Control.Monad.Writer (WriterT, runWriterT)
 import Data.Array (cons, foldMap, foldl, foldr, head, union)
 import Data.Eq.Generic (genericEq)
@@ -134,10 +142,10 @@ import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, throwError)
-import Effect.Aff.AVar (AVar, empty)
-import Effect.Aff.Class (liftAff)
-import Effect.Class (liftEffect)
-import Effect.Exception (error)
+import Effect.Aff.AVar (AVar, empty, put, read)
+import Effect.Aff.Class (class MonadAff, liftAff)
+import Effect.Class (class MonadEffect, liftEffect)
+import Effect.Exception (Error, error)
 import Foreign.Object (Object)
 import Foreign.Object as F
 import LRUCache (Cache, defaultGetOptions, delete, get, set)
@@ -152,7 +160,7 @@ import Perspectives.Instances.Environment (Environment)
 import Perspectives.InvertedQuery (InvertedQuery)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistence.Types (PouchdbState)
+import Perspectives.Persistence.Types (PouchdbState, MonadPouchdb(..))
 import Perspectives.Persistent.ChangesFeed (EventSource)
 import Perspectives.Repetition (Duration)
 import Perspectives.Representation.Class.Identifiable (class Identifiable, identifier)
@@ -162,7 +170,7 @@ import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPrope
 import Perspectives.ResourceIdentifiers.Parser (pouchdbDatabaseName)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
 import Perspectives.Sync.Transaction (Transaction)
-import Prelude (class Eq, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, eq, pure, show, unit, ($), (<<<), (<>), (>>=))
+import Prelude (class Eq, class Monad, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, eq, pure, show, unit, ($), (<<<), (<>), (>>=))
 import Simple.JSON (class ReadForeign, class WriteForeign)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -442,9 +450,16 @@ instance Ord InformedAssumption where
 -----------------------------------------------------------
 -- MONADPERSPECTIVES
 -----------------------------------------------------------
--- | MonadPerspectives is an instance of MonadAff.
--- | So, with liftAff we lift an operation in Aff to MonadPerspectives.
-type MonadPerspectives = ReaderT (AVar PerspectivesState) Aff
+-- | MonadPerspectives is a type alias for MonadPouchdb PerspectivesExtraState.
+-- | It inherits all instances (Functor, Apply, Applicative, Bind, Monad, MonadEffect,
+-- | MonadAff, MonadAsk (AVar PerspectivesState), MonadReader (AVar PerspectivesState),
+-- | MonadThrow Error, MonadError Error, MonadRec, Alt) from MonadPouchdb.
+-- | Use runMonadPerspectives to run a MonadPerspectives computation given the state AVar.
+type MonadPerspectives = MonadPouchdb PerspectivesExtraState
+
+-- | Run a MonadPerspectives action given the state AVar.
+runMonadPerspectives :: forall a. MonadPerspectives a -> AVar PerspectivesState -> Aff a
+runMonadPerspectives (MonadPouchdb mp) rf = runReaderT mp rf
 
 type MP = MonadPerspectives
 
@@ -619,6 +634,92 @@ liftToInstanceLevel f = ArrayT <<< lift <<< runArrayT <<< f
 type MonadPerspectivesTransaction = ReaderT (AVar Transaction) MonadPerspectives
 
 type MPT = MonadPerspectivesTransaction
+
+-----------------------------------------------------------
+-- MONADPERSPECTIVESCLASS
+-----------------------------------------------------------
+-- | Capability class for all monads in the Perspectives monad stack.
+-- | Restricts error boundary functions and other utilities to Perspectives-related monads
+-- | (MonadPerspectives, MonadPerspectivesTransaction, AssumptionTracking, MonadPerspectivesQuery).
+-- | State access is intentionally not a superclass here: the generic ReaderT instance
+-- | for MonadPerspectivesTransaction changes the Reader environment, so a separate
+-- | state capability should be introduced when functions are generalized.
+-- | Because these capabilities are superclasses, any function that requires them
+-- | can be called wherever a MonadPerspectivesClass constraint is satisfied.
+class
+  ( Monad m
+  , MonadEffect m
+  , MonadAff m
+  , MonadThrow Error m
+  , MonadError Error m
+  ) <=
+  MonadPerspectivesClass m
+
+class (MonadPerspectivesClass m, HasPerspectivesState s m) <= MonadPerspectivesWithState s m | m -> s
+
+instance monadPerspectivesWithStateMP :: MonadPerspectivesWithState f (MonadPouchdb f)
+
+instance monadPerspectivesWithStateMPT :: MonadPerspectivesWithState s m => MonadPerspectivesWithState s (ReaderT e m)
+
+instance monadPerspectivesWithStateAssumptionTracking :: (Monoid w, MonadPerspectivesWithState s m) => MonadPerspectivesWithState s (WriterT w m)
+
+instance monadPerspectivesWithStateMPQ :: MonadPerspectivesWithState s m => MonadPerspectivesWithState s (ArrayT m)
+
+instance monadPerspectivesWithStateExceptT :: MonadPerspectivesWithState s m => MonadPerspectivesWithState s (ExceptT Error m)
+
+instance monadPerspectivesClassMP :: MonadPerspectivesClass (MonadPouchdb f)
+
+instance monadPerspectivesClassMPT :: MonadPerspectivesClass m => MonadPerspectivesClass (ReaderT e m)
+
+instance monadPerspectivesClassAssumptionTracking :: (Monoid w, MonadPerspectivesClass m) => MonadPerspectivesClass (WriterT w m)
+
+instance monadPerspectivesClassMPQ :: MonadPerspectivesClass m => MonadPerspectivesClass (ArrayT m)
+
+instance monadPerspectivesClassExceptT :: MonadPerspectivesClass m => MonadPerspectivesClass (ExceptT Error m)
+
+-----------------------------------------------------------
+-- HASPERSPECTIVESSTATE
+-----------------------------------------------------------
+-- | Capability class for monads that can access a Pouchdb-backed Perspectives state.
+-- | The row parameter allows this to work for MonadPouchdb directly while still
+-- | supporting the concrete PerspectivesExtraState row used by MonadPerspectives.
+class MonadAff m <= HasPerspectivesState (s :: Row Type) m | m -> s where
+  perspectivesState :: m (AVar (PouchdbState s))
+
+instance hasPerspectivesStateMP :: HasPerspectivesState f (MonadPouchdb f) where
+  perspectivesState = ask
+
+instance hasPerspectivesStateMPT :: HasPerspectivesState s m => HasPerspectivesState s (ReaderT e m) where
+  perspectivesState = lift perspectivesState
+
+instance hasPerspectivesStateAssumptionTracking :: (Monoid w, HasPerspectivesState s m) => HasPerspectivesState s (WriterT w m) where
+  perspectivesState = lift perspectivesState
+
+instance hasPerspectivesStateMPQ :: HasPerspectivesState s m => HasPerspectivesState s (ArrayT m) where
+  perspectivesState = ArrayT (perspectivesState >>= pure <<< pure)
+
+instance hasPerspectivesStateExceptT :: HasPerspectivesState s m => HasPerspectivesState s (ExceptT e m) where
+  perspectivesState = lift perspectivesState
+
+getPS
+  :: forall m a
+   . HasPerspectivesState PerspectivesExtraState m
+  => (PerspectivesState -> a)
+  -> m a
+getPS f = do
+  st <- perspectivesState
+  s <- liftAff $ read st
+  pure (f s)
+
+modifyPS
+  :: forall m
+   . HasPerspectivesState PerspectivesExtraState m
+  => (PerspectivesState -> PerspectivesState)
+  -> m Unit
+modifyPS f = do
+  st <- perspectivesState
+  s <- liftAff $ read st
+  liftAff $ put (f s) st
 
 -----------------------------------------------------------
 -- UPDATER

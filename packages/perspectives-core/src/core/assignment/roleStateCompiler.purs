@@ -33,6 +33,7 @@ import Prelude
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (catchError)
 import Control.Monad.Trans.Class (lift)
+import Effect.Aff.Class (liftAff)
 import Data.Array (cons, elemIndex, filterA, foldMap, index, null)
 import Data.Array.NonEmpty (fromArray)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -319,7 +320,7 @@ exitingRoleState roleId stateId = do
   case lookup (Tuple (unwrap roleId) stateId) fibers of
     Nothing -> pure unit
     Just f -> do
-      lift $ lift $ killFiber (error "Stopped execution of repeating action in state") f
+      lift $ liftAff $ killFiber (error "Stopped execution of repeating action in state") f
       lift $ modify \s@{ transactionFibers } -> s { transactionFibers = delete (Tuple (unwrap roleId) stateId) transactionFibers }
 
   { automaticOnExit, notifyOnExit } <- getCompiledState stateId

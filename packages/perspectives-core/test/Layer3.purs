@@ -459,13 +459,10 @@ allTests =
   , { testContextTypeName: test_Binder_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Binding_in_CalculatedRole, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BindingStep, logConfiguration: 
-      { pdrA: [ { topic: RESOURCE, logLevel: Trace }, 
-                {topic: BROKER, logLevel: Trace}, 
-                {topic: SYNC, logLevel: Trace }, 
-                {topic: PERSISTENCE, logLevel: Trace}]
+      { pdrA: [ {topic: BROKER, logLevel: Trace}
+                ]
       , pdrB: [ {topic: RESOURCE, logLevel: Trace}, 
-                {topic: SYNC, logLevel: Trace }, 
-                {topic: BROKER, logLevel: Trace}, 
+                {topic: STATE, logLevel: Trace},
                 {topic: PERSISTENCE, logLevel: Trace}]}
    }
   ]

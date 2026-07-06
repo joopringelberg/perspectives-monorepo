@@ -24,15 +24,16 @@ module Perspectives.PerspectivesState where
 
 import Control.Alt (map)
 import Control.Monad.AvarMonadAsk (gets, modify)
-import Control.Monad.Trans.Class (lift)
 import Data.Array (cons)
 import Data.List (elem)
 import Data.Map (Map, empty, insert, lookup, values) as Map
 import Data.Maybe (Maybe(..), isNothing)
+import Data.Newtype (wrap)
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
 import Effect (Effect)
 import Effect.Aff.AVar (AVar, put, read, tryRead)
+import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Foreign.Object (empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
@@ -177,7 +178,7 @@ transactionFlag = gets _.transactionFlag
 
 -- Non-blocking check to see if a transaction is currently running. 
 noTransactionIsRunning :: MonadPerspectives Boolean
-noTransactionIsRunning = transactionFlag >>= lift <<< map isNothing <<< tryRead
+noTransactionIsRunning = transactionFlag >>= liftAff <<< map isNothing <<< tryRead
 
 nextTransactionNumber :: MonadPerspectives Int
 nextTransactionNumber = do
@@ -202,11 +203,11 @@ decreaseTransactionLevel = modify \s -> s
   }
 
 getBrokerService :: MonadPerspectives BrokerService
-getBrokerService = gets _.brokerService >>= lift <<< read
+getBrokerService = gets _.brokerService >>= liftAff <<< read
 
 setBrokerService :: Maybe BrokerService -> MonadPerspectives Unit
 setBrokerService bs = case bs of
-  Just bs' -> gets _.brokerService >>= lift <<< put bs'
+  Just bs' -> gets _.brokerService >>= liftAff <<< put bs'
   Nothing -> pure unit
 
 stompClient :: MonadPerspectives (Maybe StompClient)

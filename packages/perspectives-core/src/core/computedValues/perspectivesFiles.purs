@@ -4,6 +4,7 @@ import Prelude
 
 import Control.Monad.Error.Class (try)
 import Control.Monad.Trans.Class (lift)
+import Effect.Aff.Class (liftAff)
 import Data.Array (head, elemIndex)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), isJust)
@@ -48,7 +49,7 @@ getPFileTextValue v = case parsePerspectivesFile v of
       (ma :: Maybe Foreign) <- getAttachment db roleFileName (typeUri2couchdbFilename $ unwrap propertyType)
       case ma of
         Nothing -> pure Nothing
-        Just a -> Just <$> (lift $ fromBlob a)
+        Just a -> Just <$> liftAff (fromBlob a)
     else pure Nothing
   where
   isATextType :: String -> Boolean

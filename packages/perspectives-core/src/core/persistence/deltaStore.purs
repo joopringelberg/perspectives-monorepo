@@ -49,7 +49,7 @@ import Data.Array (catMaybes, elem, filter, head, last, length) as Arr
 import Data.Either (Either(..))
 import Data.Foldable (traverse_)
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Newtype (unwrap)
+import Data.Newtype (unwrap, wrap)
 import Data.String (Pattern(..), drop, indexOf, lastIndexOf, length, split, take) as Str
 import Effect.Class (liftEffect)
 import Foreign (Foreign)

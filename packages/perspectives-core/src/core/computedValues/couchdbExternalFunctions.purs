@@ -132,7 +132,7 @@ roleInstancesFromCouchdb roleTypes _ =
               ( do
                   cache <- roleCache
                   cachedRoleAvars <- liftAff $ liftEffect (rvalues cache >>= pure <<< toArray)
-                  cachedRoles <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+                  cachedRoles <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
                   pure $ rol_id <$> filter (roleViewFilter stableRt) cachedRoles
               )
             pure $ instancesInCouchdb `union` instancesInCache
@@ -153,7 +153,7 @@ contextInstancesFromCouchdb contextTypeArr _ =
               ( do
                   cache <- contextCache
                   cachedContextAvars <- liftAff $ liftEffect (rvalues cache >>= pure <<< toArray)
-                  cachedContexts <- catMaybes <$> (lift $ traverse tryRead cachedContextAvars)
+                  cachedContexts <- catMaybes <$> (liftAff $ traverse tryRead cachedContextAvars)
                   pure $ context_id <$> filter (contextViewFilter stableCt) cachedContexts
               )
             pure $ instancesInCouchdb `union` instancesInCache
@@ -170,7 +170,7 @@ pendingInvitations _ =
           ( do
               cache <- roleCache
               cachedRoleAvars <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-              cachedRoles <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              cachedRoles <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
               pure $ rol_id <$> filter (roleViewFilter $ EnumeratedRoleType DEP.invitation) cachedRoles
           )
         pure $ filledRolesInDatabase `union` filledRolesInCache

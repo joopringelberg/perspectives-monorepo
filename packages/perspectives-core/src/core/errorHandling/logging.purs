@@ -103,22 +103,21 @@ module Perspectives.Logging
   , warnTest
   ) where
 
-import Control.Monad.AvarMonadAsk (gets)
 import Data.Map (lookup) as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log) as Console
-import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives)
+import Perspectives.CoreTypes (class MonadPerspectivesWithState, LogLevel(..), LogTopic(..), PerspectivesExtraState, getPS)
 import Prelude (Unit, bind, show, when, ($), (>=), (<>), pure)
 
 -- | Emit a log message for the given topic at the given level.
 -- | The message is only written to the console when `level >= threshold`,
 -- | where `threshold` is the per-topic override from `logConfig.topicLevels`,
 -- | or `logConfig.defaultLevel` when no override is present.
-pdrLog :: LogTopic -> LogLevel -> String -> MonadPerspectives Unit
+pdrLog :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => LogTopic -> LogLevel -> String -> m Unit
 pdrLog topic level message = do
-  { defaultLevel, topicLevels } <- gets _.logConfig
-  logColor <- gets _.logColor
+  { defaultLevel, topicLevels } <- getPS _.logConfig
+  logColor <- getPS _.logColor
   let threshold = fromMaybe defaultLevel (Map.lookup topic topicLevels)
   when (level >= threshold) do
     let prefix = "[" <> show level <> "] [" <> show topic <> "] "
@@ -130,13 +129,13 @@ pdrLog topic level message = do
     liftEffect $ Console.log styledMessage
 
 -- | Check whether logging is active for the given topic and level.
-logActive :: LogTopic -> LogLevel -> MonadPerspectives Boolean
+logActive :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => LogTopic -> LogLevel -> m Boolean
 logActive topic level = do
-  { defaultLevel, topicLevels } <- gets _.logConfig
+  { defaultLevel, topicLevels } <- getPS _.logConfig
   let threshold = fromMaybe defaultLevel (Map.lookup topic topicLevels)
   pure (level >= threshold)
 
-logWhen :: LogLevel -> LogTopic -> MonadPerspectives String -> MonadPerspectives Unit
+logWhen :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => LogLevel -> LogTopic -> m String -> m Unit
 logWhen level topic message = do
   active <- logActive topic level
   when active do
@@ -178,206 +177,206 @@ noColor = Nothing
 -----------------------------------------------------------
 -- SYNC
 -----------------------------------------------------------
-traceSync :: String -> MonadPerspectives Unit
+traceSync :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 traceSync = pdrLog SYNC Trace
 
-debugSync :: String -> MonadPerspectives Unit
+debugSync :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 debugSync = pdrLog SYNC Debug
 
-infoSync :: String -> MonadPerspectives Unit
+infoSync :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 infoSync = pdrLog SYNC Info
 
-warnSync :: String -> MonadPerspectives Unit
+warnSync :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 warnSync = pdrLog SYNC Warn
 
-errorSync :: String -> MonadPerspectives Unit
+errorSync :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorSync = pdrLog SYNC Error
 
 -----------------------------------------------------------
 -- BROKER
 -----------------------------------------------------------
-traceBroker :: String -> MonadPerspectives Unit
+traceBroker :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 traceBroker = pdrLog BROKER Trace
 
-debugBroker :: String -> MonadPerspectives Unit
+debugBroker :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 debugBroker = pdrLog BROKER Debug
 
-infoBroker :: String -> MonadPerspectives Unit
+infoBroker :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 infoBroker = pdrLog BROKER Info
 
-warnBroker :: String -> MonadPerspectives Unit
+warnBroker :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 warnBroker = pdrLog BROKER Warn
 
-errorBroker :: String -> MonadPerspectives Unit
+errorBroker :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorBroker = pdrLog BROKER Error
 
 -----------------------------------------------------------
 -- QUERY
 -----------------------------------------------------------
-traceQuery :: String -> MonadPerspectives Unit
+traceQuery :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 traceQuery = pdrLog QUERY Trace
 
-debugQuery :: String -> MonadPerspectives Unit
+debugQuery :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 debugQuery = pdrLog QUERY Debug
 
 -----------------------------------------------------------
 -- PERSISTENCE
 -----------------------------------------------------------
-tracePersistence :: String -> MonadPerspectives Unit
+tracePersistence :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 tracePersistence = pdrLog PERSISTENCE Trace
 
-debugPersistence :: String -> MonadPerspectives Unit
+debugPersistence :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 debugPersistence = pdrLog PERSISTENCE Debug
 
-errorPersistence :: String -> MonadPerspectives Unit
+errorPersistence :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorPersistence = pdrLog PERSISTENCE Error
 
 -----------------------------------------------------------
 -- STATE
 -----------------------------------------------------------
-traceState :: String -> MonadPerspectives Unit
+traceState :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 traceState = pdrLog STATE Trace
 
-debugState :: String -> MonadPerspectives Unit
+debugState :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 debugState = pdrLog STATE Debug
 
 -----------------------------------------------------------
 -- AUTH
 -----------------------------------------------------------
-warnAuth :: String -> MonadPerspectives Unit
+warnAuth :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 warnAuth = pdrLog AUTH Warn
 
 -----------------------------------------------------------
 -- MODEL
 -----------------------------------------------------------
-traceModel :: String -> MonadPerspectives Unit
+traceModel :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 traceModel = pdrLog MODEL Trace
 
-debugModel :: String -> MonadPerspectives Unit
+debugModel :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 debugModel = pdrLog MODEL Debug
 
-warnModel :: String -> MonadPerspectives Unit
+warnModel :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 warnModel = pdrLog MODEL Warn
 
-infoModel :: String -> MonadPerspectives Unit
+infoModel :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 infoModel = pdrLog MODEL Info
 
-errorModel :: String -> MonadPerspectives Unit
+errorModel :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorModel = pdrLog MODEL Error
 
 -----------------------------------------------------------
 -- UPGRADE
 -----------------------------------------------------------
-debugUpgrade :: String -> MonadPerspectives Unit
+debugUpgrade :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 debugUpgrade = pdrLog UPGRADE Debug
 
-infoUpgrade :: String -> MonadPerspectives Unit
+infoUpgrade :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 infoUpgrade = pdrLog UPGRADE Info
 
-errorUpgrade :: String -> MonadPerspectives Unit
+errorUpgrade :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorUpgrade = pdrLog UPGRADE Error
 
 -----------------------------------------------------------
 -- COMPILER
 -----------------------------------------------------------
-debugCompiler :: String -> MonadPerspectives Unit
+debugCompiler :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 debugCompiler = pdrLog COMPILER Debug
 
-errorCompiler :: String -> MonadPerspectives Unit
+errorCompiler :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorCompiler = pdrLog COMPILER Error
 
 -----------------------------------------------------------
 -- INSTALL
 -----------------------------------------------------------
-errorInstall :: String -> MonadPerspectives Unit
+errorInstall :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorInstall = pdrLog INSTALL Error
 
-debugInstall :: String -> MonadPerspectives Unit
+debugInstall :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 debugInstall = pdrLog INSTALL Debug
 
-infoInstall :: String -> MonadPerspectives Unit
+infoInstall :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 infoInstall = pdrLog INSTALL Info
 
-traceInstall :: String -> MonadPerspectives Unit
+traceInstall :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 traceInstall = pdrLog INSTALL Trace
 
 -----------------------------------------------------------
 -- OTHER
 -----------------------------------------------------------
-warnOther :: String -> MonadPerspectives Unit
+warnOther :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 warnOther = pdrLog OTHER Warn
 
-errorOther :: String -> MonadPerspectives Unit
+errorOther :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorOther = pdrLog OTHER Error
 
 -----------------------------------------------------------
 -- PARSER (additional levels)
 -----------------------------------------------------------
-errorParser :: String -> MonadPerspectives Unit
+errorParser :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorParser = pdrLog PARSER Error
 
 -----------------------------------------------------------
 -- PERSISTENCE (additional levels)
 -----------------------------------------------------------
-warnPersistence :: String -> MonadPerspectives Unit
+warnPersistence :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 warnPersistence = pdrLog PERSISTENCE Warn
 
 -----------------------------------------------------------
 -- STATE (additional levels)
 -----------------------------------------------------------
-warnState :: String -> MonadPerspectives Unit
+warnState :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 warnState = pdrLog STATE Warn
 
 -----------------------------------------------------------
 -- DELTA
 -----------------------------------------------------------
-traceDelta :: String -> MonadPerspectives Unit
+traceDelta :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 traceDelta = pdrLog DELTA Trace
 
-debugDelta :: String -> MonadPerspectives Unit
+debugDelta :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 debugDelta = pdrLog DELTA Debug
 
-infoDelta :: String -> MonadPerspectives Unit
+infoDelta :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 infoDelta = pdrLog DELTA Info
 
-warnDelta :: String -> MonadPerspectives Unit
+warnDelta :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 warnDelta = pdrLog DELTA Warn
 
-errorDelta :: String -> MonadPerspectives Unit
+errorDelta :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorDelta = pdrLog DELTA Error
 
 -----------------------------------------------------------
 -- TEST
 -----------------------------------------------------------
-traceTest :: String -> MonadPerspectives Unit
+traceTest :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 traceTest = pdrLog TEST Trace
 
-debugTest :: String -> MonadPerspectives Unit
+debugTest :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 debugTest = pdrLog TEST Debug
 
-infoTest :: String -> MonadPerspectives Unit
+infoTest :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 infoTest = pdrLog TEST Info
 
-warnTest :: String -> MonadPerspectives Unit
+warnTest :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 warnTest = pdrLog TEST Warn
 
-errorTest :: String -> MonadPerspectives Unit
+errorTest :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorTest = pdrLog TEST Error
 
 -----------------------------------------------------------
 -- RESOURCE-RELATED WARNINGS
 -----------------------------------------------------------
-traceResource :: String -> MonadPerspectives Unit
+traceResource :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 traceResource = pdrLog RESOURCE Trace
 
-debugResource :: String -> MonadPerspectives Unit
+debugResource :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 debugResource = pdrLog RESOURCE Debug
 
-infoResource :: String -> MonadPerspectives Unit
+infoResource :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 infoResource = pdrLog RESOURCE Info
 
-warnResource :: String -> MonadPerspectives Unit
+warnResource :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 warnResource = pdrLog RESOURCE Warn
 
-errorResource :: String -> MonadPerspectives Unit
+errorResource :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorResource = pdrLog RESOURCE Error

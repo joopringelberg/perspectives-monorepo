@@ -22,11 +22,10 @@
 
 module Perspectives.RunPerspectives where
 
-import Control.Monad.Reader (runReaderT)
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
 import Effect.Aff.AVar (AVar, empty, new)
-import Perspectives.CoreTypes (MonadPerspectives, PerspectivesState)
+import Perspectives.CoreTypes (MonadPerspectives, PerspectivesState, runMonadPerspectives)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, newPerspectivesState)
 import Prelude (bind, show, (<<<), (<>), (>>=))
@@ -70,10 +69,10 @@ runPerspectives userName password perspectivesUser systemId host port mp = do
           userIntegrityChoice
       )
     )
-  runReaderT mp rf
+  runMonadPerspectives mp rf
 
 runPerspectivesWithState :: forall a. MonadPerspectives a -> (AVar PerspectivesState) -> Aff a
-runPerspectivesWithState = runReaderT
+runPerspectivesWithState = runMonadPerspectives
 
 runPerspectivesWithoutCouchdb
   :: forall a
@@ -108,4 +107,4 @@ runPerspectivesWithoutCouchdb userName mp = do
           userIntegrityChoice
       )
     )
-  runReaderT mp rf
+  runMonadPerspectives mp rf

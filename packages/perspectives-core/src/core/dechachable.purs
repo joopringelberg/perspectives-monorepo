@@ -27,7 +27,7 @@ import Prelude
 import Control.Monad.AvarMonadAsk (gets)
 import Data.Array (elemIndex)
 import Data.Maybe (Maybe, isJust)
-import Data.Newtype (unwrap)
+import Data.Newtype (unwrap, wrap)
 import Persistence.Attachment (class Attachment)
 import Perspectives.CoreTypes (class Persistent, MonadPerspectives, ResourceToBeStored, removeInternally, resourceIdToBeStored)
 import Perspectives.DomeinFile (DomeinFile)
