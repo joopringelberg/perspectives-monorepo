@@ -103,6 +103,7 @@ invert = invert_ >=> pure <<< catMaybes <<< map h
     -- Remove candidates without a backwards part.
     Nothing -> Nothing
     -- Creates a right-associative composition that preserves the order in steps.
+    -- Notice that the steps in the backwards part are in reverse order of the original query, already. So we do not need to reverse them again.
     Just { init, last } -> Just $ ZQ (Just $ foldr makeComposition last init) q
 
 -- | The QueryFunctionDescriptions in the Array of each QueryWithAKink_
