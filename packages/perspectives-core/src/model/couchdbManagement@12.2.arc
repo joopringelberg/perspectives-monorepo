@@ -1276,6 +1276,11 @@ domain model://perspectives.domains#CouchdbManagement@12.2
       perspective on extern
         props (DomeinFileName, Version, ArcSource, LastUpload) verbs (Consult)
         props (ArcFile, ArcFeedback, Description, IsRecommended, Build, Patch, LastChangeDT, MustUpload, AutoUpload, Store, ApplyInSession) verbs (Consult, SetPropertyValue)
+        -- It may happen that MustUpload is not set to false and then the Manifest sticks to (a substate of) AfterSuccesfulParse.
+        -- That means that no further change will cause one of the sustates to be re-entered. Hence we do not upload the model, store it in the local database or apply it immediately.
+        -- The Author can set MustUpload to false to exit AfterSuccesfulParse.
+        action UnlockForProcessing
+          MustUpload = false
       perspective on Translation
         only (Create, Remove, Delete)
         props (TranslationYaml, GenerateYaml, LastYamlChangeDT) verbs (Consult, SetPropertyValue, DeleteProperty)
