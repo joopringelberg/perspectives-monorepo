@@ -236,17 +236,15 @@ getSynchronisationResults = do
                 -- setTopicLogLevel INSTALL Debug
                 -- setTopicLogLevel SYNC Info
                 setTopicLogLevel TEST Debug
-                setTopicLogLevel RESOURCE Error
                 -- setTopicLogLevel STATE Trace
             )
           runInPDR pdrB
             ( do
                 -- setTopicLogLevel BROKER Debug
-                setTopicLogLevel INSTALL Silent
+                -- setTopicLogLevel INSTALL Silent
                 -- setTopicLogLevel MODEL Debug
                 -- setTopicLogLevel SYNC Trace
                 setTopicLogLevel TEST Debug
-                setTopicLogLevel RESOURCE Error
                 -- setTopicLogLevel DELTA Trace
             )
 
