@@ -105,8 +105,8 @@ userRoleTypeOfInvertedQuery :: Partial => InvertedQuery -> RoleType
 userRoleTypeOfInvertedQuery (InvertedQuery { users }) = case head users of
   Just user -> user
 
-invertedQueryHasRoleType :: InvertedQuery -> Boolean
-invertedQueryHasRoleType (InvertedQuery { users }) = not $ null users
+invertedQueryIsForSynchronisation :: InvertedQuery -> Boolean
+invertedQueryIsForSynchronisation (InvertedQuery { users }) = not $ null users
 
 equalDescriptions :: InvertedQuery -> InvertedQuery -> Boolean
 equalDescriptions (InvertedQuery { description: d1 }) (InvertedQuery { description: d2 }) = d1 == d2
