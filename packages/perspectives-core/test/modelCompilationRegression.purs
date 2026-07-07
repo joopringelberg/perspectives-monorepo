@@ -39,6 +39,7 @@ module Test.ModelCompilationRegression where
 import Prelude
 
 import Control.Monad.Free (Free)
+import Control.Monad.Reader (ask)
 import Data.Array (catMaybes, foldM, length, null)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
@@ -46,16 +47,19 @@ import Data.List (List(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Tuple (Tuple(..))
+import Effect.Aff (forkAff)
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign.Object (empty)
+import Main (forkJustInTimeModelLoader)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..))
-import Parsing (ParseError(..))
+import Parsing (ParseError)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinCache (storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), defaultDomeinFileRecord)
 import Perspectives.ExecuteInTopologicalOrder (sortTopologicallyEither)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
+import Perspectives.Logging (traceTest)
 import Perspectives.Parsing.Arc (domain) as ARC
 import Perspectives.Parsing.Arc.AST (ContextE)
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
@@ -63,6 +67,7 @@ import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo_', toStableDomeinFile, toStableModelUri)
 import Perspectives.Persistence.API (documentsInDatabase, includeDocs)
+import Perspectives.PerspectivesState (getModelToLoad)
 import Perspectives.RunPerspectives (runPerspectivesWithoutCouchdb)
 import Simple.JSON (read)
 import Test.Unit (TestF, suite, testOnly)
@@ -81,6 +86,11 @@ theSuite = suite "Perspectives.ModelCompilationRegression" do
       -- Register external (JavaScript) functions so that computed values that
       -- reference them can be compiled in phase 3.
       addAllExternalFunctions
+      -- Fork aff to load models just in time.
+      modelToLoadAVar <- getModelToLoad
+      state <- ask
+      void $ liftAff $ forkAff $ forkJustInTimeModelLoader modelToLoadAVar state
+
       -- Fetch every document from the models database.
       { rows: allDocs } <- documentsInDatabase modelsDb includeDocs
       -- Attempt to decode each document as an UninterpretedDomeinFile.
@@ -97,10 +107,12 @@ theSuite = suite "Perspectives.ModelCompilationRegression" do
           )
       -- Topologically sort the models so that each model is compiled only
       -- after all of its declared dependencies have been compiled.
-      case sortTopologicallyEither
-        (\(UninterpretedDomeinFile { id }) -> unwrap id)
-        (\(UninterpretedDomeinFile { referredModels }) -> referredModels)
-        models of
+      case
+        sortTopologicallyEither
+          (\(UninterpretedDomeinFile { id }) -> unwrap id)
+          (\(UninterpretedDomeinFile { referredModels }) -> referredModels)
+          models
+        of
         Left sortErrors ->
           pure [ "Topological sort failed: " <> show sortErrors ]
         Right sorted ->
@@ -123,6 +135,7 @@ theSuite = suite "Perspectives.ModelCompilationRegression" do
 -- | strings on failure.
 compileAndCacheModel :: UninterpretedDomeinFile -> MonadPerspectives (Array String)
 compileAndCacheModel (UninterpretedDomeinFile { namespace, arc }) = do
+  traceTest ("Compiling model " <> namespace)
   -- ── Phase 1: parse ARC source ──────────────────────────────────────────────
   (r :: Either ParseError ContextE) <- liftAff $ runIndentParser arc ARC.domain
   case r of

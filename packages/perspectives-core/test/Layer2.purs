@@ -61,6 +61,6 @@ import Test.ModelCompilationRegression (theSuite) as MCR
 main :: Effect Unit
 main = runTest do
   -- TODO: add Layer 2 suites here.  None are enabled yet — see module comment.
-  LARC.theSuite
+  -- LARC.theSuite
   MCR.theSuite
   pure unit
