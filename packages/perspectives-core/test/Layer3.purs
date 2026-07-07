@@ -92,100 +92,98 @@ import Test.PDRInstance (PDRInstance, SynchronisationResult, connectPDRs, noBus,
 import Test.Unit (TestSuite, suite, suiteSkip, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
-import Test.ModelCompilationRegression (theSuite) as MCR
 
 main :: Effect Unit
 main = launchAff_ do
   results <- getSynchronisationResults
   liftEffect $ runTest do
-    MCR.theSuite
     scaffoldTests
     suite "Synchronisation tests" do
       for_ results \result -> case result of
         Right { testName, testSucceeded } ->
           test (testName <> " should succeed in Bob's PDR") do
             assert ("Bob should see that test '" <> testName <> "' succeeded") testSucceeded
-        Left {testName, err} ->
+        Left { testName, err } ->
           test ("test '" <> testName <> "' failed with error") do
             assert ("Bob should see that the test succeeded, but got error: " <> show err) false
 
 scaffoldTests :: TestSuite
 scaffoldTests = suiteSkip "PDRInstance scaffold" do
 
-    -- | Smoke test: start one PDR instance, verify the system identifier matches
-    -- | the value we passed in, then shut down.
-    test "start a single PDR instance and read its system identifier" do
-      let user = testPouchdbUser "alice"
-      withPDR user defaultRuntimeOptions (Just ansiRed) noBus \pdr -> do
-        sysId <- runInPDR pdr getSystemIdentifier
-        assert "system identifier should equal alice_macbook" (sysId == "alice_macbook")
+  -- | Smoke test: start one PDR instance, verify the system identifier matches
+  -- | the value we passed in, then shut down.
+  test "start a single PDR instance and read its system identifier" do
+    let user = testPouchdbUser "alice"
+    withPDR user defaultRuntimeOptions (Just ansiRed) noBus \pdr -> do
+      sysId <- runInPDR pdr getSystemIdentifier
+      assert "system identifier should equal alice_macbook" (sysId == "alice_macbook")
 
-    -- | Smoke test: start two PDR instances in the same process, verify that
-    -- | they have distinct system identifiers.
-    test "start two PDR instances with distinct identifiers" do
-      withTwoPDRs
-        (testPouchdbUser "alice")
-        defaultRuntimeOptions
-        (Just ansiRed)
-        (testPouchdbUser "bob")
-        defaultRuntimeOptions
-        (Just ansiMagenta)
-        \pdrA pdrB -> do
-          sysA <- runInPDR pdrA getSystemIdentifier
-          sysB <- runInPDR pdrB getSystemIdentifier
-          assert "PDR-A system identifier should equal alice_macbook" (sysA == "alice_macbook")
-          assert "PDR-B system identifier should equal bob_macbook" (sysB == "bob_macbook")
-          assert "PDR-A and PDR-B should have distinct identifiers" (sysA /= sysB)
+  -- | Smoke test: start two PDR instances in the same process, verify that
+  -- | they have distinct system identifiers.
+  test "start two PDR instances with distinct identifiers" do
+    withTwoPDRs
+      (testPouchdbUser "alice")
+      defaultRuntimeOptions
+      (Just ansiRed)
+      (testPouchdbUser "bob")
+      defaultRuntimeOptions
+      (Just ansiMagenta)
+      \pdrA pdrB -> do
+        sysA <- runInPDR pdrA getSystemIdentifier
+        sysB <- runInPDR pdrB getSystemIdentifier
+        assert "PDR-A system identifier should equal alice_macbook" (sysA == "alice_macbook")
+        assert "PDR-B system identifier should equal bob_macbook" (sysB == "bob_macbook")
+        assert "PDR-A and PDR-B should have distinct identifiers" (sysA /= sysB)
 
-    test "start two PDR instances and connect them" do
-      withTwoPDRs
-        (testPouchdbUser "alice")
-        defaultRuntimeOptions
-        (Just ansiRed)
-        (testPouchdbUser "bob")
-        defaultRuntimeOptions
-        (Just ansiMagenta)
-        \pdrA pdrB -> do
-          runInPDR pdrA
-            ( do
-                -- setTopicLogLevel BROKER Debug
-                -- setTopicLogLevel INSTALL Trace
-                -- setTopicLogLevel SYNC Trace
-                setTopicLogLevel TEST Debug
-                -- setTopicLogLevel RESOURCE Debug
-                setTopicLogLevel DELTA Trace
-            )
-          runInPDR pdrB
-            ( do
-                setTopicLogLevel BROKER Debug
-                -- setTopicLogLevel INSTALL Trace
-                setTopicLogLevel SYNC Trace
-                setTopicLogLevel TEST Debug
-                setTopicLogLevel RESOURCE Trace
-                -- setTopicLogLevel DELTA Warn
-            )
-          connectPDRs pdrA pdrB
-          -- Two Persons instances.
-          -- Controleer op PerspectivesUsers in plaats daarvan.
-          malice <- runInPDR pdrA do
-            muser <- lookupIndexedRole sysMe
-            case muser of
-              Just user -> binding_ user
-              Nothing -> pure Nothing
-          mbob <- runInPDR pdrB do
-            muser <- lookupIndexedRole sysMe
-            case muser of
-              Just user -> binding_ user
-              Nothing -> pure Nothing
-          case malice, mbob of
-            Just alice, Just bob -> do
-              maliceForBob <- runInPDR pdrB $ tryGetPerspectRol alice
-              mbobForAlice <- runInPDR pdrA $ tryGetPerspectRol bob
-              case maliceForBob, mbobForAlice of
-                Just _, Just _ -> assert "Both PDRs should have each others' Person instance" true
-                Just _, Nothing -> assert "Bobs' Person instance should be visible for Alice, too" false
-                _, _ -> assert "Both PDRs should have each others' Person instance" false
-            _, _ -> assert "Both PDRs should have a `me` instance" false
+  test "start two PDR instances and connect them" do
+    withTwoPDRs
+      (testPouchdbUser "alice")
+      defaultRuntimeOptions
+      (Just ansiRed)
+      (testPouchdbUser "bob")
+      defaultRuntimeOptions
+      (Just ansiMagenta)
+      \pdrA pdrB -> do
+        runInPDR pdrA
+          ( do
+              -- setTopicLogLevel BROKER Debug
+              -- setTopicLogLevel INSTALL Trace
+              -- setTopicLogLevel SYNC Trace
+              setTopicLogLevel TEST Debug
+              -- setTopicLogLevel RESOURCE Debug
+              setTopicLogLevel DELTA Trace
+          )
+        runInPDR pdrB
+          ( do
+              setTopicLogLevel BROKER Debug
+              -- setTopicLogLevel INSTALL Trace
+              setTopicLogLevel SYNC Trace
+              setTopicLogLevel TEST Debug
+              setTopicLogLevel RESOURCE Trace
+          -- setTopicLogLevel DELTA Warn
+          )
+        connectPDRs pdrA pdrB
+        -- Two Persons instances.
+        -- Controleer op PerspectivesUsers in plaats daarvan.
+        malice <- runInPDR pdrA do
+          muser <- lookupIndexedRole sysMe
+          case muser of
+            Just user -> binding_ user
+            Nothing -> pure Nothing
+        mbob <- runInPDR pdrB do
+          muser <- lookupIndexedRole sysMe
+          case muser of
+            Just user -> binding_ user
+            Nothing -> pure Nothing
+        case malice, mbob of
+          Just alice, Just bob -> do
+            maliceForBob <- runInPDR pdrB $ tryGetPerspectRol alice
+            mbobForAlice <- runInPDR pdrA $ tryGetPerspectRol bob
+            case maliceForBob, mbobForAlice of
+              Just _, Just _ -> assert "Both PDRs should have each others' Person instance" true
+              Just _, Nothing -> assert "Bobs' Person instance should be visible for Alice, too" false
+              _, _ -> assert "Both PDRs should have each others' Person instance" false
+          _, _ -> assert "Both PDRs should have a `me` instance" false
 
 -------------------------------------------------------------------------------
 ---- COMPUTE AND CACHE ALL RESULTS ONCE
@@ -238,7 +236,7 @@ getSynchronisationResults = do
                 -- setTopicLogLevel INSTALL Debug
                 -- setTopicLogLevel SYNC Info
                 setTopicLogLevel TEST Debug
-                -- setTopicLogLevel STATE Trace
+            -- setTopicLogLevel STATE Trace
             )
           runInPDR pdrB
             ( do
@@ -247,7 +245,7 @@ getSynchronisationResults = do
                 -- setTopicLogLevel MODEL Debug
                 -- setTopicLogLevel SYNC Trace
                 setTopicLogLevel TEST Debug
-                -- setTopicLogLevel DELTA Trace
+            -- setTopicLogLevel DELTA Trace
             )
 
           -- Get Alice's and Bob's PerspectivesUsers instances for later use.
@@ -300,7 +298,7 @@ getSynchronisationResults = do
           ---- EXECUTE TESTS AND COLLECT RESULTS
           ---- Add a call for each test in model://joopringelberg.nl#SynchronisationTestModel
           -------------------------------------------------------------------------------
-          traverse runATest allTests           
+          traverse runATest allTests
 
       liftEffect $ write (Just results) cachedSynchronisationResults
       pure results
@@ -316,7 +314,7 @@ executeModelTest pdrA pdrB testAppContextA _alice _bob testContextTypeR logConfi
 
   runInPDR pdrB do
     for_ logConfiguration.pdrB \{ topic, logLevel } -> setTopicLogLevel topic logLevel
-  
+
   testContextType <- runInPDR pdrA
     (toStable (ContextType testContextTypeR))
   testFollowerType <- runInPDR pdrA
@@ -335,12 +333,12 @@ executeModelTest pdrA pdrB testAppContextA _alice _bob testContextTypeR logConfi
       do
         result <- runExceptT $ constructContext (Just (ENR testsType'))
           $ ContextSerialization
-            { id: Nothing
-            , ctype: unwrap testContextType
-            , prototype: Nothing
-            , rollen: OBJ.empty
-            , externeProperties: PropertySerialization OBJ.empty
-            }
+              { id: Nothing
+              , ctype: unwrap testContextType
+              , prototype: Nothing
+              , rollen: OBJ.empty
+              , externeProperties: PropertySerialization OBJ.empty
+              }
         case result of
           Left err -> throwError $ error ("Failed to create test context: " <> show err)
           Right test -> do
@@ -374,29 +372,31 @@ executeModelTest pdrA pdrB testAppContextA _alice _bob testContextTypeR logConfi
 
   -- Alice executes the test, bringing the test role in state Executed.
   runInPDR pdrA
-    do 
+    do
       runMonadPerspectivesTransaction' shareWithPeers (ENR testLeaderType)
-        (do
-          lift $ infoTest "Alice executes a test in PDRA"
-          runContextAction (unwrap testLeaderType) "RunTest" (unwrap theTest))
+        ( do
+            lift $ infoTest "Alice executes a test in PDRA"
+            runContextAction (unwrap testLeaderType) "RunTest" (unwrap theTest)
+        )
 
-  r <- ( pollUntilTestFinishes 100 (Milliseconds 100.0)
-      "Bob to have a value for the test to succeed in pdrB"
-      ( runInPDR pdrB $
-          do
-            testNameProperty' <- toStable (EnumeratedPropertyType testNameProperty)
-            mtestName <- testExternalRole ##> getPropertyValues (ENP testNameProperty')
-            case mtestName of
-              Just (Value testName) -> do
-                infoTest ("Bob sees that the test has a name: " <> show testName)
-                -- Get the value of Enumerated property TestSucceeded of the external role of the test.
-                testSucceededProperty' <- toStable (EnumeratedPropertyType testSucceededProperty)
-                mtestSucceeded <- testExternalRole ##> getPropertyValues (ENP testSucceededProperty')
-                case mtestSucceeded of
-                  Just (Value testSucceeded) -> pure (Right { testName, testSucceeded: testSucceeded == "true"})
-                  Nothing -> pure (Left { testName, err: error "TestSucceeded property not found" })
-              Nothing -> pure (Left { testName: "unknown testname", err: error "TestName property not found" })
-      )
+  r <-
+    ( pollUntilTestFinishes 100 (Milliseconds 100.0)
+        "Bob to have a value for the test to succeed in pdrB"
+        ( runInPDR pdrB $
+            do
+              testNameProperty' <- toStable (EnumeratedPropertyType testNameProperty)
+              mtestName <- testExternalRole ##> getPropertyValues (ENP testNameProperty')
+              case mtestName of
+                Just (Value testName) -> do
+                  infoTest ("Bob sees that the test has a name: " <> show testName)
+                  -- Get the value of Enumerated property TestSucceeded of the external role of the test.
+                  testSucceededProperty' <- toStable (EnumeratedPropertyType testSucceededProperty)
+                  mtestSucceeded <- testExternalRole ##> getPropertyValues (ENP testSucceededProperty')
+                  case mtestSucceeded of
+                    Just (Value testSucceeded) -> pure (Right { testName, testSucceeded: testSucceeded == "true" })
+                    Nothing -> pure (Left { testName, err: error "TestSucceeded property not found" })
+                Nothing -> pure (Left { testName: "unknown testname", err: error "TestName property not found" })
+        )
     )
   runInPDR pdrA
     ( do
@@ -438,7 +438,6 @@ testSucceededProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test
 testNameProperty :: String
 testNameProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test$External$TestName"
 
-
 -------------------------------------------------------------------------------
 ---- THE TESTS
 ---- One entry for each test in model://joopringelberg.nl#SynchronisationTestModel
@@ -446,48 +445,52 @@ testNameProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test$Exte
 
 allTests :: Array ModelTest
 allTests =
-  [ 
-    { testContextTypeName: test_CreateRole, logConfiguration: emptyLogConfiguration }
+  [ { testContextTypeName: test_CreateRole, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_SetProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_SetProperty_on_Filler, logConfiguration: emptyLogConfiguration }
-      -- { pdrA: [ { topic: SYNC, logLevel: Trace }
-      --         , { topic: RESOURCE, logLevel: Trace }
-      --         , { topic: BROKER, logLevel: Trace }]
-      -- , pdrB: [ { topic: SYNC, logLevel: Trace }
-      --         , { topic: BROKER, logLevel: Trace }]}
+  -- { pdrA: [ { topic: SYNC, logLevel: Trace }
+  --         , { topic: RESOURCE, logLevel: Trace }
+  --         , { topic: BROKER, logLevel: Trace }]
+  -- , pdrB: [ { topic: SYNC, logLevel: Trace }
+  --         , { topic: BROKER, logLevel: Trace }]}
   , { testContextTypeName: test_Binding_Step, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_SetProperty_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Binding_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Binder_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Binding_in_CalculatedRole, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BindingStep, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BinderStep, logConfiguration: 
-      { pdrA: [ {topic: BROKER, logLevel: Trace}
-                ]
-      , pdrB: [ {topic: RESOURCE, logLevel: Trace}, 
-                {topic: STATE, logLevel: Trace},
-                {topic: PERSISTENCE, logLevel: Trace}]}
-   }
+  , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BinderStep
+    , logConfiguration:
+        { pdrA:
+            [ { topic: BROKER, logLevel: Trace }
+            ]
+        , pdrB:
+            [ { topic: RESOURCE, logLevel: Trace }
+            , { topic: STATE, logLevel: Trace }
+            , { topic: PERSISTENCE, logLevel: Trace }
+            ]
+        }
+    }
   ]
 
 allOn :: Array TopicLogLevelPair
-allOn = 
-  [ {topic: RESOURCE, logLevel: Trace}
-  , {topic: DELTA, logLevel: Trace}
-  , {topic: STATE, logLevel: Trace}
-  , {topic: SYNC, logLevel: Trace}
-  , {topic: BROKER, logLevel: Trace}
-  , {topic: INSTALL, logLevel: Trace}
-  , {topic: TEST, logLevel: Debug}
-  , {topic: MODEL, logLevel: Trace}
-  , {topic: PERSISTENCE, logLevel: Trace}
-  , {topic: QUERY, logLevel: Trace}
-  , {topic: AUTH, logLevel: Trace}
-  , {topic: UPGRADE, logLevel: Trace}
-  , {topic: PARSER, logLevel: Trace}
-  , {topic: COMPILER, logLevel: Trace}
+allOn =
+  [ { topic: RESOURCE, logLevel: Trace }
+  , { topic: DELTA, logLevel: Trace }
+  , { topic: STATE, logLevel: Trace }
+  , { topic: SYNC, logLevel: Trace }
+  , { topic: BROKER, logLevel: Trace }
+  , { topic: INSTALL, logLevel: Trace }
+  , { topic: TEST, logLevel: Debug }
+  , { topic: MODEL, logLevel: Trace }
+  , { topic: PERSISTENCE, logLevel: Trace }
+  , { topic: QUERY, logLevel: Trace }
+  , { topic: AUTH, logLevel: Trace }
+  , { topic: UPGRADE, logLevel: Trace }
+  , { topic: PARSER, logLevel: Trace }
+  , { topic: COMPILER, logLevel: Trace }
 
-]
+  ]
 
 test_CreateRole :: String
 test_CreateRole = "model://joopringelberg.nl#SynchronisationTestModel$Test_CreateRole"
