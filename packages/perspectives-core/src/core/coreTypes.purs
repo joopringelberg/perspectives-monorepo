@@ -402,6 +402,13 @@ data RepeatingTransaction
 
 data JustInTimeModelLoad = LoadModel (ModelUri Stable) | ModelLoaded | LoadingFailed String | Stop | HotLine (AVar JustInTimeModelLoad)
 
+instance Show JustInTimeModelLoad where
+  show (LoadModel uri) = "LoadModel " <> unwrap uri
+  show ModelLoaded = "ModelLoaded"
+  show (LoadingFailed msg) = "LoadingFailed " <> msg
+  show Stop = "Stop"
+  show (HotLine _) = "HotLine <AVar>"
+
 -----------------------------------------------------------
 -- ASSUMPTIONS
 -----------------------------------------------------------
