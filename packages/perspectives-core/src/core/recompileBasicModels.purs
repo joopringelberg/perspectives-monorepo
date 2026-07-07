@@ -39,7 +39,7 @@ import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..), fromJust, fromMaybe, isJust)
+import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), Replacement(..), replace)
@@ -124,12 +124,12 @@ recompileModelsAtUrl modelsDb manifestsDb = do
               setRevision id' newRev2
           pure model
 
-  getVersionedDomeinFileName :: RoleInstance -> MonadPerspectivesTransaction (Maybe String)
-  getVersionedDomeinFileName rid = do
-    r <- lift $ getPerspectRol rid
-    case head $ rol_property r (EnumeratedPropertyType domeinFileName), head $ rol_property r (EnumeratedPropertyType versionToInstall) of
-      Just (Value dfName), Just (Value version) -> pure $ Just $ (replace (Pattern ".json") (Replacement "") dfName) <> "@" <> version <> ".json"
-      _, _ -> pure Nothing
+getVersionedDomeinFileName :: RoleInstance -> MonadPerspectivesTransaction (Maybe String)
+getVersionedDomeinFileName rid = do
+  r <- lift $ getPerspectRol rid
+  case head $ rol_property r (EnumeratedPropertyType domeinFileName), head $ rol_property r (EnumeratedPropertyType versionToInstall) of
+    Just (Value dfName), Just (Value version) -> pure $ Just $ (replace (Pattern ".json") (Replacement "") dfName) <> "@" <> version <> ".json"
+    _, _ -> pure Nothing
 
 -- | As this function recompiles a model stored in the local models database, it not only actually recompiles the source, but also
 -- | distributes the state notifications and automatic effects over the other models.

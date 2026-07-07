@@ -37,6 +37,7 @@ module Perspectives.Sidecar.NormalizeTypeNames
 
 import Prelude
 
+import Control.Monad.Error.Class (catchError)
 import Control.Monad.Reader (Reader, ask, runReaderT)
 import Data.Array (catMaybes, elem, foldM)
 import Data.Either (Either(..))
@@ -169,8 +170,11 @@ getinstalledModelCuids fromRepository =
     getVersionedInstalledModelCuids
   else do
     modelsDb <- modelDatabaseName
-    result :: Array { id :: String, namespace :: String } <- getViewOnDatabase modelsDb "defaultViews/modelIdNamespace" (NoKey :: Keys String)
-    pure $ Map.fromFoldable $ ((\{ id, namespace } -> (Tuple (ModelUri namespace) (ModelUri id))) <$> result)
+    catchError
+      do
+        result :: Array { id :: String, namespace :: String } <- getViewOnDatabase modelsDb "defaultViews/modelIdNamespace" (NoKey :: Keys String)
+        pure $ Map.fromFoldable $ ((\{ id, namespace } -> (Tuple (ModelUri namespace) (ModelUri id))) <$> result)
+      \_ -> pure Map.empty
 
 -- | A map from ModelUri Readable to versioned ModelUri Stable, for all installed models (registered in the role PerspectivesSystem$ModelsInUse).
 -- | Not every installed model need have cuid, as long as we have not completely moved to stable identifiers!

@@ -34,7 +34,7 @@ import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Maybe (Maybe(..), maybe)
 import Data.MediaType (MediaType(..))
-import Data.Newtype (unwrap, wrap)
+import Data.Newtype (unwrap)
 import Data.Show (show)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
@@ -177,7 +177,7 @@ retrieveDomeinFile m@(ModelUri modelUri') = do
                 LoadingFailed reason -> throwError (error $ "Cannot get " <> modelUri <> " from a repository. Reason: " <> reason)
                 _ -> throwError (error $ "Model retrieval from repository was not executed for " <> modelUri <> ".")
             -- This should not happen
-            _ -> throwError (error $ "Wrong communication from the forked model loading process!")
+            _ -> throwError (error $ "Unexpected response from the forked model loading process for " <> modelUri <> ". Response is: " <> show result)
         -- The model was available in the local database, but as it was not in cache, we have to load the translations.
         Just df -> do
           traceModel $ "retrieveDomeinFile' found model in local database but not in cache: " <> modelUri
