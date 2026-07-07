@@ -54,13 +54,8 @@ import Test.LoadArc (theSuite) as LARC
 -- import Test.Queries (theSuite) as QR
 -- import Test.Sync.HandleTransaction (theSuite) as HTA
 
--- Regression test: compile all models from perspectives.domains without errors.
--- Uses testOnly — requires network access to https://perspectives.domains
-import Test.ModelCompilationRegression (theSuite) as MCR
-
 main :: Effect Unit
 main = runTest do
   -- TODO: add Layer 2 suites here.  None are enabled yet — see module comment.
   -- LARC.theSuite
-  MCR.theSuite
   pure unit

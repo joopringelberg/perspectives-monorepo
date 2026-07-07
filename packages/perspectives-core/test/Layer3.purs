@@ -92,11 +92,13 @@ import Test.PDRInstance (PDRInstance, SynchronisationResult, connectPDRs, noBus,
 import Test.Unit (TestSuite, suite, suiteSkip, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
+import Test.ModelCompilationRegression (theSuite) as MCR
 
 main :: Effect Unit
 main = launchAff_ do
   results <- getSynchronisationResults
   liftEffect $ runTest do
+    MCR.theSuite
     scaffoldTests
     suite "Synchronisation tests" do
       for_ results \result -> case result of

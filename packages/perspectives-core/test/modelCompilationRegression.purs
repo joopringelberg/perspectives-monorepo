@@ -21,56 +21,53 @@
 
 -- | Regression test for model compilation.
 -- |
--- | Fetches all models from the perspectives.domains repository databases,
--- | compiles each one (ARC parse → phase 2 → phase 3) in topological
--- | dependency order, and reports any parse or compile errors clearly.
+-- | Fetches all models from the perspectives.domains repository database,
+-- | starts a full PDR instance (in-memory PouchDB, setupUser), then compiles
+-- | each model in topological dependency order using the production compilation
+-- | path (`loadAndCompileArcFileWithSidecar_`).  Any parse or compile errors
+-- | are reported clearly and the test fails if any are present.
 -- |
--- | The test caches each successfully compiled model (using its readable
--- | identifier as the cache key) so that models compiled later can resolve
--- | cross-model type references from models compiled earlier.
+-- | Each successfully compiled model is saved to the PDR's local in-memory
+-- | PouchDB so that models compiled later can resolve cross-model type
+-- | references from models compiled earlier.
 -- |
 -- | Uses `testOnly` because it requires network access to
 -- |   https://perspectives.domains/models_perspectives_domains
 -- | Run manually with:
--- |   pnpm run test:layer2
+-- |   pnpm run test:layer3
 
 module Test.ModelCompilationRegression where
 
 import Prelude
 
-import Control.Monad.Free (Free)
-import Control.Monad.Reader (ask)
+import Control.Monad.Error.Class (throwError)
+import Control.Monad.Trans.Class (lift)
 import Data.Array (catMaybes, foldM, length, null)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
-import Data.List (List(..))
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.Tuple (Tuple(..))
-import Effect.Aff (forkAff)
-import Effect.Aff.Class (liftAff)
+import Effect.Aff (error)
 import Effect.Class.Console (log)
-import Foreign.Object (empty)
-import Main (forkJustInTimeModelLoader)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..))
-import Parsing (ParseError)
-import Perspectives.CoreTypes (MonadPerspectives)
-import Perspectives.DomeinCache (storeDomeinFileInCache)
-import Perspectives.DomeinFile (DomeinFile(..), defaultDomeinFileRecord)
+import Partial.Unsafe (unsafePartial)
+import Perspectives.CoreTypes (MonadPerspectivesTransaction)
+import Perspectives.DomeinCache (storeDomeinFileInCouchdb)
 import Perspectives.ExecuteInTopologicalOrder (sortTopologicallyEither)
-import Perspectives.External.CoreModules (addAllExternalFunctions)
+import Perspectives.Identifiers (domeinFileVersion, modelUri2LocalName)
+import Perspectives.InvertedQuery.Storable (saveInvertedQueries)
 import Perspectives.Logging (traceTest)
-import Perspectives.Parsing.Arc (domain) as ARC
-import Perspectives.Parsing.Arc.AST (ContextE)
-import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
-import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
-import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
-import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo_', toStableDomeinFile, toStableModelUri)
+import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistence.API (documentsInDatabase, includeDocs)
-import Perspectives.PerspectivesState (getModelToLoad)
-import Perspectives.RunPerspectives (runPerspectivesWithoutCouchdb)
+import Perspectives.PerspectivesState (defaultRuntimeOptions)
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
+import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runMonadPerspectivesTransaction')
+import Perspectives.Sidecar.StableIdMapping (ModelUri(..), fromLocalModels, loadStableMapping)
+import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFileWithSidecar_)
 import Simple.JSON (read)
-import Test.Unit (TestF, suite, testOnly)
+import Test.PDRInstance (noBus, runInPDR, testPouchdbUser, withPDR)
+import Test.Unit (TestSuite, suite, testOnly)
 import Test.Unit.Assert (assert)
 
 -- | The CouchDB database that contains all compiled model documents
@@ -78,87 +75,79 @@ import Test.Unit.Assert (assert)
 modelsDb :: String
 modelsDb = "https://perspectives.domains/models_perspectives_domains"
 
-theSuite :: Free TestF Unit
+theSuite :: TestSuite
 theSuite = suite "Perspectives.ModelCompilationRegression" do
 
   testOnly "All models from perspectives.domains compile without errors" do
-    errors <- runPerspectivesWithoutCouchdb "regressiontest" do
-      -- Register external (JavaScript) functions so that computed values that
-      -- reference them can be compiled in phase 3.
-      addAllExternalFunctions
-      -- Fork aff to load models just in time.
-      modelToLoadAVar <- getModelToLoad
-      state <- ask
-      void $ liftAff $ forkAff $ forkJustInTimeModelLoader modelToLoadAVar state
+    let user = testPouchdbUser "regressiontest"
+    withPDR user defaultRuntimeOptions Nothing noBus \pdr -> do
+      -- Fetch every document from the models database and parse as
+      -- UninterpretedDomeinFile.  Design documents and other non-model
+      -- documents are silently skipped.
+      sorted <- runInPDR pdr do
+        { rows: allDocs } <- documentsInDatabase modelsDb includeDocs
+        let
+          models :: Array UninterpretedDomeinFile
+          models = catMaybes
+            ( map
+                ( \{ doc } -> case read <$> doc of
+                    Just (Right (df :: UninterpretedDomeinFile)) -> Just df
+                    _ -> Nothing
+                )
+                allDocs
+            )
+        -- Topologically sort the models so that each model is compiled only
+        -- after all of its declared dependencies have been compiled.
+        case sortTopologicallyEither
+               (\(UninterpretedDomeinFile { id }) -> unwrap id)
+               (\(UninterpretedDomeinFile { referredModels }) -> referredModels)
+               models of
+          Left sortErrors -> throwError (error ("Topological sort failed: " <> show sortErrors))
+          Right s -> pure s
+      -- Compile each model inside a single PDR transaction so that the
+      -- MonadPerspectives state (cache + in-memory PouchDB) is shared
+      -- across all compilations.
+      errors <- runInPDR pdr $
+        runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser) $
+          foldM (\errs model -> (\newErrs -> errs <> newErrs) <$> compileAndStoreModel model) [] sorted
+      -- Print every error and fail if any were found.
+      for_ errors log
+      assert
+        ( "Model compilation produced "
+            <> show (length errors)
+            <> " error(s) — see log above for details."
+        )
+        (null errors)
 
-      -- Fetch every document from the models database.
-      { rows: allDocs } <- documentsInDatabase modelsDb includeDocs
-      -- Attempt to decode each document as an UninterpretedDomeinFile.
-      -- Documents that cannot be decoded (design documents, etc.) are silently skipped.
-      let
-        models :: Array UninterpretedDomeinFile
-        models = catMaybes
-          ( map
-              ( \{ doc } -> case read <$> doc of
-                  Just (Right (df :: UninterpretedDomeinFile)) -> Just df
-                  _ -> Nothing
-              )
-              allDocs
-          )
-      -- Topologically sort the models so that each model is compiled only
-      -- after all of its declared dependencies have been compiled.
-      case
-        sortTopologicallyEither
-          (\(UninterpretedDomeinFile { id }) -> unwrap id)
-          (\(UninterpretedDomeinFile { referredModels }) -> referredModels)
-          models
-        of
-        Left sortErrors ->
-          pure [ "Topological sort failed: " <> show sortErrors ]
-        Right sorted ->
-          foldM (\errs model -> append errs <$> compileAndCacheModel model) [] sorted
-    -- Print every error and fail if any were found.
-    for_ errors log
-    assert
-      ( "Model compilation produced "
-          <> show (length errors)
-          <> " error(s) — see log above for details."
-      )
-      (null errors)
-
--- | Compile a single model through ARC phases 1–3, then store the result in
--- | the in-memory domain cache under its readable identifier.  Caching with
--- | the readable key ensures that subsequent compilations can resolve
--- | cross-model type references by the human-readable names used in ARC source.
+-- | Compile a single model through the production compilation path
+-- | (`loadAndCompileArcFileWithSidecar_`), then persist the result to the
+-- | PDR's local in-memory PouchDB so that later compilations can resolve
+-- | cross-model type references.
 -- |
 -- | Returns an empty array on success, or one or more human-readable error
 -- | strings on failure.
-compileAndCacheModel :: UninterpretedDomeinFile -> MonadPerspectives (Array String)
-compileAndCacheModel (UninterpretedDomeinFile { namespace, arc }) = do
+compileAndStoreModel :: UninterpretedDomeinFile -> MonadPerspectivesTransaction (Array String)
+compileAndStoreModel (UninterpretedDomeinFile { _id, id, namespace, arc }) = do
   traceTest ("Compiling model " <> namespace)
-  -- ── Phase 1: parse ARC source ──────────────────────────────────────────────
-  (r :: Either ParseError ContextE) <- liftAff $ runIndentParser arc ARC.domain
-  case r of
-    Left parseErr ->
-      pure [ namespace <> ": parse error — " <> show parseErr ]
-    Right ctxt -> do
-      -- ── Phase 2: name resolution ──────────────────────────────────────────
-      Tuple result state <-
-        liftAff $ runPhaseTwo_' (traverseDomain ctxt) defaultDomeinFileRecord empty empty Nil
-      case result of
-        Left errs ->
-          pure (map (\e -> namespace <> ": phase-2 error — " <> show e) errs)
-        Right (DomeinFile dr'@{ id }) -> do
-          let dr'' = dr' { referredModels = state.referredModels }
-          -- ── Phase 3: inverted-query / expression compilation ──────────────
-          x' <- phaseThree dr'' state.postponedStateQualifiedParts state.screens
-          case x' of
-            Left errs ->
-              pure (map (\e -> namespace <> ": phase-3 error — " <> show e) errs)
-            Right (Tuple correctedDFR _) -> do
-              -- Cache the readable DomeinFile so that later compilations can
-              -- resolve references to types declared in this model.
-              void $ storeDomeinFileInCache
-                (toStableModelUri id)
-                (toStableDomeinFile (DomeinFile correctedDFR { arc = arc }))
-              pure []
+  let mversion = domeinFileVersion _id
+  -- Load the sidecar mapping from the local models database if available.
+  -- For models already installed by setupUser this preserves stable CUIDs;
+  -- for new models (not yet installed locally) this is Nothing and a fresh
+  -- mapping is created.
+  mlocalMapping <- lift $ loadStableMapping (ModelUri $ unwrap id) fromLocalModels
+  result <- loadAndCompileArcFileWithSidecar_
+    (ModelUri $ unwrap id)
+    arc
+    true  -- save in cache after compilation
+    mlocalMapping
+    (unsafePartial modelUri2LocalName (unwrap id))
+    (namespace <> fromMaybe "" ((<>) "@" <$> mversion))
+    mversion
+  case result of
+    Left errs -> pure (map (\e -> namespace <> ": " <> show e) errs)
+    Right (Tuple df (Tuple invertedQueries _)) -> do
+      -- Persist the compiled model to the local in-memory PouchDB so that
+      -- subsequent models can find it via getinstalledModelCuids.
+      lift $ void $ storeDomeinFileInCouchdb df
+      lift $ saveInvertedQueries invertedQueries
+      pure []
