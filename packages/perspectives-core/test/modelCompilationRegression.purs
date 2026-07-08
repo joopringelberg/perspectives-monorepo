@@ -49,12 +49,14 @@ import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
+import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (error, launchAff_)
 import Effect.Class (liftEffect)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..), getVersionedDomeinFileName)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction)
+import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ExecuteInTopologicalOrder (executeInTopologicalOrder) as TOP
 import Perspectives.Identifiers (domeinFileVersion, modelUri2LocalName)
 import Perspectives.Logging (debugUpgrade, errorUpgrade)
@@ -62,7 +64,7 @@ import Perspectives.ModelDependencies (modelManifest, sysUser)
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors, PerspectivesError(..))
 import Perspectives.Persistence.API (Keys(..), documentsInDatabase, includeDocs)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (defaultRuntimeOptions)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, setModelUri)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runMonadPerspectivesTransaction')
@@ -125,7 +127,10 @@ recompileModelAtUrl model@(UninterpretedDomeinFile { id, namespace, _id, _rev, a
         r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> "@" <> version) (Just version)
         case r of
           Left m -> pure $ { namespace, version, errors: m }
-          Right _ -> pure $ { namespace, version, errors: [] }
+          Right (Tuple (DomeinFile df) _) -> do
+            -- This will not prevent all forward references to models, but it may help.
+            lift $ lift $ setModelUri df.namespace df.id
+            pure $ { namespace, version, errors: [] }
 
 --------------------------------------------------------------------------------------------
 -- TOPOLOGICAL SORTING
