@@ -45,6 +45,10 @@ export function createStompClientImpl ( url )
 export function connectAndSubscribeImpl (stompClient, params, emitStep, finishStep, emit)
 {
   let pendingIncomingMessageCount = 0;
+  stompClient.getPendingIncomingMessageCount = function()
+  {
+    return pendingIncomingMessageCount;
+  };
 
   function emitInternalMessage(body)
   {
@@ -144,6 +148,10 @@ export function sendImpl( stompClient, destination, receiptId, messageString )
   stompClient.watchForReceipt( receiptId,
     function()
     {
+      const pendingIncomingMessageCount =
+        typeof stompClient.getPendingIncomingMessageCount === "function"
+          ? stompClient.getPendingIncomingMessageCount()
+          : 0;
       stompClient.emitToPurescript(
         { body: "receipt:" + receiptId
         , ack: function() {}
