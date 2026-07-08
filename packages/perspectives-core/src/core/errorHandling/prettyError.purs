@@ -21,6 +21,7 @@ import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives)
 import Perspectives.Identifiers (typeUri2ModelUri, typeUri2LocalName_)
 import Perspectives.Logging (pdrLog)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.Query.QueryTypes (Domain(..))
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Warning (PerspectivesWarning(..))
@@ -113,6 +114,10 @@ humanizePerspectivesError e = case e of
     -- compilation failed and this error will be in terms of Readable ids.
     adt' <- traverse toReadable adt
     pure (RoleHasNoProperty adt' pt start end)
+  IncompatibleDomainsForJunction dom1 dom2 -> do
+    dom1' <- humanizeDomain dom1
+    dom2' <- humanizeDomain dom2
+    pure (IncompatibleDomainsForJunction dom1' dom2')
 
   -- Default: leave unchanged.
   _ -> pure e
@@ -128,6 +133,15 @@ swapPropertyType :: PropertyType -> MonadPerspectives PropertyType
 swapPropertyType pt = case pt of
   ENP ept -> ENP <$> toReadable ept
   CP cpt -> CP <$> toReadable cpt
+
+humanizeDomain :: Domain -> MonadPerspectives Domain
+humanizeDomain dom = case dom of
+  RDOM adt -> RDOM <$> traverse toReadable adt
+  CDOM adt -> CDOM <$> traverse toReadable adt
+  VDOM ran mprop -> VDOM ran <$> traverse swapPropertyType mprop
+  ContextKind -> pure ContextKind
+  RoleKind -> pure RoleKind
+  AnyRoleType -> pure AnyRoleType
 
 -- If the string looks like a type URI, return the local name; otherwise unchanged.
 humanizeString :: String -> MonadPerspectives String

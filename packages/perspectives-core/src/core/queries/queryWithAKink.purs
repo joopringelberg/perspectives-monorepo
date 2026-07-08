@@ -24,7 +24,8 @@ module Perspectives.Query.Kinked where
 
 import Control.Alternative (guard)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, elemIndex, foldr, head, intercalate, last, snoc, unsnoc)
+import Data.Array (catMaybes, elemIndex, foldM, foldr, head, intercalate, last, snoc, uncons, unsnoc)
+import Data.Function (flip)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Show.Generic (genericShow)
@@ -36,15 +37,16 @@ import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (ensurePropertiesAreReadab
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, addBinding, lift2, lookupVariableBinding, throwError, withFrame)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.Inversion (invertFunction, queryFunctionIsFunctional, queryFunctionIsMandatory)
-import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext, composeOverMaybe, domain, domain2roleInContext, makeComposition, range, replaceDomain, roleInContext2Context, roleInContext2Role)
-import Perspectives.Representation.ADT (ADT, allLeavesInADT)
+import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext, composeOverMaybe, domain, domain2roleInContext, makeComposition, mandatory, productOfDomains, range, replaceDomain, roleInContext2Context, roleInContext2Role, sumOfDomains)
+import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.PersistentType (getCalculatedProperty)
 import Perspectives.Representation.Class.Property (calculation)
 import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, bindingOfADT, getCalculation, getRole)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
-import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
+import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), and)
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..))
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint, prettyPrint')
 import Prelude (class Show, append, bind, discard, eq, join, map, pure, show, ($), (<$>), (<*>), (<<<), (<>), (==), (>=>), (>>=))
 
@@ -262,35 +264,57 @@ invert_ q@(SQD dom (VariableLookup varName) _ _ _) = do
     Just qfd -> invert_ qfd
 
 invert_ qfd@(SQD dom@(RDOM roleAdt) f@(PropertyGetter prop@(ENP _)) ran fun man) = do
-  (hasProp :: Boolean) <- roleHasProperty roleAdt
+  readableProp <- lift $ lift $ toReadable prop
+  (hasProp :: Boolean) <- roleHasProperty roleAdt readableProp
   if hasProp then do
     minvertedF <- invertFunction dom f ran
     case minvertedF of
       Nothing -> pure []
       Just invertedF -> pure [ ZQ_ [ (SQD ran invertedF dom True True) ] Nothing ]
-  else (expandPropertyQuery roleAdt) >>= invert_
+  else (expandPropertyQuery roleAdt readableProp) >>= invert_
 
   where
   -- Creates a series of nested binding expressions until the property has been reached.
-  expandPropertyQuery :: ADT RoleInContext -> PhaseThree QueryFunctionDescription
-  expandPropertyQuery adt = do
-    hasProp <- roleHasProperty adt
+  expandPropertyQuery :: ADT RoleInContext -> PropertyType -> PhaseThree QueryFunctionDescription
+  expandPropertyQuery adt readableProp = do
+    hasProp <- roleHasProperty adt readableProp
     if hasProp then pure (SQD (RDOM adt) (PropertyGetter prop) ran fun man)
     else do
       mbinding <- lift $ lift $ bindingOfADT adt
       case mbinding of
         Just binding -> do
-          bindingHasProp <- roleHasProperty binding
+          bindingHasProp <- roleHasProperty binding readableProp
           if bindingHasProp then pure $ makeComposition
             (SQD (RDOM adt) (DataTypeGetter FillerF) (RDOM binding) True False)
             (SQD (RDOM binding) (PropertyGetter prop) ran fun man)
-          else makeComposition <$> pure (SQD (RDOM adt) (DataTypeGetterWithParameter FillerF "direct") (RDOM binding) True False) <*> (expandPropertyQuery binding)
+          else makeComposition <$> pure (SQD (RDOM adt) (DataTypeGetterWithParameter FillerF "direct") (RDOM binding) True False) <*> (expandPropertyQuery binding readableProp)
         -- No fillers, but we haven't found the property yet. This is an error situation, but the compiler has 
         -- ensured it cannot happen.
-        Nothing -> throwError (Custom $ "An impossible situation in module Perspectives.Query.Kinked, invert_.expandPropertyQuery. This property cannot be found: " <> show prop)
+        Nothing -> case adt of
+          -- Compute the property on all terms and take the union (DataTypeGetter UnionF) of the results.
+          PROD terms -> do
+            pathsToProperty <- traverse (flip expandPropertyQuery readableProp) terms
+            unsafePartial case uncons pathsToProperty of
+              Just { head, tail } -> foldM makeUnion head tail
+          -- Compute the property on all terms and take the intersection (DataTypeGetter IntersectionF) of the results.
+          SUM terms -> do
+            pathsToProperty <- traverse (flip expandPropertyQuery readableProp) terms
+            unsafePartial case uncons pathsToProperty of
+              Just { head, tail } -> foldM makeIntersection head tail
+          _ -> throwError (Custom $ "expandPropertyQuery: no binding found for ADT " <> show adt <> " and property " <> show prop <> ".")
 
-  roleHasProperty :: ADT RoleInContext -> PhaseThree Boolean
-  roleHasProperty adt = (lift $ lift $ allLocallyRepresentedProperties (roleInContext2Role <$> adt)) >>= ensurePropertiesAreReadable >>= pure <<< isJust <<< (elemIndex prop)
+  makeUnion :: QueryFunctionDescription -> QueryFunctionDescription -> PhaseThree QueryFunctionDescription
+  makeUnion f1 f2 = case sumOfDomains (range f1) (range f2) of
+    Just combinedRange -> pure $ BQD (domain f1) (BinaryCombinator UnionF) f1 f2 combinedRange False (and (mandatory f1) (mandatory f2))
+    Nothing -> throwError (IncompatibleDomainsForJunction (range f1) (range f2))
+
+  makeIntersection :: QueryFunctionDescription -> QueryFunctionDescription -> PhaseThree QueryFunctionDescription
+  makeIntersection f1 f2 = case productOfDomains (range f1) (range f2) of
+    Just combinedRange -> pure $ BQD (domain f1) (BinaryCombinator IntersectionF) f1 f2 combinedRange False (and (mandatory f1) (mandatory f2))
+    Nothing -> throwError (IncompatibleDomainsForJunction (range f1) (range f2))
+
+  roleHasProperty :: ADT RoleInContext -> PropertyType -> PhaseThree Boolean
+  roleHasProperty adt prop' = (lift $ lift $ allLocallyRepresentedProperties (roleInContext2Role <$> adt)) >>= ensurePropertiesAreReadable >>= pure <<< isJust <<< (elemIndex prop')
 
 -- The individual takes us to an instance of the range (`ran`), whatever the domain (`dom`) is. RoleIndividual is a constant function.
 -- Its inversion takes us to all instances of the domain.

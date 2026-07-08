@@ -1662,17 +1662,20 @@ computeCurrentContextFromRoleIdentification roleIdentification pos = do
     )
     expandedCompiledObject
   (contextCalculations :: (Array QueryFunctionDescription)) <- completeInversions reducedObject
-  case joinQfds contextCalculations of
+  joinedQfds <- joinQfds contextCalculations
+  case joinedQfds of
     Nothing -> throwError (Custom $ "It is not possible to compute the current context in position " <> show pos <> " (is `origin` an indexed role or context?). Change current state at this position, for example by using `in object|subject|context state`." <> " Information for programmers: function computeCurrentContextFromRoleIdentification with compiledObject = " <> prettyPrint compiledObject)
     Just result -> pure result
   where
-  joinQfds :: Array QueryFunctionDescription -> Maybe QueryFunctionDescription
+  joinQfds :: Array QueryFunctionDescription -> PhaseThree (Maybe QueryFunctionDescription)
   joinQfds contextCalculations = case uncons contextCalculations of
-    Just { head, tail } -> Just (foldl makeUnion head tail)
-    Nothing -> Nothing
+    Just { head, tail } -> Just <$> foldM makeUnion head tail
+    Nothing -> pure Nothing
 
-  makeUnion :: QueryFunctionDescription -> QueryFunctionDescription -> QueryFunctionDescription
-  makeUnion f1 f2 = BQD (domain f1) (BinaryCombinator UnionF) f1 f2 (unsafePartial $ fromJust $ sumOfDomains (range f1) (range f2)) False (and (mandatory f1) (mandatory f2))
+  makeUnion :: QueryFunctionDescription -> QueryFunctionDescription -> PhaseThree QueryFunctionDescription
+  makeUnion f1 f2 = case sumOfDomains (range f1) (range f2) of
+    Just combinedRange -> pure $ BQD (domain f1) (BinaryCombinator UnionF) f1 f2 combinedRange False (and (mandatory f1) (mandatory f2))
+    Nothing -> throwError (IncompatibleDomainsForJunction (range f1) (range f2))
 
 computeOrigin :: AST.StateSpecification -> ArcPosition -> VarBinding
 computeOrigin sp pos = case sp of
