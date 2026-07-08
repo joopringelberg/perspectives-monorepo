@@ -360,9 +360,8 @@ domain model://perspectives.domains#CouchdbManagement@12.2
               callEffect cdb:AddCredentials( AuthorizedDomain, UserName, Password)
         state ThisIsMe = origin filledBy me
           -- Accounts needs this perspective to be able to add the CouchdbServer to his cm:MyCouchdbApp!
-          perspective of Accounts 
-            perspective on extern >> binder CouchdbServers
-              only (Create, Fill)
+          perspective on extern >> binder CouchdbServers
+            only (Create, Fill)
           on entry
             -- When a peer assigns the current user to the Accounts role,
             -- we make sure that the current user has the CouchdbServer bound
@@ -616,10 +615,6 @@ domain model://perspectives.domains#CouchdbManagement@12.2
     aspect sys:ContextWithNotification
 
     state Endorsed = extern >> binder Repositories >> AdminEndorses
-      perspective of Admin
-        perspective on Authors
-          only (Create, Fill, Remove)
-          props (FirstName, LastName) verbs (Consult)
 
     -- Embedded contexts are not removed automatically with their embedder!
     on exit
@@ -707,6 +702,11 @@ domain model://perspectives.domains#CouchdbManagement@12.2
 
       on exit 
         notify "You are no longer the administrator of the repository { context >> extern >> NameSpace_ }."
+
+      in context state Endorsed
+        perspective on Authors
+          only (Create, Fill, Remove)
+          props (FirstName, LastName) verbs (Consult)
 
       
       perspective on External
@@ -1193,7 +1193,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
         -- Why not roll up both states into one? I hope this design ensures that the required files are available.!
         state UploadToRepository = Store == "Repository"
           on entry
-            do for Author
+            do for Author after 500 Milliseconds
               -- This will upload an empty Translations table, too. VersionedModelURI should be Stable.
               callEffect p:UploadToRepository( VersionedModelURI, 
                 callExternal util:ReplaceR( "bind publicrole.*in sys:MySystem", "", ArcSource ) returns String, context >> BasedOnVersion >> VersionedModelURI)
@@ -1205,7 +1205,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
         
         state StoreInLocalDatabase = Store == "Locally"
           on entry
-            do for Author
+            do for Author after 500 Milliseconds
               callEffect p:StoreModelLocally( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI )
               Build = Build + 1
               MustUpload = false
@@ -1214,7 +1214,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
 
         state ApplyImmediately = ApplyInSession
           on entry
-            do for Author
+            do for Author after 500 Milliseconds
               callEffect p:ApplyImmediately( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI )
               MustUpload = false
             notify Author
@@ -1222,7 +1222,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
         
         state NoAction = not ApplyInSession
           on entry
-            do for Author
+            do for Author after 500 Milliseconds
               MustUpload = false
             notify Author
               "Version {External$Version} (build {Build}) has not been stored in the local store or applied to the current session."
