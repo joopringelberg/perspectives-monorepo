@@ -78,10 +78,10 @@ domain model://perspectives.domains#System@6.3
       state Upgrade_3_1_3 = callExternal util:IsLowerVersion( sys:UpgradeHook >> LastHandledUpgrade, "3.1.3" ) returns Boolean and 
         (callExternal util:IsLowerVersion( "3.1.3", callExternal util:SystemParameter( "PDRVersion" ) returns String) returns Boolean or
           ("3.1.3" == callExternal util:SystemParameter( "PDRVersion" ) returns String))
-        state SwitchKey = (filter sys:TheWorld >> PerspectivesUsers with fills me) >> PerspectivesUsers$HasKey
+        state SwitchKey = (filter sys:TheWorld >> PerspectivesUsers with fills me) >> HasKey
           perspective of Upgrader
             perspective on filter sys:TheWorld >> PerspectivesUsers with fills me
-              props (PerspectivesUsers$HasKey, UserWithHasKey$HasKey) verbs (DeleteProperty, SetPropertyValue)
+              props (UserWithHasKey$HasKey) verbs (DeleteProperty, SetPropertyValue)
           on entry
             do for Upgrader
               letA
@@ -89,7 +89,7 @@ domain model://perspectives.domains#System@6.3
               in
                 UserWithHasKey$HasKey = true for therole
                 LastHandledUpgrade = callExternal util:SystemParameter( "PDRVersion" ) returns String
-                delete property PerspectivesUsers$HasKey from therole
+                delete property HasKey from therole
 
   -- Used as model://perspectives.domains#System$RoleWithId$Id in the PDR code.
   thing RoleWithId
@@ -154,10 +154,11 @@ domain model://perspectives.domains#System@6.3
     property Phone (String)
       -- pattern = "^(\\+|00)?[0-9]{1,3}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,9}$"
 
-    ----------------------------------
-    ---- ROLEWITHFILTER
-    ---- This role should be used as an aspect role for roles to be presented with the `typeaheadfiller` widget, so that the widget can filter the presented options based on the value of FilterValue.
-    ----------------------------------
+  ----------------------------------
+  ---- ROLEWITHFILTER
+  ---- This role should be used as an aspect role for roles to be presented with the `typeaheadfiller` widget, so that the widget can filter the presented options based on the value of FilterValue.
+  ----------------------------------
+  -- PDRDEPENDENCY
   thing RoleWithFilter
     property FilterValue (String)
 
@@ -177,19 +178,17 @@ domain model://perspectives.domains#System@6.3
       -- We don't want to hand out keys to users as seen by public users.
       -- PDRDEPENDENCY (actually, a MyContexts dependency)
       property SharedFileServerKey (String)
-      state NoKey = (not PerspectivesUsers$HasKey) and (exists me >> SharedFileServerKey) and (not (callExternal util:BottomIdentifier() returns String matches regexp "^pub:.*"))
+      state NoKey = (not HasKey) and (exists me >> SharedFileServerKey) and (not (callExternal util:BottomIdentifier() returns String matches regexp "^pub:.*"))
         on entry
           do for Initializer
             SharedFileServerKey = callExternal util:GetSharedFileServerKey( me >> SharedFileServerKey ) returns String
-            PerspectivesUsers$HasKey = true
-      -- OBSOLETE. This property is obsolete from version 3.1.3 onwards. It is replaced by UserWithHasKey$HasKey in the upgrade code of that version. We keep it for a while to avoid breaking the PDR upgrade code, but we don't use it anymore.
-      property HasKey (Boolean)
+            HasKey = true
 
       perspective on PerspectivesUsers
         -- As this perspective is selfonly, it doesn't cause synchronization with peers.
         -- In other words: a PerspectivesUsers instance cannot see other PerspectivesUsers instances.
         selfonly
-        props (SharedFileServerKey, PerspectivesUsers$HasKey) verbs (Consult)
+        props (SharedFileServerKey, HasKey) verbs (Consult)
     
     user NonPerspectivesUsers (relational)
       aspect sys:Identifiable
@@ -205,7 +204,7 @@ domain model://perspectives.domains#System@6.3
     user Initializer = me
       perspective on PerspectivesUsers
         only (Create)
-        props (Identifiable$PublicKey, SharedFileServerKey, PerspectivesUsers$HasKey) verbs (SetPropertyValue, AddPropertyValue)
+        props (Identifiable$PublicKey, SharedFileServerKey, HasKey) verbs (SetPropertyValue, AddPropertyValue)
       -- Legacy: this perspective was necessary because Initializer created the Persons instance on installation of the PDR.
       perspective on sys:MySocialEnvironment >> Persons
         only (Create, Fill)

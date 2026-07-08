@@ -359,7 +359,7 @@ domain model://perspectives.domains#BrokerServices@6.1
     -- PDRDEPENDENCY
     context Accounts (relational, unlinked) filledBy BrokerContract
 
-    context MyPublicBrokers = bs:MyBrokers >> PublicBrokers
+    context MyPublicBrokers = bs:MyBrokers >> PublicBrokers  >> binding
 
   -- The contract between an end user and a BrokerService.
   -- PDRDEPENDENCY
@@ -615,7 +615,7 @@ domain model://perspectives.domains#BrokerServices@6.1
               props (QueueName) verbs (Consult)
         where
 
-    context EmptyQueue (functional) = filter Queues with not exists binding
+    thing EmptyQueue (functional) = filter Queues with not exists binding
 
     user Administrator filledBy bs:BrokerService$Administrator
       aspect sys:Invitation$Inviter

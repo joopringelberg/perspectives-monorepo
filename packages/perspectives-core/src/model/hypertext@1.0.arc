@@ -188,8 +188,9 @@ domain model://perspectives.domains#HyperContext@1.0
       perspective on Author
         only (Create, Fill)
         props (FirstName, LastName) verbs (Consult)
-    
-    user Author filledBy (sys:TheWorld$PerspectivesUsers + cm:BespokeDatabase$Owner)
+        
+    user Author filledBy (sys:TheWorld$PerspectivesUsers + cm:BespokeDatabase$Owner + sys:SocialEnvironment$Persons)
+
       perspective on extern
         props (Name) verbs (Consult, SetPropertyValue)
       perspective on EntryPoint

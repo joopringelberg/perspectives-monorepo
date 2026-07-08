@@ -1181,6 +1181,8 @@ domain model://perspectives.domains#CouchdbManagement@12.2
               and ((callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime > LastChangeDT + 1 seconds) or not exists LastChangeDT)
               and (IsTheOnlyVersion or (exists context >> BasedOnVersion))
         on entry
+          do for Author
+            ArcFeedback = "Parsing and compiling the Arc source file for " + VersionedModelURI + "..."
           do for Author after 500 Milliseconds
             -- If BasedOnVersion is not set, the PDR will generate new CUIDs.
             ArcFeedback = callExternal p:ParseAndCompileArc( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI ) returns String
