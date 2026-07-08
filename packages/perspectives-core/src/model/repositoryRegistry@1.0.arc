@@ -84,7 +84,7 @@ domain model://perspectives.domains#RepositoryRegistry@1.0
             detail
 
     -- Calculated role: the repositories the user has already registered in their system.
-    context MyRepositories = sys:MySystem >> Repositories
+    context MyRepositories = sys:MySystem >> Repositories >> binding
 
   case PublicRepositoryOverview
     external
