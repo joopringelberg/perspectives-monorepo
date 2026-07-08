@@ -29,7 +29,7 @@ import Control.Monad.Error.Class (catchError, throwError)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
 import Control.Plus (empty)
-import Data.Array (concat, elemIndex, foldl, head, index, length, null, union, unsafeIndex)
+import Data.Array (concat, elemIndex, foldl, head, index, intersect, length, null, union, unsafeIndex)
 import Data.Either (Either(..))
 import Data.Foldable (any)
 import Data.List (List(..))
@@ -195,10 +195,8 @@ interpretBQD (BQD _ (BinaryCombinator SequenceF) f1 f2 _ _ _) a = ArrayT $ do
 
 interpretBQD (BQD _ (BinaryCombinator IntersectionF) f1 f2 _ _ _) a = ArrayT do
   (f1r :: Array DependencyPath) <- runArrayT $ interpret f1 a
-  if null f1r then do
-    f2r <- runArrayT $ interpret f2 a
-    pure $ f1r `union` f2r
-  else pure f1r
+  (f2r :: Array DependencyPath) <- runArrayT $ interpret f2 a
+  pure (f1r `intersect` f2r)
 
 interpretBQD (BQD _ (BinaryCombinator UnionF) f1 f2 _ _ _) a = ArrayT do
   (l :: Array DependencyPath) <- runArrayT $ interpret f1 a
