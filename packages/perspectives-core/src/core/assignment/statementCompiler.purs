@@ -287,13 +287,13 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
     Bind f@{ bindingExpression, roleIdentifier, contextExpression, start, end } -> do
       -- Bind <binding-expression> to <binderType> [in <context-expression>]. Check:
       -- bindingExpression should result in roles
-      (bindings :: QueryFunctionDescription) <- ensureRole subjects bindingExpression
+      (fillersQuery :: QueryFunctionDescription) <- ensureRole subjects bindingExpression
       (cte :: QueryFunctionDescription) <- unsafePartial constructContextGetterDescription contextExpression
       -- binderType should be an EnumeratedRoleType (local name should resolve w.r.t. the contextExpression)
       (qualifiedRoleIdentifier :: EnumeratedRoleType) <- qualifyAsEnumeratedTypeWithRespectTo roleIdentifier cte f.start f.end
-      -- If the roleIdentifier is functional, the bindings should be functional too.
+      -- If the roleIdentifier is functional, the fillersQuery should be functional too.
       (lift $ lift $ ROLE.roleTypeIsFunctional (ENR qualifiedRoleIdentifier)) >>=
-        if _ then case functional bindings of
+        if _ then case functional fillersQuery of
           True -> pure unit
           Unknown -> throwError $ MaybeNotFunctional f.start f.end bindingExpression
           False -> throwError $ NotFunctional f.start f.end bindingExpression
@@ -304,10 +304,11 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
             Left e -> throwError e
             _ -> pure unit
         )
-      -- the possible fillers of binderType (qualifiedRoleIdentifier) should be less specific (=more general) than or equal to the type of the results of binderExpression (fillers).
+      -- The type produced by bindingExpression (fillers) must be equal to or more specific than
+      -- the declared filler restriction of binderType (qualifiedRoleIdentifier).
       qualifies <- do
         (mfillerRestriction :: Maybe (CNF RoleInContext)) <- lift $ lift (getEnumeratedRole qualifiedRoleIdentifier >>= completeDeclaredFillerRestriction >>= traverse toConjunctiveNormalForm_)
-        (fillers :: CNF RoleInContext) <- lift $ lift $ toConjunctiveNormalForm_ (unsafePartial domain2roleType (range bindings))
+        (fillers :: CNF RoleInContext) <- lift $ lift $ toConjunctiveNormalForm_ (unsafePartial domain2roleType (range fillersQuery))
         case mfillerRestriction of
           Nothing -> pure true
           Just fillerRestriction -> do
@@ -315,12 +316,12 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
             lift $ lift do
               readableFillers <- traverseDPROD toReadable fillers
               readableFillerRestriction <- traverseDPROD toReadable fillerRestriction
-              -- fillerRestriction -> fillers
+              -- fillers -> fillerRestriction
               pure (readableFillers `equalsOrSpecialises_` readableFillerRestriction)
       if qualifies
       -- Create a function description that describes the actual role creating and binding.
-      then pure $ BQD originDomain (QF.Bind qualifiedRoleIdentifier) bindings cte originDomain True True
-      else throwError $ RoleDoesNotBind f.start (ENR qualifiedRoleIdentifier) (unsafePartial $ domain2roleType (range bindings))
+      then pure $ BQD originDomain (QF.Bind qualifiedRoleIdentifier) fillersQuery cte originDomain True True
+      else throwError $ RoleDoesNotBind f.start (ENR qualifiedRoleIdentifier) (unsafePartial $ domain2roleType (range fillersQuery))
 
     Bind_ { bindingExpression, binderExpression, start, end } -> do
       -- bindingExpression should result in a functional role
@@ -587,7 +588,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
                     Just expandedCandidateRestriction -> lift $ lift do
                       readableFillers <- traverseDPROD toReadable expandedFillers
                       readableCandidateRestriction <- traverseDPROD toReadable expandedCandidateRestriction
-                      -- expandedCandidateRestriction -> expandedFillers
+                      -- expandedFillers -> expandedCandidateRestriction
                       pure (readableCandidateRestriction `equalsOrGeneralises_` readableFillers)
               )
               nameMatches

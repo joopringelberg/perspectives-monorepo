@@ -41,11 +41,11 @@ import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain2roleInContext, range, roleInContext2Context, roleInContext2Role, roleRange)
 import Perspectives.Query.QueryTypes (functional, mandatory) as QT
 import Perspectives.Representation.Action (Action)
-import Perspectives.Representation.CNF (CNF, distribute, flattenProducts)
+import Perspectives.Representation.CNF (CNF, distribute, flattenProducts, simplifyCNF, toConjunctiveNormalForm)
 import Perspectives.Representation.CalculatedRole (CalculatedRole)
 import Perspectives.Representation.Class.Context (contextADT, roles)
 import Perspectives.Representation.Class.Identifiable (class Identifiable, identifier, identifier_)
-import Perspectives.Representation.Class.PersistentType (class PersistentType, ContextType(..), getCalculatedRole, getContext, getEnumeratedRole, getPerspectType)
+import Perspectives.Representation.Class.PersistentType (class PersistentType, ContextType, getCalculatedRole, getContext, getEnumeratedRole, getPerspectType)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.ExpandedADT (ExpandedADT(..))
 import Perspectives.Representation.Perspective (Perspective, StateSpec)
@@ -261,17 +261,23 @@ completeExpandedRoleType (CR cr) = getCalculatedRole cr
     expandUnexpandedLeaves
 
 -----------------------------------------------------------
--- ADT RoleInContext TO DNF
--- NOTICE: this function can be applied only when member `completeType` of EnumeratedRoleType has been constructed in Perspectives.Parsing.Arc.PhaseThree.
+-- ADT RoleInContext TO CNF
+-- This function guarantees expanded comparison semantics for leaves by expanding
+-- ST/UET role leaves on demand before normalisation.
 -----------------------------------------------------------
 toConjunctiveNormalForm_ :: ADT RoleInContext -> MP (CNF RoleInContext)
 toConjunctiveNormalForm_ adt = case adt of
-  ST (RoleInContext { role }) -> getEnumeratedRole role >>= pure <<< _.completeType <<< unwrap
-  -- In the disjunctive normal form we have no UET.
-  -- We have a tree built from EST, ECT, ESUM and EPROD.
-  UET (RoleInContext { role }) -> getEnumeratedRole role >>= pure <<< _.completeType <<< unwrap
-  SUM as -> for as toConjunctiveNormalForm_ >>= pure <<< unsafePartial distribute
-  PROD as -> for as toConjunctiveNormalForm_ >>= pure <<< unsafePartial flattenProducts
+  ST (RoleInContext { role }) ->
+    getEnumeratedRole role
+      >>= completeExpandedType
+      >>= pure <<< toConjunctiveNormalForm
+  -- UET leaves are expanded recursively to guarantee a fully normalised CNF.
+  UET (RoleInContext { role }) ->
+    getEnumeratedRole role
+      >>= completeExpandedType
+      >>= pure <<< toConjunctiveNormalForm
+  SUM as -> for as toConjunctiveNormalForm_ >>= pure <<< simplifyCNF <<< unsafePartial distribute
+  PROD as -> for as toConjunctiveNormalForm_ >>= pure <<< simplifyCNF <<< unsafePartial flattenProducts
 
 -----------------------------------------------------------
 -- CONTEXTOFADT
