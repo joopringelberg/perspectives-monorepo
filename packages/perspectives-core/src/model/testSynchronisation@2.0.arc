@@ -94,6 +94,7 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
   ---- TESTS. All these tests construct something in pdrA and check if it is synchronised in pdrB.
   ---- The test description and name mention the crucial step in the ORIGINAL query that is tested.
   ---- I also mention the runtime inverted query key that is used to fetch the inverted query for the INVERTED step.
+  ---- We have tests for the five different types of steps in a perspective query: context, role, binder, filled and property.
   ------------------------------------------------------------------------------
   
   ------------------------------------------------------------------------------
@@ -475,12 +476,12 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
       property Q (Boolean)
 
 ------------------------------------------------------------------------------
----- This tests a query with a step from role to context, in a calculated role.
+---- This tests a query with a step from context to role, in a calculated role.
 ---- It tests inverted queries fetched with a RTContextKey.
----- The state condition that checks is the test succeeded looks whether a role instance exists.
+---- The state condition that checks whether the test succeeded looks if a role instance exists.
 ---- The crucial modification is to create a role instance.
 ------------------------------------------------------------------------------
-  case Test_CreateRole_in_CalculatedRole
+  case Test_CreateRole_in_CalculatedRole_ContextStep
     aspect mm:Test
     external 
       state TestSucceeded = exists context >> RoleToCreate
@@ -493,7 +494,7 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
       perspective on RoleToCreate
         only (Create)
       action RunTest
-        TestName = "Test create role in calculated role" for extern
+        TestName = "Test context-to-role step in calculated role, create role." for extern
         create role RoleToCreate
     
     user Follower
@@ -504,4 +505,53 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
     thing CalculatedRole1 = RoleToCreate
 
     thing RoleToCreate
+      property P (Boolean)
+
+------------------------------------------------------------------------------
+---- This tests a query with a step from role to context, in a calculated role.
+---- It tests inverted queries fetched with a RTRoleKey.
+---- The state condition that checks whether the test succeeded looks if a role instance exists.
+---- The crucial modification is to create a role instance.
+------------------------------------------------------------------------------
+  case Test_CreateRole_in_CalculatedRole_RoleStep
+    aspect mm:Test
+    state LeaderExists = exists Leader
+      on entry
+        do for Leader
+          letA
+            intermediate <- create role Intermediate5
+            filler <- create role Filler
+          in
+          bind_ filler to intermediate
+
+    external 
+      state TestSucceeded = exists context >> RoleToCreate1
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on RoleToCreate1
+        only (Create)
+      perspective on Intermediate5
+        only (Create, Fill)
+      perspective on Filler
+        only (Create)
+      action RunTest
+        TestName = "Test role-to-context step in calculated role, create role." for extern
+        create role RoleToCreate1
+    
+    user Follower
+      aspect mm:Test$Follower
+      perspective on CalculatedRole1
+        props (P) verbs (Consult)
+        
+    thing CalculatedRole1 = Intermediate5 >> binding >> context >> RoleToCreate1
+
+    thing Intermediate5 filledBy Filler
+
+    thing Filler
+
+    thing RoleToCreate1
       property P (Boolean)

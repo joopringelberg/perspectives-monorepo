@@ -455,18 +455,19 @@ allTests =
   , { testContextTypeName: test_Binding_in_CalculatedRole, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BindingStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BinderStep, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_CreateRole_in_CalculatedRole
-    , logConfiguration: -- emptyLogConfiguration 
-        { pdrA:
-            [ { topic: SYNC, logLevel: Trace }
-            , { topic: RESOURCE, logLevel: Trace }
-            , { topic: BROKER, logLevel: Trace }
-            ]
-        , pdrB:
-            [ { topic: SYNC, logLevel: Trace }
-            , { topic: BROKER, logLevel: Trace }
-            ]
-        }
+  , { testContextTypeName: test_CreateRole_in_CalculatedRole_ContextStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_CreateRole_in_CalculatedRole_RoleStep
+    , logConfiguration: emptyLogConfiguration
+    -- { pdrA:
+    --     [ { topic: SYNC, logLevel: Trace }
+    --     , { topic: RESOURCE, logLevel: Trace }
+    --     , { topic: BROKER, logLevel: Trace }
+    --     ]
+    -- , pdrB:
+    --     [ { topic: SYNC, logLevel: Trace }
+    --     , { topic: BROKER, logLevel: Trace }
+    --     ]
+    -- }
     }
   ]
 
@@ -519,5 +520,8 @@ test_SetProperty_in_CalculatedProperty_BindingStep = "model://joopringelberg.nl#
 test_SetProperty_in_CalculatedProperty_BinderStep :: String
 test_SetProperty_in_CalculatedProperty_BinderStep = "model://joopringelberg.nl#SynchronisationTestModel$Test_SetProperty_in_CalculatedProperty_BinderStep"
 
-test_CreateRole_in_CalculatedRole :: String
-test_CreateRole_in_CalculatedRole = "model://joopringelberg.nl#SynchronisationTestModel$Test_CreateRole_in_CalculatedRole"
+test_CreateRole_in_CalculatedRole_ContextStep :: String
+test_CreateRole_in_CalculatedRole_ContextStep = "model://joopringelberg.nl#SynchronisationTestModel$Test_CreateRole_in_CalculatedRole_ContextStep"
+
+test_CreateRole_in_CalculatedRole_RoleStep :: String
+test_CreateRole_in_CalculatedRole_RoleStep = "model://joopringelberg.nl#SynchronisationTestModel$Test_CreateRole_in_CalculatedRole_RoleStep"
