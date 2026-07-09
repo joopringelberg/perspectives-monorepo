@@ -403,6 +403,31 @@ runDataUpgrades = do
   runUpgrade installedVersion "3.3.4"
     migrateLegacySystemUserIdentifier
 
+  runUpgrade installedVersion "3.3.5"
+    ( \_ -> do
+        runMonadPerspectivesTransaction'
+          false
+          (ENR $ EnumeratedRoleType sysUser)
+          do
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Parsing@3.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Sensor@3.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Files@3.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#RabbitMQ@2.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Utilities@3.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Serialise@3.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Couchdb@4.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.3"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#RepositoryRegistry@1.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#BodiesWithAccounts@5.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#CouchdbManagement@12.2"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#HyperContext@1.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Disconnect@1.1"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#BrokerServices@6.1"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#SharedFileServices@4.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Introduction@1.0"
+
+    )
+
   -- runMonadPerspectivesTransaction'
   --   false
   --   (ENR $ EnumeratedRoleType sysUser)
