@@ -53,6 +53,7 @@ module Perspectives.Logging
   , debugPersistence
   , debugQuery
   , debugResource
+  , debugStartup
   , debugState
   , debugSync
   , debugTest
@@ -66,6 +67,7 @@ module Perspectives.Logging
   , errorParser
   , errorPersistence
   , errorResource
+  , errorStartup
   , errorSync
   , errorTest
   , errorUpgrade
@@ -74,6 +76,7 @@ module Perspectives.Logging
   , infoInstall
   , infoModel
   , infoResource
+  , infoStartup
   , infoSync
   , infoTest
   , infoUpgrade
@@ -88,6 +91,7 @@ module Perspectives.Logging
   , tracePersistence
   , traceQuery
   , traceResource
+  , traceStartup
   , traceState
   , traceSync
   , traceTest
@@ -98,6 +102,7 @@ module Perspectives.Logging
   , warnOther
   , warnPersistence
   , warnResource
+  , warnStartup
   , warnState
   , warnSync
   , warnTest
@@ -380,3 +385,21 @@ warnResource = pdrLog RESOURCE Warn
 
 errorResource :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorResource = pdrLog RESOURCE Error
+
+-----------------------------------------------------------
+-- STARTUP-RELATED WARNINGS
+-----------------------------------------------------------
+traceStartup :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
+traceStartup = pdrLog STARTUP Trace
+
+debugStartup :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
+debugStartup = pdrLog STARTUP Debug
+
+infoStartup :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
+infoStartup = pdrLog STARTUP Info
+
+warnStartup :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
+warnStartup = pdrLog STARTUP Warn
+
+errorStartup :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
+errorStartup = pdrLog STARTUP Error
