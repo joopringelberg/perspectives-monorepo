@@ -67,18 +67,22 @@ domain model://joopringelberg.nl#StateTestModel@1.0
         props (TestName) verbs (SetPropertyValue, Consult)
 
   ------------------------------------------------------------------------------
-  ---- TESTS. All these tests construct something in pdrA and check if it is synchronised in pdrB.
-  ---- The test description and name mention the crucial step in the ORIGINAL query that is tested.
-  ---- I also mention the runtime inverted query key that is used to fetch the inverted query for the INVERTED step.
+  ---- TESTS. All these tests modify something and then check whether a state condition that depends on a particular query step becomes true.
+  ---- The test name mentions that tested step in the ORIGINAL query.
+  ---- The TestName repeats the condition.
+  ---- Notice that the modification step is separate from the crucial query step that is tested. 
+  ---- Also notice that a query tests all of its steps at once.
+  ---- These tests are not about triggering, but about testing all different types of steps in a query.
+  ---- Each test introduces at most one new kind of step.
   ------------------------------------------------------------------------------
   
   ------------------------------------------------------------------------------
   ---- Test a context state query that tests the existence of a role in the context.
   ---- The crucial assignment is to create the role.
   ------------------------------------------------------------------------------
-  case Test_ContextState_RoleExists
+  case Test_ContextState_RoleStep
     aspect mm:Test
-    state TestState = exists Tester
+    state TestState = exists TestRole1
       on entry
         do for Tester
           TestSucceeded = true for extern
@@ -91,15 +95,15 @@ domain model://joopringelberg.nl#StateTestModel@1.0
         props (TestSucceeded) verbs (SetPropertyValue, Consult)
       action RunTest
         create role TestRole1
-        TestName = "Context state query is: (exists Tester)" for extern
+        TestName = "(exists TestRole1) - role step" for extern
 
     thing TestRole1
 
-------------------------------------------------------------------------------
-  ---- Test a context state query that tests the existence of a role in the context.
+  ------------------------------------------------------------------------------
+  ---- Test a role state query that tests the existence of a role in the context.
   ---- The crucial assignment is to create the role.
   ------------------------------------------------------------------------------
-  case Test_RoleState_RoleExists
+  case Test_RoleState_RoleStep
     aspect mm:Test
     external
       state TestState = exists context >> TestRole1
@@ -115,6 +119,35 @@ domain model://joopringelberg.nl#StateTestModel@1.0
         props (TestSucceeded) verbs (SetPropertyValue, Consult)
       action RunTest
         create role TestRole1
-        TestName = "Role state query is: (exists context >> TestRole1)" for extern
+        TestName = "(exists context >> TestRole1) - context step" for extern
 
     thing TestRole1
+
+  ------------------------------------------------------------------------------
+  ---- Test the property step.
+  ---- The crucial assignment is to create the role.
+  ------------------------------------------------------------------------------
+  case Test_RoleState_PropertyStep
+    aspect mm:Test
+    external
+      state TestState = context >> TestRole1 >> P1
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on TestRole1
+        only (Create)
+        props (P1) verbs (SetPropertyValue, Consult)
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        letA
+          r <- create role TestRole1
+        in
+          P1 = true for r
+          TestName = "(context >> TestRole1 >>> P1) - property step" for extern
+
+    thing TestRole1
+      property P1 (Boolean)

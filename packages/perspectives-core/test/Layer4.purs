@@ -136,8 +136,8 @@ getSinglePDRResults = do
                 -- setTopicLogLevel INSTALL Debug
                 -- setTopicLogLevel MODEL Debug
                 setTopicLogLevel TEST Debug
-                -- setTopicLogLevel RESOURCE Trace
-                -- setTopicLogLevel STATE Trace
+            -- setTopicLogLevel RESOURCE Trace
+            -- setTopicLogLevel STATE Trace
             )
 
           -- Load the single-PDR test model.
@@ -283,13 +283,14 @@ testNameProperty = "model://joopringelberg.nl#StateTestModel$Test$External$TestN
 
 allTests :: Array ModelTest
 allTests =
-  [
-  { testContextTypeName: test_ContextState_RoleExists, logConfiguration: emptyLogConfiguration },
+  [ { testContextTypeName: test_ContextState_RoleStep, logConfiguration: emptyLogConfiguration }
+  ,
     -- { pdr: [ { topic: STATE, logLevel: Trace }
     --         , { topic: RESOURCE, logLevel: Trace }
     --        ]
     -- } },
-  { testContextTypeName: test_RoleState_RoleExists, logConfiguration: emptyLogConfiguration }
+    { testContextTypeName: test_RoleState_RoleStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_PropertyStep, logConfiguration: emptyLogConfiguration }
   ]
 
 -- Example test context type name constant:
@@ -314,8 +315,11 @@ allOn =
   , { topic: COMPILER, logLevel: Trace }
   ]
 
-test_ContextState_RoleExists :: String
-test_ContextState_RoleExists = "model://joopringelberg.nl#StateTestModel$Test_ContextState_RoleExists"
+test_ContextState_RoleStep :: String
+test_ContextState_RoleStep = "model://joopringelberg.nl#StateTestModel$Test_ContextState_RoleStep"
 
-test_RoleState_RoleExists :: String
-test_RoleState_RoleExists = "model://joopringelberg.nl#StateTestModel$Test_RoleState_RoleExists"
+test_RoleState_RoleStep :: String
+test_RoleState_RoleStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_RoleStep"
+
+test_RoleState_PropertyStep :: String
+test_RoleState_PropertyStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_PropertyStep"
