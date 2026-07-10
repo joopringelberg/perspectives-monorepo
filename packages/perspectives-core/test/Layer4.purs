@@ -291,6 +291,20 @@ allTests =
     -- } },
     { testContextTypeName: test_RoleState_RoleStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_PropertyStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_ExternStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_BindingStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_IdentityStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_ModelNameStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_MeStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_TypeOfRoleStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_RoleTypesStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_SpecialisesRoleTypeStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_NotStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_AvailableStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_ComparisonStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_FilledByBinaryStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_FillsBinaryStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_CountSequenceStep, logConfiguration: emptyLogConfiguration }
   ]
 
 -- Example test context type name constant:
@@ -323,3 +337,45 @@ test_RoleState_RoleStep = "model://joopringelberg.nl#StateTestModel$Test_RoleSta
 
 test_RoleState_PropertyStep :: String
 test_RoleState_PropertyStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_PropertyStep"
+
+test_RoleState_ExternStep :: String
+test_RoleState_ExternStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_ExternStep"
+
+test_RoleState_BindingStep :: String
+test_RoleState_BindingStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_BindingStep"
+
+test_RoleState_IdentityStep :: String
+test_RoleState_IdentityStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_IdentityStep"
+
+test_RoleState_ModelNameStep :: String
+test_RoleState_ModelNameStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_ModelNameStep"
+
+test_RoleState_MeStep :: String
+test_RoleState_MeStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_MeStep"
+
+test_RoleState_TypeOfRoleStep :: String
+test_RoleState_TypeOfRoleStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_TypeOfRoleStep"
+
+test_RoleState_RoleTypesStep :: String
+test_RoleState_RoleTypesStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_RoleTypesStep"
+
+test_RoleState_SpecialisesRoleTypeStep :: String
+test_RoleState_SpecialisesRoleTypeStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_SpecialisesRoleTypeStep"
+
+test_RoleState_NotStep :: String
+test_RoleState_NotStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_NotStep"
+
+test_RoleState_AvailableStep :: String
+test_RoleState_AvailableStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_AvailableStep"
+
+test_RoleState_ComparisonStep :: String
+test_RoleState_ComparisonStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_ComparisonStep"
+
+test_RoleState_FilledByBinaryStep :: String
+test_RoleState_FilledByBinaryStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_FilledByBinaryStep"
+
+test_RoleState_FillsBinaryStep :: String
+test_RoleState_FillsBinaryStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_FillsBinaryStep"
+
+test_RoleState_CountSequenceStep :: String
+test_RoleState_CountSequenceStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_CountSequenceStep"
