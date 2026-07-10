@@ -63,7 +63,7 @@ import Perspectives.Persistent (getPerspectRol)
 import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getVariableBindings, pushFrame, restoreFrame)
 import Perspectives.Query.Interpreter.Dependencies (Dependency(..), DependencyPath, addAsSupportingPaths, allPaths, appendPaths, applyValueFunction, composePaths, consOnMainPath, dependencyToValue, domain2Dependency, functionOnBooleans, functionOnStrings, singletonPath, snocOnMainPath, (#>>))
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain2PropertyRange, domain2roleType, range)
-import Perspectives.Query.UnsafeCompiler (lookup, mapDurationOperator, mapNumericOperator, orderFunction, performNumericOperation')
+import Perspectives.Query.UnsafeCompiler (compareRangeValues, lookup, mapDurationOperator, mapNumericOperator, orderFunction, performNumericOperation')
 import Perspectives.Representation.ADT (ADT(..), commonLeavesInADT, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (toConjunctiveNormalForm)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty)
@@ -377,13 +377,16 @@ interpretBQDOtherFunctions (BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = case
     -- Both are singleton arrays, or empty.
     (fr1 :: Array DependencyPath) <- runArrayT (interpret f1 a)
     fr2 <- runArrayT (interpret f2 a)
-    unsafePartial $ case g of
-      EqualsF -> case head fr1, head fr2 of
-        Just fr1h, Just fr2h -> pure [ unsafePartial applyValueFunction (functionOnStrings \x y -> show (x == y)) fr1h fr2h ]
-        _, _ -> pure []
-      NotEqualsF -> case head fr1, head fr2 of
-        Just fr1h, Just fr2h -> pure [ unsafePartial applyValueFunction (functionOnStrings \x y -> show (x `notEq` y)) fr1h fr2h ]
-        _, _ -> pure []
+    case head fr1, head fr2 of
+      Just fr1h, Just fr2h -> do
+        result <- compareRangeValues (range f1) g (unwrap $ dependencyToValue fr1h.head) (unwrap $ dependencyToValue fr2h.head)
+        pure
+          [ { head: V "" (bool2Value result)
+            , mainPath: Nothing
+            , supportingPaths: allPaths fr1h `union` allPaths fr2h
+            }
+          ]
+      _, _ -> pure []
 
   -- The Description Compiler makes sure we only have Value types that can be ordered, here.
   -- It also ensures the f1 and f2 are functional.
@@ -392,12 +395,14 @@ interpretBQDOtherFunctions (BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = case
     (fr1 :: Array DependencyPath) <- runArrayT (interpret f1 a)
     fr2 <- runArrayT (interpret f2 a)
     case head fr1, head fr2 of
-      Just fr1h, Just fr2h -> unsafePartial $ case ran of
-        VDOM PString _ -> pure [ unsafePartial applyValueFunction (functionOnStrings \x y -> show $ (orderFunction g) x y) fr1h fr2h ]
-        VDOM PBool _ -> pure [ unsafePartial applyValueFunction (functionOnBooleans (orderFunction g)) fr1h fr2h ]
-        VDOM PNumber _ -> pure [ unsafePartial $ applyValueFunction (\x y -> bool2Value ((orderFunction g) (value2Number x) (value2Number y))) fr1h fr2h ]
-        VDOM PDate _ -> pure [ unsafePartial applyValueFunction (\x y -> bool2Value ((orderFunction g) (value2Date x) (value2Date y))) fr1h fr2h ]
-        VDOM PEmail _ -> pure [ unsafePartial applyValueFunction (functionOnStrings \x y -> show $ (orderFunction g) x y) fr1h fr2h ]
+      Just fr1h, Just fr2h -> do
+        result <- compareRangeValues (range f1) g (unwrap $ dependencyToValue fr1h.head) (unwrap $ dependencyToValue fr2h.head)
+        pure
+          [ { head: V "" (bool2Value result)
+            , mainPath: Nothing
+            , supportingPaths: allPaths fr1h `union` allPaths fr2h
+            }
+          ]
       _, _ -> pure []
 
   -- The Description Compiler ensuers we have only PBool Value types and that both f1 and f2 are functional.

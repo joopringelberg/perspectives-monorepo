@@ -30,7 +30,7 @@ module Perspectives.Query.UnsafeCompiler where
 import Control.Alt (void, (<|>))
 import Control.Alternative (guard)
 import Control.Monad.AvarMonadAsk (modify)
-import Control.Monad.Error.Class (catchError, throwError, try)
+import Control.Monad.Error.Class (class MonadError, catchError, throwError, try)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, tell)
 import Control.Plus (empty)
@@ -43,7 +43,8 @@ import Data.String.Regex (Regex, match, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for, maximum, minimum, traverse)
-import Effect.Exception (error)
+import Effect.Class (class MonadEffect)
+import Effect.Exception (Error, error)
 import Foreign.Object (empty, lookup) as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ContextAndRole (rol_context, rol_pspType)
@@ -477,7 +478,7 @@ compileBQD (BQD _ (BinaryCombinator g) f1 f2 _ _ _) | isJust $ elemIndex g [ Equ
   f1' <- compileFunction f1
   f2' <- compileFunction f2
 
-  pure $ unsafeCoerce $ compare f1' f2' (unsafePartial $ compareFunction g)
+  pure $ unsafeCoerce $ compare (range f1) f1' f2' g
 
 compileBQD (BQD _ (BinaryCombinator g) f1 f2 _ _ _) | isJust $ elemIndex g [ LessThanF, LessThanEqualF, GreaterThanF, GreaterThanEqualF ] = do
   f1' <- compileFunction f1
@@ -579,16 +580,15 @@ typeTimeOnly _ = false
 --  * if one of them is empty, the result is false.
 --  * because we know both a and b are functional, we just compare the first elements.
 compare
-  :: forall a
-   . Eq a
-  => (a ~~> a)
-  -> (a ~~> a)
-  -> (a -> a -> Boolean)
-  -> a ~~> Value
-compare a b f c = ArrayT do
-  (as :: Array a) <- runArrayT (a c)
-  (bs :: Array a) <- runArrayT (b c)
-  (rs :: Array Boolean) <- pure $ f <$> as <*> bs
+  :: Domain
+  -> (String ~~> String)
+  -> (String ~~> String)
+  -> FunctionName
+  -> String ~~> Value
+compare ran a b f c = ArrayT do
+  (as :: Array String) <- runArrayT (a c)
+  (bs :: Array String) <- runArrayT (b c)
+  (rs :: Array Boolean) <- traverse identity $ compareRangeValues ran f <$> as <*> bs
   if null rs then pure [ Value "false" ]
   else pure (Value <<< show <$> rs)
 
@@ -596,6 +596,30 @@ compareFunction :: forall a. Eq a => Partial => FunctionName -> (a -> a -> Boole
 compareFunction fname = case fname of
   EqualsF -> eq
   NotEqualsF -> notEq
+
+compareRangeValues :: forall m. MonadError Error m => MonadEffect m => Domain -> FunctionName -> String -> String -> m Boolean
+compareRangeValues dom f a b = case dom of
+  VDOM ran _ -> case ran of
+    RAN.PString -> pure $ compareFun a b
+    RAN.PNumber -> compareFun <$> parseNumber a <*> parseNumber b
+    RAN.PBool -> compareFun <$> parseBool a <*> parseBool b
+    RAN.PDate -> compareFun <$> string2Date a <*> string2Date b
+    RAN.PTime -> compareFun <$> string2Time a <*> string2Time b
+    RAN.PDateTime -> compareFun <$> string2DateTime a <*> string2DateTime b
+    RAN.PEmail -> pure $ compareFun a b
+    RAN.PFile -> pure $ compareFun a b
+    RAN.PDuration _ -> compareFun <$> parseNumber a <*> parseNumber b
+    RAN.PMarkDown -> pure $ compareFun a b
+  _ -> pure $ compareFun a b
+  where
+  compareFun :: forall a. Eq a => Ord a => a -> a -> Boolean
+  compareFun = unsafePartial case f of
+    EqualsF -> eq
+    NotEqualsF -> notEq
+    LessThanF -> (<)
+    LessThanEqualF -> (<=)
+    GreaterThanF -> (>)
+    GreaterThanEqualF -> (>=)
 
 ---------------------------------------------------------------------------------------------------
 -- BINDING AND FRAMES
@@ -627,32 +651,12 @@ lookup varName _ = ArrayT do
 -- | with Booleans, map a missing operator on a `false` result. That we cannot do for
 -- | ordering. Hence we return an empty result if one or both arguments are missing.
 order :: Domain -> (String ~~> String) -> (String ~~> String) -> FunctionName -> String ~~> String
-order (VDOM ran _) a b f c = ArrayT do
+order dom@(VDOM _ _) a b f c = ArrayT do
   as <- runArrayT $ a c
   bs <- runArrayT $ b c
   case head as, head bs of
-    Just a', Just b' -> case ran of
-      RAN.PString -> pure [ show $ compareFun a' b' ]
-      RAN.PNumber -> singleton <<< show <$> (compareFun <$> (parseNumber a') <*> (parseNumber b'))
-      RAN.PBool -> singleton <<< show <$> (compareFun <$> parseBool a' <*> parseBool b')
-      RAN.PDate -> singleton <<< show <$> (compareFun <$> (string2Date a') <*> string2Date b')
-      RAN.PTime -> singleton <<< show <$> (compareFun <$> (string2Time a') <*> string2Time b')
-      RAN.PDateTime -> singleton <<< show <$> (compareFun <$> (string2DateTime a') <*> string2DateTime b')
-      -- Compare email addresses as strings.
-      RAN.PEmail -> pure [ show $ compareFun a' b' ]
-      RAN.PFile -> pure [ show $ compareFun a' b' ]
-      -- Compare durations as Numbers. NOTE that we can only compare exactly equal Duration_ s!
-      -- E.g. Days with Days, but not Days with Minutes.
-      RAN.PDuration _ -> singleton <<< show <$> (compareFun <$> (parseNumber a') <*> (parseNumber b'))
-      RAN.PMarkDown -> pure [ show $ compareFun a' b' ]
+    Just a', Just b' -> singleton <<< show <$> compareRangeValues dom f a' b'
     _, _ -> pure []
-  where
-  compareFun :: forall a. Ord a => a -> a -> Boolean
-  compareFun = unsafePartial case f of
-    LessThanF -> (<)
-    LessThanEqualF -> (<=)
-    GreaterThanF -> (>)
-    GreaterThanEqualF -> (>=)
 
 order _ _ _ _ _ = throwError (error "Not a Range type. Cannot order values.")
 

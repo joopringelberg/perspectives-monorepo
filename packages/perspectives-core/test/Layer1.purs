@@ -50,6 +50,7 @@ import Test.Parsing.Arc.Expression (theSuite) as TPAE
 -- Pure ArrayT combinator tests (no MonadPerspectives)
 import Test.ArrayT (theSuite) as ARRT
 import Test.AMQP.IncomingPost (theSuite) as AIP
+import Test.Query.ComparisonOperators (theSuite) as TQCO
 
 -- Comprehensive unit tests for ExpandedADT, CNF, and ADT (with real assertions)
 import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTTESTS
@@ -70,6 +71,7 @@ main = runTest do
   TPAE.theSuite -- ARC expression parser
   ARRT.theSuite -- ArrayT combinators
   AIP.theSuite -- Incoming-post status message formatting
+  TQCO.theSuite -- Typed query comparison operators
 
   -- Read a file from the file-system, but otherwise pure (no MonadPerspectives / no HTTP)
   TPAM.theSuite -- ARC model parser (parses .arc files from the model/
