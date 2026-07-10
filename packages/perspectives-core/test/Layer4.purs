@@ -312,6 +312,7 @@ allTests =
   , { testContextTypeName: test_RoleState_FilledByBinaryStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_FillsBinaryStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_CountSequenceStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleType_TranslateStep, logConfiguration: emptyLogConfiguration }
   ]
 
 -- Example test context type name constant:
@@ -386,3 +387,6 @@ test_RoleState_FillsBinaryStep = "model://joopringelberg.nl#StateTestModel$Test_
 
 test_RoleState_CountSequenceStep :: String
 test_RoleState_CountSequenceStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_CountSequenceStep"
+
+test_RoleType_TranslateStep :: String
+test_RoleType_TranslateStep = "model://joopringelberg.nl#StateTestModel$Test_RoleType_TranslateStep"

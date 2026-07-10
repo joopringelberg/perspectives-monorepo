@@ -403,3 +403,21 @@ domain model://joopringelberg.nl#StateTestModel@1.0
         props (TestSucceeded) verbs (SetPropertyValue, Consult)
       action RunTest
         TestName = "((context >> Tester >>= count) == 1) - sequence/count step" for extern
+
+  ------------------------------------------------------------------------------
+  ---- roleType and translate steps
+  ------------------------------------------------------------------------------
+  case Test_RoleType_TranslateStep
+    aspect mm:Test
+    external
+      state TestState = roleType >> translate == "model://joopringelberg.nl#StateTestModel$Test_RoleType_TranslateStep"
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "(roleType >> translate) - roleType and translate step" for extern
