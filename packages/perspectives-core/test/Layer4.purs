@@ -294,7 +294,14 @@ allTests =
   , { testContextTypeName: test_RoleState_ExternStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_BindingStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_IdentityStep, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RoleState_ModelNameStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_ModelNameStep
+    , logConfiguration: emptyLogConfiguration
+    }
+  --     { pdr:
+  --         [ { topic: STATE, logLevel: Trace }
+  --         ]
+  --     }
+  -- }
   , { testContextTypeName: test_RoleState_MeStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_TypeOfRoleStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_RoleTypesStep, logConfiguration: emptyLogConfiguration }

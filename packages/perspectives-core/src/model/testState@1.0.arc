@@ -212,7 +212,7 @@ domain model://joopringelberg.nl#StateTestModel@1.0
   case Test_RoleState_ModelNameStep
     aspect mm:Test
     external
-      state TestState = modelname == "model://joopringelberg.nl#StateTestModel@1.0"
+      state TestState = (exists context >> Tester) and modelname >>= first == "model://joopringelberg.nl#u01vncbjik"
         on entry
           do for Tester
             TestSucceeded = true
@@ -338,7 +338,7 @@ domain model://joopringelberg.nl#StateTestModel@1.0
   case Test_RoleState_ComparisonStep
     aspect mm:Test
     external
-      state TestState = (1 + 1 == 2) and (4 - 1 == 3) and (2 * 3 == 6) and (8 / 2 == 4) and (1 < 2) and (2 <= 2) and (3 > 2) and (3 >= 3) and (1 /= 2)
+      state TestState = (2 == 1 + 1) and (4 - 1 == 3) and (2 * 3 == 6) and (8 / 2 == 4) and (1 < 2) and (2 <= 2) and (3 > 2) and (3 >= 3) and (1 /= 2)
         on entry
           do for Tester
             TestSucceeded = true
