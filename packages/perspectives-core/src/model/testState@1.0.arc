@@ -410,7 +410,9 @@ domain model://joopringelberg.nl#StateTestModel@1.0
   case Test_RoleType_TranslateStep
     aspect mm:Test
     external
-      state TestState = roleType >> translate == "model://joopringelberg.nl#StateTestModel$Test_RoleType_TranslateStep"
+      -- Explanation: an External type is always mapped to the context type and then its translation.
+      -- However, we have no translations for this model, so we end up with the Stable type identifier of the context.
+      state TestState = roleType >> translate == "model://joopringelberg.nl#u01vncbjik$s72m2cv38v"
         on entry
           do for Tester
             TestSucceeded = true
