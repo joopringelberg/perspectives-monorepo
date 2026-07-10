@@ -103,7 +103,7 @@ domain model://joopringelberg.nl#StateTestModel@1.0
   ---- Test a role state query that tests the existence of a role in the context.
   ---- The crucial assignment is to create the role.
   ------------------------------------------------------------------------------
-  case Test_RoleState_RoleStep
+  case Test_RoleState_ContextStep
     aspect mm:Test
     external
       state TestState = exists context >> TestRole1

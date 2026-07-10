@@ -289,7 +289,7 @@ allTests =
     --         , { topic: RESOURCE, logLevel: Trace }
     --        ]
     -- } },
-    { testContextTypeName: test_RoleState_RoleStep, logConfiguration: emptyLogConfiguration }
+    { testContextTypeName: test_RoleState_ContextStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_PropertyStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_ExternStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_BindingStep, logConfiguration: emptyLogConfiguration }
@@ -332,8 +332,8 @@ allOn =
 test_ContextState_RoleStep :: String
 test_ContextState_RoleStep = "model://joopringelberg.nl#StateTestModel$Test_ContextState_RoleStep"
 
-test_RoleState_RoleStep :: String
-test_RoleState_RoleStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_RoleStep"
+test_RoleState_ContextStep :: String
+test_RoleState_ContextStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_ContextStep"
 
 test_RoleState_PropertyStep :: String
 test_RoleState_PropertyStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_PropertyStep"
