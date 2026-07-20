@@ -30,7 +30,7 @@ module Perspectives.Query.ExpressionCompiler where
 -- | Use `compileAndDistributeStep` to create the QueryFunctionDescription *and* invert it,
 -- | and distribute it throughout the domain.
 
-import Control.Monad.Error.Class (catchError, try)
+import Control.Monad.Error.Class (catchError, catchJust, try)
 import Control.Monad.Except (lift)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (gets)
@@ -745,7 +745,16 @@ compileUnaryStep currentDomain (TypeFilterStep start end candidateStep typeExpre
     RDOM _ -> do
       -- In this context of use, we will never have to deal with "None". Hence we supply an arbitrary EnumeratedRoleType.
       narrowedRange :: ADT RoleInContext <- compileRoleTypeCombination (EnumeratedRoleType "Ignored") typeExpression
-      qualifiedNarrowedRange <- traverse (qualifyRoleInContext start) narrowedRange
+      qualifiedNarrowedRange <- catchJust
+        ( \errs -> case head errs of
+            Just (UnknownContext pos ctxt) -> case ctxt of
+              (ContextType "") -> Just $ head errs
+              _ -> Nothing
+            _ -> Nothing
+        )
+        (traverse (qualifyRoleInContext start) narrowedRange)
+        \(err) -> unsafePartial case err of
+          (Just (UnknownContext pos _)) -> throwError $ ProvideContext pos
       case productOfDomains (range source) (RDOM qualifiedNarrowedRange) of
         Just narrowed -> do
           typeFilterTest <- pure $ SQD (range source) (QF.RoleTypeFilter (writeJSON qualifiedNarrowedRange)) (VDOM PBool Nothing) True True
