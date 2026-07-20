@@ -423,3 +423,163 @@ domain model://joopringelberg.nl#StateTestModel@1.0
         props (TestSucceeded) verbs (SetPropertyValue, Consult)
       action RunTest
         TestName = "(roleType >> translate) - roleType and translate step" for extern
+
+  ------------------------------------------------------------------------------
+  ---- Test the binder/filled step (FilledF).
+  ---- The binder step finds roles of a given type that are filled by me.
+  ---- Since me fills Tester in this context, binder Tester returns the Tester instance.
+  ------------------------------------------------------------------------------
+  case Test_RoleState_FilledStep
+    aspect mm:Test
+    external
+      state TestState = exists context >> me >> binder Tester
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "(exists context >> me >> binder Tester) - binder/filled step" for extern
+
+  ------------------------------------------------------------------------------
+  ---- Test the indexedName step (IndexedContextName and IndexedRoleName).
+  ---- sys:MySystem is an indexed context; sys:Me is an indexed role.
+  ---- Both have indexed names so exists on both returns true.
+  ------------------------------------------------------------------------------
+  case Test_RoleState_IndexedNameStep
+    aspect mm:Test
+    external
+      state TestState = (exists sys:MySystem >> indexedName) and (exists sys:Me >> indexedName)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "((exists sys:MySystem >> indexedName) and (exists sys:Me >> indexedName)) - indexedName step" for extern
+
+  ------------------------------------------------------------------------------
+  ---- Test the roleType individual step ([role ...]).
+  ---- Compares the runtime roleType of the external role with its own type constant.
+  ---- Verifies that readable identifiers are correctly normalized to stable identifiers.
+  ------------------------------------------------------------------------------
+  case Test_RoleType_RoleTypeIndividualStep
+    aspect mm:Test
+    external
+      state TestState = roleType == [role Test_RoleType_RoleTypeIndividualStep$External]
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "(roleType == [role Test_RoleType_RoleTypeIndividualStep$External]) - roleType individual step" for extern
+
+  ------------------------------------------------------------------------------
+  ---- Test the context type individual step ([context ...]).
+  ---- Compares the contextType of the test context with its own type constant.
+  ---- Verifies that readable identifiers are correctly normalized to stable identifiers.
+  ------------------------------------------------------------------------------
+  case Test_ContextType_ContextTypeIndividualStep
+    aspect mm:Test
+    external
+      state TestState = context >> contextType == [context Test_ContextType_ContextTypeIndividualStep]
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "(context >> contextType == [context Test_ContextType_ContextTypeIndividualStep]) - context type individual step" for extern
+
+  ------------------------------------------------------------------------------
+  ---- Test the isInState step.
+  ---- RunTest creates a TestRole1 instance and sets P1=true, activating TestRole1State.
+  ---- The external state condition then checks isInState on that role.
+  ------------------------------------------------------------------------------
+  case Test_RoleState_IsInStateStep
+    aspect mm:Test
+    external
+      state TestState = context >> TestRole1 >> isInState TestRole1State
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on TestRole1
+        only (Create)
+        props (P1) verbs (SetPropertyValue, Consult)
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        letA
+          r <- create role TestRole1
+        in
+          P1 = true for r
+          TestName = "(context >> TestRole1 >> isInState TestRole1State) - isInState step" for extern
+
+    thing TestRole1
+      state TestRole1State = exists P1
+      property P1 (Boolean)
+
+  ------------------------------------------------------------------------------
+  ---- Test the regexp/matches step.
+  ---- The expression "deze expressie" matches regexp "^deze.*" is always true.
+  ------------------------------------------------------------------------------
+  case Test_RoleState_RegExStep
+    aspect mm:Test
+    external
+      state TestState = "deze expressie" matches regexp "^deze.*"
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "(deze expressie matches regexp ^deze.*) - regexp step" for extern
+
+  ------------------------------------------------------------------------------
+  ---- Test the variable (letE) step.
+  ---- Binds TestRole1 instances to v, then reads boolean property P1 from v.
+  ---- State is true when any TestRole1 has P1=true.
+  ------------------------------------------------------------------------------
+  case Test_RoleState_VariableStep
+    aspect mm:Test
+    external
+      state TestState = letE v = context >> TestRole1 in v >> P1
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on TestRole1
+        only (Create)
+        props (P1) verbs (SetPropertyValue, Consult)
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        letA
+          r <- create role TestRole1
+        in
+          P1 = true for r
+          TestName = "(letE v = context >> TestRole1 in v >> P1) - variable step" for extern
+
+    thing TestRole1
+      property P1 (Boolean)

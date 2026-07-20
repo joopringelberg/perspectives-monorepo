@@ -313,6 +313,13 @@ allTests =
   , { testContextTypeName: test_RoleState_FillsBinaryStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_CountSequenceStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleType_TranslateStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_FilledStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_IndexedNameStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleType_RoleTypeIndividualStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_ContextType_ContextTypeIndividualStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_IsInStateStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_RegExStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_VariableStep, logConfiguration: emptyLogConfiguration }
   ]
 
 -- Example test context type name constant:
@@ -390,3 +397,24 @@ test_RoleState_CountSequenceStep = "model://joopringelberg.nl#StateTestModel$Tes
 
 test_RoleType_TranslateStep :: String
 test_RoleType_TranslateStep = "model://joopringelberg.nl#StateTestModel$Test_RoleType_TranslateStep"
+
+test_RoleState_FilledStep :: String
+test_RoleState_FilledStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_FilledStep"
+
+test_RoleState_IndexedNameStep :: String
+test_RoleState_IndexedNameStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_IndexedNameStep"
+
+test_RoleType_RoleTypeIndividualStep :: String
+test_RoleType_RoleTypeIndividualStep = "model://joopringelberg.nl#StateTestModel$Test_RoleType_RoleTypeIndividualStep"
+
+test_ContextType_ContextTypeIndividualStep :: String
+test_ContextType_ContextTypeIndividualStep = "model://joopringelberg.nl#StateTestModel$Test_ContextType_ContextTypeIndividualStep"
+
+test_RoleState_IsInStateStep :: String
+test_RoleState_IsInStateStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_IsInStateStep"
+
+test_RoleState_RegExStep :: String
+test_RoleState_RegExStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_RegExStep"
+
+test_RoleState_VariableStep :: String
+test_RoleState_VariableStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_VariableStep"
