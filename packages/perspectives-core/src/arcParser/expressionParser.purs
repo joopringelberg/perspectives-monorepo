@@ -38,6 +38,7 @@ import Data.String.CodeUnits as SCU
 import Data.String.Regex (Regex, replace, parseFlags, regex)
 import Data.String.Regex.Flags (global)
 import Data.String.Regex.Unsafe (unsafeRegex)
+import Data.Unit (unit)
 import Effect.Unsafe (unsafePerformEffect)
 import Parsing (fail)
 import Parsing.Combinators (between, lookAhead, manyTill, notFollowedBy, option, optionMaybe, sepBy1, try, (<?>))
@@ -49,7 +50,7 @@ import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseName, pubParser, regexFlags', reserved)
 import Perspectives.Parsing.Arc.IndentParser (IP, entireBlock, getPosition)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
-import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
+import Perspectives.Parsing.Arc.Token (mandatoryWhiteSpace, reservedIdentifier, token)
 import Perspectives.Representation.Class.PersistentType (ContextType(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..))
 import Perspectives.Representation.Range (Duration_(..), Range(..))
@@ -551,7 +552,13 @@ dateTimeLiteral = (go <?> "date-time") <* token.whiteSpace
   dateChar = alphaNum <|> char ':' <|> char '+' <|> char '-' <|> char ' ' <|> char '.'
 
 binding :: IP VarBinding
-binding = VarBinding <$> (lowerCaseName <* token.reservedOp "<-") <*> defer \_ -> step
+binding = VarBinding <$> (parseLetVariableName <* token.reservedOp "<-") <*> defer \_ -> step
+
+parseLetVariableName :: IP String
+parseLetVariableName = do
+  candidate <- lowerCaseName <?> "lower case name (a-z only), "
+  _ <- (mandatoryWhiteSpace *> pure unit <|> lookAhead (token.reservedOp "<-")) <?> ("Invalid let variable name starting with '" <> candidate <> "'. A let variable name may contain only lowercase letters a-z. ")
+  pure candidate
 
 -- | A pure let: letE <binding>+ in <step>).
 pureLetStep :: IP Step
