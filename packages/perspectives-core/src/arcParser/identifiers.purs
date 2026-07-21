@@ -130,6 +130,13 @@ lowerCaseName = try do
   void token.whiteSpace
   pure $ fromCharArray (cons f r)
 
+lowerCaseAlphaNumName :: IP String
+lowerCaseAlphaNumName = try do
+  f <- lower
+  r <- many (lower <|> alphaNum)
+  void token.whiteSpace
+  pure $ fromCharArray (cons f r)
+
 lower :: IP Char
 lower = satisfy (isLower <<< codePointFromChar) <?> "lowercase letter, "
 

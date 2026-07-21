@@ -47,7 +47,7 @@ import Parsing.Token (alphaNum)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), FilledByAttribute(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), TypeCombination(..), UnaryStep(..), VarBinding(..))
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
-import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseName, pubParser, regexFlags', reserved)
+import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseAlphaNumName, pubParser, regexFlags', reserved)
 import Perspectives.Parsing.Arc.IndentParser (IP, entireBlock, getPosition)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Parsing.Arc.Token (mandatoryWhiteSpace, reservedIdentifier, token)
@@ -58,7 +58,7 @@ import Perspectives.Time (date2String, dateTime2String, time2String)
 import Prelude (bind, not, pure, show, ($), (&&), (*>), (+), (<$>), (<*), (<*>), (<<<), (>), (>>=), (<>), eq, (/=), discard, (==))
 
 step :: IP Step
-step = defer \_ -> step_ false
+step = defer \_ -> normalizeStep <$> step_ false
 
 step_ :: Boolean -> IP Step
 step_ parenthesised = do
@@ -79,53 +79,12 @@ step_ parenthesised = do
         Just (Second pos) -> pure $ Unary (DurationOperator start (Second pos) left)
         Just (Millisecond pos) -> pure $ Unary (DurationOperator start (Millisecond pos) left)
     (Just op) -> do
-      right <- step
+      -- Parse recursively without top-level normalization first.
+      -- We must preserve the parenthesised marker here, because this local
+      -- regrouping decision relies on it.
+      right <- step_ false
       end <- getPosition
-      case right of
-        -- The right expression is binary: leftOfRight <opOfRight> rightOfRight.
-        ( Binary
-            ( BinaryStep
-                { left: leftOfRight
-                , operator: opOfRight
-                , right: rightOfRight
-                , end: endOfRight
-                , parenthesised: rightParenthesised
-                }
-            )
-        ) ->
-          if
-            not rightParenthesised &&
-              ((operatorPrecedence op) > (operatorPrecedence opOfRight))
-          -- Regrouping: the parse tree (a op1 (b op2 c)) becomes ((a op1 b) op2 c).
-          -- The expression was: "a op2 b op1 c"
-          -- (op1 = operator with precedence 1, op2 = operator with precedence 2)
-          -- The right expression is binary and not contained in parenthesis, and
-          -- the left operator has higher precedence (than (or equal to) the right operator).
-          then pure $ Binary $ BinaryStep
-            { start
-            , end -- equals endOfRight.
-            , left: Binary (BinaryStep { start, end: endOf (leftOfRight), operator: op, left: left, right: leftOfRight, parenthesised: false })
-            , operator: opOfRight
-            , right: rightOfRight
-            , parenthesised: false
-            }
-
-          -- No regrouping.
-          -- The right expression is binary and is contained in parenthesis, OR
-          -- its operator is as precedent as (or more so then) that of the enclosing binary expression.
-          -- Hence, we maintain the right-association that is present in the parse tree: (a op (b op c)).
-          -- The expression is either:
-          --    "a opx (b opy c)"
-          -- (opx and opy have any precedence; precedence does not rule, parenthesis prevail), or:
-          --    "a op1 b op1 c"
-          -- (both operators have equal precedence but we adhere to right-associativity)
-          --    "a op1 b op2 c"
-          -- (op1 = operator with precedence 1, op2 = operator with precedence 2). The parse tree already respects
-          -- the operator precedences.
-          else pure $ Binary $ BinaryStep { start, end, left, operator: op, right, parenthesised }
-
-        -- The right expression is not binary. No regrouping.
-        otherwise -> pure $ Binary $ BinaryStep { start, end, left, operator: op, right, parenthesised }
+      pure $ Binary $ BinaryStep { start, end, left, operator: op, right, parenthesised }
   where
   leftSide :: IP Step
   leftSide = do
@@ -136,6 +95,67 @@ step_ parenthesised = do
       "callExternal" -> computationStep
       u | isUnaryKeyword u -> unaryStep
       _ -> simpleStep
+
+normalizeStep :: Step -> Step
+normalizeStep stp = case stp of
+  Binary binaryStep -> normalizeBinaryStep binaryStep
+  Unary (LogicalNot start step') -> Unary (LogicalNot start (normalizeStep step'))
+  Unary (Exists start step') -> Unary (Exists start (normalizeStep step'))
+  Unary (FilledBy start step') -> Unary (FilledBy start (normalizeStep step'))
+  Unary (Fills start step') -> Unary (Fills start (normalizeStep step'))
+  Unary (Available start step') -> Unary (Available start (normalizeStep step'))
+  Unary (DurationOperator start operator' step') -> Unary (DurationOperator start operator' (normalizeStep step'))
+  Unary (ContextIndividual start contextName step') -> Unary (ContextIndividual start contextName (normalizeStep step'))
+  Unary (RoleIndividual start roleName step') -> Unary (RoleIndividual start roleName (normalizeStep step'))
+  Unary (TypeFilterStep start end step' typeCombination) -> Unary (TypeFilterStep start end (normalizeStep step') typeCombination)
+  PureLet (PureLetStep { start, end, bindings, body }) ->
+    PureLet $ PureLetStep
+      { start
+      , end
+      , bindings: normalizeBinding <$> bindings
+      , body: normalizeStep body
+      }
+  Computation (ComputationStep { functionName, arguments, computedType, start, end }) ->
+    Computation $ ComputationStep
+      { functionName
+      , arguments: normalizeStep <$> arguments
+      , computedType
+      , start
+      , end
+      }
+  _ -> stp
+  where
+  normalizeBinding :: VarBinding -> VarBinding
+  normalizeBinding (VarBinding name boundStep) = VarBinding name (normalizeStep boundStep)
+
+normalizeBinaryStep :: BinaryStep -> Step
+normalizeBinaryStep (BinaryStep { start, end, operator: operator', left, right, parenthesised }) =
+  normalizeRotations $ Binary $ BinaryStep
+    { start
+    , end
+    , operator: operator'
+    , left: normalizeStep left
+    , right: normalizeStep right
+    , parenthesised
+    }
+  where
+  normalizeRotations :: Step -> Step
+  normalizeRotations stp = case stp of
+    Binary (BinaryStep { start: start', end: end', operator: op', left: left', right: right', parenthesised: parenthesised' }) ->
+      case right' of
+        Binary (BinaryStep { left: leftOfRight, operator: opOfRight, right: rightOfRight, end: endOfRight, parenthesised: rightParenthesised }) ->
+          if not rightParenthesised && (operatorPrecedence op') > (operatorPrecedence opOfRight) then
+            normalizeRotations $ Binary $ BinaryStep
+              { start: start'
+              , end: endOfRight
+              , left: Binary (BinaryStep { start: start', end: endOf left', operator: op', left: left', right: leftOfRight, parenthesised: false })
+              , operator: opOfRight
+              , right: rightOfRight
+              , parenthesised: false
+              }
+          else stp
+        _ -> stp
+    _ -> stp
 
 simpleStep :: IP Step
 simpleStep = do
@@ -210,7 +230,7 @@ simpleStep' =
         Simple <$> (RegEx <$> (getPosition <* reserved "regexp") <*> regexExpression)
       -- VARIABLE MUST BE LAST!
       <|>
-        Simple <$> (Variable <$> getPosition <*> lowerCaseName)
+        Simple <$> (Variable <$> getPosition <*> lowerCaseAlphaNumName)
   ) <?> "binding, binder, context, extern, this, modelname, contextType, roleType, roleTypes, specialisesRoleType, a valid variablename (lowercase only) or a number, boolean, string (between double quotes), date (between single quotes), email address or a monoid function (sum, product, minimum, maximum) or count, "
 
 -- | Parses just the regular expression; not "matches", which is interpreted like ">>".
@@ -556,8 +576,8 @@ binding = VarBinding <$> (parseLetVariableName <* token.reservedOp "<-") <*> def
 
 parseLetVariableName :: IP String
 parseLetVariableName = do
-  candidate <- lowerCaseName <?> "lower case name (a-z only), "
-  _ <- (mandatoryWhiteSpace *> pure unit <|> lookAhead (token.reservedOp "<-")) <?> ("Invalid let variable name starting with '" <> candidate <> "'. A let variable name may contain only lowercase letters a-z. ")
+  candidate <- lowerCaseAlphaNumName <?> "lower case name (a-z and 0-9 only), "
+  _ <- (mandatoryWhiteSpace *> pure unit <|> lookAhead (token.reservedOp "<-")) <?> ("Invalid let variable name starting with '" <> candidate <> "'. A let variable name may contain only lowercase letters a-z and 0-9. ")
   pure candidate
 
 -- | A pure let: letE <binding>+ in <step>).
