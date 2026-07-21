@@ -795,13 +795,13 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
       f1 <- compileStep currentDomain left
       f2 <- compileStep currentDomain right
       -- TODO. Als de types een lege doorsnede hebben, een waarschuwing geven?
-      if equalDomainKinds (range f1) (range f2) then pure $ BQD currentDomain (QF.BinaryCombinator IntersectionF) f1 f2 (unsafePartial $ fromJust $ productOfDomains (range f1) (range f2)) False (THREE.and (mandatory f1) (mandatory f2))
+      if equalDomainKinds (range f1) (range f2) then pure $ BQD currentDomain (QF.BinaryCombinator IntersectionF) f1 f2 (unsafePartial $ fromJust $ productOfDomains (range f1) (range f2)) (THREE.and (functional f1) (functional f2)) (THREE.and (mandatory f1) (mandatory f2))
       else throwError $ IncompatibleDomains (startOf left) (endOf right)
     OrElse pos -> do
       f1 <- compileStep currentDomain left
       f2 <- compileStep currentDomain right
       -- TODO. Als de types een lege doorsnede hebben, een waarschuwing geven?
-      if equalDomainKinds (range f1) (range f2) then pure $ BQD currentDomain (QF.BinaryCombinator OrElseF) f1 f2 (unsafePartial $ fromJust $ sumOfDomains (range f1) (range f2)) False (THREE.and (mandatory f1) (mandatory f2))
+      if equalDomainKinds (range f1) (range f2) then pure $ BQD currentDomain (QF.BinaryCombinator OrElseF) f1 f2 (unsafePartial $ fromJust $ sumOfDomains (range f1) (range f2)) (THREE.and (functional f1) (functional f2)) (THREE.and (mandatory f1) (mandatory f2))
       else throwError $ IncompatibleDomains (startOf left) (endOf right)
     BindsOp pos -> do
       f1 <- compileStep currentDomain left
