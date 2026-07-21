@@ -320,6 +320,13 @@ allTests =
   , { testContextTypeName: test_RoleState_IsInStateStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_RegExStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_VariableStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_FilledBy_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Fills_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Duration_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_ContextIndividual_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_FillFrom_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Union_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Intersection_Step, logConfiguration: emptyLogConfiguration }
   ]
 
 -- Example test context type name constant:
@@ -418,3 +425,24 @@ test_RoleState_RegExStep = "model://joopringelberg.nl#StateTestModel$Test_RoleSt
 
 test_RoleState_VariableStep :: String
 test_RoleState_VariableStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_VariableStep"
+
+test_FilledBy_Step :: String
+test_FilledBy_Step = "model://joopringelberg.nl#StateTestModel$Test_FilledBy_Step"
+
+test_Fills_Step :: String
+test_Fills_Step = "model://joopringelberg.nl#StateTestModel$Test_Fills_Step"
+
+test_Duration_Step :: String
+test_Duration_Step = "model://joopringelberg.nl#StateTestModel$Test_Duration_Step"
+
+test_ContextIndividual_Step :: String
+test_ContextIndividual_Step = "model://joopringelberg.nl#StateTestModel$Test_ContextIndividual_Step"
+
+test_FillFrom_Step :: String
+test_FillFrom_Step = "model://joopringelberg.nl#StateTestModel$Test_FillFrom_Step"
+
+test_Union_Step :: String
+test_Union_Step = "model://joopringelberg.nl#StateTestModel$Test_Union_Step"
+
+test_Intersection_Step :: String
+test_Intersection_Step = "model://joopringelberg.nl#StateTestModel$Test_Intersection_Step"
