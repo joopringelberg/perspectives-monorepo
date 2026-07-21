@@ -54,7 +54,6 @@ import Prelude
 import Control.Monad.AvarMonadAsk (modify)
 import Control.Monad.Error.Class (throwError)
 import Control.Promise (Promise, toAffE)
-import Effect.Exception (message)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -64,6 +63,7 @@ import Effect.Aff (Aff, Error, Milliseconds(..), attempt, bracket, delay, error,
 import Effect.Aff.AVar (AVar, empty, new, put)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
+import Effect.Exception (message)
 import Foreign.Object (empty) as OBJ
 import Main (forkCreateIndexedResources, forkDatabasePersistence, forkJustInTimeModelLoader, forkReferentialIntegrityFixer)
 import Perspectives.AMQP.IncomingPost (incomingPost)
@@ -87,7 +87,7 @@ import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (saveMarkedResources)
-import Perspectives.PerspectivesState (newPerspectivesState, noTransactionIsRunning, setBrokerService, setStompClientFactory, setTopicLogLevel)
+import Perspectives.PerspectivesState (newPerspectivesState, noTransactionIsRunning, setBrokerService, setModelUris, setStompClientFactory, setTopicLogLevel)
 import Perspectives.Representation.Class.PersistentType (EnumeratedPropertyType(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
@@ -96,6 +96,8 @@ import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runMon
 import Perspectives.RunPerspectives (runPerspectivesWithState)
 import Perspectives.SetupCouchdb (createUserDatabases)
 import Perspectives.SetupUser (setupUser)
+import Perspectives.Sidecar.NormalizeTypeNames (getinstalledModelCuids)
+import Perspectives.Sidecar.StableIdMapping (fromLocalModels)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer)
 import Simple.JSON (readJSON)
@@ -395,6 +397,7 @@ startPDRInstanceFromSnapshot pouchdbUser runtimeOptions mLogColor bus snapshotDi
         key <- getPrivateKey
         modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce key } }
         getSystemIdentifier >>= createUserDatabases
+        getinstalledModelCuids fromLocalModels >>= setModelUris
     )
     state
 
