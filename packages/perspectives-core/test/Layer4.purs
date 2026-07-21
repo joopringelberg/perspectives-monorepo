@@ -313,6 +313,20 @@ allTests =
   , { testContextTypeName: test_RoleState_FillsBinaryStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleState_CountSequenceStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RoleType_TranslateStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_FilledStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_IndexedNameStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleType_RoleTypeIndividualStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_ContextType_ContextTypeIndividualStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_IsInStateStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_RegExStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RoleState_VariableStep, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_FilledBy_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Fills_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Duration_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_ContextIndividual_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_FillFrom_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Union_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Intersection_Step, logConfiguration: emptyLogConfiguration }
   ]
 
 -- Example test context type name constant:
@@ -390,3 +404,45 @@ test_RoleState_CountSequenceStep = "model://joopringelberg.nl#StateTestModel$Tes
 
 test_RoleType_TranslateStep :: String
 test_RoleType_TranslateStep = "model://joopringelberg.nl#StateTestModel$Test_RoleType_TranslateStep"
+
+test_RoleState_FilledStep :: String
+test_RoleState_FilledStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_FilledStep"
+
+test_RoleState_IndexedNameStep :: String
+test_RoleState_IndexedNameStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_IndexedNameStep"
+
+test_RoleType_RoleTypeIndividualStep :: String
+test_RoleType_RoleTypeIndividualStep = "model://joopringelberg.nl#StateTestModel$Test_RoleType_RoleTypeIndividualStep"
+
+test_ContextType_ContextTypeIndividualStep :: String
+test_ContextType_ContextTypeIndividualStep = "model://joopringelberg.nl#StateTestModel$Test_ContextType_ContextTypeIndividualStep"
+
+test_RoleState_IsInStateStep :: String
+test_RoleState_IsInStateStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_IsInStateStep"
+
+test_RoleState_RegExStep :: String
+test_RoleState_RegExStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_RegExStep"
+
+test_RoleState_VariableStep :: String
+test_RoleState_VariableStep = "model://joopringelberg.nl#StateTestModel$Test_RoleState_VariableStep"
+
+test_FilledBy_Step :: String
+test_FilledBy_Step = "model://joopringelberg.nl#StateTestModel$Test_FilledBy_Step"
+
+test_Fills_Step :: String
+test_Fills_Step = "model://joopringelberg.nl#StateTestModel$Test_Fills_Step"
+
+test_Duration_Step :: String
+test_Duration_Step = "model://joopringelberg.nl#StateTestModel$Test_Duration_Step"
+
+test_ContextIndividual_Step :: String
+test_ContextIndividual_Step = "model://joopringelberg.nl#StateTestModel$Test_ContextIndividual_Step"
+
+test_FillFrom_Step :: String
+test_FillFrom_Step = "model://joopringelberg.nl#StateTestModel$Test_FillFrom_Step"
+
+test_Union_Step :: String
+test_Union_Step = "model://joopringelberg.nl#StateTestModel$Test_Union_Step"
+
+test_Intersection_Step :: String
+test_Intersection_Step = "model://joopringelberg.nl#StateTestModel$Test_Intersection_Step"

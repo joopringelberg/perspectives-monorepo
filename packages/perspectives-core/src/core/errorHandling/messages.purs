@@ -125,6 +125,7 @@ data PerspectivesError
   | PropertyCannotBeCalculated String ArcPosition ArcPosition
   | NotASelfPerspective ArcPosition ArcPosition
   | UndeclaredPrefix ArcPosition ArcPosition String
+  | ProvideContext ArcPosition
 
   | UnauthorizedForProperty String RoleType RoleType PropertyType PropertyVerb (Maybe ArcPosition) (Maybe ArcPosition)
   | UnauthorizedForRole String RoleType RoleType (Array RoleVerb) (Maybe ArcPosition) (Maybe ArcPosition)
@@ -260,6 +261,7 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (PropertyCannotBeCalculated prop start end) = "(PropertyCannotBeCalculated) This property cannot be calculated " <> showPosition start end
   show (NotASelfPerspective start end) = "(NotASelfPerspective) `selfOnly` is restricted to self-perspectives: a perspective for a user role on that user role. Consider `authorOnly` instead: it may be what you need " <> showPosition start end
   show (UndeclaredPrefix start end prefix) = "(UndeclaredPrefix) The prefix used in '" <> prefix <> "' has not been declared (between " <> show start <> " and " <> show end <> ")."
+  show (ProvideContext pos) = "(ProvideContext) Provide context at position " <> show pos
   show (UnauthorizedForProperty author userRole role property verb start end) = "(UnauthorizedForProperty) User " <> author <> " in role " <> show userRole <> " has no perspective on role " <> show role <> " that includes " <> show verb <> " for property " <> show property <> maybeShowPosition start end
   show (UnauthorizedForRole author userRole role verbs mstart mend) = "(UnauthorizedForRole) User " <> author <> " in role " <> show userRole <> " has no perspective on role " <> show role <> " that includes at least one of " <> show verbs <> maybeShowPosition mstart mend
   show (UnauthorizedForContext author userRole contextType) = "(UnauthorizedForContext) User " <> author <> " in role " <> show userRole <> " has no perspective on context " <> show contextType

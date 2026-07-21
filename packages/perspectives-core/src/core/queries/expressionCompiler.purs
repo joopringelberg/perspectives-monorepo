@@ -30,7 +30,7 @@ module Perspectives.Query.ExpressionCompiler where
 -- | Use `compileAndDistributeStep` to create the QueryFunctionDescription *and* invert it,
 -- | and distribute it throughout the domain.
 
-import Control.Monad.Error.Class (catchError, try)
+import Control.Monad.Error.Class (catchError, catchJust, try)
 import Control.Monad.Except (lift)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (gets)
@@ -745,7 +745,16 @@ compileUnaryStep currentDomain (TypeFilterStep start end candidateStep typeExpre
     RDOM _ -> do
       -- In this context of use, we will never have to deal with "None". Hence we supply an arbitrary EnumeratedRoleType.
       narrowedRange :: ADT RoleInContext <- compileRoleTypeCombination (EnumeratedRoleType "Ignored") typeExpression
-      qualifiedNarrowedRange <- traverse (qualifyRoleInContext start) narrowedRange
+      qualifiedNarrowedRange <- catchJust
+        ( \errs -> case head errs of
+            Just (UnknownContext pos ctxt) -> case ctxt of
+              (ContextType "") -> Just $ head errs
+              _ -> Nothing
+            _ -> Nothing
+        )
+        (traverse (qualifyRoleInContext start) narrowedRange)
+        \(err) -> unsafePartial case err of
+          (Just (UnknownContext pos _)) -> throwError $ ProvideContext pos
       case productOfDomains (range source) (RDOM qualifiedNarrowedRange) of
         Just narrowed -> do
           typeFilterTest <- pure $ SQD (range source) (QF.RoleTypeFilter (writeJSON qualifiedNarrowedRange)) (VDOM PBool Nothing) True True
@@ -786,13 +795,13 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
       f1 <- compileStep currentDomain left
       f2 <- compileStep currentDomain right
       -- TODO. Als de types een lege doorsnede hebben, een waarschuwing geven?
-      if equalDomainKinds (range f1) (range f2) then pure $ BQD currentDomain (QF.BinaryCombinator IntersectionF) f1 f2 (unsafePartial $ fromJust $ productOfDomains (range f1) (range f2)) False (THREE.and (mandatory f1) (mandatory f2))
+      if equalDomainKinds (range f1) (range f2) then pure $ BQD currentDomain (QF.BinaryCombinator IntersectionF) f1 f2 (unsafePartial $ fromJust $ productOfDomains (range f1) (range f2)) (THREE.and (functional f1) (functional f2)) (THREE.and (mandatory f1) (mandatory f2))
       else throwError $ IncompatibleDomains (startOf left) (endOf right)
     OrElse pos -> do
       f1 <- compileStep currentDomain left
       f2 <- compileStep currentDomain right
       -- TODO. Als de types een lege doorsnede hebben, een waarschuwing geven?
-      if equalDomainKinds (range f1) (range f2) then pure $ BQD currentDomain (QF.BinaryCombinator OrElseF) f1 f2 (unsafePartial $ fromJust $ sumOfDomains (range f1) (range f2)) False (THREE.and (mandatory f1) (mandatory f2))
+      if equalDomainKinds (range f1) (range f2) then pure $ BQD currentDomain (QF.BinaryCombinator OrElseF) f1 f2 (unsafePartial $ fromJust $ sumOfDomains (range f1) (range f2)) (THREE.and (functional f1) (functional f2)) (THREE.and (mandatory f1) (mandatory f2))
       else throwError $ IncompatibleDomains (startOf left) (endOf right)
     BindsOp pos -> do
       f1 <- compileStep currentDomain left
