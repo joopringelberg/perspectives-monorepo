@@ -54,12 +54,13 @@ import Prelude
 import Control.Monad.AvarMonadAsk (modify)
 import Control.Monad.Error.Class (throwError)
 import Control.Promise (Promise, toAffE)
+import Effect.Exception (message)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Traversable (traverse_)
 import Effect (Effect)
-import Effect.Aff (Aff, Error, Milliseconds(..), bracket, delay, error, forkAff, killFiber)
+import Effect.Aff (Aff, Error, Milliseconds(..), attempt, bracket, delay, error, forkAff, killFiber)
 import Effect.Aff.AVar (AVar, empty, new, put)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
@@ -109,6 +110,45 @@ foreign import loadKeypairImpl :: String -> Effect (Promise Unit)
 
 loadKeypair :: String -> Aff Unit
 loadKeypair = loadKeypairImpl >>> toAffE
+
+-----------------------------------------------------------
+-- SNAPSHOT / RESTORE
+-----------------------------------------------------------
+
+-- | Dump the four in-memory PouchDB databases of a PDR instance and the
+-- | ECDSA keypair to `snapshotDir`.  A sentinel file `snapshot.complete` is
+-- | written last so that only fully-written snapshots are considered valid.
+-- |
+-- | Parameters: systemIdentifier, perspectivesUser, snapshotDir
+foreign import snapshotPDRImpl :: String -> String -> String -> Effect (Promise Unit)
+
+-- | Restore the four in-memory PouchDB databases and the ECDSA keypair from a
+-- | snapshot written by `snapshotPDRImpl`.  Call this before `createUserDatabases`
+-- | so that the PDR state map is populated with pre-filled database instances.
+-- |
+-- | Parameters: systemIdentifier, perspectivesUser, snapshotDir
+foreign import restoreSnapshotImpl :: String -> String -> String -> Effect (Promise Unit)
+
+-- | Return `true` iff a completed snapshot exists at `snapshotDir`
+-- | (checks for the `snapshot.complete` sentinel file).
+foreign import snapshotExistsImpl :: String -> Effect Boolean
+
+-- | Snapshot a running PDR instance to `snapshotDir`.
+-- | The PDR's databases are still alive after `shutdown`, so this may also
+-- | be called after `_.shutdown` returns (the in-memory databases persist
+-- | until the process exits).
+snapshotPDR :: String -> String -> String -> Aff Unit
+snapshotPDR systemIdentifier perspectivesUser snapshotDir =
+  toAffE $ snapshotPDRImpl systemIdentifier perspectivesUser snapshotDir
+
+-- | Restore databases and keypair from a snapshot directory.
+restoreSnapshot :: String -> String -> String -> Aff Unit
+restoreSnapshot systemIdentifier perspectivesUser snapshotDir =
+  toAffE $ restoreSnapshotImpl systemIdentifier perspectivesUser snapshotDir
+
+-- | Check whether a complete snapshot exists at `snapshotDir`.
+snapshotExists :: String -> Aff Boolean
+snapshotExists = liftEffect <<< snapshotExistsImpl
 
 -----------------------------------------------------------
 -- PDR INSTANCE
@@ -273,6 +313,148 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
       traverse_ (killFiber done) postFiber
 
   pure { stateAVar: state, shutdown, name: pouchdbUser.systemIdentifier }
+
+-- | Start a PDR instance from a pre-existing snapshot, skipping the expensive
+-- | `setupUser` step (model installation, view creation).
+-- |
+-- | The snapshot is restored into the in-memory PouchDB databases BEFORE
+-- | `createUserDatabases` runs, so the PureScript state map ends up pointing
+-- | at the already-populated database instances.  The keypair is also restored
+-- | from the snapshot so that `getPrivateKey` succeeds without generating new keys.
+-- |
+-- | Use `withPDRCached` rather than calling this directly.
+startPDRInstanceFromSnapshot :: PouchdbUser -> RuntimeOptions -> Maybe String -> Maybe InProcessBus -> String -> Aff PDRInstance
+startPDRInstanceFromSnapshot pouchdbUser runtimeOptions mLogColor bus snapshotDir = do
+  -- AVars required by PerspectivesState.
+  transactionFlag <- new true
+  brokerService <- (empty :: Aff (AVar BrokerService))
+  transactionWithTiming <- (empty :: Aff (AVar RepeatingTransaction))
+  modelToLoad <- (empty :: Aff (AVar JustInTimeModelLoad))
+  indexedResourceToCreate <- (empty :: Aff (AVar IndexedResource))
+  missingResource <- (empty :: Aff (AVar IntegrityFix))
+  typeToBeFixed <- (empty :: Aff (AVar TypeFix))
+  userIntegrityChoice <- (empty :: Aff (AVar Boolean))
+
+  -- Build the initial state.
+  state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
+    pouchdbUser
+    transactionFlag
+    transactionWithTiming
+    modelToLoad
+    runtimeOptions
+    brokerService
+    indexedResourceToCreate
+    missingResource
+    typeToBeFixed
+    userIntegrityChoice
+
+  -- Optionally color all structured log lines produced by this PDR instance.
+  runPerspectivesWithState
+    do
+      (modify \s -> s { logColor = mLogColor })
+      case mLogColor of
+        Just color -> infoTest (color <> "Restoring PDR instance for user: " <> pouchdbUser.systemIdentifier <> ansiReset)
+        Nothing -> infoTest ("Restoring PDR instance for user: " <> pouchdbUser.systemIdentifier)
+      setTopicLogLevel RESOURCE CT.Error
+    state
+
+  -- Restore databases and keypair from snapshot BEFORE setting up the in-process bus,
+  -- so the keypair is available when getPrivateKey is called below.
+  restoreSnapshot pouchdbUser.systemIdentifier pouchdbUser.perspectivesUser snapshotDir
+
+  -- If we have a bus, replace the default real StompClient factory with the in-process stub.
+  case bus of
+    Just b -> do
+      runPerspectivesWithState (setStompClientFactory (makeStompClientFactory b)) state
+      runPerspectivesWithState
+        ( setBrokerService $ Just
+            { topic: pouchdbUser.perspectivesUser
+            , queueId: pouchdbUser.perspectivesUser <> "_queue"
+            , login: "test"
+            , passcode: "test"
+            , vhost: "test"
+            , url: "ws://localhost:15674/ws"
+            }
+        )
+        state
+    Nothing -> pure unit
+
+  -- Start background service fibers.
+  void $ forkAff $ forkJustInTimeModelLoader modelToLoad state
+  integrityFiber <- forkAff $ forkReferentialIntegrityFixer missingResource state
+  persistenceFiber <- forkAff $ forkDatabasePersistence state
+  indexedResourceFiber <- forkAff $ forkCreateIndexedResources indexedResourceToCreate state
+
+  -- Register external functions and wire the private key into the runtime state.
+  -- Then open the already-populated in-memory databases by calling createUserDatabases
+  -- (idempotent: it only stores PouchDB instances in the state map without clearing data).
+  -- setupUser is intentionally skipped: all models and views are already in the snapshot.
+  runPerspectivesWithState
+    ( do
+        addAllExternalFunctions
+        key <- getPrivateKey
+        modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce key } }
+        getSystemIdentifier >>= createUserDatabases
+    )
+    state
+
+  -- If we have a bus, start the incomingPost fiber to receive transactions.
+  postFiber <- case bus of
+    Just _ -> Just <$> (forkAff $ runPerspectivesWithState incomingPost state)
+    Nothing -> pure Nothing
+
+  let
+    done :: Error
+    done = error "PDRInstance shutdown"
+
+    shutdown :: Aff Unit
+    shutdown = do
+      put Stop modelToLoad
+      killFiber done integrityFiber
+      killFiber done persistenceFiber
+      killFiber done indexedResourceFiber
+      traverse_ (killFiber done) postFiber
+
+  pure { stateAVar: state, shutdown, name: pouchdbUser.systemIdentifier }
+
+-- | Like `withPDR` but transparently caches the PDR state between runs.
+-- |
+-- | First run (no snapshot exists):
+-- |   Starts a full PDR instance via `startPDRInstance` (including `setupUser`).
+-- |   Saves a snapshot to `snapshotDir` immediately after startup (before `f` runs),
+-- |   capturing only the clean base state (model:System, design views, user context).
+-- |
+-- | Subsequent runs (snapshot exists):
+-- |   Skips `setupUser` and restores databases and keypair from `snapshotDir`.
+-- |   This eliminates the model-installation cost, which is the dominant
+-- |   startup expense in `test:modelfiles`.
+-- |
+-- | Snapshot errors are logged as warnings but do not fail the test.
+-- |
+-- | To force a full rebuild, delete the snapshot directory.
+withPDRCached
+  :: forall a
+   . PouchdbUser
+  -> RuntimeOptions
+  -> Maybe String
+  -> Maybe InProcessBus
+  -> String
+  -> (PDRInstance -> Aff a)
+  -> Aff a
+withPDRCached pouchdbUser opts mLogColor mbus snapshotDir f = do
+  exists <- snapshotExists snapshotDir
+  if exists
+    then bracket
+      (startPDRInstanceFromSnapshot pouchdbUser opts mLogColor mbus snapshotDir)
+      _.shutdown
+      f
+    else bracket (startPDRInstance pouchdbUser opts mLogColor mbus) _.shutdown \pdr -> do
+      -- Snapshot immediately after setup, before f runs, so the captured state
+      -- is the clean base PDR state without any compilation artefacts from f.
+      attempt (snapshotPDR pouchdbUser.systemIdentifier pouchdbUser.perspectivesUser snapshotDir) >>= case _ of
+        Left err -> log $ "[withPDRCached] Warning: snapshot creation failed: " <> message err
+        Right _ -> log $ "[withPDRCached] Snapshot saved to: " <> snapshotDir
+      f pdr
 
 noBus :: Maybe InProcessBus
 noBus = Nothing

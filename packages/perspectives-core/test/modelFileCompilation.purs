@@ -52,7 +52,7 @@ import Effect.Class (liftEffect)
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors)
 import Perspectives.PerspectivesState (defaultRuntimeOptions)
 import Perspectives.TypePersistence.LoadArc.FS (loadAndCompileArcFile_)
-import Test.PDRInstance (noBus, runInPDR, testPouchdbUser, withPDR)
+import Test.PDRInstance (noBus, runInPDR, testPouchdbUser, withPDRCached)
 import Test.Unit (suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -62,7 +62,7 @@ type CompilationResult = { filePath :: String, errors :: MultiplePerspectivesErr
 main :: Effect Unit
 main = launchAff_ do
   let user = testPouchdbUser "modelfiletest"
-  testResults <- withPDR user defaultRuntimeOptions Nothing noBus \pdr -> runInPDR pdr do
+  testResults <- withPDRCached user defaultRuntimeOptions Nothing noBus snapshotDirectory \pdr -> runInPDR pdr do
     for modelFilePaths \filePath -> do
       r <- loadAndCompileArcFile_ filePath
       case r of
@@ -89,3 +89,8 @@ main = launchAff_ do
 modelFilePaths :: Array String
 modelFilePaths =
   []
+
+-- | Directory where the PDR snapshot is cached between test runs.
+-- | Delete this directory to force a full PDR rebuild on the next run.
+snapshotDirectory :: String
+snapshotDirectory = "test/pdr-snapshot/modelfiletest"

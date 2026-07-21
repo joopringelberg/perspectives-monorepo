@@ -45,3 +45,6 @@ stats.json
 /.cache/sidecars/
 
 idb-keyval-store.json
+
+# Ignore PDR snapshots used to speed up test:modelfiles
+/test/pdr-snapshot/
