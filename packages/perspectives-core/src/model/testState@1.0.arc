@@ -981,3 +981,30 @@ domain model://joopringelberg.nl#StateTestModel@1.0
     thing Role12A 
       property Num1 (Number)
       property Num2 (Number)
+
+  case Test_First_Step
+    aspect mm:Test
+    external
+      state TestState = context >> Role13A >> ((Num1 union Num2 >>= first == 1) and ((Num2 union Num1) >>= first == 2))
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      perspective on Role13A
+        only (Create)
+        props (Num1, Num2) verbs (SetPropertyValue, Consult)
+      action RunTest
+        letA
+          r <- create role Role13A
+        in
+          TestName = "(context >> Role13A >> ((Num1 union Num2 >>= first == 1) and ((Num2 union Num1) >>= first == 2))) - first test step" for extern
+          Num1 = 1 for r
+          Num2 = 2 for r
+    
+    thing Role13A 
+      property Num1 (Number)
+      property Num2 (Number)

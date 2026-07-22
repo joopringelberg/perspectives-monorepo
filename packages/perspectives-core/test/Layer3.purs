@@ -88,7 +88,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, Perspec
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
 import Perspectives.Sidecar.ToStable (toStable)
-import Test.PDRInstance (PDRInstance, SynchronisationResult, connectPDRs, noBus, pollUntil, pollUntilTestFinishes, runInPDR, testPouchdbUser, withPDR, withTwoPDRs)
+import Test.PDRInstance (PDRInstance, SynchronisationResult, connectPDRs, noBus, pollUntil, pollUntilTestFinishes, runInPDR, testPouchdbUser, withPDR, withTwoPDRs, withTwoPDRsCached)
 import Test.Unit (TestSuite, suite, suiteSkip, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -220,13 +220,15 @@ getSynchronisationResults = do
   case cached of
     Just results -> pure results
     Nothing -> do
-      results <- withTwoPDRs
+      results <- withTwoPDRsCached
         (testPouchdbUser "alice")
         defaultRuntimeOptions
         (Just ansiRed)
+        "test/pdr-snapshot/alice"
         (testPouchdbUser "bob")
         defaultRuntimeOptions
         (Just ansiMagenta)
+        "test/pdr-snapshot/bob"
         \pdrA pdrB -> do
           connectPDRs pdrA pdrB
 
