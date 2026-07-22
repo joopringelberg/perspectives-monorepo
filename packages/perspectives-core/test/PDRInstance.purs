@@ -81,6 +81,7 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Me (computeMe_)
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getProperty)
 import Perspectives.Logging (ansiReset, debugTest, infoTest, traceTest)
+import Main.RecompileBasicModels (addIndexedNames)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, identifiableFirstName, identifiableLastName, invitationGuestType, invitationMessageProp, inviteeType, inviterType, outgoingInvitationsType, serialisedInvitationProp, sysUser)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem, getUserIdentifier)
@@ -394,6 +395,7 @@ startPDRInstanceFromSnapshot pouchdbUser runtimeOptions mLogColor bus snapshotDi
   runPerspectivesWithState
     ( do
         addAllExternalFunctions
+        addIndexedNames
         key <- getPrivateKey
         modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce key } }
         getSystemIdentifier >>= createUserDatabases

@@ -59,11 +59,12 @@ import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors)
-import Perspectives.PerspectivesState (defaultRuntimeOptions)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runMonadPerspectivesTransaction')
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..))
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_, parseError2PerspectivesError)
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
 import Test.PDRInstance (noBus, runInPDR, testPouchdbUser, withPDRCached)
 import Test.Unit (suite, test)
 import Test.Unit.Assert (assert)
@@ -74,7 +75,7 @@ type CompilationResult = { filePath :: String, errors :: MultiplePerspectivesErr
 main :: Effect Unit
 main = launchAff_ do
   let user = testPouchdbUser "modelfiletest"
-  testResults <- withPDRCached user defaultRuntimeOptions Nothing noBus snapshotDirectory \pdr ->
+  testResults <- withPDRCached user defaultRuntimeOptions Nothing noBus snapshotDirectory \pdr -> do
     for modelFilePaths \filePath -> do
       text <- readTextFile UTF8 filePath
       (parsed :: Either ParseError ContextE) <- runIndentParser text domain
@@ -82,7 +83,10 @@ main = launchAff_ do
         Left e -> pure { filePath, errors: [ parseError2PerspectivesError e ] }
         Right (ContextE { id: modelUriReadable }) -> do
           modelCuid <- liftEffect $ cuid2 modelUriReadable
-          r <- runInPDR pdr $
+          r <- runInPDR pdr $ do
+            -- Trace Install
+            setTopicLogLevel INSTALL Trace
+            setTopicLogLevel MODEL Trace
             runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
               (loadAndCompileArcFile_ (ModelUri modelUriReadable) text false modelCuid modelUriReadable Nothing)
           case r of
