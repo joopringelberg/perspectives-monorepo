@@ -237,6 +237,60 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
               otherwise -> false
             otherwise -> false
 
+  test "Operator precedence keeps context composition scoped to parenthesised conjunction" do
+    (r :: Either ParseError Step) <- runIndentParser "context >> (Role6A >> binding orElse Role6B >> binding == context >> Filler6 and Role6B >> binding orElse Role6A >> binding == context >> Filler6)" step
+    case r of
+      (Left e) -> assert (show e) false
+      (Right parsedStep) -> do
+        assert "top-level operator should remain Compose" case parsedStep of
+          (Binary (BinaryStep { operator: Compose _, right })) -> true
+          _ -> false
+
+        assert "right side of top-level Compose should be a LogicalAnd between two Equals expressions" case parsedStep of
+          ( Binary
+              ( BinaryStep
+                  { operator: Compose _
+                  , right:
+                      ( Binary
+                          ( BinaryStep
+                              { operator: LogicalAnd _
+                              , left: (Binary (BinaryStep { operator: Equals _ }))
+                              , right: (Binary (BinaryStep { operator: Equals _ }))
+                              }
+                          )
+                      )
+                  }
+              )
+          ) -> true
+          _ -> false
+
+  test "Operator precedence groups role-binding orElse before equals" do
+    (r :: Either ParseError Step) <- runIndentParser "Role6A >> binding orElse Role6B >> binding == context >> Filler6" step
+    case r of
+      (Left e) -> assert (show e) false
+      (Right parsedStep) -> do
+        assert "top-level operator should be Equals" case parsedStep of
+          (Binary (BinaryStep { operator: Equals _ })) -> true
+          _ -> false
+
+        assert "left side of equals should be OrElse over two Role->binding compositions" case parsedStep of
+          ( Binary
+              ( BinaryStep
+                  { operator: Equals _
+                  , left:
+                      ( Binary
+                          ( BinaryStep
+                              { operator: OrElse _
+                              , left: (Binary (BinaryStep { operator: Compose _ }))
+                              , right: (Binary (BinaryStep { operator: Compose _ }))
+                              }
+                          )
+                      )
+                  }
+              )
+          ) -> true
+          _ -> false
+
   test "number in equation" do
     (r :: Either ParseError Step) <- runIndentParser "MyProp > 10" step
     case r of

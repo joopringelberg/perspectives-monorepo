@@ -30,16 +30,16 @@ import Data.String.Regex (Regex, match)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Tuple (Tuple(..))
-import Perspectives.Parsing.Arc.Expression (step)
+import Parsing (fail)
+import Parsing.Combinators (lookAhead, manyTill, option, optionMaybe, (<?>))
+import Parsing.Indent.Monadic (indented', withPos)
+import Perspectives.Parsing.Arc.Expression (parseLetVariableName, step)
 import Perspectives.Parsing.Arc.Expression.AST (VarBinding(..))
-import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, lowerCaseName, reserved)
+import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, reserved)
 import Perspectives.Parsing.Arc.IndentParser (IP, getPosition, outdented', sameOrOutdented')
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..))
 import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
 import Prelude (bind, discard, pure, ($), (*>), (<$>), (<*), (<*>), (<>), (>>=))
-import Parsing.Indent.Monadic (indented', withPos)
-import Parsing (fail)
-import Parsing.Combinators (lookAhead, manyTill, option, optionMaybe, (<?>))
 
 assignment :: IP Assignment
 assignment = isPropertyAssignment >>=
@@ -330,7 +330,8 @@ letWithAssignment = withPos do
 
 letABinding :: IP LetABinding
 letABinding = do
-  varName <- (lowerCaseName <* token.reservedOp "<-") <?> "lower case name followed by <-, "
+  varName <- parseLetVariableName
+  _ <- token.reservedOp "<-" <?> "Expected '<-' after letA variable name. "
   (Tuple first second) <- twoReservedWords
   case first, second of
     "create", "role" -> Stat <$> pure varName <*> roleCreation
