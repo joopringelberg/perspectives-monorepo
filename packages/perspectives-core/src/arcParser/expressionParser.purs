@@ -58,7 +58,15 @@ import Perspectives.Time (date2String, dateTime2String, time2String)
 import Prelude (bind, not, pure, show, ($), (&&), (*>), (+), (<$>), (<*), (<*>), (<<<), (>), (>>=), (<>), eq, (/=), discard, (==))
 
 step :: IP Step
-step = defer \_ -> normalizeStep <$> step_ false
+step = defer \_ -> normalizeToFixedPoint <$> step_ false
+
+normalizeToFixedPoint :: Step -> Step
+normalizeToFixedPoint stp =
+  let
+    normalized = normalizeStep stp
+  in
+    if normalized == stp then normalized
+    else normalizeToFixedPoint normalized
 
 step_ :: Boolean -> IP Step
 step_ parenthesised = do
@@ -130,15 +138,32 @@ normalizeStep stp = case stp of
 
 normalizeBinaryStep :: BinaryStep -> Step
 normalizeBinaryStep (BinaryStep { start, end, operator: operator', left, right, parenthesised }) =
-  normalizeRotations $ Binary $ BinaryStep
+  normalizeRotations
+    (normalizeChildren (normalizeRotations initialTree))
+  where
+  initialTree :: Step
+  initialTree = Binary $ BinaryStep
     { start
     , end
     , operator: operator'
-    , left: normalizeStep left
-    , right: normalizeStep right
+    , left
+    , right
     , parenthesised
     }
-  where
+
+  normalizeChildren :: Step -> Step
+  normalizeChildren stp = case stp of
+    Binary (BinaryStep { start: start', end: end', operator: op', left: left', right: right', parenthesised: parenthesised' }) ->
+      Binary $ BinaryStep
+        { start: start'
+        , end: end'
+        , operator: op'
+        , left: normalizeStep left'
+        , right: normalizeStep right'
+        , parenthesised: parenthesised'
+        }
+    _ -> stp
+
   normalizeRotations :: Step -> Step
   normalizeRotations stp = case stp of
     Binary (BinaryStep { start: start', end: end', operator: op', left: left', right: right', parenthesised: parenthesised' }) ->
@@ -151,7 +176,7 @@ normalizeBinaryStep (BinaryStep { start, end, operator: operator', left, right, 
               , left: Binary (BinaryStep { start: start', end: endOf left', operator: op', left: left', right: leftOfRight, parenthesised: false })
               , operator: opOfRight
               , right: rightOfRight
-              , parenthesised: false
+              , parenthesised: parenthesised'
               }
           else stp
         _ -> stp
