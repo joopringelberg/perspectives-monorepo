@@ -48,8 +48,8 @@ function convertPouchError( originalE )
     return new Error( JSON.stringify(
       { status: originalE.status
       , name: originalE.constructor.name
-      , message: originalE.message
-      , error: originalE.error}));
+      , message: originalE.message || originalE.statusText
+      , error: originalE.error || originalE.statusText}));
   }
 }
 
