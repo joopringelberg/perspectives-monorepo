@@ -1,0 +1,23 @@
+{
+  "privateJwk": {
+    "key_ops": [
+      "sign"
+    ],
+    "ext": true,
+    "kty": "EC",
+    "x": "Ulru_ClH_r3qWrK8-kMPbR9g_LP-5-RLxbHodKDbPYlIDYoa5Q59WIB3ZluILTMu",
+    "y": "cHzREt6FeNBwHrYX-neh9bNJZgDxqxqox8lfdNqaoVDNa_5Qql3GAVQXWzPT7ndU",
+    "crv": "P-384",
+    "d": "PDMGr4coYxqLFOzaU07nO8wgFlF5UZYFQRXMYi6-kISuU90OSiZiKfQTE7vHgk16"
+  },
+  "publicJwk": {
+    "key_ops": [
+      "verify"
+    ],
+    "ext": true,
+    "kty": "EC",
+    "x": "Ulru_ClH_r3qWrK8-kMPbR9g_LP-5-RLxbHodKDbPYlIDYoa5Q59WIB3ZluILTMu",
+    "y": "cHzREt6FeNBwHrYX-neh9bNJZgDxqxqox8lfdNqaoVDNa_5Qql3GAVQXWzPT7ndU",
+    "crv": "P-384"
+  }
+}
