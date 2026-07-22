@@ -516,7 +516,7 @@ compileBQD (BQD _ (BinaryCombinator g) f1 f2 ran _ _) | isJust $ elemIndex g [ A
 -- We also require that the VDOM should have an EnumeratedPropertyType.
 -- TODO. Het probleem is dat we (String ~~> String) moeten opleveren!
 compileSequenceFunction :: QueryFunctionDescription -> MP (Array String -> MonadPerspectivesQuery String)
-compileSequenceFunction (SQD dom (UnaryCombinator sequenceFunctionName) _ _ _) | isJust $ elemIndex sequenceFunctionName [ CountF, MinimumF, MaximumF, AddF, FirstF ] =
+compileSequenceFunction (SQD dom (UnaryCombinator sequenceFunctionName) _ _ _) | isJust $ elemIndex sequenceFunctionName [ CountF, MinimumF, MaximumF, AddF, MultiplyF, FirstF ] =
   case sequenceFunctionName of
     CountF -> pure \things -> pure (show $ length things)
     MinimumF -> case dom of
@@ -537,6 +537,9 @@ compileSequenceFunction (SQD dom (UnaryCombinator sequenceFunctionName) _ _ _) |
       (VDOM (RAN.PDuration _) _) -> pure addNumbers
       (VDOM RAN.PString _) -> pure \strings -> ArrayT $ pure [ foldl (\cumulator str -> cumulator <> str) "" strings ]
       _ -> throwError (error $ "compileSequenceFunction cannot handle domain '" <> show dom <> "' for 'add'.")
+    MultiplyF -> case dom of
+      (VDOM RAN.PNumber _) -> pure multiplyNumbers
+      _ -> throwError (error $ "compileSequenceFunction cannot handle domain '" <> show dom <> "' for 'multiply'.")
     FirstF -> pure firstOfSequence
 
     op -> throwError (error $ "compileSequenceFunction cannot handle sequence function: '" <> show op <> "'.")
@@ -545,6 +548,11 @@ compileSequenceFunction (SQD dom (UnaryCombinator sequenceFunctionName) _ _ _) |
   addNumbers numbers = ArrayT $ do
     (nrs :: Array Number) <- traverse parseNumber numbers
     pure $ [ show (foldl (\(cumulator :: Number) (nr :: Number) -> cumulator + nr) 1.0 nrs) ]
+
+  multiplyNumbers :: Array String -> MonadPerspectivesQuery String
+  multiplyNumbers numbers = ArrayT $ do
+    (nrs :: Array Number) <- traverse parseNumber numbers
+    pure $ [ show (foldl (\(cumulator :: Number) (nr :: Number) -> cumulator * nr) 1.0 nrs) ]
 
   smallestNumber :: Array String -> MonadPerspectivesQuery String
   smallestNumber numbers = ArrayT do

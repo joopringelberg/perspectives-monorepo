@@ -912,6 +912,8 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
               -- We also require that the VDOM should have an EnumeratedPropertyType.
               AddF -> ensureDomainIsRange dom [ PNumber, PString, PDuration Year_, PDuration Month_, PDuration Week_, PDuration Day_, PDuration Hour_, PDuration Minute_, PDuration Second_, PDuration MilliSecond_ ] pos
                 (pure $ BQD currentDomain (QF.BinaryCombinator QF.ComposeSequenceF) f1 f2' ran True True)
+              MultiplyF -> ensureDomainIsRange dom [ PNumber ] pos
+                (pure $ BQD currentDomain (QF.BinaryCombinator QF.ComposeSequenceF) f1 f2' ran True True)
               SubtractF -> ensureDomainIsRange dom [ PNumber, PString ] pos
                 (pure $ BQD currentDomain (QF.BinaryCombinator QF.ComposeSequenceF) f1 f2' ran True True)
               MinimumF -> ensureDomainIsRange dom [ PNumber, PString, PBool, PDate ] pos

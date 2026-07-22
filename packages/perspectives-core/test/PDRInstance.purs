@@ -574,6 +574,31 @@ withTwoPDRs user1 opts1 color1 user2 opts2 color2 f = do
     withPDR user2 opts2 color2 (Just bus) \pdr2 ->
       f pdr1 pdr2
 
+-- | Cached variant of `withTwoPDRs`.
+-- |
+-- | Each instance uses `withPDRCached` and therefore restores from its own
+-- | snapshot directory when present, or creates and snapshots a clean base
+-- | state on first run.
+-- |
+-- | The two instances share one in-process bus, just like `withTwoPDRs`.
+withTwoPDRsCached
+  :: forall a
+   . PouchdbUser
+  -> RuntimeOptions
+  -> Maybe String
+  -> String
+  -> PouchdbUser
+  -> RuntimeOptions
+  -> Maybe String
+  -> String
+  -> (PDRInstance -> PDRInstance -> Aff a)
+  -> Aff a
+withTwoPDRsCached user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir2 f = do
+  bus <- liftEffect createInProcessBus
+  withPDRCached user1 opts1 color1 (Just bus) snapshotDir1 \pdr1 ->
+    withPDRCached user2 opts2 color2 (Just bus) snapshotDir2 \pdr2 ->
+      f pdr1 pdr2
+
 -----------------------------------------------------------
 -- CONNECT TWO PDR INSTANCES VIA INVITATION
 -----------------------------------------------------------

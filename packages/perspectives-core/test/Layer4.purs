@@ -339,6 +339,7 @@ allTests =
   , { testContextTypeName: test_Minimum_Step, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Maximum_Step, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Sum_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_First_Step, logConfiguration: emptyLogConfiguration }
   ]
 
 -- Example test context type name constant:
@@ -473,3 +474,6 @@ test_Maximum_Step = "model://joopringelberg.nl#StateTestModel$Test_Maximum_Step"
 
 test_Sum_Step :: String
 test_Sum_Step = "model://joopringelberg.nl#StateTestModel$Test_Sum_Step"
+
+test_First_Step :: String
+test_First_Step = "model://joopringelberg.nl#StateTestModel$Test_First_Step"
