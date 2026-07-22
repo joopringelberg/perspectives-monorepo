@@ -85,8 +85,8 @@ main = launchAff_ do
           modelCuid <- liftEffect $ cuid2 modelUriReadable
           r <- runInPDR pdr $ do
             -- Trace Install
-            setTopicLogLevel INSTALL Trace
-            setTopicLogLevel MODEL Trace
+            -- setTopicLogLevel INSTALL Trace
+            -- setTopicLogLevel MODEL Trace
             runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
               (loadAndCompileArcFile_ (ModelUri modelUriReadable) text false modelCuid modelUriReadable Nothing)
           case r of
@@ -112,7 +112,7 @@ main = launchAff_ do
 -- |   ]
 modelFilePaths :: Array String
 modelFilePaths =
-  ["/Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/src/model/disconnect@1.1.arc"]
+  ["/Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/src/model/testState@1.0.arc"]
 
 -- | Directory where the PDR snapshot is cached between test runs.
 -- | Delete this directory to force a full PDR rebuild on the next run.
