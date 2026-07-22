@@ -125,6 +125,24 @@
         "NODE_EXTRA_CA_CERTS": "/Users/joopringelberg/Library/Application Support/mkcert/rootCA.pem",
         "NODE_TLS_REJECT_UNAUTHORIZED": "0"
       }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "test-modelsfile",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/dist/test.modelFileCompilation.node.js",
+      "sourceMaps": true,
+      "outFiles": [
+        "${workspaceFolder}/dist/*.js",
+        "!**/node_modules/**"
+      ],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "/Users/joopringelberg/Library/Application Support/mkcert/rootCA.pem",
+        "NODE_TLS_REJECT_UNAUTHORIZED": "0"
+      }
     }
   ]
 }

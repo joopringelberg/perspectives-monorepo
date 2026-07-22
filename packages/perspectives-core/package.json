@@ -44,6 +44,7 @@
     "test:layer3": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Layer3/index.js ROLLUP_OUTPUT=./dist/test.layer3.node.js rollup -c rollup.node.config.js && clear && node dist/test.layer3.node.js",
     "test:layer4": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Layer4/index.js ROLLUP_OUTPUT=./dist/test.layer4.node.js rollup -c rollup.node.config.js && clear && node dist/test.layer4.node.js",
     "test:models": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.ModelCompilationRegression/index.js ROLLUP_OUTPUT=./dist/test.modelCompilationRegression.node.js rollup -c rollup.node.config.js && clear && node dist/test.modelCompilationRegression.node.js",
+    "test:modelfiles": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.ModelFileCompilation/index.js ROLLUP_OUTPUT=./dist/test.modelFileCompilation.node.js rollup -c rollup.node.config.js && node dist/test.modelFileCompilation.node.js",
     "test:node": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Main/index.js ROLLUP_OUTPUT=./dist/test.node.js rollup -c rollup.node.config.js && node dist/test.node.js",
     "modulemap": "node build-module-map.mjs > module-map.json"
   },
