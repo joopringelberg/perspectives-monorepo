@@ -623,9 +623,13 @@ domain model://joopringelberg.nl#StateTestModel@1.0
     aspect mm:Test
     external
       property Today = callExternal sensor:ReadSensor("clock", "now") returns DateTime
-      property Tomorrow = Today + 1 day
-      property NextWeek = Today + 7 days
-      state TestState = Tomorrow == (((NextWeek - 5 days) - 23 hours) - 59 minutes) - 59 seconds
+      state TestState = 
+        letE
+            today <- Today
+            tomorrow <- today + 1 day
+            nextweek <- today + 7 days
+          in
+            tomorrow == (((nextweek - 5 days) - 23 hours) - 59 minutes) - 60 seconds
         on entry
           do for Tester
             TestSucceeded = true
@@ -635,7 +639,7 @@ domain model://joopringelberg.nl#StateTestModel@1.0
       perspective on extern
         props (TestSucceeded) verbs (SetPropertyValue, Consult)
       action RunTest
-        TestName = "Tomorrow == ((((NextWeek - 5 days) - 23 hours) - 59 minutes) - 60 seconds) - duration step" for extern
+        TestName = "Tomorrow == (((NextWeek - 5 days) - 23 hours) - 59 minutes) - 60 seconds) - duration step" for extern
   
   case Test_RoleIndividual_Step
     aspect mm:Test
@@ -813,3 +817,167 @@ domain model://joopringelberg.nl#StateTestModel@1.0
     thing Role6B filledBy Filler6
 
     thing Filler6
+
+  case Test_Or_Step
+    aspect mm:Test
+    external
+      state TestState = context >> Role7A >> ((Bool1 or Bool2) and (Bool2 or Bool1))
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      perspective on Role7A
+        only (Create)
+        props (Bool1, Bool2) verbs (SetPropertyValue, Consult)
+      action RunTest
+        letA
+          r <- create role Role7A
+        in
+          TestName = "(context >> Role7A >> ((Bool1 or Bool2) and (Bool2 or Bool1))) - or test step" for extern
+          Bool1 = true for r
+          Bool2 = false for r
+    
+    thing Role7A 
+      property Bool1 (Boolean)
+      property Bool2 (Boolean)
+  
+  case Test_And_Step
+    aspect mm:Test
+    external
+      state TestState = context >> Role8A >> ((not (Bool1 and Bool3)) and (not (Bool3 and Bool1)) and (Bool1 and Bool2))
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      perspective on Role8A
+        only (Create)
+        props (Bool1, Bool2, Bool3) verbs (SetPropertyValue, Consult)
+      action RunTest
+        letA
+          r <- create role Role8A
+        in
+          TestName = "(context >> Role8A >> ((Bool1 and Bool2) and (Bool2 and Bool1))) - and test step" for extern
+          Bool1 = true for r
+          Bool2 = true for r
+          Bool3 = false for r
+    
+    thing Role8A 
+      property Bool1 (Boolean)
+      property Bool2 (Boolean)
+      property Bool3 (Boolean)
+
+  case Test_Minimum_Step
+    aspect mm:Test
+    external
+      state TestState = context >> Role9A >> (Num1 union Num2 >>= minimum == 1)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      perspective on Role9A
+        only (Create)
+        props (Num1, Num2) verbs (SetPropertyValue, Consult)
+      action RunTest
+        letA
+          r <- create role Role9A
+        in
+          TestName = "(context >> Role9A >> (Num1 union Num2 >>= minimum == 1)) - minimum test step" for extern
+          Num1 = 1 for r
+          Num2 = 2 for r
+    
+    thing Role9A 
+      property Num1 (Number)
+      property Num2 (Number)
+  
+  case Test_Maximum_Step
+    aspect mm:Test
+    external
+      state TestState = context >> Role10A >> (Num1 union Num2 >>= maximum == 2)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      perspective on Role10A
+        only (Create)
+        props (Num1, Num2) verbs (SetPropertyValue, Consult)
+      action RunTest
+        letA
+          r <- create role Role10A
+        in
+          TestName = "(context >> Role10A >> (Num1 union Num2 >>= maximum == 2)) - maximum test step" for extern
+          Num1 = 1 for r
+          Num2 = 2 for r
+    
+    thing Role10A 
+      property Num1 (Number)
+      property Num2 (Number)
+
+  case Test_Sum_Step
+    aspect mm:Test
+    external
+      state TestState = context >> Role11A >> (Num1 union Num2 >>= sum == 3)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      perspective on Role11A
+        only (Create)
+        props (Num1, Num2) verbs (SetPropertyValue, Consult)
+      action RunTest
+        letA
+          r <- create role Role11A
+        in
+          TestName = "(context >> Role11A >> (Num1 union Num2 >>= sum == 3)) - sum test step" for extern
+          Num1 = 1 for r
+          Num2 = 2 for r
+    
+    thing Role11A 
+      property Num1 (Number)
+      property Num2 (Number)
+
+  case Test_Product_Step
+    aspect mm:Test
+    external
+      state TestState = context >> Role12A >> (Num1 union Num2 >>= product == 6)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      perspective on Role12A
+        only (Create)
+        props (Num1, Num2) verbs (SetPropertyValue, Consult)
+      action RunTest
+        letA
+          r <- create role Role12A
+        in
+          TestName = "(context >> Role12A >> (Num1 union Num2 >>= product == 6)) - product test step" for extern
+          Num1 = 2 for r
+          Num2 = 3 for r
+    
+    thing Role12A 
+      property Num1 (Number)
+      property Num2 (Number)

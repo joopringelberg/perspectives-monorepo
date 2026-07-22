@@ -73,7 +73,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleIns
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
 import Perspectives.Sidecar.ToStable (toStable)
-import Test.PDRInstance (PDRInstance, SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, runInPDR, testPouchdbUser, withPDR)
+import Test.PDRInstance (PDRInstance, SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, runInPDR, testPouchdbUser, withPDRCached)
 import Test.Unit (suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -119,17 +119,24 @@ type SinglePDRResults = Array SynchronisationResult
 cachedSinglePDRResults :: Ref (Maybe SinglePDRResults)
 cachedSinglePDRResults = unsafePerformEffect $ new Nothing
 
+-- | Directory where the PDR snapshot is cached between test runs.
+-- | Delete this directory to force a full PDR rebuild on the next run.
+snapshotDirectory :: String
+snapshotDirectory = "test/pdr-snapshot/layer4"
+
+
 getSinglePDRResults :: Aff SinglePDRResults
 getSinglePDRResults = do
   cached <- liftEffect $ read cachedSinglePDRResults
   case cached of
     Just results -> pure results
     Nothing -> do
-      results <- withPDR
+      results <- withPDRCached
         (testPouchdbUser "alice")
         defaultRuntimeOptions
         (Just ansiRed)
         noBus
+        snapshotDirectory
         \pdr -> do
           runInPDR pdr
             ( do
@@ -327,6 +334,11 @@ allTests =
   , { testContextTypeName: test_FillFrom_Step, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Union_Step, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Intersection_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Or_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_And_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Minimum_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Maximum_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Sum_Step, logConfiguration: emptyLogConfiguration }
   ]
 
 -- Example test context type name constant:
@@ -446,3 +458,18 @@ test_Union_Step = "model://joopringelberg.nl#StateTestModel$Test_Union_Step"
 
 test_Intersection_Step :: String
 test_Intersection_Step = "model://joopringelberg.nl#StateTestModel$Test_Intersection_Step"
+
+test_Or_Step :: String
+test_Or_Step = "model://joopringelberg.nl#StateTestModel$Test_Or_Step"
+
+test_And_Step :: String
+test_And_Step = "model://joopringelberg.nl#StateTestModel$Test_And_Step"
+
+test_Minimum_Step :: String
+test_Minimum_Step = "model://joopringelberg.nl#StateTestModel$Test_Minimum_Step"
+
+test_Maximum_Step :: String
+test_Maximum_Step = "model://joopringelberg.nl#StateTestModel$Test_Maximum_Step"
+
+test_Sum_Step :: String
+test_Sum_Step = "model://joopringelberg.nl#StateTestModel$Test_Sum_Step"
