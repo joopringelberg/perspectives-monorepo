@@ -547,7 +547,7 @@ compileSequenceFunction (SQD dom (UnaryCombinator sequenceFunctionName) _ _ _) |
   addNumbers :: Array String -> MonadPerspectivesQuery String
   addNumbers numbers = ArrayT $ do
     (nrs :: Array Number) <- traverse parseNumber numbers
-    pure $ [ show (foldl (\(cumulator :: Number) (nr :: Number) -> cumulator + nr) 1.0 nrs) ]
+    pure $ [ show (foldl (\(cumulator :: Number) (nr :: Number) -> cumulator + nr) 0.0 nrs) ]
 
   multiplyNumbers :: Array String -> MonadPerspectivesQuery String
   multiplyNumbers numbers = ArrayT $ do
