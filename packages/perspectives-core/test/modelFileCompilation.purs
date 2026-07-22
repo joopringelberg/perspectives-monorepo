@@ -50,9 +50,20 @@ import Data.Traversable (for)
 import Effect (Effect)
 import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
+import Node.Encoding (Encoding(..))
+import Node.FS.Aff (readTextFile)
+import Parsing (ParseError)
+import Perspectives.Cuid2 (cuid2)
+import Perspectives.ModelDependencies (sysUser)
+import Perspectives.Parsing.Arc (domain)
+import Perspectives.Parsing.Arc.AST (ContextE(..))
+import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors)
 import Perspectives.PerspectivesState (defaultRuntimeOptions)
-import Perspectives.TypePersistence.LoadArc.FS (loadAndCompileArcFile_)
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
+import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runMonadPerspectivesTransaction')
+import Perspectives.Sidecar.StableIdMapping (ModelUri(..))
+import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_, parseError2PerspectivesError)
 import Test.PDRInstance (noBus, runInPDR, testPouchdbUser, withPDRCached)
 import Test.Unit (suite, test)
 import Test.Unit.Assert (assert)
@@ -63,12 +74,20 @@ type CompilationResult = { filePath :: String, errors :: MultiplePerspectivesErr
 main :: Effect Unit
 main = launchAff_ do
   let user = testPouchdbUser "modelfiletest"
-  testResults <- withPDRCached user defaultRuntimeOptions Nothing noBus snapshotDirectory \pdr -> runInPDR pdr do
+  testResults <- withPDRCached user defaultRuntimeOptions Nothing noBus snapshotDirectory \pdr ->
     for modelFilePaths \filePath -> do
-      r <- loadAndCompileArcFile_ filePath
-      case r of
-        Left errors -> pure { filePath, errors }
-        Right _ -> pure { filePath, errors: [] }
+      text <- readTextFile UTF8 filePath
+      (parsed :: Either ParseError ContextE) <- runIndentParser text domain
+      case parsed of
+        Left e -> pure { filePath, errors: [ parseError2PerspectivesError e ] }
+        Right (ContextE { id: modelUriReadable }) -> do
+          modelCuid <- liftEffect $ cuid2 modelUriReadable
+          r <- runInPDR pdr $
+            runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
+              (loadAndCompileArcFile_ (ModelUri modelUriReadable) text false modelCuid modelUriReadable Nothing)
+          case r of
+            Left errors -> pure { filePath, errors }
+            Right _ -> pure { filePath, errors: [] }
   liftEffect $ runTest do
     suite "Model file compilation tests" do
       for_ testResults \{ filePath, errors } ->
