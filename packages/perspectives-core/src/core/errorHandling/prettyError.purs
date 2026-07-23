@@ -252,6 +252,6 @@ warnModellerPretty warning = do
 warnModellerWithErrorPretty :: PerspectivesWarning -> String -> MonadPerspectives Unit
 warnModellerWithErrorPretty warning err = do
   humanized <- humanizePerspectivesWarning warning
-  let msg = show humanized
+  let msg = show humanized <> " Error: " <> err
   -- modify \(s@{ warnings }) -> s { warnings = cons ({ message: msg, error: err }) warnings }
-  pdrLog MODEL Warn (show warning)
+  pdrLog MODEL Warn msg

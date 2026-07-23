@@ -23,10 +23,11 @@
 module Perspectives.Representation.QueryFunction where
 
 import Control.Monad.Error.Class (throwError)
+import Control.Monad.Except (runExcept)
+import Data.Either (Either(..))
 import Data.List.NonEmpty (singleton)
-import Data.Maybe (Maybe)
+import Data.Maybe (Maybe(..))
 import Foreign (ForeignError(..))
-
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.Range (Range)
@@ -596,7 +597,13 @@ instance writeForeignQueryFunction :: WriteForeign QueryFunction where
   writeImpl (CreateRole enumeratedRoleType) = writeImpl { constructor: "CreateRole", arg1: writeJSON enumeratedRoleType, arg2: "" }
   writeImpl (Bind enumeratedRoleType) = writeImpl { constructor: "Bind", arg1: writeJSON enumeratedRoleType, arg2: "" }
   writeImpl Bind_ = writeImpl { constructor: "Bind_", arg1: "", arg2: "" }
-  writeImpl (Unbind mEnumeratedRoleType) = writeImpl { constructor: "Unbind", arg1: writeJSON mEnumeratedRoleType, arg2: "" }
+  writeImpl (Unbind mEnumeratedRoleType) = writeImpl
+    { constructor: "Unbind"
+    , arg1: case mEnumeratedRoleType of
+        Just roleType -> writeJSON roleType
+        Nothing -> ""
+    , arg2: ""
+    }
   writeImpl Unbind_ = writeImpl { constructor: "Unbind_", arg1: "", arg2: "" }
   writeImpl (DeleteRole enumeratedRoleType) = writeImpl { constructor: "DeleteRole", arg1: writeJSON enumeratedRoleType, arg2: "" }
   writeImpl (DeleteContext roleType) = writeImpl { constructor: "DeleteContext", arg1: writeJSON roleType, arg2: "" }
@@ -668,7 +675,9 @@ instance readForeignQueryFunction :: ReadForeign QueryFunction where
       "CreateRole", enumeratedRoleType, _ -> CreateRole <$> readJSON' enumeratedRoleType
       "Bind", enumeratedRoleType, _ -> Bind <$> readJSON' enumeratedRoleType
       "Bind_", _, _ -> pure $ Bind_
-      "Unbind", mEnumeratedRoleType, _ -> Unbind <$> readJSON' mEnumeratedRoleType
+      "Unbind", mEnumeratedRoleType, _ -> Unbind <$> case runExcept $ readJSON' mEnumeratedRoleType of
+        Left _ -> pure Nothing
+        Right roleType -> pure $ Just roleType
       "Unbind_", _, _ -> pure $ Unbind_
       "DeleteRole", enumeratedRoleType, _ -> DeleteRole <$> readJSON' enumeratedRoleType
       "DeleteContext", roleType, _ -> DeleteContext <$> readJSON' roleType
