@@ -36,7 +36,10 @@
 -- | Run manually with:
 -- |   pnpm run test:layer3
 
-module Test.ModelCompilationRegression where
+module Test.ModelCompilationRegression
+  ( getCompilationResults
+  , modelCompilationSuite
+  ) where
 
 import Prelude
 
@@ -50,59 +53,58 @@ import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
-import Effect (Effect)
-import Effect.Aff (error, launchAff_)
-import Effect.Class (liftEffect)
+import Effect.Aff (Aff, error)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..), getVersionedDomeinFileName)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (MonadPerspectivesTransaction)
+import Perspectives.CoreTypes (LogTopic(..), LogLevel(..), MonadPerspectivesTransaction)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.ExecuteInTopologicalOrder (executeInTopologicalOrder) as TOP
 import Perspectives.Identifiers (domeinFileVersion, modelUri2LocalName)
-import Perspectives.Logging (debugUpgrade, errorUpgrade)
+import Perspectives.Logging (errorModel, infoModel)
 import Perspectives.ModelDependencies (modelManifest, sysUser)
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors, PerspectivesError(..))
 import Perspectives.Persistence.API (Keys(..), documentsInDatabase, includeDocs)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (defaultRuntimeOptions, setModelUri)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, setModelUri, setTopicLogLevel)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runMonadPerspectivesTransaction')
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), fromRepository, loadStableMapping)
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFileWithSidecar_)
 import Simple.JSON (read)
-import Test.PDRInstance (noBus, runInPDR, testPouchdbUser, withPDR)
-import Test.Unit (suite, test)
+import Test.PDRInstance (noBus, runInPDR, testPouchdbUser, withPDRCached)
+import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
-import Test.Unit.Main (runTest)
 
-main :: Effect Unit
-main = launchAff_ do
-  let user = testPouchdbUser "regressiontest"
-  testResults <- withPDR user defaultRuntimeOptions Nothing noBus \pdr -> runInPDR pdr do
+getCompilationResults :: Aff (Array CompilationResult)
+getCompilationResults = do
+  withPDRCached (testPouchdbUser "alice") defaultRuntimeOptions Nothing noBus "test/pdr-snapshot/layer3-clean/alice" \pdr -> runInPDR pdr do
+    setTopicLogLevel MODEL Info
     manifests :: Array RoleInstance <- getSafeViewOnDatabase manifestsDb "defaultViews/roleView" (Key modelManifest)
     runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser) do
       versionsToCompile <- traverse getVersionedDomeinFileName manifests >>= pure <<< catMaybes
       { rows: allModels } <- lift $ documentsInDatabase modelsDb includeDocs
       uninterpretedDomeinFiles <- for (filter (isJust <<< (flip elemIndex versionsToCompile) <<< _.id) allModels) \({ id, doc }) -> case read <$> doc of
-        Just (Left errs) -> (lift $ errorUpgrade ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs)) *> pure Nothing
-        Nothing -> (lift $ errorUpgrade ("No document retrieved for model '" <> id <> "'.")) *> pure Nothing
+        Just (Left errs) -> (lift $ errorModel ("Cannot interpret model document as UninterpretedDomeinFile: '" <> id <> "' " <> show errs)) *> pure Nothing
+        Nothing -> (lift $ errorModel ("No document retrieved for model '" <> id <> "'.")) *> pure Nothing
         Just (Right (df :: UninterpretedDomeinFile)) -> pure $ Just df
       results :: Either MultiplePerspectivesErrors (Array CompilationResult) <- runExceptT $ executeInTopologicalOrder (catMaybes uninterpretedDomeinFiles) recompileModelAtUrl
       case results of
         Left errs -> do
-          (lift $ errorUpgrade ("Model compilation regression test failed with errors: " <> show errs))
+          (lift $ errorModel ("Model compilation regression test failed with errors: " <> show errs))
           throwError $ error "Model compilation regression test failed."
         Right compilationResults -> pure compilationResults
-  liftEffect $ runTest do
-    suite "Model compilation tests" do
-      for_ testResults \{ namespace, version, errors } ->
-        if null errors then
-          test (namespace <> "@" <> version <> " was compiled correctly") do
-            assert ("The model with namespace '" <> namespace <> "@" <> version <> "' should compile without errors") (null errors)
-        else
-          test ("The model with namespace '" <> namespace <> "@" <> version <> "' failed with error") do
-            assert ("The model with namespace '" <> namespace <> "@" <> version <> "' should compile without errors, but got error: " <> show errors) false
+
+modelCompilationSuite :: Array CompilationResult -> TestSuite
+modelCompilationSuite testResults =
+  suite "Model compilation tests" do
+    for_ testResults \{ namespace, version, errors } ->
+      if null errors then
+        test (namespace <> "@" <> version <> " was compiled correctly") do
+          assert ("The model with namespace '" <> namespace <> "@" <> version <> "' should compile without errors") (null errors)
+      else
+        test ("The model with namespace '" <> namespace <> "@" <> version <> "' failed with error") do
+          assert ("The model with namespace '" <> namespace <> "@" <> version <> "' should compile without errors, but got error: " <> show errors) false
 
 -- | The CouchDB database that contains all compiled model documents
 -- | for the perspectives.domains namespace.
@@ -117,7 +119,7 @@ type CompilationResult = { namespace :: String, version :: String, errors :: Mul
 recompileModelAtUrl :: UninterpretedDomeinFile -> ExceptT MultiplePerspectivesErrors MonadPerspectivesTransaction CompilationResult
 recompileModelAtUrl model@(UninterpretedDomeinFile { id, namespace, _id, _rev, arc, _attachments }) =
   do
-    lift $ lift $ debugUpgrade ("Recompiling " <> namespace)
+    lift $ lift $ infoModel ("Recompiling " <> namespace)
     case domeinFileVersion $ _id of
       Nothing -> pure $ { namespace, version: "", errors: [ Custom ("recompileModelAtUrl: no version found in model id '" <> unwrap id <> "'.") ] }
       Just version -> do
