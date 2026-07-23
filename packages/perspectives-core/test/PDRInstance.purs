@@ -87,7 +87,7 @@ import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistent (saveMarkedResources)
+import Perspectives.Persistent (saveMarkedResources, tryGetPerspectContext)
 import Perspectives.PerspectivesState (newPerspectivesState, noTransactionIsRunning, setBrokerService, setModelUris, setStompClientFactory, setTopicLogLevel)
 import Perspectives.Representation.Class.PersistentType (EnumeratedPropertyType(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
@@ -355,6 +355,7 @@ startPDRInstanceFromSnapshot pouchdbUser runtimeOptions mLogColor bus snapshotDi
   runPerspectivesWithState
     do
       (modify \s -> s { logColor = mLogColor })
+      modify (\s -> s { runtimeOptions = s.runtimeOptions { isFirstInstallation = false } })
       case mLogColor of
         Just color -> infoTest (color <> "Restoring PDR instance for user: " <> pouchdbUser.systemIdentifier <> ansiReset)
         Nothing -> infoTest ("Restoring PDR instance for user: " <> pouchdbUser.systemIdentifier)
@@ -770,8 +771,29 @@ connectPDRs pdr1 pdr2 = do
               , binding: Just (unwrap me2)
               }
           )
-  waitUntilAllTransactionsComplete 6 pdr2
-  waitUntilAllTransactionsComplete 6 pdr1
+
+  -- Wait for the Invitee role to be visible in PDR2. This is a functional
+  -- completion check and is more robust than waiting for global quiescence,
+  -- which may remain false due to unrelated background fibers.
+  void $ pollUntil 100 (Milliseconds 100.0)
+    "Invitee role to be accessible in PDR2 after creation"
+    ( runInPDR pdr2 do
+        r <- (invCtx ##> getEnumeratedRoleInstances (EnumeratedRoleType inviteeType))
+        case r of
+          Just x -> pure (Just x)
+          Nothing -> pure Nothing
+    )
+
+  -- Wait until PDR1 can observe the invitation context itself after PDR2 joins.
+  -- This confirms cross-peer propagation without requiring full system quiescence.
+  void $ pollUntil 100 (Milliseconds 100.0)
+    "Invitation context to remain accessible in PDR1 after Invitee creation"
+    ( runInPDR pdr1 do
+        m <- tryGetPerspectContext invCtx
+        case m of
+          Just c -> pure (Just c)
+          Nothing -> pure Nothing
+    )
   log "connectPDRs: Connection process completed."
 
 -- | Wait until all transactions have completed and the PDR instance is

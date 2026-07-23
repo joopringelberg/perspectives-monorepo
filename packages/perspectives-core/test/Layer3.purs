@@ -224,20 +224,19 @@ getSynchronisationResults = do
         (testPouchdbUser "alice")
         defaultRuntimeOptions
         (Just ansiRed)
-        "test/pdr-snapshot/alice"
+        "test/pdr-snapshot/layer3-clean/alice"
         (testPouchdbUser "bob")
         defaultRuntimeOptions
         (Just ansiMagenta)
-        "test/pdr-snapshot/bob"
+        "test/pdr-snapshot/layer3-clean/bob"
         \pdrA pdrB -> do
-          connectPDRs pdrA pdrB
 
           runInPDR pdrA
             ( do
                 -- setTopicLogLevel BROKER Debug
                 -- setTopicLogLevel INSTALL Debug
                 -- setTopicLogLevel SYNC Info
-                setTopicLogLevel TEST Debug
+                setTopicLogLevel TEST Trace
             -- setTopicLogLevel STATE Trace
             )
           runInPDR pdrB
@@ -246,9 +245,11 @@ getSynchronisationResults = do
                 -- setTopicLogLevel INSTALL Silent
                 -- setTopicLogLevel MODEL Debug
                 -- setTopicLogLevel SYNC Trace
-                setTopicLogLevel TEST Debug
+                setTopicLogLevel TEST Trace
             -- setTopicLogLevel DELTA Trace
             )
+
+          connectPDRs pdrA pdrB
 
           -- Get Alice's and Bob's PerspectivesUsers instances for later use.
           alice <- runInPDR pdrA getPerspectivesUser

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { get as idbGet, set as idbSet } from 'idb-keyval';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync } from 'fs';
 import { writeFile, readFile } from 'fs/promises';
 import PouchDB from 'pouchdb-core';
 import PouchDBMemoryAdapter from 'pouchdb-adapter-memory';
@@ -41,7 +41,7 @@ function stripRevision(doc) {
   return rest;
 }
 
-// Snapshot the four in-memory PouchDB databases belonging to a PDR instance
+// Snapshot the six in-memory PouchDB databases belonging to a PDR instance
 // and the user's ECDSA keypair to `snapshotDir`.
 //
 // Files written:
@@ -49,6 +49,8 @@ function stripRevision(doc) {
 //   <snapshotDir>/<systemIdentifier>_post.json
 //   <snapshotDir>/<systemIdentifier>_models.json
 //   <snapshotDir>/<systemIdentifier>_invertedqueries.json
+//   <snapshotDir>/<systemIdentifier>_deltastore.json
+//   <snapshotDir>/<systemIdentifier>_resourceversions.json
 //   <snapshotDir>/keypair.json
 //   <snapshotDir>/snapshot.complete   (written last as an atomic "done" marker)
 //
@@ -62,7 +64,7 @@ export function snapshotPDRImpl(systemIdentifier) {
           mkdirSync(snapshotDir, { recursive: true });
 
           // Dump each database.
-          const suffixes = ['_entities', '_post', '_models', '_invertedqueries'];
+          const suffixes = ['_entities', '_post', '_models', '_invertedqueries', '_deltastore', '_resourceversions'];
           for (const suffix of suffixes) {
             const dbName = systemIdentifier + suffix;
             const db = new PouchDB(dbName, { adapter: 'memory' });
@@ -100,7 +102,7 @@ export function snapshotPDRImpl(systemIdentifier) {
   };
 }
 
-// Restore the four in-memory PouchDB databases and the ECDSA keypair from a
+// Restore the six in-memory PouchDB databases and the ECDSA keypair from a
 // snapshot previously created by snapshotPDRImpl.
 //
 // The databases must NOT have been written to between process start and this
@@ -116,7 +118,7 @@ export function restoreSnapshotImpl(systemIdentifier) {
       return function () {
         return (async () => {
           // Restore databases.
-          const suffixes = ['_entities', '_post', '_models', '_invertedqueries'];
+          const suffixes = ['_entities', '_post', '_models', '_invertedqueries', '_deltastore', '_resourceversions'];
           for (const suffix of suffixes) {
             const dbName = systemIdentifier + suffix;
             const db = new PouchDB(dbName, { adapter: 'memory' });
@@ -153,11 +155,26 @@ export function restoreSnapshotImpl(systemIdentifier) {
 }
 
 // Returns true iff a completed snapshot exists at `snapshotDir`.
-// Checks for the sentinel file written last by snapshotPDRImpl.
+// Checks for the sentinel file written last by snapshotPDRImpl and the files
+// required by the current snapshot layout.
 //
 // PureScript type: String -> Effect Boolean
 export function snapshotExistsImpl(snapshotDir) {
   return function () {
-    return existsSync(`${snapshotDir}/snapshot.complete`);
+    if (!existsSync(snapshotDir)) return false;
+    const files = new Set(readdirSync(snapshotDir));
+    const hasRequiredDbSnapshot = suffix =>
+      Array.from(files).some(file => file.endsWith(`${suffix}.json`));
+    return (
+      files.has('snapshot.complete') &&
+      files.has('keypair.json') &&
+      hasRequiredDbSnapshot('_entities') &&
+      hasRequiredDbSnapshot('_post') &&
+      hasRequiredDbSnapshot('_models') &&
+      hasRequiredDbSnapshot('_invertedqueries') &&
+      hasRequiredDbSnapshot('_deltastore')
+      &&
+      hasRequiredDbSnapshot('_resourceversions')
+    );
   };
 }
