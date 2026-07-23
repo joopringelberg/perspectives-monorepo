@@ -369,7 +369,18 @@ phase2 share authoringRole r = do
     else do
       lift $ debugState $ padding <> "Re-evaluating state evaluations that depend on a removed resource: " <> (show postponedStateEvaluations)
       if null postponedStateEvaluations then pure unit
-      else (runSharing share authoringRole (evaluateStates (dedupeStateEvaluations postponedStateEvaluations)))
+      -- We must remove these postponedStateEvaluations from the Transaction. Otherwise they will not really be evaluated if they had been evaluated before.
+      else do
+        AA.modify \t -> over Transaction
+          ( \tr -> tr
+              { executedStateKeys = foldl
+                  (\acc se -> Set.delete (stateEvalKey se) acc)
+                  tr.executedStateKeys
+                  postponedStateEvaluations
+              }
+          )
+          t
+        runSharing share authoringRole (evaluateStates (dedupeStateEvaluations postponedStateEvaluations))
       AA.modify \t -> over Transaction (\tr -> tr { postponedStateEvaluations = [], modelsToBeRemoved = [] }) t
       phase2 share authoringRole r
 
