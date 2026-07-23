@@ -313,107 +313,107 @@ runPDR_ usr rawPouchdbUser options callback = do
       logPerspectivesError $ Custom $ "API stopped because: " <> show e
       resumeRun state
 
-  forkTimedTransactions :: AVar RepeatingTransaction -> AVar PerspectivesState -> Aff Unit
-  forkTimedTransactions repeatingTransactionAVar state = do
-    repeatingTransaction <- take repeatingTransactionAVar
-    case repeatingTransaction of
-      (PostponedTransaction t@{ transaction, instanceId, stateId, authoringRole, startMoment }) -> do
-        f <- forkAff
-          ( do
-              delay (fromDuration startMoment)
-              unregisterTransactionFiber instanceId stateId state
-              _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
-              pure unit
-          )
-        registerTransactionFiber f instanceId stateId state
-        forkTimedTransactions repeatingTransactionAVar state
-      (TransactionWithTiming t@{ instanceId, stateId, startMoment, endMoment }) -> do
-        f <- forkAff
-          ( do
-              case startMoment of
-                Nothing -> pure unit
-                Just d -> delay (fromDuration d)
-              -- Calculate the end moment on the clock and pass on to repeatUnlimited
-              mendMoment <- computeEndMoment endMoment
-              repeatUnlimited t mendMoment
-          )
-        registerTransactionFiber f instanceId stateId state
-        forkTimedTransactions repeatingTransactionAVar state
-      RepeatNtimes t@{ instanceId, stateId, nrOfTimes, startMoment, endMoment } -> do
-        f <- forkAff
-          ( do
-              case startMoment of
-                Nothing -> pure unit
-                Just d -> delay (fromDuration d)
-              -- Calculate the end moment on the clock and pass on to repeatN
-              mendMoment <- computeEndMoment endMoment
-              repeatN t nrOfTimes mendMoment
-          )
-        registerTransactionFiber f instanceId stateId state
-        forkTimedTransactions repeatingTransactionAVar state
-    where
-    repeatUnlimited
-      :: forall f
-       . { transaction :: MonadPerspectivesTransaction Unit, authoringRole :: RoleType, interval :: Duration | f }
-      -> Maybe Instant
-      -> Aff Unit
-    repeatUnlimited t@{ transaction, authoringRole, interval } mendMoment = do
-      delay (fromDuration interval)
-      case mendMoment of
-        Nothing -> do
+forkTimedTransactions :: AVar RepeatingTransaction -> AVar PerspectivesState -> Aff Unit
+forkTimedTransactions repeatingTransactionAVar state = do
+  repeatingTransaction <- take repeatingTransactionAVar
+  case repeatingTransaction of
+    (PostponedTransaction t@{ transaction, instanceId, stateId, authoringRole, startMoment }) -> do
+      f <- forkAff
+        ( do
+            delay (fromDuration startMoment)
+            unregisterTransactionFiber instanceId stateId state
+            _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
+            pure unit
+        )
+      registerTransactionFiber f instanceId stateId state
+      forkTimedTransactions repeatingTransactionAVar state
+    (TransactionWithTiming t@{ instanceId, stateId, startMoment, endMoment }) -> do
+      f <- forkAff
+        ( do
+            case startMoment of
+              Nothing -> pure unit
+              Just d -> delay (fromDuration d)
+            -- Calculate the end moment on the clock and pass on to repeatUnlimited
+            mendMoment <- computeEndMoment endMoment
+            repeatUnlimited t mendMoment
+        )
+      registerTransactionFiber f instanceId stateId state
+      forkTimedTransactions repeatingTransactionAVar state
+    RepeatNtimes t@{ instanceId, stateId, nrOfTimes, startMoment, endMoment } -> do
+      f <- forkAff
+        ( do
+            case startMoment of
+              Nothing -> pure unit
+              Just d -> delay (fromDuration d)
+            -- Calculate the end moment on the clock and pass on to repeatN
+            mendMoment <- computeEndMoment endMoment
+            repeatN t nrOfTimes mendMoment
+        )
+      registerTransactionFiber f instanceId stateId state
+      forkTimedTransactions repeatingTransactionAVar state
+  where
+  repeatUnlimited
+    :: forall f
+     . { transaction :: MonadPerspectivesTransaction Unit, authoringRole :: RoleType, interval :: Duration | f }
+    -> Maybe Instant
+    -> Aff Unit
+  repeatUnlimited t@{ transaction, authoringRole, interval } mendMoment = do
+    delay (fromDuration interval)
+    case mendMoment of
+      Nothing -> do
+        _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
+        repeatUnlimited t mendMoment
+      Just endMoment -> do
+        n <- liftEffect $ now
+        -- If not past the endMoment:
+        if n < endMoment then do
           _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
           repeatUnlimited t mendMoment
-        Just endMoment -> do
-          n <- liftEffect $ now
-          -- If not past the endMoment:
-          if n < endMoment then do
-            _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
-            repeatUnlimited t mendMoment
-          else pure unit
+        else pure unit
 
-    repeatN
-      :: forall f
-       . { transaction :: MonadPerspectivesTransaction Unit, authoringRole :: RoleType, interval :: Duration | f }
-      -> Int
-      -> Maybe Instant
-      -> Aff Unit
-    repeatN t@{ transaction, authoringRole, interval } counter mendMoment = do
-      delay (fromDuration interval)
-      case mendMoment of
-        Nothing -> do
+  repeatN
+    :: forall f
+     . { transaction :: MonadPerspectivesTransaction Unit, authoringRole :: RoleType, interval :: Duration | f }
+    -> Int
+    -> Maybe Instant
+    -> Aff Unit
+  repeatN t@{ transaction, authoringRole, interval } counter mendMoment = do
+    delay (fromDuration interval)
+    case mendMoment of
+      Nothing -> do
+        if counter > 0 then do
+          -- If not past the endMoment:
+          _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
+          repeatN t (counter - 1) mendMoment
+        else pure unit
+      Just endMoment -> do
+        n <- liftEffect $ now
+        -- If not past the endMoment:
+        if n < endMoment then do
           if counter > 0 then do
             -- If not past the endMoment:
             _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
             repeatN t (counter - 1) mendMoment
           else pure unit
-        Just endMoment -> do
-          n <- liftEffect $ now
-          -- If not past the endMoment:
-          if n < endMoment then do
-            if counter > 0 then do
-              -- If not past the endMoment:
-              _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
-              repeatN t (counter - 1) mendMoment
-            else pure unit
-          else pure unit
+        else pure unit
 
-    computeEndMoment :: Maybe Duration -> Aff (Maybe Instant)
-    computeEndMoment Nothing = pure Nothing
-    computeEndMoment (Just d) = do
-      (Milliseconds start) <- liftEffect $ unInstant <$> now
-      (Milliseconds interval) <- pure $ fromDuration d
-      pure $ instant $ Milliseconds (start + interval)
+  computeEndMoment :: Maybe Duration -> Aff (Maybe Instant)
+  computeEndMoment Nothing = pure Nothing
+  computeEndMoment (Just d) = do
+    (Milliseconds start) <- liftEffect $ unInstant <$> now
+    (Milliseconds interval) <- pure $ fromDuration d
+    pure $ instant $ Milliseconds (start + interval)
 
-  -- Register the fiber so it can be stopped if the instance exits the state.
-  registerTransactionFiber :: Fiber Unit -> String -> StateIdentifier -> AVar PerspectivesState -> Aff Unit
-  registerTransactionFiber f instanceId stateId stateAVar = do
-    s@{ transactionFibers } <- take stateAVar
-    put s { transactionFibers = insert (Tuple instanceId stateId) f transactionFibers } stateAVar
+-- Register the fiber so it can be stopped if the instance exits the state.
+registerTransactionFiber :: Fiber Unit -> String -> StateIdentifier -> AVar PerspectivesState -> Aff Unit
+registerTransactionFiber f instanceId stateId stateAVar = do
+  s@{ transactionFibers } <- take stateAVar
+  put s { transactionFibers = insert (Tuple instanceId stateId) f transactionFibers } stateAVar
 
-  unregisterTransactionFiber :: String -> StateIdentifier -> AVar PerspectivesState -> Aff Unit
-  unregisterTransactionFiber instanceId stateId stateAVar = do
-    s@{ transactionFibers } <- take stateAVar
-    put s { transactionFibers = delete (Tuple instanceId stateId) transactionFibers } stateAVar
+unregisterTransactionFiber :: String -> StateIdentifier -> AVar PerspectivesState -> Aff Unit
+unregisterTransactionFiber instanceId stateId stateAVar = do
+  s@{ transactionFibers } <- take stateAVar
+  put s { transactionFibers = delete (Tuple instanceId stateId) transactionFibers } stateAVar
 
 forkDatabasePersistence :: AVar PerspectivesState -> Aff Unit
 forkDatabasePersistence state = do

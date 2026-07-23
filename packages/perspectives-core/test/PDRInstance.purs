@@ -65,7 +65,8 @@ import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Effect.Exception (message)
 import Foreign.Object (empty) as OBJ
-import Main (forkCreateIndexedResources, forkDatabasePersistence, forkJustInTimeModelLoader, forkReferentialIntegrityFixer)
+import Main (forkCreateIndexedResources, forkDatabasePersistence, forkJustInTimeModelLoader, forkReferentialIntegrityFixer, forkTimedTransactions)
+import Main.RecompileBasicModels (addIndexedNames)
 import Perspectives.AMQP.IncomingPost (incomingPost)
 import Perspectives.AMQP.Stomp.Stub (InProcessBus, createInProcessBus, makeStompClientFactory)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
@@ -81,7 +82,6 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Me (computeMe_)
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getProperty)
 import Perspectives.Logging (ansiReset, debugTest, infoTest, traceTest)
-import Main.RecompileBasicModels (addIndexedNames)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, identifiableFirstName, identifiableLastName, invitationGuestType, invitationMessageProp, inviteeType, inviterType, outgoingInvitationsType, serialisedInvitationProp, sysUser)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem, getUserIdentifier)
@@ -253,6 +253,9 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
   integrityFiber <- forkAff $ forkReferentialIntegrityFixer missingResource state
   persistenceFiber <- forkAff $ forkDatabasePersistence state
   indexedResourceFiber <- forkAff $ forkCreateIndexedResources indexedResourceToCreate state
+    -- Fork aff to capture transactions to run.
+  void $ forkAff $ forkTimedTransactions transactionWithTiming state
+
 
   -- Load the keypair from file into IDB before calling createAccount_.
   -- The key names follow authenticate.purs: takeGuid(perspectivesUser) <> "_privateKey" / "_publicKey".
@@ -388,6 +391,8 @@ startPDRInstanceFromSnapshot pouchdbUser runtimeOptions mLogColor bus snapshotDi
   integrityFiber <- forkAff $ forkReferentialIntegrityFixer missingResource state
   persistenceFiber <- forkAff $ forkDatabasePersistence state
   indexedResourceFiber <- forkAff $ forkCreateIndexedResources indexedResourceToCreate state
+    -- Fork aff to capture transactions to run.
+  void $ forkAff $ forkTimedTransactions transactionWithTiming state
 
   -- Register external functions and wire the private key into the runtime state.
   -- Then open the already-populated in-memory databases by calling createUserDatabases
