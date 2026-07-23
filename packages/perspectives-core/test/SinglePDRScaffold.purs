@@ -37,6 +37,7 @@ import Prelude
 import Control.Monad.Cont (lift)
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except.Trans (runExceptT)
+import Data.Array (find)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -98,14 +99,19 @@ type SinglePDRModelConfiguration =
   , tests :: Array ModelTest
   }
 
-cachedSinglePDRResults :: Ref (Maybe SinglePDRResults)
-cachedSinglePDRResults = unsafePerformEffect $ new Nothing
+type CachedSinglePDRResults =
+  { suiteName :: String
+  , results :: SinglePDRResults
+  }
+
+cachedSinglePDRResults :: Ref (Array CachedSinglePDRResults)
+cachedSinglePDRResults = unsafePerformEffect $ new []
 
 getSinglePDRResults :: SinglePDRModelConfiguration -> Aff SinglePDRResults
 getSinglePDRResults cfg = do
   cached <- liftEffect $ read cachedSinglePDRResults
-  case cached of
-    Just results -> pure results
+  case find (\result -> result.suiteName == cfg.suiteName) cached of
+    Just { results } -> pure results
     Nothing -> do
       results <- withPDRCached
         (testPouchdbUser "alice")
@@ -133,7 +139,7 @@ getSinglePDRResults cfg = do
 
           traverse (\testCase -> executeModelTest pdr testAppContext testCase.testContextTypeName testCase.logConfiguration cfg) cfg.tests
 
-      liftEffect $ write (Just results) cachedSinglePDRResults
+      liftEffect $ write (cached <> [ { suiteName: cfg.suiteName, results } ]) cachedSinglePDRResults
       pure results
 
 executeModelTest

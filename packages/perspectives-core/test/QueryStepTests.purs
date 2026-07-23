@@ -22,8 +22,7 @@
 -- END LICENSE
 
 module Test.QueryStepTests
-  ( main
-  , queryStepSuite
+  ( queryStepSuite
   , queryStepTestModelConfiguration
   ) where
 
@@ -31,20 +30,10 @@ import Prelude
 
 import Data.Either (Either(..))
 import Data.Foldable (for_)
-import Effect (Effect)
-import Effect.Aff (launchAff_)
-import Effect.Class (liftEffect)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
-import Test.SinglePDRScaffold (ModelTest, SinglePDRModelConfiguration, SinglePDRResults, emptyLogConfiguration, getSinglePDRResults)
+import Test.SinglePDRScaffold (ModelTest, SinglePDRModelConfiguration, SinglePDRResults, emptyLogConfiguration)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
-import Test.Unit.Main (runTest)
-
-main :: Effect Unit
-main = launchAff_ do
-  results <- getSinglePDRResults queryStepTestModelConfiguration
-  liftEffect $ runTest do
-    queryStepSuite results
 
 queryStepSuite :: SinglePDRResults -> TestSuite
 queryStepSuite results =
