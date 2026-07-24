@@ -23,10 +23,8 @@
 module Perspectives.Representation.QueryFunction where
 
 import Control.Monad.Error.Class (throwError)
-import Control.Monad.Except (runExcept)
 import Data.Either (Either(..))
 import Data.List.NonEmpty (singleton)
-import Data.Maybe (Maybe(..))
 import Foreign (ForeignError(..))
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
@@ -383,8 +381,9 @@ data QueryFunction
   | CreateRole EnumeratedRoleType
   | Bind EnumeratedRoleType
   | Bind_
-  | Unbind (Maybe EnumeratedRoleType)
-  | Unbind_
+  | RemoveAsFillerOfType EnumeratedRoleType
+  | RemoveAsFiller
+  | RemoveFiller
   | DeleteRole EnumeratedRoleType
   | DeleteContext RoleType
   | DeleteProperty EnumeratedPropertyType
@@ -453,8 +452,9 @@ instance showQueryFunction :: Show QueryFunction where
   show (CreateRole enumeratedRoleType) = "CreateRole " <> show enumeratedRoleType
   show (Bind enumeratedRoleType) = "Bind " <> show enumeratedRoleType
   show Bind_ = "Bind_"
-  show (Unbind menumeratedRoleType) = "Unbind " <> " " <> show menumeratedRoleType
-  show Unbind_ = "Unbind_"
+  show (RemoveAsFillerOfType enumeratedRoleType) = "RemoveAsFillerOfType " <> show enumeratedRoleType
+  show RemoveAsFiller = "RemoveAsFiller"
+  show RemoveFiller = "RemoveFiller"
   show (DeleteRole enumeratedRoleType) = "DeleteRole " <> show enumeratedRoleType
   show (DeleteContext roleType) = "DeleteContext " <> show roleType
   show (DeleteProperty enumeratedPropertyType) = "DeleteProperty " <> show enumeratedPropertyType
@@ -523,8 +523,9 @@ instance eqQueryFunction :: Eq QueryFunction where
   eq (CreateRole a) (CreateRole b) = eq a b
   eq (Bind a) (Bind b) = eq a b
   eq Bind_ Bind_ = true
-  eq (Unbind x) (Unbind y) = eq x y
-  eq Unbind_ Unbind_ = true
+  eq (RemoveAsFillerOfType a) (RemoveAsFillerOfType b) = eq a b
+  eq RemoveAsFiller RemoveAsFiller = true
+  eq RemoveFiller RemoveFiller = true
   eq (DeleteRole a) (DeleteRole b) = eq a b
   eq (DeleteContext a) (DeleteContext b) = eq a b
   eq (DeleteProperty a) (DeleteProperty b) = eq a b
@@ -597,14 +598,9 @@ instance writeForeignQueryFunction :: WriteForeign QueryFunction where
   writeImpl (CreateRole enumeratedRoleType) = writeImpl { constructor: "CreateRole", arg1: writeJSON enumeratedRoleType, arg2: "" }
   writeImpl (Bind enumeratedRoleType) = writeImpl { constructor: "Bind", arg1: writeJSON enumeratedRoleType, arg2: "" }
   writeImpl Bind_ = writeImpl { constructor: "Bind_", arg1: "", arg2: "" }
-  writeImpl (Unbind mEnumeratedRoleType) = writeImpl
-    { constructor: "Unbind"
-    , arg1: case mEnumeratedRoleType of
-        Just roleType -> writeJSON roleType
-        Nothing -> ""
-    , arg2: ""
-    }
-  writeImpl Unbind_ = writeImpl { constructor: "Unbind_", arg1: "", arg2: "" }
+  writeImpl (RemoveAsFillerOfType enumeratedRoleType) = writeImpl { constructor: "RemoveAsFillerOfType", arg1: writeJSON enumeratedRoleType, arg2: "" }
+  writeImpl RemoveAsFiller = writeImpl { constructor: "RemoveAsFiller", arg1: "", arg2: "" }
+  writeImpl RemoveFiller = writeImpl { constructor: "RemoveFiller", arg1: "", arg2: "" }
   writeImpl (DeleteRole enumeratedRoleType) = writeImpl { constructor: "DeleteRole", arg1: writeJSON enumeratedRoleType, arg2: "" }
   writeImpl (DeleteContext roleType) = writeImpl { constructor: "DeleteContext", arg1: writeJSON roleType, arg2: "" }
   writeImpl (DeleteProperty enumeratedPropertyType) = writeImpl { constructor: "DeleteProperty", arg1: writeJSON enumeratedPropertyType, arg2: "" }
@@ -675,10 +671,9 @@ instance readForeignQueryFunction :: ReadForeign QueryFunction where
       "CreateRole", enumeratedRoleType, _ -> CreateRole <$> readJSON' enumeratedRoleType
       "Bind", enumeratedRoleType, _ -> Bind <$> readJSON' enumeratedRoleType
       "Bind_", _, _ -> pure $ Bind_
-      "Unbind", mEnumeratedRoleType, _ -> Unbind <$> case runExcept $ readJSON' mEnumeratedRoleType of
-        Left _ -> pure Nothing
-        Right roleType -> pure $ Just roleType
-      "Unbind_", _, _ -> pure $ Unbind_
+      "RemoveAsFillerOfType", enumeratedRoleType, _ -> RemoveAsFillerOfType <$> readJSON' enumeratedRoleType
+      "RemoveAsFiller", _, _ -> pure $ RemoveAsFiller
+      "RemoveFiller", _, _ -> pure $ RemoveFiller
       "DeleteRole", enumeratedRoleType, _ -> DeleteRole <$> readJSON' enumeratedRoleType
       "DeleteContext", roleType, _ -> DeleteContext <$> readJSON' roleType
       "DeleteProperty", enumeratedPropertyType, _ -> DeleteProperty <$> readJSON' enumeratedPropertyType
@@ -744,8 +739,9 @@ instance ordQueryFunction :: Ord QueryFunction where
   compare (CreateRole enumeratedRoleType) (CreateRole enumeratedRoleType') = compare enumeratedRoleType enumeratedRoleType'
   compare (Bind enumeratedRoleType) (Bind enumeratedRoleType') = compare enumeratedRoleType enumeratedRoleType'
   compare Bind_ Bind_ = EQ
-  compare (Unbind m1) (Unbind m2) = compare m1 m2
-  compare Unbind_ Unbind_ = EQ
+  compare (RemoveAsFillerOfType a) (RemoveAsFillerOfType b) = compare a b
+  compare RemoveAsFiller RemoveAsFiller = EQ
+  compare RemoveFiller RemoveFiller = EQ
   compare (DeleteRole enumeratedRoleType) (DeleteRole enumeratedRoleType') = compare enumeratedRoleType enumeratedRoleType'
   compare (DeleteContext roleType) (DeleteContext roleType') = compare roleType roleType'
   compare (DeleteProperty enumeratedPropertyType) (DeleteProperty enumeratedPropertyType') = compare enumeratedPropertyType enumeratedPropertyType'

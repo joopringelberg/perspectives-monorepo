@@ -31,7 +31,7 @@ import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, concat, filter, filterA, head, index, length, nub, null, singleton, union, unsafeIndex)
+import Data.Array (catMaybes, concat, elem, filter, filterA, head, index, length, nub, null, singleton, union, unsafeIndex)
 import Data.Either (Either(..), hush)
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), fromJust, maybe)
@@ -222,32 +222,42 @@ compileAssignment (BQD _ QF.Bind_ binding binder _ _ _) = do
       Just binding'', Just binder'' -> setBinding binder'' binding'' Nothing
       _, _ -> pure []
 
-compileAssignment (UQD _ (QF.Unbind mroleType) bindings _ _ _) = do
-  (bindingsGetter :: (ContextInstance ~~> RoleInstance)) <- context2role bindings
-  case mroleType of
-    -- Just remove fillers conditionless.
-    Nothing -> pure
-      \contextId -> do
-        binders <- lift (contextId ##= bindingsGetter >=> OG.allRoleBinders)
-        for_ binders removeBinding
-    -- Only remove fillers from the filled roles of type `roleType`.
-    Just roleType -> do
-      EnumeratedRole role <- getEnumeratedRole roleType
-      pure \contextId -> do
-        binders <- lift (contextId ##= bindingsGetter >=> OG.getFilledRoles role.context roleType)
-        for_ binders removeBinding
-
-compileAssignment (BQD _ QF.Unbind_ bindings binders _ _ _) = do
-  (bindingsGetter :: (ContextInstance ~~> RoleInstance)) <- context2role bindings
-  (bindersGetter :: (ContextInstance ~~> RoleInstance)) <- context2role binders
+compileAssignment (UQD _ (QF.RemoveAsFillerOfType roleType) fillerQfd _ _ _) = do
+  (fillerGetter :: (ContextInstance ~~> RoleInstance)) <- context2role fillerQfd
+  EnumeratedRole role <- getEnumeratedRole roleType
   pure \contextId -> do
-    (binding :: Maybe RoleInstance) <- lift (contextId ##> bindingsGetter)
-    (binder :: Maybe RoleInstance) <- lift (contextId ##> bindersGetter)
-    -- TODO. As soon as we introduce multiple values for a binding, we have to adapt this so the binding argument
-    -- is taken into account, too.
-    void $ case binder of
-      Nothing -> pure []
-      Just binder' -> removeBinding binder'
+    fillers <- lift (contextId ##= fillerGetter)
+    for_ fillers \filler -> do
+      filledRoles <- lift (filler ##= OG.getFilledRoles role.context roleType)
+      for_ filledRoles removeBinding
+
+compileAssignment (UQD _ QF.RemoveAsFiller fillerQfd _ _ _) = do
+  (fillerGetter :: (ContextInstance ~~> RoleInstance)) <- context2role fillerQfd
+  pure \contextId -> do
+    fillers <- lift (contextId ##= fillerGetter)
+    for_ fillers \filler -> do
+      filledRoles <- lift (filler ##= OG.allRoleBinders)
+      for_ filledRoles removeBinding
+
+compileAssignment (UQD _ QF.RemoveFiller filledQfd _ _ _) = do
+  (filledGetter :: (ContextInstance ~~> RoleInstance)) <- context2role filledQfd
+  pure \contextId -> do
+    filledRoles <- lift (contextId ##= filledGetter)
+    for_ filledRoles removeBinding
+
+compileAssignment (BQD _ QF.RemoveFiller fillerQfd filledQfd _ _ _) = do
+  (fillerGetter :: (ContextInstance ~~> RoleInstance)) <- context2role fillerQfd
+  (filledGetter :: (ContextInstance ~~> RoleInstance)) <- context2role filledQfd
+  pure \contextId -> do
+    fillers <- lift (contextId ##= fillerGetter)
+    filledRoles <- lift (contextId ##= filledGetter)
+    for_ filledRoles \filledRole -> do
+      mCurrentFiller <- lift (filledRole ##> binding)
+      case mCurrentFiller of
+        Nothing -> pure unit
+        Just currentFiller ->
+          when (currentFiller `elem` fillers) $
+            void $ removeBinding filledRole
 
 compileAssignment (UQD _ (QF.DeleteProperty qualifiedProperty) roleQfd _ _ _) = do
   (roleGetter :: (ContextInstance ~~> RoleInstance)) <- context2role roleQfd
