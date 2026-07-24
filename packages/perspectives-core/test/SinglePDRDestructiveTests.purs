@@ -101,13 +101,14 @@ destructiveSnapshotDirectory = "test/pdr-snapshot/destructive"
 destructiveTests :: Array ModelTest
 destructiveTests = 
   [ 
-  --   { testContextTypeName: test_RemoveRole, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_DeleteProperty, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_RemoveProperty, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_RemoveOnePropertyValue, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_DeleteTwoRoles, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_RemoveOneRoleInstance, logConfiguration: emptyLogConfiguration }
-   { testContextTypeName: test_RemoveRoleFiller, logConfiguration: emptyLogConfiguration }
+    { testContextTypeName: test_RemoveRole, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_DeleteProperty, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveProperty, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveOnePropertyValue, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_DeleteTwoRoles, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveOneRoleInstance, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveRoleFiller, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveContextWithoutRoles, logConfiguration: emptyLogConfiguration }
   ]
 
 test_RemoveRole :: String
@@ -130,3 +131,6 @@ test_RemoveOneRoleInstance = "model://joopringelberg.nl#SinglePDRDestructiveTest
 
 test_RemoveRoleFiller :: String
 test_RemoveRoleFiller = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test_RemoveRoleFiller"
+
+test_RemoveContextWithoutRoles :: String
+test_RemoveContextWithoutRoles = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test_RemoveContextWithoutRoles"

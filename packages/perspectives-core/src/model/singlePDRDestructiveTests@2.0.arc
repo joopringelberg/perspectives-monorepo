@@ -2,6 +2,7 @@ domain model://joopringelberg.nl#SinglePDRDestructiveTests@2.0
   use sys for model://perspectives.domains#System
   use mm for model://joopringelberg.nl#SinglePDRDestructiveTests
   use sensor for model://perspectives.domains#Sensor
+  use cdb for model://perspectives.domains#Couchdb
 
   -------------------------------------------------------------------------------
   ---- SETTING UP
@@ -280,7 +281,7 @@ domain model://joopringelberg.nl#SinglePDRDestructiveTests@2.0
     thing TestRole6
       property P (Number)
 
-------------------------------------------------------------------------------
+  ------------------------------------------------------------------------------
   ---- Remove a role filler
   ------------------------------------------------------------------------------
   case Test_RemoveRoleFiller
@@ -302,7 +303,7 @@ domain model://joopringelberg.nl#SinglePDRDestructiveTests@2.0
           -- would not trigger a state change in the same transaction. So we delay the removal of the role.
           do for Tester
             after 2000 Milliseconds unbind context >> TestRole7
-        state TestSucceeded = (exists context >> TestRole7) and not exists context >> TestRole7 >> binding
+        state TestSucceeded = context >> ((exists TestRole7) and (not exists TestRole7 >> binding) and exists Filler1)
           on entry
             do for Tester
               TestSucceeded = true
@@ -321,3 +322,48 @@ domain model://joopringelberg.nl#SinglePDRDestructiveTests@2.0
 
     thing TestRole7 filledBy Filler1
     thing Filler1
+
+  ------------------------------------------------------------------------------
+  ---- Remove a role as filler
+  ------------------------------------------------------------------------------
+
+  ------------------------------------------------------------------------------
+  ---- Remove a context without roles.
+  ------------------------------------------------------------------------------
+  case Test_RemoveContextWithoutRoles
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          create context EmbeddedContext bound to TestRole8
+    external
+      property TestFinished (Boolean)
+      state TestFinished = TestFinished -- and exists callExternal cdb:ContextInstances( "model://joopringelberg.nl#SinglePDRDestructiveTests$Test_RemoveContextWithoutRoles$EmbeddedContext" ) returns mm:Test_RemoveContextWithoutRoles$EmbeddedContext
+        on entry
+          -- Moves the context removal out of this transaction.
+          -- Because setting TestFinished also triggers state evaluation, the removal of the context 
+          -- would not trigger a state change in the same transaction. So we delay the removal of the context.
+          do for Tester
+            after 200 Milliseconds remove context (context >> TestRole8)
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestFinished) verbs (SetPropertyValue, Consult)
+      perspective on TestRole8
+        only (CreateAndFill, RemoveContext)
+      action RunTest
+        TestName = "Remove a context without roles" for extern
+        TestFinished = true for extern
+
+    context TestRole8 filledBy EmbeddedContext
+
+    case EmbeddedContext
+      on exit
+        do for Tester
+          TestSucceeded = true for ExternOfTest
+      user Tester = me
+        perspective on ExternOfTest
+          props (TestSucceeded) verbs (SetPropertyValue, Consult)
+
+      thing ExternOfTest = extern >> binder TestRole8 >> context >> extern
