@@ -508,6 +508,7 @@ hasType rt rid = ArrayT do
   pure $ [ eq t rt ]
 
 -- | All the roles that bind the role instance.
+-- | That is: all the roles that have this role instance as their filler (binding).
 allRoleBinders :: RoleInstance ~~> RoleInstance
 allRoleBinders r = ArrayT $ (lift $ try $ getPerspectRol r) >>=
   handlePerspectRolError' "allRoleBinders" []
