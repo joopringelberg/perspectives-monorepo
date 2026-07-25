@@ -241,8 +241,9 @@ compileAssignmentFromRole (BQD _ QF.RemoveFiller fillerQfd filledQfd _ _ _) = do
       case mCurrentFiller of
         Nothing -> pure unit
         Just currentFiller ->
-          when (currentFiller `elem` fillers) $
-            void $ removeBinding filledRole
+          when (currentFiller `elem` fillers)
+            $ void
+            $ removeBinding filledRole
 
 compileAssignmentFromRole (UQD _ (QF.DeleteProperty qualifiedProperty) roleQfd _ _ _) = do
   (roleGetter :: (RoleInstance ~~> RoleInstance)) <- role2role roleQfd

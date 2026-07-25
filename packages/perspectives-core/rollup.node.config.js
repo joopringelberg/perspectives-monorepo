@@ -67,6 +67,15 @@ export default async function () {
       outro: isTestBuild ? 'main();' : '',
     },
     plugins: [
+      {
+        name: 'arc-as-text',
+        load(id) {
+          if (id.endsWith('.arc')) {
+            return `export default ${JSON.stringify(readFileSync(id, 'utf8'))};`;
+          }
+          return null;
+        },
+      },
       // Handle .arc model files FIRST — before sourcemaps() loads them verbatim as
       // JavaScript and causes a parse error.  url() intercepts them via its load hook
       // and replaces each import with a URL string pointing to the emitted asset file.

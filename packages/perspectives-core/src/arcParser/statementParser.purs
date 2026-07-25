@@ -165,16 +165,15 @@ removeFiller = do
   reserved "remove"
   reserved "filler"
   hasOf <- isJust <$> optionMaybe (reserved "of")
-  if hasOf
-    then do
-      filledExpression <- step
-      end <- getPosition
-      pure $ RemoveFiller { start, end, filledExpression }
-    else do
-      fillerExpression <- step
-      filledExpression <- reserved "from" *> step
-      end <- getPosition
-      pure $ RemoveFillerWith { start, end, fillerExpression, filledExpression }
+  if hasOf then do
+    filledExpression <- step
+    end <- getPosition
+    pure $ RemoveFiller { start, end, filledExpression }
+  else do
+    fillerExpression <- step
+    filledExpression <- reserved "from" *> step
+    end <- getPosition
+    pure $ RemoveFillerWith { start, end, fillerExpression, filledExpression }
 
 -- remove as filler of <RoleType> <filler-role-expression>  →  RemoveAsFillerOfType (UQD)
 -- remove as filler <filler-role-expression>  →  RemoveAsFiller (UQD)
@@ -185,16 +184,15 @@ removeAsFiller = do
   reserved "as"
   reserved "filler"
   hasOf <- isJust <$> optionMaybe (reserved "of")
-  if hasOf
-    then do
-      roleIdentifier <- arcIdentifier
-      fillerExpression <- step
-      end <- getPosition
-      pure $ RemoveAsFillerOfType { start, end, roleIdentifier, fillerExpression }
-    else do
-      fillerExpression <- step
-      end <- getPosition
-      pure $ RemoveAsFiller { start, end, fillerExpression }
+  if hasOf then do
+    roleIdentifier <- arcIdentifier
+    fillerExpression <- step
+    end <- getPosition
+    pure $ RemoveAsFillerOfType { start, end, roleIdentifier, fillerExpression }
+  else do
+    fillerExpression <- step
+    end <- getPosition
+    pure $ RemoveAsFiller { start, end, fillerExpression }
 
 isPropertyAssignment :: IP Boolean
 isPropertyAssignment = do
