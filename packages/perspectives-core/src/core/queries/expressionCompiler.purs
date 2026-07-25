@@ -192,7 +192,7 @@ qualifyReturnsClause pos qfd@(MQD dom' (QF.ExternalCoreRoleGetter f) args r@(RDO
     UET qComputedType | computedType == qComputedType -> pure qfd
     _ -> pure (MQD dom' (QF.ExternalCoreRoleGetter f) args r isF isM)
 qualifyReturnsClause pos qfd@(MQD dom' (QF.ExternalCorePropertyGetter f) args (VDOM ran mrop) isF isM) = pure qfd
-qualifyReturnsClause pos qfd@(MQD dom' (QF.ExternalCoreContextGetter f) args (CDOM (UET (ContextType computedType))) isF isM) = throwError $ Custom "qualifyReturnsClause: implement case ExternalCoreContextGetter"
+qualifyReturnsClause pos qfd@(MQD dom' (QF.ExternalCoreContextGetter f) args (CDOM (UET (ContextType computedType))) isF isM) = pure qfd
 qualifyReturnsClause pos qfd@(MQD dom' (QF.ForeignRoleGetter f) args ran isF isM) = throwError $ Custom "qualifyReturnsClause: implement case ForeignRoleGetter"
 qualifyReturnsClause pos qfd = pure qfd
 
@@ -1057,7 +1057,7 @@ compileComputationStep currentDomain (ComputationStep { functionName, arguments,
                         if _
                         -- Collect Context instances.
                         -- NOTE: since we ignore the compiledArgs here, we need not replace a Constant QFD that holds the context type with a ContextTypeConstant QFD.
-                        then pure $ SQD currentDomain (QF.ExternalCoreContextGetter functionName) (CDOM (UET (ContextType s))) isFunctional Unknown
+                        then pure $ MQD currentDomain (QF.ExternalCoreContextGetter functionName) [] (CDOM (UET (ContextType s))) isFunctional Unknown
 
                         -- Collect role instances. Having no other information, we conjecture these instances to have their
                         -- role type in their lexical context.

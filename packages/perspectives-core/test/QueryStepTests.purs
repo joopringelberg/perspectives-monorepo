@@ -126,6 +126,8 @@ allTests =
   , { testContextTypeName: test_Maximum_Step, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Sum_Step, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_First_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Couchdb_ContextInstances_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_Couchdb_RoleInstances_Step, logConfiguration: emptyLogConfiguration }
   ]
 
 test_ContextState_RoleStep :: String
@@ -241,3 +243,9 @@ test_Sum_Step = "model://joopringelberg.nl#StateTestModel$Test_Sum_Step"
 
 test_First_Step :: String
 test_First_Step = "model://joopringelberg.nl#StateTestModel$Test_First_Step"
+
+test_Couchdb_ContextInstances_Step :: String
+test_Couchdb_ContextInstances_Step = "model://joopringelberg.nl#StateTestModel$Test_Couchdb_ContextInstances_Step"
+
+test_Couchdb_RoleInstances_Step :: String
+test_Couchdb_RoleInstances_Step = "model://joopringelberg.nl#StateTestModel$Test_Couchdb_RoleInstances_Step"

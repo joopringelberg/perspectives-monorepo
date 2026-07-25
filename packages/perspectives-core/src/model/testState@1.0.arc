@@ -1008,3 +1008,51 @@ domain model://joopringelberg.nl#StateTestModel@1.0
     thing Role13A 
       property Num1 (Number)
       property Num2 (Number)
+  
+  case Test_Couchdb_ContextInstances_Step
+    aspect mm:Test
+    external
+      -- We need Finished to trigger state evaluation.
+      property Finished (Boolean)
+      state TestState = Finished and exists callExternal cdb:ContextInstances( "model://joopringelberg.nl#StateTestModel$Test_Couchdb_ContextInstances_Step$EmbeddedContext" ) returns mm:Test_Couchdb_ContextInstances_Step$EmbeddedContext
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded, Finished) verbs (SetPropertyValue, Consult)
+      perspective on TestRole8
+        only (CreateAndFill)
+      action RunTest
+        TestName = "(exists callExternal cdb:ContextInstances( \"model://joopringelberg.nl#StateTestModel$Test_Couchdb_ContextInstances_Step$EmbeddedContext\" ) returns mm:Test_Couchdb_ContextInstances_Step$EmbeddedContext) - couchdb context instances test step" for extern
+        create context EmbeddedContext bound to TestRole8
+        Finished = true for extern
+    
+    context TestRole8 filledBy EmbeddedContext
+
+    case EmbeddedContext
+  
+  case Test_Couchdb_RoleInstances_Step
+    aspect mm:Test
+    external
+      -- We need Finished to trigger state evaluation.
+      property Finished (Boolean)
+      state TestState = Finished and exists callExternal cdb:RoleInstances( "model://joopringelberg.nl#StateTestModel$Test_Couchdb_RoleInstances_Step$TestRole9" ) returns mm:Test_Couchdb_RoleInstances_Step$TestRole9
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded, Finished) verbs (SetPropertyValue, Consult)
+      perspective on TestRole9
+        only (Create)
+      action RunTest
+        TestName = "(exists callExternal cdb:RoleInstances( \"model://joopringelberg.nl#StateTestModel$Test_Couchdb_RoleInstances_Step$TestRole9\" ) returns mm:Test_Couchdb_RoleInstances_Step$TestRole9) - couchdb role instances test step" for extern
+        create role TestRole9
+        Finished = true for extern
+    
+    thing TestRole9
