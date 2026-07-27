@@ -1,0 +1,52 @@
+DISCOVERY IN EEN GEDISTRIBUEERDE INFRASTRUCTUUR
+
+TL;DR; Met Perspectives bouw je modelgedreven gedistribueerde software voor samenwerking. Maar het ondersteunt geen discovery. De beschikbaarheid van LLMs maakt een gefedereerde architectuur van gespecialiseerde registers mogelijk die zich dankzij een metaregister laat bevragen als één geheel. Dit is de ontbrekende bouwsteen dat Perspectives tot een volwaardig functioneel alternatief maakt voor een monopolistische superstore. Aan de eindgebruiker dient zich dat aan als de mogelijkheid om een item **vindbaar te maken**.
+
+UITWERKING
+Hoewel het wereldwijde web oorspronkelijk als een netwerk van gelijkwaardige deelnemers werd gevisualiseerd, heeft het zich ontwikkeld tot een infrastructuur met servers en clients. Dit correspondeert met sterk ongelijkwaardige machtsverhoudingen. Software maken is kostbaar en daarmee voorbehouden aan partijen met diepe zakken. Met een succesvolle software service vergroten zij hun machtspositie en rijkdom en zo ontstaat een vicieuze cirkel.
+
+Perspectives zou die cirkel kunnen doorbreken, alhoewel citizen development een moeilijk doel is. Daarmee zijn machtige internet hubs overigens niet automatisch verleden tijd, want ze steunen op een tweede pijler die Perspectives niet te bieden heeft.
+
+Perspectives voorziet namelijk weliswaar in een gedistribueerde infrastructuur die organisatie en samenwerking ondersteunt, maar die vindt voornamelijk plaats langs de lijnen van bestaande sociale netwerken. Perspectives maakt vooral informatieuitwisselilng mogelijk tussen mensen die elkaar al kennen (alhoewel je er in beperkte mate mensen mee met elkaar in contact kunt brengen). Veel internet applicaties daarentegen ontlenen een groot deel van hun nut aan **discovery** buiten de eigen sociale kring van de gebruikers. Discovery is gebaseerd op een effectief en efficient register van veel items. Zo'n index geeft zijn eigenaar vaak een de facto monopoliepositie.
+
+De website boekwinkeltjes.nl is een mooi voorbeeld: wie een boek verkopen wil, biedt het aan en wie een boek zoekt, vindt het met behulp van de aangelegde index van beschikbare boeken. In de Perspectives Language kunnen we het hele proces van aanbieden, verkoop en afhandeling modelleren - maar we kunnen niet de zoekfunctie realiseren. 
+Dit geldt precies zo voor marktplaats, airbnb, dating sites en ga zo maar door.
+
+Een goed geïndexeerde verzameling van items aanleggen is al lang bepaald geen raketwetenschap meer. Toch kon de beschikbaarheid van LLMs wel eens het sluitstuk zijn van de verbinding tussen Perspectives en dergelijke indices. Een LLM kan drie cruciale functies realiseren of op zijn minst veel gemakkelijker maken:
+
+* een gestructureerd (Perspectives) model maken van een inhoudelijk domein (boeken, breipatronen, recepten, vakantiehuizen). Zo'n model vormt de basis van een nieuw, doorzoekbaar register;
+* een aanbieder helpen een item in die termen te beschrijven;
+* een belangstellende helpen om uit een wens een gestructureerd zoekplan te maken.
+
+Een LLM kan zo elke drempel voor het *gebruik* van een register wegnemen. Maar de belangrijkste toevoeging van een LLM zal het raadplegen van een **meta register** zijn: een register van registers. Met andere woorden: de LLM kan vertellen waar je de mosterd kunt halen - en vervolgens assisteren om de juiste mosterd te vinden.
+
+Waarom is dat belangrijk? Menselijke internet gebruikers kennen misschien tientallen webwinkels, startpagina's of vergelijkingssites. Misschien een paar honderd. Dat verklaart de aantrekkingskracht van Amazon, Bol en de grote Chineze webwinkels: het zijn one-stop shops. De klant hoeft maar één register te raadplegen voor nagenoeg al zijn wensen en kan de koffiethuiswinkel en de vloerkledengigant vergeten. Het is het voordeel van de monopolist. 
+
+Maar LLM overtreft het geheugen en overzicht van de mens met ordes van grootte. De combinatie Perspectives van, LLMs, registers en een register van registers is daarom een gedistribueerd, gefedereerd alternatief voor de supermonopolist.
+
+GPT 5.4 / GPT 5.3 CODEX: SAMENVATTING VAN EEN ARCHITECTUUR
+The proposed architecture is a federated discovery network for published Perspectives contexts, designed to avoid any central LLM service. Each discoverable item is a context instance with a stable CUID, an ARC-derived type identifier, human-readable and structured projected fields, a public URL binding, and provenance rooted in Perspectives role occupancy. Language, rights, jurisdiction, and similar policy dimensions are modeled as first-class roles/properties and exposed through a strict public discovery projection.
+
+Discovery is handled by autonomous hubs. A hub is authoritative for locally published items and may cache/index peer items through explicit federation links. Hubs exchange signed lifecycle events such as publish, update, and tombstone, and expose deterministic interfaces for schema discovery, plan validation, search execution, and provenance proof. Storage is centered on an immutable event log plus a materialized latest-state view, with specialized lexical, vector, and facet indexes.
+
+The LLM is strictly client-side: each user brings their own model account or local model. The model only needs control-plane knowledge: envelope schema, domain-model mappings, search-plan structure, and policy rules. Authoritative control-plane memory can itself be local and versioned through Perspectives. The LLM produces structured search plans, hubs validate and execute them, and results are returned as grounded URLs with provenance and trust signals.
+
+EEN VIJFDE RESOURCE NAAST COMPUTE, MEMORY, BANDWITH EN MESSAGE EXCHANGE: INDEXING
+Discovery van fysieke items is anders dan van informatieproducten. Wie in Nederland een tweedehands keukenstoel zoekt, heeft niets aan zulke stoelen in New York. Voor bijvoorbeeld mp3 bestanden geldt dat niet.
+Desondanks kan één algoritmische / indexrepresentatie benadering beide doelen dienen in een federatie van hubs. Daarbij worden fysieke items bij voorkeur op een geografisch nabije hub geïndexeerd, terwijl niet-lokatiegebonden items in shards naar type verspreid worden.
+Tevens kunnen we load-balancing toepassen bij ingestie, hetgeen betekent dat de hubs in een federatie het werk verspreiden. 
+
+Nemen we aan dat een hub een bepaalde capaciteit heeft en dat gebruikers een bepaalde constante gemiddelde belasting van een hub geven in termen van aanbod en vraag, dan kunnen we berekenen hoeveel gebruikers één hub kan ondersteunen. Met andere woorden, lokale gebruikers kunnen inschrijven op een regionale hub en die gezamenlijk in de lucht houden, terwijl ze functioneel een non-lokale index ervaren.
+
+Dit is een belangrijke conclusie, omdat het betekent dat 'indexing' een resource is die we kunnen behandelen zoals compute, memory, message exchange en bandwidth. Bij een Perspectives netwerk brengen de gebruikers zelf compute en bandwidth in. Memory (cloud opslag voor media en backup) en message exchange moeten ze inkopen. Daar kunnen we dus een vijfde resource aan toevoegen, namelijk 'indexing'.
+
+Kortom: we kunnen een ruimte opspannen voor ondernemingen die deze drie resources als pakket tegen abonnementsprijzen verkopen. 
+
+Géén van deze drie resources heeft een inherente hang naar monopolisering. Opslag is naar de aard der zaak gedistribueerd en message exchange en indexing zijn goed te federeren. 
+
+HOE ZIET DIT ERUIT VOOR EINDGEBRUIKERS?
+Al deze techniek kunnen we volkomen onzichtbaar maken op het conceptuele niveau van Perspectives. Het enige nieuwe concept dat we introduceren is dat **een willekeurig item vindbaar gemaakt kan worden**. Door inzet van LLM's zijn zulke items 'content addressable': een kort gesprek in natuurlijke taal levert een lijst kandidaten op.
+
+De interactie tussen betrokkenen rondom een vindbaar/gevonden item kan sterk variëren, van een klassieke webshop tot het aanbod boodschappen te doen voor een behoeftige in de buurt. Deze verschillen moeten worden uitgemodelleerd; de onderliggende zoektechniek is ingebouwd in het platform en constant.
+
+
