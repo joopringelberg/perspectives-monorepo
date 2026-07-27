@@ -366,13 +366,13 @@ sharedFileServices :: String
 sharedFileServices = "model://perspectives.domains#xjrfkxrzyt" -- SharedFileServices
 
 mySharedFileServices :: String
-mySharedFileServices = "model://perspectives.domains#xjrfkxrzyt$p6irsi0fot$zbhqrtftsu"
+mySharedFileServices = "model://perspectives.domains#xjrfkxrzyt$ul1y1ukzye$tp551lll1t"
 
 actualSharedFileServer :: String
-actualSharedFileServer = "model://perspectives.domains#xjrfkxrzyt$p6irsi0fot$ee6lcb9jxh"
+actualSharedFileServer = "model://perspectives.domains#xjrfkxrzyt$ul1y1ukzye$jx2xqh4f1w"
 
 fileShareCredentials :: String
-fileShareCredentials = "model://perspectives.domains#xjrfkxrzyt$z685qvaro6$r7vvr6u68p"
+fileShareCredentials = "model://perspectives.domains#xjrfkxrzyt$fvq0e98r87$mnfe8z3j7a"
 
 ------------------------------------------------------------------------------------
 -- USED IN TESTS

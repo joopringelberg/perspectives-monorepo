@@ -302,7 +302,7 @@ domain model://joopringelberg.nl#SinglePDRDestructiveTests@2.0
           -- Because setting TestFinished also triggers state evaluation, the removal of the role 
           -- would not trigger a state change in the same transaction. So we delay the removal of the role.
           do for Tester
-            after 2000 Milliseconds unbind context >> TestRole7
+            after 200 Milliseconds remove filler of context >> TestRole7
         state TestSucceeded = context >> ((exists TestRole7) and (not exists TestRole7 >> binding) and exists Filler1)
           on entry
             do for Tester
@@ -313,7 +313,7 @@ domain model://joopringelberg.nl#SinglePDRDestructiveTests@2.0
       perspective on extern
         props (TestFinished) verbs (SetPropertyValue, Consult)
       perspective on TestRole7
-        only (Create, Remove, Fill, Unbind)
+        only (Create, RemoveFiller, Fill)
       perspective on Filler1
         only (Create)
       action RunTest
