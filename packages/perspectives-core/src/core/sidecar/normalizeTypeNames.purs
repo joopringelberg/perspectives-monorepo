@@ -670,7 +670,9 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
     normalizeQueryFunction (CreateContext_ ct) = CreateContext_ <$> fqn2tid ct
     normalizeQueryFunction (CreateRole rt) = CreateRole <$> fqn2tid rt
     normalizeQueryFunction (Bind rt) = Bind <$> fqn2tid rt
-    normalizeQueryFunction (Unbind rt) = Unbind <$> traverse fqn2tid rt
+    normalizeQueryFunction (RemoveAsFillerOfType rt) = RemoveAsFillerOfType <$> fqn2tid rt
+    normalizeQueryFunction RemoveAsFiller = pure RemoveAsFiller
+    normalizeQueryFunction RemoveFiller = pure RemoveFiller
     normalizeQueryFunction (DeleteRole rt) = DeleteRole <$> fqn2tid rt
     normalizeQueryFunction (DeleteContext rt) = DeleteContext <$> fqn2tid rt
     normalizeQueryFunction (DeleteProperty pt) = DeleteProperty <$> fqn2tid pt

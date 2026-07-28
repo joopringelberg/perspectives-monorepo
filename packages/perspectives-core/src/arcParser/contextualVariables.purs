@@ -112,13 +112,19 @@ assignmentContainsReference varName (Bind_ { bindingExpression, binderExpression
     ||
       stepContainsVariableReference varName binderExpression
 
-assignmentContainsReference varName (Unbind { bindingExpression }) =
-  stepContainsVariableReference varName bindingExpression
+assignmentContainsReference varName (RemoveAsFillerOfType { fillerExpression }) =
+  stepContainsVariableReference varName fillerExpression
 
-assignmentContainsReference varName (Unbind_ { bindingExpression, binderExpression }) =
-  stepContainsVariableReference varName bindingExpression
+assignmentContainsReference varName (RemoveAsFiller { fillerExpression }) =
+  stepContainsVariableReference varName fillerExpression
+
+assignmentContainsReference varName (RemoveFiller { filledExpression }) =
+  stepContainsVariableReference varName filledExpression
+
+assignmentContainsReference varName (RemoveFillerWith { fillerExpression, filledExpression }) =
+  stepContainsVariableReference varName fillerExpression
     ||
-      stepContainsVariableReference varName binderExpression
+      stepContainsVariableReference varName filledExpression
 
 assignmentContainsReference varName (DeleteRole { contextExpression }) = maybe false (stepContainsVariableReference varName) contextExpression
 

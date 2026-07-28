@@ -176,14 +176,20 @@ instance containsPrefixesAssignment :: ScanSymbols Assignment where
     ebindingExpression <- scan bindingExpression
     ebinderExpression <- scan binderExpression
     pure $ Bind_ r { binderExpression = ebinderExpression, bindingExpression = ebindingExpression }
-  scan (Unbind r@{ bindingExpression, roleIdentifier }) = do
-    eroleIdentifier <- traverse f roleIdentifier
-    ebindingExpression <- scan bindingExpression
-    pure $ Unbind r { bindingExpression = ebindingExpression, roleIdentifier = eroleIdentifier }
-  scan (Unbind_ r@{ bindingExpression, binderExpression }) = do
-    ebindingExpression <- scan bindingExpression
-    ebinderExpression <- scan binderExpression
-    pure $ Unbind_ r { bindingExpression = ebindingExpression, binderExpression = ebinderExpression }
+  scan (RemoveAsFillerOfType r@{ roleIdentifier, fillerExpression }) = do
+    eroleIdentifier <- f roleIdentifier
+    efillerExpression <- scan fillerExpression
+    pure $ RemoveAsFillerOfType r { roleIdentifier = eroleIdentifier, fillerExpression = efillerExpression }
+  scan (RemoveAsFiller r@{ fillerExpression }) = do
+    efillerExpression <- scan fillerExpression
+    pure $ RemoveAsFiller r { fillerExpression = efillerExpression }
+  scan (RemoveFiller r@{ filledExpression }) = do
+    efilledExpression <- scan filledExpression
+    pure $ RemoveFiller r { filledExpression = efilledExpression }
+  scan (RemoveFillerWith r@{ fillerExpression, filledExpression }) = do
+    efillerExpression <- scan fillerExpression
+    efilledExpression <- scan filledExpression
+    pure $ RemoveFillerWith r { fillerExpression = efillerExpression, filledExpression = efilledExpression }
   scan (DeleteRole r@{ contextExpression, roleIdentifier }) = do
     eroleIdentifier <- f roleIdentifier
     econtextExpression <- traverse scan contextExpression

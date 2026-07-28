@@ -370,7 +370,7 @@ domain model://perspectives.domains#System@6.1
         in object state Filled
           action Detach
             DetachedFiller = binding >> callExternal util:RoleIdentifier() returns String
-            unbind_ origin >> binding from origin
+            remove filler of origin
         in object state UnFilled
           action Reattach
             bind_ (roleinstance (sys:VersionedModelManifest$External) DetachedFiller) to origin

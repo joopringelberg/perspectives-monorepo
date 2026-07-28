@@ -186,7 +186,14 @@ enteringState contextId stateId = do
       catchError
         (updater cid)
         ( \e -> do
-            lift $ addWarning ({ message: padding <> "Error in automatic action in state: " <> show stateId <> " of context instance " <> show contextId <> ".", error: show e, externalRoleId: "", contextName: "" })
+            warning <- lift $ humanizePerspectivesWarning (AutomaticActionError stateId)
+            lift $ addWarning
+              ( { message: padding <> show warning <> " in context instance " <> show contextId <> "."
+                , error: show e
+                , externalRoleId: ""
+                , contextName: ""
+                }
+              )
         )
       lift $ restoreFrame oldFrame
 

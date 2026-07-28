@@ -282,9 +282,9 @@ domain model://joopringelberg.nl#SinglePDRDestructiveTests@2.0
       property P (Number)
 
   ------------------------------------------------------------------------------
-  ---- Remove a role filler
+  ---- Remove a role filler (starting from the filled role)
   ------------------------------------------------------------------------------
-  case Test_RemoveRoleFiller
+  case Test_RemoveFiller
     aspect mm:Test
     state TesterAvailable = exists Tester 
       on entry
@@ -302,7 +302,7 @@ domain model://joopringelberg.nl#SinglePDRDestructiveTests@2.0
           -- Because setting TestFinished also triggers state evaluation, the removal of the role 
           -- would not trigger a state change in the same transaction. So we delay the removal of the role.
           do for Tester
-            after 2000 Milliseconds unbind context >> TestRole7
+            after 200 Milliseconds remove filler of context >> TestRole7
         state TestSucceeded = context >> ((exists TestRole7) and (not exists TestRole7 >> binding) and exists Filler1)
           on entry
             do for Tester
@@ -313,7 +313,7 @@ domain model://joopringelberg.nl#SinglePDRDestructiveTests@2.0
       perspective on extern
         props (TestFinished) verbs (SetPropertyValue, Consult)
       perspective on TestRole7
-        only (Create, Remove, Fill, Unbind)
+        only (Create, RemoveFiller, Fill)
       perspective on Filler1
         only (Create)
       action RunTest
@@ -324,8 +324,142 @@ domain model://joopringelberg.nl#SinglePDRDestructiveTests@2.0
     thing Filler1
 
   ------------------------------------------------------------------------------
-  ---- Remove a role as filler
+  ---- Remove a role as filler (starting from the filler)
   ------------------------------------------------------------------------------
+  case Test_RemoveRoleFiller
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          letA
+            tr <- create role Filler2
+          in
+            bind tr to TestRole9
+
+    external
+      property TestFinished (Boolean)
+      state TestFinished = TestFinished
+        on entry
+          -- Moves the role removal out of this transaction.
+          -- Because setting TestFinished also triggers state evaluation, the removal of the role 
+          -- would not trigger a state change in the same transaction. So we delay the removal of the role.
+          do for Tester
+            after 200 Milliseconds remove as filler context >> Filler2
+        state TestSucceeded = context >> ((exists TestRole9) and (not exists TestRole9 >> binding) and exists Filler2)
+          on entry
+            do for Tester
+              TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestFinished) verbs (SetPropertyValue, Consult)
+      perspective on TestRole9
+        only (Create, RemoveFiller, Fill)
+      perspective on Filler2
+        only (Create, Remove)
+      action RunTest
+        TestName = "Remove a role as filler" for extern
+        TestFinished = true for extern
+
+    thing TestRole9 filledBy Filler2
+    thing Filler2
+
+  ------------------------------------------------------------------------------
+  ---- Remove a role as filler (starting from the filler, from specific role types only)
+  ------------------------------------------------------------------------------
+  case Test_RemoveRoleFiller_SpecificRoleTypes
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          letA
+            tr <- create role Filler3
+          in
+            bind tr to TestRole10
+            bind tr to TestRole11
+
+    external
+      property TestFinished (Boolean)
+      state TestFinished = TestFinished
+        on entry
+          -- Moves the role removal out of this transaction.
+          -- Because setting TestFinished also triggers state evaluation, the removal of the role 
+          -- would not trigger a state change in the same transaction. So we delay the removal of the role.
+          do for Tester
+            after 200 Milliseconds remove as filler of TestRole11 context >> Filler3 
+        state TestSucceeded = context >> ((exists TestRole10) and (not exists TestRole11 >> binding) and (exists Filler3) and exists TestRole10 >> binding)
+          on entry
+            do for Tester
+              TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestFinished) verbs (SetPropertyValue, Consult)
+      perspective on TestRole10
+        only (Create, RemoveFiller, Fill)
+      perspective on TestRole11
+        only (Create, RemoveFiller, Fill)
+      perspective on Filler3
+        only (Create, Remove)
+      action RunTest
+        TestName = "Remove a role as filler from specific role types" for extern
+        TestFinished = true for extern
+
+    thing TestRole10 filledBy Filler3
+    thing TestRole11 filledBy Filler3
+    thing Filler3
+
+  ------------------------------------------------------------------------------
+  ---- Break the fill link between specific instances
+  ------------------------------------------------------------------------------
+  case Test_UnBindRoleFiller_SpecificRoleTypes
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          letA
+            tr <- create role Filler4
+            tr2 <- create role Filler5
+          in
+            bind tr to TestRole12
+            bind tr2 to TestRole13
+
+    external
+      property TestFinished (Boolean)
+      state TestFinished = TestFinished
+        on entry
+          -- Moves the role removal out of this transaction.
+          -- Because setting TestFinished also triggers state evaluation, the removal of the role 
+          -- would not trigger a state change in the same transaction. So we delay the removal of the role.
+          do for Tester
+            after 200 Milliseconds remove filler context >> Filler4 from context >> TestRole12
+        state TestSucceeded = context >> ((exists TestRole12) and (not exists TestRole12 >> binding) and (exists Filler4) and exists TestRole13 >> binding)
+          on entry
+            do for Tester
+              TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestFinished) verbs (SetPropertyValue, Consult)
+      perspective on TestRole12
+        only (Create, RemoveFiller, Fill)
+      perspective on TestRole13
+        only (Create, RemoveFiller, Fill)
+      perspective on Filler4
+        only (Create, Remove)
+      perspective on Filler5
+        only (Create, Remove)
+      action RunTest
+        TestName = "Remove a specific role instance from another instance" for extern
+        TestFinished = true for extern
+
+    thing TestRole12 filledBy Filler4
+    thing TestRole13 filledBy Filler5
+    thing Filler4
+    thing Filler5
 
   ------------------------------------------------------------------------------
   ---- Remove a context without roles.
@@ -367,3 +501,199 @@ domain model://joopringelberg.nl#SinglePDRDestructiveTests@2.0
           props (TestSucceeded) verbs (SetPropertyValue, Consult)
 
       thing ExternOfTest = extern >> binder TestRole8 >> context >> extern
+
+  ------------------------------------------------------------------------------
+  ---- Remove a context with an unfilled role.
+  ------------------------------------------------------------------------------
+  case Test_RemoveContextWithUnfilledRole
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          create context EmbeddedContext2 bound to TestRole14
+    external
+      property ContextExited (Boolean)
+      property RoleExited (Boolean)
+      property TestFinished (Boolean)
+      state TestSucceeded = ContextExited and RoleExited
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+      state TestFinished = TestFinished
+        on entry
+          -- Moves the context removal out of this transaction.
+          -- Because setting ContextExited also triggers state evaluation, the removal of the context 
+          -- would not trigger a state change in the same transaction. So we delay the removal of the context.
+          do for Tester
+            after 200 Milliseconds remove context (context >> TestRole14)
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestFinished) verbs (SetPropertyValue, Consult)
+      perspective on TestRole14
+        only (CreateAndFill, RemoveContext)
+      action RunTest
+        TestName = "Remove a context with an unfilled role" for extern
+        TestFinished = true for extern
+
+    context TestRole14 filledBy EmbeddedContext2
+
+    case EmbeddedContext2
+      on entry
+        do for Tester
+          create role RoleOfContext1
+      on exit
+        do for Tester
+          ContextExited = true for ExternOfTest2
+      user Tester = me
+        perspective on ExternOfTest2
+          props (ContextExited, RoleExited) verbs (SetPropertyValue, Consult)
+        perspective on RoleOfContext1
+          only (Create)
+      thing RoleOfContext1
+        on exit
+          do for Tester
+            RoleExited = true for context >> ExternOfTest2
+
+      thing ExternOfTest2 = extern >> binder TestRole14 >> context >> extern
+
+  ------------------------------------------------------------------------------
+  ---- Remove a context with a filled role.
+  ------------------------------------------------------------------------------
+  case Test_RemoveContextWithFilledRole
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          create context EmbeddedContext3 bound to TestRole15
+
+    external
+      property TestExecuted (Boolean)
+      property ContextExited (Boolean)
+      property RoleExited (Boolean)
+      property FillerExited (Boolean)
+      state TestSucceeded = ContextExited and RoleExited and FillerExited
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+      state TestExecuted = TestExecuted
+        on entry
+          -- Moves the context removal out of this transaction.
+          -- Because setting TestExecuted also triggers state evaluation, the removal of the context 
+          -- would not trigger a state change in the same transaction. So we delay the removal of the context.
+          do for Tester
+            after 200 Milliseconds remove context (context >> TestRole15)
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestExecuted) verbs (SetPropertyValue, Consult)
+      perspective on TestRole15
+        only (CreateAndFill, RemoveContext)
+      action RunTest
+        TestName = "Remove a context with a filled role" for extern
+        TestExecuted = true for extern
+
+    context TestRole15 filledBy EmbeddedContext3
+
+    case EmbeddedContext3
+      on entry
+        do for Tester
+          letA
+            filler <- create role FillerOfContext2
+          in
+            bind filler to RoleOfContext2
+      on exit
+        do for Tester
+          ContextExited = true for ExternOfTest3
+      user Tester = me
+        perspective on ExternOfTest3
+          props (ContextExited, RoleExited, FillerExited) verbs (SetPropertyValue, Consult)
+        perspective on RoleOfContext2
+          only (Create, Fill)
+        perspective on FillerOfContext2
+          only (Create)
+      
+      thing RoleOfContext2 filledBy FillerOfContext2
+        on exit
+          do for Tester
+            RoleExited = true for context >> ExternOfTest3
+
+      thing ExternOfTest3 = extern >> binder TestRole15 >> context >> extern
+
+      thing FillerOfContext2
+        on exit
+          do for Tester
+            FillerExited = true for context >> ExternOfTest3
+
+  ------------------------------------------------------------------------------
+  ---- Remove a context with a filled role that should remain.
+  ------------------------------------------------------------------------------
+  case Test_RemoveContextWithFilledRoleThatShouldRemain
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          create role FillerOfContext3
+          create context EmbeddedContext4 bound to TestRole16
+
+    external
+      property TestExecuted (Boolean)
+      property ContextExited (Boolean)
+      property RoleExited (Boolean)
+      property FillerExited (Boolean)
+      state TestSucceeded = ContextExited and RoleExited and exists context >> FillerOfContext3
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+      state TestExecuted = TestExecuted
+        on entry
+          -- Moves the context removal out of this transaction.
+          -- Because setting TestExecuted also triggers state evaluation, the removal of the context 
+          -- would not trigger a state change in the same transaction. So we delay the removal of the context.
+          do for Tester
+            after 200 Milliseconds remove context (context >> TestRole16)
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestExecuted) verbs (SetPropertyValue, Consult)
+      perspective on TestRole16
+        only (CreateAndFill, RemoveContext)
+      perspective on FillerOfContext3
+        only (Create)
+      action RunTest
+        TestName = "Remove a context with a filled role that should remain" for extern
+        TestExecuted = true for extern
+
+    context TestRole16 filledBy EmbeddedContext4
+
+    thing FillerOfContext3
+
+    case EmbeddedContext4
+      on entry
+        do for Tester
+          bind extern >> binder TestRole16 >> context >> FillerOfContext3 >>= first to RoleOfContext3
+      on exit
+        do for Tester
+          ContextExited = true for ExternOfTest3
+      user Tester = me
+        perspective on ExternOfTest3
+          props (ContextExited, RoleExited, FillerExited) verbs (SetPropertyValue, Consult)
+        perspective on RoleOfContext3
+          only (Create, Fill)
+        perspective on ExternOfTest3 >> context >> FillerOfContext3
+          all roleverbs
+
+      
+      thing RoleOfContext3 filledBy FillerOfContext3
+        on exit
+          do for Tester
+            RoleExited = true for context >> ExternOfTest3
+
+      thing ExternOfTest3 = extern >> binder TestRole16 >> context >> extern
+

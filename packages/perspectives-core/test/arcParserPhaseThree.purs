@@ -707,63 +707,63 @@ theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
         -- logShow otherwise
         assert "Expected the error NotFunctional" false
 
-  domainTest "Bot Action with unqualified unbind"
-    "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast\n  user EreGast (mandatory) filledBy Gast\n"
-    \correctedDFR -> do
-      -- logShow correctedDFR
-      ensureState "model:Test$Gast$SomeState" correctedDFR
-        >>= ensureOnEntry (ENR (EnumeratedRoleType "model:Test$Gast"))
-        >>= pure <<< effectOfAction
-        >>=
-          case _ of
-            (UQD _ qf bndg _ _ _) -> do
-              assert "The queryfunction should be unbind"
-                ( case qf of
-                    Unbind Nothing -> true
-                    otherwise -> false
-                )
-              case bndg of
-                (SQD _ (RolGetter (ENR (EnumeratedRoleType "model:Test$Gast"))) _ _ _) ->
-                  assert "The binding should be a rolgetter for Gast" true
-                otherwise -> assert "The binding should be a rolgetter" false
-            otherwise -> assert "Side effect expected" false
+  -- domainTest "Bot Action with unqualified unbind"
+  --   "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast\n  user EreGast (mandatory) filledBy Gast\n"
+  --   \correctedDFR -> do
+  --     -- logShow correctedDFR
+  --     ensureState "model:Test$Gast$SomeState" correctedDFR
+  --       >>= ensureOnEntry (ENR (EnumeratedRoleType "model:Test$Gast"))
+  --       >>= pure <<< effectOfAction
+  --       >>=
+  --         case _ of
+  --           (UQD _ qf bndg _ _ _) -> do
+  --             assert "The queryfunction should be unbind"
+  --               ( case qf of
+  --                   Unbind Nothing -> true
+  --                   otherwise -> false
+  --               )
+  --             case bndg of
+  --               (SQD _ (RolGetter (ENR (EnumeratedRoleType "model:Test$Gast"))) _ _ _) ->
+  --                 assert "The binding should be a rolgetter for Gast" true
+  --               otherwise -> assert "The binding should be a rolgetter" false
+  --           otherwise -> assert "Side effect expected" false
 
-  domainTest "Bot Action with qualified unbind"
-    "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast from EreGast\n  user EreGast (mandatory) filledBy Gast\n"
-    \correctedDFR -> do
-      ensureState "model:Test$Gast$SomeState" correctedDFR
-        >>= ensureOnEntry (ENR (EnumeratedRoleType "model:Test$Gast"))
-        >>= pure <<< effectOfAction
-        >>=
-          case _ of
-            (UQD _ qf bndg _ _ _) -> do
-              assert "The queryfunction should be unbind"
-                ( case qf of
-                    Unbind (Just (EnumeratedRoleType "model:Test$EreGast")) -> true
-                    otherwise -> false
-                )
-              case bndg of
-                (SQD _ (RolGetter (ENR (EnumeratedRoleType "model:Test$Gast"))) _ _ _) ->
-                  assert "The binding should be a rolgetter for Gast" true
-                otherwise -> assert "The binding should be a rolgetter" false
-            otherwise -> assert "Side effect expected" false
+  -- domainTest "Bot Action with qualified unbind"
+  --   "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast from EreGast\n  user EreGast (mandatory) filledBy Gast\n"
+  --   \correctedDFR -> do
+  --     ensureState "model:Test$Gast$SomeState" correctedDFR
+  --       >>= ensureOnEntry (ENR (EnumeratedRoleType "model:Test$Gast"))
+  --       >>= pure <<< effectOfAction
+  --       >>=
+  --         case _ of
+  --           (UQD _ qf bndg _ _ _) -> do
+  --             assert "The queryfunction should be unbind"
+  --               ( case qf of
+  --                   Unbind (Just (EnumeratedRoleType "model:Test$EreGast")) -> true
+  --                   otherwise -> false
+  --               )
+  --             case bndg of
+  --               (SQD _ (RolGetter (ENR (EnumeratedRoleType "model:Test$Gast"))) _ _ _) ->
+  --                 assert "The binding should be a rolgetter for Gast" true
+  --               otherwise -> assert "The binding should be a rolgetter" false
+  --           otherwise -> assert "Side effect expected" false
 
-  expectError "Unbind: non-existing binder"
-    "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast from AnotherRole\n  user EreGast (mandatory) filledBy Gast\n"
-    case _ of
-      (Left (UnknownRole _ _)) -> assert "ok" true
-      -- (Left (CannotCreateCalculatedRole _ _ _)) -> assert "ok" true
-      otherwise -> do
-        -- logShow otherwise
-        assert "Expected the error UnknownRole" false
+  -- expectError "Unbind: non-existing binder"
+  --   "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast from AnotherRole\n  user EreGast (mandatory) filledBy Gast\n"
+  --   case _ of
+  --     (Left (UnknownRole _ _)) -> assert "ok" true
+  --     -- (Left (CannotCreateCalculatedRole _ _ _)) -> assert "ok" true
+  --     otherwise -> do
+  --       -- logShow otherwise
+  --       assert "Expected the error UnknownRole" false
 
-  expectError "Unbind: binder does not bind"
-    "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast from EreGast\n  user EreGast (mandatory) filledBy Organisator\n  user Organisator\n    property Prop2\n"
-    case _ of
-      (Left (LocalRoleDoesNotBind _ _ _ _)) -> assert "ok" true
-      otherwise -> do
-        -- logShow otherwise
-        assert "Expected the error LocalRoleDoesNotBind" false
+  -- expectError "Unbind: binder does not bind"
+  --   "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast from EreGast\n  user EreGast (mandatory) filledBy Organisator\n  user Organisator\n    property Prop2\n"
+  --   case _ of
+  --     (Left (LocalRoleDoesNotBind _ _ _ _)) -> assert "ok" true
+  --     otherwise -> do
+  --       -- logShow otherwise
+  --       assert "Expected the error LocalRoleDoesNotBind" false
 
   domainTest "Bot Action with delete role"
     "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          delete role Gast\n"

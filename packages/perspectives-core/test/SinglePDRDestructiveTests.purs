@@ -70,8 +70,8 @@ singlePDRDestructiveTestModelConfiguration =
   , setupLogConfiguration:
       { pdr:
           [ { topic: TEST, logLevel: Debug }
-          , { topic: RESOURCE, logLevel: Trace }
-          , { topic: STATE, logLevel: Trace }
+          -- , { topic: RESOURCE, logLevel: Trace }
+          -- , { topic: STATE, logLevel: Trace }
           ]
       }
   , tests: destructiveTests
@@ -102,13 +102,19 @@ destructiveTests :: Array ModelTest
 destructiveTests = 
   [ 
     { testContextTypeName: test_RemoveRole, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveOneRoleInstance, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_DeleteTwoRoles, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_DeleteProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RemoveProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RemoveOnePropertyValue, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_DeleteTwoRoles, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RemoveOneRoleInstance, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveFiller, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RemoveRoleFiller, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveRoleFiller_SpecificRoleTypes, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_UnBindRoleFiller_SpecificRoleTypes, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RemoveContextWithoutRoles, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveContextWithUnfilledRole, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveContextWithFilledRole, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveContextWithFilledRoleThatShouldRemain, logConfiguration: emptyLogConfiguration }
   ]
 
 test_RemoveRole :: String
@@ -129,8 +135,26 @@ test_DeleteTwoRoles = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test_
 test_RemoveOneRoleInstance :: String
 test_RemoveOneRoleInstance = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test_RemoveOneRoleInstance"
 
+test_RemoveFiller :: String
+test_RemoveFiller = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test_RemoveFiller"
+
 test_RemoveRoleFiller :: String
 test_RemoveRoleFiller = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test_RemoveRoleFiller"
 
 test_RemoveContextWithoutRoles :: String
 test_RemoveContextWithoutRoles = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test_RemoveContextWithoutRoles"
+
+test_RemoveRoleFiller_SpecificRoleTypes :: String
+test_RemoveRoleFiller_SpecificRoleTypes = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test_RemoveRoleFiller_SpecificRoleTypes"
+
+test_UnBindRoleFiller_SpecificRoleTypes :: String
+test_UnBindRoleFiller_SpecificRoleTypes = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test_UnBindRoleFiller_SpecificRoleTypes"
+
+test_RemoveContextWithUnfilledRole :: String
+test_RemoveContextWithUnfilledRole = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test_RemoveContextWithUnfilledRole"
+
+test_RemoveContextWithFilledRole :: String
+test_RemoveContextWithFilledRole = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test_RemoveContextWithFilledRole"
+
+test_RemoveContextWithFilledRoleThatShouldRemain :: String
+test_RemoveContextWithFilledRoleThatShouldRemain = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test_RemoveContextWithFilledRoleThatShouldRemain"

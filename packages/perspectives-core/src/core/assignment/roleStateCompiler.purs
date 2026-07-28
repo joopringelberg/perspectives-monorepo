@@ -201,7 +201,15 @@ enteringRoleState roleId stateId = do
         (updater rid)
         \e ->
           -- setInActiveRoleState stateId roleId 
-          lift $ addWarning ({ message: padding <> "Error in automatic action in state " <> show stateId <> " of role instance " <> show roleId <> ".", error: show e, externalRoleId: "", contextName: "" })
+          do
+            warning <- lift $ humanizePerspectivesWarning (AutomaticActionError stateId)
+            lift $ addWarning
+              ( { message: padding <> show warning <> " in role instance " <> show roleId <> "."
+                , error: show e
+                , externalRoleId: ""
+                , contextName: ""
+                }
+              )
       lift $ restoreFrame oldFrame
 
   forWithIndex_ notifyOnEntry \(allowedUser :: RoleType) ({ contextGetter, updater } :: CompiledNotification) -> whenRightUser
