@@ -383,6 +383,9 @@ addProperty rids propertyName valuesAndDeltas = case ARR.head rids of
             -- Look for requests for the original property AND the replacement property (if any).
             (lift $ findPropertyRequests propertyBearingInstance propertyName) >>= addCorrelationIdentifiersToTransactie
             (lift $ findPropertyRequests propertyBearingInstance replacementProperty) >>= addCorrelationIdentifiersToTransactie
+            readablePropertyName <- lift $ toReadable propertyName
+            lift $ debugResource ("addProperty: add to property " <> unwrap readablePropertyName <> " values " <> show values)
+
 
 -- | Get the property bearing role individual in the chain.
 -- | If the property is defined on role instance's type (either directly or by Aspect), return it; otherwise
@@ -458,6 +461,8 @@ removeProperty rids propertyName mdelta values = case ARR.head rids of
               (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
               -- Apply changes to the role and save it.
               lift $ cacheAndSave rid (removeRol_property pe replacementProperty values)
+              readablePropertyName <- lift $ toReadable propertyName
+              lift $ debugResource ("removeProperty: remove from property " <> unwrap readablePropertyName <> " values " <> show values)
 
 -- | Delete all property values from the role for the EnumeratedPropertyType.
 -- | If there are no values for the property on the role instance, this is a no-op.
@@ -508,6 +513,9 @@ deleteProperty rids propertyName mdelta = case ARR.head rids of
               (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
               -- Apply changes to the role and save it.
               lift $ cacheAndSave rid (deleteRol_property pe replacementProperty)
+              readablePropertyName <- lift $ toReadable propertyName
+              lift $ debugResource ("deleteProperty: delete property " <> unwrap readablePropertyName)
+
 
 -- | Modify the role instance with the new property values.
 -- | When all new values are in fact already in the set of values for the property of the role instance, this is
