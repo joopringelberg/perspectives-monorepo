@@ -27,7 +27,7 @@ import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
-import Data.Array (any, catMaybes, concat, filter, fromFoldable, null, sortBy)
+import Data.Array (any, catMaybes, concat, filter, foldl, fromFoldable, null, nub, sortBy)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -218,10 +218,33 @@ extractOrderingInfo stringifiedDelta = case runExcept $ readJSON' stringifiedDel
 -- | Returns the list of missing deltas (gaps) if any.
 checkForGaps :: Array { resourceKey :: String, resourceVersion :: Int, author :: PerspectivesUser } -> MonadPerspectivesTransaction (Array MissingDelta)
 checkForGaps deltaInfos = do
-  gaps <- for deltaInfos \{ resourceKey, resourceVersion, author } -> do
+  let
+    nonLegacyInfos = filter (\d -> d.resourceVersion >= 0) deltaInfos
+    resourceKeys = nub (map _.resourceKey nonLegacyInfos)
+  gaps <- for resourceKeys \resourceKey -> do
     localVersion <- lift $ getResourceVersion resourceKey
-    if resourceVersion > localVersion + 1 then pure $ Just { author, resourceKey, expectedVersion: localVersion + 1 }
-    else pure Nothing
+    let
+      sortedInfos = sortBy (\d1 d2 -> compare d1.resourceVersion d2.resourceVersion)
+        (filter (\d -> d.resourceKey == resourceKey) nonLegacyInfos)
+      result = foldl
+        (\acc d ->
+          case acc.gap of
+            Just _ -> acc
+            Nothing ->
+              if d.resourceVersion < acc.expectedVersion then acc
+              else if d.resourceVersion == acc.expectedVersion then acc { expectedVersion = acc.expectedVersion + 1 }
+              else
+                acc
+                  { gap = Just
+                      { author: d.author
+                      , resourceKey: d.resourceKey
+                      , expectedVersion: acc.expectedVersion
+                      }
+                  }
+        )
+        { expectedVersion: localVersion + 1, gap: Nothing }
+        sortedInfos
+    pure result.gap
   pure $ catMaybes gaps
 
 -- | Retrieves from the repository the model that holds the ContextType, if necessary.
