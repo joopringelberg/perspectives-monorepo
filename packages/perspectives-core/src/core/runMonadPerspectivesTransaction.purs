@@ -69,7 +69,7 @@ import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
 import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..), createTransaction)
 import Perspectives.Types.ObjectGetters (contextRootStates, publicUrl_, roleRootStates)
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, void, ($), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||))
+import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||))
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -341,6 +341,19 @@ phase2 share authoringRole r = do
       ContextRemoval ctxt authorizedRole -> lift (debugState (padding <> "Remove context " <> unwrap ctxt) *> removeContextInstance ctxt authorizedRole)
       RoleRemoval rid -> lift (debugState (padding <> "Remove role " <> unwrap rid) *> removeRoleInstance rid)
       _ -> pure unit
+
+    -- In non-sharing transactions we evaluate states in an embedded sharing transaction.
+    -- That pass runs before physical removals happen in this outer transaction. Re-run the
+    -- same state-query results once removals are done so conditions like `not exists ...`
+    -- can transition after the resource is actually gone.
+    -- This complements (does not replace) postponedStateEvaluations: postponed covers
+    -- Undetermined conditions on untouchable resources; this replay covers conditions that
+    -- were Determined before removal and can only flip after the physical delete.
+    if (not share) && hasPhysicalRemovals scheduledAssignments && (not $ null invertedQueryResults) then do
+      lift $ debugState $ padding <> "Re-evaluate states after physical removals in non-sharing transaction " <> show transactionNumber
+      runSharing share authoringRole (recursivelyEvaluateStates invertedQueryResults)
+    else pure unit
+
     -- we can now remove ContextRemovals and RoleRemovals from scheduledAssignments. As these can be the only items left in the collection of scheduledAssignments,
     -- we can simply reset it.
     -- We can also remove the untouchables; all resources listed in them have gone, now.
@@ -385,6 +398,14 @@ phase2 share authoringRole r = do
       phase2 share authoringRole r
 
   where
+  hasPhysicalRemovals :: Array ScheduledAssignment -> Boolean
+  hasPhysicalRemovals = not <<< null <<< filter isPhysicalRemoval
+
+  isPhysicalRemoval :: ScheduledAssignment -> Boolean
+  isPhysicalRemoval (ContextRemoval _ _) = true
+  isPhysicalRemoval (RoleRemoval _) = true
+  isPhysicalRemoval _ = false
+
   criterium :: ScheduledAssignment -> Boolean
   criterium (ContextRemoval _ _) = true
   criterium (RoleUnbinding _ _ _) = true
