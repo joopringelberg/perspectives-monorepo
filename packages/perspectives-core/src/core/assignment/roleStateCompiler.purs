@@ -193,6 +193,7 @@ enteringRoleState roleId stateId = do
     contextGetter
     allowedUser
     \currentactors cid rid -> do
+      lift $ humanizePerspectivesWarning (RunRoleStateAutomaticAction roleId stateId) >>= \warning -> traceState (padding <> show warning)
       oldFrame <- lift pushFrame
       -- no need to add currentcontext for context states; a binding has been added compile time.
       lift $ addBinding "currentcontext" [ (unwrap cid) ]

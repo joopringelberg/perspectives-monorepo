@@ -44,6 +44,9 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
         only (CreateAndFill, RemoveContext)
       perspective on Tests >> binding >> context >> Leader
         only (Create, Fill)
+      perspective on Follower
+        only (Create, Fill)
+        props (FirstName) verbs (Consult)
           
     -- To execute any test, run the action RunTest in the first PDR.
     -- To check if a test has succeeded, retrieve the value of TestSucceeded in the second PDR.
@@ -53,19 +56,19 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
 
   case Test
-    -- The automatic actions are contextualised in their specialisations,
-    -- meaning that specialisation of Leader is created.
-    on entry 
-      do for Initializer
-        bind me to Leader
 
     -- Why not on entry of Test, like we do for the Leader?
     -- The Test instance may not yet be bound to Tests, so AppFollower is not yet reachable.
     state AppfollowerReachable = exists extern >> binder Tests
       on entry
         do for Initializer
+          -- The automatic actions are contextualised in their specialisations,
+          -- meaning that specialisations of Leader and Follower are created.
           -- Dit gaat fout als we Follower met AppFollower vullen in plaats van met de vuller van AppFollower.
           bind AppFollower >> binding to Follower
+          -- Follower will not have Test instances bound in TestApp$Tests, so this is a surefire way 
+          -- to execute this action only for Leader.
+          bind me to Leader
 
     external
       property TestName (String)
@@ -109,6 +112,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
             P = 1 for tr
     external
       property TestFinished (Boolean)
+      property RoleAvailable (Boolean)
       state TestFinished = TestFinished
         on entry
           -- Moves the role removal out of this transaction.
@@ -116,10 +120,10 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
           -- would not trigger a state change in the same transaction. So we delay the removal of the role.
           do for Leader
             after 200 Milliseconds remove role context >> TestRole1
-        state TestSucceeded = not exists context >> TestRole1
-          on entry
-            do for Follower
-              TestSucceeded = true
+      state TestSucceeded = RoleAvailable and not exists context >> TestRole1
+        on entry
+          do for Follower
+            TestSucceeded = true
 
     user Leader filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Leader
@@ -135,11 +139,14 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
       perspective on extern
-        props (TestFinished) verbs (Consult)
+        props (RoleAvailable) verbs (SetPropertyValue, Consult)
       perspective on TestRole1
         props (P) verbs (Consult)
 
     thing TestRole1
+      on entry
+        do for Follower
+          RoleAvailable = true for context >> extern
       property P (Number)
 
   ------------------------------------------------------------------------------
@@ -200,10 +207,19 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
     state TesterAvailable = exists Leader 
       on entry
         do for Leader
-          create role TestRole3
-          create role TestRole3
+          letA
+            r1 <- create role TestRole3
+            r2 <- create role TestRole3
+          in
+            P = 1 for r1
+            P = 2 for r2
     external
       property TestFinished (Boolean)
+      property TwoRolesReceived (Boolean)
+      state TwoRolesReceived = context >> TestRole3 >>= count == 2
+        on entry
+          do for Follower
+            TwoRolesReceived = true
       state TestFinished = TestFinished
         on entry
           -- Moves the role removal out of this transaction.
@@ -211,7 +227,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
           -- would not trigger a state change in the same transaction. So we delay the removal of the role.
           do for Leader
             after 200 Milliseconds delete role TestRole3 from context
-        state TestSucceeded = not exists context >> TestRole3
+        state TestSucceeded = TwoRolesReceived and not exists context >> TestRole3
           on entry
             do for Follower
               TestSucceeded = true
@@ -222,6 +238,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
         props (TestFinished) verbs (SetPropertyValue, Consult)
       perspective on TestRole3
         only (Create, Delete)
+        props (P) verbs (SetPropertyValue, Consult)
       action RunTest
         TestName = "Delete two role instances at once" for extern
         TestFinished = true for extern
@@ -230,8 +247,12 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       aspect mm:Test$Follower
       perspective on extern
         props (TestFinished) verbs (Consult)
+        props (TwoRolesReceived) verbs (SetPropertyValue, Consult)
+      perspective on TestRole3
+        props (P) verbs (Consult)
 
     thing TestRole3 (relational)
+      property P (Number)
 
   ------------------------------------------------------------------------------
   ---- Delete a property value.
@@ -300,6 +321,8 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       aspect mm:Test$Follower
       perspective on extern
         props (TestSucceeded) verbs (Consult, SetPropertyValue)
+      perspective on TestRole5
+        props (P) verbs (Consult)
 
     thing TestRole5
       property P (Number)
@@ -318,7 +341,12 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
             P = 1 for tr
             P =+ 2 for tr
     external
-      state TestSucceeded = context >> TestRole6 >> P >>= count == 1
+      property TwoPropertyValuesReceived (Boolean)
+      state TwoPropertyValuesReceived = context >> TestRole6 >> P >>= count == 2
+        on entry
+          do for Follower
+            TwoPropertyValuesReceived = true
+      state TestSucceeded = TwoPropertyValuesReceived and context >> TestRole6 >> P >>= count == 1
         on entry
           do for Follower
             TestSucceeded = true
@@ -335,7 +363,9 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
       perspective on extern
-        props (TestSucceeded) verbs (Consult)
+        props (TestSucceeded, TwoPropertyValuesReceived) verbs (Consult, SetPropertyValue)
+      perspective on TestRole6
+        props (P) verbs (Consult)
 
     thing TestRole6
       property P (Number)
@@ -352,9 +382,11 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
             tr <- create role Filler1
           in
             bind tr to TestRole7
+            P = 1 for tr
 
     external
       property TestFinished (Boolean)
+      property FillerExists (Boolean)
       state TestFinished = TestFinished
         on entry
           -- Moves the role removal out of this transaction.
@@ -362,10 +394,10 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
           -- would not trigger a state change in the same transaction. So we delay the removal of the role.
           do for Leader
             after 200 Milliseconds remove filler of context >> TestRole7
-        state TestSucceeded = context >> ((exists TestRole7) and (not exists TestRole7 >> binding) and exists Filler1)
-          on entry
-            do for Follower
-              TestSucceeded = true
+      state TestSucceeded = FillerExists and context >> ((exists TestRole7) and (not exists TestRole7 >> binding) and exists Filler1)
+        on entry
+          do for Follower
+            TestSucceeded = true
 
     user Leader filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Leader
@@ -375,17 +407,25 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
         only (Create, RemoveFiller, Fill)
       perspective on Filler1
         only (Create)
+        props (P) verbs (SetPropertyValue, Consult)
       action RunTest
         TestName = "Remove the filler from a role" for extern
         TestFinished = true for extern
 
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
+      perspective on TestRole7
+        props (P) verbs (Consult)
       perspective on extern
-        props (TestSucceeded) verbs (Consult)
+        props (FillerExists) verbs (SetPropertyValue, Consult)
 
     thing TestRole7 filledBy Filler1
+      state FillerExists = exists binding
+        on entry
+          do for Follower
+            FillerExists = true for context >> extern
     thing Filler1
+      property P (Number)
 
   ------------------------------------------------------------------------------
   ---- Remove a role as filler (starting from the filler)
@@ -430,6 +470,8 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       aspect mm:Test$Follower
       perspective on extern
         props (TestSucceeded) verbs (Consult)
+      perspective on TestRole9
+      perspective on Filler2
 
     thing TestRole9 filledBy Filler2
     thing Filler2
@@ -480,6 +522,9 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       aspect mm:Test$Follower
       perspective on extern
         props (TestSucceeded) verbs (Consult)
+      perspective on TestRole10
+      perspective on TestRole11
+      perspective on Filler3
 
     thing TestRole10 filledBy Filler3
     thing TestRole11 filledBy Filler3
@@ -534,6 +579,10 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       aspect mm:Test$Follower
       perspective on extern
         props (TestSucceeded) verbs (Consult)
+      perspective on TestRole12
+      perspective on TestRole13
+      perspective on Filler4
+      perspective on Filler5
 
     thing TestRole12 filledBy Filler4
     thing TestRole13 filledBy Filler5
@@ -573,6 +622,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       aspect mm:Test$Follower
       perspective on extern
         props (TestSucceeded) verbs (Consult)
+      perspective on TestRole8
 
     context TestRole8 filledBy EmbeddedContext
 
@@ -628,6 +678,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       aspect mm:Test$Follower
       perspective on extern
         props (TestSucceeded) verbs (Consult)
+      perspective on TestRole14
 
     case EmbeddedContext2
       on entry
@@ -641,6 +692,10 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
           props (ContextExited, RoleExited) verbs (SetPropertyValue, Consult)
         perspective on RoleOfContext1
           only (Create)
+      
+      user Follower = extern >> binder TestRole14 >> context >> Follower
+        perspective on RoleOfContext1
+          
       thing RoleOfContext1
         on exit
           do for Tester
@@ -689,7 +744,8 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
       perspective on extern
-        props (TestSucceeded) verbs (Consult)
+        props (TestSucceeded, ContextExited, RoleExited, FillerExited) verbs (Consult)
+      perspective on TestRole15
 
     context TestRole15 filledBy EmbeddedContext3
 
@@ -703,7 +759,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       on exit
         do for Tester
           ContextExited = true for ExternOfTest3
-      user Tester = me
+      user Tester = extern >> binder TestRole15 >> context >> Follower
         perspective on ExternOfTest3
           props (ContextExited, RoleExited, FillerExited) verbs (SetPropertyValue, Consult)
         perspective on RoleOfContext2
@@ -768,6 +824,8 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       aspect mm:Test$Follower
       perspective on extern
         props (TestSucceeded) verbs (Consult)
+      perspective on TestRole16
+      perspective on FillerOfContext3
 
     context TestRole16 filledBy EmbeddedContext4
 
@@ -778,9 +836,13 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
         do for Tester
           bind extern >> binder TestRole16 >> context >> FillerOfContext3 >>= first to RoleOfContext3
       on exit
-        do for Tester
+        do for Follower
           ContextExited = true for ExternOfTest3
       user Tester = me
+        perspective on RoleOfContext3
+          only (Create, Fill)
+      
+      user Follower = extern >> binder TestRole16 >> context >> Follower
         perspective on ExternOfTest3
           props (ContextExited, RoleExited, FillerExited) verbs (SetPropertyValue, Consult)
         perspective on RoleOfContext3
@@ -791,7 +853,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       
       thing RoleOfContext3 filledBy FillerOfContext3
         on exit
-          do for Tester
+          do for Follower
             RoleExited = true for context >> ExternOfTest3
 
       thing ExternOfTest3 = extern >> binder TestRole16 >> context >> extern

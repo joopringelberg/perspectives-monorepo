@@ -357,7 +357,7 @@ domain model://joopringelberg.nl#StateTestModel@1.0
   case Test_RoleState_FilledByBinaryStep
     aspect mm:Test
     external
-      state TestState = (context >> Tester) filledBy me
+      state TestState = ((context >> Tester) filledBy me) and (not ((context >> Tester) filledBy origin))
         on entry
           do for Tester
             TestSucceeded = true
