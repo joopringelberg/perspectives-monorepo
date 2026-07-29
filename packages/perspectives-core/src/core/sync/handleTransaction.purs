@@ -227,20 +227,20 @@ checkForGaps deltaInfos = do
       sortedInfos = sortBy (\d1 d2 -> compare d1.resourceVersion d2.resourceVersion)
         (filter (\d -> d.resourceKey == resourceKey) nonLegacyInfos)
       result = foldl
-        (\acc d ->
-          case acc.gap of
-            Just _ -> acc
-            Nothing ->
-              if d.resourceVersion < acc.expectedVersion then acc
-              else if d.resourceVersion == acc.expectedVersion then acc { expectedVersion = acc.expectedVersion + 1 }
-              else
-                acc
-                  { gap = Just
-                      { author: d.author
-                      , resourceKey: d.resourceKey
-                      , expectedVersion: acc.expectedVersion
-                      }
-                  }
+        ( \acc d ->
+            case acc.gap of
+              Just _ -> acc
+              Nothing ->
+                if d.resourceVersion < acc.expectedVersion then acc
+                else if d.resourceVersion == acc.expectedVersion then acc { expectedVersion = acc.expectedVersion + 1 }
+                else
+                  acc
+                    { gap = Just
+                        { author: d.author
+                        , resourceKey: d.resourceKey
+                        , expectedVersion: acc.expectedVersion
+                        }
+                    }
         )
         { expectedVersion: localVersion + 1, gap: Nothing }
         sortedInfos

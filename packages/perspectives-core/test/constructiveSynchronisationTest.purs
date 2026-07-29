@@ -29,15 +29,15 @@ module Test.ConstructiveSynchronisationTest
 
 import Prelude
 
-import Data.Foldable (for_)
 import Data.Either (Either(..))
+import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, new, read, write)
 import Effect.Unsafe (unsafePerformEffect)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
-import Test.Layer3Scaffold (ModelTest, SynchronisationModelConfiguration, SynchronisationResults, emptyLogConfiguration)
+import Test.Layer3Scaffold (ModelTest, SynchronisationModelConfiguration, SynchronisationResults, LogConfiguration, emptyLogConfiguration)
 import Test.Layer3Scaffold (getSynchronisationResults) as Layer3Scaffold
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
@@ -121,7 +121,8 @@ testNameProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test$Exte
 
 allTests :: Array ModelTest
 allTests =
-  [ { testContextTypeName: test_CreateRole, logConfiguration: emptyLogConfiguration }
+  [ 
+    { testContextTypeName: test_CreateRole, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_SetProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_SetProperty_on_Filler, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Binding_Step, logConfiguration: emptyLogConfiguration }
@@ -134,6 +135,24 @@ allTests =
   , { testContextTypeName: test_CreateRole_in_CalculatedRole_ContextStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_CreateRole_in_CalculatedRole_RoleStep, logConfiguration: emptyLogConfiguration }
   ]
+
+debugConfiguration :: LogConfiguration
+debugConfiguration =       
+  { pdrA:
+    [
+    { topic: TEST, logLevel: Trace }
+    , { topic: RESOURCE, logLevel: Trace }
+    , { topic: STATE, logLevel: Trace }
+    , { topic: INSTALL, logLevel: Trace }
+    ]
+  , pdrB:
+    [ { topic: TEST, logLevel: Trace }
+    , { topic: RESOURCE, logLevel: Trace }
+    , { topic: STATE, logLevel: Trace }
+    , { topic: SYNC, logLevel: Trace }
+    , { topic: BROKER, logLevel: Trace }
+    ]
+  }
 
 test_CreateRole :: String
 test_CreateRole = "model://joopringelberg.nl#SynchronisationTestModel$Test_CreateRole"

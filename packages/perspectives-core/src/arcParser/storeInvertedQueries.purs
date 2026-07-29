@@ -482,7 +482,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
 
   -- For any inversion step whose domain is a role domain and that has no remaining
   -- forward path, also store calculated-property perspective queries.
-  storeCalculatedPropertyPerspectiveQueries
+  storePropertyPerspectiveQueries
     qfd
     qWithAK
     users
@@ -520,7 +520,7 @@ setPathForStep (MQD _ qf _ _ _ _) qWithAK users states statesPerProperty selfOnl
 -- | path, the perspective-object query has reached its destination role. In that
 -- | case, also index calculated-property queries so updates in their underlying
 -- | enumerated properties can trigger affected-user detection.
-storeCalculatedPropertyPerspectiveQueries
+storePropertyPerspectiveQueries
   :: Partial
   => QueryFunctionDescription
   -> QueryWithAKink
@@ -530,7 +530,7 @@ storeCalculatedPropertyPerspectiveQueries
   -> Boolean
   -> Maybe ArcPosition
   -> WithModificationSummary Unit
-storeCalculatedPropertyPerspectiveQueries qfd qWithAK users statesPerProperty selfOnly authorOnly perspectiveStartPosition =
+storePropertyPerspectiveQueries qfd qWithAK users statesPerProperty selfOnly authorOnly perspectiveStartPosition =
   if isRoleDomain (domain qfd) then
     case forwards qWithAK of
       Nothing ->
@@ -569,29 +569,30 @@ storeCalculatedPropertyPerspectiveQueries qfd qWithAK users statesPerProperty se
                 let perspObjADT = unsafePartial domain2roleInContext (domain qfd)
                 localProps <- lift $ lift2 $ allLocallyRepresentedProperties (roleInContext2Role <$> perspObjADT)
                 if elem (ENP propType') localProps
-                  -- Property is directly on the perspective object: no extra handling needed.
-                  then pure unit
-                  -- Property is on a filler role: invert the virtual query to obtain binding-change
-                  -- inversions (RTFilledKey / RTFillerKey) and property-change inversions (RTPropertyKey).
-                  else do
-                    ep <- lift $ lift2 $ getEnumeratedProperty propType'
-                    let propRange = (unwrap ep).range
-                        propFunctional = bool2threeValued (unwrap ep).functional
-                        propMandatory = bool2threeValued (unwrap ep).mandatory
-                        -- Virtual query: PropertyGetter P from the perspective object's role domain.
-                        -- invert_ expands this to (FillerF >> … >> PropertyGetter P) when the
-                        -- property is not locally on the perspective object.
-                        virtualQuery = SQD (domain qfd) (PropertyGetter (ENP propType')) (VDOM propRange (Just propType)) propFunctional propMandatory
-                    propInversions <- lift $ invert virtualQuery
-                    for_ propInversions \(ZQ bwProp fwdProp) ->
-                      storeInvertedQuery
-                        (ZQ (addTermOnRight <$> bwProp <*> (backwards qWithAK)) fwdProp)
-                        users
-                        propStates
-                        (Map.singleton propType propStates)
-                        selfOnly
-                        authorOnly
-                        perspectiveStartPosition
+                -- Property is directly on the perspective object: no extra handling needed.
+                then pure unit
+                -- Property is on a filler role: invert the virtual query to obtain binding-change
+                -- inversions (RTFilledKey / RTFillerKey) and property-change inversions (RTPropertyKey).
+                else do
+                  ep <- lift $ lift2 $ getEnumeratedProperty propType'
+                  let
+                    propRange = (unwrap ep).range
+                    propFunctional = bool2threeValued (unwrap ep).functional
+                    propMandatory = bool2threeValued (unwrap ep).mandatory
+                    -- Virtual query: PropertyGetter P from the perspective object's role domain.
+                    -- invert_ expands this to (FillerF >> … >> PropertyGetter P) when the
+                    -- property is not locally on the perspective object.
+                    virtualQuery = SQD (domain qfd) (PropertyGetter (ENP propType')) (VDOM propRange (Just propType)) propFunctional propMandatory
+                  propInversions <- lift $ invert virtualQuery
+                  for_ propInversions \(ZQ bwProp fwdProp) ->
+                    storeInvertedQuery
+                      (ZQ (addTermOnRight <$> bwProp <*> (backwards qWithAK)) fwdProp)
+                      users
+                      propStates
+                      (Map.singleton propType propStates)
+                      selfOnly
+                      authorOnly
+                      perspectiveStartPosition
       Just _ -> pure unit
   else pure unit
 
