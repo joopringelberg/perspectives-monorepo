@@ -33,7 +33,6 @@ import Prelude
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (catchError)
 import Control.Monad.Trans.Class (lift)
-import Effect.Aff.Class (liftAff)
 import Data.Array (cons, elemIndex, filterA, foldMap, null)
 import Data.Array.NonEmpty (fromArray)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -45,6 +44,7 @@ import Data.Traversable (for_, traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
 import Effect.Aff (error, killFiber)
+import Effect.Aff.Class (liftAff)
 import Foreign.Object (singleton)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
@@ -60,7 +60,7 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter, not') as COMB
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), contextType, filledBy, getActiveStates_)
-import Perspectives.Logging (logWhen, debugState)
+import Perspectives.Logging (debugState, logWhen, traceState)
 import Perspectives.ModelDependencies (contextWithNotification, notificationMessage, notifications)
 import Perspectives.Names (getMySystem)
 import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, pushFrame, restoreFrame, transactionLevel)
@@ -183,6 +183,7 @@ enteringState contextId stateId = do
       oldFrame <- lift pushFrame
       -- no need to add currentcontext for context states; a binding has been added compile time.
       lift $ addBinding "currentactor" (unwrap <$> currentactors)
+      lift $ humanizePerspectivesWarning (RunContextStateAutomaticAction contextId stateId) >>= \warning -> traceState (padding <> show warning)
       catchError
         (updater cid)
         ( \e -> do
