@@ -82,7 +82,8 @@ import Perspectives.Instances.Me (getMyType, isMe)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, binding_, context, contextType, contextType_, getUnlinkedRoleInstances, roleType_)
 import Perspectives.Logging (logWhen)
 import Perspectives.Names (findIndexedContextName, findIndexedRoleName, removeIndexedContext, removeIndexedRole)
-import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
+import Perspectives.Persistence.DeltaStore (getDeltasForResource, storeDeltaFromSignedDelta)
+import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.ResourceVersionStore (incrementResourceVersion)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, tryGetPerspectContext, tryGetPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
@@ -602,6 +603,21 @@ setFirstBindingWithMode mode filled filler msignedDelta = (lift $ try $ getPersp
             -- (addDelta has not yet been called), causing the SetFirstBinding delta to be omitted
             -- from the context serialisation sent to the new peer.
             lift $ storeDeltaFromSignedDelta signedDelta
+            -- The peer also needs to know how to construct the new filler itself, even when no
+            -- property value on that filler has been set yet.
+            if not (isInPublicScheme (unwrap actualFiller)) then do
+              let fillerContext = rol_context fillerRole
+              (lift $ try $ getPerspectContext fillerContext) >>=
+                handlePerspectContextError "setFirstBinding, filler"
+                  \(PerspectContext { buitenRol }) -> do
+                    contextDeltas <- lift $ getDeltasForResource (unwrap fillerContext)
+                    extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
+                    fillerDeltas <- lift $ getDeltasForResource (unwrap actualFiller)
+                    for_ (contextDeltas <> extRoleDeltas <> fillerDeltas)
+                      ( \(DeltaStoreRecord { signedDelta: fillerDelta }) ->
+                          addDelta (DeltaInTransaction { users, delta: fillerDelta })
+                      )
+            else pure unit
             -- Compute the deltas that must be sent to other users in case the filled role is a 
             -- perspective object.
             handleNewPeer filled
