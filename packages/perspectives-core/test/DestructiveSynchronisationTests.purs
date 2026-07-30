@@ -136,16 +136,16 @@ destructiveTests =
   , { testContextTypeName: test_RemoveOneRoleInstance, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_DeleteTwoRoles, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_DeleteProperty, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RemoveProperty, logConfiguration: debugConfiguration }
+  , { testContextTypeName: test_RemoveProperty, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RemoveOnePropertyValue, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RemoveFiller, logConfiguration: debugConfiguration }
-  -- , { testContextTypeName: test_RemoveRoleFiller, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_RemoveRoleFiller_SpecificRoleTypes, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_UnBindRoleFiller_SpecificRoleTypes, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_RemoveContextWithoutRoles, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_RemoveContextWithUnfilledRole, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_RemoveContextWithFilledRole, logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: test_RemoveContextWithFilledRoleThatShouldRemain, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveFiller, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveRoleFiller, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveRoleFiller_SpecificRoleTypes, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_UnBindRoleFiller_SpecificRoleTypes, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveContextWithoutRoles, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveContextWithUnfilledRole, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveContextWithFilledRole, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_RemoveContextWithFilledRoleThatShouldRemain, logConfiguration: emptyLogConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration

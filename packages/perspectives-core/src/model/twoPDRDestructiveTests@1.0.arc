@@ -442,6 +442,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
 
     external
       property TestFinished (Boolean)
+      property FillerExists (Boolean)
       state TestFinished = TestFinished
         on entry
           -- Moves the role removal out of this transaction.
@@ -449,7 +450,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
           -- would not trigger a state change in the same transaction. So we delay the removal of the role.
           do for Leader
             after 200 Milliseconds remove as filler context >> Filler2
-        state TestSucceeded = context >> ((exists TestRole9) and (not exists TestRole9 >> binding) and exists Filler2)
+        state TestSucceeded = FillerExists and context >> ((exists TestRole9) and (not exists TestRole9 >> binding) and exists Filler2)
           on entry
             do for Follower
               TestSucceeded = true
@@ -469,12 +470,17 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
       perspective on extern
-        props (TestSucceeded) verbs (Consult)
+        props (FillerExists) verbs (SetPropertyValue, Consult)
       perspective on TestRole9
-      perspective on Filler2
+        props (P) verbs (SetPropertyValue, Consult)
 
     thing TestRole9 filledBy Filler2
+      state FillerExists = exists binding
+        on entry
+          do for Follower
+            FillerExists = true for context >> extern
     thing Filler2
+      property P (Number)
 
   ------------------------------------------------------------------------------
   ---- Remove a role as filler (starting from the filler, from specific role types only)
@@ -499,7 +505,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
           -- would not trigger a state change in the same transaction. So we delay the removal of the role.
           do for Leader
             after 200 Milliseconds remove as filler of TestRole11 context >> Filler3 
-        state TestSucceeded = context >> ((exists TestRole10) and (not exists TestRole11 >> binding) and (exists Filler3) and exists TestRole10 >> binding)
+        state TestSucceeded = context >> ((exists TestRole10) and (exists TestRole10 >> binding) and (exists Filler3) and not exists TestRole11 >> binding)
           on entry
             do for Follower
               TestSucceeded = true
@@ -523,12 +529,15 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       perspective on extern
         props (TestSucceeded) verbs (Consult)
       perspective on TestRole10
+        props (P) verbs (Consult)
       perspective on TestRole11
+        props (P) verbs (Consult)
       perspective on Filler3
 
     thing TestRole10 filledBy Filler3
     thing TestRole11 filledBy Filler3
     thing Filler3
+      property P (Number)
 
   ------------------------------------------------------------------------------
   ---- Break the fill link between specific instances
@@ -580,14 +589,18 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       perspective on extern
         props (TestSucceeded) verbs (Consult)
       perspective on TestRole12
+        props (P) verbs (Consult)
       perspective on TestRole13
+        props (P) verbs (Consult)
       perspective on Filler4
       perspective on Filler5
 
     thing TestRole12 filledBy Filler4
     thing TestRole13 filledBy Filler5
     thing Filler4
+      property P (Number)
     thing Filler5
+      property P (Number)
 
   ------------------------------------------------------------------------------
   ---- Remove a context without roles.
@@ -695,11 +708,15 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       
       user Follower = extern >> binder TestRole14 >> context >> Follower
         perspective on RoleOfContext1
+          props (P) verbs (Consult)
+        perspective on ExternOfTest2
+          props (ContextExited, RoleExited) verbs (SetPropertyValue, Consult)
           
       thing RoleOfContext1
         on exit
           do for Tester
             RoleExited = true for context >> ExternOfTest2
+        property P (Number)
 
       thing ExternOfTest2 = extern >> binder TestRole14 >> context >> extern
 
