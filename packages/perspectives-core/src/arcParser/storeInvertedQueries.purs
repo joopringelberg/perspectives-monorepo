@@ -24,10 +24,11 @@ module Perspectives.Parsing.Arc.PhaseThree.StoreInvertedQueries where
 
 import Control.Monad.Except (lift)
 import Control.Monad.Reader (ReaderT, ask)
-import Data.Array (concat, fromFoldable, head, union)
+import Data.Array (concat, elem, fromFoldable, head, union)
 import Data.Foldable (for_)
 import Data.Map (Map, empty, singleton, toUnfoldable, values) as Map
 import Data.Maybe (Maybe(..), fromJust, maybe)
+import Data.Newtype (unwrap)
 import Data.Tuple (Tuple(..))
 import Partial.Unsafe (unsafePartial)
 import Perspective.InvertedQuery.Indices (typeLevelKeyForContextQueries, typeLevelKeyForFilledQueries, typeLevelKeyForFillerQueries, typeLevelKeyForPropertyQueries, typeLevelKeyForRoleQueries)
@@ -40,14 +41,15 @@ import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo', addStorableInvertedQuer
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.Kinked (invert)
-import Perspectives.Query.QueryTypes (Domain, QueryFunctionDescription(..), Range, RoleInContext(..), addTermOnRight, domain, domain2roleInContext, isRoleDomain, makeComposition, mandatory, range)
+import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), Range, RoleInContext(..), addTermOnRight, domain, domain2roleInContext, isRoleDomain, makeComposition, mandatory, range, roleInContext2Role)
 import Perspectives.Representation.ADT (allLeavesInADT)
-import Perspectives.Representation.Class.PersistentType (getCalculatedProperty)
+import Perspectives.Representation.Class.PersistentType (getCalculatedProperty, getEnumeratedProperty)
 import Perspectives.Representation.Class.Property (calculation)
+import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties)
 import Perspectives.Representation.Perspective (ModificationSummary)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..)) as QF
-import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
+import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), bool2threeValued)
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..), StateIdentifier)
 import Perspectives.Utilities (prettyPrint)
 import Prelude (Unit, bind, discard, flip, pure, show, unit, ($), (<$>), (<>), (==), (>=>), (<*>))
@@ -480,7 +482,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
 
   -- For any inversion step whose domain is a role domain and that has no remaining
   -- forward path, also store calculated-property perspective queries.
-  storeCalculatedPropertyPerspectiveQueries
+  storePropertyPerspectiveQueries
     qfd
     qWithAK
     users
@@ -518,7 +520,7 @@ setPathForStep (MQD _ qf _ _ _ _) qWithAK users states statesPerProperty selfOnl
 -- | path, the perspective-object query has reached its destination role. In that
 -- | case, also index calculated-property queries so updates in their underlying
 -- | enumerated properties can trigger affected-user detection.
-storeCalculatedPropertyPerspectiveQueries
+storePropertyPerspectiveQueries
   :: Partial
   => QueryFunctionDescription
   -> QueryWithAKink
@@ -528,7 +530,7 @@ storeCalculatedPropertyPerspectiveQueries
   -> Boolean
   -> Maybe ArcPosition
   -> WithModificationSummary Unit
-storeCalculatedPropertyPerspectiveQueries qfd qWithAK users statesPerProperty selfOnly authorOnly perspectiveStartPosition =
+storePropertyPerspectiveQueries qfd qWithAK users statesPerProperty selfOnly authorOnly perspectiveStartPosition =
   if isRoleDomain (domain qfd) then
     case forwards qWithAK of
       Nothing ->
@@ -554,7 +556,43 @@ storeCalculatedPropertyPerspectiveQueries qfd qWithAK users statesPerProperty se
                     selfOnly
                     authorOnly
                     perspectiveStartPosition
-              ENP _ -> pure unit
+              -- For an enumerated property that does not sit directly on the perspective object,
+              -- construct a virtual PropertyGetter query starting from the perspective object's
+              -- role domain and invert it.  The inversion algorithm (invert_) will expand the
+              -- filler chain (FillerF >> … >> PropertyGetter P) automatically, producing the
+              -- RTFilledKey / RTFillerKey inversions that allow the runtime to detect that a user
+              -- must be informed when the fill relation in the chain is severed.
+              -- Properties that are directly on the perspective object already have the required
+              -- RTPropertyKey inverted query (handled elsewhere) and need no extra binding-change
+              -- inversions, so we skip them (bottom case of the recursion).
+              ENP propType' -> do
+                let perspObjADT = unsafePartial domain2roleInContext (domain qfd)
+                localProps <- lift $ lift2 $ allLocallyRepresentedProperties (roleInContext2Role <$> perspObjADT)
+                if elem (ENP propType') localProps
+                -- Property is directly on the perspective object: no extra handling needed.
+                then pure unit
+                -- Property is on a filler role: invert the virtual query to obtain binding-change
+                -- inversions (RTFilledKey / RTFillerKey) and property-change inversions (RTPropertyKey).
+                else do
+                  ep <- lift $ lift2 $ getEnumeratedProperty propType'
+                  let
+                    propRange = (unwrap ep).range
+                    propFunctional = bool2threeValued (unwrap ep).functional
+                    propMandatory = bool2threeValued (unwrap ep).mandatory
+                    -- Virtual query: PropertyGetter P from the perspective object's role domain.
+                    -- invert_ expands this to (FillerF >> … >> PropertyGetter P) when the
+                    -- property is not locally on the perspective object.
+                    virtualQuery = SQD (domain qfd) (PropertyGetter (ENP propType')) (VDOM propRange (Just propType)) propFunctional propMandatory
+                  propInversions <- lift $ invert virtualQuery
+                  for_ propInversions \(ZQ bwProp fwdProp) ->
+                    storeInvertedQuery
+                      (ZQ (addTermOnRight <$> bwProp <*> (backwards qWithAK)) fwdProp)
+                      users
+                      propStates
+                      (Map.singleton propType propStates)
+                      selfOnly
+                      authorOnly
+                      perspectiveStartPosition
       Just _ -> pure unit
   else pure unit
 

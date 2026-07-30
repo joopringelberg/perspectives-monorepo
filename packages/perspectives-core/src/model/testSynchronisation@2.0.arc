@@ -54,19 +54,19 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
     context Tests (relational) filledBy Test
 
   case Test
-    -- The automatic actions are contextualised in their specialisations,
-    -- meaning that specialisations of Follower and Leader are created.
-    on entry 
-      do for Initializer
-        bind me to Leader
 
     -- Why not on entry of Test, like we do for the Leader?
     -- The Test instance may not yet be bound to Tests, so AppFollower is not yet reachable.
     state AppfollowerReachable = exists extern >> binder Tests
       on entry
         do for Initializer
+          -- The automatic actions are contextualised in their specialisations,
+          -- meaning that specialisations of Leader and Follower are created.
           -- Dit gaat fout als we Follower met AppFollower vullen in plaats van met de vuller van AppFollower.
           bind AppFollower >> binding to Follower
+          -- Follower will not have Test instances bound in TestApp$Tests, so this is a surefire way 
+          -- to execute this action only for Leader.
+          bind me to Leader
 
     external
       property TestName (String)

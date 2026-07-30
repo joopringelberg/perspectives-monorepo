@@ -40,6 +40,7 @@ import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
 import Test.SinglePDRScaffold (getSinglePDRResults)
 import Test.ConstructiveSynchronisationTest (getSynchronisationResults, synchronisationSuite)
+import Test.DestructiveSynchronisationTests (getSynchronisationResults, synchronisationSuite) as DestructiveSynchronisationTests
 import Test.Layer3ScaffoldTests (scaffoldTests)
 import Test.ModelCompilationRegression (getCompilationResults, modelCompilationSuite)
 import Test.QueryStepTests (queryStepSuite, queryStepTestModelConfiguration)
@@ -50,6 +51,7 @@ import Test.Unit.Main (runTest)
 main :: Effect Unit
 main = launchAff_ do
   synchronisationResults <- getSynchronisationResults
+  destructiveSynchronisationResults <- DestructiveSynchronisationTests.getSynchronisationResults
   compilationResults <- getCompilationResults
   queryStepResults <- getSinglePDRResults queryStepTestModelConfiguration
   destructiveResults <- getSinglePDRResults singlePDRDestructiveTestModelConfiguration
@@ -57,6 +59,7 @@ main = launchAff_ do
   liftEffect $ runTest do
     scaffoldTests
     synchronisationSuite synchronisationResults
+    DestructiveSynchronisationTests.synchronisationSuite destructiveSynchronisationResults
     modelCompilationSuite compilationResults
     queryStepSuite queryStepResults
     singlePDRDestructiveSuite destructiveResults
