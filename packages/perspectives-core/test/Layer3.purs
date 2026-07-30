@@ -44,6 +44,7 @@ import Test.Layer3ScaffoldTests (scaffoldTests)
 import Test.ModelCompilationRegression (getCompilationResults, modelCompilationSuite)
 import Test.QueryStepTests (queryStepSuite, queryStepTestModelConfiguration)
 import Test.SinglePDRDestructiveTests (singlePDRDestructiveSuite, singlePDRDestructiveTestModelConfiguration)
+import Test.TransactionExecutionTests (transactionExecutionSuite, transactionExecutionTestModelConfiguration)
 import Test.Unit.Main (runTest)
 
 main :: Effect Unit
@@ -52,9 +53,11 @@ main = launchAff_ do
   compilationResults <- getCompilationResults
   queryStepResults <- getSinglePDRResults queryStepTestModelConfiguration
   destructiveResults <- getSinglePDRResults singlePDRDestructiveTestModelConfiguration
+  transactionExecutionResults <- getSinglePDRResults transactionExecutionTestModelConfiguration
   liftEffect $ runTest do
     scaffoldTests
     synchronisationSuite synchronisationResults
     modelCompilationSuite compilationResults
     queryStepSuite queryStepResults
     singlePDRDestructiveSuite destructiveResults
+    transactionExecutionSuite transactionExecutionResults
