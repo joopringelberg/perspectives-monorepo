@@ -624,7 +624,7 @@ addDeltasForPerspectiveObjects filled = do
   -- Now compute all context-user combinations that have a perspective on this object
   nub <<< concat <$> for allFilleds \filled' -> do
     -- Each filled role might be a perspective object.
-    contextInstance <- lift $ context' filled
+    contextInstance <- lift $ context' filled'
     cType <- lift $ contextType_ contextInstance
     filledType <- lift (filled' ##>> OG.roleType)
     -- For each of them: get and compile perspective object queries for the step from that filled role to its context.
@@ -640,16 +640,16 @@ addDeltasForPerspectiveObjects filled = do
       -- Consequently, the filled role is the only user that should be informed of the deltas in the calculation of the properties.
       -- Notice that authorOnly queries are not inverted. They cannot turn up here.
       if isForSelfOnly iq then do
-        ctxt <- lift (context' filled)
-        computeProperties [ (singletonPath (R filled)) ] statesPerProperty [ Tuple ctxt [ filled ] ]
-        pure [ filled ]
+        ctxt <- lift (context' filled')
+        computeProperties [ (singletonPath (R filled')) ] statesPerProperty [ Tuple ctxt [ filled' ] ]
+        pure [ filled' ]
       else do
         cwus <- handleBackwardQuery filled iq
         -- Then take the properties of the query and, for the users computed, apply computeProperties in order to add filled role deltas and property deltas.
         us <- pure (filter (\(Tuple context users) -> not $ null users) cwus)
         if null us then pure unit
         -- This function serialises dependencies from the interpretation result to deltas and adds them to the transaction for the users.
-        else computeProperties [ (singletonPath (R filled)) ] statesPerProperty us
+        else computeProperties [ (singletonPath (R filled')) ] statesPerProperty us
         pure $ concat (snd <$> cwus)
 
   where
