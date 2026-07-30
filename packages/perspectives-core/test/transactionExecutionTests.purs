@@ -8,7 +8,7 @@ import Effect (Effect)
 import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
-import Test.SinglePDRScaffold (ModelTest, SinglePDRModelConfiguration, SinglePDRResults, getSinglePDRResults, emptyLogConfiguration)
+import Test.SinglePDRScaffold (ModelTest, SinglePDRModelConfiguration, SinglePDRResults, LogConfiguration, emptyLogConfiguration, getSinglePDRResults)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -80,5 +80,17 @@ transactionExecutionTests =
     -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T03", logConfiguration: emptyLogConfiguration }
     -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T04", logConfiguration: emptyLogConfiguration }
     -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T05", logConfiguration: emptyLogConfiguration }
-    { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T06", logConfiguration: emptyLogConfiguration }
+    -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T06", logConfiguration: emptyLogConfiguration }
+    { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T07", logConfiguration: emptyLogConfiguration }
   ]
+
+debugConfiguration :: LogConfiguration
+debugConfiguration =       
+  { pdr:
+    [
+    { topic: TEST, logLevel: Trace }
+    , { topic: RESOURCE, logLevel: Trace }
+    , { topic: STATE, logLevel: Trace }
+    , { topic: INSTALL, logLevel: Trace }
+    ]
+  }

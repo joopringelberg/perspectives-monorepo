@@ -219,12 +219,15 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
   ------------------------------------------------------------------------------
   case T06
     aspect mm:Test
-    on entry
-      do for Tester
-        create context EmbeddedContextT06 bound to EmbeddedT06
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          create context EmbeddedContextT06 bound to EmbeddedT06
 
     external
-      state Success = context >> EmbeddedT06 >> binding >> P
+      -- The test on existence of TestName is to prevent double evaluation of state Success
+      -- in the same transaction. To protect us from infinite loops, a state is evaluated only once per transaction.
+      state Success = (exists TestName) and context >> EmbeddedT06 >> binding >> P
         on entry
           do for Tester
             TestSucceeded = true
