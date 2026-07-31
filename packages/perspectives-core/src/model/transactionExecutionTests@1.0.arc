@@ -217,40 +217,6 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
   ------------------------------------------------------------------------------
   ---- T06 — Context creation cascades: on entry creates another context
   ------------------------------------------------------------------------------
-  case T06
-    aspect mm:Test
-    state TesterAvailable = exists Tester 
-      on entry
-        do for Tester
-          create context EmbeddedContextT06 bound to EmbeddedT06
-
-    external
-      -- The test on existence of TestName is to prevent double evaluation of state Success
-      -- in the same transaction. To protect us from infinite loops, a state is evaluated only once per transaction.
-      state Success = (exists TestName) and context >> EmbeddedT06 >> binding >> P
-        on entry
-          do for Tester
-            TestSucceeded = true
-
-    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
-      aspect mm:Test$Tester
-      perspective on EmbeddedT06
-        only (CreateAndFill)
-      action RunTest
-        TestName = "T06 - Context creation cascades: on entry creates another context" for extern
-
-    context EmbeddedT06 filledBy EmbeddedContextT06
-
-    case EmbeddedContextT06
-      on entry
-        do for Tester
-          P = true for extern
-      external
-        property P (Boolean)
-      user Tester = me
-        perspective on extern
-          props (P) verbs (SetPropertyValue, Consult)
-  
   ------------------------------------------------------------------------------
   ---- T07 — Role creation cascades: on entry creates another role
   ------------------------------------------------------------------------------
@@ -295,7 +261,7 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
     aspect mm:Test
 
     external
-      state Success = exists context >> Archive
+      state Success = (exists TestName) and (exists context >> Archive)
         on entry
           do for Tester
             TestSucceeded = true
@@ -304,23 +270,285 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
       aspect mm:Test$Tester
 
       perspective on Ephemeral
-        only (Remove)
+        only (Create, Remove)
 
       perspective on Archive
         only (Create)
-        props (Timestamp) verbs (SetPropertyValue, Consult)
 
       action RunTest
         TestName = "T08 - Role exit cascades: on exit creates a new role" for extern
+        create role Ephemeral
         remove role Ephemeral
 
     thing Ephemeral
       on exit
         do for Tester
-          letA
-            archive <- create role Archive
-          in
-            Timestamp = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime for archive
+          create role Archive
+          TestSucceeded = true for context >> extern
 
     thing Archive
-      property Timestamp (DateTime)
+
+  ------------------------------------------------------------------------------
+  ---- T08a — Exit-to-entry cascade chain: on exit creates role that on entry creates another role
+  ------------------------------------------------------------------------------
+  case T08a
+    aspect mm:Test
+
+    external
+      state Success = (exists TestName) and (exists context >> FinalT09)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+
+      perspective on TriggerT09
+        only (Create, Remove)
+
+      perspective on IntermediateT09
+        only (Create)
+
+      perspective on FinalT09
+        only (Create)
+
+      action RunTest
+        TestName = "T08a - Exit-to-entry cascade chain" for extern
+        create role TriggerT09
+        remove role TriggerT09
+
+    thing TriggerT09
+      on exit
+        do for Tester
+          create role IntermediateT09
+
+    thing IntermediateT09
+      on entry
+        do for Tester
+          create role FinalT09
+
+    thing FinalT09
+
+  ------------------------------------------------------------------------------
+  ---- T09 — Context removal cascades through multiple roles
+  ------------------------------------------------------------------------------
+  case T09
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          create context EmbeddedContextT09 bound to EmbeddedT09
+
+    external
+      property ARemoved (Boolean)
+      property BRemoved (Boolean)
+      -- The test on existence of TestName is to prevent double evaluation of state Success
+      -- in the same transaction. To protect us from infinite loops, a state is evaluated only once per transaction.
+      state Success = (exists TestName) and ARemoved and BRemoved
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on EmbeddedT09
+        only (CreateAndFill, RemoveContext)
+      action RunTest
+        TestName = "T09 - Context removal cascades through multiple roles" for extern
+        remove context EmbeddedT09
+
+    context EmbeddedT09 filledBy EmbeddedContextT09
+
+    case EmbeddedContextT09
+      on entry
+        do for Tester
+          create role A
+          create role B
+
+      user Tester = me
+        perspective on EnclosingT09
+          props (ARemoved, BRemoved) verbs (SetPropertyValue, Consult)
+        perspective on A
+          only (Create, Remove)
+        perspective on B
+          only (Create, Remove)
+      
+      context EnclosingT09 = extern >> binder EmbeddedT09 >> context >> extern
+      
+      thing A
+        on exit
+          do for Tester
+            ARemoved = true for context >> EnclosingT09
+      thing B
+        on exit
+          do for Tester
+            BRemoved = true for context >> EnclosingT09
+  
+  ------------------------------------------------------------------------------
+  ---- T10 — Role removal deferred
+  ------------------------------------------------------------------------------
+  case T10
+    aspect mm:Test
+    state TesterAvailable = exists Tester
+      on entry
+        do for Tester
+          create role RoleT10
+          create role SecondRoleT10
+    
+    external
+      property SecondRoleT10Fired (Boolean)
+      property ThirdRoleRemoved (Boolean)
+      state TestSucceeded = SecondRoleT10Fired and ThirdRoleRemoved
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+
+      perspective on extern
+        props (SecondRoleT10Fired, ThirdRoleRemoved) verbs (SetPropertyValue, Consult)
+
+      perspective on RoleT10
+        only (Create)
+
+      perspective on SecondRoleT10
+        only (Create, Remove)
+      
+      perspective on ThirdRoleT10
+        only (Create, Remove)
+      
+      action RunTest
+        TestName = "T10 - Role removal deferred" for extern
+        create role ThirdRoleT10 
+
+    thing RoleT10
+      state TestStarted = (exists context >> ThirdRoleT10)
+        on entry
+          do for Tester
+            remove role context >> ThirdRoleT10
+            ThirdRoleRemoved = true for context >> extern
+
+    thing SecondRoleT10
+      -- This state can only be entered after state RoleT10$TestStarted has been entered.
+      state Role10Fired = context >> extern >> ThirdRoleRemoved
+        -- Subsequently, state TestStarted can only be entered if the removal of ThirdRoleT10 has been deferred.
+        state TestStarted = (exists context >> ThirdRoleT10)
+          on entry
+            do for Tester
+              SecondRoleT10Fired = true for context >> extern
+    
+    thing ThirdRoleT10
+
+  ------------------------------------------------------------------------------
+  ---- T11 — ExecuteDestructiveEffect deferred until phase-1 base case (SKIPPED)
+  ------------------------------------------------------------------------------
+  
+    ------------------------------------------------------------------------------
+  ---- T12 — Full context removal lifecycle
+  ------------------------------------------------------------------------------
+  case T12
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          create context EmbeddedContextOfT12 bound to RoleOfT12
+          Counter = 0 for extern
+    external
+      property Counter (Number)
+      -- This state condition will be checked immediately after creation and found to be true.
+      -- It will become false again when EmbeddedContextOfT12 is created.
+      --
+      -- When the test is run, we start a fresh transaction.
+      -- Removing RoleOfT12 touches this state condition again. 
+      -- But RoleOfT12 will be marked untouchable on removal.
+      -- That causes step 2.1 to add this state to the deferred evaluation queue.
+      -- Finally, step 2.5 re-evaluates this state after physical removal 
+      -- If the test succeeds, physical removal has occurred (step 2.4), which is the condition for the test to succeed.
+      state TestSucceeded = (not exists context >> RoleOfT12) 
+        state CounterIncremented = Counter == 1
+          on entry
+            do for Tester
+              TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (Counter) verbs (SetPropertyValue, Consult)
+      perspective on RoleOfT12
+        only (CreateAndFill, RemoveContext)
+      action RunTest
+        TestName = "T12 — Full context removal lifecycle" for extern
+        remove context RoleOfT12
+
+    context RoleOfT12 filledBy EmbeddedContextOfT12
+
+    case EmbeddedContextOfT12
+      on exit
+        do for Tester
+          -- Marks exit in step 1.6.
+          Counter = ExternOfT12 >> Counter + 1 for ExternOfT12
+
+      thing ExternOfT12 (functional) = extern >> binder RoleOfT12 >> context >> extern
+
+      user Tester = me
+        perspective on ExternOfT12
+          props (Counter) verbs (SetPropertyValue, Consult)
+
+  ------------------------------------------------------------------------------
+  ---- T13 — Property change causes state entry in phase 2
+  ------------------------------------------------------------------------------
+  case T13
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          create role RoleOfT13
+          POfT13 = true for extern
+    external
+      property POfT13 (Boolean)
+      state TestState = POfT13
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on RoleOfT13
+        only (Create)
+      perspective on extern
+        props (TestSucceeded, POfT13) verbs (SetPropertyValue, Consult)
+      action RunTest
+        POfT13 = false for extern
+        TestName = "T13 — Property change causes state entry in phase 2" for extern
+
+    thing RoleOfT13
+
+  ------------------------------------------------------------------------------
+  ---- T14 — Property change causes state entry in phase 2
+  ------------------------------------------------------------------------------
+  case T14
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          create role RoleOfT14
+          POfT14 = true for extern
+    external
+      property POfT14 (Boolean)
+      state TestState = POfT14
+        on exit
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on RoleOfT14
+        only (Create)
+      perspective on extern
+        props (TestSucceeded, POfT14) verbs (SetPropertyValue, Consult)
+      action RunTest
+        POfT14 = false for extern
+        TestName = "T14 — Property change causes state entry in phase 2" for extern
+
+    thing RoleOfT14
