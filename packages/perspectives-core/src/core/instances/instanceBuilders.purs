@@ -41,7 +41,7 @@ module Perspectives.Instances.Builders
 import Control.Monad.AvarMonadAsk (modify)
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Writer (WriterT, lift, runWriterT, tell)
-import Data.Array (catMaybes, elemIndex)
+import Data.Array (catMaybes, elemIndex, uncons)
 import Data.Array.NonEmpty (NonEmptyArray, toArray)
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -61,11 +61,12 @@ import Perspectives.ContextAndRole (changeRol_isMe, getNextRolIndex)
 import Perspectives.CoreTypes (IndexedResource(..), MonadPerspectivesTransaction, (###=), (##=))
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, addDelta)
 import Perspectives.DependencyTracking.Dependency (findIndexedContextNamesRequests)
+import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.Instances.CreateRole (constructEmptyRole)
 import Perspectives.Instances.Me (isMe)
-import Perspectives.Logging (debugInstall, traceResource)
+import Perspectives.Logging (debugInstall, traceResource, warnResource)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Parsing.Messages (PerspectivesError)
 import Perspectives.Persistent (saveEntiteit, tryGetPerspectEntiteit)
@@ -80,7 +81,8 @@ import Perspectives.ResourceIdentifiers (createResourceIdentifier, createResourc
 import Perspectives.SaveUserData (FillBindingMode(..), setFirstBinding, setFirstBindingWithMode)
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
-import Perspectives.Types.ObjectGetters (indexedContextName, indexedRoleName, publicUserRole)
+import Perspectives.Types.ObjectGetters (indexedContextName, indexedRoleName, isFunctional_, publicUserRole)
+import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (Unit, bind, discard, eq, pure, unit, void, ($), (*>), (<$>), (<<<), (<>), (>>=), (&&))
 
 -- | Construct a context from the serialization. If a context with the given id exists, returns a PerspectivesError.
@@ -193,13 +195,28 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
 -- | The contextId may be prefixed with a default namespace: it will be expanded.
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 createAndAddRoleInstance :: EnumeratedRoleType -> String -> RolSerialization -> MonadPerspectivesTransaction (Maybe RoleInstance)
-createAndAddRoleInstance roleType@(EnumeratedRoleType rtype) contextId r@(RolSerialization { binding }) =
-  case binding of
-    Nothing -> Just <$> (createAndAddRoleInstance_ roleType contextId r false)
-    Just b -> do
-      me <- lift (isMe $ RoleInstance b)
-      isUserRole <- lift (getEnumeratedRole roleType >>= \rl -> pure $ isJust $ elemIndex (kindOfRole rl) [ UserRole, Public, PublicProxy ])
-      Just <$> (createAndAddRoleInstance_ roleType contextId r (me && isUserRole))
+createAndAddRoleInstance roleType@(EnumeratedRoleType rtype) contextId r@(RolSerialization { binding }) = do 
+  -- If the role type is functional, check whether an instance of this role type already exists in the context. If so, do not make another and log a warning.
+  onlyOneInstanceAllowed <- lift $ isFunctional_ roleType
+  if onlyOneInstanceAllowed then do
+    contextInstanceId <- ContextInstance <$> (lift $ expandDefaultNamespaces contextId)
+    rolInstances <- lift (contextInstanceId ##= getRoleInstances (ENR roleType))
+    case uncons rolInstances of
+      Nothing -> createIt 
+      Just { head: existing, tail: _ } -> do
+        lift (humanizePerspectivesWarning (RoleIsFunctional roleType contextInstanceId existing) >>= warnResource <<< show)
+        pure Nothing
+  else createIt
+
+  where 
+  createIt :: MonadPerspectivesTransaction (Maybe RoleInstance)
+  createIt = do
+    case binding of
+      Nothing -> Just <$> (createAndAddRoleInstance_ roleType contextId r false)
+      Just b -> do
+        me <- lift (isMe $ RoleInstance b)
+        isUserRole <- lift (getEnumeratedRole roleType >>= \rl -> pure $ isJust $ elemIndex (kindOfRole rl) [ UserRole, Public, PublicProxy ])
+        Just <$> (createAndAddRoleInstance_ roleType contextId r (me && isUserRole))
 
 createAndAddRoleInstance_ :: EnumeratedRoleType -> String -> RolSerialization -> Boolean -> MonadPerspectivesTransaction RoleInstance
 createAndAddRoleInstance_ roleType@(EnumeratedRoleType rtype) contextId (RolSerialization { id: mRoleId, properties, binding }) isMe = lookupOrCreateRoleInstance roleType
@@ -207,6 +224,7 @@ createAndAddRoleInstance_ roleType@(EnumeratedRoleType rtype) contextId (RolSeri
   do
     contextInstanceId <- ContextInstance <$> (lift $ expandDefaultNamespaces contextId)
     rolInstances <- lift (contextInstanceId ##= getRoleInstances (ENR roleType))
+    -- If this role type is functional, we should not create a new instance if one already exists.
     -- SYNCHRONISATION by UniverseRoleDelta
     r@(PerspectRol { id: roleInstance }) <- case mRoleId of
       Nothing -> do
