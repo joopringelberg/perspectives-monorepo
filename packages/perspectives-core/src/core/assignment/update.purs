@@ -386,7 +386,6 @@ addProperty rids propertyName valuesAndDeltas = case ARR.head rids of
             readablePropertyName <- lift $ toReadable propertyName
             lift $ debugResource ("addProperty: add to property " <> unwrap readablePropertyName <> " values " <> show values)
 
-
 -- | Get the property bearing role individual in the chain.
 -- | If the property is defined on role instance's type (either directly or by Aspect), return it; otherwise
 -- | recursively apply this function to its binding.
@@ -515,7 +514,6 @@ deleteProperty rids propertyName mdelta = case ARR.head rids of
               lift $ cacheAndSave rid (deleteRol_property pe replacementProperty)
               readablePropertyName <- lift $ toReadable propertyName
               lift $ debugResource ("deleteProperty: delete property " <> unwrap readablePropertyName)
-
 
 -- | Modify the role instance with the new property values.
 -- | When all new values are in fact already in the set of values for the property of the role instance, this is

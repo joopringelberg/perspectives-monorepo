@@ -31,7 +31,7 @@ import Prelude
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
-import Test.SinglePDRScaffold (ModelTest, SinglePDRModelConfiguration, SinglePDRResults, emptyLogConfiguration)
+import Test.SinglePDRScaffold (ModelTest, SinglePDRModelConfiguration, SinglePDRResults, TestModelLoadMethod(..), emptyLogConfiguration)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 
@@ -51,6 +51,7 @@ queryStepTestModelConfiguration =
   { suiteName: "Query step tests"
   , snapshotDirectory: snapshotDirectory
   , testModel
+  , testModelLoadMethod: LoadModelFromRepository
   , indexedTestContext
   , testAppManager
   , testsType

@@ -195,20 +195,20 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
 -- | The contextId may be prefixed with a default namespace: it will be expanded.
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 createAndAddRoleInstance :: EnumeratedRoleType -> String -> RolSerialization -> MonadPerspectivesTransaction (Maybe RoleInstance)
-createAndAddRoleInstance roleType@(EnumeratedRoleType rtype) contextId r@(RolSerialization { binding }) = do 
+createAndAddRoleInstance roleType@(EnumeratedRoleType rtype) contextId r@(RolSerialization { binding }) = do
   -- If the role type is functional, check whether an instance of this role type already exists in the context. If so, do not make another and log a warning.
   onlyOneInstanceAllowed <- lift $ isFunctional_ roleType
   if onlyOneInstanceAllowed then do
     contextInstanceId <- ContextInstance <$> (lift $ expandDefaultNamespaces contextId)
     rolInstances <- lift (contextInstanceId ##= getRoleInstances (ENR roleType))
     case uncons rolInstances of
-      Nothing -> createIt 
+      Nothing -> createIt
       Just { head: existing, tail: _ } -> do
         lift (humanizePerspectivesWarning (RoleIsFunctional roleType contextInstanceId existing) >>= warnResource <<< show)
         pure Nothing
   else createIt
 
-  where 
+  where
   createIt :: MonadPerspectivesTransaction (Maybe RoleInstance)
   createIt = do
     case binding of

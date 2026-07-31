@@ -251,3 +251,76 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
         perspective on extern
           props (P) verbs (SetPropertyValue, Consult)
   
+  ------------------------------------------------------------------------------
+  ---- T07 — Role creation cascades: on entry creates another role
+  ------------------------------------------------------------------------------
+  case T07
+    aspect mm:Test
+
+    external
+      state Success = context >> ((exists TriggerT07) and ((exists ResultT07) and ResultT07 >> Q))
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      
+      perspective on TriggerT07
+        only (Create)
+      
+      perspective on ResultT07
+        only (Create)
+        props (Q) verbs (SetPropertyValue, Consult)
+
+      action RunTest
+        TestName = "T07 - Role creation cascades: on entry creates another role" for extern
+        create role TriggerT07
+
+    thing TriggerT07
+      on entry
+        do for Tester
+          create role ResultT07
+
+    thing ResultT07
+      property Q (Boolean)
+      on entry
+        do for Tester
+          Q = true
+
+  ------------------------------------------------------------------------------
+  ---- T08 — Role exit cascades: on exit creates a new role
+  ------------------------------------------------------------------------------
+  case T08
+    aspect mm:Test
+
+    external
+      state Success = exists context >> Archive
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+
+      perspective on Ephemeral
+        only (Remove)
+
+      perspective on Archive
+        only (Create)
+        props (Timestamp) verbs (SetPropertyValue, Consult)
+
+      action RunTest
+        TestName = "T08 - Role exit cascades: on exit creates a new role" for extern
+        remove role Ephemeral
+
+    thing Ephemeral
+      on exit
+        do for Tester
+          letA
+            archive <- create role Archive
+          in
+            Timestamp = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime for archive
+
+    thing Archive
+      property Timestamp (DateTime)

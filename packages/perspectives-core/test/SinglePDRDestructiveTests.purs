@@ -35,7 +35,7 @@ import Effect (Effect)
 import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
-import Test.SinglePDRScaffold (ModelTest, SinglePDRModelConfiguration, SinglePDRResults, getSinglePDRResults, emptyLogConfiguration)
+import Test.SinglePDRScaffold (ModelTest, SinglePDRModelConfiguration, SinglePDRResults, TestModelLoadMethod(..), getSinglePDRResults, emptyLogConfiguration)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -62,6 +62,7 @@ singlePDRDestructiveTestModelConfiguration =
   { suiteName: "Single-PDR destructive tests"
   , snapshotDirectory: destructiveSnapshotDirectory
   , testModel: destructiveTestModel
+  , testModelLoadMethod: LoadModelFromRepository
   , indexedTestContext: destructiveIndexedTestContext
   , testAppManager: destructiveTestAppManager
   , testsType: destructiveTestsType

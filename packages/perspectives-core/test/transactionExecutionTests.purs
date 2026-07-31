@@ -4,11 +4,12 @@ import Prelude
 
 import Data.Either (Either(..))
 import Data.Foldable (for_)
+import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
-import Test.SinglePDRScaffold (ModelTest, SinglePDRModelConfiguration, SinglePDRResults, LogConfiguration, emptyLogConfiguration, getSinglePDRResults)
+import Test.SinglePDRScaffold (ModelTest, SinglePDRModelConfiguration, SinglePDRResults, LogConfiguration, TestModelLoadMethod(..), emptyLogConfiguration, getSinglePDRResults)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -35,6 +36,7 @@ transactionExecutionTestModelConfiguration =
   { suiteName: "Transaction execution tests"
   , snapshotDirectory: transactionExecutionSnapshotDirectory
   , testModel: transactionExecutionTestModel
+  , testModelLoadMethod: LoadModelFromRepository
   , indexedTestContext: transactionExecutionIndexedTestContext
   , testAppManager: transactionExecutionTestAppManager
   , testsType: transactionExecutionTestsType
@@ -49,6 +51,18 @@ transactionExecutionTestModelConfiguration =
       }
   , tests: transactionExecutionTests
   }
+
+transactionExecutionCompileTestModelConfiguration :: SinglePDRModelConfiguration
+transactionExecutionCompileTestModelConfiguration =
+  transactionExecutionTestModelConfiguration
+    { suiteName = "Transaction execution tests (compile)"
+    , testModelLoadMethod =
+        CompileModelFromSource
+          { sourcePath: "src/model/transactionExecutionTests@1.0.arc"
+          , modelUriReadable: "model://joopringelberg.nl#TransactionExecutionTests@1.0"
+          , basedOnVersion: Nothing
+          }
+    }
 
 transactionExecutionTestModel :: String
 -- transactionExecutionTestModel = "model://joopringelberg.nl#TransactionExecutionTests@1.0"
@@ -81,7 +95,8 @@ transactionExecutionTests =
     -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T04", logConfiguration: emptyLogConfiguration }
     -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T05", logConfiguration: emptyLogConfiguration }
     -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T06", logConfiguration: emptyLogConfiguration }
-    { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T07", logConfiguration: emptyLogConfiguration }
+    -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T07", logConfiguration: emptyLogConfiguration }
+     { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T08", logConfiguration: emptyLogConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration

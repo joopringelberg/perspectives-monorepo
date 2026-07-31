@@ -26,6 +26,7 @@ module Test.SinglePDRScaffold
   , LogConfiguration
   , emptyLogConfiguration
   , ModelTest
+  , TestModelLoadMethod(..)
   , SinglePDRResults
   , SinglePDRModelConfiguration
   , getSinglePDRResults
@@ -47,12 +48,15 @@ import Effect.Aff (Aff, error)
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, new, read, write)
 import Effect.Unsafe (unsafePerformEffect)
+import Node.Encoding (Encoding(..))
+import Node.FS.Aff (readTextFile)
+import Partial.Unsafe (unsafePartial)
 import Foreign.Object (empty) as OBJ
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runContextAction)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##>))
 import Perspectives.Extern.Couchdb (addModelToLocalStore_)
-import Perspectives.Identifiers (buitenRol)
+import Perspectives.Identifiers (buitenRol, modelUri2LocalName)
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
 import Perspectives.Logging (ansiRed, infoTest)
 import Perspectives.ModelDependencies (sysUser)
@@ -62,7 +66,9 @@ import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
+import Perspectives.Sidecar.StableIdMapping (ModelUri(..), Stable)
 import Perspectives.Sidecar.ToStable (toStable)
+import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
 import Test.PDRInstance (PDRInstance, SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, runInPDR, testPouchdbUser, withPDRCached)
 
 type TopicLogLevelPair =
@@ -86,10 +92,19 @@ type ModelTest =
 
 type SinglePDRResults = Array SynchronisationResult
 
+data TestModelLoadMethod
+  = LoadModelFromRepository
+  | CompileModelFromSource
+      { sourcePath :: String
+      , modelUriReadable :: String
+      , basedOnVersion :: Maybe String
+      }
+
 type SinglePDRModelConfiguration =
   { suiteName :: String
   , snapshotDirectory :: String
   , testModel :: String
+  , testModelLoadMethod :: TestModelLoadMethod
   , indexedTestContext :: String
   , testAppManager :: String
   , testsType :: String
@@ -100,7 +115,7 @@ type SinglePDRModelConfiguration =
   }
 
 type CachedSinglePDRResults =
-  { suiteName :: String
+  { cacheKey :: String
   , results :: SinglePDRResults
   }
 
@@ -109,8 +124,9 @@ cachedSinglePDRResults = unsafePerformEffect $ new []
 
 getSinglePDRResults :: SinglePDRModelConfiguration -> Aff SinglePDRResults
 getSinglePDRResults cfg = do
+  let cacheKey = singlePDRCacheKey cfg
   cached <- liftEffect $ read cachedSinglePDRResults
-  case find (\result -> result.suiteName == cfg.suiteName) cached of
+  case find (\result -> result.cacheKey == cacheKey) cached of
     Just { results } -> pure results
     Nothing -> do
       results <- withPDRCached
@@ -125,9 +141,28 @@ getSinglePDRResults cfg = do
 
           runInPDR pdr do
             infoTest "Loading test model"
-            runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
-              $
-                addModelToLocalStore_ [ cfg.testModel ] (RoleInstance "Ignored")
+
+          case cfg.testModelLoadMethod of
+            LoadModelFromRepository -> runInPDR pdr do
+              runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+                $
+                  addModelToLocalStore_ [ cfg.testModel ] (RoleInstance "Ignored")
+            CompileModelFromSource { sourcePath, modelUriReadable, basedOnVersion } -> do
+              source <- readTextFile UTF8 sourcePath
+              runInPDR pdr do
+                infoTest "Compiling and storing test model from source"
+                compilationResult <- runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+                  ( loadCompileAndStoreArcFile_
+                      (ModelUri cfg.testModel :: ModelUri Stable)
+                      source
+                      true
+                      (unsafePartial modelUri2LocalName cfg.testModel)
+                      modelUriReadable
+                      basedOnVersion
+                  )
+                case compilationResult of
+                  Left errs -> throwError $ error ("Failed to compile and store test model: " <> show errs)
+                  Right _ -> pure unit
 
           testAppContext <- pollUntil 100 (Milliseconds 100.0)
             "Indexed test context to appear after loading test model"
@@ -139,8 +174,17 @@ getSinglePDRResults cfg = do
 
           traverse (\testCase -> executeModelTest pdr testAppContext testCase.testContextTypeName testCase.logConfiguration cfg) cfg.tests
 
-      liftEffect $ write (cached <> [ { suiteName: cfg.suiteName, results } ]) cachedSinglePDRResults
+      liftEffect $ write (cached <> [ { cacheKey, results } ]) cachedSinglePDRResults
       pure results
+
+singlePDRCacheKey :: SinglePDRModelConfiguration -> String
+singlePDRCacheKey cfg =
+  let
+    loadMethodKey = case cfg.testModelLoadMethod of
+      LoadModelFromRepository -> "repository"
+      CompileModelFromSource { sourcePath } -> "compile:" <> sourcePath
+  in
+    cfg.suiteName <> "|" <> loadMethodKey
 
 executeModelTest
   :: PDRInstance
