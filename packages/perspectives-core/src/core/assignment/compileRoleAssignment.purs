@@ -420,7 +420,7 @@ compileRoleAssignment (UQD _ (QF.CreateRole qualifiedRoleIdentifier) contextGett
       roleTypesToCreate <- roleContextualisations ctxt qualifiedRoleIdentifier
       -- If the role type is indexed, adds the created instance to the indexed roles in PerspectivesState.
       for_ roleTypesToCreate \qualifiedRoleIdentifier' -> createAndAddRoleInstance qualifiedRoleIdentifier' (unwrap ctxt)
-          (RolSerialization { id: localName, properties: PropertySerialization empty, binding: Nothing })
+        (RolSerialization { id: localName, properties: PropertySerialization empty, binding: Nothing })
 
 compileContextAssignmentFromRole :: Partial => QueryFunctionDescription -> Maybe QueryFunctionDescription -> MP (Updater RoleInstance)
 compileContextAssignmentFromRole (UQD _ (QF.CreateContext qualifiedContextTypeIdentifier qualifiedRoleIdentifier) contextGetterDescription _ _ _) mnameGetterDescription = do

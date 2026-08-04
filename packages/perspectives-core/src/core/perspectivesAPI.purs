@@ -747,9 +747,9 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
       if isTypeUri predicate then do
         -- Notice that createAndAddRoleInstance adds the model describing the eroltype if necessary.
         mrolInst <- runMonadPerspectivesTransaction authoringRole $ createAndAddRoleInstance
-            (EnumeratedRoleType predicate)
-            subject
-            (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
+          (EnumeratedRoleType predicate)
+          subject
+          (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
         case mrolInst of
           Nothing -> sendResponse (Error corrId ("Could not create a role instance for: " <> predicate <> " in " <> subject <> " because this functional role already has an instance")) setter
           Just rolInst -> sendResponse (Result corrId [ (unwrap rolInst) ]) setter
