@@ -883,6 +883,156 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
           ExitedOnce = true for context >> RecorderOfT20
 
   ------------------------------------------------------------------------------
+  ---- T21 — CWH: `not exists X` sees same-transaction creation
+  ------------------------------------------------------------------------------
+  case T21
+    aspect mm:Test
+
+    external
+      state Success =
+        (exists context >> COfT21 >> binding >> context >> WatcherOfT21)
+        and
+        (not context >> COfT21 >> binding >> context >> WatcherOfT21 >> NoXOfT21)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on COfT21
+        only (CreateAndFill)
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "T21 — CWH: `not exists X` sees same-transaction creation" for extern
+        create context CContextT21 bound to COfT21
+
+    context COfT21 filledBy CContextT21
+
+    case CContextT21
+      on entry
+        do for Tester
+          create role WatcherOfT21
+          create role XOfT21
+
+      -- This state must be evaluated in phase 2 against the current world,
+      -- where XOfT21 already exists because it is created in the same transaction.
+      -- We therefore expect this state to be false, and the property NoXOfT21 to be not set (so its negation evaluates to false).
+      state NoXStateOfT21 = not exists XOfT21
+        on entry
+          do for Tester
+            NoXOfT21 = true for WatcherOfT21
+
+      thing XOfT21
+
+      thing WatcherOfT21
+        property NoXOfT21 (Boolean)
+
+      user Tester = me
+        perspective on WatcherOfT21
+          only (Create)
+          props (NoXOfT21) verbs (SetPropertyValue, Consult)
+        perspective on XOfT21
+          only (Create)
+
+  ------------------------------------------------------------------------------
+  ---- T22 — CWH: `not exists X` enters when X is absent
+  ------------------------------------------------------------------------------
+  case T22
+    aspect mm:Test
+
+    external
+      state Success = context >> COfT22 >> binding >> context >> WatcherOfT22 >> NoXOfT22
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on COfT22
+        only (CreateAndFill)
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "T22 — CWH: `not exists X` enters when X is absent" for extern
+        create context CContextT22 bound to COfT22
+
+    context COfT22 filledBy CContextT22
+
+    case CContextT22
+      on entry
+        do for Tester
+          create role WatcherOfT22
+
+      -- Complement of T21: XOfT22 is absent in this transaction, so this
+      -- closed-world condition should evaluate true in phase 2.
+      state NoXStateOfT22 = not exists XOfT22
+        on entry
+          do for Tester
+            NoXOfT22 = true for WatcherOfT22
+
+      thing XOfT22
+
+      thing WatcherOfT22
+        property NoXOfT22 (Boolean)
+
+      user Tester = me
+        perspective on WatcherOfT22
+          only (Create)
+          props (NoXOfT22) verbs (SetPropertyValue, Consult)
+        perspective on XOfT22
+          only (Create)
+
+  ------------------------------------------------------------------------------
+  ---- Unbind re-ordering in a single automatic action
+  ------------------------------------------------------------------------------
+  case T23
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          letA
+            filler <- create role Filler
+            filledrole <- create role FilledRole
+            recorder <- create role Recorder
+          in
+            bind_ filler to filledrole
+    external
+      property TestFinished (Boolean)
+      state TestSucceeded = context >> Recorder >> R == 2
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on Filler
+        only (Create, Remove)
+        props (StartValue) verbs (SetPropertyValue, Consult)
+      perspective on FilledRole
+        only (Create, Remove, Fill, RemoveFiller)
+        props (StartValue) verbs (Consult)
+      perspective on Recorder
+        only (Create)
+        props (R) verbs (SetPropertyValue, Consult)
+      action RunTest
+        remove filler of FilledRole
+        TestName = "T23 — Monotone simulation: destructive op follows constructive ops" for extern
+        -- If actually unbinding happens before the property is read, then R does not have a value. If unbinding is postponed until after the property is read, then R will be 1 + 1 = 2.
+        R = 1 + FilledRole >> StartValue for Recorder
+
+    thing FilledRole filledBy Filler
+
+    thing Filler
+      property StartValue (Number)
+      on entry
+        do for Tester
+          StartValue = 1
+
+    thing Recorder
+      property R (Number)
+
+  ------------------------------------------------------------------------------
   ---- Remove re-ordering in a single automatic action
   ------------------------------------------------------------------------------
   case RoleRemoveReordering
@@ -923,50 +1073,8 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
       property R (Number)
 
   ------------------------------------------------------------------------------
-  ---- Unbind re-ordering in a single automatic action
+  ---- T24 — Peer transaction: own-user reaction distributed via embedded sharing transaction
+  ---- T25 — Peer transaction: own-user reaction triggers further state cascade
+  ---- These tests require two PDRs. They have been moved to the model "model://joopringelberg.nl#SynchronisationTestModel@2.0".
+  ---- Run Test.ConstructiveSynchronisationTest to test them.
   ------------------------------------------------------------------------------
-  case RoleUnbindReordering
-    aspect mm:Test
-    state TesterAvailable = exists Tester 
-      on entry
-        do for Tester
-          letA
-            filler <- create role Filler
-            filledrole <- create role FilledRole
-            recorder <- create role Recorder
-          in
-            bind_ filler to filledrole
-    external
-      property TestFinished (Boolean)
-      state TestSucceeded = context >> Recorder >> R == 2
-        on entry
-          do for Tester
-            TestSucceeded = true
-
-    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
-      aspect mm:Test$Tester
-      perspective on Filler
-        only (Create, Remove)
-        props (StartValue) verbs (SetPropertyValue, Consult)
-      perspective on FilledRole
-        only (Create, Remove, Fill, RemoveFiller)
-        props (StartValue) verbs (Consult)
-      perspective on Recorder
-        only (Create)
-        props (R) verbs (SetPropertyValue, Consult)
-      action RunTest
-        remove filler of FilledRole
-        TestName = "Role unbind must be postponed to the last" for extern
-        -- If actually unbinding happens before the property is read, then R does not have a value. If unbinding is postponed until after the property is read, then R will be 1 + 1 = 2.
-        R = 1 + FilledRole >> StartValue for Recorder
-
-    thing FilledRole filledBy Filler
-
-    thing Filler
-      property StartValue (Number)
-      on entry
-        do for Tester
-          StartValue = 1
-
-    thing Recorder
-      property R (Number)
