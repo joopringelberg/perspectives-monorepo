@@ -242,9 +242,6 @@ humanizePerspectivesWarning w = case w of
   RoleStateHasBeenEvaluatedBefore roleInstance stateId -> do
     stateId' <- toReadable stateId
     pure (RoleStateHasBeenEvaluatedBefore roleInstance stateId')
-  ContextStateHasBeenEvaluatedBefore contextInstance stateId -> do
-    stateId' <- toReadable stateId
-    pure (ContextStateHasBeenEvaluatedBefore contextInstance stateId')
 
   -- Default: leave unchanged.
   _ -> pure w
