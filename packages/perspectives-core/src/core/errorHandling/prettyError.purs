@@ -236,6 +236,9 @@ humanizePerspectivesWarning w = case w of
   RunRoleStateAutomaticAction roleInstance stateId -> do
     stateId' <- toReadable stateId
     pure (RunRoleStateAutomaticAction roleInstance stateId')
+  RoleIsFunctional roleType contextInstance roleInstance -> do
+    roleType' <- toReadable roleType
+    pure (RoleIsFunctional roleType' contextInstance roleInstance)
 
   -- Default: leave unchanged.
   _ -> pure w

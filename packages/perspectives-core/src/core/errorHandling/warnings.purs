@@ -79,6 +79,7 @@ data PerspectivesWarning
   | StateHasBeenEvaluatedBefore ContextInstance StateIdentifier
   | RunContextStateAutomaticAction ContextInstance StateIdentifier
   | RunRoleStateAutomaticAction RoleInstance StateIdentifier
+  | RoleIsFunctional EnumeratedRoleType ContextInstance RoleInstance
 
 instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ModelLacksModelId dfid) = "(ModelLacksModelId) The model '" <> dfid <> "' lacks a value for the property ModelIdentification on its Model instance."
@@ -149,3 +150,4 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (StateHasBeenEvaluatedBefore contextInstance stateId) = "(StateHasBeenEvaluatedBefore) State " <> show stateId <> " has already been evaluated for context " <> show contextInstance
   show (RunContextStateAutomaticAction contextInstance stateId) = "(RunContextStateAutomaticAction) Running automatic action for state " <> show stateId <> " in context " <> show contextInstance
   show (RunRoleStateAutomaticAction roleInstance stateId) = "(RunRoleStateAutomaticAction) Running automatic action for state " <> show stateId <> " in role " <> show roleInstance
+  show (RoleIsFunctional roleType contextInstance roleInstance) = "(RoleIsFunctional) Role type " <> show roleType <> " is functional in context " <> show contextInstance <> " and already has an instance: " <> show roleInstance
