@@ -105,7 +105,11 @@ transactionExecutionTests =
     -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$RoleRemoveReordering", logConfiguration: emptyLogConfiguration }
     -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$RoleUnbindReordering", logConfiguration: emptyLogConfiguration }
     -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T15", logConfiguration: emptyLogConfiguration }
-      { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T16", logConfiguration: emptyLogConfiguration }
+    --   { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T16", logConfiguration: emptyLogConfiguration }
+    -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T17", logConfiguration: emptyLogConfiguration }
+    -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T18", logConfiguration: emptyLogConfiguration }
+    -- , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T19", logConfiguration: emptyLogConfiguration }
+      { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T20", logConfiguration: emptyLogConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration

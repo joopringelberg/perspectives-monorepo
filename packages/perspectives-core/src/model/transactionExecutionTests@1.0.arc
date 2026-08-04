@@ -669,6 +669,220 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
           props (DoneOfT16) verbs (SetPropertyValue, Consult)
 
   ------------------------------------------------------------------------------
+  ---- T17 — State condition on untouchable role is postponed until removal
+  ------------------------------------------------------------------------------
+  case T17
+    aspect mm:Test
+    state TesterAvailable = exists Tester
+      on entry
+        do for Tester
+          create role GuardOfT17
+          create role WatcherOfT17
+
+      -- Having state GuardAbsent as a substate of TesterAvailable ensures 
+      -- that its first evaluation is only AFTER GuardOfT17 has been created.
+      -- Otherwise, it would be evaluated immediately after creating T17, which is before GuardOfT17 has been created.
+      -- However, because Tester is then not yet available, nothing happens! This is a bit precarious.
+      -- Removing GuardOfT17 first marks it untouchable.
+      -- This condition should be postponed in phase 2 and re-evaluated
+      -- after physical removal in step 2.5.
+      state GuardAbsent = not exists GuardOfT17
+        on entry
+          do for Tester
+            letA
+              watcher <- WatcherOfT17
+            in
+              SafeOfT17 = true for watcher
+
+    external
+      state Success = context >> WatcherOfT17 >> SafeOfT17
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on GuardOfT17
+        only (Create, Remove)
+      perspective on WatcherOfT17
+        only (Create)
+        props (SafeOfT17) verbs (SetPropertyValue, Consult)
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "T17 — State condition on untouchable role is postponed until removal" for extern
+        remove role GuardOfT17
+
+    thing GuardOfT17
+
+    thing WatcherOfT17
+      property SafeOfT17 (Boolean)
+
+  ------------------------------------------------------------------------------
+  ---- T18 — State condition on untouchable context is postponed until removal
+  ------------------------------------------------------------------------------
+  case T18
+    aspect mm:Test
+    state TesterAvailable = exists Tester
+      on entry
+        do for Tester
+          create context ChildContextT18 bound to ChildOfT18
+          create role ObserverOfT18
+
+      -- Same deferral pattern as T17, but now for a context role.
+      -- Removing ChildOfT18 marks its filled context untouchable first;
+      -- this condition should be postponed in phase 2 and re-evaluated
+      -- after physical removal in step 2.5.
+      state ChildAbsent = not exists ChildOfT18
+        on entry
+          do for Tester
+            letA
+              observer <- ObserverOfT18
+            in
+              ChildGoneOfT18 = true for observer
+
+    external
+      state Success = context >> ObserverOfT18 >> ChildGoneOfT18
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on ChildOfT18
+        only (CreateAndFill, RemoveContext)
+      perspective on ObserverOfT18
+        only (Create)
+        props (ChildGoneOfT18) verbs (SetPropertyValue, Consult)
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "T18 — State condition on untouchable context is postponed until removal" for extern
+        remove context ChildOfT18
+
+    context ChildOfT18 filledBy ChildContextT18
+
+    case ChildContextT18
+
+    thing ObserverOfT18
+      property ChildGoneOfT18 (Boolean)
+
+  ------------------------------------------------------------------------------
+  ---- T19 — Same state is not entered twice in a single transaction
+  ------------------------------------------------------------------------------
+  case T19
+    aspect mm:Test
+    state TesterAvailable = exists Tester
+      on entry
+        do for Tester
+          create role RecorderOfT19
+          EntryCountOfT19 = 0 for RecorderOfT19
+
+    external
+      state Success = context >> RecorderOfT19 >> EntryCountOfT19 == 1
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on COfT19
+        only (CreateAndFill, RemoveContext)
+      perspective on RecorderOfT19
+        only (Create)
+        props (EntryCountOfT19) verbs (SetPropertyValue, Consult)
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "T19 — Same state is not entered twice in a single transaction" for extern
+        create context CContextT19 bound to COfT19
+
+    thing RecorderOfT19
+      property EntryCountOfT19 (Number)
+
+    context COfT19 filledBy CContextT19
+
+    case CContextT19
+      
+      external
+        state ReEnterIncreaseEntryCount = InternalTriggerOfT19
+          on entry
+            do for Tester
+              -- This will again make the condition of IncreaseEntryCount true, but the state IncreaseEntryCount will not be entered again in this transaction.
+              InternalTriggerOfT19 = false
+
+        -- Closed world: property doesn't exist, condition evaluates to true.
+        -- State is entered immediately on creation.
+        state IncreaseEntryCount = not context >> extern >> InternalTriggerOfT19
+          on entry
+            do for Tester
+              -- Increase counter.
+              EntryCountOfT19 = context >> RecorderInT19 >> EntryCountOfT19 + 1 for context >> RecorderInT19
+              -- Exit state IncreaseEntryCount. This triggers a chain of actions that will eventually 
+              -- lead to re-evaluation and would re-enter this state, but that will be blocked.
+              InternalTriggerOfT19 = true
+
+        property EntryCountOfT19 (Boolean)
+        property InternalTriggerOfT19 (Boolean)
+
+      thing RecorderInT19 (functional) = extern >> binder COfT19 >> context >> RecorderOfT19
+
+      user Tester = me
+        perspective on RecorderInT19
+          props (EntryCountOfT19) verbs (SetPropertyValue, Consult)
+        perspective on extern
+          props (InternalTriggerOfT19) verbs (SetPropertyValue, Consult)
+
+  ------------------------------------------------------------------------------
+  ---- T20 — State re-entry after role exit and re-create in the same transaction
+  ------------------------------------------------------------------------------
+  case T20
+    aspect mm:Test
+    state TesterAvailable = exists Tester
+      on entry
+        do for Tester
+          create role RecorderOfT20
+          Cycles = 0 for RecorderOfT20
+          ExitedOnce = false for RecorderOfT20
+          create role ROfT20
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on RecorderOfT20
+        only (Create)
+        props (Cycles, ExitedOnce) verbs (SetPropertyValue, Consult)
+      perspective on ROfT20
+        only (Create, Remove)
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "T20 — State re-entry after role exit and re-create in the same transaction" for extern
+        -- The destructive remove will be postponed. 
+        -- Subsequently, we cannot recreate because the role is functional.
+        remove role ROfT20
+        create role ROfT20
+
+    thing RecorderOfT20
+      property Cycles (Number)
+      property ExitedOnce (Boolean)
+
+    -- We must make this a relational role, otherwise the re-creation of ROfT20 will not be possible.
+    -- This is because removing the instance will be postponed and if the role is functional, the re-creation will be blocked.
+    -- This does not compromise the validity of the test.
+    thing ROfT20 (relational)
+      state ReEntered = context >> RecorderOfT20 >> (ExitedOnce and Cycles == 1)
+        on entry
+          do for Tester
+            TestSucceeded = true for context >> extern
+      on entry
+        do for Tester
+          Cycles = context >> RecorderOfT20 >> Cycles + 1 for context >> RecorderOfT20
+      on exit
+        do for Tester
+          Cycles = context >> RecorderOfT20 >> Cycles - 1 for context >> RecorderOfT20
+          ExitedOnce = true for context >> RecorderOfT20
+
+  ------------------------------------------------------------------------------
   ---- Remove re-ordering in a single automatic action
   ------------------------------------------------------------------------------
   case RoleRemoveReordering
