@@ -552,3 +552,207 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
         TestName = "T14 — Property change causes state entry in phase 2" for extern
 
     thing RoleOfT14
+
+  ------------------------------------------------------------------------------
+  ---- T15 — Multiple inverted-query results deduplicated in phase 2
+  ------------------------------------------------------------------------------
+  case T15
+    aspect mm:Test
+    state TesterAvailable = exists Tester
+      on entry
+        do for Tester
+          create role RecorderOfT15
+          EntryCountOfT15 = 0 for RecorderOfT15
+
+    -- R1 and R2 both occur in this single state condition.
+    -- Creating both in one transaction should still evaluate this state once.
+    state BothRolesPresent = (exists Role1OfT15) and (exists Role2OfT15)
+      on entry
+        do for Tester
+          letA
+            recorder <- RecorderOfT15
+          in
+            EntryCountOfT15 = recorder >> EntryCountOfT15 + 1 for recorder
+
+    external
+      state Success = context >> RecorderOfT15 >> EntryCountOfT15 == 1
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on TriggerOfT15
+        only (Create)
+      perspective on Role1OfT15
+        only (Create)
+      perspective on Role2OfT15
+        only (Create)
+      perspective on RecorderOfT15
+        only (Create)
+        props (EntryCountOfT15) verbs (SetPropertyValue, Consult)
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "T15 — Multiple inverted-query results deduplicated in phase 2" for extern
+        create role TriggerOfT15
+
+    thing TriggerOfT15
+      on entry
+        do for Tester
+          create role Role1OfT15
+          create role Role2OfT15
+
+    thing Role1OfT15
+
+    thing Role2OfT15
+
+    thing RecorderOfT15
+      property EntryCountOfT15 (Number)
+
+  ------------------------------------------------------------------------------
+  ---- T16 — State evaluation in phase 2 creates a new context
+  ------------------------------------------------------------------------------
+  case T16
+    aspect mm:Test
+    state TesterAvailable = exists Tester
+      on entry
+        do for Tester
+          create role SignalOfT16
+          GoOfT16 = false for SignalOfT16
+
+    -- Entering this state happens in phase 2 when GoOfT16 flips to true.
+    -- The on entry action creates a context, which should trigger step 2.2
+    -- and therefore a new phase-1 pass for the created context.
+    state TriggerInnerCreation = SignalOfT16 >> GoOfT16
+      on entry
+        do for Tester
+          create context InnerContextT16 bound to InnerOfT16
+    
+    external
+      state Success = context >> InnerOfT16 >> DoneOfT16
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on SignalOfT16
+        only (Create)
+        props (GoOfT16) verbs (SetPropertyValue, Consult)
+      perspective on InnerOfT16
+        only (CreateAndFill)
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      action RunTest
+        TestName = "T16 — State evaluation in phase 2 creates a new context" for extern
+        GoOfT16 = true for SignalOfT16
+
+    thing SignalOfT16
+      property GoOfT16 (Boolean)
+
+    context InnerOfT16 filledBy InnerContextT16
+
+    case InnerContextT16
+      on entry
+        do for Tester
+          -- If we do not lift this into the next transaction, state Success will not be 
+          -- entered because it already has been evaluated in the current transaction. The test will fail.
+          after 200 Milliseconds
+            DoneOfT16 = true for extern
+
+      external
+        property DoneOfT16 (Boolean)
+
+      user Tester = me
+        perspective on extern
+          props (DoneOfT16) verbs (SetPropertyValue, Consult)
+
+  ------------------------------------------------------------------------------
+  ---- Remove re-ordering in a single automatic action
+  ------------------------------------------------------------------------------
+  case RoleRemoveReordering
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          create role RoleT05
+          create role Recorder
+    external
+      property TestFinished (Boolean)
+      state TestSucceeded = context >> Recorder >> R == 2
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on RoleT05
+        only (Create, Remove)
+        props (StartValue) verbs (SetPropertyValue, Consult)
+      perspective on Recorder
+        only (Create)
+        props (R) verbs (SetPropertyValue, Consult)
+      action RunTest
+        remove role RoleT05
+        TestName = "Role removal must be postponed to the last" for extern
+        -- If actually removing happens before the property is read, then R does not have a value. If removing is postponed until after the property is read, then R will be 1 + 1 = 2.
+        R = 1 + RoleT05 >> StartValue for Recorder
+
+    thing RoleT05
+      property StartValue (Number)
+      on entry
+        do for Tester
+          StartValue = 1
+
+    thing Recorder
+      property R (Number)
+
+  ------------------------------------------------------------------------------
+  ---- Unbind re-ordering in a single automatic action
+  ------------------------------------------------------------------------------
+  case RoleUnbindReordering
+    aspect mm:Test
+    state TesterAvailable = exists Tester 
+      on entry
+        do for Tester
+          letA
+            filler <- create role Filler
+            filledrole <- create role FilledRole
+            recorder <- create role Recorder
+          in
+            bind_ filler to filledrole
+    external
+      property TestFinished (Boolean)
+      state TestSucceeded = context >> Recorder >> R == 2
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on Filler
+        only (Create, Remove)
+        props (StartValue) verbs (SetPropertyValue, Consult)
+      perspective on FilledRole
+        only (Create, Remove, Fill, RemoveFiller)
+        props (StartValue) verbs (Consult)
+      perspective on Recorder
+        only (Create)
+        props (R) verbs (SetPropertyValue, Consult)
+      action RunTest
+        remove filler of FilledRole
+        TestName = "Role unbind must be postponed to the last" for extern
+        -- If actually unbinding happens before the property is read, then R does not have a value. If unbinding is postponed until after the property is read, then R will be 1 + 1 = 2.
+        R = 1 + FilledRole >> StartValue for Recorder
+
+    thing FilledRole filledBy Filler
+
+    thing Filler
+      property StartValue (Number)
+      on entry
+        do for Tester
+          StartValue = 1
+
+    thing Recorder
+      property R (Number)
