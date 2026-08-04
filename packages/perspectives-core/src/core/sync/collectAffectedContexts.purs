@@ -1028,7 +1028,19 @@ addDeltasForPropertyChange roleWithPropertyValue property replacementProperty = 
                   <>
                     "."
           )
-        else pure unit
+        else ( do
+              readableRType <- lift $ toReadable rType
+              readableProperty <- lift $ toReadable property
+              debugSync $
+                "No users have a perspective on the property "
+                  <> unwrap readableProperty
+                  <> " of role instance "
+                  <> unwrap roleWithPropertyValue'
+                  <> " of type "
+                  <> unwrap readableRType
+                  <>
+                    "."
+          )
         if isForSelfOnly iq || isSelfOnlyProperty
         -- If iq has the selfOnly modifier, the perspective object equals the user role that has the perspective.
         -- Only compute the property for that role instance!
