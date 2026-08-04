@@ -298,7 +298,7 @@ phase2 share authoringRole r = do
           || (not $ null (tr.createdContexts `difference` createdContexts))
           || (not $ null (tr.createdRoles `difference` createdRoles))
     )
-  if reRunPhase1 then (lift $ debugState $ padding <> "Rerun phase1 for " <> show transactionNumber) *> phase1 share authoringRole r
+  if reRunPhase1 then (lift $ debugState $ padding <> "Rerun phase1 for transaction " <> show transactionNumber) *> phase1 share authoringRole r
   else do
     -- Invariant: there are no rolesToExit, no createdContexts, no createdRoles. 
     -- Nor will there be RoleUnbinding or ExecuteDestructiveEffect items in scheduledAssignments.

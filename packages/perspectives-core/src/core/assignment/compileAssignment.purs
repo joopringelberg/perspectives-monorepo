@@ -60,7 +60,7 @@ import Perspectives.Instances.ObjectGetters (binding, context, roleType_)
 import Perspectives.Instances.Values (writePerspectivesFile)
 import Perspectives.Logging (errorCompiler, logWhen)
 import Perspectives.ModelDependencies (sysUser)
-import Perspectives.Parsing.Messages (PerspectivesError)
+import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistent (getPerspectRol)
 import Perspectives.PerspectivesState (addBinding, getVariableBindings)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription(..))
@@ -430,8 +430,7 @@ compileRoleAssignment (UQD _ (QF.CreateRole qualifiedRoleIdentifier) contextGett
     for_ ctxts \ctxt -> do
       roleTypesToCreate <- roleContextualisations ctxt qualifiedRoleIdentifier
       -- If the role type is indexed, adds the created instance to the indexed roles in PerspectivesState.
-      for_ roleTypesToCreate \qualifiedRoleIdentifier' -> unwrap <<< unsafePartial fromJust <$>
-        createAndAddRoleInstance qualifiedRoleIdentifier' (unwrap ctxt)
+      for_ roleTypesToCreate \qualifiedRoleIdentifier' -> createAndAddRoleInstance qualifiedRoleIdentifier' (unwrap ctxt)
           (RolSerialization { id: localName, properties: PropertySerialization empty, binding: Nothing })
 
 -- Create a context. Fill a new context role instance with its external role, unless it is a DBQ role.
@@ -611,13 +610,14 @@ compileRoleCreatingAssignments (UQD _ (QF.CreateRole qualifiedRoleIdentifier) co
       Nothing -> pure Nothing
     concat <$> for ctxts \ctxt -> do
       roleTypesToCreate <- roleContextualisations ctxt qualifiedRoleIdentifier
-      for roleTypesToCreate
+      catMaybes <$> for roleTypesToCreate
         -- If the role type is indexed, adds the created instance to the indexed roles in PerspectivesState.
-        \roleTypeToCreate -> unwrap <<< unsafePartial fromJust <$>
-          createAndAddRoleInstance
+        \roleTypeToCreate -> do
+          mroleIdentifier <- createAndAddRoleInstance
             roleTypeToCreate
             (unwrap ctxt)
             (RolSerialization { id: localName, properties: PropertySerialization empty, binding: Nothing })
+          pure (unwrap <$> mroleIdentifier)
 
 compileContextCreatingAssignments :: Partial => QueryFunctionDescription -> Maybe QueryFunctionDescription -> MP (ContextInstance -> MonadPerspectivesTransaction (Array String))
 compileContextCreatingAssignments (UQD _ (QF.CreateContext qualifiedContextTypeIdentifier qualifiedRoleIdentifier) contextGetterDescription _ _ _) mnameGetterDescription = do
@@ -674,15 +674,19 @@ compileContextCreatingAssignments (UQD _ (QF.CreateContext qualifiedContextTypeI
                 Left e -> do
                   lift (renderPerspectivesError e >>= errorCompiler)
                   pure $ Left e
-                Right (ContextInstance contextIdentifier) -> (Right <<< unwrap <<< unsafePartial fromJust) <$> createAndAddRoleInstance
-                  roleTypeToCreate
-                  (unwrap ctxt)
-                  ( RolSerialization
-                      { id: Nothing
-                      , properties: PropertySerialization empty
-                      , binding: Just $ Identifier.buitenRol contextIdentifier
-                      }
-                  )
+                Right (ContextInstance contextIdentifier) -> do
+                  mroleIdentifier <- createAndAddRoleInstance
+                    roleTypeToCreate
+                    (unwrap ctxt)
+                    ( RolSerialization
+                        { id: Nothing
+                        , properties: PropertySerialization empty
+                        , binding: Just $ Identifier.buitenRol contextIdentifier
+                        }
+                    )
+                  case mroleIdentifier of
+                    Nothing -> pure $ Left $ Custom ("Could not create role instance of type " <> show roleTypeToCreate <> " in context " <> unwrap ctxt <> " because this functional role already has an instance")
+                    Just roleIdentifier -> pure $ Right $ unwrap roleIdentifier
     pure $ catMaybes (hush <$> results)
 
 compileContextCreatingAssignments (UQD _ (QF.CreateRootContext qualifiedContextTypeIdentifier) contextGetterDescription _ _ _) mnameGetterDescription = do

@@ -190,8 +190,10 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
                       void $ setBindingWithMode mode rol (RoleInstance bnd) Nothing
                     sendResponse (Result corrId [ (unwrap rol) ]) setter
             Nothing -> do
-              rol <- runMonadPerspectivesTransaction authoringRole $ unsafePartial fromJust <$> createAndAddRoleInstance eroltype subject roleDescription
-              sendResponse (Result corrId [ (unwrap rol) ]) setter
+              mrole <- runMonadPerspectivesTransaction authoringRole $ createAndAddRoleInstance eroltype subject roleDescription
+              case mrole of
+                Nothing -> sendResponse (Error corrId ("Could not create role instance of " <> show eroltype)) setter
+                Just rol -> sendResponse (Result corrId [ (unwrap rol) ]) setter
 
     dispatchBindToRole :: FillBindingMode -> MonadPerspectives Unit
     dispatchBindToRole mode = catchError
@@ -657,14 +659,16 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
           \(ContextInstance id) -> do
             -- now bind it in a new instance of the roletype in the given context.
             -- Notice that createAndAddRoleInstance adds the model describing the eroltype if necessary.
-            contextRole <- unsafePartial $ fromJust <$> createAndAddRoleInstance eroltype subject
+            mcontextRole <- createAndAddRoleInstance eroltype subject
               ( RolSerialization
                   { id: Nothing
                   , properties: PropertySerialization empty
                   , binding: Just $ buitenRol id
                   }
               )
-            lift $ sendResponse (Result corrId [ buitenRol id, unwrap contextRole ]) setter
+            case mcontextRole of
+              Nothing -> lift $ sendResponse (Error corrId ("Could not create context role instance of " <> show eroltype)) setter
+              Just contextRole -> lift $ sendResponse (Result corrId [ buitenRol id, unwrap contextRole ]) setter
     -- {request: "CreateContext_", subject: roleInstance, contextDescription: contextDescription, authoringRole: myroletype}
     Api.CreateContext_ -> do
       rtype <- roleType_ (RoleInstance subject)
@@ -742,12 +746,13 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     Api.CreateRole -> do
       if isTypeUri predicate then do
         -- Notice that createAndAddRoleInstance adds the model describing the eroltype if necessary.
-        (rolInst :: RoleInstance) <- runMonadPerspectivesTransaction authoringRole $ unsafePartial $
-          fromJust <$> createAndAddRoleInstance
+        mrolInst <- runMonadPerspectivesTransaction authoringRole $ createAndAddRoleInstance
             (EnumeratedRoleType predicate)
             subject
             (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
-        sendResponse (Result corrId [ (unwrap rolInst) ]) setter
+        case mrolInst of
+          Nothing -> sendResponse (Error corrId ("Could not create a role instance for: " <> predicate <> " in " <> subject <> " because this functional role already has an instance")) setter
+          Just rolInst -> sendResponse (Result corrId [ (unwrap rolInst) ]) setter
       else sendResponse (Error corrId ("Could not create a role instance for: " <> predicate <> " in " <> subject)) setter
 
     -- {request: "CreateRole_", subject: contextinstance, predicate: roleType, object: contextType, rolDescription: rolDescription, authoringRole: myroletype },
