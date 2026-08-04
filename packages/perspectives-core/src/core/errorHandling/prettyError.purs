@@ -227,9 +227,9 @@ humanizePerspectivesWarning w = case w of
   NoUserForContextStateEvaluation contextInstance stateId -> do
     stateId' <- toReadable stateId
     pure (NoUserForContextStateEvaluation contextInstance stateId')
-  StateHasBeenEvaluatedBefore contextInstance stateId -> do
+  ContextStateHasBeenEvaluatedBefore contextInstance stateId -> do
     stateId' <- toReadable stateId
-    pure (StateHasBeenEvaluatedBefore contextInstance stateId')
+    pure (ContextStateHasBeenEvaluatedBefore contextInstance stateId')
   RunContextStateAutomaticAction contextInstance stateId -> do
     stateId' <- toReadable stateId
     pure (RunContextStateAutomaticAction contextInstance stateId')
@@ -239,6 +239,12 @@ humanizePerspectivesWarning w = case w of
   RoleIsFunctional roleType contextInstance roleInstance -> do
     roleType' <- toReadable roleType
     pure (RoleIsFunctional roleType' contextInstance roleInstance)
+  RoleStateHasBeenEvaluatedBefore roleInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (RoleStateHasBeenEvaluatedBefore roleInstance stateId')
+  ContextStateHasBeenEvaluatedBefore contextInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (ContextStateHasBeenEvaluatedBefore contextInstance stateId')
 
   -- Default: leave unchanged.
   _ -> pure w

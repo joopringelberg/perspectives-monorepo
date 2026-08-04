@@ -525,7 +525,7 @@ evaluateStates stateEvaluations' =
       let k = stateKeyForContext stateId contextId
       already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
       -- Evaluate a state only once per transaction. If it has already been evaluated, we skip it.
-      if already then (lift $ humanizePerspectivesWarning (StateHasBeenEvaluatedBefore contextId stateId) >>= traceState <<< show) *> pure unit
+      if already then (lift $ humanizePerspectivesWarning (ContextStateHasBeenEvaluatedBefore contextId stateId) >>= traceState <<< show) *> pure unit
       else do
         -- Provide a new frame for the current context variable binding.
         oldFrame <- lift pushFrame
@@ -537,7 +537,7 @@ evaluateStates stateEvaluations' =
     RoleStateEvaluation stateId roleId -> do
       let k = stateKeyForRole stateId roleId
       already <- AA.gets \(Transaction tr) -> Set.member k tr.executedStateKeys
-      if already then pure unit
+      if already then (lift $ humanizePerspectivesWarning (RoleStateHasBeenEvaluatedBefore roleId stateId) >>= traceState <<< show) *> pure unit
       else do
         cid <- lift (roleId ##>> context)
         oldFrame <- lift pushFrame

@@ -76,7 +76,8 @@ data PerspectivesWarning
   | NoRoleInstanceToSetProperty EnumeratedPropertyType (Array Value)
   | RoleInstanceAlreadyHasPropertyValue RoleInstance EnumeratedPropertyType (Array Value)
   | NoUserForContextStateEvaluation ContextInstance StateIdentifier
-  | StateHasBeenEvaluatedBefore ContextInstance StateIdentifier
+  | ContextStateHasBeenEvaluatedBefore ContextInstance StateIdentifier
+  | RoleStateHasBeenEvaluatedBefore RoleInstance StateIdentifier
   | RunContextStateAutomaticAction ContextInstance StateIdentifier
   | RunRoleStateAutomaticAction RoleInstance StateIdentifier
   | RoleIsFunctional EnumeratedRoleType ContextInstance RoleInstance
@@ -147,7 +148,8 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (NoRoleInstanceToSetProperty property value) = "(NoRoleInstanceToSetProperty) No role instance found for property " <> unwrap property <> " to set value " <> show value
   show (RoleInstanceAlreadyHasPropertyValue roleInstance property value) = "(RoleInstanceAlreadyHasPropertyValue) Role instance " <> show roleInstance <> " already has value " <> show value <> " for property " <> unwrap property
   show (NoUserForContextStateEvaluation contextInstance stateIds) = "(NoUserForContextStateEvaluation) No user role instance found for context " <> show contextInstance <> " to evaluate states " <> show stateIds
-  show (StateHasBeenEvaluatedBefore contextInstance stateId) = "(StateHasBeenEvaluatedBefore) State " <> show stateId <> " has already been evaluated for context " <> show contextInstance
+  show (ContextStateHasBeenEvaluatedBefore contextInstance stateId) = "(ContextStateHasBeenEvaluatedBefore) State " <> show stateId <> " has already been evaluated for context " <> show contextInstance
+  show (RoleStateHasBeenEvaluatedBefore roleInstance stateId) = "(RoleStateHasBeenEvaluatedBefore) State " <> show stateId <> " has already been evaluated for role " <> show roleInstance
   show (RunContextStateAutomaticAction contextInstance stateId) = "(RunContextStateAutomaticAction) Running automatic action for state " <> show stateId <> " in context " <> show contextInstance
   show (RunRoleStateAutomaticAction roleInstance stateId) = "(RunRoleStateAutomaticAction) Running automatic action for state " <> show stateId <> " in role " <> show roleInstance
   show (RoleIsFunctional roleType contextInstance roleInstance) = "(RoleIsFunctional) Role type " <> show roleType <> " is functional in context " <> show contextInstance <> " and already has an instance: " <> show roleInstance
