@@ -605,6 +605,28 @@ withTwoPDRsCached user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir
     withPDRCached user2 opts2 color2 (Just bus) snapshotDir2 \pdr2 ->
       f pdr1 pdr2
 
+-- | Cached variant that uses the default AMQP/Stomp setup.
+-- |
+-- | Unlike `withTwoPDRsCached`, this does not install the in-process bus
+-- | test transport and therefore leaves runtime wiring equivalent to
+-- | non-test startup.
+withTwoPDRsCachedNoBus
+  :: forall a
+   . PouchdbUser
+  -> RuntimeOptions
+  -> Maybe String
+  -> String
+  -> PouchdbUser
+  -> RuntimeOptions
+  -> Maybe String
+  -> String
+  -> (PDRInstance -> PDRInstance -> Aff a)
+  -> Aff a
+withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir2 f =
+  withPDRCached user1 opts1 color1 noBus snapshotDir1 \pdr1 ->
+    withPDRCached user2 opts2 color2 noBus snapshotDir2 \pdr2 ->
+      f pdr1 pdr2
+
 -----------------------------------------------------------
 -- CONNECT TWO PDR INSTANCES VIA INVITATION
 -----------------------------------------------------------

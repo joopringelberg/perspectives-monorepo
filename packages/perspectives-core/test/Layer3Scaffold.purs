@@ -29,6 +29,7 @@ module Test.Layer3Scaffold
   , SynchronisationResults
   , SynchronisationModelConfiguration
   , getSynchronisationResults
+  , getSynchronisationResultsOverAMQP
   , executeModelTest
   , runSynchronisationSuite
   ) where
@@ -51,7 +52,7 @@ import Effect.Ref (Ref, read, write)
 import Foreign.Object (empty) as OBJ
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runContextAction)
-import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##=), (##>))
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), RuntimeOptions, (##=), (##>))
 import Perspectives.Extern.Couchdb (addModelToLocalStore_)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
@@ -59,6 +60,7 @@ import Perspectives.Instances.ObjectGetters (binding, getEnumeratedRoleInstances
 import Perspectives.Logging (ansiMagenta, ansiRed, infoTest)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Names (lookupIndexedContext)
+import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistent (tryGetPerspectContext)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, disableAllLogging, getPerspectivesUser, setTopicLogLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
@@ -66,7 +68,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, Perspec
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
 import Perspectives.Sidecar.ToStable (toStable)
-import Test.PDRInstance (PDRInstance, SynchronisationResult, connectPDRs, pollUntil, pollUntilTestFinishes, runInPDR, testPouchdbUser, withTwoPDRsCached)
+import Test.PDRInstance (PDRInstance, SynchronisationResult, connectPDRs, pollUntil, pollUntilTestFinishes, runInPDR, testPouchdbUser, withTwoPDRsCached, withTwoPDRsCachedNoBus)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -110,6 +112,19 @@ type SynchronisationModelConfiguration =
   , tests :: Array ModelTest
   }
 
+type WithTwoPDRsCachedLike =
+  forall a
+   . PouchdbUser
+  -> RuntimeOptions
+  -> Maybe String
+  -> String
+  -> PouchdbUser
+  -> RuntimeOptions
+  -> Maybe String
+  -> String
+  -> (PDRInstance -> PDRInstance -> Aff a)
+  -> Aff a
+
 runSynchronisationSuite
   :: Ref (Maybe SynchronisationResults)
   -> TestSuite
@@ -133,12 +148,25 @@ getSynchronisationResults
   :: Ref (Maybe SynchronisationResults)
   -> SynchronisationModelConfiguration
   -> Aff SynchronisationResults
-getSynchronisationResults cacheRef cfg = do
+getSynchronisationResults = getSynchronisationResultsInternal withTwoPDRsCached
+
+getSynchronisationResultsOverAMQP
+  :: Ref (Maybe SynchronisationResults)
+  -> SynchronisationModelConfiguration
+  -> Aff SynchronisationResults
+getSynchronisationResultsOverAMQP = getSynchronisationResultsInternal withTwoPDRsCachedNoBus
+
+getSynchronisationResultsInternal
+  :: WithTwoPDRsCachedLike
+  -> Ref (Maybe SynchronisationResults)
+  -> SynchronisationModelConfiguration
+  -> Aff SynchronisationResults
+getSynchronisationResultsInternal withTwoPDRsFn cacheRef cfg = do
   cached <- liftEffect $ read cacheRef
   case cached of
     Just results -> pure results
     Nothing -> do
-      results <- withTwoPDRsCached
+      results <- withTwoPDRsFn
         (testPouchdbUser "alice")
         defaultRuntimeOptions
         (Just ansiRed)
