@@ -86,6 +86,7 @@ constructEmptyRole contextInstance roleType i rolInstanceId = do
         , allTypes = allTypes
         , context = contextInstance
         , occurrence = i
+        -- We need to store all root states. Otherwise inverted queries derived from aspect perspectives will not be triggered.
         , states = allRootStates
         }
     )

@@ -1078,3 +1078,49 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
   ---- These tests require two PDRs. They have been moved to the model "model://joopringelberg.nl#SynchronisationTestModel@2.0".
   ---- Run Test.ConstructiveSynchronisationTest to test them.
   ------------------------------------------------------------------------------
+
+  ------------------------------------------------------------------------------
+  ---- T26 — Concurrent transactions are serialised
+  ------------------------------------------------------------------------------
+  case T26
+    aspect mm:Test
+    external
+      property Trigger (Boolean)
+      property FirstActionDone (Boolean)
+      property SecondActionDone (Boolean)
+      property FirstActionCompleted (Boolean)
+      property SecondActionCompleted (Boolean)
+      -- Both actions are lifted out of this transaction and executed in separate transactions. 
+      state RunFirstAction = Trigger
+        on entry
+          do for Tester after 100 Milliseconds
+            -- Unconditionally set FirstActionDone to true.
+            FirstActionDone = true
+        -- Only when the second action has completed, complete the first action.
+        state SecondActionDone = SecondActionDone and not FirstActionCompleted
+          on entry
+            do for Tester
+              FirstActionCompleted = true
+
+      state RunSecondAction = Trigger
+        on entry
+          do for Tester after 100 Milliseconds
+            SecondActionDone = true
+        -- Only when the first action has completed, complete the second action.
+        state FirstActionDone = FirstActionDone and not SecondActionCompleted
+          on entry
+            do for Tester
+              SecondActionCompleted = true
+
+      state TestSucceeded = (FirstActionCompleted and not SecondActionCompleted) or (SecondActionCompleted and not FirstActionCompleted)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded, Trigger, FirstActionDone, SecondActionDone, FirstActionCompleted, SecondActionCompleted) verbs (SetPropertyValue, Consult)
+      action RunTest
+        Trigger = true for extern
+        TestName = "T26 — Concurrent transactions are serialised" for extern
