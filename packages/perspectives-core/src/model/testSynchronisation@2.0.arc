@@ -555,3 +555,106 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
 
     thing RoleToCreate1
       property P (Boolean)
+  
+  ------------------------------------------------------------------------------
+  ---- These tests belong to the test suite in Test.TransactionExecutionTests.
+  ---- However, they require two PDRs to run, so they have been moved here.
+  ---- T24 — Peer transaction: own-user reaction distributed via embedded sharing transaction
+  ---- T25 — Peer transaction: own-user reaction triggers further state cascade
+  ------------------------------------------------------------------------------
+
+  ------------------------------------------------------------------------------
+  ---- T24 — Peer transaction: own-user reaction distributed via embedded sharing transaction
+  ------------------------------------------------------------------------------
+  case T24
+    aspect mm:Test
+    external
+      property Trigger (Boolean)
+      property Acknowledge (Boolean)
+      property Handshake (Boolean)
+      
+      state Acknowledge = Trigger
+        on entry
+          do for Follower
+            Acknowledge = true
+      state Handshake = Trigger and Acknowledge
+        on entry
+          do for Leader
+            Handshake = true
+      state TestSucceeded = Handshake
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on extern
+        only (Create)
+        props (Handshake, Trigger) verbs (Consult, SetPropertyValue)
+        props (Acknowledge) verbs (Consult)
+      action RunTest
+        Trigger = true for extern
+        TestName = "T24 — Peer transaction: own-user reaction distributed via embedded sharing transaction" for extern
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on extern
+        props (Acknowledge) verbs (Consult, SetPropertyValue)
+        props (Trigger, Handshake) verbs (Consult)
+
+  ------------------------------------------------------------------------------
+  ---- T25 — Peer transaction: own-user reaction triggers further state cascade
+  ------------------------------------------------------------------------------
+  case T25
+    aspect mm:Test
+    external
+      property Trigger (Boolean)
+      property Acknowledge (Boolean)
+      property Handshake (Boolean)
+      
+      state Acknowledge = Trigger
+        on entry
+          do for Follower
+            create context NestedT25 bound to EmbeddedT25 in context
+      state Handshake = Trigger and context >> EmbeddedT25 >> binding >> Acknowledge
+        on entry
+          do for Leader
+            Handshake = true
+      state TestSucceeded = Handshake
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on extern
+        only (Create)
+        props (Handshake, Trigger) verbs (Consult, SetPropertyValue)
+        props (Acknowledge) verbs (Consult)
+      perspective on EmbeddedT25 >> binding 
+        props (Acknowledge) verbs (Consult)
+        
+      action RunTest
+        Trigger = true for extern
+        TestName = "T25 — Peer transaction: own-user reaction triggers further state cascade" for extern
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on extern
+        props (Acknowledge) verbs (Consult, SetPropertyValue)
+        props (Trigger, Handshake) verbs (Consult)
+      perspective on EmbeddedT25
+        only (CreateAndFill)
+    
+    context EmbeddedT25 filledBy NestedT25
+
+    case NestedT25
+      external
+        on entry
+          do for Follower
+            Acknowledge = true
+        property Acknowledge (Boolean)
+      
+      user Follower = me
+        perspective on extern
+          props (Acknowledge) verbs (Consult, SetPropertyValue)
