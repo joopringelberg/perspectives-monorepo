@@ -658,3 +658,29 @@ domain model://joopringelberg.nl#SynchronisationTestModel@2.0
       user Follower = me
         perspective on extern
           props (Acknowledge) verbs (Consult, SetPropertyValue)
+
+  ------------------------------------------------------------------------------
+  ---- Inherited perspectives actually sync.
+  ------------------------------------------------------------------------------
+  case Test_InheritedPerspectivesSync
+    aspect mm:Test
+    external
+      property Trigger (Boolean)
+      
+      state Acknowledge = Trigger and exists context >> Leader
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on extern
+        props (Trigger) verbs (Consult, SetPropertyValue)
+      action RunTest
+        Trigger = true for extern
+        TestName = "InheritedPerspectivesSync - peer receives resource based on inherited perspective" for extern
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on extern
+        props (Trigger) verbs (Consult)

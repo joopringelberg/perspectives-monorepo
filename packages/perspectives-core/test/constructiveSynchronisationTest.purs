@@ -136,6 +136,7 @@ allTests =
   , { testContextTypeName: test_CreateRole_in_CalculatedRole_RoleStep, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#SynchronisationTestModel$T24", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#SynchronisationTestModel$T25", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_InheritedPerspectivesSync, logConfiguration: emptyLogConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration
@@ -193,3 +194,6 @@ test_CreateRole_in_CalculatedRole_ContextStep = "model://joopringelberg.nl#Synch
 
 test_CreateRole_in_CalculatedRole_RoleStep :: String
 test_CreateRole_in_CalculatedRole_RoleStep = "model://joopringelberg.nl#SynchronisationTestModel$Test_CreateRole_in_CalculatedRole_RoleStep"
+
+test_InheritedPerspectivesSync :: String
+test_InheritedPerspectivesSync = "model://joopringelberg.nl#SynchronisationTestModel$Test_InheritedPerspectivesSync"

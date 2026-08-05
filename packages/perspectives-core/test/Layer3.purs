@@ -50,7 +50,7 @@ import Test.Unit.Main (runTest)
 
 main :: Effect Unit
 main = launchAff_ do
-  synchronisationResults <- getSynchronisationResults
+  constructiveSynchronisationResults <- getSynchronisationResults
   destructiveSynchronisationResults <- DestructiveSynchronisationTests.getSynchronisationResults
   compilationResults <- getCompilationResults
   queryStepResults <- getSinglePDRResults queryStepTestModelConfiguration
@@ -58,7 +58,7 @@ main = launchAff_ do
   transactionExecutionResults <- getSinglePDRResults transactionExecutionTestModelConfiguration
   liftEffect $ runTest do
     scaffoldTests
-    synchronisationSuite synchronisationResults
+    synchronisationSuite constructiveSynchronisationResults
     DestructiveSynchronisationTests.synchronisationSuite destructiveSynchronisationResults
     modelCompilationSuite compilationResults
     queryStepSuite queryStepResults
