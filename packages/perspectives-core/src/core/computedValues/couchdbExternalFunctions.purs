@@ -692,8 +692,8 @@ createCouchdbDatabase databaseUrls databaseNames _ =
 createEntitiesDatabase :: Array Url -> Array DatabaseName -> Array Namespace -> RoleInstance -> MonadPerspectivesTransaction Unit
 createEntitiesDatabase databaseUrls databaseNames namespaces _ =
   try
-    ( case head databaseUrls, head databaseNames, head namespaces of
-        Just databaseUrl, Just databaseName, Just namespace -> do
+    ( case head databaseUrls, head databaseNames of
+        Just databaseUrl, Just databaseName -> do
           dbName <- pure (databaseUrl <> databaseName)
           lift $ withDatabase (databaseUrl <> databaseName)
             ( \_ -> do
@@ -708,11 +708,13 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
                 setContext2RoleView dbName
                 setRole2ContextView dbName
             )
-          -- dbName is also the url that is provided in a "public Visitor at <location>" declaration.
-          -- Hence we can use it to construct an instance of TheWorld in that database.
-          -- CURRENTLY, CouchdbManagement is such that `namespace` may or may not end with a slash.
-          -- Hence we make sure it does.
-          theworldid <- pure (ContextInstance $ "pub:https://" <> ensureSlash namespace <> ensureSlash databaseName <> "#TheWorld")
+          -- If databaseUrl is empty, we target a local (in-memory) PouchDB database.
+          -- Otherwise we construct the public endpoint from namespace and database name.
+          publicationTarget <- case databaseUrl, head namespaces of
+            "", _ -> pure databaseName
+            _, Just namespace -> pure ("https://" <> ensureSlash namespace <> ensureSlash databaseName)
+            _, Nothing -> throwError (error "CreateEntitiesDatabase: namespace is required for non-empty databaseUrl")
+          theworldid <- pure (ContextInstance $ "pub:" <> publicationTarget <> "#TheWorld")
           mtheWorld <- lift $ tryGetPerspectContext theworldid
           case mtheWorld of
             Nothing -> do
@@ -720,13 +722,13 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
               -- otherwise we'll end up with deltas that refer to the local instance of the system user.
               sysUser <- lift getPerspectivesUser
               void
-                $ withPerspectivesUser (PerspectivesUser $ "pub:https://" <> ensureSlash namespace <> ensureSlash databaseName <> "#" <> takeGuid (unwrap sysUser))
+                $ withPerspectivesUser (PerspectivesUser $ "pub:" <> publicationTarget <> "#" <> takeGuid (unwrap sysUser))
                     -- Notice that the deltas in the result of constructEmptyContext are not added to the Transaction yet.
                     -- This is what we want; we take a short route to creating a public instance of TheWorld here.
                     (void $ runExceptT $ constructEmptyContext theworldid theWorld "TheWorld" (PropertySerialization empty) Nothing)
               lift $ void $ saveEntiteit theworldid
             _ -> pure unit
-        _, _, _ -> pure unit
+        _, _ -> pure unit
     )
     >>= handleExternalStatementError "model://perspectives.domains#CreateEntitiesDatabase"
 
