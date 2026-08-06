@@ -69,7 +69,9 @@ import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransac
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), Stable)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
-import Test.PDRInstance (PDRInstance, SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, runInPDR, testPouchdbUser, withPDRCached)
+import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, testPouchdbUser, withPDRCached)
+import Test.PDRInstance.Types (PDRInstance, runInPDR)
+
 
 type TopicLogLevelPair =
   { topic :: LogTopic

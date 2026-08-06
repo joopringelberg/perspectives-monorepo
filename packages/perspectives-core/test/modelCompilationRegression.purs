@@ -72,7 +72,8 @@ import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runMon
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), fromRepository, loadStableMapping)
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFileWithSidecar_)
 import Simple.JSON (read)
-import Test.PDRInstance (noBus, runInPDR, testPouchdbUser, withPDRCached)
+import Test.PDRInstance (noBus, testPouchdbUser, withPDRCached)
+import Test.PDRInstance.Types (runInPDR)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 
