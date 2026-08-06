@@ -36,6 +36,7 @@ import Data.Traversable (for_, traverse)
 import Foreign.Object (Object, keys, values)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Checking.Authorization (roleHasPerspectiveOnRoleWithVerb)
+import Perspectives.Error.Pretty (humanizePerspectivesError)
 import Perspectives.External.CoreModuleList (isExternalCoreModule)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionCardinality, lookupHiddenFunctionIsEffect, lookupHiddenFunctionNArgs)
 import Perspectives.Identifiers (areLastSegmentsOf, buitenRol, typeUri2ModelUri, endsWithSegments, isExternalRole, isTypeUri)
@@ -552,7 +553,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       case head rtarr of
         Just et@(ENR _) -> pure et
         Just ct'@(CR _) -> pure ct'
-        otherwise -> throwError $ ContextHasNoRole ct roleIdentifier start end
+        otherwise -> (lift $ lift $ humanizePerspectivesError (ContextHasNoRole ct roleIdentifier start end)) >>= throwError
 
     -- Either the identifier is qualified, or we qualify it with respect to the model.
     qualifyContextType :: String -> ArcPosition -> ArcPosition -> PhaseThree ContextType

@@ -45,6 +45,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (###=))
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (modifyCalculatedPropertyInDomeinFile, modifyCalculatedRoleInDomeinFile)
+import Perspectives.Error.Pretty (humanizePerspectivesError)
 import Perspectives.External.CoreModuleList (isExternalCoreModule)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunctionCardinality, lookupHiddenFunctionIsEffect, lookupHiddenFunctionNArgs)
 import Perspectives.Identifiers (endsWithSegments, isExternalRole, isTypeUri, qualifyWith, typeUri2ModelUri)
@@ -399,7 +400,7 @@ compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
                             else lookForRoleTypeOfADT ident c
                           else lookForUnqualifiedRoleTypeOfADT ident c
                         case uncons rts of
-                          Nothing -> throwError $ ContextHasNoRole c ident pos (endOf $ Simple s)
+                          Nothing -> (lift $ lift $ humanizePerspectivesError (ContextHasNoRole c ident pos (endOf $ Simple s))) >>= throwError
                           Just { head, tail } ->
                             if null tail then
                               if isExternalRole ident then do

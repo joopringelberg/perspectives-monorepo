@@ -118,6 +118,9 @@ humanizePerspectivesError e = case e of
     dom1' <- humanizeDomain dom1
     dom2' <- humanizeDomain dom2
     pure (IncompatibleDomainsForJunction dom1' dom2')
+  ContextHasNoRole contextADT roleType start end -> do
+    contextADT' <- traverse toReadable contextADT
+    pure (ContextHasNoRole contextADT' roleType start end)
 
   -- Default: leave unchanged.
   _ -> pure e
