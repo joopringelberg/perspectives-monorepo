@@ -32,6 +32,7 @@ module Test.Layer3Scaffold
   , getSynchronisationResultsOverAMQP
   , executeModelTest
   , runSynchronisationSuite
+  , runSynchronisationSuiteOverAMQP
   ) where
 
 import Prelude
@@ -130,9 +131,24 @@ runSynchronisationSuite
   -> TestSuite
   -> SynchronisationModelConfiguration
   -> Effect Unit
-runSynchronisationSuite cacheRef scaffoldSuite cfg =
+runSynchronisationSuite = runSynchronisationSuiteInternal getSynchronisationResults
+
+runSynchronisationSuiteOverAMQP
+  :: Ref (Maybe SynchronisationResults)
+  -> TestSuite
+  -> SynchronisationModelConfiguration
+  -> Effect Unit
+runSynchronisationSuiteOverAMQP = runSynchronisationSuiteInternal getSynchronisationResultsOverAMQP
+
+runSynchronisationSuiteInternal
+  :: (Ref (Maybe SynchronisationResults) -> SynchronisationModelConfiguration -> Aff SynchronisationResults)
+  -> Ref (Maybe SynchronisationResults)
+  -> TestSuite
+  -> SynchronisationModelConfiguration
+  -> Effect Unit
+runSynchronisationSuiteInternal getResults cacheRef scaffoldSuite cfg =
   launchAff_ do
-    results <- getSynchronisationResults cacheRef cfg
+    results <- getResults cacheRef cfg
     liftEffect $ runTest do
       scaffoldSuite
       suite cfg.suiteName do

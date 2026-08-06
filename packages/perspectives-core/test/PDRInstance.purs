@@ -73,7 +73,7 @@ import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (getPrivateKey)
-import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction, RuntimeOptions, TypeFix, (##>))
+import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogTopic(..), MonadPerspectivesTransaction, RepeatingTransaction, RuntimeOptions, TypeFix, (##>))
 import Perspectives.CoreTypes (LogLevel(..)) as CT
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
@@ -81,7 +81,7 @@ import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Me (computeMe_)
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getProperty)
-import Perspectives.Logging (ansiReset, debugTest, infoTest, traceTest)
+import Perspectives.Logging (ansiReset, debugTest, infoTest)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, identifiableFirstName, identifiableLastName, invitationGuestType, invitationMessageProp, inviteeType, inviterType, outgoingInvitationsType, serialisedInvitationProp, sysUser)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem, getUserIdentifier)
@@ -102,6 +102,8 @@ import Perspectives.Sidecar.StableIdMapping (fromLocalModels)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer)
 import Simple.JSON (readJSON)
+import Test.PDRInstance.Types (PDRInstance, runInPDR)
+import Test.Test.PDRInstance.SubscribePDRtoAMQP (manageAMQPwithPDR, subscribePDRtoAMQP)
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -152,20 +154,6 @@ restoreSnapshot systemIdentifier perspectivesUser snapshotDir =
 -- | Check whether a complete snapshot exists at `snapshotDir`.
 snapshotExists :: String -> Aff Boolean
 snapshotExists = liftEffect <<< snapshotExistsImpl
-
------------------------------------------------------------
--- PDR INSTANCE
------------------------------------------------------------
-
--- | A running PDR installation with its state AVar and a shutdown action.
--- | Use `runInPDR` / `runTransactionInPDR` to interact with the PDR, and
--- | call `shutdown` (or use `withPDR` / `withTwoPDRs`) to clean up.
-type PDRInstance =
-  { stateAVar :: AVar PerspectivesState
-  -- | Kill all background fibers for this instance.
-  , shutdown :: Aff Unit
-  , name :: String
-  }
 
 -- | Convenience constructor for an in-memory (no CouchDB) PouchdbUser.
 -- | The `perspectivesUser` is the bare name; `systemIdentifier` gets a
@@ -474,19 +462,6 @@ noBus = Nothing
 -- INTERACTION HELPERS
 -----------------------------------------------------------
 
--- TODO: een functie met dezelfde naam bestaat in TestUtils.purs (Test.Sync.Utils).
--- Deze versie moet prevaleren.
--- | Run a `MonadPerspectives` action against a PDR instance.
-runInPDR :: forall a. PDRInstance -> MonadPerspectives a -> Aff a
-runInPDR pdr mp = do
-  
-  runPerspectivesWithState 
-    ( do
-        traceTest $ "Running in PDR instance: " <> pdr.name
-        mp 
-    )
-    pdr.stateAVar
-
 -- | Run a `MonadPerspectivesTransaction` against a PDR instance.
 -- | Peer sharing is disabled (suitable for isolated single-instance tests).
 runTransactionInPDR :: PDRInstance -> MonadPerspectivesTransaction Unit -> Aff Unit
@@ -610,6 +585,7 @@ withTwoPDRsCached user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir
 -- | Unlike `withTwoPDRsCached`, this does not install the in-process bus
 -- | test transport and therefore leaves runtime wiring equivalent to
 -- | non-test startup.
+-- | Here is where we subscribe both PDR instances to the default AMQP/Stomp broker so that they can receive transactions from each other.
 withTwoPDRsCachedNoBus
   :: forall a
    . PouchdbUser
@@ -623,8 +599,12 @@ withTwoPDRsCachedNoBus
   -> (PDRInstance -> PDRInstance -> Aff a)
   -> Aff a
 withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir2 f =
-  withPDRCached user1 opts1 color1 noBus snapshotDir1 \pdr1 ->
-    withPDRCached user2 opts2 color2 noBus snapshotDir2 \pdr2 ->
+  withPDRCached user1 opts1 color1 noBus snapshotDir1 \pdr1 -> do
+    -- Here, make pdr1 subscribe to the default AMQP/Stomp broker so that it can receive transactions from pdr2.
+    manageAMQPwithPDR pdr1
+    withPDRCached user2 opts2 color2 noBus snapshotDir2 \pdr2 -> do
+      subscribePDRtoAMQP pdr2
+      -- And here subscribe pdr2 to the default AMQP/Stomp broker so that it can receive transactions from pdr1.
       f pdr1 pdr2
 
 -----------------------------------------------------------
