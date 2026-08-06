@@ -1028,7 +1028,8 @@ addDeltasForPropertyChange roleWithPropertyValue property replacementProperty = 
                   <>
                     "."
           )
-        else ( do
+        else
+          ( do
               readableRType <- lift $ toReadable rType
               readableProperty <- lift $ toReadable property
               debugSync $

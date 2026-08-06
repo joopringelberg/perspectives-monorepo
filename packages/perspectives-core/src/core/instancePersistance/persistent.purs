@@ -70,7 +70,7 @@ import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.MediaType (MediaType)
-import Data.Newtype (unwrap, wrap)
+import Data.Newtype (unwrap)
 import Data.String.Regex (Regex, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
@@ -84,7 +84,7 @@ import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
 import Perspectives.Logging (errorPersistence, warnPersistence, warnResource)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (AttachmentName, AuthoritySource(..), MonadPouchdb, addDocument, deleteDocument, ensureAuthentication, getDocument, isOffLine, retrieveDocumentVersion)
+import Perspectives.Persistence.API (AttachmentName, AuthoritySource(..), MonadPouchdb, addDocument, deleteDocument, ensureAuthentication, getDocument, isOffLine, retrieveDocumentVersion, startsWithDatabaseEndpoint)
 import Perspectives.Persistence.API (addAttachment) as P
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.PerspectivesState (getMissingResource)
@@ -243,7 +243,11 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) \_ ->
 -- Instead, we want to notify the user that, being offline, some resources cannot be accessed.
 internetRequiredButMissing :: ResourceIdentifier -> MonadPerspectives Boolean
 internetRequiredButMissing s =
-  if isInPublicScheme s || isInRemoteScheme s then liftAff isOffLine
+  if isInRemoteScheme s then liftAff isOffLine
+  else if isInPublicScheme s then do
+    { database } <- resourceIdentifier2DocLocator s
+    if startsWithDatabaseEndpoint database then liftAff isOffLine
+    else pure false
   else pure false
 
 -- | Saves a previously cached entity.
