@@ -59,7 +59,7 @@ isResourceIdentifier resId =
 -- Match a local Couchdb database name that starts with cw_, separated by "#" from a
 -- string built from word characters, digits and underscore.
 locRegex :: Regex
-locRegex = unsafeRegex "^(cw_\\w+)#([_\\w\\d]+)$" noFlags
+locRegex = unsafeRegex "^(cw_\\w+)#([\\w$]+)$" noFlags
 
 parseResourceIdentifier :: forall f. ResourceIdentifier -> MonadPouchdb f DecomposedResourceIdentifier
 parseResourceIdentifier resId =

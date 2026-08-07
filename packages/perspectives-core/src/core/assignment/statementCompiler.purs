@@ -28,7 +28,7 @@ module Perspectives.Query.StatementCompiler
 
 import Control.Monad.State.Class (gets)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (filter, foldM, head, length, null, uncons)
+import Data.Array (filter, foldM, head, length, uncons)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Newtype (unwrap)
@@ -51,7 +51,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.ExpressionCompiler (compileExpression, makeSequence)
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext, adtContext2AdtRoleInContext, domain2contextType, domain2roleType, functional, mandatory, range, roleInContext2Context, roleInContext2Role, roleRange)
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
-import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equalsOrGeneralises_, equalsOrSpecialises_)
+import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF, traverseDPROD)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.Class.PersistentType (getEnumeratedProperty, getEnumeratedRole)
