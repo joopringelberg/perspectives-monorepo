@@ -1,6 +1,9 @@
+-- Copyright Joop Ringelberg and Cor Baars, 2026.
+-- CUID = xyyehk9bpc
 domain model://joopringelberg.nl#AMQPtestModel@1.0
   use sys for model://perspectives.domains#System
   use mm for model://joopringelberg.nl#AMQPtestModel
+  use bs for model://perspectives.domains#BrokerServices
 
   -------------------------------------------------------------------------------
   ---- SETTING UP
@@ -45,6 +48,14 @@ domain model://joopringelberg.nl#AMQPtestModel@1.0
       perspective on Follower
         only (Create, Fill)
         props (FirstName) verbs (Consult)
+      perspective on bs:MyBrokers >> ManagedBrokers
+        only (CreateAndFill, RemoveContext)
+      perspective on bs:MyBrokers >> ManagedBrokers >> binding
+        props (Name, Url, Exchange, ManagementEndpoint, SelfRegisterEndpoint, ContractPeriod, GracePeriod, TerminationPeriod) verbs (Consult, SetPropertyValue)
+      perspective on bs:MyBrokers >> PublicBrokers >> binding >> context >> Administrator
+        props (AdminUserName, AdminPassword) verbs (Consult, SetPropertyValue)
+      perspective on bs:MyBrokers >> PublicBrokers
+        only (Create, Fill)      
           
     -- We need to synchronise, hence PerspectivesUsers and not Persons.
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)

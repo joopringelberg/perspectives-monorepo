@@ -57,7 +57,7 @@ import Control.Promise (Promise, toAffE)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
-import Data.Traversable (traverse_)
+import Data.Traversable (traverse, traverse_)
 import Effect (Effect)
 import Effect.Aff (Aff, Error, Milliseconds(..), attempt, bracket, delay, error, forkAff, killFiber)
 import Effect.Aff.AVar (AVar, empty, new, put)
@@ -73,7 +73,7 @@ import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (getPrivateKey)
-import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogTopic(..), MonadPerspectivesTransaction, RepeatingTransaction, RuntimeOptions, TypeFix, (##>))
+import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogLevel(..), LogTopic(..), MonadPerspectivesTransaction, RepeatingTransaction, RuntimeOptions, TypeFix, (##>))
 import Perspectives.CoreTypes (LogLevel(..)) as CT
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
@@ -600,10 +600,20 @@ withTwoPDRsCachedNoBus
   -> Aff a
 withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir2 f =
   withPDRCached user1 opts1 color1 noBus snapshotDir1 \pdr1 -> do
+
+    runInPDR pdr1 do
+      debugTest "withTwoPDRsCachedNoBus: Setting log levels for PDR1"
+      setTopicLogLevel TEST Trace
+      setTopicLogLevel INSTALL Trace
+      setTopicLogLevel RESOURCE Trace
+      setTopicLogLevel STATE Trace
+
     -- Here, make pdr1 subscribe to the default AMQP/Stomp broker so that it can receive transactions from pdr2.
-    manageAMQPwithPDR pdr1
+    publicBrokerServiceInstance <- manageAMQPwithPDR pdr1
+    -- subscribe the first instance.
+    subscribePDRtoAMQP publicBrokerServiceInstance pdr1
     withPDRCached user2 opts2 color2 noBus snapshotDir2 \pdr2 -> do
-      subscribePDRtoAMQP pdr2
+      subscribePDRtoAMQP publicBrokerServiceInstance pdr2
       -- And here subscribe pdr2 to the default AMQP/Stomp broker so that it can receive transactions from pdr1.
       f pdr1 pdr2
 
