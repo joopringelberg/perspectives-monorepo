@@ -54,7 +54,7 @@ import Perspectives.Error.Boundaries (handlePerspectRolError')
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionNArgs)
 import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.HumanReadableType (translateType)
-import Perspectives.Identifiers (isExternalRole)
+import Perspectives.Identifiers (isExternalRole, isUrl)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Combinators (available_, exists, logicalAnd, logicalOr, not)
 import Perspectives.Instances.Combinators (conjunction, intersection, orElse) as Combinators
@@ -1118,7 +1118,8 @@ getPublicUrl ctxt = do
         urlComputer <- context2propertyValue qfd
         murl <- ctxt ##> urlComputer
         case murl of
-          Just (Value url) -> pure $ Just $ ensureTerminalSlash url
+          -- As we also allow the form pub:cw_localDbName#guid, just add the terminal slash if url is in the http or https scheme.
+          Just (Value url) -> if isUrl url then pure $ Just $ ensureTerminalSlash url else pure $ Just url
           Nothing -> do
             -- addWarning ("Cannot compute a URL to publish to for this user role type and context instance: " <> show r <> " ('" <> show ctxt <> "')")
             pure Nothing
