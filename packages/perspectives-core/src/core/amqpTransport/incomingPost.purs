@@ -42,7 +42,7 @@ import Perspectives.Assignment.Update (setProperty)
 import Perspectives.CoreTypes (BrokerService, MonadPerspectives, MonadPerspectivesQuery, (##>))
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.ObjectGetters (context, externalRole, getProperty)
-import Perspectives.Logging (debugBroker, warnBroker)
+import Perspectives.Logging (debugBroker, traceBroker, warnBroker)
 import Perspectives.ModelDependencies (accountHolder, accountHolderName, accountHolderPassword, accountHolderQueueName, brokerEndpoint, brokerServiceContractInUse, brokerServiceExchange, connectedToAMQPBroker, myBrokers, sysUser)
 import Perspectives.Names (getMySystem, lookupIndexedContext)
 import Perspectives.Persistence.API (cleanupDeletedDocs, deleteDocument, documentsInDatabase, excludeDocs, getDocument_)
@@ -146,15 +146,20 @@ retrieveBrokerService :: MonadPerspectives Unit
 retrieveBrokerService = lookupIndexedContext myBrokers
   >>=
     ( \mbrokers -> case mbrokers of
-        Nothing -> pure Nothing
-        Just brokers ->
+        Nothing -> do
+          debugBroker "No BrokerService instance found in myBrokers context"
+          pure Nothing
+        Just brokers -> do
+          traceBroker ("Retrieved brokerservices: " <> show brokers)
           brokers ##>
             getRoleInstances (CR $ CalculatedRoleType brokerServiceContractInUse)
             >=> context
             >=> getRoleInstances (ENR $ EnumeratedRoleType accountHolder)
             >=> constructBrokerServiceForUser
     )
-  >>= setBrokerService
+  >>= \bs -> do
+    traceBroker $ "Retrieved BrokerService instance: " <> show bs
+    setBrokerService bs
 
 -- | Construct a BrokerService object for a particular AccountHolder.
 constructBrokerServiceForUser :: RoleInstance -> MonadPerspectivesQuery BrokerService
