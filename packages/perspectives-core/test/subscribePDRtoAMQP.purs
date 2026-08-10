@@ -65,7 +65,7 @@ manageAMQPwithPDR pdr = runInPDR pdr do
   infoTest $ pdr.name <> " ran SetupBrokerService action to create a BrokerService instance"
 
   -- Now run the action ConfigureBrokerService by the Manager.
-  runMonadPerspectivesTransaction' doNotShareWithPeers (CR $ CalculatedRoleType testSetupManager)
+  runMonadPerspectivesTransaction' shareWithPeers (CR $ CalculatedRoleType testSetupManager)
     $
     runContextAction testSetupManager "ConfigureBrokerService" (unwrap setupApp)
   infoTest $ pdr.name <> " ran ConfigureBrokerService action to configure the BrokerService instance"
