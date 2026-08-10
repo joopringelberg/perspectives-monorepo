@@ -38,6 +38,7 @@ import Test.PDRInstance.Types (PDRInstance, runInPDR)
 manageAMQPwithPDR :: PDRInstance -> Aff ContextInstance
 manageAMQPwithPDR pdr = runInPDR pdr do
   let bespokeDatabaseName = "cw_test_amqp_broker_service"
+  -- let bespokeDatabaseName = "https://perspectives.domains/cw_ro6a1vrf9y/"
   runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
     do
       addModelToLocalStore_ [ amqpTestSetupModel ] (RoleInstance "Ignored")
@@ -50,19 +51,24 @@ manageAMQPwithPDR pdr = runInPDR pdr do
   setupApp <- do
     IndexedContext setupApp <- toStable (IndexedContext "model://joopringelberg.nl#AMQPtestSetup$AMQPtestSetupApp")
     msetUpApp <- lookupIndexedContext setupApp
-    -- First create an instance of ManagedBrokers
-    -- and set its StorageLocation property to the URL of a Couchdb database that can be used to store the public version.
     case msetUpApp of
       Nothing -> throwError $ error $ pdr.name <> " could not find AMQPtestSetupApp context"
       Just s -> do
-        infoTest $ pdr.name <> " is now Manager of a new BrokerService instance"
+        infoTest $ pdr.name <> " found the AMQPtestSetupApp context"
         pure s
   
-  -- Now run the action SetupBrokerService by the Manager.
+  -- First create an instance of ManagedBrokers
+  -- and set its StorageLocation property to the URL of a Couchdb database that can be used to store the public version.
   runMonadPerspectivesTransaction' doNotShareWithPeers (CR $ CalculatedRoleType testSetupManager)
     $
     runContextAction testSetupManager "SetupBrokerService" (unwrap setupApp)
   infoTest $ pdr.name <> " ran SetupBrokerService action to create a BrokerService instance"
+
+  -- Now run the action ConfigureBrokerService by the Manager.
+  runMonadPerspectivesTransaction' doNotShareWithPeers (CR $ CalculatedRoleType testSetupManager)
+    $
+    runContextAction testSetupManager "ConfigureBrokerService" (unwrap setupApp)
+  infoTest $ pdr.name <> " ran ConfigureBrokerService action to configure the BrokerService instance"
 
   runMonadPerspectivesTransaction' doNotShareWithPeers (CR $ CalculatedRoleType testSetupManager)
     $
@@ -129,19 +135,21 @@ subscribePDRtoAMQP publicBrokerServiceInstance pdr = runInPDR pdr do
   
   -- Use the public version of the BrokerService instance to subscribe to AMQP.
   -- Run the context action AddThisServer in the context of the external role of the public BrokerService instance.
-  runMonadPerspectivesTransaction' doNotShareWithPeers (CR $ CalculatedRoleType testSetupManager)
+  runMonadPerspectivesTransaction' doNotShareWithPeers (CR $ CalculatedRoleType brokerServiceVisitor)
     $
     runContextAction brokerServiceVisitor "AddThisServer" (unwrap publicBrokerServiceInstance)
   
   -- Now sign up by running the Signup action.
   do
-    lookupIndexedContext brokerServicesApp >>= case _ of
+    IndexedContext brokerServicesAppStable <- toStable (IndexedContext brokerServicesApp)
+    lookupIndexedContext brokerServicesAppStable >>= case _ of
       Nothing -> throwError $ error $ pdr.name <> " could not find BrokerServicesApp context"
       Just b@(ContextInstance bApp) -> do
-        publicBrokersInstances <- b ##= getEnumeratedRoleInstances (EnumeratedRoleType publicBrokers)
+        publicBrokersStable <- toStable (EnumeratedRoleType publicBrokers)
+        publicBrokersInstances <- b ##= getEnumeratedRoleInstances publicBrokersStable
         case head publicBrokersInstances of
           (Just publicBrokerRoleInstance) -> do
-            runMonadPerspectivesTransaction' doNotShareWithPeers (CR $ CalculatedRoleType testSetupManager)
+            runMonadPerspectivesTransaction' shareWithPeers (CR $ CalculatedRoleType brokerServicesManager)
               $
               runActionForObject (CR $ CalculatedRoleType brokerServicesManager) "SignUp" bApp (unwrap publicBrokerRoleInstance)
             infoTest $ pdr.name <> " executed SignUp action to subscribe to AMQP using the public BrokerService instance"

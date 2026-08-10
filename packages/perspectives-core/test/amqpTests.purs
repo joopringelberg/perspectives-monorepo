@@ -110,7 +110,7 @@ testModel = "model://joopringelberg.nl#xyyehk9bpc@1.0"
 -- testModel = "model://joopringelberg.nl#AMQPtestModel@1.0"
 
 indexedTestContext :: String
-indexedTestContext = "model://joopringelberg.nl#AMQPtestModel$TestSyncApp"
+indexedTestContext = "model://joopringelberg.nl#AMQPtestModel$AMQPtestSyncApp"
 
 testAppManager :: String
 testAppManager = "model://joopringelberg.nl#AMQPtestModel$TestApp$Manager"
@@ -159,4 +159,4 @@ debugConfiguration =
   }
 
 test_SetProperty :: String
-test_SetProperty = "model://joopringelberg.nl#AMQPtestModel$TestApp$Tests$Test_SetProperty" 
+test_SetProperty = "model://joopringelberg.nl#AMQPtestModel$Test_SetProperty" 

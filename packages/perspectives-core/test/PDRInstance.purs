@@ -602,17 +602,29 @@ withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapsh
   withPDRCached user1 opts1 color1 noBus snapshotDir1 \pdr1 -> do
 
     runInPDR pdr1 do
-      debugTest "withTwoPDRsCachedNoBus: Setting log levels for PDR1"
       setTopicLogLevel TEST Trace
-      setTopicLogLevel INSTALL Trace
+      -- setTopicLogLevel INSTALL Trace
       setTopicLogLevel RESOURCE Trace
       setTopicLogLevel STATE Trace
+      -- setTopicLogLevel SYNC Trace
+      setTopicLogLevel BROKER Trace
+      infoTest "withTwoPDRsCachedNoBus: Setting log levels for PDR1"
 
     -- Here, make pdr1 subscribe to the default AMQP/Stomp broker so that it can receive transactions from pdr2.
     publicBrokerServiceInstance <- manageAMQPwithPDR pdr1
     -- subscribe the first instance.
     subscribePDRtoAMQP publicBrokerServiceInstance pdr1
     withPDRCached user2 opts2 color2 noBus snapshotDir2 \pdr2 -> do
+
+      runInPDR pdr2 do
+        setTopicLogLevel TEST Trace
+        -- setTopicLogLevel INSTALL Trace
+        setTopicLogLevel RESOURCE Trace
+        setTopicLogLevel STATE Trace
+        -- setTopicLogLevel SYNC Trace
+        setTopicLogLevel BROKER Trace
+        infoTest "withTwoPDRsCachedNoBus: Setting log levels for PDR2"
+
       subscribePDRtoAMQP publicBrokerServiceInstance pdr2
       -- And here subscribe pdr2 to the default AMQP/Stomp broker so that it can receive transactions from pdr1.
       f pdr1 pdr2

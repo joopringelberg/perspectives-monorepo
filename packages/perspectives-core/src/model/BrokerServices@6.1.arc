@@ -357,7 +357,7 @@ domain model://perspectives.domains#BrokerServices@6.1
             detail
 
     -- PDRDEPENDENCY
-    context Accounts (relational, unlinked) filledBy BrokerContract
+    context Accounts (relational) filledBy BrokerContract
 
     context MyPublicBrokers = bs:MyBrokers >> PublicBrokers  >> binding
 

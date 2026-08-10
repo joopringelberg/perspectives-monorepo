@@ -42,7 +42,8 @@ domain model://joopringelberg.nl#AMQPtestSetup@1.0
     
     user Manager = sys:Me
       perspective on bs:MyBrokers >> ManagedBrokers
-        only (CreateAndFill, RemoveContext)
+        only (Create, RemoveContext)
+        props (StorageLocation) verbs (Consult, SetPropertyValue)
       perspective on bs:MyBrokers >> ManagedBrokers >> binding
         props (Name, Url, Exchange, ManagementEndpoint, SelfRegisterEndpoint, ContractPeriod, GracePeriod, TerminationPeriod) verbs (Consult, SetPropertyValue)
       perspective on bs:MyBrokers >> PublicBrokers >> binding >> context >> Administrator
@@ -52,7 +53,15 @@ domain model://joopringelberg.nl#AMQPtestSetup@1.0
       
       action SetupBrokerService
         letA
-          broker <- create context bs:BrokerService bound to bs:BrokerServices$ManagedBrokers in bs:MyBrokers
+          -- broker <- create context bs:BrokerService bound to bs:BrokerServices$ManagedBrokers in bs:MyBrokers
+          managedbroker <- create role bs:BrokerServices$ManagedBrokers in bs:MyBrokers
+        in
+          StorageLocation = "cw_test_amqp_broker_service" for managedbroker
+
+      action ConfigureBrokerService
+        letA
+          -- The external role of the BrokerService instance.
+          broker <- bs:MyBrokers >> ManagedBrokers >> binding >>= first
         in
           Name = "Test Broker" for broker
           Url = "wss://mycontexts.com:15673/ws" for broker
@@ -63,8 +72,6 @@ domain model://joopringelberg.nl#AMQPtestSetup@1.0
           ContractPeriod = 1 day for broker
           GracePeriod = 1 day for broker
           TerminationPeriod = 1 day for broker
-
-          bind broker >> binding to PublicBrokers in bs:MyBrokers
 
       action SetCredentials
         letA
