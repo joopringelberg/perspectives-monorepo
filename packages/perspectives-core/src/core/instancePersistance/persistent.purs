@@ -328,14 +328,21 @@ saveMarkedResources = do
 saveCachedEntiteit :: forall a i. Attachment a => WriteForeign a => Persistent a i => ResourceToBeStored -> i -> MonadPerspectives a
 saveCachedEntiteit r entId = do
   entiteit <- takeEntiteitFromCache entId
-  -- The cache is now blocked, so there is no way to modify the entity. It may be decached; but we have the modified entity in our hands, here.
-  modify \s -> s { entitiesToBeStored = delete r s.entitiesToBeStored }
-  { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap $ identifier entiteit)
-  mresult <- try $ addDocument database entiteit documentName
+  mresult <- catchError
+    ( do
+        -- The cache is now blocked, so there is no way to modify the entity. It may be decached; but we have the modified entity in our hands, here.
+        modify \s -> s { entitiesToBeStored = delete r s.entitiesToBeStored }
+        { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap $ identifier entiteit)
+        try $ addDocument database entiteit documentName
+    )
+    ( \e -> do
+        void $ cacheEntity (identifier entiteit) entiteit
+        throwError e
+    )
   case mresult of
-    -- Restore the avar holding the resource to its filled state, to prevent the main fiber from blocking.
-    -- Notice we do not put it back into entitiesToBeStared.
-    Left e -> cacheEntity (identifier entiteit) entiteit *> pure entiteit
+    Left e -> do
+      void $ cacheEntity (identifier entiteit) entiteit
+      pure entiteit
     Right (rev :: Revision_) -> do
       entiteit' <- pure (changeRevision rev entiteit)
       void $ cacheEntity (identifier entiteit) entiteit'
