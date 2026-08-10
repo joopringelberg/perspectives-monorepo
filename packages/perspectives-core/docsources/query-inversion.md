@@ -162,7 +162,7 @@ The `invert_` function handles recursive cases:
 | `DataTypeGetter FillerF` | `RTFillerKey` | The filled role of a binding changes |
 | `RolGetter (ENR role)` | `RTRoleKey` | A role instance of type `role` is added to/removed from a context |
 | `DataTypeGetter ContextF` | `RTContextKey` | The context of a role instance changes (used when the query traverses `context`) |
-| `GetRoleInstancesForContextFromDatabaseF et` | `RTRoleKey` | Similar to `RolGetter ENR` but for relational roles |
+| `GetRoleInstancesForContextFromDatabaseF et` | `RTRoleKey` | Similar to `RolGetter ENR` but for unlinked roles |
 
 For `FilledF` and `FillerF` steps, the first backwards step is **dropped** from the stored inverted query (the `removeFirstBackwardsStep` helper). This is because at runtime the delta already provides the filled or filler role instance directly, so the step that would navigate to it is redundant.
 
