@@ -20,10 +20,60 @@ import PouchDB from "pouchdb-core";
 import PouchDBMemoryAdapter from "pouchdb-adapter-memory";
 import PouchDBHttpAdapter from "pouchdb-adapter-http";
 import PouchDBMapReduce from "pouchdb-mapreduce";
+import { createRequire } from "module";
+import { dirname } from "path";
 
 PouchDB.plugin(PouchDBMemoryAdapter);
 PouchDB.plugin(PouchDBHttpAdapter);
 PouchDB.plugin(PouchDBMapReduce);
+
+const require = createRequire(import.meta.url);
+const pouchdbAdapterHttpDir = dirname(require.resolve("pouchdb-adapter-http"));
+const { fetch: pouchdbFetch } = require(require.resolve("pouchdb-fetch", { paths: [pouchdbAdapterHttpDir] }));
+
+const RETRYABLE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const RETRYABLE_ERROR_CODES = new Set([
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "EAI_AGAIN",
+  "ENETUNREACH",
+  "EHOSTUNREACH"
+]);
+
+function retryDelayMillis(attempt) {
+  return 200 * Math.pow(2, attempt - 1);
+}
+
+function isRetryableFetchError(error) {
+  return Boolean(
+    error &&
+    (RETRYABLE_ERROR_CODES.has(error.code) ||
+      error.type === "request-timeout" ||
+      error.type === "system")
+  );
+}
+
+async function retryingFetch(url, options) {
+  const method = ((options && options.method) || "GET").toUpperCase();
+  const maxAttempts = RETRYABLE_METHODS.has(method) ? 3 : 1;
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await pouchdbFetch(url, options);
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts || !isRetryableFetchError(error)) {
+        throw error;
+      }
+      await new Promise(function(resolve) {
+        setTimeout(resolve, retryDelayMillis(attempt));
+      });
+    }
+  }
+
+  throw lastError;
+}
 
 function convertPouchError( originalE )
 {
@@ -66,14 +116,14 @@ export function createDatabaseImpl( databaseName )
 {
   if (databaseName.startsWith('http://') || databaseName.startsWith('https://'))
   {
-    return new PouchDB( databaseName );
+    return new PouchDB( databaseName, { fetch: retryingFetch } );
   }
   return new PouchDB( databaseName, { adapter: 'memory' } );
 }
 
 export function createRemoteDatabaseImpl( databaseName, couchdbUrl )
 {
-  var P = PouchDB.defaults({ prefix: couchdbUrl });
+  var P = PouchDB.defaults({ prefix: couchdbUrl, fetch: retryingFetch });
   return new P(databaseName);
 }
 
