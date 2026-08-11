@@ -792,3 +792,50 @@ The expression compiler maintains a set of identifiers currently being compiled 
 **Severity:** Low
 
 The cardinality flags `functional` and `mandatory` use three-valued logic (`True`, `False`, `Unknown`). The propagation of `Unknown` through complex expressions (particularly through union, intersection, and filter) has not been formally verified. Incorrect propagation could cause the compiler to misclassify a query's cardinality, leading to subtle behavioural differences (e.g. using `head` on an array that may be empty).
+
+### 10.8 Filter semantics in inversion and storage
+
+**Modules:** `Perspectives.Query.Kinked`, `Perspectives.Parsing.Arc.PhaseThree.StoreInvertedQueries`  
+**Severity:** High (correctness-sensitive)
+
+Filter handling for affected-query detection is intentionally split over two stages:
+
+1. **Inversion stage** (`queryWithAKink.purs`):
+   - `invert_` for `FilterF` appends the filter step to inverted criterium paths (filter appears in the backwards part, not as a forwards step).
+   - In the `ComposeF` branch, `hasFilter` changes candidate generation: when the right side starts with a filter-shape, only comprehension variants are kept.
+
+2. **Storage rewrite stage** (`storeInvertedQueries.purs`):
+   - `storeInvertedQuery'` recognises the pattern where a filter sits between inverted criterium and source.
+   - For **regular perspective queries** (`mCalcUserRoleType = Nothing`) it stores two semantic variants:
+     - **Unfiltered trigger variant** (filter dropped): detects changes even when the filter has become false (loss of visibility).
+     - **Filtered trigger variant** (filter reintroduced through recursive call with `mfilter = Just filter`): detects changes where the filter becomes true (gain of visibility).
+   - For **calculated-user detection queries** (`mCalcUserRoleType = Just _`) it stores a single filter-preserving variant:
+     - `backward = filter >> source`
+     - `forward = filter`
+     This is required so runtime can recognise role instances (not property values) when discovering newly accessible calculated users.
+
+So, semantically, filters are **not** globally "applied" or globally "ignored" in inverted queries. Instead, the subsystem deliberately uses both filtered and unfiltered variants (regular case), while keeping strict filter evaluation in the calculated-user case.
+
+#### Why this split exists
+
+A single filtered trigger is insufficient:
+- If a criterion flips from true to false, peers may need removal/invalidating deltas; a strict filter gate would miss that transition.
+
+A single unfiltered trigger is also insufficient:
+- It cannot represent "criterion became true" with enough precision for some synchronisation and calculated-user scenarios.
+
+Therefore the design balances both transition directions explicitly.
+
+#### `preprendToCriterium`: restoring semantic alignment after path surgery
+
+`setPathForStep` often rewrites inverted paths (for example by removing the first backwards step in `FilledF`, `FillerF`, and role-context cases). After this rewrite, the original filter criterium may no longer be aligned with the new runtime anchor.
+
+`preprendToCriterium` addresses this by inserting an extra compensating step at the front of the filter criterium, then prepending that modified filter to the rewritten backwards path. In effect, the filter is evaluated against the intended semantic object even after the inversion path has been structurally transformed.
+
+Used at:
+- `FilledF` storage path
+- `FillerF` storage path
+- `RolGetter (ENR ...)` storage path
+- `GetRoleInstancesForContextFromDatabaseF` storage path
+
+Companion deep-dive: see `docsources/query-inversion.md` for the full compile-time/runtime trace and key-category alignment.

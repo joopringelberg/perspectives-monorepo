@@ -200,6 +200,70 @@ So besides the regular inversion of the perspective-object query, Phase 3 also s
 extra property-triggered inversions for calculated (and certain non-local enumerated)
 perspective properties.
 
+### 1.4.2 Filter semantics: detection-oriented vs selection-oriented behaviour
+
+Filter handling in query inversion is intentionally not a single yes/no decision. The
+subsystem combines two semantics:
+
+- **Selection semantics**: keep only instances that satisfy the filter now.
+- **Detection semantics**: detect relevant changes even when a filter becomes false
+  (loss of visibility) or becomes true (gain of visibility).
+
+#### Compile-time inversion behaviour
+
+In `invert_`:
+
+- A `FilterF` step is appended to inverted criterium paths.
+- In `ComposeF`, `hasFilter` suppresses one family of extra forward-augmented
+  variants and keeps the comprehension variants.
+
+This produces candidate `QueryWithAKink` values where filter structure is still present,
+but final runtime trigger behaviour is decided later during storage.
+
+#### Storage-time rewrite behaviour
+
+In `storeInvertedQuery'`, when the backward shape is recognised as:
+
+- `{first source step} << filter << {last criterium step}`
+
+two different policies are applied.
+
+1. **Regular perspective queries** (`mCalcUserRoleType = Nothing`):
+   - Store an **unfiltered** variant (filter dropped) so transitions to filter-false
+     still trigger affected-user processing.
+   - Store an additional **filtered** variant (recursive call with `mfilter = Just filter`)
+     so transitions to filter-true also trigger precisely.
+
+2. **Calculated-user detection queries** (`mCalcUserRoleType = Just _`):
+   - Store a filter-preserving description:
+     - backward = `filter >> source`
+     - forward = `filter`
+   - Do **not** store the second recursive variant. This avoids runtime shape errors
+     where property values would be treated as role instances.
+
+Semantically, this means filters are both preserved and bypassed, depending on the
+purpose of the stored query.
+
+#### Why `preprendToCriterium` is needed
+
+For `RTFilledKey`, `RTFillerKey`, and role-context rewrites, `setPathForStep` may remove
+the first backward step (`removeFirstBackwardsStep`) and optionally compensate in the
+forward part. After this path surgery, the original filter criterium may no longer be
+anchored to the correct runtime object.
+
+`preprendToCriterium` restores alignment by inserting a compensating step at the start
+of the filter criterium and then prepending that modified filter to the rewritten
+backward. So the filter is evaluated on the intended semantic object despite structural
+rewrites of the inversion path.
+
+#### Practical outcome
+
+- Filters are **not** globally ignored.
+- Filters are **not** globally enforced as hard gates either.
+- The runtime sees a deliberately mixed set of stored inversions that together preserve
+  correctness for both visibility-loss and visibility-gain transitions, while keeping
+  calculated-user detection type-correct.
+
 Each stored inverted query is a `StorableInvertedQuery`:
 
 ```purescript
