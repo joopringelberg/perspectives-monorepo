@@ -241,9 +241,8 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
   integrityFiber <- forkAff $ forkReferentialIntegrityFixer missingResource state
   persistenceFiber <- forkAff $ forkDatabasePersistence state
   indexedResourceFiber <- forkAff $ forkCreateIndexedResources indexedResourceToCreate state
-    -- Fork aff to capture transactions to run.
+  -- Fork aff to capture transactions to run.
   void $ forkAff $ forkTimedTransactions transactionWithTiming state
-
 
   -- Load the keypair from file into IDB before calling createAccount_.
   -- The key names follow authenticate.purs: takeGuid(perspectivesUser) <> "_privateKey" / "_publicKey".
@@ -262,17 +261,17 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
         -- Get the User instance from System
         me <- getUserIdentifier
         runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
-          (do 
-             setProperty
-              [ RoleInstance me ]
-              (EnumeratedPropertyType identifiableFirstName)
-              Nothing
-              [ Value pouchdbUser.perspectivesUser ]
-             setProperty
-              [ RoleInstance me ]
-              (EnumeratedPropertyType identifiableLastName)
-              Nothing
-              [ Value $ pouchdbUser.perspectivesUser <> "_last" ]
+          ( do
+              setProperty
+                [ RoleInstance me ]
+                (EnumeratedPropertyType identifiableFirstName)
+                Nothing
+                [ Value pouchdbUser.perspectivesUser ]
+              setProperty
+                [ RoleInstance me ]
+                (EnumeratedPropertyType identifiableLastName)
+                Nothing
+                [ Value $ pouchdbUser.perspectivesUser <> "_last" ]
           )
         saveMarkedResources
         case bus of
@@ -287,10 +286,9 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
     )
     state
 
-  -- If we have a bus, start the incomingPost fiber to receive transactions.
-  postFiber <- case bus of
-    Just _ -> Just <$> (forkAff $ runPerspectivesWithState incomingPost state)
-    Nothing -> pure Nothing
+  -- Start the incomingPost fiber to receive transactions.
+  -- In noBus mode this enables the regular AMQP client path as well.
+  postFiber <- Just <$> (forkAff $ runPerspectivesWithState incomingPost state)
 
   let
     done :: Error
@@ -379,7 +377,7 @@ startPDRInstanceFromSnapshot pouchdbUser runtimeOptions mLogColor bus snapshotDi
   integrityFiber <- forkAff $ forkReferentialIntegrityFixer missingResource state
   persistenceFiber <- forkAff $ forkDatabasePersistence state
   indexedResourceFiber <- forkAff $ forkCreateIndexedResources indexedResourceToCreate state
-    -- Fork aff to capture transactions to run.
+  -- Fork aff to capture transactions to run.
   void $ forkAff $ forkTimedTransactions transactionWithTiming state
 
   -- Register external functions and wire the private key into the runtime state.
@@ -397,10 +395,9 @@ startPDRInstanceFromSnapshot pouchdbUser runtimeOptions mLogColor bus snapshotDi
     )
     state
 
-  -- If we have a bus, start the incomingPost fiber to receive transactions.
-  postFiber <- case bus of
-    Just _ -> Just <$> (forkAff $ runPerspectivesWithState incomingPost state)
-    Nothing -> pure Nothing
+  -- Start the incomingPost fiber to receive transactions.
+  -- In noBus mode this enables the regular AMQP client path as well.
+  postFiber <- Just <$> (forkAff $ runPerspectivesWithState incomingPost state)
 
   let
     done :: Error
@@ -442,18 +439,17 @@ withPDRCached
   -> Aff a
 withPDRCached pouchdbUser opts mLogColor mbus snapshotDir f = do
   exists <- snapshotExists snapshotDir
-  if exists
-    then bracket
-      (startPDRInstanceFromSnapshot pouchdbUser opts mLogColor mbus snapshotDir)
-      _.shutdown
-      f
-    else bracket (startPDRInstance pouchdbUser opts mLogColor mbus) _.shutdown \pdr -> do
-      -- Snapshot immediately after setup, before f runs, so the captured state
-      -- is the clean base PDR state without any compilation artefacts from f.
-      attempt (snapshotPDR pouchdbUser.systemIdentifier pouchdbUser.perspectivesUser snapshotDir) >>= case _ of
-        Left err -> log $ "[withPDRCached] Warning: snapshot creation failed: " <> message err
-        Right _ -> log $ "[withPDRCached] Snapshot saved to: " <> snapshotDir
-      f pdr
+  if exists then bracket
+    (startPDRInstanceFromSnapshot pouchdbUser opts mLogColor mbus snapshotDir)
+    _.shutdown
+    f
+  else bracket (startPDRInstance pouchdbUser opts mLogColor mbus) _.shutdown \pdr -> do
+    -- Snapshot immediately after setup, before f runs, so the captured state
+    -- is the clean base PDR state without any compilation artefacts from f.
+    attempt (snapshotPDR pouchdbUser.systemIdentifier pouchdbUser.perspectivesUser snapshotDir) >>= case _ of
+      Left err -> log $ "[withPDRCached] Warning: snapshot creation failed: " <> message err
+      Right _ -> log $ "[withPDRCached] Snapshot saved to: " <> snapshotDir
+    f pdr
 
 noBus :: Maybe InProcessBus
 noBus = Nothing
@@ -495,7 +491,7 @@ pollUntil maxAttempts interval description action = go maxAttempts
         delay interval
         go (n - 1)
 
-type SynchronisationResult = Either {testName :: String, err :: Error} { testName :: String, testSucceeded :: Boolean }
+type SynchronisationResult = Either { testName :: String, err :: Error } { testName :: String, testSucceeded :: Boolean }
 
 pollUntilTestFinishes
   :: Int
@@ -503,9 +499,9 @@ pollUntilTestFinishes
   -> String
   -> Aff SynchronisationResult
   -> Aff SynchronisationResult
-pollUntilTestFinishes maxAttempts interval description action = go 
-  maxAttempts 
-  ((Left {testName: description, err: error "pollUntilTestFinishes: initial state"}) :: SynchronisationResult)
+pollUntilTestFinishes maxAttempts interval description action = go
+  maxAttempts
+  ((Left { testName: description, err: error "pollUntilTestFinishes: initial state" }) :: SynchronisationResult)
   where
   go 0 previousResult = pure previousResult
   go n _ = do
@@ -605,7 +601,7 @@ withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapsh
       setTopicLogLevel TEST Trace
       -- setTopicLogLevel INSTALL Trace
       setTopicLogLevel RESOURCE Trace
-      setTopicLogLevel STATE Trace
+      -- setTopicLogLevel STATE Trace
       -- setTopicLogLevel SYNC Trace
       setTopicLogLevel BROKER Trace
       infoTest "withTwoPDRsCachedNoBus: Setting log levels for PDR1"
@@ -620,7 +616,7 @@ withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapsh
         setTopicLogLevel TEST Trace
         -- setTopicLogLevel INSTALL Trace
         setTopicLogLevel RESOURCE Trace
-        setTopicLogLevel STATE Trace
+        -- setTopicLogLevel STATE Trace
         -- setTopicLogLevel SYNC Trace
         setTopicLogLevel BROKER Trace
         infoTest "withTwoPDRsCachedNoBus: Setting log levels for PDR2"
@@ -667,9 +663,9 @@ connectPDRs pdr1 pdr2 = do
   mySystem1 <- runInPDR pdr1 getMySystem
 
   runInPDR pdr1 do
-      debugTest "connectPDRs: Running CreateInvitation context action in PDR1"
-      runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
-        $
+    debugTest "connectPDRs: Running CreateInvitation context action in PDR1"
+    runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
+      $
         runContextAction sysUser "CreateInvitation" mySystem1
 
   -- -----------------------------------------------------------------------
@@ -679,7 +675,7 @@ connectPDRs pdr1 pdr2 = do
   invCtx <- pollUntil 100 (Milliseconds 100.0)
     "Invitation context to appear in PerspectivesSystem$OutgoingInvitations"
     ( runInPDR pdr1
-        ( do 
+        ( do
             r <- (ContextInstance mySystem1) ##>
               ( getEnumeratedRoleInstances (EnumeratedRoleType outgoingInvitationsType)
                   >=> binding
@@ -691,7 +687,7 @@ connectPDRs pdr1 pdr2 = do
     )
 
   let invExternal = externalRole invCtx
-  
+
   -- -----------------------------------------------------------------------
   -- PDR1: Step 3 — set the Message property on Invitation$External
   -- -----------------------------------------------------------------------
@@ -699,11 +695,11 @@ connectPDRs pdr1 pdr2 = do
     debugTest "connectPDRs: Setting message property in PDR1"
     runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType inviterType)
       $
-      setProperty
-        [ invExternal ]
-        (EnumeratedPropertyType invitationMessageProp)
-        Nothing
-        [ Value "Hello there" ]
+        setProperty
+          [ invExternal ]
+          (EnumeratedPropertyType invitationMessageProp)
+          Nothing
+          [ Value "Hello there" ]
 
   messageText <- pollUntil 100 (Milliseconds 200.0)
     "Message property to be set"
@@ -713,7 +709,7 @@ connectPDRs pdr1 pdr2 = do
           debugTest "connectPDRs: Message property obtained in PDR1"
           pure r
     )
-  
+
   -- -----------------------------------------------------------------------
   -- PDR1: Step 4 — run the Inviter's CreateInvitation object action
   -- (sets ConfirmationCode → bot creates SerialisedInvitation file)
@@ -739,15 +735,15 @@ connectPDRs pdr1 pdr2 = do
           (invExternal ##> getProperty (EnumeratedPropertyType serialisedInvitationProp))
         case mPFileStr of
           Nothing -> pure Nothing
-          Just (Value v) -> runInPDR pdr1 do 
-              mt <- getPFileTextValue v
-              case mt of 
-                Nothing -> pure Nothing
-                Just t -> do
-                  debugTest "connectPDRs: SerialisedInvitation property and file content obtained in PDR1"
-                  pure (Just t)
+          Just (Value v) -> runInPDR pdr1 do
+            mt <- getPFileTextValue v
+            case mt of
+              Nothing -> pure Nothing
+              Just t -> do
+                debugTest "connectPDRs: SerialisedInvitation property and file content obtained in PDR1"
+                pure (Just t)
     )
-  
+
   -- -----------------------------------------------------------------------
   -- PDR2: Step 6 — parse invitation JSON and execute the transaction
   -- -----------------------------------------------------------------------
@@ -845,7 +841,7 @@ waitUntilAllTransactionsComplete secs pdr = do
       -- A non blocking check.
       quiet <- runInPDR pdr noTransactionIsRunning
       let nextStableCount = if quiet then stableCount + 1 else 0
-      if nextStableCount >= stableWindows then 
+      if nextStableCount >= stableWindows then
         runInPDR pdr $ debugTest ("waitUntilAllTransactionsComplete: PDR instance " <> pdr.name <> " is quiescent.")
       else loop (n - 1) nextStableCount
 

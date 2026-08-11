@@ -394,6 +394,7 @@ domain model://perspectives.domains#BrokerServices@6.1
             IsInUse = true for extern
             bind_ (sys:MySystem >> extern) to EmptyQueue
             callEffect rabbit:StartListening()
+            ConnectedToAMQPBroker = true for sys:MySystem >> extern
 
     state Terminated = (extern >> Registered) and (sys:MySystem >> extern >> CurrentDate) > (extern >> TerminatesOn) or (extern >> ContractTerminated)
       on entry
@@ -579,6 +580,9 @@ domain model://perspectives.domains#BrokerServices@6.1
       perspective on Queues
         only (Create, Fill, Remove)
         props (QueueName) verbs (SetPropertyValue, Consult)
+
+      perspective on sys:MySystem >> extern
+        props (ConnectedToAMQPBroker) verbs (SetPropertyValue, Consult)
 
       screen
         who
