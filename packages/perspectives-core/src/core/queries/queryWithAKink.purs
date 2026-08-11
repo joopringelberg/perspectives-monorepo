@@ -24,7 +24,7 @@ module Perspectives.Query.Kinked where
 
 import Control.Alternative (guard)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, elemIndex, foldM, foldr, head, intercalate, last, snoc, uncons, unsnoc)
+import Data.Array (catMaybes, elemIndex, foldM, foldl, foldr, head, intercalate, last, null, snoc, uncons, unsnoc)
 import Data.Function (flip)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), fromJust, isJust)
@@ -48,7 +48,7 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), and)
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint, prettyPrint')
-import Prelude (class Show, append, bind, discard, eq, join, map, pure, show, ($), (<$>), (<*>), (<<<), (<>), (==), (>=>), (>>=))
+import Prelude (class Show, append, bind, discard, eq, join, map, pure, show, ($), (&&), (<$>), (<*>), (<<<), (<>), (==), (>=>), (>>=), (||))
 
 --------------------------------------------------------------------------------------------------------------
 ---- QUERYWITHAKINK
@@ -58,7 +58,17 @@ import Prelude (class Show, append, bind, discard, eq, join, map, pure, show, ($
 -- The second part is forwards-facing (not inverted).
 data QueryWithAKink_ = ZQ_ (Array QueryFunctionDescription) (Maybe QueryFunctionDescription)
 
+-- | Reasons why inversion of a query branch is blocked.
+-- | Keep this extensible: more semantic blockers can be added over time.
+data InversionBlockTag = BlockedByContextlessIdentity
+
 derive instance genericQueryWithAKink_ :: Generic QueryWithAKink_ _
+
+type InversionOutcome =
+  { candidates :: Array QueryWithAKink_
+  , blockingTags :: Array InversionBlockTag
+  , hardBlocked :: Boolean
+  }
 
 instance showQueryWithAKink_ :: Show QueryWithAKink_ where
   show = genericShow
@@ -98,7 +108,7 @@ completeInversions = invert >=> pure <<< catMaybes <<< map f
 -- | semantics. See the text Filtering Inverted Queries.docx.
 -- | INVARIANT: All QueryWithAKink instances will have a backwards part.
 invert :: QueryFunctionDescription -> PhaseThree (Array QueryWithAKink)
-invert = invert_ >=> pure <<< catMaybes <<< map h
+invert = invert_ >=> pure <<< _.candidates >=> pure <<< catMaybes <<< map h
   where
   h :: QueryWithAKink_ -> Maybe QueryWithAKink
   h (ZQ_ steps q) = case unsnoc steps of
@@ -110,7 +120,7 @@ invert = invert_ >=> pure <<< catMaybes <<< map h
 
 -- | The QueryFunctionDescriptions in the Array of each QueryWithAKink_
 -- | are inversed wrt the orinal query.
-invert_ :: QueryFunctionDescription -> PhaseThree (Array QueryWithAKink_)
+invert_ :: QueryFunctionDescription -> PhaseThree InversionOutcome
 -- The inversion depends on the function f.
 invert_ (MQD dom (ExternalCoreRoleGetter f) args ran _ _) = do
   -- If we have a Constant argument, we must replace it with a ContextTypeConstant.
@@ -119,58 +129,72 @@ invert_ (MQD dom (ExternalCoreRoleGetter f) args ran _ _) = do
     (SQD _dom (Constant _ _) _ _ _) -> pure $ SQD ran (ContextTypeConstant ctype) ContextKind True True
     _ -> pure qfd
   case f of
-    "model://perspectives.domains#Couchdb$PendingInvitations" -> pure [ ZQ_ [ SQD ran (ContextIndividual (ContextInstance mySystem)) dom True True ] Nothing ]
-    _ -> pure $ [ ZQ_ [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances") args' dom Unknown Unknown ] Nothing ]
+    "model://perspectives.domains#Couchdb$PendingInvitations" -> pure $ unblocked [ ZQ_ [ SQD ran (ContextIndividual (ContextInstance mySystem)) dom True True ] Nothing ]
+    _ -> pure $ unblocked [ ZQ_ [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances") args' dom Unknown Unknown ] Nothing ]
 
-invert_ (MQD _ _ args _ _ _) = join <$> traverse invert_ args
+invert_ (MQD _ _ args _ _ _) = do
+  outcomes <- traverse invert_ args
+  pure $ foldl combineIndependent (unblocked []) outcomes
 
 invert_ q@(BQD dom (BinaryCombinator ComposeF) l r _ f m) = case l of
-  (BQD _ (BinaryCombinator UnionF) conj1 conj2 _ _ _) -> append
-    <$> invert_ (makeComposition conj1 (replaceDomain r (range conj1)))
-    <*>
-      invert_ (makeComposition conj2 (replaceDomain r (range conj2)))
+  (BQD _ (BinaryCombinator UnionF) conj1 conj2 _ _ _) -> do
+    o1 <- invert_ (makeComposition conj1 (replaceDomain r (range conj1)))
+    o2 <- invert_ (makeComposition conj2 (replaceDomain r (range conj2)))
+    pure $ combineIndependent o1 o2
 
-  (BQD _ (BinaryCombinator IntersectionF) conj1 conj2 _ _ _) -> append
-    <$> invert_ (makeComposition conj1 (replaceDomain r (range conj1)))
-    <*>
-      invert_ (makeComposition conj2 (replaceDomain r (range conj2)))
+  (BQD _ (BinaryCombinator IntersectionF) conj1 conj2 _ _ _) -> do
+    o1 <- invert_ (makeComposition conj1 (replaceDomain r (range conj1)))
+    o2 <- invert_ (makeComposition conj2 (replaceDomain r (range conj2)))
+    pure $ combineIndependent o1 o2
 
   (BQD _ (BinaryCombinator ComposeF) qfd1 qfd2 ran _ _) -> invert_ (BQD dom (BinaryCombinator ComposeF) qfd1 (BQD (range qfd1) (BinaryCombinator ComposeF) qfd2 r ran f m) ran f m)
 
-  (BQD _ (BinaryCombinator FilledByF) conj1 conj2 _ _ _) -> append
-    <$> invert_ (makeComposition conj1 (replaceDomain r (range conj1)))
-    <*>
-      invert_ (makeComposition conj2 (replaceDomain r (range conj2)))
+  (BQD _ (BinaryCombinator FilledByF) conj1 conj2 _ _ _) -> do
+    o1 <- invert_ (makeComposition conj1 (replaceDomain r (range conj1)))
+    o2 <- invert_ (makeComposition conj2 (replaceDomain r (range conj2)))
+    pure $ combineIndependent o1 o2
 
   (BQD _ (BinaryCombinator SequenceF) qfd1 qfd2 ran _ _) -> do
-    q1 <- invert_ qfd1
-    q2 <- invert_ qfd2
-    pure $ join $ [ q1, q2 ]
+    o1 <- invert_ qfd1
+    o2 <- invert_ qfd2
+    pure $ combineIndependent o1 o2
 
   qq@(SQD _ (VariableLookup varName) _ _ _) -> do
     varExpr <- lookupVariableBinding varName
     case varExpr of
-      Nothing -> pure []
-      Just qfd | qq == qfd -> pure []
+      Nothing -> pure $ unblocked []
+      Just qfd | qq == qfd -> pure $ unblocked []
       Just qfd -> invert_ (makeComposition qfd r)
 
   otherwise -> do
-    (lefts :: Array QueryWithAKink_) <- invert_ l
-    (rights :: Array QueryWithAKink_) <- invert_ r
-    case lefts, rights of
-      [], _ -> pure rights
-      _, [] -> pure lefts
-      _, _ -> do
-        comprehension <- pure (comprehend lefts rights)
-        -- If the next step is a filter, just return the comprehension. This is because storeInvertedQueries will 
-        -- re-create the lefts, but then with a condition.
-        -- TODO. I am not sure of the above.
-        if hasFilter r then pure comprehension
-        else append comprehension <$> for lefts
-          -- Add the original right part of the composition as the forward part of the qinked query.
-          \(ZQ_ bw fw) -> case fw of
-            Nothing -> pure $ ZQ_ bw (Just r)
-            Just fw' -> pure $ ZQ_ bw (Just $ makeComposition fw' r)
+    left <- invert_ l
+    right <- invert_ r
+    if left.hardBlocked || right.hardBlocked then
+      pure $ blockedFrom (left.blockingTags <> right.blockingTags)
+    else do
+      let
+        lefts = left.candidates
+        rights = right.candidates
+      case lefts, rights of
+        [], _ -> pure $ unblocked rights
+        _, [] -> pure $ unblocked lefts
+        _, _ -> do
+          comprehension <- pure (comprehend lefts rights)
+          -- If the next step is a filter, just return the comprehension. This is because storeInvertedQueries will 
+          -- re-create the lefts, but then with a condition.
+          -- TODO. I am not sure of the above.
+          candidates <-
+            if hasFilter r then pure comprehension
+            else append comprehension <$> for lefts
+              -- Add the original right part of the composition as the forward part of the qinked query.
+              \(ZQ_ bw fw) -> case fw of
+                Nothing -> pure $ ZQ_ bw (Just r)
+                Just fw' -> pure $ ZQ_ bw (Just $ makeComposition fw' r)
+          pure
+            { candidates
+            , blockingTags: left.blockingTags <> right.blockingTags
+            , hardBlocked: false
+            }
 
   where
   comprehend :: Array QueryWithAKink_ -> Array QueryWithAKink_ -> Array QueryWithAKink_
@@ -212,7 +236,10 @@ invert_ q@(BQD dom (BinaryCombinator ComposeF) l r _ f m) = case l of
 --     makeComposition (UQD (range source) FilterF criterium (range source) True False)
 --       criterium
 
-invert_ (BQD _ (BinaryCombinator f) qfd1 qfd2 _ _ _) = append <$> invert_ qfd1 <*> invert_ qfd2
+invert_ (BQD _ (BinaryCombinator f) qfd1 qfd2 _ _ _) = do
+  o1 <- invert_ qfd1
+  o2 <- invert_ qfd2
+  pure $ combineIndependent o1 o2
 
 -- We balance VariableLookup, where we invert the expression we look up,
 -- simply by storing the compiled expression under the variable name.
@@ -220,7 +247,7 @@ invert_ (UQD _ (BindVariable varName) qfd _ _ _) = do
   addBinding varName qfd
   -- As we invert the expression that the variable is bound to
   -- each time we refer it, we do not need invert it here.
-  pure []
+  pure $ unblocked []
 
 -- Push a frame. We will encounter BindVariable instances in the first
 -- part of the seqence that is the qfd.
@@ -235,8 +262,12 @@ invert_ (UQD _ WithFrame qfd _ _ _) = do
 -- For that reason, we prepend it here but remove it when we store inverted queries.
 -- Notice that the filter never ends up in the forward part.
 invert_ filter@(UQD _ FilterF criterium _ _ _) = do
-  criteriumInversions :: Array QueryWithAKink_ <- invert_ criterium
-  pure $ addFilter <$> criteriumInversions
+  outcome <- invert_ criterium
+  pure
+    { candidates: addFilter <$> outcome.candidates
+    , blockingTags: outcome.blockingTags
+    , hardBlocked: outcome.hardBlocked
+    }
   -- An inversion of criterium is a query whose range is the type of items to be judged. 
   -- We append the filter to such an inverted query (apply the filter to items of the range type!).
   where
@@ -245,22 +276,25 @@ invert_ filter@(UQD _ FilterF criterium _ _ _) = do
 
 invert_ (UQD _ _ qfd _ _ _) = invert_ qfd
 
-invert_ (SQD dom (Constant _ _) ran _ _) = pure []
+-- `me` is contextless for inversion purposes. A branch that depends on it is hard-blocked.
+invert_ (SQD _ (DataTypeGetter MeF) _ _ _) = pure $ blocked BlockedByContextlessIdentity
+
+invert_ (SQD dom (Constant _ _) ran _ _) = pure $ unblocked []
 
 invert_ (SQD dom (RolGetter rt) ran _ _) = case rt of
-  ENR _ -> pure [ ZQ_ [ (SQD ran (DataTypeGetter ContextF) dom True True) ] Nothing ]
+  ENR _ -> pure $ unblocked [ ZQ_ [ (SQD ran (DataTypeGetter ContextF) dom True True) ] Nothing ]
   CR r -> (lift2 $ (getRole >=> getCalculation) rt) >>= invert_
 
 invert_ (SQD dom (PropertyGetter (CP prop)) ran _ _) = (lift2 $ (getCalculatedProperty >=> calculation) prop) >>= invert_
 
-invert_ (SQD dom (DataTypeGetter CountF) ran _ _) = pure []
+invert_ (SQD dom (DataTypeGetter CountF) ran _ _) = pure $ unblocked []
 
 -- Treat a variable by looking up its definition (a QueryFunctionDescription), inverting it and inserting it.
 invert_ q@(SQD dom (VariableLookup varName) _ _ _) = do
   varExpr <- lookupVariableBinding varName
   case varExpr of
-    Nothing -> pure []
-    Just qfd | qfd == q -> pure []
+    Nothing -> pure $ unblocked []
+    Just qfd | qfd == q -> pure $ unblocked []
     Just qfd -> invert_ qfd
 
 invert_ qfd@(SQD dom@(RDOM roleAdt) f@(PropertyGetter prop@(ENP _)) ran fun man) = do
@@ -269,8 +303,8 @@ invert_ qfd@(SQD dom@(RDOM roleAdt) f@(PropertyGetter prop@(ENP _)) ran fun man)
   if hasProp then do
     minvertedF <- invertFunction dom f ran
     case minvertedF of
-      Nothing -> pure []
-      Just invertedF -> pure [ ZQ_ [ (SQD ran invertedF dom True True) ] Nothing ]
+      Nothing -> pure $ unblocked []
+      Just invertedF -> pure $ unblocked [ ZQ_ [ (SQD ran invertedF dom True True) ] Nothing ]
   else (expandPropertyQuery roleAdt readableProp) >>= invert_
 
   where
@@ -324,7 +358,7 @@ invert_ (SQD dom (RoleIndividual rid) ran fun man) = do
     -- NOTE: WE ARBITRARILY TAKE THE FIRST SUCH TYPE.
     CDOM adt -> do
       ctxt <- pure $ unsafePartial $ fromJust (head $ allLeavesInADT adt)
-      pure
+      pure $ unblocked
         [ ZQ_
             [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
                 [ SQD dom (ContextTypeConstant ctxt) ContextKind True True ]
@@ -336,7 +370,7 @@ invert_ (SQD dom (RoleIndividual rid) ran fun man) = do
         ]
     RDOM adt -> do
       rl <- pure $ roleInContext2Role $ unsafePartial $ fromJust (head $ allLeavesInADT adt)
-      pure
+      pure $ unblocked
         [ ZQ_
             [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
                 [ SQD dom (RoleTypeConstant $ ENR rl) RoleKind True True ]
@@ -346,14 +380,14 @@ invert_ (SQD dom (RoleIndividual rid) ran fun man) = do
             ]
             Nothing
         ]
-    _ -> pure []
+    _ -> pure $ unblocked []
 
 -- Get all instances of the type of the domain. 
 invert_ (SQD dom (ContextIndividual rid) ran fun man) = do
   case dom of
     CDOM adt -> do
       ctxt <- pure $ unsafePartial $ fromJust $ head $ allLeavesInADT adt
-      pure
+      pure $ unblocked
         [ ZQ_
             [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
                 [ SQD dom (ContextTypeConstant ctxt) ContextKind True True ]
@@ -365,7 +399,7 @@ invert_ (SQD dom (ContextIndividual rid) ran fun man) = do
         ]
     RDOM adt -> do
       rl <- pure $ roleInContext2Role $ unsafePartial $ fromJust $ head $ allLeavesInADT adt
-      pure
+      pure $ unblocked
         [ ZQ_
             [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
                 [ SQD dom (RoleTypeConstant $ ENR rl) RoleKind True True ]
@@ -375,14 +409,46 @@ invert_ (SQD dom (ContextIndividual rid) ran fun man) = do
             ]
             Nothing
         ]
-    _ -> pure []
+    _ -> pure $ unblocked []
 
 invert_ (SQD dom f ran _ _) = do
   (minvertedF :: Maybe QueryFunction) <- invertFunction dom f ran
   case minvertedF of
-    Nothing -> pure []
-    Just invertedF -> pure [ ZQ_ [ (SQD ran invertedF dom (queryFunctionIsFunctional invertedF) (queryFunctionIsMandatory f)) ] Nothing ]
+    Nothing -> pure $ unblocked []
+    Just invertedF -> pure $ unblocked [ ZQ_ [ (SQD ran invertedF dom (queryFunctionIsFunctional invertedF) (queryFunctionIsMandatory f)) ] Nothing ]
 
 -- Catchall.
 invert_ q = throwError (Custom $ "Missing case in invert for: " <> prettyPrint q)
+
+unblocked :: Array QueryWithAKink_ -> InversionOutcome
+unblocked candidates =
+  { candidates
+  , blockingTags: []
+  , hardBlocked: false
+  }
+
+blocked :: InversionBlockTag -> InversionOutcome
+blocked tag =
+  { candidates: []
+  , blockingTags: [ tag ]
+  , hardBlocked: true
+  }
+
+blockedFrom :: Array InversionBlockTag -> InversionOutcome
+blockedFrom tags =
+  { candidates: []
+  , blockingTags: tags
+  , hardBlocked: true
+  }
+
+combineIndependent :: InversionOutcome -> InversionOutcome -> InversionOutcome
+combineIndependent l r =
+  let
+    candidates = l.candidates <> r.candidates
+    hardBlocked = l.hardBlocked && r.hardBlocked && null candidates
+  in
+    { candidates
+    , blockingTags: l.blockingTags <> r.blockingTags
+    , hardBlocked
+    }
 
