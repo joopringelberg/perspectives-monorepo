@@ -168,6 +168,38 @@ For `FilledF` and `FillerF` steps, the first backwards step is **dropped** from 
 
 For `RolGetter (ENR role)` steps, the first backwards step is also dropped, and a compensating `context` step is prepended to the forwards part.
 
+### 1.4.1 Additional Indexing for Calculated Properties in Perspectives
+
+After handling the primary inversion step, `setPathForStep` always calls
+`storePropertyPerspectiveQueries`.
+
+This helper adds an extra mechanism for perspective properties when:
+
+- `domain qfd` is a role domain (the inversion step starts from a role), and
+- `forwards qWithAK` is `Nothing` (the perspective-object inversion is complete).
+
+For each property in `statesPerProperty`:
+
+- **Calculated property (`CP`)**:
+  - The property calculation is loaded and inverted.
+  - Each property inversion is composed with the already-complete inversion of the
+    perspective object (`addTermOnRight <$> bwProp <*> backwards qWithAK`).
+  - This effectively places the inverted property calculation in front of the
+    perspective-object inversion, producing a complete path from changed
+    enumerated property value to the context that holds the perspective users.
+  - The result is stored again via `storeInvertedQuery` and typically indexed as
+    `RTPropertyKey` (first backwards step is `Value2Role`).
+
+- **Enumerated property (`ENP`) not local to the perspective object**:
+  - A virtual `PropertyGetter` query is constructed at the perspective-object role
+    domain and inverted.
+  - This yields additional binding-change/property-change inversions so changes in
+    filler chains can still trigger affected-user detection.
+
+So besides the regular inversion of the perspective-object query, Phase 3 also stores
+extra property-triggered inversions for calculated (and certain non-local enumerated)
+perspective properties.
+
 Each stored inverted query is a `StorableInvertedQuery`:
 
 ```purescript
@@ -595,14 +627,29 @@ aliases.
 The backward starts with `Value2Role pt` (domain `VDOM pt`).
 
 **At runtime** (`aisInPropertyDelta`):
-`handleBackwardQuery propertyBearingInstance iq` is called.
-At runtime `Value2Role` compiles to the identity function, so the `propertyBearingInstance`
-(a `RoleInstance`) is passed through unchanged.
+`aisInPropertyDelta` iterates all matching property queries and distinguishes three cases:
 
-**Purpose**: RTPropertyKey queries are exclusively **state queries** (`users = []`). Perspective
-synchronisation for property changes is handled separately by `addDeltasForPropertyChange`, which
-uses RTContextKey queries (see §3.3). The comment in `aisInPropertyDelta` confirms:
-`handleBackwardQuery` will not return any users for property queries.
+1. `isCalculatedUserQuery iq && forwardStartsWithFilter iq`:
+  calls `handleNewCalculatedUsersForBinding ...` to detect newly accessible
+  calculated users and serialise their context.
+2. `invertedQueryIsForSynchronisation iq`:
+  this is the calculated-property perspective path. The compiled backward function
+  is used to compute context(s), then `getRoleInstances` is used for each user type
+  in those contexts, and those users are returned for synchronisation.
+3. Otherwise:
+  `handleBackwardQuery propertyBearingInstance iq` is run as a state-query path
+  (or non-synchronisation path).
+
+At runtime `Value2Role` still compiles to identity, so applying the backward query to
+`propertyBearingInstance` is type-compatible.
+
+**Purpose**: RTPropertyKey queries are mostly state queries (`users = []`), but not
+exclusively. Additional RTPropertyKey queries are stored for calculated-property
+perspectives and can carry non-empty `users`, enabling synchronisation user detection
+directly from property changes in `aisInPropertyDelta`.
+
+Regular perspective-object synchronisation for property changes is still handled by
+`addDeltasForPropertyChange` (RTContextKey-based lookup), so both mechanisms coexist.
 
 **Domain/range invariant**: The `VDOM` domain annotation on `Value2Role` is a compile-time type
 label only; at runtime the compiled function is identity regardless of domain. ✓
