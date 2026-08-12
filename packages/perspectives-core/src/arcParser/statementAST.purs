@@ -58,9 +58,10 @@ data Assignment
   | Move (WithTextRange (roleExpression :: Step, contextExpression :: Maybe Step))
   | Bind (WithTextRange (bindingExpression :: Step, roleIdentifier :: String, contextExpression :: Maybe Step))
   | Bind_ (WithTextRange (bindingExpression :: Step, binderExpression :: Step))
-  -- TODO: Maybe String voor roleIdentifier. Pas de parser aan.
-  | Unbind (WithTextRange (bindingExpression :: Step, roleIdentifier :: Maybe String))
-  | Unbind_ (WithTextRange (bindingExpression :: Step, binderExpression :: Step))
+  | RemoveAsFillerOfType (WithTextRange (roleIdentifier :: String, fillerExpression :: Step))
+  | RemoveAsFiller (WithTextRange (fillerExpression :: Step))
+  | RemoveFiller (WithTextRange (filledExpression :: Step))
+  | RemoveFillerWith (WithTextRange (fillerExpression :: Step, filledExpression :: Step))
   | DeleteRole (WithTextRange (roleIdentifier :: String, contextExpression :: Maybe Step))
   | DeleteContext (WithTextRange (contextRoleIdentifier :: String, contextExpression :: Maybe Step))
   | DeleteProperty (WithTextRange (propertyIdentifier :: String, roleExpression :: Maybe Step))
@@ -78,8 +79,10 @@ startOfAssignment (CreateFile { start }) = start
 startOfAssignment (Move { start }) = start
 startOfAssignment (Bind { start }) = start
 startOfAssignment (Bind_ { start }) = start
-startOfAssignment (Unbind { start }) = start
-startOfAssignment (Unbind_ { start }) = start
+startOfAssignment (RemoveAsFillerOfType { start }) = start
+startOfAssignment (RemoveAsFiller { start }) = start
+startOfAssignment (RemoveFiller { start }) = start
+startOfAssignment (RemoveFillerWith { start }) = start
 startOfAssignment (DeleteRole { start }) = start
 startOfAssignment (DeleteContext { start }) = start
 startOfAssignment (DeleteProperty { start }) = start
@@ -97,8 +100,10 @@ endOfAssignment (CreateFile { end }) = end
 endOfAssignment (Move { end }) = end
 endOfAssignment (Bind { end }) = end
 endOfAssignment (Bind_ { end }) = end
-endOfAssignment (Unbind { end }) = end
-endOfAssignment (Unbind_ { end }) = end
+endOfAssignment (RemoveAsFillerOfType { end }) = end
+endOfAssignment (RemoveAsFiller { end }) = end
+endOfAssignment (RemoveFiller { end }) = end
+endOfAssignment (RemoveFillerWith { end }) = end
 endOfAssignment (DeleteRole { end }) = end
 endOfAssignment (DeleteContext { end }) = end
 endOfAssignment (DeleteProperty { end }) = end
@@ -161,8 +166,10 @@ instance prettyPrintAssignment :: PrettyPrint Assignment where
   prettyPrint' t (Move { roleExpression, contextExpression }) = "Move " <> prettyPrint' t roleExpression <> "\n" <> t <> prettyPrint' (t <> "  ") contextExpression
   prettyPrint' t (Bind { bindingExpression, contextExpression }) = "Bind " <> prettyPrint' t bindingExpression <> "\n" <> t <> prettyPrint' (t <> "  ") contextExpression
   prettyPrint' t (Bind_ { bindingExpression, binderExpression }) = "Bind_ " <> prettyPrint' t bindingExpression <> "\n" <> t <> prettyPrint' (t <> "  ") binderExpression
-  prettyPrint' t (Unbind { bindingExpression, roleIdentifier }) = "Unbind " <> prettyPrint' t bindingExpression <> "\n" <> t <> show roleIdentifier
-  prettyPrint' t (Unbind_ { bindingExpression, binderExpression }) = "Unbind_ " <> prettyPrint' t bindingExpression <> "\n" <> t <> prettyPrint' (t <> "  ") binderExpression
+  prettyPrint' t (RemoveAsFillerOfType { roleIdentifier, fillerExpression }) = "RemoveAsFillerOfType " <> roleIdentifier <> " " <> prettyPrint' t fillerExpression
+  prettyPrint' t (RemoveAsFiller { fillerExpression }) = "RemoveAsFiller " <> prettyPrint' t fillerExpression
+  prettyPrint' t (RemoveFiller { filledExpression }) = "RemoveFiller " <> prettyPrint' t filledExpression
+  prettyPrint' t (RemoveFillerWith { fillerExpression, filledExpression }) = "RemoveFillerWith " <> prettyPrint' t fillerExpression <> "\n" <> t <> prettyPrint' (t <> "  ") filledExpression
   prettyPrint' t (DeleteRole { roleIdentifier, contextExpression }) = "DeleteRole " <> roleIdentifier <> " " <> prettyPrint' t contextExpression
   prettyPrint' t (DeleteContext { contextRoleIdentifier, contextExpression }) = "DeleteContext " <> contextRoleIdentifier <> " " <> prettyPrint' t contextExpression
   prettyPrint' t (DeleteProperty { propertyIdentifier, roleExpression }) = "DeleteProperty " <> propertyIdentifier <> " " <> prettyPrint' t roleExpression

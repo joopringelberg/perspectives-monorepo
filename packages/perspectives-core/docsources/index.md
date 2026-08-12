@@ -11,6 +11,8 @@ This index provides an overview of the technical documentation in `packages/pers
 | Document | Description |
 |---|---|
 | [Installation Initialization](installation-initialization.md) | What happens when a new Perspectives installation is created — covers both the PDR (PureScript) side and the Perspectives Language (PL) side, including the shared contexts that are bootstrapped on first run. |
+| [Model URI resolution](model-uri-resolution.md) | How `ModelUri` values are deterministically mapped to `models_*` and `cw_*` URLs (`modelUri2ModelUrl`, `modelUri2ManifestUrl`), including naming conventions, assumptions, and the reason tests may need an alternate mapping. |
+| [Public Resource Identifiers](public-resource-identifiers.md) | How `pub:` resource identifiers are parsed and used from ARC parsing to persistence, including support for both remote HTTP(S) publication targets and local PouchDB database names for tests. |
 | [PDR → Frontend Messaging](pdr-messaging.md) | The two mechanisms the PDR uses to push messages to the browser frontend: the status-message channel (`setPDRStatus`) and the reactive warning queue, plus how a developer wires up each one. |
 | [PDR Client Data Structures](pdr-client-data-structures.md) | All data structures the PDR serialises and sends to its clients (`mycontexts` / `perspectives-react`). Starting from `ScreenDefinition` the document descends into `Perspective`, `Roleinstancewithprops`, and every referenced type, including the developer-tool types `InspectableContext` and `InspectableRole`. |
 | [Structured Logging](structured-logging.md) | The runtime-configurable logging layer: `LogLevel`, `LogTopic`, and `LogConfig` types; the `pdrLog` entry point and its pre-bound convenience aliases; `MonadPerspectives` helpers for changing thresholds at runtime; and three JavaScript-callable functions (`setLogLevelForTopic`, `disableLogTopic`, `disableLogging`) that allow reconfiguring the log from the browser DevTools console without restarting. Also includes a migration guide for replacing legacy `log`/`logPerspectivesError` call sites and instructions for adding new topics. |
@@ -21,12 +23,14 @@ This index provides an overview of the technical documentation in `packages/pers
 |---|---|
 | [The Query Subsystem](query-subsystem.md) | End-to-end technical overview of the query pipeline: parsing an ARC expression into an AST, compiling it to a typed `QueryFunctionDescription`, evaluating it at runtime via the interpreter, and registering computed values in the external-function cache. Also covers three-valued logic and assumption tracking. |
 | [Query Inversion](query-inversion.md) | The compile-time transformation that turns every forward query into one or more *inverted* queries. Inverted queries allow the runtime to answer "given that data item X changed, which running queries are affected and which users must be notified?" without re-evaluating the world. |
+| [Role-Binding Query Analysis](role-binding-query-analysis.md) | A focused walkthrough of the binding-related runtime path in `Perspectives.CollectAffectedContexts`, including how `RTFillerKey` and `RTFilledKey` queries are applied and why the `Invitation$Inviter` → `Invitee` case likely points to stored-query data rather than an obvious runtime mismatch. |
 
 ### Transaction & Delta System
 
 | Document | Description |
 |---|---|
 | [Transaction Execution Process](transaction-execution.md) | How the PDR executes a transaction: the two entry paths (user-initiated vs. peer-received), the multi-phase processing loop (state evaluation → action execution → synchronisation), and the design rationale for the production-rule model. |
+| [Transaction Execution — Test Script Catalogue](transaction-execution-tests.md) | 26 human-readable test scripts, one per significant path through `runMonadPerspectivesTransaction`. Each script states the model setup, initial state, triggering action, and expected outcome. Intended as the specification from which ARC test models and PureScript test cases will be built. |
 | [Delta Ordering and Conflict Resolution](delta-ordering.md) | How the PDR achieves convergence in a distributed system where peers can modify the same resources concurrently. Covers the resource-version scheme, deterministic ordering via `executeDeltaWithVersionTracking`, and the pending-transaction store used to defer out-of-order deltas. |
 | [Context Serialisation for a Peer](context-serialisation-for-peer.md) | How a Perspectives context instance is serialised as a set of deltas so that a peer can reconstruct it locally. Central to the Invitation mechanism and to handing a complete context representation to a new installation. |
 
@@ -36,6 +40,12 @@ This index provides an overview of the technical documentation in `packages/pers
 |---|---|
 | [Type Comparison](type-comparison.md) | How types are represented (ADT, ExpandedADT, CNF), normalised, and compared throughout the PDR. Covers `equalsOrSpecialises`, `leastCommonSuperType`, role-class hierarchy, and the role of Phase Three in populating comparison tables. |
 | [Stable ID Mapping](stable-id-mapping.md) | How stable type identifiers are preserved across ARC model refactors using a `stableIdMapping.json` sidecar stored alongside the DomeinFile. Covers the alias mechanism, snapshot heuristics, and where in the compilation pipeline the mapping is applied. |
+
+### Screen Widgets & Language Extensions
+
+| Document | Description |
+|---|---|
+| [Typeahead Screen Widgets](typeahead-screen-widgets.md) | The four ARC keywords for role-filling with large candidate lists: `typeaheadfillfrom`, `typeaheadfiller`, `typeaheadform`, and `fillfrom`. Explains the `filterValueView` PouchDB view, the full compilation pipeline from ARC parser to React components, and the shared helper functions `fetchCandidatesFromQfd` and `fetchFilterValueCandidates`. |
 
 ---
 
@@ -48,12 +58,13 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.AMQP.IncomingPost` | [Context Serialisation for a Peer](context-serialisation-for-peer.md), [Transaction Execution Process](transaction-execution.md) |
 | `Perspectives.Assignment.Update` | [Installation Initialization](installation-initialization.md) |
 | `Perspectives.Checking.PerspectivesTypeChecker` | [Type Comparison](type-comparison.md) |
-| `Perspectives.CollectAffectedContexts` | [Query Inversion](query-inversion.md) |
+| `Perspectives.CollectAffectedContexts` | [Query Inversion](query-inversion.md), [Role-Binding Query Analysis](role-binding-query-analysis.md) |
 | `Perspectives.ContextStateCompiler` | [Transaction Execution Process](transaction-execution.md) |
 | `Perspectives.CoreTypes` | [The Query Subsystem](query-subsystem.md), [Structured Logging](structured-logging.md) |
 | `Perspectives.ErrorLogging` | [PDR → Frontend Messaging](pdr-messaging.md) |
 | `Perspectives.Logging` | [Structured Logging](structured-logging.md) |
 | `Perspectives.External.HiddenFunctionCache` | [The Query Subsystem](query-subsystem.md) |
+| `Perspectives.Identifiers` | [Model URI resolution](model-uri-resolution.md) |
 | `Perspectives.Inspector.InspectableResources` | [PDR Client Data Structures](pdr-client-data-structures.md) |
 | `Perspectives.Instances.Me` | [Installation Initialization](installation-initialization.md) |
 | `Perspectives.Instances.ObjectGetters` | [Type Comparison](type-comparison.md) |
@@ -85,10 +96,16 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.Representation.TypeIdentifiers` | [PDR Client Data Structures](pdr-client-data-structures.md) |
 | `Perspectives.Representation.Verbs` | [PDR Client Data Structures](pdr-client-data-structures.md) |
 | `Perspectives.RoleStateCompiler` | [Context Serialisation for a Peer](context-serialisation-for-peer.md), [Transaction Execution Process](transaction-execution.md) |
-| `Perspectives.RunMonadPerspectivesTransaction` | [Transaction Execution Process](transaction-execution.md) |
+| `Perspectives.RunMonadPerspectivesTransaction` | [Transaction Execution Process](transaction-execution.md), [Transaction Execution — Test Script Catalogue](transaction-execution-tests.md) |
 | `Perspectives.Sync.HandleTransaction` | [Delta Ordering and Conflict Resolution](delta-ordering.md), [Transaction Execution Process](transaction-execution.md) |
 | `Perspectives.Sync.LegacyDeltas` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
 | `Perspectives.Sync.Transaction` | [Transaction Execution Process](transaction-execution.md) |
+| `Perspectives.SideCar.PhantomTypedNewtypes` | [Model URI resolution](model-uri-resolution.md) |
 | `Perspectives.TypePersistence.PerspectiveSerialisation.Data` | [PDR Client Data Structures](pdr-client-data-structures.md) |
 | `Perspectives.Types.ObjectGetters` | [Type Comparison](type-comparison.md) |
 | `Perspectives.TypesForDeltas` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
+| `Perspectives.Parsing.Arc.AST` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |
+| `Perspectives.Parsing.Arc` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |
+| `Perspectives.Parsing.Arc.PhaseThree.Screens` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |
+| `Perspectives.Parsing.Arc.NormalizeTypeNames` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |
+| `Perspectives.TypePersistence.ScreenContextualisation` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |

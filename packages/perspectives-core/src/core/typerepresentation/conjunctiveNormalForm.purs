@@ -23,15 +23,15 @@
 module Perspectives.Representation.CNF where
 
 import Control.Alternative (class Applicative)
-import Data.Array (concat, intercalate, nub, null)
+import Data.Array (any, concat, filter, intercalate, nub, null)
 import Data.Foldable (foldl)
 import Data.Generic.Rep (class Generic)
-import Data.Set (fromFoldable) as SET
+import Data.Set (fromFoldable, subset) as SET
 import Data.Traversable (traverse)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Representation.ExpandedADT (ExpandedADT(..))
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
-import Prelude (class Eq, class Ord, class Show, compare, map, show, ($), (<#>), (<$>), (<>), (==))
+import Prelude (class Eq, class Ord, class Show, compare, map, not, show, ($), (&&), (/=), (<<<), (<#>), (<$>), (<>), (==))
 import Simple.JSON (class ReadForeign, class WriteForeign, readImpl, writeImpl)
 
 --------------------------------------------------------------------------------------------------
@@ -85,14 +85,32 @@ instance (ReadForeign a) => ReadForeign (DPROD a) where
 
 -- To be applied to an expanded tree only. In the expanded tree, UET will not occur.
 toConjunctiveNormalForm :: forall a. Eq a => Ord a => ExpandedADT a -> DPROD a
-toConjunctiveNormalForm adt = case adt of
+toConjunctiveNormalForm adt = simplifyCNF $ case adt of
   EST a -> DPROD [ (DSUM [ a ]) ]
   -- In the disjunctive normal form we have no UET.
   -- We have a tree built from EST, ECT, ESUM and EPROD.
   -- We can safely ignore the label; it is in a, too.
-  ECT label a -> toConjunctiveNormalForm a
+  ECT _ a -> toConjunctiveNormalForm a
   EPROD as -> unsafePartial flattenProducts (map toConjunctiveNormalForm as)
   ESUM as -> unsafePartial distribute $ map toConjunctiveNormalForm as
+
+-- | Remove clauses that are subsumed by a stricter clause.
+-- | In CNF, if a clause C1 is a subset of C2, then C2 is redundant.
+-- | Example: A ∧ (A ∨ B) simplifies to A.
+simplifyCNF :: forall a. Ord a => DPROD a -> DPROD a
+simplifyCNF (DPROD sums) = DPROD $ filter (not <<< isSubsumed) sums
+  where
+  isSubsumed :: DSUM a -> Boolean
+  isSubsumed clause = any (\candidate -> strictlySubsumes candidate clause) sums
+
+  strictlySubsumes :: DSUM a -> DSUM a -> Boolean
+  strictlySubsumes candidate clause =
+    candidate /= clause
+      && subsetDSUM candidate clause
+      && not (subsetDSUM clause candidate)
+
+  subsetDSUM :: DSUM a -> DSUM a -> Boolean
+  subsetDSUM (DSUM left) (DSUM right) = SET.fromFoldable left `SET.subset` SET.fromFoldable right
 
 -- the argument is the product of applying toDisjunctiveNormalForm to an array of ADT - so it must
 -- be an array of DPROD (Array (DSUM a))

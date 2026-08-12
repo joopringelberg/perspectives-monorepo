@@ -141,9 +141,9 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
   handleKeyDownInReadOnly(event : React.KeyboardEvent)
   {
     const component = this;
-    switch(event.keyCode){
+    switch(event.key){
 
-      case 39: // right arrow
+      case "ArrowRight": // right arrow
         // If we have a file (as can be seen from the url property), we may move to the download button.
         if (component.state.roleFileName)
         {
@@ -159,10 +159,10 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
   {
     const component = this;
     let fileName, mimeType, newFile : File;
-    switch(event.keyCode){
-      // case 9: // horizontal tab; vertical tab is 11
-      // case 37: // left arrow
-      case 39: // right arrow
+    switch(event.key){
+      // case "Tab": // horizontal tab; vertical tab is 11
+      // case "ArrowLeft": // left arrow
+      case "ArrowRight": // right arrow
         if (component.state.selectedField == FILENAME)
         {
           event.preventDefault();
@@ -185,7 +185,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
         }
         break;
 
-      case 13: // Enter
+      case "Enter": // Enter
         // Use values to create a file.
         // Both fields must be filled.
         event.preventDefault();
@@ -210,7 +210,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
       
         break;
 
-      case 27: // Escape
+      case "Escape": // Escape
         // Discard changes.
         event.preventDefault();
         event.stopPropagation();   
@@ -224,8 +224,8 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
   handleKeyDownInFilled(event : React.KeyboardEvent)
   {
     const component = this;
-    switch(event.keyCode){
-      case 13: // Enter
+    switch(event.key){
+      case "Enter": // Enter
         event.preventDefault();
         event.stopPropagation();      
 
@@ -233,7 +233,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
         component.setState({state: EDITABLE, selectedField: FILENAME})
         break;
 
-      case 39: // right arrow
+      case "ArrowRight": // right arrow
         // If we have a file (as can be seen from the url property), we may move to the download button.
         if (component.state.roleFileName)
         {
@@ -250,9 +250,9 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
     const component = this;
     let parsedPropertyValue = undefined;
     let fileNameOnProps = undefined;
-    switch(event.keyCode){
-      // case 9: // horizontal tab; vertical tab is 11
-      case 39: // right arrow
+    switch(event.key){
+      // case "Tab": // horizontal tab; vertical tab is 11
+      case "ArrowRight": // right arrow
         if (component.state.selectedField == FILENAME)
         {
           event.preventDefault();
@@ -281,7 +281,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
         }
         break;
 
-      case 13: // Enter
+      case "Enter": // Enter
         event.preventDefault();
         event.stopPropagation();      
 
@@ -326,7 +326,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
         }
         break;
 
-      case 27: // Escape
+      case "Escape": // Escape
         // Discard changes (revert to saved values, if any)
         event.preventDefault();
         event.stopPropagation();   
@@ -338,7 +338,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
             { state: FILLED
             , fileName: parsedPropertyValue.fileName || ""
             , mimeType: parsedPropertyValue.mimeType || ""
-            , database: parsedPropertyValue.database
+            , database: parsedPropertyValue.database || ""
             , roleFileName: parsedPropertyValue.roleFileName
           });  
         }
@@ -355,6 +355,11 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
   saveFileAndProperty(theFile : File)
   {
     const component = this;
+    const currentDatabase =
+      component.state.database
+      || (component.props.propertyValues?.values[0]
+        ? (JSON.parse(component.props.propertyValues.values[0]) as PerspectivesFileType).database
+        : undefined);
     return PDRproxy.then( pproxy => 
       {
         return pproxy
@@ -363,7 +368,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
             { fileName: theFile.name
             , propertyType: component.props.serialisedProperty.id
             , mimeType: component.mapMimeType( theFile.type, theFile.name )
-            , database: undefined
+            , database: currentDatabase
             // By construction we know that the roleId is present.
             , roleFileName: component.props.roleId!
             },
@@ -372,7 +377,11 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
           )
           .then( perspectivesFile => 
             {
-              return component.setState({ database: perspectivesFile.database });
+              const parsedFile = JSON.parse(perspectivesFile) as PerspectivesFileType;
+              return component.setState(
+                { database: parsedFile.database || currentDatabase
+                , roleFileName: parsedFile.roleFileName || component.state.roleFileName
+                });
             })
           .catch(e => UserMessagingPromise.then( um => 
             um.addMessageForEndUser(
@@ -449,13 +458,14 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
     {
       event.preventDefault();
       event.stopPropagation();
-      const selectedFile = document.getElementById(component.props.serialisedProperty.id + '_selectedFile');
+      const selectedFile = document.getElementById(component.props.serialisedProperty.id + '_selectedFile') as HTMLInputElement;
       if (selectedFile)
       {
+        selectedFile.value = '';  // Reset so onChange fires even when the same file is re-selected.
         selectedFile.click();   
       }
     }
-    if (event instanceof KeyboardEvent && event.code === "Space") {
+    if (event instanceof KeyboardEvent && event.key === " ") {
       doit();
     }
     if (event.type == "click")
@@ -536,7 +546,7 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
             }
           });
     }
-    if (event instanceof KeyboardEvent && event.code === "Space") {
+    if (event instanceof KeyboardEvent && event.key === " ") {
       doit();
     }
     if ( this.state.roleFileName && event.type == "click")

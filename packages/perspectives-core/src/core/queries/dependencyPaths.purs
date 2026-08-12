@@ -49,6 +49,26 @@ instance showDependency :: Show Dependency where
   show (RT rtype) = "RT " <> show rtype
   show AnyRoleTypeDependency = "AnyRoleTypeDependency"
 
+instance Ord Dependency where
+  compare (C cid1) (C cid2) = compare cid1 cid2
+  compare (R rid1) (R rid2) = compare rid1 rid2
+  compare (V ptype1 val1) (V ptype2 val2) = case compare ptype1 ptype2 of
+    EQ -> compare val1 val2
+    otherwise -> otherwise
+  compare (CT ctype1) (CT ctype2) = compare ctype1 ctype2
+  compare (RT rtype1) (RT rtype2) = compare rtype1 rtype2
+  compare AnyRoleTypeDependency AnyRoleTypeDependency = EQ
+  compare (C _) _ = LT
+  compare _ (C _) = GT
+  compare (R _) _ = LT
+  compare _ (R _) = GT
+  compare (V _ _) _ = LT
+  compare _ (V _ _) = GT
+  compare (CT _) _ = LT
+  compare _ (CT _) = GT
+  compare (RT _) _ = LT
+  compare _ (RT _) = GT
+
 -- | Given information on a Domain, turn a string value into a Dependency.
 -- | Caveats: Role types are construed to be Enumerated.
 domain2Dependency :: Domain -> String -> Dependency

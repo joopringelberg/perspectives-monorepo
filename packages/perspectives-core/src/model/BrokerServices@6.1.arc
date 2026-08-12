@@ -359,7 +359,7 @@ domain model://perspectives.domains#BrokerServices@6.1
     -- PDRDEPENDENCY
     context Accounts (relational, unlinked) filledBy BrokerContract
 
-    context MyPublicBrokers = bs:MyBrokers >> PublicBrokers
+    context MyPublicBrokers = bs:MyBrokers >> PublicBrokers  >> binding
 
   -- The contract between an end user and a BrokerService.
   -- PDRDEPENDENCY
@@ -394,20 +394,23 @@ domain model://perspectives.domains#BrokerServices@6.1
             IsInUse = true for extern
             bind_ (sys:MySystem >> extern) to EmptyQueue
             callEffect rabbit:StartListening()
+            ConnectedToAMQPBroker = true for sys:MySystem >> extern
 
     state Terminated = ((extern >> Registered) and ((extern >> CurrentDate) > (extern >> TerminatesOn)) and not (extern >> ExtensionRequested)) or (extern >> ContractTerminated)
       on entry
         do for BrokerContract$Administrator
+          Registered = false for extern
+          ContractTerminated = true for extern
+          IsInUse = false for extern
+        -- Give the AccountHolder a chance to read the notification before we delete his account on the RabbitMQ server. We do this by waiting 10 seconds before we delete the account.
+        do for BrokerContract$Administrator after 10 Seconds
           callEffect rabbit:DeleteAMQPaccount(
             extern >> ManagementEndpoint,
             Administrator >> AdminUserName,
             Administrator >> AdminPassword,
             AccountHolder >> AccountName)
-          -- Deleting the queue will cause it to be removed from the RabbitMQ server.
-          delete role Queues
-          Registered = false for extern
-          ContractTerminated = true for extern
-          IsInUse = false for extern
+            -- Deleting the queue will cause it to be removed from the RabbitMQ server.
+            delete role Queues
         notify AccountHolder
           "Your account at the BrokerService { extern >> Name } has been terminated."
 
@@ -597,6 +600,9 @@ domain model://perspectives.domains#BrokerServices@6.1
         only (Create, Fill, Remove)
         props (QueueName) verbs (SetPropertyValue, Consult)
 
+      perspective on sys:MySystem >> extern
+        props (ConnectedToAMQPBroker) verbs (SetPropertyValue, Consult)
+
       screen
         who
           Administrator
@@ -632,7 +638,7 @@ domain model://perspectives.domains#BrokerServices@6.1
               props (QueueName) verbs (Consult)
         where
 
-    context EmptyQueue (functional) = filter Queues with not exists binding
+    thing EmptyQueue (functional) = filter Queues with not exists binding
 
     user Administrator filledBy bs:BrokerService$Administrator
       aspect sys:Invitation$Inviter
@@ -734,12 +740,14 @@ domain model://perspectives.domains#BrokerServices@6.1
       property QueueName (String)
         readableName
       on exit
-        do for BrokerContract$Administrator
+        do for BrokerContract$Administrator after 10 Seconds
           callEffect rabbit:DeleteQueue(
             context >> extern >> ManagementEndpoint,
             context >> Administrator >> AdminUserName,
             context >> Administrator >> AdminPassword,
             QueueName)
+        do for BrokerContract$AccountHolder
+          callEffect rabbit:StopReadingPost(QueueName)
 
     context Service (functional) = extern >> binder Accounts >> context >> extern
   

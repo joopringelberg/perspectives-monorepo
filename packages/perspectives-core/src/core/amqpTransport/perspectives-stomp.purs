@@ -33,7 +33,9 @@ module Perspectives.AMQP.Stomp
   , Message
   , AcknowledgeFunction
   , AcknowledgementHeaders
+  , MarkHandledFunction
   , acknowledge
+  , markHandled
   , unsubscribe
   , send
   , sendToTopic
@@ -100,10 +102,13 @@ type ConnectAndSubscriptionParameters p =
 -- type AcknowledgeFunction = Unit -> Unit
 type AcknowledgementHeaders = {}
 type AcknowledgeFunction = EffectFn1 AcknowledgementHeaders Unit
+type MarkHandledFunction = EffectFn1 AcknowledgementHeaders Int
 
 type Message =
   { body :: String
   , ack :: AcknowledgeFunction
+  , markHandled :: MarkHandledFunction
+  , pendingCount :: Int
   }
 
 foreign import connectAndSubscribeImpl
@@ -140,20 +145,37 @@ messageProducer' stompClient params = produce' (connectAndSubscribe stompClient 
 type StructuredMessage f =
   { body :: f
   , ack :: AcknowledgeFunction
+  , markHandled :: MarkHandledFunction
+  , pendingCount :: Int
   }
 
 messageProducer :: forall t f p. ReadForeign t => StompClient -> ConnectAndSubscriptionParameters p -> Producer (Either MultipleErrors (StructuredMessage t)) (MonadPouchdb f) Unit
 messageProducer stompClient params = (messageProducer' stompClient params) $~ (forever (transform decodeMessage))
   where
   decodeMessage :: Message -> Either MultipleErrors (StructuredMessage t)
-  decodeMessage { body, ack } = case runExcept $ readJSON' body of
+  decodeMessage { body, ack, markHandled, pendingCount } = case runExcept $ readJSON' body of
     Left e -> case body of
       "noConnection" -> Left $ singleton $ ForeignError "noConnection"
       "connection" -> Left $ singleton $ ForeignError "connection"
+      -- The STOMP spec is precise on this. From the RECEIPT section:
+
+      -- "A RECEIPT frame is an acknowledgment that the corresponding client frame has been processed by the server. 
+      -- Since STOMP is stream based, the receipt is also a cumulative acknowledgment that all the previous frames 
+      -- have been received by the server. However, these previous frames may not yet be fully processed."
+
+      -- So watchForReceipt fires when the broker has processed the SEND frame — meaning it has accepted the message. 
+      -- For RabbitMQ (which is what this code targets, given amq.topic), "processed" means the message has been 
+      -- accepted and enqueued by the broker. It does not mean:
+
+      -- The message has been delivered to a consumer
+      -- The consumer has acknowledged it
+      -- It is a publisher confirmation from the broker, not an end-to-end delivery guarantee. 
+      -- If the destination queue exists and the broker successfully stored the message, that's what the receipt confirms.
+
       -- NOTICE that we misuse / overload the TypeMismatch constructor here for our purposes.
       s | isAReceipt s -> Left $ singleton (TypeMismatch "receipt" (unsafePartial $ fromJust $ getReceipt s))
       otherwise -> Left $ cons (ForeignError body) e
-    Right m -> Right { body: m, ack }
+    Right m -> Right { body: m, ack, markHandled, pendingCount }
 
   isAReceipt :: String -> Boolean
   isAReceipt = isJust <<< getReceipt
@@ -167,6 +189,9 @@ messageProducer stompClient params = (messageProducer' stompClient params) $~ (f
 
 acknowledge :: forall f. AcknowledgeFunction -> MonadPouchdb f Unit
 acknowledge ack = liftEffect $ runEffectFn1 ack {}
+
+markHandled :: forall f. MarkHandledFunction -> MonadPouchdb f Int
+markHandled handled = liftEffect $ runEffectFn1 handled {}
 
 -----------------------------------------------------------
 -- UNSUBSCRIBE

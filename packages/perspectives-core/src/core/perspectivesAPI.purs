@@ -48,16 +48,14 @@ import Foreign.Object (empty, fromFoldable)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ApiEffect, RequestType(..)) as Api
 import Perspectives.ApiTypes (ContextSerialization(..), ContextsSerialisation(..), PropertySerialization(..), RecordWithCorrelationidentifier(..), Request(..), RequestRecord, Response(..), ResponseWithWarnings(..), RolSerialization(..), ApiEffect, mkApiEffect, showRequestRecord)
-import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor_)
+import Perspectives.Assignment.RunAction (runAction, runContextAction)
+import Perspectives.Assignment.SerialiseAsDeltas (noNewPeer, serialisedAsDeltasFor_)
 import Perspectives.Assignment.Update (RoleProp(..), addProperty, deleteProperty, getPropertyBearingRoleInstance, saveFile, setPreferredUserRoleType, setProperty)
 import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
-import Perspectives.CompileAssignment (compileAssignment)
-import Perspectives.CompileRoleAssignment (compileAssignmentFromRole)
 import Perspectives.CoreTypes (MP, MonadPerspectives, MonadPerspectivesTransaction, PropertyValueGetter, RoleGetter, liftToInstanceLevel, (##=), (##>), (##>>), (###=))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DependencyTracking.Dependency (registerSupportedEffect, unregisterSupportedEffect)
 import Perspectives.DomeinCache (retrieveDomeinFile)
-import Perspectives.Logging (errorOther)
 import Perspectives.Fuzzysort (matchIndexedContextNames)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, isTypeUri, typeUri2ModelUri_, typeUri2couchdbFilename)
@@ -65,39 +63,38 @@ import Perspectives.Inspector.Factories (makeInspectableContext, makeInspectable
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
 import Perspectives.Instances.Combinators (filter)
-import Perspectives.Instances.Me (getAllMyRoleTypes, getMeInRoleAndContext, getMyType, isMe)
+import Perspectives.Instances.Me (getAllMyRoleTypes, getMyType, isMe)
 import Perspectives.Instances.ObjectGetters (binding, context, contextType, contextType_, externalRole, getAllFilledRoles, getContextActions, getFilledRoles, getMe, getProperty, roleType, roleType_, siblings)
 import Perspectives.Instances.Values (parsePerspectivesFile)
+import Perspectives.Logging (errorOther)
 import Perspectives.ModelDependencies (actualSharedFileServer, allSettings, fileShareCredentials, identifiableFirstName, identifiableLastName, itemOnClipboardClipboardData, itemsOnClipboard, mySharedFileServices, selectedClipboardItem, sharedFileServices, sysUser)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, getUserIdentifier, lookupIndexedContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (deleteDocument, getAttachment, toFile)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, saveMarkedResources)
-import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getWarnings, pushFrame, resetWarnings, restoreFrame)
+import Perspectives.PerspectivesState (getPerspectivesUser, getWarnings, resetWarnings)
 import Perspectives.Proxy (createRequestEmitter, retrieveRequestEmitter)
 import Perspectives.Query.QueryTypes (roleInContext2Role)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter, getDynamicPropertyGetterFromLocalName, getPropertyFromTelescope, getPropertyValues, getPublicUrl, getRoleFunction, getRoleInstances)
 import Perspectives.Representation.ADT (ADT, allLeavesInADT)
-import Perspectives.Representation.Action (Action(..)) as ACTION
 import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getContext, getEnumeratedRole, getPerspectType)
 import Perspectives.Representation.Class.Role (getRoleType, kindOfRole, perspectivesOfRoleType, rangeOfRoleCalculation, roleKindOfRoleType, completeDeclaredFillerRestriction, displayNameOfRoleType)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
-import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), StateIdentifier(..), ViewType, propertytype2string, roletype2string, toRoleType_)
 import Perspectives.Representation.View (View, propertyReferences)
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, guid, resourceIdentifier2DocLocator)
 import Perspectives.RoleStateCompiler (evaluateRoleState)
 import Perspectives.RunMonadPerspectivesTransaction (detectPublicStateChanges, runMonadPerspectivesTransaction, runMonadPerspectivesTransaction')
-import Perspectives.SaveUserData (removeAllRoleInstances, removeBinding, removeContextIfUnbound, scheduleContextRemoval, scheduleRoleRemoval, setBinding, setFirstBinding, synchronise)
+import Perspectives.SaveUserData (FillBindingMode(..), findMostGeneralAllowedFillerType, removeAllRoleInstances, removeBinding, removeContextIfUnbound, scheduleContextRemoval, scheduleRoleRemoval, setBindingWithMode, setFirstBinding, synchronise)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUser, serialisedTableFormForContextAndUser)
 import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableName, perspectiveForContextAndUser, perspectivesForContextAndUser, settingsPerspective)
-import Perspectives.Types.ObjectGetters (findPerspective, getAction, getContextAction, getContextActionFromUnqualifiedName, isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
-import Prelude (Unit, bind, discard, eq, identity, map, negate, pure, show, unit, void, ($), (&&), (/=), (<$>), (<<<), (<>), (==), (>=>), (>>=))
+import Perspectives.Types.ObjectGetters (isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
+import Prelude (Unit, bind, discard, identity, map, negate, pure, show, unit, void, ($), (&&), (/=), (<$>), (<<<), (<>), (==), (>=>), (>>=))
 import Simple.JSON (read, readJSON_, unsafeStringify, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -168,6 +165,46 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
   authoringRole <- case as of
     Nothing -> pure $ ENR $ EnumeratedRoleType sysUser
     Just x -> getRoleType x
+  let
+    dispatchBindInRole :: FillBindingMode -> MonadPerspectives Unit
+    dispatchBindInRole mode = withLocalName predicate (ContextType object)
+      \(qrolname :: RoleType) -> case qrolname of
+        (CR ctype) -> sendResponse (Error corrId ("Cannot construct an instance of CalculatedRole '" <> unwrap ctype <> "'!")) setter
+        (ENR eroltype) -> do
+          let roleDescription = unsafePartial $ fromJust rolDescription
+          RolSerialization { binding: mbnd } <- pure roleDescription
+          case mbnd of
+            Just bnd -> do
+              contextInstanceId <- ContextInstance <$> (expandDefaultNamespaces subject)
+              bindings <- contextInstanceId ##= (getRoleInstances qrolname >=> binding)
+              if isJust $ elemIndex (RoleInstance bnd) bindings then sendResponse (Error corrId ("Cannot not bind the same role instance twice in the same role type")) setter
+              else do
+                let
+                  roleWithoutBinding = case roleDescription of
+                    RolSerialization rec -> RolSerialization (rec { binding = Nothing })
+                mrole <- runMonadPerspectivesTransaction authoringRole $ createAndAddRoleInstance eroltype subject roleWithoutBinding
+                case mrole of
+                  Nothing -> sendResponse (Error corrId ("Could not create role instance of " <> show eroltype)) setter
+                  Just rol -> do
+                    void $ runMonadPerspectivesTransaction authoringRole do
+                      void $ setBindingWithMode mode rol (RoleInstance bnd) Nothing
+                    sendResponse (Result corrId [ (unwrap rol) ]) setter
+            Nothing -> do
+              mrole <- runMonadPerspectivesTransaction authoringRole $ createAndAddRoleInstance eroltype subject roleDescription
+              case mrole of
+                Nothing -> sendResponse (Error corrId ("Could not create role instance of " <> show eroltype)) setter
+                Just rol -> sendResponse (Result corrId [ (unwrap rol) ]) setter
+
+    dispatchBindToRole :: FillBindingMode -> MonadPerspectives Unit
+    dispatchBindToRole mode = catchError
+      do
+        bindings <- (RoleInstance subject) ##= siblings >=> binding
+        if isJust $ elemIndex (RoleInstance object) bindings then sendResponse (Result corrId [ "false" ]) setter
+        else do
+          void $ runMonadPerspectivesTransaction authoringRole do
+            void $ setBindingWithMode mode (RoleInstance subject) (RoleInstance object) Nothing
+          sendResponse (Result corrId [ "true" ]) setter
+      (\e -> sendResponse (Error corrId (show e)) setter)
   case request of
     -- Given the context instance identifier and the qualified name of the RolType.
     -- Api.GetRolBinding -> do
@@ -579,7 +616,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
         (RoleInstance subject)
         onlyOnce
 
-    Api.GetSelectedRoleFromClipboard -> do
+    Api.SubscribeSelectedRoleFromClipboard -> do
       -- Get the SelectedClipboardItem.
       -- Then get its ClipboardData and return that.
       mysystem <- getMySystem
@@ -622,14 +659,16 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
           \(ContextInstance id) -> do
             -- now bind it in a new instance of the roletype in the given context.
             -- Notice that createAndAddRoleInstance adds the model describing the eroltype if necessary.
-            contextRole <- unsafePartial $ fromJust <$> createAndAddRoleInstance eroltype subject
+            mcontextRole <- createAndAddRoleInstance eroltype subject
               ( RolSerialization
                   { id: Nothing
                   , properties: PropertySerialization empty
                   , binding: Just $ buitenRol id
                   }
               )
-            lift $ sendResponse (Result corrId [ buitenRol id, unwrap contextRole ]) setter
+            case mcontextRole of
+              Nothing -> lift $ sendResponse (Error corrId ("Could not create context role instance of " <> show eroltype)) setter
+              Just contextRole -> lift $ sendResponse (Result corrId [ buitenRol id, unwrap contextRole ]) setter
     -- {request: "CreateContext_", subject: roleInstance, contextDescription: contextDescription, authoringRole: myroletype}
     Api.CreateContext_ -> do
       rtype <- roleType_ (RoleInstance subject)
@@ -707,12 +746,13 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     Api.CreateRole -> do
       if isTypeUri predicate then do
         -- Notice that createAndAddRoleInstance adds the model describing the eroltype if necessary.
-        (rolInst :: RoleInstance) <- runMonadPerspectivesTransaction authoringRole $ unsafePartial $
-          fromJust <$> createAndAddRoleInstance
-            (EnumeratedRoleType predicate)
-            subject
-            (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
-        sendResponse (Result corrId [ (unwrap rolInst) ]) setter
+        mrolInst <- runMonadPerspectivesTransaction authoringRole $ createAndAddRoleInstance
+          (EnumeratedRoleType predicate)
+          subject
+          (RolSerialization { id: Nothing, properties: PropertySerialization empty, binding: Nothing })
+        case mrolInst of
+          Nothing -> sendResponse (Error corrId ("Could not create a role instance for: " <> predicate <> " in " <> subject <> " because this functional role already has an instance")) setter
+          Just rolInst -> sendResponse (Result corrId [ (unwrap rolInst) ]) setter
       else sendResponse (Error corrId ("Could not create a role instance for: " <> predicate <> " in " <> subject)) setter
 
     -- {request: "CreateRole_", subject: contextinstance, predicate: roleType, object: contextType, rolDescription: rolDescription, authoringRole: myroletype },
@@ -722,39 +762,11 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     -- Provide the binding in the rolDescription!
     -- roleType may be a local name.
     -- The context type given in object must be described in a locally installed model.
-    Api.Bind -> withLocalName predicate (ContextType object)
-      \(qrolname :: RoleType) -> case qrolname of
-        (CR ctype) -> sendResponse (Error corrId ("Cannot construct an instance of CalculatedRole '" <> unwrap ctype <> "'!")) setter
-        (ENR eroltype) -> do
-          RolSerialization { binding: mbnd } <- pure $ unsafePartial $ fromJust rolDescription
-          case mbnd of
-            Just bnd -> do
-              contextInstanceId <- ContextInstance <$> (expandDefaultNamespaces subject)
-              bindings <- contextInstanceId ##= (getRoleInstances qrolname >=> binding)
-              if isJust $ elemIndex (RoleInstance bnd) bindings then sendResponse (Error corrId ("Cannot not bind the same role instance twice in the same role type")) setter
-              else do
-                -- Notice that createAndAddRoleInstance adds the model describing the eroltype if necessary.
-                mrole <- runMonadPerspectivesTransaction authoringRole $ createAndAddRoleInstance eroltype subject (unsafePartial $ fromJust rolDescription)
-                case mrole of
-                  Nothing -> sendResponse (Error corrId ("Could not create role instance of " <> show eroltype)) setter
-                  Just rol -> sendResponse (Result corrId [ (unwrap rol) ]) setter
-            Nothing -> do
-              -- Notice that createAndAddRoleInstance adds the model describing the eroltype if necessary.
-              rol <- runMonadPerspectivesTransaction authoringRole $ unsafePartial fromJust <$> createAndAddRoleInstance eroltype subject (unsafePartial $ fromJust rolDescription)
-              sendResponse (Result corrId [ (unwrap rol) ]) setter
+    Api.Bind -> dispatchBindInRole FillWithRequiredType
     -- {request: "Bind_", subject: binder, object: binding, authoringRole: myroletype},
-    Api.Bind_ -> catchError
-      do
-        -- Find the other role instances of the same type as subject in this context and check whether one of them
-        -- binds the object.
-        bindings <- (RoleInstance subject) ##= siblings >=> binding
-        if isJust $ elemIndex (RoleInstance object) bindings then sendResponse (Result corrId [ "false" ]) setter
-        else do
-          void $ runMonadPerspectivesTransaction authoringRole
-            do
-              void $ setBinding (RoleInstance subject) (RoleInstance object) Nothing
-          sendResponse (Result corrId [ "true" ]) setter
-      (\e -> sendResponse (Error corrId (show e)) setter)
+    Api.Bind_ -> dispatchBindToRole FillWithRequiredType
+    Api.FillWithProvidedType -> if isJust rolDescription then dispatchBindInRole FillWithProvidedType else dispatchBindToRole FillWithProvidedType
+    Api.FillWithRequiredType -> if isJust rolDescription then dispatchBindInRole FillWithRequiredType else dispatchBindToRole FillWithRequiredType
     -- {request: "RemoveBinding", subject: rolID}
     Api.RemoveBinding -> catchError
       do
@@ -762,6 +774,18 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
         void $ runMonadPerspectivesTransaction authoringRole $ removeBinding (RoleInstance subject)
         sendResponse (Result corrId []) setter
       (\e -> sendResponse (Error corrId (show e)) setter)
+
+    Api.GetSelectedRoleFromClipboard -> do
+      -- Get the SelectedClipboardItem.
+      -- Then get its ClipboardData and return that.
+      mysystem <- getMySystem
+      (try ((ContextInstance mysystem) ##= ((getRoleInstances (CR $ CalculatedRoleType selectedClipboardItem)) >=> getPropertyValues (ENP $ EnumeratedPropertyType itemOnClipboardClipboardData)))) >>=
+        case _ of
+          Left e -> do
+            errorOther (show $ RolErrorBoundary "Api.GetSelectedRoleFromClipboard" (show e))
+            sendResponse (Error corrId (show $ RolErrorBoundary "Api.GetSelectedRoleFromClipboard" (show e))) setter
+          Right item -> sendResponse (Result corrId (unwrap <$> item)) setter
+
     -- Check whether the role type in predicate allows RolID as binding.
     -- The context type given in object must be described in a locally installed model.
     -- {request: "CheckBinding", predicate: localRolName, object: rolInstance}
@@ -776,6 +800,17 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
             void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap pspType)))
             ok <- checkBinding typeOfRoleToBindTo (RoleInstance object)
             sendResponse (Result corrId [ (show ok) ]) setter
+    Api.GetMostGeneralAllowedBindingType -> catchError
+      ( do
+          filledType <- string2EnumeratedRoleType predicate
+          mroleType <- findMostGeneralAllowedFillerType filledType (RoleInstance object)
+          case mroleType of
+            Nothing -> sendResponse (Result corrId []) setter
+            Just roleType -> do
+              readableName <- displayNameOfRoleType (ENR roleType)
+              sendResponse (Result corrId [ writeJSON { roleType: roletype2string (ENR roleType), readableName } ]) setter
+      )
+      (\e -> sendResponse (Error corrId (show e)) setter)
     Api.SetProperty -> catchError
       ( do
           void $ runMonadPerspectivesTransaction authoringRole (setProperty [ (RoleInstance subject) ] (EnumeratedPropertyType predicate) Nothing [ (Value object) ])
@@ -841,7 +876,6 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
       )
       (\e -> sendResponse (Error corrId (show e)) setter)
     -- { request: Action
-    -- , subject: <user role instance>
     -- , predicate: <object of perspective role instance>
     -- , object: <context instance>
     -- , contextDescription:
@@ -853,21 +887,9 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
       ( case read contextDescription of
           Left err -> sendResponse (Error corrId ("Incorrectly formed description of Action on applying an action in context instance '" <> object <> "' and object role instance '" <> predicate <> "'. Errors: " <> show err)) setter
           Right ({ perspectiveId, actionName } :: { perspectiveId :: String, actionName :: String }) -> do
-            -- Find the action from the authoringRole, the perspective id, the Action name.
-            maction <- (map $ getAction actionName) <$> (findPerspective authoringRole (\(Perspective { id }) -> pure $ id `eq` perspectiveId))
-            mauthoringRoleInstance <- (ContextInstance object) ##> getMeInRoleAndContext authoringRole
-            case mauthoringRoleInstance, maction of
-              Just author, Just (Just (ACTION.Action { qfd: action })) -> do
-                void $ runMonadPerspectivesTransaction authoringRole
-                  do
-                    oldFrame <- lift $ pushFrame
-                    lift $ addBinding "currentcontext" [ object ]
-                    lift $ addBinding "currentactor" [ unwrap author ]
-                    updater <- lift $ compileAssignmentFromRole action
-                    updater (RoleInstance predicate)
-                    lift $ restoreFrame oldFrame
-                sendResponse (Result corrId []) setter
-              _, _ -> sendResponse (Error corrId $ "cannot identify Action with role type '" <> show authoringRole <> "', perspectiveId '" <> perspectiveId <> "' and action name '" <> actionName <> "'.") setter
+            void $ runMonadPerspectivesTransaction authoringRole
+              (runAction authoringRole perspectiveId actionName object predicate)
+            sendResponse (Result corrId []) setter
       )
       (\e -> sendResponse (Error corrId (show e)) setter)
 
@@ -878,28 +900,10 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     -- }
     Api.ContextAction -> catchError
       ( do
-          -- Find the action from the subject type and the Action name.
           userRoleType <- getRoleType subject
-          maction <- if isTypeUri predicate then getContextAction predicate userRoleType else getContextActionFromUnqualifiedName predicate userRoleType
-          muserRoleInstance <- (ContextInstance object) ##> getMeInRoleAndContext userRoleType
-          case muserRoleInstance, maction of
-            Just user, Just (ACTION.Action { qfd: action }) -> do
-              void $ runMonadPerspectivesTransaction userRoleType
-                do
-                  oldFrame <- lift $ pushFrame
-                  lift $ addBinding "currentcontext" [ object ]
-                  lift $ addBinding "currentactor" [ unwrap user ]
-                  updater <- lift $ compileAssignment action
-                  updater (ContextInstance object)
-                  lift $ restoreFrame oldFrame
-              sendResponse (Result corrId []) setter
-            _, _ -> sendResponse
-              ( Error corrId $ "cannot identify Action with role type '" <> show userRoleType
-                  <> "' and action name '"
-                  <> predicate
-                  <> "'."
-              )
-              setter
+          void $ runMonadPerspectivesTransaction userRoleType
+            (runContextAction subject predicate object)
+          sendResponse (Result corrId []) setter
       )
       (\e -> sendResponse (Error corrId (show e)) setter)
 
@@ -946,10 +950,10 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
           case kind of
             Public -> do
               proxyInstance <- (ContextInstance subject) ##>> getRoleInstances (ENR $ EnumeratedRoleType (object <> "Proxy"))
-              void $ runMonadPerspectivesTransaction authoringRole (serialisedAsDeltasFor_ (ContextInstance subject) proxyInstance (ENR $ EnumeratedRoleType (object <> "Proxy")))
+              void $ runMonadPerspectivesTransaction authoringRole (serialisedAsDeltasFor_ (ContextInstance subject) proxyInstance (ENR $ EnumeratedRoleType (object <> "Proxy")) noNewPeer)
               sendResponse (Result corrId []) setter
             _ -> do
-              void $ runMonadPerspectivesTransaction authoringRole (serialisedAsDeltasFor_ (ContextInstance subject) (RoleInstance predicate) roleType)
+              void $ runMonadPerspectivesTransaction authoringRole (serialisedAsDeltasFor_ (ContextInstance subject) (RoleInstance predicate) roleType noNewPeer)
               sendResponse (Result corrId []) setter
       )
       \e -> sendResponse (Error corrId (show e)) setter

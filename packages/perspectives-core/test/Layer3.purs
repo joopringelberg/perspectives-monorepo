@@ -21,42 +21,46 @@
 
 -- END LICENSE
 
--- | Layer 3 test entry point — synchronisation tests with a stubbed AMQP transport.
+-- | Layer 3 test entry point — tests that require full PDR instances.
 -- |
--- | Prerequisites (before these tests can run):
--- |   1. All Layer 2 prerequisites (in-memory PouchDB via `persistenceAPI.node.js`).
--- |   2. A stub AMQP transport that replaces `@stomp/stompjs` with an in-process
--- |      message bus.  The stub must implement the same interface as the real
--- |      Stomp client and be injectable via the PDR state record.
--- |
--- | Test strategy:
--- |   1. Start two PDR instances (PDR-A and PDR-B) in the same Node.js process,
--- |      each with its own in-memory PouchDB and the stub AMQP transport.
--- |   2. Apply a mutation via PDR-A's API.
--- |   3. Assert that PDR-B receives the expected `TransactionForPeer` and that
--- |      its database reflects the change.
--- |
--- | This covers the full synchronisation path (delta generation, signing,
--- | transmission, application) without requiring a real RabbitMQ broker.
+-- | This suite aggregates:
+-- |   1. Constructive synchronisation tests (two connected PDR instances)
+-- |   2. Model compilation regression tests (full compilation flow)
 -- |
 -- | Run with:
 -- |
 -- |   pnpm run test:layer3
--- |
--- | TODO: Enable suites below once the stub AMQP transport is implemented.
--- |       See docsources/nodejs-testing-architecture.md §3 for the design.
 
 module Test.Layer3 where
 
 import Prelude
+
 import Effect (Effect)
+import Effect.Aff (launchAff_)
+import Effect.Class (liftEffect)
+import Test.SinglePDRScaffold (getSinglePDRResults)
+import Test.ConstructiveSynchronisationTest (getSynchronisationResults, synchronisationSuite)
+import Test.DestructiveSynchronisationTests (getSynchronisationResults, synchronisationSuite) as DestructiveSynchronisationTests
+import Test.Layer3ScaffoldTests (scaffoldTests)
+import Test.ModelCompilationRegression (getCompilationResults, modelCompilationSuite)
+import Test.QueryStepTests (queryStepSuite, queryStepTestModelConfiguration)
+import Test.SinglePDRDestructiveTests (singlePDRDestructiveSuite, singlePDRDestructiveTestModelConfiguration)
+import Test.TransactionExecutionTests (transactionExecutionSuite, transactionExecutionTestModelConfiguration)
 import Test.Unit.Main (runTest)
 
--- TODO: uncomment once the stub AMQP transport is available
--- import Test.Sync.Channel (theSuite) as CHA
--- import Test.Sync.HandleTransaction (theSuite) as HTA  -- advanced sync scenarios
-
 main :: Effect Unit
-main = runTest do
-  -- TODO: add Layer 3 suites here.  None are enabled yet — see module comment.
-  pure unit
+main = launchAff_ do
+  constructiveSynchronisationResults <- getSynchronisationResults
+  destructiveSynchronisationResults <- DestructiveSynchronisationTests.getSynchronisationResults
+  compilationResults <- getCompilationResults
+  queryStepResults <- getSinglePDRResults queryStepTestModelConfiguration
+  destructiveResults <- getSinglePDRResults singlePDRDestructiveTestModelConfiguration
+  transactionExecutionResults <- getSinglePDRResults transactionExecutionTestModelConfiguration
+  liftEffect $ runTest do
+    scaffoldTests
+    synchronisationSuite constructiveSynchronisationResults
+    DestructiveSynchronisationTests.synchronisationSuite destructiveSynchronisationResults
+    modelCompilationSuite compilationResults
+    queryStepSuite queryStepResults
+    singlePDRDestructiveSuite destructiveResults
+    transactionExecutionSuite transactionExecutionResults

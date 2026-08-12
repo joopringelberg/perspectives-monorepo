@@ -44,6 +44,7 @@ import Data.Traversable (for_, traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
 import Effect.Aff (error, killFiber)
+import Effect.Aff.Class (liftAff)
 import Foreign.Object (singleton)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
@@ -53,12 +54,13 @@ import Perspectives.Assignment.StateCache (CompiledContextState, cacheCompiledCo
 import Perspectives.Assignment.Update (ConditionResult(..), isUndetermined, setActiveContextState, setInActiveContextState)
 import Perspectives.CompileAssignment (compileAssignment, withAuthoringRole)
 import Perspectives.CompileTimeFacets (addTimeFacets)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), MP, MonadPerspectives, MonadPerspectivesTransaction, Updater, WithAssumptions, liftToInstanceLevel, runMonadPerspectivesQuery, (##=), (##>>))
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), LogLevel(..), LogTopic(..), MP, MonadPerspectives, MonadPerspectivesTransaction, Updater, WithAssumptions, liftToInstanceLevel, runMonadPerspectivesQuery, (##=), (##>>))
+import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter, not') as COMB
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), contextType, filledBy, getActiveStates_)
-import Perspectives.Logging (traceState)
+import Perspectives.Logging (debugState, logWhen, traceState)
 import Perspectives.ModelDependencies (contextWithNotification, notificationMessage, notifications)
 import Perspectives.Names (getMySystem)
 import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, pushFrame, restoreFrame, transactionLevel)
@@ -73,6 +75,7 @@ import Perspectives.ScheduledAssignment (StateEvaluation(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (hasContextAspect, subStates_)
+import Perspectives.Warning (PerspectivesWarning(..))
 
 compileState :: Partial => StateIdentifier -> MP CompiledContextState
 compileState stateId = do
@@ -133,14 +136,18 @@ evaluateContextState contextId stateId = do
         contextWasInState <- lift $ isActive stateId contextId
         if contextWasInState then do
           padding <- lift transactionLevel
-          lift $ toReadable stateId >>= \readableStateId -> traceState (padding <> "Already in context state " <> unwrap readableStateId <> ": " <> unwrap contextId)
+          lift $ logWhen Trace STATE
+            ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ AlreadyInContextState contextId stateId)))
           subStates <- lift $ subStates_ stateId
           for_ subStates (evaluateContextState contextId)
         else enteringState contextId stateId
       else do
         contextWasInState <- lift $ isActive stateId contextId
         if contextWasInState then exitingState contextId stateId
-        else pure unit
+        else do
+          padding <- lift transactionLevel
+          lift $ logWhen Trace STATE
+            ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ ContextStateNotValid contextId stateId)))
     Undetermined -> modify
       ( \t -> over Transaction
           (\tr -> tr { postponedStateEvaluations = cons (ContextStateEvaluation stateId contextId) tr.postponedStateEvaluations })
@@ -158,7 +165,7 @@ evaluateContextState contextId stateId = do
 enteringState :: ContextInstance -> StateIdentifier -> MonadPerspectivesTransaction Unit
 enteringState contextId stateId = do
   padding <- lift transactionLevel
-  lift $ toReadable stateId >>= \readableStateId -> traceState (padding <> "Entering context state " <> unwrap readableStateId <> " for context " <> unwrap contextId)
+  lift $ toReadable stateId >>= \readableStateId -> debugState (padding <> "Entering context state " <> unwrap readableStateId <> " for context " <> unwrap contextId)
   -- Add the state identifier to the path of states in the context instance, triggering query updates
   -- just before running the current Transaction is finished.
   setActiveContextState stateId contextId
@@ -176,10 +183,18 @@ enteringState contextId stateId = do
       oldFrame <- lift pushFrame
       -- no need to add currentcontext for context states; a binding has been added compile time.
       lift $ addBinding "currentactor" (unwrap <$> currentactors)
+      lift $ humanizePerspectivesWarning (RunContextStateAutomaticAction contextId stateId) >>= \warning -> traceState (padding <> show warning)
       catchError
         (updater cid)
         ( \e -> do
-            lift $ addWarning ({ message: padding <> "Error in automatic action in state: " <> show stateId <> " of context instance " <> show contextId <> ".", error: show e, externalRoleId: "", contextName: "" })
+            warning <- lift $ humanizePerspectivesWarning (AutomaticActionError stateId)
+            lift $ addWarning
+              ( { message: padding <> show warning <> " in context instance " <> show contextId <> "."
+                , error: show e
+                , externalRoleId: ""
+                , contextName: ""
+                }
+              )
         )
       lift $ restoreFrame oldFrame
 
@@ -255,7 +270,7 @@ notify compiledSentence contextId = do
 exitingState :: ContextInstance -> StateIdentifier -> MonadPerspectivesTransaction Unit
 exitingState contextId stateId = do
   padding <- lift transactionLevel
-  lift $ traceState (padding <> "Exiting context state " <> unwrap stateId <> " for context " <> unwrap contextId)
+  lift $ debugState (padding <> "Exiting context state " <> unwrap stateId <> " for context " <> unwrap contextId)
   -- Recur. We do this first, because we have to exit the deepest nested substate first.
   subStates <- lift $ subStates_ stateId
   for_ subStates \subStateId -> do
@@ -271,7 +286,7 @@ exitingState contextId stateId = do
   case lookup (Tuple (unwrap contextId) stateId) fibers of
     Nothing -> pure unit
     Just f -> do
-      lift $ lift $ killFiber (error "Stopped execution of repeating action in state") f
+      lift $ liftAff $ killFiber (error "Stopped execution of repeating action in state") f
       lift $ modify \s@{ transactionFibers } -> s { transactionFibers = delete (Tuple (unwrap contextId) stateId) transactionFibers }
 
   { automaticOnExit, notifyOnExit } <- getCompiledState stateId

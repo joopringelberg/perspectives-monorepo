@@ -30,16 +30,15 @@ import Data.Maybe (Maybe(..))
 import Data.Traversable (for)
 import Main.RecompileBasicModels (UninterpretedDomeinFile, executeInTopologicalOrder, recompileModel)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (MonadPerspectives)
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives)
 import Perspectives.DomeinCache (lookupStableModelUri_)
-import Perspectives.Logging (errorUpgrade)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (modelUri2ModelUrl)
+import Perspectives.Logging (errorUpgrade)
 import Perspectives.ModelDependencies (sysUser)
-import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (databaseInfo, deleteDatabase, documentsInDatabase, getDocument_, includeDocs)
 import Perspectives.Persistent (invertedQueryDatabaseName, saveMarkedResources)
-import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage)
+import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage, setTopicLogLevel)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
 import Perspectives.SetupUser (setupInvertedQueryDatabase)
@@ -50,6 +49,7 @@ import Simple.JSON (read) as JSON
 recompileLocalModels :: MonadPerspectives Boolean
 recompileLocalModels =
   do
+    setTopicLogLevel UPGRADE Info
     addAllExternalFunctions
     modelsDb <- modelsDatabaseName
     { rows: allModels } <- documentsInDatabase modelsDb includeDocs
@@ -94,7 +94,7 @@ recompileLocalModel modelUri = do
         (ENR $ EnumeratedRoleType sysUser)
         (runExceptT (recompileModel udf))
       case r of
-        Left errors -> errorUpgrade ("recompileLocalModel: " <> show errors) *> pure false
+        Left errors -> errorUpgrade ("recompileLocalModels(" <> show modelUri <> "): " <> show errors) *> pure false
         Right success -> do
           saveMarkedResources
           pure true

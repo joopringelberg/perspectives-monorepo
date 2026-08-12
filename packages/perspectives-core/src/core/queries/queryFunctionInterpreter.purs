@@ -20,72 +20,65 @@
 
 -- END LICENSE
 
--- TODO
---  A case expression contains unreachable cases:
---
---   (MQD dom fun args ran _ _)                 a
---   (BQD _ (BinaryCombinator g) f1 f2 ran _ _) a
---   (BQD _ (BinaryCombinator g) f1 f2 _ _ _)   a
---   (BQD _ (BinaryCombinator g) f1 f2 ran _ _) a
---   (BQD _ (BinaryCombinator g) f1 f2 _ _ _)   a
---   ...
---
--- in binding group interpret, getterFromPropertyType, getDynamicPropertyGetter
-
 module Perspectives.Query.Interpreter where
 
+import Control.Alternative (guard)
 import Control.Bind (join)
 import Control.Monad.AvarMonadAsk (modify)
-import Control.Monad.Error.Class (catchError, throwError, try)
+import Control.Monad.Error.Class (catchError, throwError)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
 import Control.Plus (empty)
-import Data.Array (concat, elemIndex, foldl, head, index, length, null, union, unsafeIndex)
+import Data.Array (concat, elemIndex, foldl, head, index, intersect, length, null, union, unsafeIndex)
+import Data.Either (Either(..))
+import Data.Foldable (any)
 import Data.List (List(..))
 import Data.List.NonEmpty (fromList, singleton, tail)
 import Data.List.Types (List, NonEmptyList)
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (unwrap)
+import Data.Set (fromFoldable, member) as SET
+import Data.String.Regex (match)
 import Data.Traversable (for_, maximum, minimum, traverse)
 import Effect.Exception (error)
 import Foreign.Object (empty, lookup) as OBJ
 import Partial.Unsafe (unsafePartial)
-import Perspectives.ContextAndRole (rol_binding, rol_id, rol_pspType)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MPQ, AssumptionTracking, liftToInstanceLevel, (##=), (##>>))
+import Perspectives.ContextAndRole (rol_context, rol_pspType)
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MPQ, AssumptionTracking, liftToInstanceLevel, (###=), (##>>), (##=))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
-import Perspectives.Error.Boundaries (handlePerspectRolError')
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionNArgs)
 import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isExternalRole)
-import Perspectives.InstanceRepresentation (PerspectRol)
 import Perspectives.Instances.Combinators (available', not_)
 import Perspectives.Instances.Environment (_pushFrame)
-import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding, binding_, context, contextModelName, contextType, contextType_, externalRole, filledBy, fills, getAllFilledRoles_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
+import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding, binding_, completeRuntimeType, context, contextModelName, contextType, contextType_, externalRole, filledBy, fills, getActiveRoleStates_, getActiveStates_, getAllFilledRoles_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
 import Perspectives.Instances.Values (bool2Value, parseNumber, value2Date, value2Number)
-import Perspectives.ModelDependencies (roleWithId)
+import Perspectives.ModelDependencies (roleWithId, socialEnvironment, socialEnvironmentPersons)
 import Perspectives.Names (lookupIndexedRole)
+import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Parsing.Arc.Position (arcParserStartPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistent (getPerspectRol)
-import Perspectives.PerspectivesState (addBinding, getVariableBindings, pushFrame, restoreFrame)
+import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getVariableBindings, pushFrame, restoreFrame)
 import Perspectives.Query.Interpreter.Dependencies (Dependency(..), DependencyPath, addAsSupportingPaths, allPaths, appendPaths, applyValueFunction, composePaths, consOnMainPath, dependencyToValue, domain2Dependency, functionOnBooleans, functionOnStrings, singletonPath, snocOnMainPath, (#>>))
-import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext, domain2PropertyRange, domain2roleType, range)
-import Perspectives.Query.UnsafeCompiler (lookup, mapDurationOperator, mapNumericOperator, orderFunction, performNumericOperation')
-import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
-import Perspectives.Representation.CNF (CNF)
+import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain2PropertyRange, domain2roleType, range)
+import Perspectives.Query.UnsafeCompiler (compareRangeValues, lookup, mapDurationOperator, mapNumericOperator, orderFunction, performNumericOperation')
+import Perspectives.Representation.ADT (ADT(..), commonLeavesInADT, equalsOrSpecialises_)
+import Perspectives.Representation.CNF (toConjunctiveNormalForm)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty)
 import Perspectives.Representation.CalculatedRole (CalculatedRole)
-import Perspectives.Representation.Class.PersistentType (getEnumeratedRole, getPerspectType)
+import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getPerspectType)
 import Perspectives.Representation.Class.Property (calculation) as PC
 import Perspectives.Representation.Class.Property (getPropertyType)
-import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, calculation, toConjunctiveNormalForm_)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
+import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, calculation, expandUnexpandedLeaves)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..), isDateOrTime, isPDuration)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string)
-import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextTypeModelName', propertyAliases, roleTypeModelName', generalisesRoleType)
-import Prelude (Unit, bind, discard, eq, flip, map, notEq, pure, show, unit, ($), (&&), (+), (<#>), (<$>), (<<<), (<=), (<>), (==), (>=>), (>>=), (||), void)
+import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextAspectsClosure, contextTypeModelName', equalsOrSpecialisesRoleInContext, propertyAliases, roleTypeModelName', generalisesRoleType)
+import Prelude (Unit, bind, discard, eq, flip, notEq, pure, show, unit, void, ($), (&&), (+), (<#>), (<$>), (<<<), (<=), (<>), (==), (>=>), (>>=), (||))
+import Simple.JSON (readJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
 lift2MPQ :: forall a. MP a -> MPQ a
@@ -179,8 +172,8 @@ interpretBQD (BQD _ (BinaryCombinator ComposeF) f1 f2@(SQD _ (Constant _ _) _ _ 
 interpretBQD (BQD _ (BinaryCombinator ComposeF) f1 f2 _ _ _) a =
   case f1, f2 of
     (SQD _ (DataTypeGetter IdentityF) _ _ _), (SQD _ (DataTypeGetter IdentityF) _ _ _) -> pure a
-    _, (SQD _ (DataTypeGetter IdentityF) _ _ _) -> interpret f1 a
     (SQD _ (DataTypeGetter IdentityF) _ _ _), _ -> interpret f2 a
+    _, (SQD _ (DataTypeGetter IdentityF) _ _ _) -> interpret f1 a
     _, _ -> (interpret f1 >=> interpret f2) a
 interpretBQD (BQD _ (BinaryCombinator SequenceF) f1 f2 _ _ _) a = ArrayT $ do
   (f1r :: Array DependencyPath) <- runArrayT $ interpret f1 a
@@ -202,10 +195,8 @@ interpretBQD (BQD _ (BinaryCombinator SequenceF) f1 f2 _ _ _) a = ArrayT $ do
 
 interpretBQD (BQD _ (BinaryCombinator IntersectionF) f1 f2 _ _ _) a = ArrayT do
   (f1r :: Array DependencyPath) <- runArrayT $ interpret f1 a
-  if null f1r then do
-    f2r <- runArrayT $ interpret f2 a
-    pure $ f1r `union` f2r
-  else pure f1r
+  (f2r :: Array DependencyPath) <- runArrayT $ interpret f2 a
+  pure (f1r `intersect` f2r)
 
 interpretBQD (BQD _ (BinaryCombinator UnionF) f1 f2 _ _ _) a = ArrayT do
   (l :: Array DependencyPath) <- runArrayT $ interpret f1 a
@@ -236,12 +227,41 @@ interpretBQD (BQD _ (BinaryCombinator FilledByF) sourceOfFilledRoles sourceOfFil
         }
       ]
 
+interpretBQD (BQD _ (BinaryCombinator FillsF) sourceOfFillerRoles sourceOfFilledRoles _ _ _) a = ArrayT do
+  (fillerRoles :: Array DependencyPath) <- runArrayT $ interpret sourceOfFillerRoles a
+  (filledRoles :: Array DependencyPath) <- runArrayT $ interpret sourceOfFilledRoles a
+  -- fillerRoles and filledRoles must be functional.
+  case head fillerRoles, head filledRoles of
+    Just fillerRolesh, Just filledRolesh | length fillerRoles <= 1 && length filledRoles <= 1 ->
+      case fillerRolesh.head, filledRolesh.head of
+        R filler, R filled -> do
+          result <- lift ((Filled_ filled) ##>> fills (Filler_ filler))
+          pure
+            [ { head: (V "" (Value $ show result))
+              , mainPath: Nothing
+              , supportingPaths: allPaths fillerRolesh `union` allPaths filledRolesh
+              }
+            ]
+        _, _ -> throwError (error $ "'fills' expects two roles, but got: " <> show fillerRolesh.head <> " and " <> show filledRolesh.head)
+    Just fillerRolesh, Just filledRolesh -> throwError (error $ "'fills' expects at most a single role instance on both the left and right side")
+    _, _ -> pure
+      [ { head: (V "" (Value "false"))
+        , mainPath: Nothing
+        , supportingPaths: []
+        }
+      ]
+
 interpretBQD (BQD _ (BinaryCombinator OrElseF) f1 f2 ran fun man) a = ArrayT do
   fr1 <- runArrayT (interpret f1 a)
   if null fr1 then runArrayT (interpret f2 a)
   else pure fr1
 
-interpretBQD (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _ _) a = ArrayT
+interpretBQD qfd@(BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _ _) a = interpretComposeSequenceF qfd a
+
+interpretBQD qfd@(BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = interpretBQDOtherFunctions qfd a
+
+interpretComposeSequenceF :: Partial => QueryFunctionDescription -> DependencyPath ~~> DependencyPath
+interpretComposeSequenceF (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _ _) a = ArrayT
   case f2 of
     -- f2 results from the expression that follows `>>=` (must have been: "sum", "product", etc.).
     -- This was parsed as `SequenceFunction f` and is now compiled as `UnaryCombinator f` in an SQD.
@@ -349,20 +369,24 @@ interpretBQD (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _ _) a = Array
         }
       ]
 
-interpretBQD (BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = case fun of
+interpretBQDOtherFunctions :: Partial => QueryFunctionDescription -> DependencyPath ~~> DependencyPath
+interpretBQDOtherFunctions (BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = case fun of
 
   -- The compiler only allows f1 and f2 if they're functional.
   g | isJust $ elemIndex g [ EqualsF, NotEqualsF ] -> ArrayT do
     -- Both are singleton arrays, or empty.
     (fr1 :: Array DependencyPath) <- runArrayT (interpret f1 a)
     fr2 <- runArrayT (interpret f2 a)
-    unsafePartial $ case g of
-      EqualsF -> case head fr1, head fr2 of
-        Just fr1h, Just fr2h -> pure [ unsafePartial applyValueFunction (functionOnStrings \x y -> show (x == y)) fr1h fr2h ]
-        _, _ -> pure []
-      NotEqualsF -> case head fr1, head fr2 of
-        Just fr1h, Just fr2h -> pure [ unsafePartial applyValueFunction (functionOnStrings \x y -> show (x `notEq` y)) fr1h fr2h ]
-        _, _ -> pure []
+    case head fr1, head fr2 of
+      Just fr1h, Just fr2h -> do
+        result <- compareRangeValues (range f1) g (unwrap $ dependencyToValue fr1h.head) (unwrap $ dependencyToValue fr2h.head)
+        pure
+          [ { head: V "" (bool2Value result)
+            , mainPath: Nothing
+            , supportingPaths: allPaths fr1h `union` allPaths fr2h
+            }
+          ]
+      _, _ -> pure []
 
   -- The Description Compiler makes sure we only have Value types that can be ordered, here.
   -- It also ensures the f1 and f2 are functional.
@@ -371,12 +395,14 @@ interpretBQD (BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = case fun of
     (fr1 :: Array DependencyPath) <- runArrayT (interpret f1 a)
     fr2 <- runArrayT (interpret f2 a)
     case head fr1, head fr2 of
-      Just fr1h, Just fr2h -> unsafePartial $ case ran of
-        VDOM PString _ -> pure [ unsafePartial applyValueFunction (functionOnStrings \x y -> show $ (orderFunction g) x y) fr1h fr2h ]
-        VDOM PBool _ -> pure [ unsafePartial applyValueFunction (functionOnBooleans (orderFunction g)) fr1h fr2h ]
-        VDOM PNumber _ -> pure [ unsafePartial $ applyValueFunction (\x y -> bool2Value ((orderFunction g) (value2Number x) (value2Number y))) fr1h fr2h ]
-        VDOM PDate _ -> pure [ unsafePartial applyValueFunction (\x y -> bool2Value ((orderFunction g) (value2Date x) (value2Date y))) fr1h fr2h ]
-        VDOM PEmail _ -> pure [ unsafePartial applyValueFunction (functionOnStrings \x y -> show $ (orderFunction g) x y) fr1h fr2h ]
+      Just fr1h, Just fr2h -> do
+        result <- compareRangeValues (range f1) g (unwrap $ dependencyToValue fr1h.head) (unwrap $ dependencyToValue fr2h.head)
+        pure
+          [ { head: V "" (bool2Value result)
+            , mainPath: Nothing
+            , supportingPaths: allPaths fr1h `union` allPaths fr2h
+            }
+          ]
       _, _ -> pure []
 
   -- The Description Compiler ensuers we have only PBool Value types and that both f1 and f2 are functional.
@@ -541,6 +567,25 @@ interpretSQD (SQD dom (VariableLookup varName) range _ _) a = do
   -- as we recorded them before actually storing the result in the variable.
   pure a { head = domain2Dependency range r }
 
+interpretSQD (SQD _ (DataTypeGetter MeF) _ _ _) a = do
+  PerspectivesUser pUser <- lift $ lift getPerspectivesUser
+  (flip consOnMainPath a) <<< R <$> getFilledRoles (ContextType socialEnvironment) (EnumeratedRoleType socialEnvironmentPersons) (RoleInstance pUser)
+
+interpretSQD (SQD _ (RoleTypeConstant qname) _ _ _) a = pure $ consOnMainPath (RT qname) a
+
+interpretSQD (SQD _ (ContextTypeConstant qname) _ _ _) a = pure $ consOnMainPath (CT qname) a
+
+interpretSQD (SQD _ (PublicRole individual) _ _ _) a = pure $ consOnMainPath (R individual) a
+
+interpretSQD (SQD _ (PublicContext individual) _ _ _) a = pure $ consOnMainPath (C individual) a
+
+interpretSQD (SQD _ (RegExMatch (RegExP reg)) _ _ _) a = pure $ consOnMainPath (V "RegExMatch" (Value result)) a
+  where
+  val = unwrap $ unsafePartial dependencyToValue a.head
+  result = case match reg val of
+    Nothing -> "false"
+    Just _ -> "true"
+
 interpretSQD qfd a = case a.head of
   -----------------------------------------------------------
   -- ContextInstance
@@ -555,9 +600,19 @@ interpretSQD qfd a = case a.head of
       (lift $ lift $ calculation ct) >>= flip interpret a
     (SQD _ (DataTypeGetter ExternalRoleF) _ _ _) -> (flip consOnMainPath a) <<< R <$> externalRole cid
     (SQD _ (TypeGetter TypeOfContextF) _ _ _) -> (flip consOnMainPath a) <<< CT <$> contextType cid
+    (SQD _ (ContextTypeFilter adtString) _ _ _) ->
+      case readJSON adtString of
+        Left e -> throwError (error $ "Cannot read ContextTypeFilter ADT: " <> show e)
+        Right adt -> do
+          result <- lift $ lift $ contextMatchesTypeFilter cid adt
+          pure $ consOnMainPath (V "ContextTypeFilter" (bool2Value result)) a
     (SQD _ (DataTypeGetter IndexedContextName) _ _ _) -> (flip consOnMainPath a) <<< V "IndexedContextName" <$> (indexedContextName cid)
     (SQD _ TranslateContextType _ _ _) -> (flip consOnMainPath a) <<< V "translation" <<< Value <$> (lift $ lift $ (contextType_ cid >>= translateType))
     (SQD _ (DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF roleTypeName) _ _ _) -> (flip consOnMainPath a) <<< R <$> getUnlinkedRoleInstances (EnumeratedRoleType roleTypeName) cid
+    (SQD _ (DataTypeGetterWithParameter IsInStateF parameter) _ _ _) -> do
+      states <- lift $ lift $ getActiveStates_ cid
+      let result = isJust $ elemIndex (StateIdentifier parameter) states
+      pure $ consOnMainPath (V "IsInStateF" (Value $ show result)) a
 
     otherwise -> throwError (error $ "(head=ContextInstance) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show cid)
 
@@ -589,6 +644,12 @@ interpretSQD qfd a = case a.head of
       (lift2MPQ $ PC.calculation cp) >>= flip interpret a
     (SQD _ (DataTypeGetter ContextF) _ _ _) -> (flip consOnMainPath a) <<< C <$> context rid
     (SQD _ (DataTypeGetter TypeOfRoleF) _ _ _) -> (flip consOnMainPath a) <<< RT <<< ENR <$> roleType rid
+    (SQD _ (RoleTypeFilter adtString) _ _ _) ->
+      case readJSON adtString of
+        Left e -> throwError (error $ "Cannot read RoleTypeFilter ADT: " <> show e)
+        Right adt -> do
+          result <- lift $ lift $ roleMatchesTypeFilter rid adt
+          pure $ consOnMainPath (V "RoleTypeFilter" (bool2Value result)) a
     (SQD _ TranslateRoleType _ _ _) -> (flip consOnMainPath a) <<< V "translation" <<< Value <$> (lift $ lift $ (roleType_ rid >>= translateType))
     (SQD _ (DataTypeGetter IndexedRoleName) _ _ _) -> (flip consOnMainPath a) <<< V "IndexedRoleName" <$> (indexedRoleName rid)
     (SQD _ (DataTypeGetter FillerF) ran _ _) -> composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
@@ -596,6 +657,10 @@ interpretSQD qfd a = case a.head of
       if parameter == "direct" then composePaths a <$> getDirectFillerType rid
       else composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
     (SQD _ (FilledF roleType contextType) _ _ _) -> composePaths a <$> getRecursivelyFilledRoles contextType roleType rid
+    (SQD _ (DataTypeGetterWithParameter IsInStateF parameter) _ _ _) -> do
+      states <- lift $ lift $ getActiveRoleStates_ rid
+      let result = isJust $ elemIndex (StateIdentifier parameter) states
+      pure $ consOnMainPath (V "IsInStateF" (Value $ show result)) a
 
     otherwise -> throwError (error $ "(head=RoleInstance) No implementation in Perspectives.Query.Interpreter for " <> show qfd <> " and " <> show rid)
 
@@ -658,19 +723,24 @@ getDirectFillerType rid = binding rid >>= \b -> pure $ snocOnMainPath (singleton
 
 getFillerTypeRecursively :: ADT RoleInContext -> RoleInstance ~~> DependencyPath
 getFillerTypeRecursively adt r = do
-  adtCnf <- lift $ lift $ toConjunctiveNormalForm_ adt
-  ArrayT $ (lift $ try $ getPerspectRol r) >>=
-    handlePerspectRolError' "getFillerTypeRecursively" [] (depthFirst adtCnf)
-  where
-  depthFirst :: CNF RoleInContext -> PerspectRol -> AssumptionTracking (Array DependencyPath)
-  depthFirst adtCnf role =
-    case rol_binding role of
-      Nothing -> pure []
-      Just b -> do
-        bRole <- lift $ getPerspectRol b
-        roleCnf <- lift (getEnumeratedRole (rol_pspType bRole) >>= pure <<< _.completeType <<< unwrap)
-        if roleCnf `equalsOrSpecialises_` adtCnf then pure [ snocOnMainPath (singletonPath (R b)) (R $ rol_id role) ]
-        else map (flip snocOnMainPath (R $ rol_id role)) <$> depthFirst adtCnf bRole
+  adtDnf <- lift $ lift $ (expandUnexpandedLeaves adt >>= pure <<< toConjunctiveNormalForm)
+  filler <- binding r
+  adtFiller <- lift $ lift $ completeRuntimeType filler >>= expandUnexpandedLeaves >>= pure <<< toConjunctiveNormalForm
+  guard (adtFiller `equalsOrSpecialises_` adtDnf)
+  pure (singletonPath (R filler))
+
+roleMatchesTypeFilter :: RoleInstance -> ADT RoleInContext -> MP Boolean
+roleMatchesTypeFilter roleId roleFilter = do
+  role <- getPerspectRol roleId
+  roleContextType <- (rol_context role) ##>> contextType
+  ST (RoleInContext { context: roleContextType, role: rol_pspType role }) `equalsOrSpecialisesRoleInContext` roleFilter
+
+contextMatchesTypeFilter :: ContextInstance -> ADT ContextType -> MP Boolean
+contextMatchesTypeFilter contextId contextFilter = do
+  instanceContextType <- contextType_ contextId
+  contextAspects <- instanceContextType ###= contextAspectsClosure
+  let contextAspectSet = SET.fromFoldable contextAspects
+  pure $ any (\candidate -> SET.member candidate contextAspectSet) (commonLeavesInADT contextFilter)
 
 toBool :: List Dependency -> Boolean
 toBool (Cons (V _ (Value s)) _) = s == "true"

@@ -23,9 +23,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 /* eslint-env serviceworker */
-/* global __MYCONTEXTS_VERSION__, __BUILD__, __IS_DEV__ */
+/* global __MYCONTEXTS_VERSION__, __BUILD_ID__, __IS_DEV__ */
 
-const currentVersion = __MYCONTEXTS_VERSION__ + __BUILD__;
+const currentVersion = __MYCONTEXTS_VERSION__ + __BUILD_ID__;
 const IS_DEV = __IS_DEV__;
 let previousVersion = '';
 

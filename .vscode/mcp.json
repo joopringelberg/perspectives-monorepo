@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "perspectives-purescript-tools": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/Users/joopringelberg/Code/purescript-mcp-tools/index.js"
+      ]
+    }
+  },
+  "inputs": []
+}

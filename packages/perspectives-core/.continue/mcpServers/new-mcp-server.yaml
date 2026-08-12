@@ -1,0 +1,11 @@
+name: PureScript MCP
+version: 0.0.1
+schema: v1
+
+mcpServers:
+  - name: purescript-core
+    command: node
+    args:
+      - /Users/joopringelberg/Code/purescript-mcp-tools/index.js
+    env:
+      PURESCRIPT_PROJECT_PATH: /Users/joopringelberg/Code/perspectives-monorepo/perspectives-core

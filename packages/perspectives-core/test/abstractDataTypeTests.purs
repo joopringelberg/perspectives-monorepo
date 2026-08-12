@@ -36,13 +36,15 @@ module Test.Perspectives.Representation.AbstractDataTypeTests where
 import Prelude
 
 import Control.Monad.Free (Free)
-import Data.Array (singleton)
-import Data.Foldable (foldMap)
+import Data.Array (cons, nub, singleton)
+import Data.Foldable (all, any, foldMap, foldr, for_)
 import Data.Identity (Identity(..))
 import Data.Int (even)
 import Data.Maybe (Maybe(..))
 import Data.Monoid.Additive (Additive(..))
 import Data.Newtype (unwrap)
+import Data.Set (fromFoldable, member) as SET
+import Data.Tuple (Tuple(..))
 import Data.Traversable (traverse)
 import Effect.Aff.Class (liftAff)
 import Partial.Unsafe (unsafePartial)
@@ -61,6 +63,24 @@ expandPure = expand (unsafePartial leafToExpanded)
   leafToExpanded adt = case adt of
     ST x -> Identity (EST x)
     UET x -> Identity (EST x)
+
+allAssignments :: forall a. Array a -> Array (Array a)
+allAssignments = foldr (\term assignments -> assignments <> map (cons term) assignments) [ [] ]
+
+satisfiesCnf :: forall a. Ord a => Array a -> DPROD a -> Boolean
+satisfiesCnf assignment (DPROD clauses) =
+  let
+    assignmentSet = SET.fromFoldable assignment
+  in
+    all (\(DSUM disjunction) -> any (\term -> SET.member term assignmentSet) disjunction) clauses
+
+semanticallyImplies :: forall a. Ord a => DPROD a -> DPROD a -> Boolean
+semanticallyImplies left right =
+  let
+    allTerms (DPROD clauses) = nub $ foldMap (\(DSUM disjunction) -> disjunction) clauses
+    universe = allTerms left <> allTerms right
+  in
+    all (\assignment -> not (satisfiesCnf assignment left) || satisfiesCnf assignment right) (allAssignments universe)
 
 theSuite :: Free TestF Unit
 theSuite = suite "Test.Perspectives.Representation.AbstractDataTypeTests" do
@@ -350,6 +370,34 @@ theSuite = suite "Test.Perspectives.Representation.AbstractDataTypeTests" do
         not $ equalsOrSpecialises_ (DPROD [DSUM [1, 2]]) (DPROD [DSUM [1]])
       liftAff $ assert "NOT: DPROD [DSUM [1]] equalsOrSpecialises_ DPROD [DSUM [2]]" $
         not $ equalsOrSpecialises_ (DPROD [DSUM [1]]) (DPROD [DSUM [2]])
+
+    test "equalsOrSpecialises_ matches monotone CNF implication semantics" do
+      let
+        cases =
+          [ Tuple (DPROD [DSUM [1]]) (DPROD [DSUM [1]])
+          , Tuple (DPROD [DSUM [1]]) (DPROD [DSUM [1, 2]])
+          , Tuple (DPROD [DSUM [1], DSUM [2]]) (DPROD [DSUM [1]])
+          , Tuple (DPROD [DSUM [1], DSUM [2]]) (DPROD [DSUM [1, 2]])
+          , Tuple (DPROD [DSUM [1, 2]]) (DPROD [DSUM [1], DSUM [2]])
+          ]
+      for_ cases \(Tuple left right) ->
+        liftAff $ assert ("semantic implication matches equalsOrSpecialises_ for " <> show left <> " => " <> show right)
+          ((left `equalsOrSpecialises_` right) == semanticallyImplies left right)
+
+    test "toConjunctiveNormalForm may retain absorbed clauses without changing implication results" do
+      let
+        canonical = toConjunctiveNormalForm (EST 1)
+        absorbed = toConjunctiveNormalForm (EPROD [EST 1, ESUM [EST 1, EST 2]])
+      liftAff $ assert "Absorption can yield a non-identical but semantically equivalent CNF." $
+        canonical /= absorbed
+      liftAff $ assert "The absorbed CNF still implies the canonical CNF." $
+        absorbed `equalsOrSpecialises_` canonical
+      liftAff $ assert "The canonical CNF still implies the absorbed CNF." $
+        canonical `equalsOrSpecialises_` absorbed
+      liftAff $ assert "The semantic implication check agrees for absorbed => canonical." $
+        semanticallyImplies absorbed canonical
+      liftAff $ assert "The semantic implication check agrees for canonical => absorbed." $
+        semanticallyImplies canonical absorbed
 
     test "equals_ (mutual implication)" do
       liftAff $ assert "DPROD [DSUM [1]] equals_ itself" $

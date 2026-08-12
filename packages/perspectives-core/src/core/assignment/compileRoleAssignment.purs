@@ -31,7 +31,7 @@ import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, concat, filter, filterA, head, index, length, nub, singleton, union, unsafeIndex)
+import Data.Array (catMaybes, concat, elem, filter, filterA, head, index, length, nub, singleton, union, unsafeIndex)
 import Data.Either (Either(..), hush)
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), fromJust, maybe)
@@ -60,6 +60,7 @@ import Perspectives.Instances.Values (writePerspectivesFile)
 import Perspectives.Logging (errorCompiler)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (getPerspectRol)
+import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.PerspectivesState (addBinding, getVariableBindings)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription(..))
 import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances, role2context, role2propertyValue, role2role, role2string, typeTimeOnly)
@@ -207,33 +208,43 @@ compileAssignmentFromRole (BQD _ QF.Bind_ binding binder _ _ _) = do
       Just binding'', Just binder'' -> setBinding binder'' binding'' Nothing
       _, _ -> pure []
 
-compileAssignmentFromRole (UQD _ (QF.Unbind mroleType) bindings _ _ _) = do
-  (bindingsGetter :: (RoleInstance ~~> RoleInstance)) <- role2role bindings
-  case mroleType of
-    Nothing -> pure
-      \roleId -> do
-        binders <- lift (roleId ##= bindingsGetter >=> OG.allRoleBinders)
-        for_ binders removeBinding
-    Just roleType -> do
-      EnumeratedRole role <- getEnumeratedRole roleType
-      pure \roleId -> do
-        -- We have no information about the ContextType in which these binders of type `roleType` are a member.
-        -- Therefore we currently just remove them from the lexical context of roleType.
-        -- When we implement the `remove filler` syntax, the modeller can specify the ContextType as well.
-        binders <- lift (roleId ##= bindingsGetter >=> OG.getFilledRoles role.context roleType)
-        for_ binders removeBinding
-
-compileAssignmentFromRole (BQD _ QF.Unbind_ bindings binders _ _ _) = do
-  (bindingsGetter :: (RoleInstance ~~> RoleInstance)) <- role2role bindings
-  (bindersGetter :: (RoleInstance ~~> RoleInstance)) <- role2role binders
+compileAssignmentFromRole (UQD _ (QF.RemoveAsFillerOfType roleType) fillerQfd _ _ _) = do
+  (fillerGetter :: (RoleInstance ~~> RoleInstance)) <- role2role fillerQfd
+  EnumeratedRole role <- getEnumeratedRole roleType
   pure \roleId -> do
-    (binding :: Maybe RoleInstance) <- lift (roleId ##> bindingsGetter)
-    (binder :: Maybe RoleInstance) <- lift (roleId ##> bindersGetter)
-    -- TODO. As soon as we introduce multiple values for a binding, we have to adapt this so the binding argument
-    -- is taken into account, too.
-    void $ case binder of
-      Nothing -> pure []
-      Just binder' -> removeBinding binder'
+    fillers <- lift (roleId ##= fillerGetter)
+    for_ fillers \filler -> do
+      filledRoles <- lift (filler ##= OG.getFilledRoles role.context roleType)
+      for_ filledRoles removeBinding
+
+compileAssignmentFromRole (UQD _ QF.RemoveAsFiller fillerQfd _ _ _) = do
+  (fillerGetter :: (RoleInstance ~~> RoleInstance)) <- role2role fillerQfd
+  pure \roleId -> do
+    fillers <- lift (roleId ##= fillerGetter)
+    for_ fillers \filler -> do
+      filledRoles <- lift (filler ##= OG.allRoleBinders)
+      for_ filledRoles removeBinding
+
+compileAssignmentFromRole (UQD _ QF.RemoveFiller filledQfd _ _ _) = do
+  (filledGetter :: (RoleInstance ~~> RoleInstance)) <- role2role filledQfd
+  pure \roleId -> do
+    filledRoles <- lift (roleId ##= filledGetter)
+    for_ filledRoles removeBinding
+
+compileAssignmentFromRole (BQD _ QF.RemoveFiller fillerQfd filledQfd _ _ _) = do
+  (fillerGetter :: (RoleInstance ~~> RoleInstance)) <- role2role fillerQfd
+  (filledGetter :: (RoleInstance ~~> RoleInstance)) <- role2role filledQfd
+  pure \roleId -> do
+    fillers <- lift (roleId ##= fillerGetter)
+    filledRoles <- lift (roleId ##= filledGetter)
+    for_ filledRoles \filledRole -> do
+      mCurrentFiller <- lift (filledRole ##> binding)
+      case mCurrentFiller of
+        Nothing -> pure unit
+        Just currentFiller ->
+          when (currentFiller `elem` fillers)
+            $ void
+            $ removeBinding filledRole
 
 compileAssignmentFromRole (UQD _ (QF.DeleteProperty qualifiedProperty) roleQfd _ _ _) = do
   (roleGetter :: (RoleInstance ~~> RoleInstance)) <- role2role roleQfd
@@ -408,9 +419,8 @@ compileRoleAssignment (UQD _ (QF.CreateRole qualifiedRoleIdentifier) contextGett
     for_ ctxts \ctxt -> do
       roleTypesToCreate <- roleContextualisations ctxt qualifiedRoleIdentifier
       -- If the role type is indexed, adds the created instance to the indexed roles in PerspectivesState.
-      for_ roleTypesToCreate \qualifiedRoleIdentifier' -> unwrap <<< unsafePartial fromJust <$>
-        createAndAddRoleInstance qualifiedRoleIdentifier' (unwrap ctxt)
-          (RolSerialization { id: localName, properties: PropertySerialization empty, binding: Nothing })
+      for_ roleTypesToCreate \qualifiedRoleIdentifier' -> createAndAddRoleInstance qualifiedRoleIdentifier' (unwrap ctxt)
+        (RolSerialization { id: localName, properties: PropertySerialization empty, binding: Nothing })
 
 compileContextAssignmentFromRole :: Partial => QueryFunctionDescription -> Maybe QueryFunctionDescription -> MP (Updater RoleInstance)
 compileContextAssignmentFromRole (UQD _ (QF.CreateContext qualifiedContextTypeIdentifier qualifiedRoleIdentifier) contextGetterDescription _ _ _) mnameGetterDescription = do
@@ -590,14 +600,13 @@ compileRoleCreatingAssignments (UQD _ (QF.CreateRole qualifiedRoleIdentifier) co
       localName <- case mNameGetter of
         Just nameGetter -> lift $ Just <$> (roleId ##>> nameGetter)
         Nothing -> pure Nothing
-      for roleTypesToCreate
+      catMaybes <$> for roleTypesToCreate
         \roleTypeToCreate -> do
-          roleIdentifier <- unsafePartial $ fromJust <$> createAndAddRoleInstance
+          mroleIdentifier <- createAndAddRoleInstance
             roleTypeToCreate
             (unwrap ctxt)
             (RolSerialization { id: localName, properties: PropertySerialization empty, binding: Nothing })
-          -- No need to handle retrieval errors as we've just created the role.
-          pure (unwrap roleIdentifier)
+          pure (unwrap <$> mroleIdentifier)
 
 compileContextCreatingAssignments :: Partial => QueryFunctionDescription -> Maybe QueryFunctionDescription -> MP (RoleInstance -> MonadPerspectivesTransaction (Array String))
 compileContextCreatingAssignments (UQD _ (QF.CreateContext qualifiedContextTypeIdentifier qualifiedRoleIdentifier) contextGetterDescription _ _ _) mnameGetterDescription = do
@@ -655,15 +664,19 @@ compileContextCreatingAssignments (UQD _ (QF.CreateContext qualifiedContextTypeI
                 Left e -> do
                   lift (renderPerspectivesError e >>= errorCompiler)
                   pure $ Left e
-                Right (ContextInstance contextIdentifier) -> (Right <<< unwrap <<< unsafePartial fromJust) <$> createAndAddRoleInstance
-                  roleTypeToCreate
-                  (unwrap ctxt)
-                  ( RolSerialization
-                      { id: Nothing
-                      , properties: PropertySerialization empty
-                      , binding: Just $ buitenRol contextIdentifier
-                      }
-                  )
+                Right (ContextInstance contextIdentifier) -> do
+                  mroleIdentifier <- createAndAddRoleInstance
+                    roleTypeToCreate
+                    (unwrap ctxt)
+                    ( RolSerialization
+                        { id: Nothing
+                        , properties: PropertySerialization empty
+                        , binding: Just $ buitenRol contextIdentifier
+                        }
+                    )
+                  case mroleIdentifier of
+                    Nothing -> pure $ Left $ Custom ("Could not create role instance of type " <> show roleTypeToCreate <> " in context " <> unwrap ctxt <> " because this functional role already has an instance")
+                    Just roleIdentifier -> pure $ Right $ unwrap roleIdentifier
     pure $ catMaybes (hush <$> results)
 
 compileContextCreatingAssignments (UQD _ (QF.CreateRootContext qualifiedContextTypeIdentifier) contextGetterDescription _ _ _) mnameGetterDescription = do

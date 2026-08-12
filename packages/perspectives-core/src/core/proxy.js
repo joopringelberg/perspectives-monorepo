@@ -207,7 +207,7 @@ export function handleClientRequest( pdr, channels, request )
             })(); // The core recoverFromRecoveryPoint function results in an Effect, hence we apply it to return the (boolean) result.
         break;
       case "createAccount":
-        pdr.createAccount( req.username) (req.pouchdbuser) (req.runtimeOptions) (req.identityDocument)
+        pdr.createAccount( req.perspectivesUser) (req.pouchdbuser) (req.runtimeOptions) (req.identityDocument)
           // eslint-disable-next-line no-unexpected-multiline
           (function({success, reason}) // ({success :: Boolean, reason :: Nullable String} -> Effect Unit)
             {

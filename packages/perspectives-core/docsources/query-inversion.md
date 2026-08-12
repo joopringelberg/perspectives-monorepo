@@ -142,7 +142,12 @@ The `invert_` function handles recursive cases:
 
 - **Composition** (`s1 >> s2`): kinks are produced both at `s1` and at `s2`, with appropriate combinations. The `comprehend` function generates all valid pairs of (backwards steps from the right sub-query) cross (backwards steps from the left sub-query), concatenating them in reversed order.
 - **Union / Intersection** (`q1 | q2`, `q1 & q2`): inverted as the union of inversions of `q1` and `q2`.
-- **Filter** (`filter source with criterium`): the criterium is inverted and a `FilterF` step is appended. Crucially, the filter is later *removed* when storing the inverted query (see §1.5), because at runtime we want to detect the change even when the filter now evaluates to false (the user may have just *lost* visibility of an item).
+- **Filter** (`filter source with criterium`): the criterium is inverted and a `FilterF` step is
+  appended. For **regular perspective queries** the filter is later *removed* when storing the
+  inverted query (see §1.5), because at runtime we want to detect the change even when the filter
+  now evaluates to false (the user may have just *lost* visibility of an item).
+  For **Calculated User role detection queries** (see §1.9) the filter is *kept* in both the
+  backwards and forwards slots of the stored `QueryWithAKink` — see §1.9 for the full rationale.
 - **Let\* (WithFrame / BindVariable)**: variable bindings are stored and substituted when the variable is later referenced.
 - **Calculated Role** (`RolGetter (CR r)`): the calculation of the role is retrieved and inverted recursively.
 
@@ -157,11 +162,107 @@ The `invert_` function handles recursive cases:
 | `DataTypeGetter FillerF` | `RTFillerKey` | The filled role of a binding changes |
 | `RolGetter (ENR role)` | `RTRoleKey` | A role instance of type `role` is added to/removed from a context |
 | `DataTypeGetter ContextF` | `RTContextKey` | The context of a role instance changes (used when the query traverses `context`) |
-| `GetRoleInstancesForContextFromDatabaseF et` | `RTRoleKey` | Similar to `RolGetter ENR` but for relational roles |
+| `GetRoleInstancesForContextFromDatabaseF et` | `RTRoleKey` | Similar to `RolGetter ENR` but for unlinked roles |
 
 For `FilledF` and `FillerF` steps, the first backwards step is **dropped** from the stored inverted query (the `removeFirstBackwardsStep` helper). This is because at runtime the delta already provides the filled or filler role instance directly, so the step that would navigate to it is redundant.
 
 For `RolGetter (ENR role)` steps, the first backwards step is also dropped, and a compensating `context` step is prepended to the forwards part.
+
+### 1.4.1 Additional Indexing for Calculated Properties in Perspectives
+
+After handling the primary inversion step, `setPathForStep` always calls
+`storePropertyPerspectiveQueries`.
+
+This helper adds an extra mechanism for perspective properties when:
+
+- `domain qfd` is a role domain (the inversion step starts from a role), and
+- `forwards qWithAK` is `Nothing` (the perspective-object inversion is complete).
+
+For each property in `statesPerProperty`:
+
+- **Calculated property (`CP`)**:
+  - The property calculation is loaded and inverted.
+  - Each property inversion is composed with the already-complete inversion of the
+    perspective object (`addTermOnRight <$> bwProp <*> backwards qWithAK`).
+  - This effectively places the inverted property calculation in front of the
+    perspective-object inversion, producing a complete path from changed
+    enumerated property value to the context that holds the perspective users.
+  - The result is stored again via `storeInvertedQuery` and typically indexed as
+    `RTPropertyKey` (first backwards step is `Value2Role`).
+
+- **Enumerated property (`ENP`) not local to the perspective object**:
+  - A virtual `PropertyGetter` query is constructed at the perspective-object role
+    domain and inverted.
+  - This yields additional binding-change/property-change inversions so changes in
+    filler chains can still trigger affected-user detection.
+
+So besides the regular inversion of the perspective-object query, Phase 3 also stores
+extra property-triggered inversions for calculated (and certain non-local enumerated)
+perspective properties.
+
+### 1.4.2 Filter semantics: detection-oriented vs selection-oriented behaviour
+
+Filter handling in query inversion is intentionally not a single yes/no decision. The
+subsystem combines two semantics:
+
+- **Selection semantics**: keep only instances that satisfy the filter now.
+- **Detection semantics**: detect relevant changes even when a filter becomes false
+  (loss of visibility) or becomes true (gain of visibility).
+
+#### Compile-time inversion behaviour
+
+In `invert_`:
+
+- A `FilterF` step is appended to inverted criterium paths.
+- In `ComposeF`, `hasFilter` suppresses one family of extra forward-augmented
+  variants and keeps the comprehension variants.
+
+This produces candidate `QueryWithAKink` values where filter structure is still present,
+but final runtime trigger behaviour is decided later during storage.
+
+#### Storage-time rewrite behaviour
+
+In `storeInvertedQuery'`, when the backward shape is recognised as:
+
+- `{first source step} << filter << {last criterium step}`
+
+two different policies are applied.
+
+1. **Regular perspective queries** (`mCalcUserRoleType = Nothing`):
+   - Store an **unfiltered** variant (filter dropped) so transitions to filter-false
+     still trigger affected-user processing.
+   - Store an additional **filtered** variant (recursive call with `mfilter = Just filter`)
+     so transitions to filter-true also trigger precisely.
+
+2. **Calculated-user detection queries** (`mCalcUserRoleType = Just _`):
+   - Store a filter-preserving description:
+     - backward = `filter >> source`
+     - forward = `filter`
+   - Do **not** store the second recursive variant. This avoids runtime shape errors
+     where property values would be treated as role instances.
+
+Semantically, this means filters are both preserved and bypassed, depending on the
+purpose of the stored query.
+
+#### Why `preprendToCriterium` is needed
+
+For `RTFilledKey`, `RTFillerKey`, and role-context rewrites, `setPathForStep` may remove
+the first backward step (`removeFirstBackwardsStep`) and optionally compensate in the
+forward part. After this path surgery, the original filter criterium may no longer be
+anchored to the correct runtime object.
+
+`preprendToCriterium` restores alignment by inserting a compensating step at the start
+of the filter criterium and then prepending that modified filter to the rewritten
+backward. So the filter is evaluated on the intended semantic object despite structural
+rewrites of the inversion path.
+
+#### Practical outcome
+
+- Filters are **not** globally ignored.
+- Filters are **not** globally enforced as hard gates either.
+- The runtime sees a deliberately mixed set of stored inversions that together preserve
+  correctness for both visibility-loss and visibility-gain transitions, while keeping
+  calculated-user detection type-correct.
 
 Each stored inverted query is a `StorableInvertedQuery`:
 
@@ -373,13 +474,134 @@ Runtime (on data mutation)
 
 At runtime, when `usersWithAnActivePerspective` computes user instances, it calls `getRoleInstances (CR rName)`, which evaluates the Calculated role's query to produce the actual user role instances.
 
-**Important limitation**: The inverted query is stored on the type visited by the perspective object query. It is indexed so that mutations to that type trigger the backwards query, which navigates back to a context where the Calculated user role is defined. In that context, the Calculated role is evaluated to find the actual user instances.
+**Important limitation (partially resolved)**: The inverted query is stored on the type visited by
+the perspective object query. It is indexed so that mutations to that type trigger the backwards
+query, which navigates back to a context where the Calculated user role is defined. In that
+context, the Calculated role is evaluated to find the actual user instances.
 
-However, when the Calculated role's **query itself** traverses a role binding (filler/filled step), a change to that binding can introduce entirely new user instances whose context has never been serialised. This is a known limitation and the subject of ongoing work.
+When the Calculated role's **query itself** traverses a role binding (filler/filled step), a
+change to that binding can introduce entirely new user instances whose context has never been
+serialised. The `invertCalculatedUsers` pass (§1.9) addresses this case.
 
 ---
 
-## Note on Redundancy in Inverted Query Storage (Future Optimisation)
+## §1.9 `invertCalculatedUsers` — Detecting New Calculated User Instances
+
+### Purpose
+
+A Calculated User Role whose definition traverses a role binding (e.g. via `filler`, `fills`,
+or an external database query such as `callExternal cdb:RoleInstances(...)`) can gain **new
+instances** when a binding changes.  The regular `invertPerspectiveObjects` pass is not
+sufficient for this: it inverts the *perspective object* query (what the user sees), not the
+*user role calculation* itself.  So when a new role binding appears, there is no mechanism in
+`invertPerspectiveObjects` to notice that a new Calculated User instance has come into
+existence and that its context must be serialised for it.
+
+`invertCalculatedUsers` fills this gap.  For every Calculated User Role it calls `invert` on
+the role's own calculation query, and stores each resulting `QueryWithAKink` via
+`storeCalculatedUserInvertedQuery`, which sets `calculatedUserRoleType = Just (CR id)` and
+`users = []`.
+
+### Special Semantics for Filter-based Queries
+
+The running example from the issue is the `Contacts` role of the System model:
+
+```arc
+filter (callExternal cdb:RoleInstances("Persons") returns SocialEnvironment$Persons)
+  with (exists PublicKey) and (not this == me)
+```
+
+`invert` produces (for the `exists PublicKey` criterium, assuming PublicKey is a property of
+the filler `PerspectivesUsers`):
+
+```
+ZQ (Just (FilledF >> filter >> ExternalCoreContextGetter))
+   (Just PropertyGetter_pk)
+```
+
+#### The Original Bug
+
+Under the old storage code `storeInvertedQuery'` would drop the filter and store:
+
+```
+RTFilledKey  description = ZQ (Just ExternalCoreContextGetter)
+                                (Just PropertyGetter_pk)
+```
+
+At runtime `handleNewCalculatedUsersForBinding filled filler iq` was called:
+- backward `ExternalCoreContextGetter` on `filled` (Persons) → context **✓**
+- forward `PropertyGetter_pk` on `fwStart = filler` (PerspectivesUser) → property **values** **✗**
+
+The property value string was then passed as a `RoleInstance` to `serialisedAsDeltasFor_`,
+causing runtime errors.
+
+#### The Fix
+
+For `mCalcUserRoleType = Just _` in the filter pattern case, `storeInvertedQuery'` now
+produces the description:
+
+```
+ZQ (Just (filter >> source)) (Just filter)
+```
+
+i.e. both the backwards and forwards slots carry the `FilterF` expression.
+
+After `setPathForStep FilledF` removes the `FilledF` first step, the stored description is:
+
+```
+RTFilledKey  description = ZQ (Just ExternalCoreContextGetter)
+                                (Just filter)        ← FilterF, not PropertyGetter_pk
+```
+
+At runtime, `handleNewCalculatedUsersForBinding` now detects `forwardStartsWithFilter iq` and
+uses `bwStart` (the filled Persons role) as the start for **both** the backwards and the
+forwards query:
+
+- backward `ExternalCoreContextGetter` on `filled` (Persons) → context **✓**
+- forward `filter` on `filled` (Persons) → `[Persons]` if the filter passes **✓**
+
+The result is a `calcUserInstances = [Persons role instance]` that is correctly treated as the
+new Calculated User instance.
+
+#### Property-Change Trigger
+
+For scenario A (PublicKey directly on the Persons role), a corresponding `RTPropertyKey`
+inverted query is also stored with:
+
+```
+description = ZQ (Just (filter >> ExternalCoreContextGetter)) (Just filter)
+```
+
+When PublicKey changes on a Persons role, `aisInPropertyDelta` detects
+`isCalculatedUserQuery iq && forwardStartsWithFilter iq` and calls
+`handleNewCalculatedUsersForBinding propertyBearingInstance propertyBearingInstance iq`,
+applying both backward (`filter >> ECG`) and forward (`filter`) to the same Persons role
+instance.
+
+For scenario B (PublicKey on the filler PerspectivesUser), no `RTPropertyKey` is stored for
+the Calculated User query because the first backwards step is `FilledF` (not `Value2Role`).
+The property-change trigger for scenario B is a remaining limitation: only the role-binding
+change (RTFilledKey) is detected.
+
+#### The `not this == me` Criterion
+
+The `not this == me` condition inverts to nothing useful (the `this` variable cannot be
+inverted in a way that produces a meaningful key), so it does not generate a stored inverted
+query.  At runtime the filter checks both criteria (`exists PublicKey` **and** `not this == me`)
+before returning the role as a new Calculated User instance.  This is correct: the filter
+criterium is evaluated in full when the forward `filter` step is applied.
+
+### Runtime Flow
+
+1. A new Persons role gets a PerspectivesUser filler (RTFilledKey fires).
+2. `usersWithPerspectiveOnRoleBinding'` separates `isCalculatedUserQuery` queries from regular
+   ones.
+3. For each `calcUserFilledCalculation`, `handleNewCalculatedUsersForBinding filled filler iq`
+   is called with `bwStart = filled`, `fwStart = filler`.
+4. Because `forwardStartsWithFilter iq`, `forwardStart = bwStart = filled`.
+5. Backward: `ExternalCoreContextGetter` on `filled` → `SocialEnvironment` context.
+6. Forward: `filter` on `filled` → `[filled]` if both criterium conditions pass.
+7. Context is serialised for the new user (the Persons role instance).
 
 When a context defines two user roles U1 and U2 that both have a perspective on the same Calculated thing role O, `invertPerspectiveObjects` processes each user role's perspective independently:
 
@@ -426,3 +648,245 @@ When a Calculated User role CU has _both_ (a) another user U with a perspective 
 These two records have the same `description` but serve different purposes. The first is for synchronising U; the second is for detecting new CU instances. They cannot be merged because they carry different metadata.
 
 A future optimisation could detect this overlap and avoid the redundant backwards traversal by sharing the backwards query execution while dispatching to both purposes. This is deferred alongside the broader per-user merging optimisation described above.
+
+---
+
+## §3 Correctness Analysis: Compile-time / Runtime Alignment
+
+This section formally documents the correctness of the five inverted-query categories: key alignment between compile time and runtime, and domain/range ("kind") compatibility between what is stored and what is applied at runtime.
+
+### §3.1 The `qfd` Invariant in `setPathForStep`
+
+A frequently misread aspect of `storeInvertedQuery` / `setPathForStep` is what `qfd` represents. In
+`setPathForStep qfd qwk …`, the first argument `qfd` is **the first step of the backwards path** of
+`qwk` — which is the **inverse of the original query step at the kink point**. It is _not_ the
+original kinked step itself.
+
+Concretely, if the original query had a `ContextF` step at the kink, then `qfd` is an `RolGetter`
+step (the inverse of `ContextF`). If the original query had a `RolGetter role` step at the kink,
+then `qfd` is a `ContextF` step (the inverse of `RolGetter`).
+
+This identity matters when reading the domain / range of `qfd`:
+
+| Original kinked step | `qfd` (first backward step) | `domain qfd` | `range qfd` |
+|---|---|---|---|
+| `RolGetter (ENR role)` in context `ctx` | `ContextF` | `RDOM role` | `CDOM ctx` |
+| `ContextF` on role `role` in `ctx` | `RolGetter role` | `CDOM ctx` | `RDOM role` |
+| `FillerF` on filled `fld` | `FilledF fld ctx` | `RDOM filler` | `RDOM filled` |
+| `FilledF` on filler `flr` | `FillerF` | `RDOM filled` | `RDOM filler` |
+| property getter `p` on role `role` | `Value2Role p` | `VDOM p` | `RDOM role` |
+
+### §3.2 RTPropertyKey — property value changes
+
+**Compile-time key** (`typeLevelKeyForPropertyQueries`):
+`qfd` is a `Value2Role pt` step (domain `VDOM pt`, range `RDOM roleType`).
+The key is `RTPropertyKey { property: pt, role: roleType }`, derived from the range of `qfd`.
+
+**Runtime key** (`runtimeIndexForPropertyQueries`):
+Constructed from `(typeOfInstanceOnPath, propertyBearingType, property, replacementProperty)`.
+Produces the same `RTPropertyKey { property, role }` structure, accounting for Aspect property
+aliases.
+
+**Description stored**: `qWithAK` unmodified (the full `ZQ backward forward`).
+The backward starts with `Value2Role pt` (domain `VDOM pt`).
+
+**At runtime** (`aisInPropertyDelta`):
+`aisInPropertyDelta` iterates all matching property queries and distinguishes three cases:
+
+1. `isCalculatedUserQuery iq && forwardStartsWithFilter iq`:
+  calls `handleNewCalculatedUsersForBinding ...` to detect newly accessible
+  calculated users and serialise their context.
+2. `invertedQueryIsForSynchronisation iq`:
+  this is the calculated-property perspective path. The compiled backward function
+  is used to compute context(s), then `getRoleInstances` is used for each user type
+  in those contexts, and those users are returned for synchronisation.
+3. Otherwise:
+  `handleBackwardQuery propertyBearingInstance iq` is run as a state-query path
+  (or non-synchronisation path).
+
+At runtime `Value2Role` still compiles to identity, so applying the backward query to
+`propertyBearingInstance` is type-compatible.
+
+**Purpose**: RTPropertyKey queries are mostly state queries (`users = []`), but not
+exclusively. Additional RTPropertyKey queries are stored for calculated-property
+perspectives and can carry non-empty `users`, enabling synchronisation user detection
+directly from property changes in `aisInPropertyDelta`.
+
+Regular perspective-object synchronisation for property changes is still handled by
+`addDeltasForPropertyChange` (RTContextKey-based lookup), so both mechanisms coexist.
+
+**Domain/range invariant**: The `VDOM` domain annotation on `Value2Role` is a compile-time type
+label only; at runtime the compiled function is identity regardless of domain. ✓
+
+### §3.3 RTContextKey — role instance added/removed (ContextF kink)
+
+**Kink point**: A `RolGetter (ENR role)` step in the original query — the query traverses _from_
+a context _to_ a role instance.
+
+**`qfd`** (first backward step): A `ContextF` step (inverse of `RolGetter`).
+- `domain qfd = RDOM (ST (RoleInContext { context: ctx, role: roleType }))` — the role instance
+  that the context step starts from.
+- `range qfd = CDOM ctx` — the context it navigates to.
+
+**Compile-time key** (`typeLevelKeyForContextQueries`):
+`roleDomain qfd` extracts `RDOM roleType` and produces
+`RTContextKey { role_origin: roleType, context_destination: ctx }`.
+
+**Runtime key** (`runtimeIndexForContextQueries`):
+Called with `(r: EnumeratedRoleType, c: ContextInstance)` (the role type and context type of the
+changed role instance). Produces the same `RTContextKey { role_origin, context_destination }`.
+Multiple keys are emitted for Aspect role types via `roleContextCombinations`.
+
+**Description stored**: `qWithAK` unmodified — the backward starts with `ContextF` (domain `RDOM role`).
+
+**Filter** (`invertedQueryHasRoleDomain cType rType`):
+Checks `domain (backwards description) = RDOM adt` where `(cType, rType)` is the actual
+role+context at runtime. Uses `equalsOrSpecialisesRoleInContext` so that a query stored for an
+Aspect role also fires for its specialisations.
+
+**At runtime** (`usersWithPerspectiveOnRoleInstance` — CONTEXT STEP branch):
+`handleBackwardQuery roleInstance iq` is called with the newly added/removed role instance.
+The backward's first step is `ContextF` (domain `RDOM role`) — exactly the kind of value
+that `roleInstance` represents. ✓
+
+### §3.4 RTRoleKey — role instance added/removed (RolGetter kink)
+
+**Kink point**: A `ContextF` step in the original query — the query traverses _from_ a role
+_to_ its context.
+
+**`qfd`** (first backward step): A `RolGetter (ENR role)` step (inverse of `ContextF`).
+- `domain qfd = CDOM ctx` — a context instance.
+- `range qfd = RDOM (ST (RoleInContext { context: ctx, role: roleType }))`.
+
+**Compile-time key** (`typeLevelKeyForRoleQueries`):
+`roleRange qfd` extracts `RDOM roleType` and produces
+`RTRoleKey { context_origin: ctx, role_destination: roleType }`.
+
+**Runtime key** (`runTimeIndexForRoleQueries`):
+Called with `(r: EnumeratedRoleType, c: ContextType)` when a role instance of type `r` is
+added/removed from context `c`. Produces the same `RTRoleKey { context_origin: c, role_destination: r }`.
+
+**Description transformation** (`removeFirstBackwardsStep` with compensating `ContextF`):
+The `RolGetter` first-backward step has domain `CDOM ctx`, but at runtime we start from a
+**role instance**, not a context. Therefore the first step is dropped. To compensate, a `ContextF`
+step (domain `RDOM role`) is prepended to the forwards part so that the forward computation can
+still reach the original context.
+
+After removal: `domain (new backward) = range (RolGetter) = RDOM roleType`.
+
+**Filter** (`invertedQueryHasRoleDomain cType rType`):
+After step removal the backward's domain is `RDOM (ST (RoleInContext {context, role}))`.
+The filter checks that the runtime role+context specialises this stored domain. ✓
+
+**Special case** — when `removeFirstBackwardsStep` produces `ZQ Nothing _` (the full backward
+consisted of only one `RolGetter` step), the description is silently discarded (`pure unit`).
+This is correct: a backward path of only `RolGetter` means the query started at `ContextF` with
+nothing preceding it. After removal there is nothing left to navigate, so no useful inverted query
+can be formed.
+
+**At runtime** (`usersWithPerspectiveOnRoleInstance` — ROLE STEP branch):
+`handleBackwardQuery roleInstance iq` is called. After step removal, backward has domain `RDOM`
+— matching the `roleInstance` argument. ✓
+
+### §3.5 RTFillerKey — role binding changed (FillerF kink)
+
+**Kink point**: A `FilledF` step in the original query — the query traverses _from_ a filler
+role _to_ a filled role.
+
+**`qfd`** (first backward step): A `FillerF` step (inverse of `FilledF`).
+- `domain qfd = RDOM (ST (RoleInContext { ... filled role type ... }))` — the filled role.
+- `range qfd = RDOM (ST (RoleInContext { ... filler role type ... }))` — the filler role.
+
+**Compile-time key** (`typeLevelKeyForFillerQueries`):
+`domain qfd` gives the filled role; `range qfd` gives the filler role.
+Produces `RTFillerKey { filledRole_origin, filledContext_origin, fillerRole_destination, fillerContext_destination }`.
+The query is **stored under the filled role type**, even though the filler is what changes.
+
+**Runtime key** (`runtimeIndexForFillerQueries'`):
+Called with `(filledType, filledContextType)` — the type of the role whose filler changed.
+Produces the same `RTFillerKey { filledRole_origin = filledType, ... }`.
+
+**Description transformation** (`removeFirstBackwardsStep` with no compensating step):
+After removal: `domain (new backward) = range (FillerF) = RDOM fillerType`.
+
+**Filter** (`invertedQueryHasRoleDomain fillerContextType fillerType`):
+After step removal the backward's domain is `RDOM filler`. The filter checks that the runtime
+filler type+context specialises this stored domain. ✓
+
+**At runtime** (`usersWithPerspectiveOnRoleBinding'` — FILLER STEP branch):
+`handleBackwardQuery filler iq` is called. After step removal, backward has domain `RDOM filler`
+— matching the `filler` argument. ✓
+
+**Single-step degenerate case**: When the original backward consists only of `FillerF`, step
+removal produces `ZQ Nothing fwd`. In this case the stored description replaces `Nothing` with an
+identity step `SQD ran IdentityF ran`, so the backward is always defined. ✓
+
+### §3.6 RTFilledKey — role binding changed (FilledF kink)
+
+**Kink point**: A `FillerF` step in the original query — the query traverses _from_ a filled
+role _to_ its filler.
+
+**`qfd`** (first backward step): A `FilledF fld ctx` step (inverse of `FillerF`).
+- `domain qfd = RDOM (ST (RoleInContext { ... filler role type ... }))` — the filler role.
+- `range qfd = RDOM (ST (RoleInContext { context: ctx, role: fld }))` — the filled role.
+
+**Compile-time key** (`typeLevelKeyForFilledQueries`):
+`domain qfd` gives the filler type; `range qfd` gives the filled type.
+Produces `RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }`.
+The query is stored under the filled role (the one that receives the filler).
+
+**Runtime key** (`runtimeIndexForFilledQueries'`):
+Called with `(filledType, filledContextType)`.
+Produces the same `RTFilledKey { ..., filledRole_destination = filledType, ... }`.
+
+**Description transformation** (`removeFirstBackwardsStep` with no compensating step):
+After removal: `domain (new backward) = range (FilledF) = RDOM filledType`.
+
+**Filter** (`invertedQueryHasRoleDomain filledContextType filledType`):
+After step removal the backward's domain is `RDOM filled`. The filter checks that the runtime
+filled type+context specialises this stored domain. ✓
+
+**At runtime** (`usersWithPerspectiveOnRoleBinding'` — FILLED STEP branch):
+`handleBackwardQuery filled iq` is called. After step removal, backward has domain `RDOM filled`
+— matching the `filled` argument. ✓
+
+**Single-step degenerate case**: Same treatment as RTFillerKey — replaced with an identity step. ✓
+
+### §3.7 The `invertedQueryHasRoleDomain` Filter
+
+The filter `invertedQueryHasRoleDomain :: ContextType -> EnumeratedRoleType -> InvertedQuery -> MP Boolean`
+is used for RTContextKey, RTRoleKey, RTFillerKey and RTFilledKey categories. It checks:
+
+```
+domain (backwards (description iq)) = RDOM adt
+  where (ST (RoleInContext { context, role })) `equalsOrSpecialisesRoleInContext` adt
+```
+
+The direction of specialisation is: **runtime type specialises stored type**. This is correct
+because:
+- Stored queries may be indexed on Aspect types (more general).
+- At runtime we encounter concrete (possibly more specific) role types.
+- A concrete role that specialises an Aspect should trigger all queries stored for that Aspect.
+
+`equalsOrSpecialisesRoleInContext` converts both sides to Conjunctive Normal Form using the full
+Aspect hierarchy, making the check complete for all levels of specialisation.
+
+### §3.8 Summary: Correctness Status
+
+All five categories are correctly implemented. The table below summarises the key invariants:
+
+| Category | Key indexed by | Domain of backward at runtime | Applied to |
+|---|---|---|---|
+| RTPropertyKey | property + role bearing the property | `VDOM` (identity at runtime) | `propertyBearingInstance` |
+| RTContextKey | role type + context type | `RDOM role` | role instance (ContextF step) |
+| RTRoleKey | context type + role type | `RDOM role` (after removing RolGetter) | role instance |
+| RTFillerKey | filled role type | `RDOM filler` (after removing FillerF) | filler instance |
+| RTFilledKey | filled role type | `RDOM filled` (after removing FilledF) | filled instance |
+
+No keys are missed at runtime, no domain/range mismatches exist, and all filter conditions are
+correctly directed.
+
+The one architectural asymmetry worth noting: for RTFillerKey, the runtime filler type is used for
+filtering (`invertedQueryHasRoleDomain fillerContextType fillerType`) but the **key itself is
+indexed by the filled type**. This is by design: the query is stored under the filled role so that
+it fires whenever that filled role's filler changes, regardless of the concrete filler type.

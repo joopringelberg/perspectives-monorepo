@@ -212,7 +212,11 @@ For each remaining `ContextRemoval` in `scheduledAssignments`: `removeContextIns
 
 For each `RoleRemoval`: `removeRoleInstance` physically deletes the role.
 
-`scheduledAssignments`, `untouchableContexts`, and `untouchableRoles` are all cleared.
+For non-sharing transactions, an additional pass is now executed immediately after these removals: when the phase-2 entry snapshot contained `invertedQueryResults` and at least one physical removal (`ContextRemoval` or `RoleRemoval`) was executed, the same `invertedQueryResults` are evaluated again (via `recursivelyEvaluateStates` under `runSharing`).
+
+This second pass closes the timing gap where an earlier embedded sharing pass evaluated a condition before the resource was physically removed in the outer non-sharing transaction. It is especially relevant for conditions of the form `not exists ...` that become true only after removal.
+
+After this optional post-removal pass, `scheduledAssignments`, `untouchableContexts`, and `untouchableRoles` are cleared.
 
 ### Step 2.5 – Postponed state evaluations
 
@@ -299,6 +303,7 @@ runMonadPerspectivesTransaction' share authoringRole action
           │                                  → execute on PublicDestination destinations
           ├─ Clear deltas
           ├─ Remove contexts (ContextRemoval) and roles (RoleRemoval)
+          ├─ [if non-sharing and removals happened] re-run recursivelyEvaluateStates on phase-2 entry invertedQueryResults
           ├─ Clear scheduledAssignments, untouchables
           │
           ├─ IF postponedStateEvaluations non-empty:
@@ -328,6 +333,8 @@ When a role exits its states (step 1.5), the corresponding state keys are remove
 
 ### 3. CWH and construction ordering
 When multiple deltas arrive in a single incoming transaction and are executed sequentially (step by step), the `invertedQueryResults` accumulated by each delta are not evaluated until phase 2. This means that state conditions checking `not exists X` may see a stale view of the world during the initial delta-execution pass: X may have been added by an earlier delta in the same batch but the state evaluating `not exists X` has not yet been re-evaluated. However, in phase 2 all affected instances are re-evaluated together, so the eventual outcome is correct.
+
+Additionally, for non-sharing transactions that physically remove contexts or roles, phase 2 now performs a targeted post-removal replay of the phase-2 entry `invertedQueryResults`. This covers the complementary timing case where `not exists X` only becomes true *after* physical removal in the outer transaction.
 
 ### 4. Own-user reactions during peer transactions
 The `runSharing` pattern (embedding a sharing sub-transaction inside a non-sharing outer transaction) correctly ensures that own-user reactions are distributed. One subtlety: the embedded sharing transaction runs `phase1` and `phase2` fully, including its own delta distribution. This means that state-triggered own-user actions can themselves trigger further state evaluations and distributions. Because each embedded transaction runs to completion before `runSharing` returns, these nested effects are fully resolved before the outer non-sharing transaction continues.

@@ -28,33 +28,45 @@ import Data.Array (elemIndex, fromFoldable, many)
 import Data.DateTime (Date, DateTime(..), Hour, Time(..))
 import Data.Either (Either(..))
 import Data.Enum (toEnum)
+import Data.Foldable (all)
 import Data.JSDate (JSDate, parse, toDateTime)
 import Data.List (List(..))
+import Data.List.NonEmpty (NonEmptyList, head, length, singleton) as LNE
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.String (length, trim)
 import Data.String.CodeUnits as SCU
 import Data.String.Regex (Regex, replace, parseFlags, regex)
 import Data.String.Regex.Flags (global)
 import Data.String.Regex.Unsafe (unsafeRegex)
+import Data.Unit (unit)
 import Effect.Unsafe (unsafePerformEffect)
 import Parsing (fail)
-import Parsing.Combinators (between, lookAhead, manyTill, notFollowedBy, option, optionMaybe, try, (<?>))
+import Parsing.Combinators (between, lookAhead, manyTill, notFollowedBy, option, optionMaybe, sepBy1, try, (<?>))
 import Parsing.String (char, satisfy)
 import Parsing.Token (alphaNum)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), UnaryStep(..), VarBinding(..))
+import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), FilledByAttribute(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), TypeCombination(..), UnaryStep(..), VarBinding(..))
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
-import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseName, pubParser, regexFlags', reserved)
+import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseAlphaNumName, pubParser, regexFlags', reserved)
 import Perspectives.Parsing.Arc.IndentParser (IP, entireBlock, getPosition)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
-import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
+import Perspectives.Parsing.Arc.Token (mandatoryWhiteSpace, reservedIdentifier, token)
+import Perspectives.Representation.Class.PersistentType (ContextType(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..))
 import Perspectives.Representation.Range (Duration_(..), Range(..))
 import Perspectives.Time (date2String, dateTime2String, time2String)
-import Prelude (bind, not, pure, show, ($), (&&), (*>), (+), (<$>), (<*), (<*>), (<<<), (>), (>>=), (<>), eq, (/=))
+import Prelude (bind, not, pure, show, ($), (&&), (*>), (+), (<$>), (<*), (<*>), (<<<), (>), (>>=), (<>), eq, (/=), discard, (==))
 
 step :: IP Step
-step = defer \_ -> step_ false
+step = defer \_ -> normalizeToFixedPoint <$> step_ false
+
+normalizeToFixedPoint :: Step -> Step
+normalizeToFixedPoint stp =
+  let
+    normalized = normalizeStep stp
+  in
+    if normalized == stp then normalized
+    else normalizeToFixedPoint normalized
 
 step_ :: Boolean -> IP Step
 step_ parenthesised = do
@@ -75,53 +87,12 @@ step_ parenthesised = do
         Just (Second pos) -> pure $ Unary (DurationOperator start (Second pos) left)
         Just (Millisecond pos) -> pure $ Unary (DurationOperator start (Millisecond pos) left)
     (Just op) -> do
-      right <- step
+      -- Parse recursively without top-level normalization first.
+      -- We must preserve the parenthesised marker here, because this local
+      -- regrouping decision relies on it.
+      right <- step_ false
       end <- getPosition
-      case right of
-        -- The right expression is binary: leftOfRight <opOfRight> rightOfRight.
-        ( Binary
-            ( BinaryStep
-                { left: leftOfRight
-                , operator: opOfRight
-                , right: rightOfRight
-                , end: endOfRight
-                , parenthesised: rightParenthesised
-                }
-            )
-        ) ->
-          if
-            not rightParenthesised &&
-              ((operatorPrecedence op) > (operatorPrecedence opOfRight))
-          -- Regrouping: the parse tree (a op1 (b op2 c)) becomes ((a op1 b) op2 c).
-          -- The expression was: "a op2 b op1 c"
-          -- (op1 = operator with precedence 1, op2 = operator with precedence 2)
-          -- The right expression is binary and not contained in parenthesis, and
-          -- the left operator has higher precedence (than (or equal to) the right operator).
-          then pure $ Binary $ BinaryStep
-            { start
-            , end -- equals endOfRight.
-            , left: Binary (BinaryStep { start, end: endOf (leftOfRight), operator: op, left: left, right: leftOfRight, parenthesised: false })
-            , operator: opOfRight
-            , right: rightOfRight
-            , parenthesised: false
-            }
-
-          -- No regrouping.
-          -- The right expression is binary and is contained in parenthesis, OR
-          -- its operator is as precedent as (or more so then) that of the enclosing binary expression.
-          -- Hence, we maintain the right-association that is present in the parse tree: (a op (b op c)).
-          -- The expression is either:
-          --    "a opx (b opy c)"
-          -- (opx and opy have any precedence; precedence does not rule, parenthesis prevail), or:
-          --    "a op1 b op1 c"
-          -- (both operators have equal precedence but we adhere to right-associativity)
-          --    "a op1 b op2 c"
-          -- (op1 = operator with precedence 1, op2 = operator with precedence 2). The parse tree already respects
-          -- the operator precedences.
-          else pure $ Binary $ BinaryStep { start, end, left, operator: op, right, parenthesised }
-
-        -- The right expression is not binary. No regrouping.
-        otherwise -> pure $ Binary $ BinaryStep { start, end, left, operator: op, right, parenthesised }
+      pure $ Binary $ BinaryStep { start, end, left, operator: op, right, parenthesised }
   where
   leftSide :: IP Step
   leftSide = do
@@ -132,6 +103,84 @@ step_ parenthesised = do
       "callExternal" -> computationStep
       u | isUnaryKeyword u -> unaryStep
       _ -> simpleStep
+
+normalizeStep :: Step -> Step
+normalizeStep stp = case stp of
+  Binary binaryStep -> normalizeBinaryStep binaryStep
+  Unary (LogicalNot start step') -> Unary (LogicalNot start (normalizeStep step'))
+  Unary (Exists start step') -> Unary (Exists start (normalizeStep step'))
+  Unary (FilledBy start step') -> Unary (FilledBy start (normalizeStep step'))
+  Unary (Fills start step') -> Unary (Fills start (normalizeStep step'))
+  Unary (Available start step') -> Unary (Available start (normalizeStep step'))
+  Unary (DurationOperator start operator' step') -> Unary (DurationOperator start operator' (normalizeStep step'))
+  Unary (ContextIndividual start contextName step') -> Unary (ContextIndividual start contextName (normalizeStep step'))
+  Unary (RoleIndividual start roleName step') -> Unary (RoleIndividual start roleName (normalizeStep step'))
+  Unary (TypeFilterStep start end step' typeCombination) -> Unary (TypeFilterStep start end (normalizeStep step') typeCombination)
+  PureLet (PureLetStep { start, end, bindings, body }) ->
+    PureLet $ PureLetStep
+      { start
+      , end
+      , bindings: normalizeBinding <$> bindings
+      , body: normalizeStep body
+      }
+  Computation (ComputationStep { functionName, arguments, computedType, start, end }) ->
+    Computation $ ComputationStep
+      { functionName
+      , arguments: normalizeStep <$> arguments
+      , computedType
+      , start
+      , end
+      }
+  _ -> stp
+  where
+  normalizeBinding :: VarBinding -> VarBinding
+  normalizeBinding (VarBinding name boundStep) = VarBinding name (normalizeStep boundStep)
+
+normalizeBinaryStep :: BinaryStep -> Step
+normalizeBinaryStep (BinaryStep { start, end, operator: operator', left, right, parenthesised }) =
+  normalizeRotations
+    (normalizeChildren (normalizeRotations initialTree))
+  where
+  initialTree :: Step
+  initialTree = Binary $ BinaryStep
+    { start
+    , end
+    , operator: operator'
+    , left
+    , right
+    , parenthesised
+    }
+
+  normalizeChildren :: Step -> Step
+  normalizeChildren stp = case stp of
+    Binary (BinaryStep { start: start', end: end', operator: op', left: left', right: right', parenthesised: parenthesised' }) ->
+      Binary $ BinaryStep
+        { start: start'
+        , end: end'
+        , operator: op'
+        , left: normalizeStep left'
+        , right: normalizeStep right'
+        , parenthesised: parenthesised'
+        }
+    _ -> stp
+
+  normalizeRotations :: Step -> Step
+  normalizeRotations stp = case stp of
+    Binary (BinaryStep { start: start', end: end', operator: op', left: left', right: right', parenthesised: parenthesised' }) ->
+      case right' of
+        Binary (BinaryStep { left: leftOfRight, operator: opOfRight, right: rightOfRight, end: endOfRight, parenthesised: rightParenthesised }) ->
+          if not rightParenthesised && (operatorPrecedence op') > (operatorPrecedence opOfRight) then
+            normalizeRotations $ Binary $ BinaryStep
+              { start: start'
+              , end: endOfRight
+              , left: Binary (BinaryStep { start: start', end: endOf left', operator: op', left: left', right: leftOfRight, parenthesised: false })
+              , operator: opOfRight
+              , right: rightOfRight
+              , parenthesised: parenthesised'
+              }
+          else stp
+        _ -> stp
+    _ -> stp
 
 simpleStep :: IP Step
 simpleStep = do
@@ -206,7 +255,7 @@ simpleStep' =
         Simple <$> (RegEx <$> (getPosition <* reserved "regexp") <*> regexExpression)
       -- VARIABLE MUST BE LAST!
       <|>
-        Simple <$> (Variable <$> getPosition <*> lowerCaseName)
+        Simple <$> (Variable <$> getPosition <*> lowerCaseAlphaNumName)
   ) <?> "binding, binder, context, extern, this, modelname, contextType, roleType, roleTypes, specialisesRoleType, a valid variablename (lowercase only) or a number, boolean, string (between double quotes), date (between single quotes), email address or a monoid function (sum, product, minimum, maximum) or count, "
 
 -- | Parses just the regular expression; not "matches", which is interpreted like ">>".
@@ -299,11 +348,11 @@ parseJSDate = try do
   pure $ unsafePerformEffect $ parse s
 
 isUnaryKeyword :: String -> Boolean
-isUnaryKeyword kw = isJust $ elemIndex kw [ "not", "exists", "filledBy", "fills", "available", "roleinstance", "contextinstance" ]
+isUnaryKeyword kw = isJust $ elemIndex kw [ "not", "exists", "filledBy", "fills", "available", "roleinstance", "contextinstance", "selectFrom" ]
 
 unaryStep :: IP Step
 unaryStep = do
-  keyword <- lookAhead reservedIdentifier <?> "not, exists, filledBy, fills, available, contextinstance, roleinstance. "
+  keyword <- lookAhead reservedIdentifier <?> "not, exists, filledBy, fills, available, contextinstance, roleinstance, selectFrom. "
   case keyword of
     "not" -> (Unary <$> (LogicalNot <$> getPosition <*> (reserved "not" *> (defer \_ -> step))))
     "exists" -> Unary <$> (Exists <$> getPosition <*> (reserved "exists" *> (defer \_ -> step)))
@@ -312,7 +361,15 @@ unaryStep = do
     "available" -> Unary <$> (Available <$> getPosition <*> (reserved "available" *> (defer \_ -> step)))
     "contextinstance" -> Unary <$> (ContextIndividual <$> getPosition <*> (reserved "contextinstance" *> token.parens arcIdentifier) <*> (defer \_ -> step))
     "roleinstance" -> Unary <$> (RoleIndividual <$> getPosition <*> (reserved "roleinstance" *> token.parens arcIdentifier) <*> (defer \_ -> step))
-    s -> fail ("Expected not, exists, filledBy, fills or available, contextinstance or roleinstance, but found: '" <> s <> "'. ")
+    "selectFrom" -> do
+      start <- getPosition
+      reserved "selectFrom"
+      candidate <- step
+      reserved "just"
+      typeExpr <- typeCombinations
+      end <- getPosition
+      pure $ Unary (TypeFilterStep start end candidate typeExpr)
+    s -> fail ("Expected not, exists, filledBy, fills, available, contextinstance, roleinstance or selectFrom, but found: '" <> s <> "'. ")
 
 operator :: Partial => IP Operator
 operator =
@@ -422,6 +479,7 @@ operatorPrecedence (LogicalOr _) = 2
 -- not, exists, available, filledBy, fills 1
 
 operatorPrecedence (Filter _) = 0
+operatorPrecedence (TypeFilter _) = 0
 
 startOf :: Step -> ArcPosition
 startOf stp = case stp of
@@ -469,6 +527,7 @@ startOf stp = case stp of
   startOfUnary (DurationOperator p _ _) = p
   startOfUnary (ContextIndividual p _ _) = p
   startOfUnary (RoleIndividual p _ _) = p
+  startOfUnary (TypeFilterStep p _ _ _) = p
 
 endOf :: Step -> ArcPosition
 endOf stp = case stp of
@@ -517,6 +576,7 @@ endOf stp = case stp of
   endOfUnary (DurationOperator _ _ step') = endOf step'
   endOfUnary (ContextIndividual _ _ step') = endOf step'
   endOfUnary (RoleIndividual _ _ step') = endOf step'
+  endOfUnary (TypeFilterStep _ end _ _) = end
 
   col_ :: ArcPosition -> Int
   col_ (ArcPosition { column }) = column
@@ -537,7 +597,13 @@ dateTimeLiteral = (go <?> "date-time") <* token.whiteSpace
   dateChar = alphaNum <|> char ':' <|> char '+' <|> char '-' <|> char ' ' <|> char '.'
 
 binding :: IP VarBinding
-binding = VarBinding <$> (lowerCaseName <* token.reservedOp "<-") <*> defer \_ -> step
+binding = VarBinding <$> (parseLetVariableName <* token.reservedOp "<-") <*> defer \_ -> step
+
+parseLetVariableName :: IP String
+parseLetVariableName = do
+  candidate <- lowerCaseAlphaNumName <?> "lower case name (a-z and 0-9 only), "
+  _ <- (mandatoryWhiteSpace *> pure unit <|> lookAhead (token.reservedOp "<-")) <?> ("Invalid let variable name starting with '" <> candidate <> "'. A let variable name may contain only lowercase letters a-z and 0-9. ")
+  pure candidate
 
 -- | A pure let: letE <binding>+ in <step>).
 pureLetStep :: IP Step
@@ -587,3 +653,54 @@ markDownLiteral = (go <?> "MarkDown") <* token.whiteSpace
   whiteSpaceRegex :: Regex
   whiteSpaceRegex = unsafeRegex "\\s*\\n+\\s*" global
 
+-- | This parser always succeeds. It should be preceded by `reserved filledBy` or `reserved selectFrom`.
+-- | filledBy SomeRole, AnotherRole
+-- | Here `SomeRole` and `AnotherRole` are alternatives.
+-- | filledBy SomeRole + AnotherRole
+-- | Here both are required: that is, only instances that have both types are allowed to fill this role.
+-- | filledBy (SomeRole + AnotherRole), ThirdRole
+-- | Here `SomeRole + AnotherRole` is a combination (conjunction) and `ThirdRole` is a single alternative;
+-- | the result is a disjunction of conjunctions.
+-- Implementation note: we cannot know, here, whether the filler is Calculated or
+-- Enumerated. This will be fixed in PhaseThree.
+typeCombinations :: IP TypeCombination
+typeCombinations = (try (token.parens (makeSpec <$> token.commaSep1 fillerGroup)))
+  <|> (try (Combination <$> token.parens (plusSep filler)))
+  <|> (Alternatives <$> LNE.singleton <$> (try filler))
+  where
+  filler :: IP FilledByAttribute
+  filler = do
+    typeName <- arcIdentifier
+    mcontext <- optionMaybe (reserved "in" *> arcIdentifier)
+    case mcontext of
+      Nothing -> do
+        pure $ FilledByAttribute typeName (ContextType "")
+      Just context -> pure $ FilledByAttribute typeName (ContextType context)
+
+  -- | Determine the appropriate TypeCombination from a list of fillerGroups:
+  -- | * All groups are singletons → Alternatives (each group's head is the sole attribute)
+  -- | * Single group with multiple members → Combination (unwrap the sole group)
+  -- | * Multiple groups, at least one with multiple members → DisjunctionOfConjunctions
+  makeSpec :: LNE.NonEmptyList (LNE.NonEmptyList FilledByAttribute) -> TypeCombination
+  makeSpec groups =
+    if all (\g -> LNE.length g == 1) groups
+    -- Every group is a singleton: extract the single element from each group.
+    -- LNE.head is safe here because LNE.length g == 1 guarantees exactly one element.
+    then Alternatives (LNE.head <$> groups)
+    else if LNE.length groups == 1
+    -- Single group with multiple members: use Combination.
+    -- LNE.head is safe here because LNE.length groups == 1 guarantees exactly one group.
+    then Combination (LNE.head groups)
+    else DisjunctionOfConjunctions groups
+
+  plus :: IP String
+  plus = token.symbol "+"
+
+  plusSep :: forall a. IP a -> IP (LNE.NonEmptyList a)
+  plusSep p = sepBy1 p plus
+
+  -- | A fillerGroup is either a parenthesised combination `(A + B)` or a single filler `A`.
+  fillerGroup :: IP (LNE.NonEmptyList FilledByAttribute)
+  fillerGroup =
+    (try (token.parens (plusSep filler)))
+      <|> (LNE.singleton <$> filler)

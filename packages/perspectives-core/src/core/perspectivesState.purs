@@ -22,20 +22,22 @@
 
 module Perspectives.PerspectivesState where
 
+import Control.Alt (map)
 import Control.Monad.AvarMonadAsk (gets, modify)
-import Control.Monad.Trans.Class (lift)
 import Data.Array (cons)
 import Data.List (elem)
 import Data.Map (Map, empty, insert, lookup, values) as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), isNothing)
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
-import Effect.Aff.AVar (AVar, put, read)
+import Effect (Effect)
+import Effect.Aff.AVar (AVar, put, read, take, tryRead)
+import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Foreign.Object (empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
-import Perspectives.AMQP.Stomp (StompClient)
+import Perspectives.AMQP.Stomp (StompClient, createStompClient)
 import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceDeltasCache, ResourceVersionCache, RolInstances, RoleInstanceDeltasCache, RuntimeOptions, TranslationTable, TypeFix, Warning)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, empty, lookup) as ENV
@@ -46,7 +48,7 @@ import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
-import Prelude (Unit, bind, discard, pure, unit, void, ($), (+), (<<<), (>>=), (<>))
+import Prelude (Unit, bind, discard, pure, unit, void, ($), (+), (<<<), (>>=), (<>), (==))
 
 newPerspectivesState
   :: PouchdbUser
@@ -86,6 +88,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , transactionLevel: ""
   , brokerService
   , stompClient: Nothing
+  , stompClientFactory: createStompClient
   , databases: empty
   , warnings: []
   , transactionFlag: transFlag
@@ -106,6 +109,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , modelUnderCompilation: Nothing
   , modelUris: Map.empty
   , logConfig: defaultLogLevels
+  , logColor: Nothing
   }
 
 defaultRuntimeOptions :: RuntimeOptions
@@ -171,6 +175,10 @@ transactionNumber = gets _.transactionNumber
 transactionFlag :: MonadPerspectives (AVar Boolean)
 transactionFlag = gets _.transactionFlag
 
+-- Non-blocking check to see if a transaction is currently running. 
+noTransactionIsRunning :: MonadPerspectives Boolean
+noTransactionIsRunning = transactionFlag >>= liftAff <<< map isNothing <<< tryRead
+
 nextTransactionNumber :: MonadPerspectives Int
 nextTransactionNumber = do
   n <- transactionNumber
@@ -194,18 +202,36 @@ decreaseTransactionLevel = modify \s -> s
   }
 
 getBrokerService :: MonadPerspectives BrokerService
-getBrokerService = gets _.brokerService >>= lift <<< read
+getBrokerService = gets _.brokerService >>= liftAff <<< read
 
 setBrokerService :: Maybe BrokerService -> MonadPerspectives Unit
 setBrokerService bs = case bs of
-  Just bs' -> gets _.brokerService >>= lift <<< put bs'
+  Just bs' -> gets _.brokerService >>= liftAff <<< put bs'
   Nothing -> pure unit
+
+deleteBrokerService :: String -> MonadPerspectives Unit
+deleteBrokerService queueName = do
+  bs <- gets _.brokerService
+  { queueId } <- liftAff <<< read $ bs
+  if queueId == queueName then
+    void $ liftAff $ take bs
+  else
+    pure unit
 
 stompClient :: MonadPerspectives (Maybe StompClient)
 stompClient = gets _.stompClient
 
 setStompClient :: StompClient -> MonadPerspectives Unit
 setStompClient bs = modify \s -> s { stompClient = Just bs }
+
+-- | Return the factory used to create a Stomp client for a given broker URL.
+getStompClientFactory :: MonadPerspectives (String -> Effect StompClient)
+getStompClientFactory = gets _.stompClientFactory
+
+-- | Replace the Stomp client factory stored in state.
+-- | Call this before `incomingPost` to inject a test stub.
+setStompClientFactory :: (String -> Effect StompClient) -> MonadPerspectives Unit
+setStompClientFactory f = modify \s -> s { stompClientFactory = f }
 
 getWarnings :: MonadPerspectives (Array Warning)
 getWarnings = gets _.warnings

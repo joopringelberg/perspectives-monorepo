@@ -135,7 +135,8 @@ ensureStateInRole tester (RoleE{roleParts}) = do
           P (PropertyVerbE{state}) -> tester state
           AC (ActionE{state}) -> tester state
           N (NotificationE{transition}) -> transitionForState tester transition
-          AE (AutomaticEffectE{transition}) -> transitionForState tester transition)
+          AE (AutomaticEffectE{transition}) -> transitionForState tester transition
+          _ -> false)
         parts
       _ -> Nil)
     roleParts

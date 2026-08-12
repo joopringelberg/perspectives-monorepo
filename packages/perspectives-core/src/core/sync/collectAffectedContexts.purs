@@ -22,12 +22,11 @@
 
 module Perspectives.CollectAffectedContexts where
 
-import Control.Monad.AvarMonadAsk (modify) as AA
+import Control.Monad.AvarMonadAsk (modify, gets) as AA
 import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Reader (lift)
-import Data.Array (concat, cons, difference, elemIndex, filter, filterA, foldM, head, nub, null, union)
+import Data.Array (concat, cons, difference, elemIndex, filter, filterA, foldM, head, length, nub, null, union, unsafeIndex)
 import Data.FoldableWithIndex (forWithIndex_)
-import Data.Map (isEmpty)
 import Data.Maybe (Maybe(..), fromJust, isJust, isNothing)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, for_, traverse, traverse_)
@@ -36,20 +35,19 @@ import Effect.Exception (error)
 import Partial.Unsafe (unsafePartial)
 import Perspective.InvertedQuery.Indices (runTimeIndexForRoleQueries, runtimeIndexForContextQueries, runtimeIndexForFilledQueries', runtimeIndexForFillerQueries', runtimeIndexForPropertyQueries)
 import Perspectives.ArrayUnions (ArrayUnions(..))
-import Perspectives.Assignment.SerialiseAsDeltas (getPropertyValues, serialiseDependencies, serialisedAsDeltasFor_)
+import Perspectives.Assignment.SerialiseAsDeltas (getPropertyValues, noNewPeer, perspectivePositionText, serialiseDependencies, serialisedAsDeltasFor_)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MP, MonadPerspectivesTransaction, runMonadPerspectivesQuery, (##=), (##>), (##>>))
 import Perspectives.Data.EncodableMap (EncodableMap, filterKeys, lookup)
 import Perspectives.Deltas (addDelta)
 import Perspectives.Error.Boundaries (handlePerspectContextError)
-import Perspectives.Logging (errorSync)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.Me (notIsMe)
 import Perspectives.Instances.ObjectGetters (allFillers, binding, context, context', contextIsInState, contextType, contextType_, getActiveRoleStates_, getFilledRoles, getRecursivelyAllFilledRoles, roleIsInState, roleType_)
 import Perspectives.Instances.ObjectGetters (context, contextType, roleType) as OG
-import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwards, isCalculatedUserQuery, shouldResultInContextStateQuery, shouldResultInRoleStateQuery, startsWithFilter)
+import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwardStartsWithFilter, forwards, isCalculatedUserQuery, shouldResultInContextStateQuery, shouldResultInRoleStateQuery, startsWithFilter, userRoleTypeOfInvertedQuery, invertedQueryIsForSynchronisation)
 import Perspectives.InvertedQuery.Storable (getContextQueries, getFilledQueries, getFillerQueries, getPropertyQueries, getRoleQueries)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey)
-import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.Logging (debugSync, errorSync, infoDelta)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, tryGetPerspectEntiteit)
@@ -64,14 +62,15 @@ import Perspectives.Representation.Class.Role (bindingOfRole, calculationOfRoleT
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, externalRole)
 import Perspectives.Representation.State (StateFulObject(..))
 import Perspectives.Representation.State (StateFulObject(..), State(..)) as State
-import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType, EnumeratedRoleType, PropertyType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType, EnumeratedRoleType, PropertyType(..), RoleType(..), propertytype2string, roletype2string)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (enumeratedRoleContextType, equalsOrSpecialisesRoleInContext)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..), RoleBindingDeltaType(..))
 import Perspectives.Utilities (findM, prettyPrint)
-import Prelude (Unit, bind, discard, flip, join, map, not, pure, show, unit, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
+import Prelude (Unit, bind, discard, flip, join, map, not, pure, show, unit, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
 import Unsafe.Coerce (unsafeCoerce)
 
 -- TODO. #12 Check the way state-conditional verbs are combined to establish whether a peer should receive a delta.
@@ -102,14 +101,26 @@ usersWithPerspectiveOnRoleInstance roleType roleInstance contextInstance runForw
       >>= getContextQueries compileBoth <<< unwrap
       >>= (filterA (invertedQueryHasRoleDomain cType roleType))
 
-    ( for contextCalculations \iq ->
-        if isForSelfOnly iq
-        -- We now know this is the self-perspective of a multi-user role. Hence, the subject and object of the perspective is the same role type.
-        -- If iq has the selfOnly modifier, we must apply another algorithm to the roleInstance and the roleInstance.
-        -- An example: Pupil has a perspective on his Grade. However, this is personal. By adding `selfOnly` we ensure that each pupil just receives his own Grading, not that of others.
-        then handleSelfOnlyQuery iq roleInstance
-        else if runForwards then handleBackwardQuery roleInstance iq >>= runForwardsComputation roleInstance iq <<< filter (\(Tuple context users) -> not $ null users)
-        else handleBackwardQuery roleInstance iq >>= pure <<< join <<< map snd
+    ( for contextCalculations \iq -> do
+        users <-
+          if isForSelfOnly iq
+          -- We now know this is the self-perspective of a multi-user role. Hence, the subject and object of the perspective is the same role type.
+          -- If iq has the selfOnly modifier, we must apply another algorithm to the roleInstance and the roleInstance.
+          -- An example: Pupil has a perspective on his Grade. However, this is personal. By adding `selfOnly` we ensure that each pupil just receives his own Grading, not that of others.
+          then handleSelfOnlyQuery iq roleInstance
+          else if runForwards then handleBackwardQuery roleInstance iq >>= runForwardsComputation roleInstance iq <<< filter (\(Tuple context users) -> not $ null users)
+          else handleBackwardQuery roleInstance iq >>= pure <<< join <<< map snd
+        if not null users then do
+          readableRoleType <- lift $ toReadable roleType
+          traceUsersWithPerspective iq users $
+            "have a perspective through a context step on role instance "
+              <> unwrap roleInstance
+              <> " of type "
+              <> unwrap readableRoleType
+              <>
+                "."
+        else pure unit
+        pure users
     ) >>= pure <<< join
 
   -- ROLE STEP
@@ -124,19 +135,30 @@ usersWithPerspectiveOnRoleInstance roleType roleInstance contextInstance runForw
     -- Find all InvertedQueryResults, starting from the new role instance of the Delta.
     -- We do not start on the context because the cardinality of the role getting step is larger than one and
     -- we want to make sure that the new binding is in the path for the users.
-    ( for roleCalculations \iq ->
-        if isForSelfOnly iq then handleSelfOnlyQuery iq roleInstance
-        else if runForwards then handleBackwardQuery roleInstance iq >>= runForwardsComputation roleInstance iq <<< filter (\(Tuple context users) -> not $ null users)
-        else handleBackwardQuery roleInstance iq >>= pure <<< join <<< map snd
+    ( for roleCalculations \iq -> do
+        users <-
+          if isForSelfOnly iq then handleSelfOnlyQuery iq roleInstance
+          else if runForwards then handleBackwardQuery roleInstance iq >>= runForwardsComputation roleInstance iq <<< filter (\(Tuple context users) -> not $ null users)
+          else handleBackwardQuery roleInstance iq >>= pure <<< join <<< map snd
+        if not null users then do
+          readableRoleType <- lift $ toReadable roleType
+          traceUsersWithPerspective iq users $
+            "have a perspective through a role step on role instance "
+              <> unwrap roleInstance
+              <> " of type "
+              <> unwrap readableRoleType
+              <> "."
+        else pure unit
+        pure users
     ) >>= pure <<< join
   lift $ filterA notIsMe (nub $ union users1 users2)
 
   where
   -- | Handle InvertedQueryies with the selfOnly (personal) modifier (selfOnly applied to the perspective!).
   -- | The inverted query stems from a self-perspective on a multi(user) role.
-  -- | This means that the new role instance can be a new peer. Only that peer should be sent de role and context deltas.
+  -- | This means that the new role instance can be a new peer. Only that peer should be sent the role and context deltas.
   handleSelfOnlyQuery :: InvertedQuery -> RoleInstance -> MonadPerspectivesTransaction (Array RoleInstance)
-  handleSelfOnlyQuery (InvertedQuery { backwardsCompiled, forwardsCompiled, description, users: userTypes, statesPerProperty }) newRoleInstance = do
+  handleSelfOnlyQuery (InvertedQuery { backwardsCompiled, forwardsCompiled, description, users: userTypes, statesPerProperty, perspectiveStartPosition }) newRoleInstance = do
     case backwardsCompiled of
       -- This case should not happen, as we start from a role instance.
       Nothing -> pure []
@@ -153,12 +175,22 @@ usersWithPerspectiveOnRoleInstance roleType roleInstance contextInstance runForw
               -- calculation of that role must equal the forward part.
               -- Neither do we need the backward part to gather dependencies. It will all be in the calculation of the role type.
               (rinstances :: Array (DependencyPath)) <- lift (calculationOfRoleType userType >>= \calc -> singletonPath (C cid) ##= interpret calc)
-              concat <$> for rinstances \rinstance -> case rinstance.head of
+              concat <$> for (nub rinstances) \rinstance -> case rinstance.head of
                 R peer ->
                   if peer == newRoleInstance
                   -- Regardless of whether the userType is Enumerated or Calculated, only the newRoleInstance may be informed. 
                   -- Notice that this must be a 'new peer' situation.
                   then do
+                    -- Do this only for a sharing transaction.
+                    isSharing <- AA.gets (\(Transaction { isSharing }) -> isSharing)
+                    if isSharing then do
+                      lift $ debugSync $
+                        "Peer "
+                          <> unwrap peer
+                          <> " has a perspective through a self-perspective("
+                          <> perspectivePositionText perspectiveStartPosition
+                          <> ")."
+                    else pure unit
                     -- For each path that was used to compute this peer: serialise it.
                     for_ (allPaths rinstance) (serialiseDependencies [ peer ])
                     -- Compute properties for this peer in this perspective and serialise the dependencies.
@@ -179,6 +211,24 @@ type ContextWithUsers = Tuple ContextInstance (Array RoleInstance)
 isForSelfOnly :: InvertedQuery -> Boolean
 isForSelfOnly (InvertedQuery { selfOnly }) = selfOnly
 
+traceUsersWithPerspective :: InvertedQuery -> Array RoleInstance -> String -> MonadPerspectivesTransaction Unit
+traceUsersWithPerspective iq@(InvertedQuery { perspectiveStartPosition }) users message = do
+  isSharing <- AA.gets (\(Transaction { isSharing }) -> isSharing)
+  if isSharing then do
+    readableRoleType <- lift $ toReadable (unsafePartial userRoleTypeOfInvertedQuery iq)
+    lift $ debugSync $
+      "These users "
+        <> show (map unwrap users)
+        <> " of type "
+        <> roletype2string readableRoleType
+        <> "(based on perspective starting at "
+        <> perspectivePositionText perspectiveStartPosition
+        <> ") "
+        <> " "
+        <>
+          message
+  else pure unit
+
 -----------------------------------------------------------
 -- HANDLEBACKWARDQUERY
 -----------------------------------------------------------
@@ -195,10 +245,10 @@ isForSelfOnly (InvertedQuery { selfOnly }) = selfOnly
 -- | The 'own' user is not one of them.
 -- | INVARIANT TO RESPECT: both the backward- and forward part of the InvertedQuery should have been compiled.
 handleBackwardQuery :: RoleInstance -> InvertedQuery -> MonadPerspectivesTransaction (Array ContextWithUsers)
-handleBackwardQuery roleInstance iq@(InvertedQuery { description, backwardsCompiled, users: userTypes, states, forwardsCompiled }) = catchError
+handleBackwardQuery roleInstance iq@(InvertedQuery { description, backwardsCompiled, users: userTypes, states, forwardsCompiled, perspectiveStartPosition }) = catchError
   ( case backwardsCompiled of
       Nothing -> do
-        lift $ errorSync ("Backwards is not compiled on " <> prettyPrint description)
+        lift $ errorSync ("Backwards is not compiled on " <> prettyPrint description <> perspectivePositionText perspectiveStartPosition)
         pure []
       _ -> do
         if unsafePartial shouldResultInContextStateQuery iq then createContextStateQuery *> pure []
@@ -216,7 +266,7 @@ handleBackwardQuery roleInstance iq@(InvertedQuery { description, backwardsCompi
   createContextStateQuery = do
     (invertedQueryResults :: Array ContextInstance) <- lift (roleInstance ##= (unsafeCoerce (unsafePartial fromJust backwardsCompiled) :: RoleInstance ~~> ContextInstance))
     if null invertedQueryResults then pure unit
-    else addInvertedQueryResult $ ContextStateQuery invertedQueryResults
+    else addInvertedQueryResult $ ContextStateQuery (unsafePartial $ unsafeIndex states 0) invertedQueryResults
 
   -- | The InvertedQuery is based on a Role state condition.
   -- | This function adds, as a side effect, an InvertedQueryResult to the current transaction.
@@ -224,7 +274,7 @@ handleBackwardQuery roleInstance iq@(InvertedQuery { description, backwardsCompi
   createRoleStateQuery = do
     -- Apply the compiled backwards query.
     (affectedRoles :: Array RoleInstance) <- lift (roleInstance ##= (unsafeCoerce (unsafePartial fromJust backwardsCompiled) :: RoleInstance ~~> RoleInstance))
-    addInvertedQueryResult $ RoleStateQuery affectedRoles
+    addInvertedQueryResult $ RoleStateQuery (unsafePartial $ unsafeIndex states 0) affectedRoles
 
 -- | The InvertedQuery is based on an explicit or implicit perspective.
 -- | This function has no side effect but returns, bundled in their respective contexts, users with
@@ -331,12 +381,12 @@ usersWithAnActivePerspective roleInstance iq@(InvertedQuery { description, backw
 
 -- | Adds the InvertedQueryResult to the current Transaction, but only if the resource is not marked as (to be) removed.
 addInvertedQueryResult :: InvertedQueryResult -> MonadPerspectivesTransaction Unit
-addInvertedQueryResult (ContextStateQuery ctxts) = AA.modify \(Transaction r@{ invertedQueryResults, untouchableContexts }) -> case difference ctxts untouchableContexts of
+addInvertedQueryResult (ContextStateQuery sid ctxts) = AA.modify \(Transaction r@{ invertedQueryResults, untouchableContexts }) -> case difference ctxts untouchableContexts of
   nothing | null nothing -> Transaction r
-  ctxts' -> Transaction (r { invertedQueryResults = union [ ContextStateQuery ctxts' ] invertedQueryResults })
-addInvertedQueryResult (RoleStateQuery roles) = AA.modify \(Transaction r@{ invertedQueryResults, untouchableRoles }) -> case difference roles untouchableRoles of
+  ctxts' -> Transaction (r { invertedQueryResults = union [ ContextStateQuery sid ctxts' ] invertedQueryResults })
+addInvertedQueryResult (RoleStateQuery sid roles) = AA.modify \(Transaction r@{ invertedQueryResults, untouchableRoles }) -> case difference roles untouchableRoles of
   nothing | null nothing -> Transaction r
-  roles' -> Transaction (r { invertedQueryResults = union [ RoleStateQuery roles' ] invertedQueryResults })
+  roles' -> Transaction (r { invertedQueryResults = union [ RoleStateQuery sid roles' ] invertedQueryResults })
 
 -----------------------------------------------------------
 -- FOR ROLEBINDING DELTAS
@@ -373,6 +423,11 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
   fillerType <- lift (filler ##>> OG.roleType)
   filledContextType <- lift $ enumeratedRoleContextType filledType
   fillerContextType <- lift $ enumeratedRoleContextType fillerType
+  -- `storeInvertedQueries` removes the first backward binding step before persisting
+  -- both `RTFillerKey` and `RTFilledKey` queries.  Runtime therefore starts from the
+  -- role instances carried by the RoleBindingDelta itself and only evaluates the
+  -- remaining backward part after checking that the current type/context still
+  -- specialises the stored domain.
   -- Includes calculations from all types of filledType.
   (ArrayUnions fillerKeys) <- lift $ runtimeIndexForFillerQueries' filledType filledContextType
   fillerCalculations <- lift
@@ -383,15 +438,33 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
   let regularFillerCalculations = filter (not <<< isCalculatedUserQuery) fillerCalculations
   let calcUserFillerCalculations = filter isCalculatedUserQuery fillerCalculations
   -- FILLER step
-  -- These are inverted queries that begin with the filler step starting from filled.
+  -- These are queries whose original backwards part started with `filler`
+  -- (stored under `RTFillerKey`).  After compile-time step removal their
+  -- remaining backward part must be applied to the filler instance directly.
   (users1 :: Array RoleInstance) <- concat <$> for regularFillerCalculations
     -- Find all affected contexts, starting from the filler instance of the Delta (on storing the query, we left out the filler step).
-    ( \iq ->
-        if isForSelfOnly iq then handleSelfOnlyQuery iq filler filled
-        else if runForwards
-        -- However, we can skip that step and start the backwards part with the filler instead.
-        then (handleBackwardQuery filler iq) >>= runForwardsComputation filled iq <<< filter (\(Tuple context users) -> not $ null users)
-        else handleBackwardQuery filler iq >>= pure <<< concat <<< map snd
+    ( \iq -> do
+        users <-
+          if isForSelfOnly iq then handleSelfOnlyQuery iq filler filled
+          else if runForwards
+          -- However, we can skip that step and start the backwards part with the filler instead.
+          then (handleBackwardQuery filler iq) >>= runForwardsComputation filled iq <<< filter (\(Tuple context users) -> not $ null users)
+          else handleBackwardQuery filler iq >>= pure <<< concat <<< map snd
+        if not null users then do
+          readableFilledType <- lift $ toReadable filledType
+          readableFillerType <- lift $ toReadable fillerType
+          traceUsersWithPerspective iq users $
+            "have a perspective from filled role "
+              <> unwrap filled
+              <> " of type "
+              <> unwrap readableFilledType
+              <> "on its filler "
+              <> unwrap filler
+              <> " of type "
+              <> unwrap readableFillerType
+              <> "."
+        else pure unit
+        pure users
     )
   -- FILLED step
   -- These are inverted queries that begin with the filled step starting from filler.
@@ -403,19 +476,39 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
   -- Separate Calculated User detection queries from regular synchronisation/state queries.
   let regularFilledCalculations = filter (not <<< isCalculatedUserQuery) filledCalculations
   let calcUserFilledCalculations = filter isCalculatedUserQuery filledCalculations
+  -- These are queries whose original backwards part started with `filled`
+  -- (stored under `RTFilledKey`).  After compile-time step removal their
+  -- remaining backward part must be applied to the filled instance directly.
   (users2 :: Array RoleInstance) <- concat <$> for regularFilledCalculations
-    ( \iq ->
-        if isForSelfOnly iq
-        -- These inverted queries skip the first step and so must be applied to the filled itself.
-        -- The inverted query stems from a self-perspective on a multi(user) role.
-        -- So a filler has been added that causes a new instance to appear in a (calculated) multi(user)role. 
-        -- This in turn implies the user role instance (the filled role) existed prior to this fill modification, so it may have had properties.
-        -- These properties must be syncrhonised for the bearer!
-        then handleSelfOnlyQuery iq filled filler
-        else if runForwards
-        -- However, because of cardinality, we apply these queries to the filled role instead.
-        then (handleBackwardQuery filled iq) >>= runForwardsComputation filler iq <<< filter (\(Tuple context users) -> not $ null users)
-        else handleBackwardQuery filled iq >>= pure <<< concat <<< map snd
+    ( \iq -> do
+        users <-
+          if isForSelfOnly iq
+          -- These inverted queries skip the first step and so must be applied to the filled itself.
+          -- The inverted query stems from a self-perspective on a multi(user) role.
+          -- So a filler has been added that causes a new instance to appear in a (calculated) multi(user)role. 
+          -- This in turn implies the user role instance (the filled role) existed prior to this fill modification, so it may have had properties.
+          -- These properties must be syncrhonised for the bearer!
+          then handleSelfOnlyQuery iq filled filler
+          else if runForwards
+          -- However, because of cardinality, we apply these queries to the filled role instead.
+          then (handleBackwardQuery filled iq) >>= runForwardsComputation filler iq <<< filter (\(Tuple context users) -> not $ null users)
+          else handleBackwardQuery filled iq >>= pure <<< concat <<< map snd
+        if not null users then do
+          readableFilledType <- lift $ toReadable filledType
+          readableFillerType <- lift $ toReadable fillerType
+          traceUsersWithPerspective iq users $
+            "have a perspective from filler role "
+              <> unwrap filler
+              <> " of type "
+              <> unwrap readableFillerType
+              <> "on its filled "
+              <> unwrap filled
+              <> " of type "
+              <> unwrap readableFilledType
+              <>
+                "."
+        else pure unit
+        pure users
     )
   -- FILLER in case of overwriting an existing filler.
   -- All InvertedQueries with a backwards step that is `filler`, iff we actually overwrite something:
@@ -489,28 +582,35 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
 -- |   - filler (for RTFilledKey queries) — goes forwards from filler to find Calculated User instances
 -- | This mirrors the convention used for regular RTFillerKey/RTFilledKey queries in
 -- | `usersWithPerspectiveOnRoleBinding'`.
+-- | SPECIAL CASE: when `forwardStartsWithFilter iq` is true the InvertedQuery was generated from a
+-- | filter-based Calculated User Role calculation.  In that case the filter must be evaluated
+-- | against the *same* role instance as the backwards query (the candidate new user), so the
+-- | forward query is applied to `bwStart` instead of `fwStart`.
 handleNewCalculatedUsersForBinding :: RoleInstance -> RoleInstance -> InvertedQuery -> MonadPerspectivesTransaction Unit
-handleNewCalculatedUsersForBinding bwStart fwStart (InvertedQuery { backwardsCompiled, forwardsCompiled, calculatedUserRoleType: Just calcUserRoleType }) =
+handleNewCalculatedUsersForBinding bwStart fwStart iq@(InvertedQuery { backwardsCompiled, forwardsCompiled, calculatedUserRoleType: Just calcUserRoleType }) =
   case backwardsCompiled, forwardsCompiled of
     Just bw, Just fw -> do
       -- The backwards query runs from `bwStart` to the context(s) where the Calculated User role is defined.
       (contextInstances :: Array ContextInstance) <- lift (bwStart ##= (unsafeCoerce bw :: RoleInstance ~~> ContextInstance))
-      -- The forwards query runs from `fwStart` to the new Calculated User role instances.
-      (calcUserInstances :: Array RoleInstance) <- lift (fwStart ##= (unsafeCoerce fw :: RoleInstance ~~> RoleInstance))
+      -- For filter-based Calculated User queries the forward query (a FilterF) must be evaluated
+      -- against the same role instance as the backwards query (i.e. bwStart, the candidate new
+      -- user), not against fwStart.  For all other Calculated User queries the forward query
+      -- starts from fwStart as usual.
+      let forwardStart = if forwardStartsWithFilter iq then bwStart else fwStart
+      -- The forwards query runs from `forwardStart` to the new Calculated User role instances.
+      (calcUserInstances :: Array RoleInstance) <- lift (forwardStart ##= (unsafeCoerce fw :: RoleInstance ~~> RoleInstance))
       newCalcUsers <- lift $ filterA notIsMe calcUserInstances
       -- For each (context, new user) pair: add context creation deltas first, then serialise the full context.
       for_ contextInstances \contextInstance -> do
         let buitenRol = externalRole contextInstance
         for_ newCalcUsers \calcUserInstance -> do
-          -- ORDER IS OF THE ESSENCE: external role deltas first, then context delta.
+          -- Collect creation/linking deltas before adding (they will be sorted at distribution time).
           extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
-          for_ extRoleDeltas \(DeltaStoreRecord { signedDelta }) ->
-            addDelta $ DeltaInTransaction { users: [ calcUserInstance ], delta: signedDelta }
           ctxDeltas <- lift $ getDeltasForResource (unwrap contextInstance)
-          for_ ctxDeltas \(DeltaStoreRecord { signedDelta }) ->
+          for_ (extRoleDeltas <> ctxDeltas) \(DeltaStoreRecord { signedDelta }) ->
             addDelta $ DeltaInTransaction { users: [ calcUserInstance ], delta: signedDelta }
           -- Serialise all perspectives of the Calculated User for this context.
-          serialisedAsDeltasFor_ contextInstance calcUserInstance calcUserRoleType
+          serialisedAsDeltasFor_ contextInstance calcUserInstance calcUserRoleType noNewPeer
     _, _ -> pure unit
 handleNewCalculatedUsersForBinding _ _ _ = pure unit
 
@@ -524,7 +624,7 @@ addDeltasForPerspectiveObjects filled = do
   -- Now compute all context-user combinations that have a perspective on this object
   nub <<< concat <$> for allFilleds \filled' -> do
     -- Each filled role might be a perspective object.
-    contextInstance <- lift $ context' filled
+    contextInstance <- lift $ context' filled'
     cType <- lift $ contextType_ contextInstance
     filledType <- lift (filled' ##>> OG.roleType)
     -- For each of them: get and compile perspective object queries for the step from that filled role to its context.
@@ -540,16 +640,16 @@ addDeltasForPerspectiveObjects filled = do
       -- Consequently, the filled role is the only user that should be informed of the deltas in the calculation of the properties.
       -- Notice that authorOnly queries are not inverted. They cannot turn up here.
       if isForSelfOnly iq then do
-        ctxt <- lift (context' filled)
-        computeProperties [ (singletonPath (R filled)) ] statesPerProperty [ Tuple ctxt [ filled ] ]
-        pure [ filled ]
+        ctxt <- lift (context' filled')
+        computeProperties [ (singletonPath (R filled')) ] statesPerProperty [ Tuple ctxt [ filled' ] ]
+        pure [ filled' ]
       else do
         cwus <- handleBackwardQuery filled iq
         -- Then take the properties of the query and, for the users computed, apply computeProperties in order to add filled role deltas and property deltas.
         us <- pure (filter (\(Tuple context users) -> not $ null users) cwus)
         if null us then pure unit
         -- This function serialises dependencies from the interpretation result to deltas and adds them to the transaction for the users.
-        else computeProperties [ (singletonPath (R filled)) ] statesPerProperty us
+        else computeProperties [ (singletonPath (R filled')) ] statesPerProperty us
         pure $ concat (snd <$> cwus)
 
   where
@@ -598,15 +698,12 @@ runForwardsComputation roleInstance (InvertedQuery { description, forwardsCompil
     case forwards description of
       Nothing -> do
         -- This case arises for example for a perspective on an EnumeratedRoleType in the same context.
-        -- Such a perspective will have properties (no sense in providing a perspective with just role verbs,
+        -- Such a perspective generally will have properties (no sense in providing a perspective with just role verbs,
         -- because instances of such a role cannot be shown).
-        -- Another case that the roleInstance has just been added as a binding to a role a user has a perspective on.
-        -- For each property, get its value from the role instance, if the state condition is met.
-        -- When there are no properties, we add the deltas for the role instance anyway.
-        -- This covers the case of a new binding for a perspective without properties.
+        -- However, those properties may not have values, yet.
+        -- We choose to let peers know about the instance as soon as it is added.
         PerspectRol { pspType, context } <- lift $ getPerspectRol roleInstance
-        if (isEmpty (unwrap statesPerProperty)) then magic context [ roleInstance ] pspType (join $ snd <$> cwus)
-        else pure unit
+        magic context [ roleInstance ] pspType (join $ snd <$> cwus)
         computeProperties [ singletonPath (R roleInstance) ] statesPerProperty cwus
 
       -- These are all other cases, where there still is some path to walk to the
@@ -673,43 +770,46 @@ computeProperties rinstances statesPerProperty cwus = forWithIndex_ (unwrap stat
     isAuthorOnly <- lift (propertyTypeIsAuthorOnly prop)
     isSelfOnly <- lift (propertyTypeIsSelfOnly prop)
     if isAuthorOnly then pure unit
-    else for_ propStates
-      -- For each state that provides a perspective on the property,
-      \stateIdentifier -> (lift $ tryGetState stateIdentifier) >>= case _ of
-        -- If we deal with a roleInstance of a type for which no state has been defined,
-        -- we should carry on as if the state condition was satisfied.
-        Nothing -> for_ (join (allPaths <$> rinstances)) (serialiseDependencies (join $ snd <$> cwus))
-        Just (State.State { stateFulObject }) ->
-          -- if the stateful object...
-          case stateFulObject of
-            -- ... is the current context, then if it is in that state,
-            Cnt _ -> for_ cwus
-              \(Tuple cid users) -> (lift $ contextIsInState stateIdentifier cid) >>=
-                if _
-                -- then run the interpreter on the property computation and the head of the dependency paths
-                -- and create deltas for all users
-                then for_ (_.head <$> rinstances) (f users isSelfOnly)
-                else pure unit
-            -- ... is the subject role, collect each user that is that state,
-            Srole _ -> for_ cwus
-              \(Tuple _ users) -> lift (filterA (roleIsInState stateIdentifier) users) >>=
-                \sanctionedUsers ->
-                  -- run the interpreter on the property computation and the head of the dependency paths
-                  -- and create deltas for all collected users
-                  for_ (_.head <$> rinstances) (f sanctionedUsers isSelfOnly)
-            -- ... is the object role, then for all paths that end in a role that is in that state,
-            Orole _ ->
-              ( filterA
-                  ( \{ head } -> case head of
-                      R rid -> lift (roleIsInState stateIdentifier rid)
-                      otherwise -> throwError (error ("computeProperties (states per property) hits on a QueryInterpreter result that is not a role: " <> show otherwise))
-                  )
-                  rinstances
-              )
-                >>= pure <<< map _.head
-                -- run the interpreter on the property computation and the head of the dependency path
-                -- and create deltas for all users
-                >>= traverse_ (f (join $ snd <$> cwus) isSelfOnly)
+    else do
+      readableProp <- lift $ toReadable prop
+      lift $ infoDelta $ "computeProperties: computing property " <> propertytype2string readableProp <> " for " <> show (length rinstances) <> " role instances and " <> show (length cwus) <> " context-user combinations." <> (if isSelfOnly then "(selfonly)" else "")
+      for_ propStates
+        -- For each state that provides a perspective on the property,
+        \stateIdentifier -> (lift $ tryGetState stateIdentifier) >>= case _ of
+          -- If we deal with a roleInstance of a type for which no state has been defined,
+          -- we should carry on as if the state condition was satisfied.
+          Nothing -> for_ (join (allPaths <$> rinstances)) (serialiseDependencies (join $ snd <$> cwus))
+          Just (State.State { stateFulObject }) ->
+            -- if the stateful object...
+            case stateFulObject of
+              -- ... is the current context, then if it is in that state,
+              Cnt _ -> for_ cwus
+                \(Tuple cid users) -> (lift $ contextIsInState stateIdentifier cid) >>=
+                  if _
+                  -- then run the interpreter on the property computation and the head of the dependency paths
+                  -- and create deltas for all users
+                  then for_ (_.head <$> rinstances) (f users isSelfOnly)
+                  else pure unit
+              -- ... is the subject role, collect each user that is that state,
+              Srole _ -> for_ cwus
+                \(Tuple _ users) -> lift (filterA (roleIsInState stateIdentifier) users) >>=
+                  \sanctionedUsers ->
+                    -- run the interpreter on the property computation and the head of the dependency paths
+                    -- and create deltas for all collected users
+                    for_ (_.head <$> rinstances) (f sanctionedUsers isSelfOnly)
+              -- ... is the object role, then for all paths that end in a role that is in that state,
+              Orole _ ->
+                ( filterA
+                    ( \{ head } -> case head of
+                        R rid -> lift (roleIsInState stateIdentifier rid)
+                        otherwise -> throwError (error ("computeProperties (states per property) hits on a QueryInterpreter result that is not a role: " <> show otherwise))
+                    )
+                    rinstances
+                )
+                  >>= pure <<< map _.head
+                  -- run the interpreter on the property computation and the head of the dependency path
+                  -- and create deltas for all users
+                  >>= traverse_ (f (join $ snd <$> cwus) isSelfOnly)
 
     where
     f :: Array RoleInstance -> Boolean -> Dependency -> MonadPerspectivesTransaction Unit
@@ -717,10 +817,14 @@ computeProperties rinstances statesPerProperty cwus = forWithIndex_ (unwrap stat
       if isSelfOnly then case dep of
         R user -> do
           (vals :: Array DependencyPath) <- lift ((singletonPath dep) ##= getPropertyValues prop)
+          readableProp <- lift $ toReadable prop
+          lift $ infoDelta $ "computeProperties: found " <> show (length vals) <> " values for selfOnly property " <> propertytype2string readableProp <> " for user " <> unwrap user <> "."
           for_ (join (allPaths <$> vals)) (serialiseDependencies [ user ])
         _ -> pure unit
       else do
         (vals :: Array DependencyPath) <- lift ((singletonPath dep) ##= getPropertyValues prop)
+        readableProp <- lift $ toReadable prop
+        lift $ infoDelta $ "computeProperties: found " <> show (length vals) <> " values for property " <> propertytype2string readableProp <> " for users " <> show users <> "."
         for_ (join (allPaths <$> vals)) (serialiseDependencies users)
 
 -- | Add deltas for all the users to the current transaction, from the given assumption.
@@ -806,13 +910,10 @@ magic ctxt roleInstances rtype users = do
   (try $ lift $ getPerspectContext ctxt) >>=
     handlePerspectContextError "Perspectives.CollectAffectedContexts.magic"
       \(PerspectContext { buitenRol }) -> do
-        -- Get creation deltas for the context (UniverseContextDelta).
+        -- Collect creation/linking deltas (they will be sorted at distribution time).
         contextDeltas <- lift $ getDeltasForResource (unwrap ctxt)
-        for_ contextDeltas \(DeltaStoreRecord { signedDelta }) ->
-          addDelta $ DeltaInTransaction { users, delta: signedDelta }
-        -- Get creation deltas for the external role (UniverseRoleDelta + ContextDelta).
         extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
-        for_ extRoleDeltas \(DeltaStoreRecord { signedDelta }) ->
+        for_ (contextDeltas <> extRoleDeltas) \(DeltaStoreRecord { signedDelta }) ->
           addDelta $ DeltaInTransaction { users, delta: signedDelta }
         -- Get creation deltas for each role instance.
         for_ roleInstances \roleInstance -> do
@@ -847,12 +948,32 @@ aisInPropertyDelta
     -- A state condition in terms of properties of other roles is then not supported.
     -- allCalculations <- lift $ filterA (invertedQueryHasRoleRange cType propertyBearingType) allCalculations'
 
-    -- `handleBackwardQuery` will actually not return any users since we have no property queries for properties in a perspective and a perspective itself is always on a role.
-    -- However, there may be state queries that must be re-evaluated. We conveniently capture both role- and context state queries through handleBackwardQuery
-    for_ allCalculations (handleBackwardQuery propertyBearingInstance)
+    -- Most RTPropertyKey queries carry `users = []` (state-condition queries only). Their backward
+    -- path ends in a context or role domain and `handleBackwardQuery` records state-query results.
+    -- Exception: RTPropertyKey queries stored for calculated property perspectives carry non-empty
+    -- `users`. Their backward path ends at the perspective object (RDOM), allowing `fromRoleResults`
+    -- to find context + user instances with full state checking. We then apply `backwardsCompiled`
+    -- once more to obtain the perspective object(s) and use them to compute the instances of the user types from the inverted query
+    -- in the same context as the perspective object. We then return those users as part of the end result of this function.
+    -- An earlier version tried to compute properties and their underlying deltas right away, 
+    -- but that was wrong because the delta describing the property change itself is only created after
+    -- the current function returns the users to which it applies!
+    users1 :: Array RoleInstance <- join <$> for allCalculations \iq@(InvertedQuery { backwardsCompiled, statesPerProperty: spProp, users: userTypes }) ->
+      if isCalculatedUserQuery iq && forwardStartsWithFilter iq then handleNewCalculatedUsersForBinding propertyBearingInstance propertyBearingInstance iq *> pure []
+      else if invertedQueryIsForSynchronisation iq then do
+        -- Calculated property perspective query: backward ends at perspective object (RDOM).
+        -- handleBackwardQuery applies backward to find context+users (with state checking).
+        -- Apply backwardsCompiled again to get perspective objects for computeProperties.
+        case backwardsCompiled of
+          Just compiled -> do
+            -- backwards part computes from the property-bearing role instance the context of the users that should be informed.
+            ctxts <- lift (propertyBearingInstance ##= (unsafeCoerce compiled :: RoleInstance ~~> ContextInstance))
+            nub <<< join <$> for ctxts \ctxt -> nub <<< join <$> for userTypes \userType -> lift (ctxt ##= getRoleInstances userType)
+          Nothing -> pure []
+      else handleBackwardQuery propertyBearingInstance iq *> pure []
     -- The property might fall in a perspective. Compute the users and add deltas to the transaction.
     users <- addDeltasForPropertyChange propertyBearingInstance property replacementProperty
-    pure (nub users)
+    pure (nub $ users <> users1)
 
 -- | If the role instance or any of the roles it fills is the object of a perspective, add deltas to the transaction for the user(s) of that perspective
 -- | so that they will receive deltas that inform them about the property change.
@@ -888,28 +1009,57 @@ addDeltasForPropertyChange roleWithPropertyValue property replacementProperty = 
       -- Then restrict the properties of the query to `property` and `replacementProperty` and, for the users computed, apply computeProperties in order to add roleWithPropertyValue role deltas and property deltas.
       -- Do so only when the subject state requirement of the inverted query is met by the actual state of the subjects.
       -- (computeProperties takes care of that)
-      cwus' <- pure (filter (\(Tuple context users) -> not $ null users) cwus)
+      cwus' :: Array ContextWithUsers <- pure (filter (\(Tuple context users) -> not $ null users) cwus)
       if null cwus'
       -- For a selfOnly query, this should not happen.
       then pure []
-      else if isForSelfOnly iq || isSelfOnlyProperty
-      -- If iq has the selfOnly modifier, the perspective object equals the user role that has the perspective.
-      -- Only compute the property for that role instance!
-      then do
-        computeProperties [ (singletonPath (R roleWithPropertyValue')) ] (filterKeys (\k -> isJust $ elemIndex k [ ENP property, ENP replacementProperty ]) statesPerProperty) [ (Tuple contextInstance [ roleWithPropertyValue' ]) ]
-        pure [ roleWithPropertyValue' ]
-      else if startsWithFilter iq
-      -- The property is the filter criterion for a calculated role object of a perspective.
-      -- When the filter condition is now satisfied (usersWithAnActivePerspective applied the filter and found users),
-      -- treat this as if the role instance just became visible to those users:
-      -- add role creation deltas AND all perspective property deltas (not just the changed property).
-      then do
-        magic contextInstance [ roleWithPropertyValue' ] rType (join $ snd <$> cwus')
-        computeProperties [ (singletonPath (R roleWithPropertyValue')) ] statesPerProperty cwus'
-        pure $ concat (snd <$> cwus')
       else do
-        computeProperties [ (singletonPath (R roleWithPropertyValue')) ] (filterKeys (\k -> isJust $ elemIndex k [ ENP property, ENP replacementProperty ]) statesPerProperty) cwus'
-        pure $ concat (snd <$> cwus) -- Should this not be cwus'??
+        if not null (concat (snd <$> cwus')) then
+          ( do
+              readableRType <- lift $ toReadable rType
+              readableProperty <- lift $ toReadable property
+              traceUsersWithPerspective iq (concat (snd <$> cwus')) $
+                "have a perspective on the property "
+                  <> unwrap readableProperty
+                  <> " of role instance "
+                  <> unwrap roleWithPropertyValue'
+                  <> " of type "
+                  <> unwrap readableRType
+                  <>
+                    "."
+          )
+        else
+          ( do
+              readableRType <- lift $ toReadable rType
+              readableProperty <- lift $ toReadable property
+              debugSync $
+                "No users have a perspective on the property "
+                  <> unwrap readableProperty
+                  <> " of role instance "
+                  <> unwrap roleWithPropertyValue'
+                  <> " of type "
+                  <> unwrap readableRType
+                  <>
+                    "."
+          )
+        if isForSelfOnly iq || isSelfOnlyProperty
+        -- If iq has the selfOnly modifier, the perspective object equals the user role that has the perspective.
+        -- Only compute the property for that role instance!
+        then do
+          computeProperties [ (singletonPath (R roleWithPropertyValue')) ] (filterKeys (\k -> isJust $ elemIndex k [ ENP property, ENP replacementProperty ]) statesPerProperty) [ (Tuple contextInstance [ roleWithPropertyValue' ]) ]
+          pure [ roleWithPropertyValue' ]
+        else if startsWithFilter iq
+        -- The property is the filter criterion for a calculated role object of a perspective.
+        -- When the filter condition is now satisfied (usersWithAnActivePerspective applied the filter and found users),
+        -- treat this as if the role instance just became visible to those users:
+        -- add role creation deltas AND all perspective property deltas (not just the changed property).
+        then do
+          magic contextInstance [ roleWithPropertyValue' ] rType (join $ snd <$> cwus')
+          computeProperties [ (singletonPath (R roleWithPropertyValue')) ] statesPerProperty cwus'
+          pure $ concat (snd <$> cwus')
+        else do
+          computeProperties [ (singletonPath (R roleWithPropertyValue')) ] (filterKeys (\k -> isJust $ elemIndex k [ ENP property, ENP replacementProperty ]) statesPerProperty) cwus'
+          pure $ concat (snd <$> cwus) -- Should this not be cwus'??
 
   where
   -- It must be a perspective on the right property, or the query starts with a filter
@@ -933,17 +1083,21 @@ addDeltasForPropertyChange roleWithPropertyValue property replacementProperty = 
 -- | Errors:
 -- | - Logs an error if the backwards function cannot be compiled.
 compileBoth :: InvertedQuery -> MP InvertedQuery
-compileBoth ac@(InvertedQuery iqr@{ description, backwardsCompiled, forwardsCompiled }) = case backwardsCompiled of
+compileBoth ac@(InvertedQuery iqr@{ description, backwardsCompiled, forwardsCompiled, perspectiveStartPosition }) = case backwardsCompiled of
   Just c -> pure ac
   Nothing -> do
     backwards' <- traverse getHiddenFunction (backwards description)
     forwards' <- traverse getHiddenFunction (forwards description)
     -- It is an error if backwards' is Nothing.
-    if isNothing backwards' then errorSync ("compileBoth: backwards is nothing for \n" <> prettyPrint description)
+    if isNothing backwards' then errorSync ("compileBoth: backwards is nothing for \n" <> prettyPrint description <> perspectivePositionText perspectiveStartPosition)
     else pure unit
     pure $ InvertedQuery iqr { backwardsCompiled = backwards', forwardsCompiled = forwards' }
 
--- The backwards part of the query with a kink should have a compatible domain
+-- The backwards part of the query with a kink should have a compatible domain.
+-- After the first backward step is removed (for RTRoleKey, RTFillerKey, RTFilledKey), the domain
+-- of the remaining backward equals the range of the removed step — which is always RDOM.
+-- The filter checks that the runtime role instance's type+context *specialises* the stored
+-- domain, so that queries indexed under an Aspect type also fire for concrete specialising roles.
 invertedQueryHasRoleDomain :: ContextType -> EnumeratedRoleType -> InvertedQuery -> MP Boolean
 invertedQueryHasRoleDomain context role (InvertedQuery { description }) = case description of
   ZQ (Just qfd) _ -> case domain qfd of

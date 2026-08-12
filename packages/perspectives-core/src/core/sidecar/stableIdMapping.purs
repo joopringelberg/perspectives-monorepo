@@ -39,7 +39,7 @@ module Perspectives.Sidecar.StableIdMapping
 
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
-import Data.Newtype (unwrap)
+import Data.Newtype (unwrap, wrap)
 import Data.Show (show)
 import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (liftAff)

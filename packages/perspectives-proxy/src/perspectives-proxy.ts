@@ -49,7 +49,8 @@ import type {
   ContextAndNameReceiver,
   InspectableContext,
   InspectableRole,
-  FillerType
+  FillerType,
+  FillMode
 } from "./perspectivesshape.d.ts";
 
 export type * from "./perspectivesshape.d.ts";
@@ -109,7 +110,7 @@ export function configurePDRproxy(channeltype: "internalChannel" | "sharedWorker
       // Force a new instance per app version; keep Vite’s worker URL untouched
       sharedWorker = new SharedWorker( new URL('perspectives-sharedworker', import.meta.url), {
         type: 'module',
-        name: `pdr-${__MYCONTEXTS_VERSION__}-${__BUILD__}`
+        name: `pdr-${__MYCONTEXTS_VERSION__}-${__BUILD_ID__}`
       });
       sharedWorkerChannel = new SharedWorkerChannel(sharedWorker.port, cursor);
       sharedWorkerChannelResolver(sharedWorkerChannel);
@@ -151,6 +152,10 @@ interface RequestRecord {
   reactStateSetter?: (response: any) => void;
   corrId?: number;
   trackingNumber?: number;
+  // When true, cursor.wait() is not called for this request. Use for background
+  // subscriptions that auto-subscribe on mount (e.g. subscribeSelectedRoleFromClipboard)
+  // so that rapid component remounts during window resize do not trigger the loading overlay.
+  noWaitCursor?: boolean;
 }
 
 const defaultRequest =
@@ -681,7 +686,7 @@ export class PerspectivesProxy
     // }
 
     // Set cursor shape
-    if ( !(req.request == "Unsubscribe") )
+    if ( !(req.request == "Unsubscribe") && !req.noWaitCursor )
       {
         cursor.wait(req);
       }
@@ -912,6 +917,19 @@ export class PerspectivesProxy
     );
   }
 
+  getRoleNameP(rid: RoleInstanceT): Promise<string>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        proxy.send(
+          { request: "GetRoleName", object: rid, onlyOnce: true },
+          values => resolver(values[0]),
+          rejecter
+        );
+      });
+  }
+
   // We haven't made this promisebased because the binding can change, even though its type cannot.
   getBindingType (roleType : RoleType, receiveValues : (fillerTypes: FillerType[]) => void, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
   {
@@ -956,16 +974,15 @@ export class PerspectivesProxy
     /**
    * Retrieves the selected role from the clipboard.
    *
-   * This function sends a request to get the selected role from the clipboard
-   * and returns a promise that resolves with the role instance.
+   * This function subscribes to get the selected role from the clipboard
    *
-   * @returns {Promise<RoleInstanceT>} A promise that resolves with the selected role instance.
+   * @returns {Promise<Unsubscriber>} A promise that resolves with an unsubscriber function.
    */
   subscribeSelectedRoleFromClipboard( receiver: (roleOnClipboard : RoleOnClipboard[]) => void) : Promise<Unsubscriber>
   {
     const proxy = this;
     return proxy.send(
-        { request: "GetSelectedRoleFromClipboard", onlyOnce: false },
+        { request: "SubscribeSelectedRoleFromClipboard", onlyOnce: false, noWaitCursor: true },
         values => receiver( values.map( JSON.parse ) )
       );
   }
@@ -1024,6 +1041,29 @@ export class PerspectivesProxy
           {request: "CheckBinding", predicate: roleName, object: rolInstance, onlyOnce: true}
           , (r => resolver(r[0] === "true"))
           , rejecter
+        );
+      });
+  }
+
+  getMostGeneralAllowedBindingType(roleName: RoleType, rolInstance: RoleInstanceT): Promise<FillerType | undefined>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        proxy.send(
+          { request: "GetMostGeneralAllowedBindingType", predicate: roleName, object: rolInstance, onlyOnce: true },
+          values =>
+          {
+            if (values.length === 0)
+            {
+              resolver(undefined);
+            }
+            else
+            {
+              resolver(JSON.parse(values[0]));
+            }
+          },
+          rejecter
         );
       });
   }
@@ -1655,26 +1695,28 @@ export class PerspectivesProxy
    * @param myroletype - The type of the user role.
    * @returns A promise that resolves to the role instance.
    */
-  bind (contextinstance : ContextInstanceT, localRolName : RolName, contextType : ContextType, rolDescription : RolSerialization, myroletype : UserRoleType) : Promise<RoleInstanceT>
+  bind (contextinstance : ContextInstanceT, localRolName : RolName, contextType : ContextType, rolDescription : RolSerialization, myroletype : UserRoleType, fillMode: FillMode = "required") : Promise<RoleInstanceT>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)
       {
+        const request = fillMode === "provided" ? "FillWithProvidedType" : "FillWithRequiredType";
         return proxy.send(
-          {request: "Bind", subject: contextinstance, predicate: localRolName, object: contextType, rolDescription: rolDescription, authoringRole: myroletype, onlyOnce: true },
+          {request, subject: contextinstance, predicate: localRolName, object: contextType, rolDescription: rolDescription, authoringRole: myroletype, onlyOnce: true },
           (r => resolver(r[0])),
           rejecter
         );
       });
   }
 
-  bind_ (filledRole : RoleInstanceT, filler : RoleInstanceT, myroletype  : UserRoleType) : Promise<boolean>
+  bind_ (filledRole : RoleInstanceT, filler : RoleInstanceT, myroletype  : UserRoleType, fillMode: FillMode = "required") : Promise<boolean>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)
       {
+        const request = fillMode === "provided" ? "FillWithProvidedType" : "FillWithRequiredType";
         return proxy.send(
-          {request: "Bind_", subject: filledRole, object: filler, authoringRole: myroletype, onlyOnce: true},
+          {request, subject: filledRole, object: filler, authoringRole: myroletype, onlyOnce: true},
           values => resolver( values[0] == "true" ),
           rejecter
         );
@@ -1988,7 +2030,21 @@ class Cursor {
   setPDRStatus({ action, message }: { action: "push" | "remove"; message: string }) {
     const STATUS_ID = Cursor.STATUS_ID;
     if (action === "push") {
-      this.pushMessage(STATUS_ID, message);
+      this.enqueue(() => {
+        const existingIndex = this.messages.findIndex(msg => msg.identifier === STATUS_ID);
+        if (existingIndex >= 0) {
+          const [statusMessage] = this.messages.splice(existingIndex, 1);
+          if (statusMessage) {
+            statusMessage.text = message;
+            this.messages.unshift(statusMessage);
+          }
+        } else {
+          this.messages.unshift({ identifier: STATUS_ID, text: message, startedAt: Date.now() });
+        }
+        this.setOverlayText(message);
+        this.setOverlayVisibility(true);
+        document.body.style.cursor = "wait";
+      });
     } else if (action === "remove") {
       this.removeMessage(STATUS_ID);
     }

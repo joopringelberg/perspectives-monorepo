@@ -66,6 +66,7 @@ interface SmartFieldControlGroupProps
   hasFocus?: boolean;
   minLines?: number;
   maxLines?: number;
+  referenceValues?: string[];
 }
 
 interface SmartFieldControlGroupState
@@ -128,7 +129,7 @@ export default class SmartFieldControlGroup extends Component<SmartFieldControlG
     const isHorizontal = containerWidth > 400;
     return (
       <div ref={this.containerRef}>
-        <Form.Group as={ isHorizontal ? Row : 'div'} className="mb-2">
+        <Form.Group as={ isHorizontal ? Row : 'div'} className="mb-1">
           <Form.Label
             column={isHorizontal}
             className={isHorizontal ? "col-4" : ""}
@@ -147,10 +148,10 @@ export default class SmartFieldControlGroup extends Component<SmartFieldControlG
               contextinstance={component.props.contextinstance}
               minLines={component.props.minLines}
               maxLines={component.props.maxLines}
+              referenceValues={component.props.referenceValues}
             />
           </div>
         </Form.Group>
       </div>);
     }
 }
-

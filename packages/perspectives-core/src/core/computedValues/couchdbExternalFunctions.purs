@@ -68,20 +68,21 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError, handleExternalFunctionError, handleExternalStatementError)
-import Perspectives.Logging (debugInstall, errorInstall, infoInstall)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance, createAndAddRoleInstance_)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.Instances.Me (computeMe_)
 import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesDatabase, getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries)
+import Perspectives.Logging (debugInstall, errorInstall, infoInstall, traceInstall)
 import Perspectives.ModelDependencies as DEP
-import Perspectives.Names (getMySystem)
+import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addDocument_, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, splitRepositoryFileUrl, tryGetDocument_, withDatabase)
 import Perspectives.Persistence.API (deleteDocument, documentsInDatabase, excludeDocs) as Persistence
 import Perspectives.Persistence.Authentication (addCredentials) as Authentication
 import Perspectives.Persistence.CouchdbFunctions (addRoleToUser, concatenatePathSegments, removeRoleFromUser, user2couchdbuser)
 import Perspectives.Persistence.CouchdbFunctions as CDB
+import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (UserName, Password)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit)
@@ -131,7 +132,7 @@ roleInstancesFromCouchdb roleTypes _ =
               ( do
                   cache <- roleCache
                   cachedRoleAvars <- liftAff $ liftEffect (rvalues cache >>= pure <<< toArray)
-                  cachedRoles <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+                  cachedRoles <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
                   pure $ rol_id <$> filter (roleViewFilter stableRt) cachedRoles
               )
             pure $ instancesInCouchdb `union` instancesInCache
@@ -152,7 +153,7 @@ contextInstancesFromCouchdb contextTypeArr _ =
               ( do
                   cache <- contextCache
                   cachedContextAvars <- liftAff $ liftEffect (rvalues cache >>= pure <<< toArray)
-                  cachedContexts <- catMaybes <$> (lift $ traverse tryRead cachedContextAvars)
+                  cachedContexts <- catMaybes <$> (liftAff $ traverse tryRead cachedContextAvars)
                   pure $ context_id <$> filter (contextViewFilter stableCt) cachedContexts
               )
             pure $ instancesInCouchdb `union` instancesInCache
@@ -169,7 +170,7 @@ pendingInvitations _ =
           ( do
               cache <- roleCache
               cachedRoleAvars <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-              cachedRoles <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              cachedRoles <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
               pure $ rol_id <$> filter (roleViewFilter $ EnumeratedRoleType DEP.invitation) cachedRoles
           )
         pure $ filledRolesInDatabase `union` filledRolesInCache
@@ -319,6 +320,7 @@ addModelToLocalStore_ modelNames _ = try (for_ modelNames (flip addModelToLocalS
 -- | The modelName may be UNVERSIONED or VERSIONED.
 addModelToLocalStore :: ModelUri Stable -> Boolean -> MonadPerspectivesTransaction Unit
 addModelToLocalStore dfid isInitialLoad' = do
+  lift $ traceInstall ("Entering `addModelToLocalStore` for " <> unwrap dfid)
   mDomeinFile :: Maybe (DomeinFile Stable) <- (lift $ tryGetPerspectEntiteit (ModelUri $ unversionedModelUri (unwrap dfid)))
   case mDomeinFile of
     Just _ -> pure unit
@@ -385,6 +387,7 @@ computeVersionedAndUnversiondName (ModelUri modelname) = do
 -- | Also saves the attachments.
 installModelLocally :: (Tuple (DomeinFileRecord Stable) AttachmentFiles) -> Boolean -> StoredQueries -> MonadPerspectivesTransaction Unit
 installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects, _attachments } attachmentFiles) isInitialLoad' storedQueries = do
+  lift $ traceInstall ("Entering `installModelLocally` for " <> unwrap namespace)
   { patch, build, versionedModelName, unversionedModelname, versionedModelManifest } <- lift $ computeVersionedAndUnversiondName id
   -- Store the model in Couchdb, that is: in the local store of models.
   -- Save it with the revision of the local version that we have, if any (do not use the repository version).
@@ -434,6 +437,7 @@ installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQue
 
 createInitialInstances :: String -> String -> String -> String -> Maybe RoleInstance -> MonadPerspectivesTransaction Unit
 createInitialInstances unversionedModelname versionedModelName patch build versionedModelManifest = do
+  lift $ traceInstall ("Entering `createInitialInstances` for " <> versionedModelName)
   -- If and only if the model we load is model:System, create both the system context and the system user.
   -- This is part of the installation routine.
   if unversionedModelname == DEP.systemModelName then initSystem
@@ -449,9 +453,13 @@ createInitialInstances unversionedModelname versionedModelName patch build versi
     Nothing
   case r of
     Left e -> lift $ errorInstall (show e)
-    Right { context: ctxt } -> do
+    Right { context: ctxt, universeContextDelta, externalUniverseRoleDelta, externalContextDelta } -> do
       lift $ void $ saveEntiteit_ (identifier ctxt) ctxt
       addCreatedContextToTransaction (identifier ctxt)
+      lift $ storeDeltaFromSignedDelta externalUniverseRoleDelta
+      lift $ storeDeltaFromSignedDelta universeContextDelta
+      lift $ storeDeltaFromSignedDelta externalContextDelta
+      lift $ traceInstall ("Created model root context for " <> versionedModelName)
   me <- lift $ getPerspectivesUser
   minstallerId <- createAndAddRoleInstance (EnumeratedRoleType DEP.installer) cid
     ( RolSerialization
@@ -568,6 +576,7 @@ initSystem = do
                   }
               )
               true
+            -- Redundantly sets isMe on the role instance but also sets the `me` of the context.
             roleIsMe puser world
             -- Now create the SocialEnvironment.
             socialEnvResult <- runExceptT $ constructContext Nothing
@@ -627,7 +636,7 @@ initSystem = do
     -- Now create the user role (the instance of sys:PerspectivesSystem$User; it is cached automatically).
     -- This will also create the IndexedRole in the System instance, filled with the new User instance.
     sysId <- lift getMySystem
-    userId <- pure (sysId <> "$User")
+    userId <- lift getUserIdentifier
     sysUser <- createAndAddRoleInstance_ (EnumeratedRoleType DEP.sysUser) sysId
       ( RolSerialization
           { id: Just userId
@@ -683,8 +692,8 @@ createCouchdbDatabase databaseUrls databaseNames _ =
 createEntitiesDatabase :: Array Url -> Array DatabaseName -> Array Namespace -> RoleInstance -> MonadPerspectivesTransaction Unit
 createEntitiesDatabase databaseUrls databaseNames namespaces _ =
   try
-    ( case head databaseUrls, head databaseNames, head namespaces of
-        Just databaseUrl, Just databaseName, Just namespace -> do
+    ( case head databaseUrls, head databaseNames of
+        Just databaseUrl, Just databaseName -> do
           dbName <- pure (databaseUrl <> databaseName)
           lift $ withDatabase (databaseUrl <> databaseName)
             ( \_ -> do
@@ -699,11 +708,13 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
                 setContext2RoleView dbName
                 setRole2ContextView dbName
             )
-          -- dbName is also the url that is provided in a "public Visitor at <location>" declaration.
-          -- Hence we can use it to construct an instance of TheWorld in that database.
-          -- CURRENTLY, CouchdbManagement is such that `namespace` may or may not end with a slash.
-          -- Hence we make sure it does.
-          theworldid <- pure (ContextInstance $ "pub:https://" <> ensureSlash namespace <> ensureSlash databaseName <> "#TheWorld")
+          -- If databaseUrl is empty, we target a local (in-memory) PouchDB database.
+          -- Otherwise we construct the public endpoint from namespace and database name.
+          publicationTarget <- case databaseUrl, head namespaces of
+            "", _ -> pure databaseName
+            _, Just namespace -> pure ("https://" <> ensureSlash namespace <> ensureSlash databaseName)
+            _, Nothing -> throwError (error "CreateEntitiesDatabase: namespace is required for non-empty databaseUrl")
+          theworldid <- pure (ContextInstance $ "pub:" <> publicationTarget <> "#TheWorld")
           mtheWorld <- lift $ tryGetPerspectContext theworldid
           case mtheWorld of
             Nothing -> do
@@ -711,13 +722,13 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
               -- otherwise we'll end up with deltas that refer to the local instance of the system user.
               sysUser <- lift getPerspectivesUser
               void
-                $ withPerspectivesUser (PerspectivesUser $ "pub:https://" <> ensureSlash namespace <> ensureSlash databaseName <> "#" <> takeGuid (unwrap sysUser))
+                $ withPerspectivesUser (PerspectivesUser $ "pub:" <> publicationTarget <> "#" <> takeGuid (unwrap sysUser))
                     -- Notice that the deltas in the result of constructEmptyContext are not added to the Transaction yet.
                     -- This is what we want; we take a short route to creating a public instance of TheWorld here.
                     (void $ runExceptT $ constructEmptyContext theworldid theWorld "TheWorld" (PropertySerialization empty) Nothing)
               lift $ void $ saveEntiteit theworldid
             _ -> pure unit
-        _, _, _ -> pure unit
+        _, _ -> pure unit
     )
     >>= handleExternalStatementError "model://perspectives.domains#CreateEntitiesDatabase"
 

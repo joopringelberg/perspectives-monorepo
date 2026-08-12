@@ -66,7 +66,7 @@ import Data.Tuple (Tuple(..), fst)
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (log)
 import Foreign (unsafeToForeign)
-import Foreign.Object (Object, empty, fromFoldable, lookup)
+import Foreign.Object (Object, empty, fromFoldable, lookup, toUnfoldable)
 import IDBKeyVal (idbGet, idbSet)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..), executeInTopologicalOrder, recompileModel)
 import Partial.Unsafe (unsafePartial)
@@ -76,11 +76,12 @@ import Perspectives.ContextAndRole (deleteContext_rolInContext, removeContext_ro
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, removeInternally, (##=))
 import Perspectives.Data.EncodableMap as EM
 import Perspectives.DataUpgrade.AddContextKeyMigration (addContextKeyToDeltas)
-import Perspectives.DataUpgrade.DeltasMigration (migrateDeltasToStore)
 import Perspectives.DataUpgrade.DeltaStoreKeyMigration (migrateDeltaStoreKeys)
+import Perspectives.DataUpgrade.DeltasMigration (migrateDeltasToStore)
 import Perspectives.DataUpgrade.PatchModels (patchModels)
+import Perspectives.DataUpgrade.PatchModels.PDR030306 as PDR030306
 import Perspectives.DataUpgrade.PatchModels.PDR3061 as PDR3061
-import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModels)
+import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModel, recompileLocalModels)
 import Perspectives.DataUpgrade.UpdateLocalModels (updateLocalModels)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (storeDomeinFileInCache, storeDomeinFileInCouchdbPreservingAttachments)
@@ -93,28 +94,29 @@ import Perspectives.Identifiers (buitenRol, splitTypeUri, unversionedModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter)
-import Perspectives.Instances.ObjectGetters (binding, getProperty)
+import Perspectives.Instances.ObjectGetters (binding, getProperty, getUnlinkedRoleInstances)
 import Perspectives.Instances.Values (PerspectivesFile, parsePerspectivesFile, writePerspectivesFile)
-import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, isSystemModel, mySocialEnvironment, repositoryRegistryModelName, rootName, settings, socialEnvironmentMe, startContexts, sysUser, systemModelName, theSystem)
+import Perspectives.ModelDependencies (filterValueProperty, identifiableLastName, indexedContext, indexedContextName, indexedRole, indexedRoleName, isSystemModel, mySocialEnvironment, repositoryRegistryModelName, rootName, settings, socialEnvironmentMe, socialEnvironmentPersons, startContexts, sysUser, systemModelName, theSystem)
 import Perspectives.Names (getMySystem, lookupIndexedContext)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (toReadableDomeinFile, toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (Keys(..), databaseInfo, documentsInDatabase, includeDocs, resetViewIndex)
+import Perspectives.Persistence.API (Keys(..), addDocument_, databaseInfo, deleteDocument, documentsInDatabase, includeDocs, resetViewIndex)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, getPerspectRol, saveEntiteit_, saveMarkedResources, tryGetPerspectEntiteit, tryGetPerspectRol, tryRemoveEntiteit)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage)
-import Perspectives.Query.UnsafeCompiler (getRoleInstances)
+import Perspectives.PerspectivesState (modelsDatabaseName, pushMessage, removeMessage, setModelUri)
+import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..), EnumeratedPropertyType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
-import Perspectives.SetupCouchdb (setContext2RoleView, setContextView, setCredentialsView, setFilled2FillerView, setFiller2FilledView, setRole2ContextView, setRoleFromContextView, setRoleView)
+import Perspectives.SetupCouchdb (setContext2RoleView, setContextView, setCredentialsView, setFilled2FillerView, setFiller2FilledView, setFilterValueView, setRole2ContextView, setRoleFromContextView, setRoleView)
 import Perspectives.SetupUser (setupInvertedQueryDatabase)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.Sidecar.NormalizeTypeNames (fqn2tid, normalize, normalizeTypeNames)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping, fromRepository, loadStableMapping, lookupContextIndividualId, lookupRoleIndividualId)
 import Perspectives.Sidecar.ToStable (toStable)
+import Perspectives.UnschemedIdentifiers (unschemeRoleInstance)
 import Simple.JSON (read)
 import Simple.JSON as JSON
 import Unsafe.Coerce (unsafeCoerce)
@@ -373,6 +375,67 @@ runDataUpgrades = do
         addContextKeyToDeltas unit
     )
 
+  runUpgrade installedVersion "3.3.2"
+    ( \_ -> do
+        runMonadPerspectivesTransaction'
+          false
+          (ENR $ EnumeratedRoleType sysUser)
+          do
+            -- This adds the facet RoleWithFilter.
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.3"
+            -- We need to set the FilterValue property for the RoleWithFilter aspect on each Persons instance, so that the typeaheadfiller widget can filter by last name.
+            msocEnv <- lift $ lookupIndexedContext mySocialEnvironment
+            case msocEnv of
+              Just socEnv -> do
+                persons <- lift (socEnv ##= getUnlinkedRoleInstances (EnumeratedRoleType socialEnvironmentPersons))
+                for_ persons \person -> do
+                  lastName <- lift (person ##= getPropertyValues (ENP $ EnumeratedPropertyType identifiableLastName))
+                  setProperty [ person ] (EnumeratedPropertyType filterValueProperty) Nothing lastName
+              Nothing -> logPerspectivesError (Custom "Could not find mySocialEnvironment during data upgrade to 3.3.0; cannot set FilterValue for RoleWithFilter aspect.")
+        -- Set the new view through Pouchdb.
+        entitiesDatabaseName >>= setFilterValueView
+    )
+
+  runUpgrade installedVersion "3.3.3"
+    ( \_ -> void recompileLocalModels
+    )
+
+  runUpgrade installedVersion "3.3.4"
+    migrateLegacySystemUserIdentifier
+
+  runUpgrade installedVersion "3.3.5"
+    ( \_ -> do
+        runMonadPerspectivesTransaction'
+          false
+          (ENR $ EnumeratedRoleType sysUser)
+          do
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Parsing@3.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Sensor@3.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Files@3.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#RabbitMQ@2.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Utilities@3.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Serialise@3.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Couchdb@4.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.3"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#RepositoryRegistry@1.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#BodiesWithAccounts@5.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#CouchdbManagement@12.2"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#HyperContext@1.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Disconnect@1.1"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#BrokerServices@6.1"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#SharedFileServices@4.0"
+            updateModelForUpgrade $ ModelUri "model://perspectives.domains#Introduction@1.0"
+
+    )
+
+  runUpgrade installedVersion "3.3.8"
+    ( \_ -> do
+        -- patch the System model to use the new syntax to remove a filler.
+        setModelUri (ModelUri "model://perspectives.domains#System@6.3") (ModelUri "model://perspectives.domains#tiodn6tcyc")
+        patchModels PDR030306.replacements
+        void $ recompileLocalModel (ModelUri "model://perspectives.domains#System")
+    )
+
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 
@@ -381,6 +444,14 @@ runDataUpgrades = do
   ----------------------------------------------------------------------------------------
   if installedVersion `isLowerVersion` pdrVersion then liftAff $ idbSet "CurrentPDRVersion" (unsafeToForeign pdrVersion)
   else pure unit
+
+-- Adapt and use this function until the upgrade mechanism is fully implemented. It is called at every system startup, and can be used to patch models, recompile them, etc.
+atEverySystemStartup :: MonadPerspectives Unit
+atEverySystemStartup = do
+  -- patch the System model to use the new syntax to remove a filler.
+  setModelUri (ModelUri "model://perspectives.domains#System@6.3") (ModelUri "model://perspectives.domains#tiodn6tcyc")
+  patchModels PDR030306.replacements
+  void $ recompileLocalModel (ModelUri "model://perspectives.domains#System")
 
 ----------------------------------------------------------------------------------------
 ---- RUN UPGRADE
@@ -590,6 +661,80 @@ removeSocialMeIndexedRole _ = do
               void $ saveEntiteit_ (ContextInstance systemId) cleanedContext
               saveMarkedResources
               log "removeSocialMeIndexedRole: removed IndexedRoles instance for sys:SocialMe"
+
+-- | Migrates a legacy system User role identifier from "$User" to "$auftu9ldl2".
+-- | If no legacy resource exists, no migration is performed.
+migrateLegacySystemUserIdentifier :: Upgrade
+migrateLegacySystemUserIdentifier _ = do
+  systemId <- getMySystem
+  let
+    legacyRoleId = systemId <> "$User"
+    migratedRoleId = systemId <> "$auftu9ldl2"
+    legacyRole = RoleInstance legacyRoleId
+    migratedRole = RoleInstance migratedRoleId
+
+  mlegacyUserRole <- tryGetPerspectRol legacyRole
+  case mlegacyUserRole of
+    Nothing -> pure unit
+    Just (PerspectRol rec) -> do
+      mMigratedUserRole <- tryGetPerspectRol migratedRole
+      case mMigratedUserRole of
+        -- New id already exists; remove legacy duplicate.
+        Just _ -> tryRemoveEntiteit legacyRole
+        Nothing -> do
+          let migratedDoc = PerspectRol rec { _id = unwrap $ unschemeRoleInstance migratedRole, id = migratedRole, _rev = Nothing }
+          entitiesDb <- entitiesDatabaseName
+          void $ addDocument_ entitiesDb migratedDoc (unwrap $ unschemeRoleInstance migratedRole)
+          void $ deleteDocument entitiesDb (unwrap $ unschemeRoleInstance legacyRole) Nothing
+      migrateRoleInstanceBacklinks legacyRole migratedRole
+
+migrateRoleInstanceBacklinks :: RoleInstance -> RoleInstance -> MonadPerspectives Unit
+migrateRoleInstanceBacklinks oldRoleId newRoleId = do
+  entitiesDb <- entitiesDatabaseName
+  { rows: allEntities } <- documentsInDatabase entitiesDb includeDocs
+  for_ allEntities \{ doc } ->
+    unsafePartial case read <$> doc of
+      Just (Right rol@(PerspectRol rec)) -> do
+        let
+          binding' = map (replaceRoleReference oldRoleId newRoleId) rec.binding
+          filledRoles' = replaceRoleReferenceInFilledRoles oldRoleId newRoleId rec.filledRoles
+        if binding' == rec.binding && filledRoles' == rec.filledRoles then pure unit
+        else void $ saveEntiteit_ (identifier rol) (PerspectRol rec { binding = binding', filledRoles = filledRoles' })
+      Just _ -> case read <$> doc of
+        Just (Right ctxt@(PerspectContext rec)) -> do
+          let
+            buitenRol' = replaceRoleReference oldRoleId newRoleId rec.buitenRol
+            me' = map (replaceRoleReference oldRoleId newRoleId) rec.me
+            rolInContext' = replaceRoleReferenceInRoleMap oldRoleId newRoleId rec.rolInContext
+          if buitenRol' == rec.buitenRol && me' == rec.me && rolInContext' == rec.rolInContext then pure unit
+          else void $ saveEntiteit_ (identifier ctxt) (PerspectContext rec { buitenRol = buitenRol', me = me', rolInContext = rolInContext' })
+        _ -> pure unit
+  saveMarkedResources
+
+replaceRoleReference :: RoleInstance -> RoleInstance -> RoleInstance -> RoleInstance
+replaceRoleReference oldRoleId newRoleId roleId =
+  if roleId == oldRoleId then newRoleId
+  else roleId
+
+replaceRoleReferenceInRoleMap :: RoleInstance -> RoleInstance -> Object (Array RoleInstance) -> Object (Array RoleInstance)
+replaceRoleReferenceInRoleMap oldRoleId newRoleId roleMap =
+  fromFoldable
+    ( map
+        ( \(Tuple key roleIds) ->
+            Tuple key (map (replaceRoleReference oldRoleId newRoleId) roleIds)
+        )
+        (toUnfoldable roleMap :: Array (Tuple String (Array RoleInstance)))
+    )
+
+replaceRoleReferenceInFilledRoles :: RoleInstance -> RoleInstance -> Object (Object (Array RoleInstance)) -> Object (Object (Array RoleInstance))
+replaceRoleReferenceInFilledRoles oldRoleId newRoleId filledRoles =
+  fromFoldable
+    ( map
+        ( \(Tuple contextType roleMap) ->
+            Tuple contextType (replaceRoleReferenceInRoleMap oldRoleId newRoleId roleMap)
+        )
+        (toUnfoldable filledRoles :: Array (Tuple String (Object (Array RoleInstance))))
+    )
 
 -- | Stable identifier for the (now obsolete) indexed role sys:SocialMe.
 socialMeStableId :: String

@@ -22,7 +22,7 @@ import React, { createRef } from "react"; // 2
 import PerspectivesComponent from "./perspectivesComponent";
 import TableCell from "./tablecell.js";
 import "././styles/components.css";
-import { Perspective, Roleinstancewithprops, SerialisedProperty, RoleInstanceT, RoleType } from "perspectives-proxy";
+import { Perspective, Roleinstancewithprops, SerialisedProperty, RoleInstanceT, RoleType, FilterValueEntry } from "perspectives-proxy";
 import { WithOutBehavioursProps } from "./adorningComponentWrapper";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -39,6 +39,7 @@ interface TableRowProps
   , perspective: Perspective
   , orderedProperties: SerialisedProperty[]
   , showDetails?: boolean
+  , typeAheadFillFromCandidates?: FilterValueEntry[]
   }
 
 export default class TableRow extends PerspectivesComponent<TableRowProps>
@@ -99,8 +100,8 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
 
   handleKeyDown (event : React.KeyboardEvent)
   {
-    switch (event.code) {
-      case "Space":
+    switch (event.key) {
+      case " ":
         if (event.shiftKey) {
           event.preventDefault();
           event.stopPropagation();
@@ -126,9 +127,9 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
           }));
         }
         break;
-      default:
+      case "F10":
         // Also support Shift+F10 as a fallback shortcut
-        if (event.key === "F10" && event.shiftKey) {
+        if (event.shiftKey) {
           event.preventDefault();
           event.stopPropagation();
           if (this.ref.current) {
@@ -216,6 +217,7 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
                   perspective={component.props.perspective}
                   readableName={roleInstanceWithProps.readableName}
                   cancelled={roleInstanceWithProps.cancelled}
+                  typeAheadFillFromCandidates={serialisedProperty.id === component.props.cardcolumn ? component.props.typeAheadFillFromCandidates : undefined}
                 /> )
             }</tr>;
   }

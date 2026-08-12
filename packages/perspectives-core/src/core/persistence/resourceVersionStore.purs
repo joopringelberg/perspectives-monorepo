@@ -36,6 +36,7 @@ import Prelude
 
 import Control.Monad.AvarMonadAsk (gets)
 import Data.Maybe (Maybe(..))
+import Data.Newtype (wrap)
 import Effect.Class (liftEffect)
 import LRUCache (defaultGetOptions, get, set) as LRU
 import Perspectives.CoreTypes (MonadPerspectives)

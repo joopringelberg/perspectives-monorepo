@@ -24,11 +24,12 @@ module Perspectives.Deltas where
 
 import Control.Monad.AvarMonadAsk (modify, gets) as AA
 import Control.Monad.State.Trans (StateT, execStateT, get, lift, modify, put)
-import Data.Array (catMaybes, concat, elemIndex, filterA, foldl, head, insertAt, length, nub, null, snoc, union)
+import Data.Array (catMaybes, concat, elemIndex, filterA, foldl, head, nub, null, snoc, sortBy, union)
 import Data.DateTime.Instant (toDateTime)
-import Data.Map (Map, empty, filter, insert, lookup) as Map
-import Data.Maybe (Maybe(..), fromJust, isJust)
+import Data.Map (Map, empty, insert, lookup, filter) as Map
+import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (over, unwrap)
+import Data.Ordering (Ordering)
 import Data.Traversable (for, for_)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..))
@@ -46,12 +47,13 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Me (notIsMe)
 import Perspectives.Instances.ObjectGetters (deltaAuthor2ResourceIdentifier, getProperty, perspectivesUsersRole_, roleType_)
+import Perspectives.Logging (debugBroker, infoDelta)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, userChannel) as DEP
 import Perspectives.ModelDependencies (perspectivesUsersCancelled, perspectivesUsersPublicKey)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (Url, addDocument)
-import Perspectives.Persistence.DeltaStore (getDeltasForResource, storeDeltaFromSignedDelta)
+import Perspectives.Persistence.DeltaStore (extractDeltaInfo, getDeltasForResource, storeDeltaFromSignedDelta)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (getPerspectRol, postDatabaseName)
 import Perspectives.PerspectivesState (nextTransactionNumber, stompClient)
@@ -68,7 +70,7 @@ import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), Transactio
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), addToTransactionForPeer, transactieID)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
-import Prelude (Unit, add, bind, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>))
+import Prelude (Unit, bind, compare, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>), (||))
 import Simple.JSON (writeJSON)
 
 -- | Splits the transaction in versions specific for each peer and sends them.
@@ -76,10 +78,12 @@ import Simple.JSON (writeJSON)
 -- IMPLEMENTATION NOTICE: we cannot handle these instances here by calling executeTransactionForPublicRole
 -- because that would need cyclic model imports.
 distributeTransaction :: Transaction -> MonadPerspectives TransactionPerUser
-distributeTransaction t@(Transaction { changedDomeinFiles }) = do
+distributeTransaction (Transaction tr@{ changedDomeinFiles }) = do
   for_ changedDomeinFiles (ModelUri >>> saveCachedDomeinFile)
+  -- Sort the deltas into the required partial order before distributing to peers.
+  let sortedTransaction = Transaction tr { deltas = sortTransactionDeltas tr.deltas }
   -- Send the Transaction to all involved.
-  addPublicKeysToTransaction t >>= distributeTransactie'
+  addPublicKeysToTransaction sortedTransaction >>= distributeTransactie'
 
 distributeTransactie' :: Transaction -> MonadPerspectives TransactionPerUser
 distributeTransactie' t = do
@@ -116,7 +120,7 @@ sendTransactieToUserUsingCouchdb cdbUrl userId t = do
 -- |   * a model://perspectives.domains#System$PerspectivesSystem$User instance, or
 -- |   * an instance of the Visitor role.
 sendTransactieToUserUsingAMQP :: UnschemedResourceIdentifier -> TransactionForPeer -> MonadPerspectives Unit
-sendTransactieToUserUsingAMQP perspectivesUser t = do
+sendTransactieToUserUsingAMQP perspectivesUser t@(TransactionForPeer { timeStamp }) = do
   connected <- connectedToAMQPBroker
   n <- liftEffect $ now
   dt <- pure $ SerializableDateTime (toDateTime n)
@@ -125,9 +129,13 @@ sendTransactieToUserUsingAMQP perspectivesUser t = do
     mstompClient <- stompClient
     case mstompClient of
       Just stompClient -> do
+        -- If sending fails, we will still save the transaction in the OutgoingTransactions post database, so that it can be retried later.
+        -- The transaction will be removed when incomingPost receives an acknowledgement from the RabbitMQ broker, meaning 
+        -- that the broker has accepted and stored the message.
         saveTransactionInOutgoingPost perspectivesUser messageId t
         -- Just send the message to the topic that is the addressees PerspectivesUser instance.
         -- Each system will listen to a queue that is bound to that topic upon subscription.
+        debugBroker $ "Sending transaction for user " <> unwrap perspectivesUser <> " to AMQP broker with transaction timestamp " <> show timeStamp
         liftEffect $ sendToTopic stompClient perspectivesUser messageId (writeJSON t)
       otherwise -> saveTransactionInOutgoingPost perspectivesUser messageId t
   else saveTransactionInOutgoingPost perspectivesUser messageId t
@@ -140,7 +148,8 @@ sendTransactieToUserUsingAMQP perspectivesUser t = do
     pure $ mConnected == (Just $ Value "true")
 
 saveTransactionInOutgoingPost :: UnschemedResourceIdentifier -> String -> TransactionForPeer -> MonadPerspectives Unit
-saveTransactionInOutgoingPost userId messageId t = do
+saveTransactionInOutgoingPost userId messageId t@(TransactionForPeer { timeStamp }) = do
+  debugBroker $ "Saving transaction for user " <> unwrap userId <> " in OutgoingTransactions post database with transaction timestamp " <> show timeStamp
   postDB <- postDatabaseName
   void $ addDocument postDB (OutgoingTransaction { _id: messageId, receiver: userId, transaction: t }) messageId
 
@@ -196,14 +205,17 @@ addDomeinFileToTransactie dfId = AA.modify
 -- | Onlookers instances represent TCP subscribers (Transaction Collection Points) reached via RabbitMQ.
 -- | Otherwise return an empty array.
 -- | Also return an empty array if the PerspectivesUser has been cancelled.
+-- | Also return an empty array for the fictive serialization user (def:#serializationuser), which is never a real peer.
 computeUserRoleBottom :: RoleInstance -> MonadPerspectives (Array (Tuple RoleInstance TransactionDestination))
-computeUserRoleBottom rid = ((map ENR <<< roleType_ >=> isPublicProxy) rid) >>=
-  if _ then pure [ Tuple rid (PublicDestination rid) ]
-  else perspectivesUsersRole_ rid >>= case _ of
-    Nothing -> pure []
-    Just perspectivesUser -> ((perspectivesUser2RoleInstance perspectivesUser) ##> getProperty (EnumeratedPropertyType perspectivesUsersCancelled)) >>= case _ of
-      Just (Value "true") -> pure []
-      _ -> pure [ Tuple rid (Peer $ unschemePerspectivesUser perspectivesUser) ]
+computeUserRoleBottom rid =
+  if unwrap rid == "def:#serializationuser" then pure []
+  else ((map ENR <<< roleType_ >=> isPublicProxy) rid) >>=
+    if _ then pure [ Tuple rid (PublicDestination rid) ]
+    else perspectivesUsersRole_ rid >>= case _ of
+      Nothing -> pure []
+      Just perspectivesUser -> ((perspectivesUser2RoleInstance perspectivesUser) ##> getProperty (EnumeratedPropertyType perspectivesUsersCancelled)) >>= case _ of
+        Just (Value "true") -> pure []
+        _ -> pure [ Tuple rid (Peer $ unschemePerspectivesUser perspectivesUser) ]
 
 -- | Add the delta at the end of the array, unless it is already in the transaction or there are no users (and ignore the own user).
 -- | Only include 
@@ -218,56 +230,28 @@ addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
   isExecuting <- AA.gets (\(Transaction tr) -> tr.isExecutingIncomingDeltas)
   when (not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
-  users' <- lift $ filterA notIsMe users
-  if null users' then pure unit
+  users' <- (lift $ filterA notIsMe users)
+  if null users' || isExecuting then pure unit
   else do
     newUserBottoms <- lift (concat <$> for users' computeUserRoleBottom)
     newDelta <- pure (DeltaInTransaction deltarecord { users = users' })
+    lift $ infoDelta $ "Adding a delta to transaction for users " <> show users' <> " with user role bottoms " <> show newUserBottoms
     AA.modify
-      ( over Transaction \t@{ deltas, userRoleBottoms, insertionPoint } -> t
-          { deltas =
-              if isJust $ elemIndex newDelta deltas then deltas
-              else case insertionPoint of
-                Nothing -> snoc deltas newDelta
-                Just i -> case insertAt i newDelta deltas of
-                  Nothing -> snoc deltas newDelta
-                  Just deltas' -> deltas'
-          , userRoleBottoms = foldl (\userBottoms' (Tuple role user) -> Map.insert role user userBottoms') userRoleBottoms newUserBottoms
-          , insertionPoint = (add 1) <$> insertionPoint
-          }
-      )
-
--- | Insert the delta at the index, unless it is already in the transaction or there are no users (and ignore the own user).
-insertDelta :: DeltaInTransaction -> Int -> MonadPerspectivesTransaction Unit
-insertDelta (DeltaInTransaction deltarecord@{ users, delta }) i = do
-  -- Store locally-created deltas in the DeltaStore for persistent history.
-  -- Skip storage when processing incoming deltas (see addDelta for the rationale).
-  isExecuting <- AA.gets (\(Transaction tr) -> tr.isExecutingIncomingDeltas)
-  when (not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
-  -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
-  users' <- lift $ filterA notIsMe users
-  if null users' then pure unit
-  else do
-    (newUserBottoms :: Array (Tuple RoleInstance TransactionDestination)) <- lift (concat <$> for users' computeUserRoleBottom)
-    newDelta <- pure (DeltaInTransaction deltarecord { users = users' })
-    AA.modify
-      ( over Transaction \t@{ deltas, userRoleBottoms } -> t
-          { deltas =
-              if isJust $ elemIndex newDelta deltas then deltas
-              else case insertAt i newDelta deltas of
-                Nothing -> snoc deltas newDelta
-                Just deltas' -> deltas'
-          , userRoleBottoms = foldl (\userBottoms' (Tuple role user) -> Map.insert role user userBottoms') userRoleBottoms newUserBottoms
-          }
+      ( over Transaction \t@{ deltas, userRoleBottoms } ->
+          let
+            alreadyPresent = isJust $ elemIndex newDelta deltas
+          in
+            t
+              { deltas =
+                  if alreadyPresent then deltas
+                  else snoc deltas newDelta
+              , userRoleBottoms = foldl (\userBottoms' (Tuple role user) -> Map.insert role user userBottoms') userRoleBottoms newUserBottoms
+              }
       )
 
 -- | Instrumental for QUERY UPDATES.
 addCorrelationIdentifiersToTransactie :: Array CorrelationIdentifier -> MonadPerspectivesTransaction Unit
 addCorrelationIdentifiersToTransactie corrIds = AA.modify (over Transaction \t@{ correlationIdentifiers } -> t { correlationIdentifiers = union correlationIdentifiers corrIds })
-
--- | Give the number of SignedDeltas in the Transaction.
-deltaIndex :: MonadPerspectivesTransaction Int
-deltaIndex = AA.gets \(Transaction { deltas }) -> length deltas
 
 addCreatedContextToTransaction :: ContextInstance -> MonadPerspectivesTransaction Unit
 addCreatedContextToTransaction cid =
@@ -324,3 +308,59 @@ addPublicKeysToTransaction (Transaction tr@{ deltas }) = do
       Nothing -> logPerspectivesError (NoPublicKeyForAuthor (unwrap roleInstanceId)) *> pure Nothing
       Just (Value key) -> pure $ Just { key, deltas: allDeltas }
 
+-- | Priority ordering for delta types. Lower number = executed first.
+-- | Implements the partial order required for correct peer execution:
+-- | - Context creation before role creation
+-- | - Role creation before adding roles to a context (UniverseRoleDelta before ContextDelta)
+-- | - Role-context linking before binding/property updates
+-- | - Construction/addition before removal/move operations
+-- | Within each delta type:
+-- | - UniverseRoleDelta: ConstructEmptyRole/ConstructExternalRole before RemoveRoleInstance/…
+-- | - ContextDelta: AddRoleInstancesToContext/AddExternalRole before MoveRoleInstancesToAnotherContext
+-- | - RoleBindingDelta: SetFirstBinding before RemoveBinding/ReplaceBinding
+-- | - RolePropertyDelta: AddProperty/SetProperty/UploadFile before RemoveProperty/DeleteProperty
+deltaTypeSortPriority :: String -> Int
+deltaTypeSortPriority dt
+  | dt == "ConstructExternalRole" = 0
+  | dt == "ConstructEmptyContext" = 1
+  | dt == "ConstructEmptyRole" = 2
+  | dt == "AddExternalRole" = 2
+  | dt == "AddRoleInstancesToContext" = 3
+  | dt == "SetFirstBinding" = 4
+  | dt == "AddProperty" = 5
+  | dt == "SetProperty" = 5
+  | dt == "UploadFile" = 5
+  | dt == "MoveRoleInstancesToAnotherContext" = 5
+  | dt == "RemoveRoleInstance" = 6
+  | dt == "RemoveUnboundExternalRoleInstance" = 6
+  | dt == "RemoveExternalRoleInstance" = 6
+  | dt == "RemoveBinding" = 6
+  | dt == "ReplaceBinding" = 6
+  | dt == "RemoveProperty" = 7
+  | dt == "DeleteProperty" = 7
+  | true = 99
+
+-- | Sort the deltas in an array into the correct partial order for execution by peers.
+-- | Uses the delta type priority as the primary sort key, followed by resource version
+-- | and resource key for a deterministic stable order within the same priority level.
+-- | Deltas whose type cannot be determined are placed at the end.
+sortTransactionDeltas :: Array DeltaInTransaction -> Array DeltaInTransaction
+sortTransactionDeltas = sortBy compareDeltaInTransaction
+  where
+  compareDeltaInTransaction :: DeltaInTransaction -> DeltaInTransaction -> Ordering
+  compareDeltaInTransaction
+    (DeltaInTransaction { delta: SignedDelta { encryptedDelta: d1 } })
+    (DeltaInTransaction { delta: SignedDelta { encryptedDelta: d2 } }) =
+    let
+      mInfo1 = extractDeltaInfo d1
+      mInfo2 = extractDeltaInfo d2
+      priority1 = maybe 99 (\i -> deltaTypeSortPriority i.deltaType) mInfo1
+      priority2 = maybe 99 (\i -> deltaTypeSortPriority i.deltaType) mInfo2
+      version1 = maybe 0 _.resourceVersion mInfo1
+      version2 = maybe 0 _.resourceVersion mInfo2
+      key1 = maybe "" _.resourceKey mInfo1
+      key2 = maybe "" _.resourceKey mInfo2
+    in
+      compare priority1 priority2
+-- <> compare version1 version2
+-- <> compare key1 key2

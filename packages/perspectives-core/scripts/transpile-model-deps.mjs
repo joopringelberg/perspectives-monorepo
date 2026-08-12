@@ -13,12 +13,11 @@ let outFile = path.join(__dirname, 'modelDependencies.purs')
 // CLI args (support both --flag=value and --flag value)
 const argv = process.argv.slice(2)
 function parseArgs(argv) {
-  const out = { dryRun: false, cacheDir: null, inFile: null, outFile: null, refresh: false, preferDoc: false }
+  const out = { dryRun: false, cacheDir: null, inFile: null, outFile: null, refresh: false }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--dry-run') { out.dryRun = true; continue }
     if (a === '--refresh') { out.refresh = true; continue }
-    if (a === '--prefer-doc') { out.preferDoc = true; continue }
     if (a === '--cache-dir') { out.cacheDir = argv[i + 1]; i++; continue }
     if (a === '--in-file') { out.inFile = argv[i + 1]; i++; continue }
     if (a === '--out-file') { out.outFile = argv[i + 1]; i++; continue }
@@ -34,7 +33,6 @@ const srcFile = parsed.inFile ? path.resolve(parsed.inFile) : defaultInFile
 if (parsed.outFile) outFile = path.resolve(parsed.outFile)
 const cacheDir = parsed.cacheDir ? path.resolve(parsed.cacheDir) : path.join(root, '.cache', 'sidecars')
 const refresh = parsed.refresh || process.env.PDR_REFRESH_SIDECARS === '1' || process.env.PDR_REFRESH_SIDECARS === 'true'
-const preferDoc = parsed.preferDoc || process.env.PDR_PREFER_DOC === '1' || process.env.PDR_PREFER_DOC === 'true'
 
 // Config: versions per stable model uri (optional, can be omitted for now)
 const configPath = path.join(__dirname, 'transpile.config.json')
@@ -76,37 +74,89 @@ const modelUri2ModelUrl = (s) => {
   }
 }
 
-// Simple fetch with cache and optional refresh; adds cache-busting
+// Fetch from the remote source of truth first; cache is only a fallback when network fetch fails.
 async function fetchWithCache(urlStr, cachePath, { refresh = false } = {}) {
   await fs.mkdir(path.dirname(cachePath), { recursive: true })
-  if (!refresh) {
-    try {
-      const data = await fs.readFile(cachePath, 'utf8')
-      return data
-    } catch {}
-  }
   const u = new URL(urlStr)
   if (refresh) {
     u.searchParams.set('_ts', Date.now().toString())
   }
-  const data = await new Promise((resolve, reject) => {
-    const options = {
-      headers: refresh ? { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } : undefined
-    }
-    https.get(u, options, (res) => {
-      if (res.statusCode !== 200) {
-        reject(new Error(`HTTP ${res.statusCode} for ${u.toString()}`))
-        res.resume()
-        return
+  try {
+    const data = await new Promise((resolve, reject) => {
+      const options = {
+        headers: refresh ? { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } : undefined
       }
-      let chunks = ''
-      res.setEncoding('utf8')
-      res.on('data', (d) => (chunks += d))
-      res.on('end', () => resolve(chunks))
-    }).on('error', reject)
+      https.get(u, options, (res) => {
+        if (res.statusCode !== 200) {
+          reject(new Error(`HTTP ${res.statusCode} for ${u.toString()}`))
+          res.resume()
+          return
+        }
+        let chunks = ''
+        res.setEncoding('utf8')
+        res.on('data', (d) => (chunks += d))
+        res.on('end', () => resolve(chunks))
+      }).on('error', reject)
+    })
+    await fs.writeFile(cachePath, data, 'utf8')
+    return data
+  } catch (remoteErr) {
+    // For missing resources we should not silently use an old local copy.
+    if (remoteErr && typeof remoteErr.message === 'string' && remoteErr.message.startsWith('HTTP 404')) {
+      throw remoteErr
+    }
+    try {
+      const cached = await fs.readFile(cachePath, 'utf8')
+      console.warn(`[transpile] Falling back to cached sidecar for ${path.basename(cachePath)}: ${remoteErr.message}`)
+      return cached
+    } catch {
+      throw remoteErr
+    }
+  }
+}
+
+function parseVersionFromDocName(documentName) {
+  const m = documentName.match(/@([0-9]+(?:\.[0-9]+)*)\.json$/)
+  return m ? m[1] : null
+}
+
+function compareVersionStrings(a, b) {
+  const as = a.split('.').map((x) => Number.parseInt(x, 10) || 0)
+  const bs = b.split('.').map((x) => Number.parseInt(x, 10) || 0)
+  const len = Math.max(as.length, bs.length)
+  for (let i = 0; i < len; i++) {
+    const ai = as[i] ?? 0
+    const bi = bs[i] ?? 0
+    if (ai > bi) return 1
+    if (ai < bi) return -1
+  }
+  return 0
+}
+
+async function findLatestDocumentName(stableModelUri) {
+  const m = stableModelUri.match(newModelPattern)
+  if (!m) throw new Error(`Cannot resolve latest document for non-model uri: ${stableModelUri}`)
+  const authority = m[1]
+  const localModelName = m[2]
+  const ns = authority.split('.').join('_')
+  const { repositoryUrl } = modelUri2ModelUrl(stableModelUri)
+  const prefix = `${ns}-${localModelName}@`
+  const allDocsUrl = `${repositoryUrl}/_all_docs?startkey=${encodeURIComponent(JSON.stringify(prefix))}&endkey=${encodeURIComponent(JSON.stringify(prefix + '\\ufff0'))}&include_docs=false`
+  const allDocsCache = path.join(cacheDir, `${ns}-${localModelName}-all_docs.json`)
+  const payload = JSON.parse(await fetchWithCache(allDocsUrl, allDocsCache, { refresh }))
+  const rows = Array.isArray(payload.rows) ? payload.rows : []
+  const candidateNames = rows
+    .map((r) => r && r.id)
+    .filter((id) => typeof id === 'string' && id.startsWith(prefix) && id.endsWith('.json'))
+  if (candidateNames.length === 0) {
+    throw new Error(`No versioned document found for ${stableModelUri}`)
+  }
+  candidateNames.sort((x, y) => {
+    const xv = parseVersionFromDocName(x) || '0'
+    const yv = parseVersionFromDocName(y) || '0'
+    return compareVersionStrings(xv, yv)
   })
-  await fs.writeFile(cachePath, data, 'utf8')
-  return data
+  return candidateNames[candidateNames.length - 1]
 }
 
 // Build stable id for a readable FQN using a StableIdMapping JSON
@@ -255,43 +305,19 @@ function hasSingleLocalSegment(s) {
     const key = version ? `${stableModelUri}@${version}` : stableModelUri
     if (mappingCache.has(key)) return mappingCache.get(key)
     const { repositoryUrl, documentName } = modelUri2ModelUrl(key)
-    const attachmentUrl = `${repositoryUrl}/${documentName}/stableIdMapping.json`
-    const attachmentCache = path.join(cacheDir, `${documentName}-stableIdMapping.json`)
-    const docUrl = `${repositoryUrl}/${documentName}`
-    const docCache = path.join(cacheDir, `${documentName}.json`)
-    const tryAttachment = async () => JSON.parse(await fetchWithCache(attachmentUrl, attachmentCache, { refresh }))
-    const tryDocument = async () => {
-      const docText = await fetchWithCache(docUrl, docCache, { refresh })
-      const mappingDoc = JSON.parse(docText)
-      if (mappingDoc && mappingDoc._attachments && mappingDoc._attachments['stableIdMapping.json'] && mappingDoc._attachments['stableIdMapping.json'].data) {
-        const b64 = mappingDoc._attachments['stableIdMapping.json'].data
-        const buf = Buffer.from(b64, 'base64')
-        return JSON.parse(buf.toString('utf8'))
-      } else if (mappingDoc && mappingDoc.stableIdMapping) {
-        return mappingDoc.stableIdMapping
-      } else if (mappingDoc && mappingDoc.version && mappingDoc.modelIdentifier) {
-        return mappingDoc
-      } else {
-        throw new Error('No stableIdMapping in document')
-      }
-    }
     let mapping
     try {
-      mapping = preferDoc ? await tryDocument() : await tryAttachment()
+      const attachmentUrl = `${repositoryUrl}/${documentName}/stableIdMapping.json`
+      const attachmentCache = path.join(cacheDir, `${documentName}-stableIdMapping.json`)
+      mapping = JSON.parse(await fetchWithCache(attachmentUrl, attachmentCache, { refresh }))
     } catch (e) {
-      try {
-        mapping = preferDoc ? await tryAttachment() : await tryDocument()
-      } catch (e2) {
-        if (version) {
-          const { repositoryUrl: repo2, documentName: doc2 } = modelUri2ModelUrl(stableModelUri)
-          const att2 = `${repo2}/${doc2}/stableIdMapping.json`
-          const cache2 = path.join(cacheDir, `${doc2}-stableIdMapping.json`)
-          const txt2 = await fetchWithCache(att2, cache2, { refresh })
-          mapping = JSON.parse(txt2)
-        } else {
-          throw e2
-        }
+      const latestDocName = await findLatestDocumentName(stableModelUri)
+      if (version) {
+        console.warn(`[transpile] Version ${version} for ${stableModelUri} unavailable; using latest ${latestDocName}.`)
       }
+      const att2 = `${repositoryUrl}/${latestDocName}/stableIdMapping.json`
+      const cache2 = path.join(cacheDir, `${latestDocName}-stableIdMapping.json`)
+      mapping = JSON.parse(await fetchWithCache(att2, cache2, { refresh }))
     }
     mappingCache.set(key, mapping)
     return mapping

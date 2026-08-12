@@ -13,8 +13,10 @@ import Effect.Exception (message)
 import Node.Encoding as ENC
 import Node.FS.Aff (readTextFile)
 import Node.Path as Path
-import Perspectives.Parsing.Arc (automaticEffectE, contextE, domain, propertyE, thingRoleE, userRoleE, viewE)
-import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FilledBySpecification(..), PropertyE(..), PropertyPart(..), PropsOrView(..), RoleE(..), RolePart(..), StateQualifiedPart, StateSpecification(..), ViewE(..))
+import Parsing (ParseError(..))
+import Perspectives.Parsing.Arc (automaticEffectE, contextE, contextRoleE, domain, propertyE, thingRoleE, userRoleE, viewE)
+import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), PropertyE(..), PropertyPart(..), PropsOrView(..), RoleE(..), RolePart(..), StateQualifiedPart, StateSpecification(..), ViewE(..))
+import Perspectives.Parsing.Arc.Expression.AST (TypeCombination(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier)
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
@@ -24,9 +26,8 @@ import Perspectives.Representation.TypeIdentifiers (ContextType(..), RoleKind(..
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerbList(..))
 import Perspectives.Representation.Verbs (RoleVerb(..), PropertyVerb(..)) as RV
 import Test.Parsing.ArcAstSelectors (actionExists, allPropertyVerbs, ensureAction, ensureContext, ensureOnEntry, ensureOnExit, ensurePerspectiveOf, ensurePerspectiveOn, ensurePropertyVerbsForPropsOrView, ensureRoleVerbs, ensureStateInContext, ensureStateInRole, ensureSubState, ensureUserRole, failure, hasAutomaticAction, isImplicitRoleOnIdentifier, isIndexed, isNotified, isStateWithContext, isStateWithExplicitRole, isStateWithExplicitRole_, perspectiveExists, stateExists, stateParts)
-import Test.Unit (TestF, suite, test)
+import Test.Unit (TestF, suite, test, testOnly)
 import Test.Unit.Assert (assert)
-import Parsing (ParseError(..))
 import Unsafe.Coerce (unsafeCoerce)
 
 testDirectory :: String
@@ -100,6 +101,13 @@ theSuite = suite "Perspectives.Parsing.Arc" do
       (Right id) -> do
         assert "'entry' should be parsed as a valid reserved identifier" (id == "entry")
 
+  test "reservedIdentifier, fillproperty keyword" do
+    (r :: Either ParseError String) <- runIndentParser "fillproperty" reservedIdentifier
+    case r of
+      (Left e) -> assert (show e) false
+      (Right id) -> do
+        assert "'fillproperty' should be parsed as a valid reserved identifier" (id == "fillproperty")
+
   test "reservedIdentifier, failing" do
     (r :: Either ParseError String) <- {-pure $ unwrap $-} runIndentParser "cheese" reservedIdentifier
     case r of
@@ -166,6 +174,19 @@ theSuite = suite "Perspectives.Parsing.Arc" do
           (isJust (findIndex (case _ of
             (Calculation _ _) -> true
             otherwise -> false) roleParts)))
+      otherwise -> assert "Role should have parts" false
+
+  test "Role with FilledBy attribute" do 
+    (r :: Either ParseError ContextPart) <- {-pure $ unwrap $-} runIndentParser "context Stadskamers (relational) filledBy Stadskamer\n" contextRoleE
+    case r of
+      (Left e) -> assert (show e) false
+      (Right rl@(RE (RoleE{roleParts}))) -> do
+        assert "Role should have a FilledBy attribute"
+          (1 == (length (filter (case _ of 
+            FilledBySpecifications spec -> (case spec of
+              (Alternatives atts) -> LNE.length atts == 1
+              otherwise -> false)
+            _ -> false) roleParts)))
       otherwise -> assert "Role should have parts" false
 
   test "Role that has two FilledBy attributes" do 
@@ -271,6 +292,22 @@ theSuite = suite "Perspectives.Parsing.Arc" do
         ensureUserRole "GoedeGast" dom >>=
           ensureStateInRole (isStateWithExplicitRole "model:Feest$GoedeGast") >>=
             perspectiveExists
+
+  test "Screen parser accepts fillproperty clauses" do
+    let
+      src = "domain MyTestDomain\n  thing ReferenceValues (relational)\n    property Value (String)\n  user Doorverwijzer\n    perspective on ReferenceValues\n      all roleverbs\n      props (Value) verbs (Consult, SetPropertyValue)\n  screen\n    who\n      Doorverwijzer\n        master\n          with props (Value)\n          fillproperty Value from ReferenceValues >> Value\n        detail\n          with props (Value)"
+    (r :: Either ParseError ContextE) <- runIndentParser src domain
+    case r of
+      Left e -> assert (show e) false
+      Right _ -> assert "The domain parser should accept fillproperty clauses in screens." true
+
+  test "Screen parser accepts fillproperty in classic form and table widgets" do
+    let
+      src = "domain MyTestDomain\n  thing Extern (functional)\n    property OrganisatieNaam (String)\n  thing Task (relational)\n    property Status (String)\n  thing ReferenceValues (relational)\n    property Value (String)\n  user ProjectManager\n    perspective on Extern\n      all roleverbs\n      props (OrganisatieNaam) verbs (Consult, SetPropertyValue)\n    perspective on Task\n      all roleverbs\n      props (Status) verbs (Consult, SetPropertyValue)\n  screen \"Project\"\n    tab \"Overview\" default\n      row\n        form Extern\n          fillproperty OrganisatieNaam from ReferenceValues >> Value\n    tab \"Tasks\"\n      row\n        table Task\n          fillproperty Status from ReferenceValues >> Value"
+    (r :: Either ParseError ContextE) <- runIndentParser src domain
+    case r of
+      Left e -> assert (show e) false
+      Right _ -> assert "Classic form/table widgets should accept fillproperty clauses." true
 
   --------------------------------------------------------------------------------
   ---- DOMAIN

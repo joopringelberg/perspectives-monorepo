@@ -32,7 +32,7 @@ import Perspectives.ModelDependencies (bodiesWithAccountsModelName, couchdbManag
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, invertedQueryDatabaseName, modelDatabaseName)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction)
-import Perspectives.SetupCouchdb (setContext2RoleView, setContextSpecialisationsView, setContextView, setCredentialsView, setFilled2FillerView, setFiller2FilledView, setModelIdNamespaceView, setModelView, setPendingInvitationView, setRTContextKeyView, setRTFilledKeyView, setRTFillerKeyView, setRTPropertyKeyView, setRTRoleKeyView, setRole2ContextView, setRoleFromContextView, setRoleSpecialisationsView, setRoleView)
+import Perspectives.SetupCouchdb (setContext2RoleView, setContextSpecialisationsView, setContextView, setCredentialsView, setFilled2FillerView, setFiller2FilledView, setFilterValueView, setModelIdNamespaceView, setModelView, setPendingInvitationView, setRTContextKeyView, setRTFilledKeyView, setRTFillerKeyView, setRTPropertyKeyView, setRTRoleKeyView, setRole2ContextView, setRoleFromContextView, setRoleSpecialisationsView, setRoleView)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer)
 import Prelude (Unit, bind, discard, void, ($), (>>=))
@@ -55,6 +55,7 @@ setupUser uninterpretedIdentityDoc = do
   entitiesDatabaseName >>= setFilled2FillerView
   entitiesDatabaseName >>= setContext2RoleView
   entitiesDatabaseName >>= setRole2ContextView
+  entitiesDatabaseName >>= setFilterValueView
 
   setupInvertedQueryDatabase
 
@@ -91,6 +92,7 @@ reSetupUser = do
   entitiesDatabaseName >>= setFilled2FillerView
   entitiesDatabaseName >>= setContext2RoleView
   entitiesDatabaseName >>= setRole2ContextView
+  entitiesDatabaseName >>= setFilterValueView
   -- Ensure the models database has the id+namespace view as well during re-setup
   modelDatabaseName >>= setModelIdNamespaceView
   DomeinFile { referredModels } <- getDomeinFile (ModelUri systemModelName)

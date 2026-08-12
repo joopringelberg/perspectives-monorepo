@@ -4,7 +4,7 @@ import json from '@rollup/plugin-json';
 import url from '@rollup/plugin-url';
 import del from 'rollup-plugin-delete';
 import replace from '@rollup/plugin-replace';
-import { promises as fs } from 'fs';
+import { promises as fs, readFileSync } from 'fs';
 
 export default async function() {
   const packageJson = JSON.parse(await fs.readFile(new URL('./package.json', import.meta.url)));
@@ -24,6 +24,15 @@ export default async function() {
       ), // Resolve node_modules
       commonjs(), // Convert CommonJS modules to ES6
       json(), // Handle JSON files
+      {
+        name: 'arc-as-text',
+        load(id) {
+          if (id.endsWith('.arc')) {
+            return `export default ${JSON.stringify(readFileSync(id, 'utf8'))};`;
+          }
+          return null;
+        },
+      },
       url({
         include: ['**/*.arc'], // Include .arc files
         limit: 0, // No limit, always include the file

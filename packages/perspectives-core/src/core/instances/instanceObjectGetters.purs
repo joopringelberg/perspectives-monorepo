@@ -54,7 +54,7 @@ import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..), ex
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.InstanceRepresentation.PublicUrl (PublicUrl)
 import Perspectives.Instances.Combinators (orElse)
-import Perspectives.ModelDependencies (nonPerspectivesUsers, perspectivesUsers)
+import Perspectives.ModelDependencies (onlookers, perspectivesUsers)
 import Perspectives.Persistence.API (Keys(..))
 import Perspectives.Persistent (entitiesDatabaseName, getPerspectContext, getPerspectRol)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase, getSafeViewOnDatabase_)
@@ -63,7 +63,7 @@ import Perspectives.Query.QueryTypes (RoleInContext)
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Action (Action)
 import Perspectives.Representation.Class.PersistentType (getContext, getEnumeratedRole)
-import Perspectives.Representation.Class.Role (actionsOfRoleType, completeDeclaredFillerRestriction, declaredTypeWithoutFiller, kindOfRole)
+import Perspectives.Representation.Class.Role (actionsOfRoleType, declaredType, kindOfRole)
 import Perspectives.Representation.Context (Context(..)) as CONTEXT
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser(..), RoleInstance(..), Value(..), roleInstance2PerspectivesUser)
@@ -103,7 +103,7 @@ getUnlinkedRoleInstances rn c = ArrayT $
           ( do
               cache <- roleCache
               cachedRoleAvars <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-              cachedRoles <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              cachedRoles <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
               pure $ rol_id <$> filter (roleFromContextFilter rn c) cachedRoles
           )
         pure $ filledRolesInDatabase `union` filledRolesInCache
@@ -229,18 +229,12 @@ binding_ r = (try $ getPerspectRol r) >>=
         Nothing -> pure Nothing
         (Just b) -> pure $ Just b
 
+-- | The product of the declared types of the role and all of its actual fillers.
 completeRuntimeType :: RoleInstance -> MP (ADT RoleInContext)
 completeRuntimeType rid = do
-  role <- roleType_ rid >>= getEnumeratedRole
-  crt <- declaredTypeWithoutFiller role
-  mb <- binding_ rid
-  case mb of
-    Nothing -> do
-      mrestrictions <- completeDeclaredFillerRestriction role
-      case mrestrictions of
-        Nothing -> pure crt
-        Just restrictions -> pure $ PROD [ crt, restrictions ]
-    Just b -> (\adt -> PROD [ crt, adt ]) <$> completeRuntimeType b
+  fillers <- allFillers rid
+  allDeclaredTypes <- for (cons rid fillers) (roleType_ >=> getEnumeratedRole)
+  pure $ PROD $ declaredType <$> allDeclaredTypes
 
 allFillers :: RoleInstance -> MonadPerspectives (Array RoleInstance)
 allFillers rid = do
@@ -275,19 +269,12 @@ perspectivesUsersRole_ :: RoleInstance -> MP (Maybe PerspectivesUser)
 perspectivesUsersRole_ r = do
   EnumeratedRoleType rt <- roleType_ r
   if rt == perspectivesUsers then pure $ Just (roleInstance2PerspectivesUser r)
+  else if rt == onlookers then pure $ Just (roleInstance2PerspectivesUser r)
   else do
     (mbinding :: Maybe RoleInstance) <- binding_ r
     case mbinding of
-      Nothing ->
-        -- Bottom of the chain. NonPerspectivesUsers have no AMQP account and are excluded.
-        -- Other UserRole types (e.g. Onlookers) are recognised as valid AMQP peers.
-        -- The isUserRole guard protects against non-UserRole instances (e.g. ExternalRole)
-        -- accidentally appearing at the bottom of a binding chain.
-        if rt == nonPerspectivesUsers then pure Nothing
-        else do
-          isUser <- isUserRole r
-          if isUser then pure $ Just (roleInstance2PerspectivesUser r)
-          else pure Nothing
+      -- Bottom of the chain.
+      Nothing -> pure Nothing
       Just b -> perspectivesUsersRole_ b
 
 -- | From the instance of a Role (fillerId) of any kind, find the instances of the Role of the given
@@ -396,7 +383,7 @@ filler2filledFromDatabase_ (Filler_ filler) =
           ( do
               cache <- roleCache
               cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
               pure $ rol_id <$> filter (filler2filledFilter filler) cachedRoles
           )
         pure $ filledRolesInDatabase `union` filledRolesInCache
@@ -419,7 +406,7 @@ filled2fillerFromDatabase_ rid =
               cache <- roleCache
               cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
               -- There may be empty AVars.
-              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
               for (filter (filled2fillerFilter rid) cachedRoles)
                 ( \filler@(PerspectRol { id, pspType, context: cid }) -> do
                     filledContextType <- contextType_ cid
@@ -445,7 +432,7 @@ role2contextFromDatabase_ rid =
           ( do
               cache <- contextCache
               cachedContextAvars :: Array (AVar IP.PerspectContext) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-              cachedContexts :: Array IP.PerspectContext <- catMaybes <$> (lift $ traverse tryRead cachedContextAvars)
+              cachedContexts :: Array IP.PerspectContext <- catMaybes <$> (liftAff $ traverse tryRead cachedContextAvars)
               pure $ context_id <$> filter (context2RoleFilter rid) cachedContexts
           )
         pure $ contextInDatabase `union` contextInCache
@@ -466,7 +453,7 @@ context2roleFromDatabase_ cid =
           ( do
               cache <- roleCache
               cachedRoleAvars :: Array (AVar IP.PerspectRol) <- liftAff $ liftEffect $ (rvalues cache >>= pure <<< toArray)
-              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (lift $ traverse tryRead cachedRoleAvars)
+              cachedRoles :: Array IP.PerspectRol <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
               pure $ rol_id <$> filter (role2ContextFilter cid) cachedRoles
           )
         pure $ contextRolesInDatabase `union` contextRolesInCache
@@ -521,6 +508,7 @@ hasType rt rid = ArrayT do
   pure $ [ eq t rt ]
 
 -- | All the roles that bind the role instance.
+-- | That is: all the roles that have this role instance as their filler (binding).
 allRoleBinders :: RoleInstance ~~> RoleInstance
 allRoleBinders r = ArrayT $ (lift $ try $ getPerspectRol r) >>=
   handlePerspectRolError' "allRoleBinders" []

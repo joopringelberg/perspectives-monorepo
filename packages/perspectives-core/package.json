@@ -1,6 +1,6 @@
 {
   "name": "perspectives-core",
-  "version": "3.2.0",
+  "version": "3.3.8",
   "description": "Core functionality of Perspectives",
   "license": "GPL-3.0-or-later",
   "author": "Joop Ringelberg <joop.ringelberg@gmail.com>",
@@ -37,9 +37,16 @@
     "prebuild": "node ./scripts/transpile-model-deps.mjs --cache-dir ./.cache/sidecars --in-file ./scripts/modelDependencies_source.purs --out-file ./src/core/modelDependencies.purs || echo '[transpile] skipping (no versions or offline)'",
     "build": "pnpm run fmt && pnpm exec spago build && rollup -c",
     "build:node": "pnpm exec spago build && rollup -c rollup.node.config.js",
+    "build:layer3": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Layer3/index.js ROLLUP_OUTPUT=./dist/test.layer3.node.js rollup -c rollup.node.config.js",
     "test:layer1": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Layer1/index.js ROLLUP_OUTPUT=./dist/test.layer1.node.js rollup -c rollup.node.config.js && node dist/test.layer1.node.js",
     "test:layer2": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Layer2/index.js ROLLUP_OUTPUT=./dist/test.layer2.node.js rollup -c rollup.node.config.js && node dist/test.layer2.node.js",
-    "test:layer3": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Layer3/index.js ROLLUP_OUTPUT=./dist/test.layer3.node.js rollup -c rollup.node.config.js && node dist/test.layer3.node.js",
+    "test:layer3": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Layer3/index.js ROLLUP_OUTPUT=./dist/test.layer3.node.js rollup -c rollup.node.config.js && clear && node dist/test.layer3.node.js",
+    "test:amqp": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.AMQPTests/index.js ROLLUP_OUTPUT=./dist/test.amqp.node.js rollup -c rollup.node.config.js && clear && node dist/test.amqp.node.js",
+    "test:destructive": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.SinglePDRDestructiveTests/index.js ROLLUP_OUTPUT=./dist/test.singlepdrdestructive.node.js rollup -c rollup.node.config.js && clear && node dist/test.singlepdrdestructive.node.js",
+    "test:destructiveSync": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.DestructiveSynchronisationTests/index.js ROLLUP_OUTPUT=./dist/test.destructiveSynchronisation.node.js rollup -c rollup.node.config.js && clear && node dist/test.destructiveSynchronisation.node.js",
+    "test:transaction": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.TransactionExecutionTests/index.js ROLLUP_OUTPUT=./dist/test.transactionexecution.node.js rollup -c rollup.node.config.js && clear && node dist/test.transactionexecution.node.js",
+    "test:transaction:compile": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.TransactionExecutionTestsCompile/index.js ROLLUP_OUTPUT=./dist/test.transactionexecution.compile.node.js rollup -c rollup.node.config.js && clear && node dist/test.transactionexecution.compile.node.js",
+    "test:compileModelsFromFile": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.ModelFileCompilation/index.js ROLLUP_OUTPUT=./dist/test.modelFileCompilation.node.js rollup -c rollup.node.config.js && node dist/test.modelFileCompilation.node.js",
     "test:node": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Main/index.js ROLLUP_OUTPUT=./dist/test.node.js rollup -c rollup.node.config.js && node dist/test.node.js",
     "modulemap": "node build-module-map.mjs > module-map.json"
   },
@@ -54,7 +61,9 @@
     "pouchdb-adapter-http": "^9.0.0",
     "pouchdb-adapter-memory": "^9.0.0",
     "pouchdb-core": "^9.0.0",
+    "pouchdb-mapreduce": "^9.0.0",
     "rollup-plugin-delete": "^3.0.1",
+    "rollup-plugin-sourcemaps": "^0.6.3",
     "xhr2": "^0.2.1"
   }
 }

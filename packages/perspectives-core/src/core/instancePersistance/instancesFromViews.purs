@@ -2,8 +2,8 @@ module Perspectives.Persistent.FromViews where
 
 import Prelude
 
+import Control.Monad.Error.Class (catchError)
 import Data.Foldable (for_)
-import Effect.Aff (catchError)
 import Persistence.Attachment (class Attachment)
 import Perspectives.CoreTypes (class Persistent, MonadPerspectives)
 import Perspectives.Persistence.API (Keys, getViewOnDatabase, resetViewIndex)

@@ -40,8 +40,8 @@ import Perspectives.ContextAndRole (defaultRolRecord)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (###=))
 import Perspectives.Deltas (addCreatedRoleToTransaction)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
-import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Instances.ObjectGetters (contextType_)
+import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType, cacheEntity)
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
@@ -49,7 +49,7 @@ import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Types.ObjectGetters (roleAspectsClosure)
 import Perspectives.TypesForDeltas (UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Prelude (bind, discard, pure, void, ($))
+import Prelude (bind, discard, pure, void, ($), (<<<), (<$>))
 import Simple.JSON (writeJSON)
 
 -- | `localName` should be the local name of the roleType.
@@ -63,6 +63,7 @@ constructEmptyRole
 constructEmptyRole contextInstance roleType i rolInstanceId = do
   subject <- getSubject
   allTypes <- lift (roleType ###= roleAspectsClosure)
+  allRootStates <- pure (StateIdentifier <<< unwrap <$> allTypes)
   contextType <- lift $ contextType_ contextInstance
   delta <- signDelta
     ( writeJSON $ stripResourceSchemes $ UniverseRoleDelta
@@ -85,7 +86,8 @@ constructEmptyRole contextInstance roleType i rolInstanceId = do
         , allTypes = allTypes
         , context = contextInstance
         , occurrence = i
-        , states = [ StateIdentifier $ unwrap roleType ]
+        -- We need to store all root states. Otherwise inverted queries derived from aspect perspectives will not be triggered.
+        , states = allRootStates
         }
     )
   void $ lift $ cacheEntity rolInstanceId role

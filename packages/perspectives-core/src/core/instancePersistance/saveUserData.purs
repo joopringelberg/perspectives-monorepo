@@ -38,11 +38,15 @@ module Perspectives.SaveUserData
   , removeContextIfUnbound
   , removeContextInstance
   , removeRoleInstance
+  , FillBindingMode(..)
+  , findMostGeneralAllowedFillerType
   , replaceBinding
   , scheduleContextRemoval
   , scheduleRoleRemoval
   , setBinding
+  , setBindingWithMode
   , setFirstBinding
+  , setFirstBindingWithMode
   , severeBindingLinks
   , stateEvaluationAndQueryUpdatesForContext
   , synchronise
@@ -54,28 +58,32 @@ import Control.Monad.State (lift)
 import Data.Array (concat, cons, delete, elemIndex, find, nub, union)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (over, unwrap)
+import Data.Show (show)
 import Data.Traversable (for, for_, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Foreign.Object (Object, values)
-import Perspectives.Assignment.SerialiseAsDeltas (serialisedAsDeltasFor)
+import Perspectives.Assignment.SerialiseAsDeltas (newPeer, serialisedAsDeltasFor)
 import Perspectives.Assignment.Update (cacheAndSave, getSubject)
 import Perspectives.Authenticate (signDelta)
 import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
 import Perspectives.CollectAffectedContexts (addDeltasForPerspectiveObjects, usersWithPerspectiveOnRoleBinding, usersWithPerspectiveOnRoleBinding', usersWithPerspectiveOnRoleInstance)
 import Perspectives.ContextAndRole (changeContext_me, context_buitenRol, context_pspType, modifyContext_rolInContext, rol_binding, rol_context, rol_isMe, rol_pspType)
-import Perspectives.CoreTypes (MonadPerspectivesTransaction, Updater, MonadPerspectives, (###=), (##=), (##>), (##>>))
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, Updater, (###=), (##=), (##>), (##>>))
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addDelta)
 import Perspectives.DependencyTracking.Dependency (findBindingRequests, findFilledRoleRequests, findMeRequests, findResourceDependencies, findRoleRequests)
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
+import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, typeUri2ModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.AutoRemoveWithFiller (emptyRolesToRemove)
 import Perspectives.Instances.Clipboard (allItemsOnClipboard)
 import Perspectives.Instances.Me (getMyType, isMe)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, binding_, context, contextType, contextType_, getUnlinkedRoleInstances, roleType_)
+import Perspectives.Logging (logWhen)
 import Perspectives.Names (findIndexedContextName, findIndexedRoleName, removeIndexedContext, removeIndexedRole)
-import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
+import Perspectives.Persistence.DeltaStore (getDeltasForResource, storeDeltaFromSignedDelta)
+import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.ResourceVersionStore (incrementResourceVersion)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, tryGetPerspectContext, tryGetPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
@@ -94,7 +102,8 @@ import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (allUnlinkedRoles, isUnlinked_)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..), RoleBindingDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Prelude (Unit, bind, discard, not, pure, unit, void, ($), (&&), (<$>), (<<<), (<>), (==), (>>=), (||))
+import Perspectives.Warning (PerspectivesWarning(..))
+import Prelude (Unit, bind, discard, not, pure, unit, void, ($), (&&), (<$>), (<<<), (<>), (==), (>>=), (||), (/=))
 import Simple.JSON (writeJSON)
 
 synchronise :: Boolean
@@ -102,6 +111,10 @@ synchronise = true
 
 doNotSynchronise :: Boolean
 doNotSynchronise = false
+
+data FillBindingMode
+  = FillWithProvidedType
+  | FillWithRequiredType
 
 -- | Add the role instance to the end of the roles to exit.
 -- | Add the actual removal instruction to the end of the scheduledAssignments.
@@ -112,10 +125,9 @@ scheduleRoleRemoval sync id = do
   -- It may happen that two public roles with the same address both have a perspective on this role instance.
   -- In that case, we remove the instance for the first public role (in a random order). 
   -- We should check whether it is still there before we try to remove it.
-  if isInPublicScheme (unwrap id) then (lift $ tryGetPerspectRol id) >>= case _ of
+  (lift $ tryGetPerspectRol id) >>= case _ of
     Nothing -> pure []
     Just _ -> f
-  else f
   where
   f :: MonadPerspectivesTransaction (Array RoleInstance)
   f = do
@@ -432,13 +444,16 @@ removeAllRoleInstances et cid = do
 -- the bound role. SYNCHRONISATION should be taken care of by a RoleBindingDelta.
 -----------------------------------------------------------
 setBinding :: RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPerspectivesTransaction (Array RoleInstance)
-setBinding roleId newBindingId msignedDelta = (lift $ try $ getPerspectRol roleId) >>=
+setBinding = setBindingWithMode FillWithRequiredType
+
+setBindingWithMode :: FillBindingMode -> RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPerspectivesTransaction (Array RoleInstance)
+setBindingWithMode mode roleId newBindingId msignedDelta = (lift $ try $ getPerspectRol roleId) >>=
   handlePerspectRolError' "setBinding" []
     \(filled :: PerspectRol) ->
-      if isJust $ rol_binding filled then replaceBinding roleId newBindingId msignedDelta
+      if isJust $ rol_binding filled then replaceBindingWithMode mode roleId newBindingId msignedDelta
       -- Since in all cases that setBinding is called, the role instances involved do already exist, we can just
       -- insert all context serialisation deltas for a new peer right at the end of the array of deltas.
-      else setFirstBinding roleId newBindingId msignedDelta
+      else setFirstBindingWithMode mode roleId newBindingId msignedDelta
 
 -- | The first argument represents the role instance that receives the new binding.
 -- | The second argument represents the new binding.
@@ -450,20 +465,21 @@ setBinding roleId newBindingId msignedDelta = (lift $ try $ getPerspectRol roleI
 -- | QUERY UPDATES for `binding <roleId`, `binder <TypeOfRoleId>` for both the old binding and the new binding.
 -- | CURRENTUSER for roleId and its context.
 replaceBinding :: RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPerspectivesTransaction (Array RoleInstance)
-replaceBinding roleId (newBindingId :: RoleInstance) msignedDelta = (lift $ try $ getPerspectRol roleId) >>=
+replaceBinding = replaceBindingWithMode FillWithRequiredType
+
+replaceBindingWithMode :: FillBindingMode -> RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPerspectivesTransaction (Array RoleInstance)
+replaceBindingWithMode mode roleId (newBindingId :: RoleInstance) msignedDelta = (lift $ try $ getPerspectRol roleId) >>=
   handlePerspectRolError' "replaceBinding" []
     \(originalRole :: PerspectRol) -> do
-      -- When msignedDelta is Nothing (local call), find the exact filler in the binding chain
-      -- so that the resolved filler matches the compile-time declared type constraint of the filled role.
-      -- This ensures a fixed filler depth: A fills only instances of the declared filler type,
-      -- not 'specialised' instances that are themselves filled by the declared type.
-      actualNewBinding <- case msignedDelta of
-        Nothing -> do
-          mexact <- lift $ findExactFiller (rol_pspType originalRole) newBindingId
-          pure $ case mexact of
-            Just exactFiller -> exactFiller
-            Nothing -> newBindingId
-        Just _ -> pure newBindingId
+      actualNewBinding <- case mode of
+        FillWithProvidedType -> pure newBindingId
+        FillWithRequiredType -> case msignedDelta of
+          Nothing -> do
+            mexact <- lift $ findExactFiller (rol_pspType originalRole) newBindingId
+            pure $ case mexact of
+              Just exactFiller -> exactFiller
+              Nothing -> newBindingId
+          Just _ -> pure newBindingId
       if (rol_binding originalRole == Just actualNewBinding) then pure []
       else do
         users <- removeBinding_ roleId (Just actualNewBinding) msignedDelta
@@ -492,6 +508,11 @@ findExactFiller filledType startFiller = go Nothing startFiller
       Nothing -> pure newDeepest
       Just nextFiller -> go newDeepest nextFiller
 
+findMostGeneralAllowedFillerType :: EnumeratedRoleType -> RoleInstance -> MonadPerspectives (Maybe EnumeratedRoleType)
+findMostGeneralAllowedFillerType filledType filler = do
+  mrole <- findExactFiller filledType filler
+  traverse roleType_ mrole
+
 -- | PERSISTENCE
 -- | QUERY EVALUATION
 -- | CURRENTUSER
@@ -499,20 +520,22 @@ findExactFiller filledType startFiller = go Nothing startFiller
 -- | STATE EVALUATION
 -- | This function is idempotent: if the role is already filled with the filler, nothing changes.
 setFirstBinding :: RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPerspectivesTransaction (Array RoleInstance)
-setFirstBinding filled filler msignedDelta = (lift $ try $ getPerspectRol filled) >>=
+setFirstBinding = setFirstBindingWithMode FillWithRequiredType
+
+setFirstBindingWithMode :: FillBindingMode -> RoleInstance -> RoleInstance -> Maybe SignedDelta -> MonadPerspectivesTransaction (Array RoleInstance)
+setFirstBindingWithMode mode filled filler msignedDelta = (lift $ try $ getPerspectRol filled) >>=
   handlePerspectRolError' "setFirstBinding, filled" []
     \(filledRole :: PerspectRol) -> do
-      -- When msignedDelta is Nothing (local call), find the exact filler in the binding chain
-      -- so that the resolved filler matches the compile-time declared type constraint of the filled role.
-      -- This ensures a fixed filler depth: A fills only instances of the declared filler type,
-      -- not 'specialised' instances that are themselves filled by the declared type.
-      actualFiller <- case msignedDelta of
-        Nothing -> do
-          mexact <- lift $ findExactFiller (rol_pspType filledRole) filler
-          pure $ case mexact of
-            Just exactFiller -> exactFiller
-            Nothing -> filler
-        Just _ -> pure filler
+      actualFiller <- case mode of
+        FillWithProvidedType -> pure filler
+        FillWithRequiredType -> case msignedDelta of
+          Nothing -> do
+            mexact <- lift $ findExactFiller (rol_pspType filledRole) filler
+            pure $ case mexact of
+              Just exactFiller -> exactFiller
+              Nothing -> filler
+          -- Notice that we assume here that the filler provided in the signed delta is already the most specific compliant filler.
+          Just _ -> pure filler
       if rol_binding filledRole == Just actualFiller then pure []
       else (lift $ try $ getPerspectRol actualFiller) >>=
         handlePerspectRolError' "setFirstBinding, filler" []
@@ -580,13 +603,29 @@ setFirstBinding filled filler msignedDelta = (lift $ try $ getPerspectRol filled
             -- (addDelta has not yet been called), causing the SetFirstBinding delta to be omitted
             -- from the context serialisation sent to the new peer.
             lift $ storeDeltaFromSignedDelta signedDelta
+            -- The peer also needs to know how to construct the new filler itself, even when no
+            -- property value on that filler has been set yet.
+            if not (isInPublicScheme (unwrap actualFiller)) then do
+              let fillerContext = rol_context fillerRole
+              (lift $ try $ getPerspectContext fillerContext) >>=
+                handlePerspectContextError "setFirstBinding, filler"
+                  \(PerspectContext { buitenRol }) -> do
+                    contextDeltas <- lift $ getDeltasForResource (unwrap fillerContext)
+                    extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
+                    fillerDeltas <- lift $ getDeltasForResource (unwrap actualFiller)
+                    for_ (contextDeltas <> extRoleDeltas <> fillerDeltas)
+                      ( \(DeltaStoreRecord { signedDelta: fillerDelta }) ->
+                          addDelta (DeltaInTransaction { users, delta: fillerDelta })
+                      )
+            else pure unit
             -- Compute the deltas that must be sent to other users in case the filled role is a 
             -- perspective object.
             handleNewPeer filled
             addDelta (DeltaInTransaction { users, delta: signedDelta })
 
             void $ addDeltasForPerspectiveObjects filled
-
+            lift $ logWhen Trace RESOURCE
+              (show <$> (humanizePerspectivesWarning $ FilledRoleInstance filled (rol_pspType filledRole) actualFiller fillerType))
             pure users
 
   where
@@ -601,13 +640,15 @@ setFirstBinding filled filler msignedDelta = (lift $ try $ getPerspectRol filled
 -- | according to his perspective.
 -- | Notice that in order to establish whether this role represents `sys:SocialMe`,
 -- | it needs a binding!
+-- | The fictive serialization user (def:#serializationuser) is excluded: it is never a real peer
+-- | and should never receive context serialisations.
 handleNewPeer :: RoleInstance -> MonadPerspectivesTransaction Unit
 handleNewPeer roleInstance = (lift $ try $ getPerspectRol roleInstance) >>=
   handlePerspectRolError "handleNewPeer"
     \(PerspectRol { context, pspType }) -> do
       (EnumeratedRole { kindOfRole }) <- lift $ getEnumeratedRole pspType
       me <- lift $ isMe roleInstance
-      if kindOfRole == UserRole && not me then context `serialisedAsDeltasFor` roleInstance
+      if kindOfRole == UserRole && not me && unwrap roleInstance /= "def:#serializationuser" then (context `serialisedAsDeltasFor` roleInstance) newPeer
       else pure unit
 
 -- | PERSISTENCE of binding role and old binding, through the call to `changeRoleBinding`.
@@ -778,4 +819,3 @@ changeRoleBinding filledId mNewFiller = (lift $ try $ getPerspectRol filledId) >
             if newFillerIsMe then roleIsMe filledId (rol_context filled) -- Set isMe of the role and set the role to Me of the context.
             else pure unit
           else pure unit
-

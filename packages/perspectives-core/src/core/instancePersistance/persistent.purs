@@ -64,7 +64,7 @@ import Prelude
 
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (try)
-import Control.Monad.Except (catchError, lift, throwError)
+import Control.Monad.Except (catchError, throwError)
 import Data.Array (cons, delete, elemIndex)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
@@ -76,16 +76,15 @@ import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect.Aff.AVar (AVar, put, read, take)
 import Effect.Aff.Class (liftAff)
-import Effect.Class.Console (log)
 import Effect.Exception (error)
 import Persistence.Attachment (class Attachment)
 import Perspectives.CoreTypes (class Persistent, IntegrityFix(..), MP, MonadPerspectives, ResourceToBeStored(..), addPublicResource, removeInternally, representInternally, resourceToBeStored, retrieveInternally, typeOfInstance)
 import Perspectives.Couchdb (DeleteCouchdbDocument(..))
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
-import Perspectives.Logging (errorPersistence, warnPersistence)
+import Perspectives.Logging (errorPersistence, warnPersistence, warnResource)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (AttachmentName, AuthoritySource(..), MonadPouchdb, addDocument, deleteDocument, ensureAuthentication, getDocument, isOffLine, retrieveDocumentVersion)
+import Perspectives.Persistence.API (AttachmentName, AuthoritySource(..), MonadPouchdb, addDocument, deleteDocument, ensureAuthentication, getDocument, isOffLine, retrieveDocumentVersion, startsWithDatabaseEndpoint)
 import Perspectives.Persistence.API (addAttachment) as P
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.PerspectivesState (getMissingResource)
@@ -164,7 +163,7 @@ removeEntiteit entId = do
 
 removeEntiteit_ :: forall a i. Persistent a i => i -> a -> MonadPerspectives a
 removeEntiteit_ entId entiteit =
-  ensureAuthentication (Resource $ unwrap entId) $ \_ -> do
+  ensureAuthentication (Resource $ unwrap entId) \_ -> do
     -- If on the list of items to be saved, remove!
     modify \s@{ entitiesToBeStored } -> s { entitiesToBeStored = delete (resourceToBeStored entiteit) entitiesToBeStored }
     case (rev entiteit) of
@@ -186,14 +185,14 @@ tryRemoveEntiteit entId = do
 -- | This function must only be called when there is no AVar in cache to represent the resource.
 -- | As an invariant side effect: there is either an AVar that holds the resource, or there is no AVar.
 fetchEntiteit :: forall a i. Attachment a => Persistent a i => Boolean -> i -> MonadPerspectives a
-fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
+fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) \_ ->
   catchError
     do
       { database, documentName } <- resourceIdentifier2DocLocator (unwrap id)
       doc <- getDocument database documentName
       -- Returns either the local database name or a URL.
       v <- representInternally id
-      lift $ put doc v
+      liftAff $ put doc v
       pure doc
 
     \e -> do
@@ -217,11 +216,11 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
               result <- liftAff $ take av
               case result of
                 FixRestored -> do
-                  log ("fetchEntiteit: resource " <> unwrap id <> " restored successfully, retrying fetch.")
+                  warnResource ("fetchEntiteit: resource " <> unwrap id <> " restored successfully, retrying fetch.")
                   -- The resource has been restored; retry the fetch (with tryToFix=false to avoid infinite loop).
                   fetchEntiteit doNotFix id
                 FixDeleted -> do
-                  log ("fetchEntiteit: resource " <> unwrap id <> " was deleted during fixing, so cannot be retrieved.")
+                  warnResource ("fetchEntiteit: resource " <> unwrap id <> " was deleted during fixing, so cannot be retrieved.")
                   throwError $ error ("fetchEntiteit: user deleted resource " <> unwrap id <> " from couchdb.")
                 FixFailed s -> do
                   errorPersistence (show $ Custom ("fetchEntiteit: cannot fix resource " <> unwrap id <> ": " <> s))
@@ -244,7 +243,11 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) $ \_ ->
 -- Instead, we want to notify the user that, being offline, some resources cannot be accessed.
 internetRequiredButMissing :: ResourceIdentifier -> MonadPerspectives Boolean
 internetRequiredButMissing s =
-  if isInPublicScheme s || isInRemoteScheme s then lift $ isOffLine
+  if isInRemoteScheme s then liftAff isOffLine
+  else if isInPublicScheme s then do
+    { database } <- resourceIdentifier2DocLocator s
+    if startsWithDatabaseEndpoint database then liftAff isOffLine
+    else pure false
   else pure false
 
 -- | Saves a previously cached entity.
@@ -325,14 +328,21 @@ saveMarkedResources = do
 saveCachedEntiteit :: forall a i. Attachment a => WriteForeign a => Persistent a i => ResourceToBeStored -> i -> MonadPerspectives a
 saveCachedEntiteit r entId = do
   entiteit <- takeEntiteitFromCache entId
-  -- The cache is now blocked, so there is no way to modify the entity. It may be decached; but we have the modified entity in our hands, here.
-  modify \s -> s { entitiesToBeStored = delete r s.entitiesToBeStored }
-  { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap $ identifier entiteit)
-  mresult <- try $ addDocument database entiteit documentName
+  mresult <- catchError
+    ( do
+        -- The cache is now blocked, so there is no way to modify the entity. It may be decached; but we have the modified entity in our hands, here.
+        modify \s -> s { entitiesToBeStored = delete r s.entitiesToBeStored }
+        { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap $ identifier entiteit)
+        try $ addDocument database entiteit documentName
+    )
+    ( \e -> do
+        void $ cacheEntity (identifier entiteit) entiteit
+        throwError e
+    )
   case mresult of
-    -- Restore the avar holding the resource to its filled state, to prevent the main fiber from blocking.
-    -- Notice we do not put it back into entitiesToBeStared.
-    Left e -> cacheEntity (identifier entiteit) entiteit *> pure entiteit
+    Left e -> do
+      void $ cacheEntity (identifier entiteit) entiteit
+      pure entiteit
     Right (rev :: Revision_) -> do
       entiteit' <- pure (changeRevision rev entiteit)
       void $ cacheEntity (identifier entiteit) entiteit'

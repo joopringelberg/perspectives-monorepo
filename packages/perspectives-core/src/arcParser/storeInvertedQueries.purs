@@ -24,9 +24,12 @@ module Perspectives.Parsing.Arc.PhaseThree.StoreInvertedQueries where
 
 import Control.Monad.Except (lift)
 import Control.Monad.Reader (ReaderT, ask)
-import Data.Array (concat, fromFoldable, head, union)
-import Data.Map (Map, empty, values) as Map
+import Data.Array (concat, elem, fromFoldable, head, union)
+import Data.Foldable (for_)
+import Data.Map (Map, empty, singleton, toUnfoldable, values) as Map
 import Data.Maybe (Maybe(..), fromJust, maybe)
+import Data.Newtype (unwrap)
+import Data.Tuple (Tuple(..))
 import Partial.Unsafe (unsafePartial)
 import Perspective.InvertedQuery.Indices (typeLevelKeyForContextQueries, typeLevelKeyForFilledQueries, typeLevelKeyForFillerQueries, typeLevelKeyForPropertyQueries, typeLevelKeyForRoleQueries)
 import Perspectives.ArrayUnions (ArrayUnions(..))
@@ -34,17 +37,22 @@ import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Data.EncodableMap (EncodableMap(..))
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, forwards)
 import Perspectives.InvertedQueryKey (serializeInvertedQueryKey)
-import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo', addStorableInvertedQuery, getsDF, throwError)
+import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo', addStorableInvertedQuery, getsDF, lift2, throwError)
+import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Query.QueryTypes (Domain, QueryFunctionDescription(..), Range, RoleInContext(..), domain, domain2roleInContext, makeComposition, mandatory, range)
+import Perspectives.Query.Kinked (invert)
+import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), Range, RoleInContext(..), addTermOnRight, domain, domain2roleInContext, isRoleDomain, makeComposition, mandatory, range, roleInContext2Role)
 import Perspectives.Representation.ADT (allLeavesInADT)
+import Perspectives.Representation.Class.PersistentType (getCalculatedProperty, getEnumeratedProperty)
+import Perspectives.Representation.Class.Property (calculation)
+import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties)
 import Perspectives.Representation.Perspective (ModificationSummary)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..)) as QF
-import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
+import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), bool2threeValued)
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..), StateIdentifier)
 import Perspectives.Utilities (prettyPrint)
-import Prelude (Unit, bind, discard, flip, pure, unit, ($), (<$>), (<>), (==))
+import Prelude (Unit, bind, discard, flip, pure, show, unit, ($), (<$>), (<>), (==), (>=>), (<*>))
 
 type WithModificationSummary = ReaderT ModificationSummary (PhaseTwo' MonadPerspectives)
 
@@ -55,8 +63,9 @@ storeInvertedQuery
   -> Map.Map PropertyType (Array StateIdentifier)
   -> Boolean
   -> Boolean
+  -> Maybe ArcPosition
   -> WithModificationSummary Unit
-storeInvertedQuery qwk users roleStates statesPerProperty selfOnly authorOnly = storeInvertedQuery' qwk users roleStates statesPerProperty selfOnly authorOnly Nothing Nothing
+storeInvertedQuery qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition = storeInvertedQuery' qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition Nothing Nothing
 
 -- | Modifies the DomeinFile in PhaseTwoState.
 storeInvertedQuery'
@@ -66,10 +75,11 @@ storeInvertedQuery'
   -> Map.Map PropertyType (Array StateIdentifier)
   -> Boolean
   -> Boolean
+  -> Maybe ArcPosition
   -> Maybe QueryFunctionDescription
   -> Maybe RoleType
   -> WithModificationSummary Unit
-storeInvertedQuery' qwk@(ZQ backward forward) users roleStates statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType = do
+storeInvertedQuery' qwk@(ZQ backward forward) users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType = do
   -- What is confusing about what follows is that it just seems to handle the first step of an inverted query.
   -- What about the steps that follow?
   -- Reflect that we have generated *separate inverted queries* for all these steps, each 'kinking' the original query
@@ -88,27 +98,54 @@ storeInvertedQuery' qwk@(ZQ backward forward) users roleStates statesPerProperty
     Just (BQD _ (BinaryCombinator ComposeF) qfd1 qfd2 _ _ _) -> case qfd2 of
       -- qfd1 is the last step of the INVERTED criterium; 'criterium' in FilterF is the ORIGINAL criterium. 
       (BQD _ (BinaryCombinator ComposeF) filter@(UQD _ FilterF criterium _ _ _) source _ _ _) -> do
-        -- Drop the filter. Store  {first source step} << {last criterium step}
-        unsafePartial $ setPathForStep
-          qfd1
-          (ZQ (Just $ makeComposition qfd1 source) $ forwards qwk)
-          users
-          roleStates
-          statesPerProperty
-          selfOnly
-          authorOnly
-          Nothing
-          mCalcUserRoleType
-        -- prepend the filter to the source. Store {first source step} << filter criterium.
-        storeInvertedQuery'
-          (ZQ (Just source) $ forwards qwk)
-          users
-          (roleStates `union` (concat $ fromFoldable $ Map.values statesPerProperty))
-          statesPerProperty
-          selfOnly
-          authorOnly
-          (Just filter)
-          mCalcUserRoleType
+        case mCalcUserRoleType of
+          -- For Calculated User role detection queries: produce a filter-based description so that
+          -- `handleNewCalculatedUsersForBinding` can apply both backward (filter >> source) and
+          -- forward (filter) to the same role instance, checking the filter before recognising
+          -- the instance as a new Calculated User.
+          -- The second storeInvertedQuery' call (which would store an RTPropertyKey or similar with
+          -- a property-getter forward) is intentionally omitted: it would incorrectly return
+          -- property values instead of role instances at runtime.
+          Just _ ->
+            unsafePartial $ setPathForStep
+              qfd1
+              (ZQ (Just $ makeComposition filter source) (Just filter))
+              users
+              roleStates
+              statesPerProperty
+              selfOnly
+              authorOnly
+              perspectiveStartPosition
+              Nothing
+              mCalcUserRoleType
+          -- Regular case: drop the filter to detect changes even when the filter evaluates to
+          -- false (the user may have just *lost* visibility of an item). Also store a separate
+          -- query with the filter prepended, for the case where the filter condition now becomes
+          -- satisfied.
+          Nothing -> do
+            -- Drop the filter. Store  {first source step} << {last criterium step}
+            unsafePartial $ setPathForStep
+              qfd1
+              (ZQ (Just $ makeComposition qfd1 source) $ forwards qwk)
+              users
+              roleStates
+              statesPerProperty
+              selfOnly
+              authorOnly
+              perspectiveStartPosition
+              Nothing
+              mCalcUserRoleType
+            -- prepend the filter to the source. Store {first source step} << filter criterium.
+            storeInvertedQuery'
+              (ZQ (Just source) $ forwards qwk)
+              users
+              (roleStates `union` (concat $ fromFoldable $ Map.values statesPerProperty))
+              statesPerProperty
+              selfOnly
+              authorOnly
+              perspectiveStartPosition
+              (Just filter)
+              mCalcUserRoleType
       -- unsafePartial $ setPathForStep 
       --   source
       --   (ZQ (Just source) $ forwards qwk)
@@ -117,9 +154,9 @@ storeInvertedQuery' qwk@(ZQ backward forward) users roleStates statesPerProperty
       --   statesPerProperty 
       --   selfOnly 
       --   (Just filter)
-      _ -> unsafePartial $ setPathForStep qfd1 qwk users roleStates statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType
-    (Just b@(SQD _ _ _ _ _)) -> unsafePartial $ setPathForStep b qwk users roleStates statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType
-    (Just b@(MQD _ _ _ _ _ _)) -> unsafePartial $ setPathForStep b qwk users roleStates statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType
+      _ -> unsafePartial $ setPathForStep qfd1 qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType
+    (Just b@(SQD _ _ _ _ _)) -> unsafePartial $ setPathForStep b qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType
+    (Just b@(MQD _ _ _ _ _ _)) -> unsafePartial $ setPathForStep b qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType
     otherwise -> lift $ throwError (Custom $ "impossible case in setInvertedQueries:\n" <> prettyPrint otherwise)
 
 -- | The function is partial, because we just handle the SQD and MQD cases.
@@ -136,10 +173,11 @@ setPathForStep
   -> Map.Map PropertyType (Array StateIdentifier)
   -> Boolean
   -> Boolean
+  -> Maybe ArcPosition
   -> Maybe QueryFunctionDescription
   -> Maybe RoleType
   -> WithModificationSummary Unit
-setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType = do
+setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType = do
   model <- getsDF _.id
   { modifiesRoleInstancesOf, modifiesRoleBindingOf, modifiesPropertiesOf } <- ask
   case qf of
@@ -170,6 +208,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                     , states
                     , selfOnly
                     , authorOnly
+                    , perspectiveStartPosition
                     , calculatedUserRoleType: mCalcUserRoleType
                     }
                 )
@@ -178,21 +217,20 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
         CP _ -> pure unit
 
     -- FILLED STEP
+    -- NOTE: qfd here is a `FilledF enr ctxt` step, which is the INVERSE of the original
+    -- `FillerF` step at the kink point.  Its domain is RDOM filler, its range is RDOM filled.
+    -- We remove this first step so that at runtime the remaining backward is applied to the
+    -- *filled* role instance (range of FilledF) rather than the filler.  The key is stored
+    -- under the filled role type so that it fires whenever that filled role acquires a new filler.
+    -- No compensating step is added to the forward part because `usersWithPerspectiveOnRoleBinding`
+    -- applies the forward to the filler directly.
+    -- After step removal: domain(new backward) = range(FilledF) = RDOM filled.
+    -- The query is indexed under the **FILLED** role for two reasons:
+    --  * the filler may well be in another model, leading to an InvertedQuery for another domain;
+    --  * if at runtime a filler is used that is a specialisation of the required type, it will
+    --    still trigger the inverted query.
     QF.FilledF enr ctxt ->
-      -- Compute the keys on the base of the original backwards query.
-      -- The domain can be a complex ADT RoleInContext. The range is always an ST RoleInContext.
       let
-        -- We remove the first step of the backwards path, because we apply it (runtime) not to the filler
-        -- but to the filled. We skip the fills step because its cardinality is larger than one. It would
-        -- cause a fan-out while we know, when applying the inverted query when handling a RoleBindingDelta, the exact
-        -- path to follow.
-        -- The function `usersWithPerspectiveOnRoleBinding` applies the forward part to the filler. Hence we don't 
-        -- have to adapt the forward part.
-        -- We add the inverted query to the **FILLED** role, not the filler role.
-        -- This has two reasons:
-        --  * the filler may well be in another model, leading to an InvertedQuery for another domain;
-        --  * if runtime a filler is used that is a specialisation of the required role, it will still trigger
-        --    the inverted query.
         oneStepLess = removeFirstBackwardsStep qWithAK (\_ _ _ -> Nothing)
         description = case mfilter of
           Nothing -> case oneStepLess of
@@ -227,6 +265,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                     , states
                     , selfOnly
                     , authorOnly
+                    , perspectiveStartPosition
                     , calculatedUserRoleType: mCalcUserRoleType
                     }
                 )
@@ -234,14 +273,17 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
             }
 
     -- FILLER STEP
+    -- NOTE: qfd here is a `FillerF` step, which is the INVERSE of the original `FilledF` step
+    -- at the kink point.  Its domain is RDOM filled, its range is RDOM filler.
+    -- We remove this first step so that at runtime the remaining backward is applied to the
+    -- *filler* role instance (range of FillerF) rather than the filled role.
+    -- The key is stored under the filled role type (domain of FillerF) so that it fires whenever
+    -- that filled role acquires a new filler.  No compensating step is added to the forward part.
+    -- After step removal: domain(new backward) = range(FillerF) = RDOM filler.
     QF.DataTypeGetter QF.FillerF -> do
       (ArrayUnions keys) <- lift $ lift $ lift $ typeLevelKeyForFillerQueries qfd
       oneStepLess <- pure $ removeFirstBackwardsStep qWithAK (\_ _ _ -> Nothing)
       description <- pure $ case mfilter of
-        -- We remove the first step of the backwards path, because we apply it (runtime) not to the filled
-        -- but to the filler. We skip the fills step because we can: we don't have to compute the filler from the 
-        -- filled, because it is already in the Delta.
-        -- We add the inverted query to the **FILLED** role, not the filler role.
         Nothing -> case oneStepLess of
           -- If backwards of oneStepLess is Nothing, the backwards step of qWithAK (== qfd) consisted of just
           -- a single step and that was FillerF.
@@ -280,6 +322,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                   , states
                   , selfOnly
                   , authorOnly
+                  , perspectiveStartPosition
                   , calculatedUserRoleType: mCalcUserRoleType
                   }
               )
@@ -287,16 +330,20 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
           }
 
     -- Treat the variant with a context restriction in exactly the same way as without that restriction.
-    QF.DataTypeGetterWithParameter QF.FillerF _ -> setPathForStep (SQD dom (QF.DataTypeGetter QF.FillerF) ran fun man) qWithAK users states statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType
+    QF.DataTypeGetterWithParameter QF.FillerF _ -> setPathForStep (SQD dom (QF.DataTypeGetter QF.FillerF) ran fun man) qWithAK users states statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType
 
+    -- NOTE: qfd here is a `RolGetter (ENR role)` step, which is the INVERSE of the original
+    -- `ContextF` step at the kink point.  Its domain is CDOM ctx, its range is RDOM roleType.
+    -- At runtime the RTRoleKey query is applied starting from a role *instance*, not a context.
+    -- Therefore we drop the RolGetter step (domain CDOM).  After removal the remaining backward
+    -- has domain = range(RolGetter) = RDOM roleType — correct for a role-instance argument.
+    -- Because the forward part was designed to start from the context (range of ContextF), we
+    -- compensate by prepending a ContextF step to the forward part.
+    -- When the full backward consisted of only this single RolGetter step (ZQ Nothing _), there
+    -- is nothing meaningful left to store, so we silently discard the description.
     QF.RolGetter roleType -> case roleType of
       ENR role ->
         let
-          -- We remove the first step of the backwards path, because we apply it runtime not to the context, but to
-          -- the new role instance. We skip the RolGetter step because its cardinality is larger than one.
-          -- Because the forward part will be applied to that same role (instead of the context), we have to compensate
-          -- for that by prepending it with the inversal of the first backward step - which is, by construction, a
-          -- `context` step.
           oneStepLess = removeFirstBackwardsStep
             qWithAK
             (\ran' dom' man' -> Just $ SQD ran' (QF.DataTypeGetter ContextF) dom' True man')
@@ -328,6 +375,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                         , states
                         , selfOnly
                         , authorOnly
+                        , perspectiveStartPosition
                         , calculatedUserRoleType: mCalcUserRoleType
                         }
                     )
@@ -335,8 +383,11 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                 }
       CR _ -> lift $ throwError $ Custom "Implement the handling of Calculated Roles in setPathForStep."
 
-    -- We could omit the first backwards step, as in runtime we have the context of a role instance at hand.
-    -- However, we handle that situation by `handlebackwardsQuery` and that function expects a RoleInstance.
+    -- NOTE: qfd here is a `ContextF` step, which is the INVERSE of the original `RolGetter
+    -- (ENR role)` step at the kink point.  Its domain is RDOM roleType, its range is CDOM ctx.
+    -- At runtime the RTContextKey backward is applied starting from a role *instance*.  Because
+    -- the ContextF step's domain is already RDOM, we do NOT need to remove it; `handleBackwardQuery`
+    -- passes the role instance directly as the starting point.
     QF.DataTypeGetter QF.ContextF -> do
       description <- case mfilter of
         Nothing -> pure qWithAK
@@ -358,6 +409,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                 , states
                 , selfOnly
                 , authorOnly
+                , perspectiveStartPosition
                 , calculatedUserRoleType: mCalcUserRoleType
                 }
             )
@@ -415,6 +467,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
                       , states
                       , selfOnly
                       , authorOnly
+                      , perspectiveStartPosition
                       , calculatedUserRoleType: mCalcUserRoleType
                       }
                   )
@@ -427,7 +480,18 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
 
     _ -> lift $ throwError $ Custom "setPathForStep: there should be no other cases. This is a system programming error."
 
-setPathForStep (MQD _ qf _ _ _ _) qWithAK users states statesPerProperty selfOnly authorOnly mfilter mCalcUserRoleType =
+  -- For any inversion step whose domain is a role domain and that has no remaining
+  -- forward path, also store calculated-property perspective queries.
+  storePropertyPerspectiveQueries
+    qfd
+    qWithAK
+    users
+    statesPerProperty
+    selfOnly
+    authorOnly
+    perspectiveStartPosition
+
+setPathForStep (MQD _ qf _ _ _ _) qWithAK users states statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType =
   case qf of
     -- ExternalCoreRoleGetter is the inversion of a role individual step, such as sys:Me,
     -- and there are no other query steps that invert to it.
@@ -450,6 +514,87 @@ setPathForStep (MQD _ qf _ _ _ _) qWithAK users states statesPerProperty selfOnl
     -- NOTICE: the inversion is useful, as it will be part of backwards queries - we just don't store the inverted query of such
     -- a query that is kinked at this step.
     QF.ExternalCoreContextGetter f -> pure unit
+    _ -> lift $ throwError $ Custom $ "setPathForStep: uncovered case:" <> show qf <> " in MQD. This is a system programming error."
+
+-- | When an inversion step starts from a role domain and has no remaining forward
+-- | path, the perspective-object query has reached its destination role. In that
+-- | case, also index calculated-property queries so updates in their underlying
+-- | enumerated properties can trigger affected-user detection.
+storePropertyPerspectiveQueries
+  :: Partial
+  => QueryFunctionDescription
+  -> QueryWithAKink
+  -> Array RoleType
+  -> Map.Map PropertyType (Array StateIdentifier)
+  -> Boolean
+  -> Boolean
+  -> Maybe ArcPosition
+  -> WithModificationSummary Unit
+storePropertyPerspectiveQueries qfd qWithAK users statesPerProperty selfOnly authorOnly perspectiveStartPosition =
+  if isRoleDomain (domain qfd) then
+    case forwards qWithAK of
+      Nothing ->
+        for_ (Map.toUnfoldable statesPerProperty :: Array (Tuple PropertyType (Array StateIdentifier)))
+          \(Tuple propType propStates) ->
+            case propType of
+              CP calcPropType -> do
+                propCalc <- lift $ lift2 $ (getCalculatedProperty >=> calculation) calcPropType
+                propInversions <- lift $ invert propCalc
+                for_ propInversions \(ZQ bwProp fwdProp) ->
+                  -- Only handle complete inversions (kink at the leaf enumerated property) to avoid
+                  -- infinite recursion through nested calculated properties. The backwards path
+                  -- `bwProp` ends at the perspective object (RDOM).
+                  -- Let's call bwProp the "property to bearing role" query and the backwards path of the perspective object the "inverted perspective object"
+                  -- By postpending the inverted perspective object to the property bearing role query, we get a complete inversion
+                  -- from the enumerated property to the context holding the subject (users).
+                  -- As the first step of the complete inversion is a Value2Role step, it will be stored as a RTPropertyKey query.
+                  storeInvertedQuery
+                    (ZQ (addTermOnRight <$> bwProp <*> (backwards qWithAK)) fwdProp)
+                    users
+                    propStates
+                    (Map.singleton propType propStates)
+                    selfOnly
+                    authorOnly
+                    perspectiveStartPosition
+              -- For an enumerated property that does not sit directly on the perspective object,
+              -- construct a virtual PropertyGetter query starting from the perspective object's
+              -- role domain and invert it.  The inversion algorithm (invert_) will expand the
+              -- filler chain (FillerF >> … >> PropertyGetter P) automatically, producing the
+              -- RTFilledKey / RTFillerKey inversions that allow the runtime to detect that a user
+              -- must be informed when the fill relation in the chain is severed.
+              -- Properties that are directly on the perspective object already have the required
+              -- RTPropertyKey inverted query (handled elsewhere) and need no extra binding-change
+              -- inversions, so we skip them (bottom case of the recursion).
+              ENP propType' -> do
+                let perspObjADT = unsafePartial domain2roleInContext (domain qfd)
+                localProps <- lift $ lift2 $ allLocallyRepresentedProperties (roleInContext2Role <$> perspObjADT)
+                if elem (ENP propType') localProps
+                -- Property is directly on the perspective object: no extra handling needed.
+                then pure unit
+                -- Property is on a filler role: invert the virtual query to obtain binding-change
+                -- inversions (RTFilledKey / RTFillerKey) and property-change inversions (RTPropertyKey).
+                else do
+                  ep <- lift $ lift2 $ getEnumeratedProperty propType'
+                  let
+                    propRange = (unwrap ep).range
+                    propFunctional = bool2threeValued (unwrap ep).functional
+                    propMandatory = bool2threeValued (unwrap ep).mandatory
+                    -- Virtual query: PropertyGetter P from the perspective object's role domain.
+                    -- invert_ expands this to (FillerF >> … >> PropertyGetter P) when the
+                    -- property is not locally on the perspective object.
+                    virtualQuery = SQD (domain qfd) (PropertyGetter (ENP propType')) (VDOM propRange (Just propType)) propFunctional propMandatory
+                  propInversions <- lift $ invert virtualQuery
+                  for_ propInversions \(ZQ bwProp fwdProp) ->
+                    storeInvertedQuery
+                      (ZQ (addTermOnRight <$> bwProp <*> (backwards qWithAK)) fwdProp)
+                      users
+                      propStates
+                      (Map.singleton propType propStates)
+                      selfOnly
+                      authorOnly
+                      perspectiveStartPosition
+      Just _ -> pure unit
+  else pure unit
 
 ------------------------------------------------------------------------------------------
 ---- REMOVE FIRST BACKWARDS STEP
@@ -517,4 +662,4 @@ storeCalculatedUserInvertedQuery
   -> QueryWithAKink
   -> WithModificationSummary Unit
 storeCalculatedUserInvertedQuery calcUserRoleType qwk =
-  storeInvertedQuery' qwk [] [] Map.empty false false Nothing (Just calcUserRoleType)
+  storeInvertedQuery' qwk [] [] Map.empty false false Nothing Nothing (Just calcUserRoleType)

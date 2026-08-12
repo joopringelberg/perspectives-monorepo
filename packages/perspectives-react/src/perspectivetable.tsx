@@ -1,9 +1,8 @@
-import React, { createRef, useContext, useEffect, useRef } from "react";
+import React, { createRef, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import PerspectivesComponent from "./perspectivesComponent";
 import {mapRoleVerbsToBehaviourNames} from "./maproleverbstobehaviours.js";
 import TableRow from "./tablerow.js";
 import TableControls from "./tablecontrols.js";
-import i18next from "i18next";
 
 import
   { Table
@@ -14,9 +13,10 @@ import
 import "././styles/components.css";
 import { CardProperties } from "./cardbehaviour";
 import { CardWithFixedBehaviour, WithOutBehavioursProps } from "./adorningComponentWrapper";
-import { RoleInstanceT, Perspective, SerialisedProperty, PropertyType, Roleinstancewithprops } from "perspectives-proxy";
+import { RoleInstanceT, Perspective, SerialisedProperty, PropertyType, Roleinstancewithprops, FilterValueEntry } from "perspectives-proxy";
 import { AppContext } from "./reactcontexts";
 import TableItemContextMenu from "./tableItemContextMenu";
+import { orderPropertiesByPerspective } from "./utilities";
 
 // Wrapper functional component to derive `isOpen` from Accordion context and pass to the menu.
 const TableItemContextMenuWithOpen: React.FC<{
@@ -46,12 +46,32 @@ const RowContextMenu: React.FC<{
   const menuRef = useRef<HTMLDivElement | null>(null);
   const isActive = !!(visible && position && roleId);
 
+  // Start invisible so the first render does not flash at an uncorrected position.
+  const [computedTop, setComputedTop] = useState<number | null>(null);
+
+  // After each render, check whether the menu overflows the viewport bottom.
+  // If so, flip it upward so its bottom edge aligns with the trigger point.
+  useLayoutEffect(() => {
+    if (!isActive || !position || !menuRef.current) {
+      setComputedTop(null);
+      return;
+    }
+    const menuHeight = menuRef.current.getBoundingClientRect().height;
+    const viewportHeight = window.innerHeight;
+    const top =
+      position.y + menuHeight > viewportHeight
+        ? Math.max(0, position.y - menuHeight)
+        : position.y;
+    setComputedTop(top);
+  }, [isActive, position?.x, position?.y]);
+
   const style: React.CSSProperties = isActive && position
     ? {
         position: "fixed",
-        top: position.y,
+        top: computedTop !== null ? computedTop : position.y,
         left: position.x,
-        zIndex: 2000
+        zIndex: 2000,
+        visibility: computedTop !== null ? "visible" : "hidden"
       }
     : {
         position: "fixed",
@@ -180,6 +200,7 @@ interface PerspectiveTableProps
   , showDetails? : boolean
   , sortOnHiddenProperty?: PropertyType
   , sortAscending?: boolean
+  , typeAheadFillFromCandidates?: FilterValueEntry[]
   }
 
 interface PerspectiveTableState
@@ -235,13 +256,22 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
   orderProperties()
   {
     const perspective = this.props.perspective;
-    // Here we put the identifying property in the front of the list, so it will be the first column.
-    const identifyingProperty = perspective.properties[perspective.identifyingProperty];
-    this.orderedProperties = Object.values(perspective.properties);
-    this.orderedProperties.splice( this.orderedProperties.indexOf( identifyingProperty), 1);
-    if (identifyingProperty)
+    if (perspective.propertyOrder && perspective.propertyOrder.length > 0)
     {
-      this.orderedProperties.unshift(identifyingProperty);
+      // When an explicit property order is given by the screen definition (`with props`),
+      // use the shared helper to order: listed properties come first, then any remaining.
+      this.orderedProperties = orderPropertiesByPerspective(perspective);
+    }
+    else
+    {
+      // Default: put the identifying property in the front of the list, so it will be the first column.
+      const identifyingProperty = perspective.properties[perspective.identifyingProperty];
+      this.orderedProperties = Object.values(perspective.properties);
+      this.orderedProperties.splice( this.orderedProperties.indexOf( identifyingProperty), 1);
+      if (identifyingProperty)
+      {
+        this.orderedProperties.unshift(identifyingProperty);
+      }
     }
     this.propertyNames = this.orderedProperties.map( p => p.id);
     // Finally, remove an eventual sort property from the list of properties.
@@ -380,7 +410,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
     const roleIds = Object.keys( component.props.perspective.roleInstances ) as RoleInstanceT[];
     const rowIndex = roleIds.indexOf( component.state.row );
 
-    switch(event.code){
+    switch(event.key){
       case "ArrowDown": // Down arrow
         if ( rowIndex < roleIds.length - 1 )
         {
@@ -454,7 +484,6 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
             hover
             size="sm"
             className="mb-0">
-            {component.props.showcontrolsandcaption !== false ? <caption>{ i18next.t("table_subscriptionLeader", {ns: 'preact'}) }{ perspective.displayName }</caption> : null}
             <thead>
               <tr>
               { component.propertyNames.map( pn =>
@@ -481,6 +510,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
                     perspective={component.props.perspective}
                     orderedProperties={component.orderedProperties}
                     showDetails={component.props.showDetails}
+                    typeAheadFillFromCandidates={component.props.typeAheadFillFromCandidates}
                     />)
               }
             </tbody>

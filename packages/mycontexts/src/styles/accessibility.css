@@ -12,9 +12,16 @@
   --bs-table-striped-color: #212529;
   --bs-table-hover-color: #212529;
   --bs-table-active-color: #212529;
-  
-  --bs-primary-rgb: 68, 110, 155;
-  --bs-primary: #446e9b;
+
+  /* === GUI theme: warm copper/parchment palette === */
+  /* Primary color: warm copper/bronze (navbar, buttons) */
+  --bs-primary-rgb: 165, 135, 97;
+  --bs-primary: #a58761;
+
+  /* Body background: warm cream/parchment (lighter) */
+  --bs-body-bg: #faf7f0;
+  --bs-body-bg-rgb: 250, 247, 240;
+  --bs-light-rgb: 250, 247, 240;
 
   /* Selected/active state colors with better contrast */
   --bs-secondary-bg: #626b73; /* Darker secondary background */
@@ -27,21 +34,90 @@
   /* Input placeholder color with better contrast */
   --bs-input-placeholder-color: #767676;
 
-  --bs-accordion-btn-color: #212529; /* Darker text for accordion buttons */
-  --bs-accordion-btn-bg: rgba(255, 255, 255, 0.9); /* Lighter background for accordion buttons */
-
-  /* Link colors with better contrast */
-  --bs-link-color: #043466; /* Darker blue for links */
-  --bs-link-color-rgb: 0, 86, 179; /* Darker blue for links */
+  /* Accordion: lighter tan/beige background with dark text */
+  --bs-accordion-bg: #c8b89e;
+  --bs-accordion-btn-color: #1b2334;
+  --bs-accordion-btn-bg: #c8b89e;
+  --bs-accordion-active-bg: #c8b89e;
+  --bs-accordion-active-color: #1b2334;
+  
+  /* Link colors: dark warm brown for cohesion with warm palette */
+  --bs-link-color: #7a5230;
+  --bs-link-color-rgb: 122, 82, 48;
   --bs-link-opacity: 1; /* Full opacity for better visibility */
-  --bs-link-hover-color-rgb: 0, 61, 126; /* Darker blue for hover/focus */
-  --bs-link-hover-color: #003d7e;
+  --bs-link-hover-color-rgb: 61, 45, 32;
+  --bs-link-hover-color: #3d2d20;
   --bs-link-hover-opacity: 1;
-  --bs-link-focus-color-rgb: 0, 61, 126;
-  --bs-link-focus-color: #003d7e;
+  --bs-link-focus-color-rgb: 61, 45, 32;
+  --bs-link-focus-color: #3d2d20;
   --bs-link-focus-opacity: 1;
 
   --bs-code-color: #bd2e76; /* Darker pink for code */
+}
+
+/* Primary buttons: warm copper background with dark text for legibility.
+   All --bs-btn-* variables override Bootswatch Spacelab's compiled values.
+   background-image: none removes the Spacelab gradient (compiled with $enable-gradients). */
+.btn-primary {
+  --bs-btn-color: #1b2334;
+  --bs-btn-bg: var(--bs-primary);
+  --bs-btn-border-color: var(--bs-primary);
+  --bs-btn-hover-color: #1b2334;
+  --bs-btn-hover-bg: color-mix(in srgb, var(--bs-primary) 85%, black);
+  --bs-btn-hover-border-color: color-mix(in srgb, var(--bs-primary) 80%, black);
+  --bs-btn-active-color: #1b2334;
+  --bs-btn-active-bg: color-mix(in srgb, var(--bs-primary) 80%, black);
+  --bs-btn-active-border-color: color-mix(in srgb, var(--bs-primary) 75%, black);
+  --bs-btn-disabled-bg: var(--bs-primary);
+  --bs-btn-disabled-border-color: var(--bs-primary);
+  --bs-btn-focus-shadow-rgb: var(--bs-primary-rgb);
+  background-image: none;
+}
+
+.btn-primary:hover,
+.btn-primary:active,
+.btn-primary.active,
+.btn-primary:disabled,
+.btn-primary.disabled {
+  background-image: none;
+}
+
+/* Spacelab is compiled with $enable-gradients: true, which bakes a
+   background-image linear-gradient into .navbar variants. Remove it and
+   make the navbar transparent so it inherits the body background. */
+.navbar, .navbar.bg-light, .navbar.bg-dark {
+  background-image: none;
+  background-color: transparent;
+}
+
+/* Fix: Spacelab's Bootstrap 5 scopes accordion variables inside .accordion{}
+   (not :root), so the :root overrides above lose to the theme file.
+   Repeat the overrides here at the same selector level so ours win. */
+.accordion {
+  --bs-accordion-bg: #c8b89e;
+  --bs-accordion-color: #1b2334;
+  --bs-accordion-border-color: #c8b89e; /* border same colour as bg = invisible */
+  --bs-accordion-btn-color: #1b2334;
+  --bs-accordion-btn-bg: #c8b89e;
+  --bs-accordion-active-bg: #c8b89e;
+  --bs-accordion-active-color: #1b2334;
+  --bs-accordion-btn-padding-y: 0.5rem;
+  --bs-accordion-btn-padding-x: 0.75rem;
+}
+
+/* Accordion items: tan background, invisible border, slightly rounded corners. */
+.accordion-item {
+  background-color: var(--bs-accordion-bg);
+  border-color: var(--bs-accordion-bg);
+  border-radius: 0.375rem !important;
+  overflow: hidden;
+  margin-bottom: 0.125rem;
+}
+
+/* Remove Spacelab's gradient from accordion buttons. */
+.accordion-button,
+.accordion-button:not(.collapsed) {
+  background-image: none;
 }
 
 h2.column-heading {
@@ -52,15 +128,17 @@ h2.column-heading {
 }
 
 h3.column-heading {
-  font-size: 1.0rem; 
-  font-weight: 500;  /* Same as h4 */
-  margin-bottom: 0.5rem; /* Same as h4 */
-  /* Add any other h4 styles you want to preserve */
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--bs-secondary-color);
+  margin-bottom: 0.5rem;
 }
 
 /* Focus styles for content sections */
 .content-section-area:focus {
-  outline: 2px solid #0056b3; /* Your link color for consistency */
+  outline: 2px solid var(--bs-link-color);
   outline-offset: -2px;
 }
 
@@ -111,4 +189,12 @@ h3.column-heading {
 button:focus-visible, 
 .btn:focus-visible {
   box-shadow: 0 0 0 0.25rem rgba(var(--bs-link-color-rgb), 0.5) !important;
+}
+
+/* Remove Bootstrap's focus glow/shadow from form controls to avoid
+   a highlighted border around fields when clicking to select them. */
+.form-control:focus {
+  box-shadow: none;
+  border-color: var(--bs-border-color);
+  outline: none;
 }

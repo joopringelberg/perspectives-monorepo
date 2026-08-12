@@ -94,14 +94,13 @@ newtype Transaction = Transaction
       -- A Transaction for the users TheWorld and SocialEnvironment. Included as uninterpreted data to avoid
       -- module cycles. Use read_ to transform to Maybe TransactionForPeer.
       , identityDocument :: Maybe UninterpretedTransactionForPeer
-      -- Maybe an index where to insert deltas.
-      , insertionPoint :: Maybe Int
       , transactionNumber :: Int
       , executedStateKeys :: Set.Set String
-      -- When true, addDelta and insertDelta skip storeDeltaFromSignedDelta because the
+      -- When true, addDelta skips storeDeltaFromSignedDelta because the
       -- deltas being processed were either already stored (executeTransaction path) or
       -- should not be stored at all (executeDeltas for public roles).
       , isExecutingIncomingDeltas :: Boolean
+      , isSharing :: Boolean
       )
   )
 
@@ -170,10 +169,10 @@ instance ReadForeign Transaction where
       , publicKeys: ENCMAP.empty
       , postponedStateEvaluations: []
       , identityDocument: Nothing
-      , insertionPoint: Nothing
       , transactionNumber: 0
       , executedStateKeys: Set.empty
       , isExecutingIncomingDeltas: false
+      , isSharing: false
       }
 
 derive newtype instance ReadForeign Transaction'
@@ -190,8 +189,8 @@ instance Attachment Transaction where
   setAttachment t _ = t
   getAttachments t = Nothing
 
-createTransaction :: RoleType -> Aff Transaction
-createTransaction authoringRole =
+createTransaction :: RoleType -> Boolean -> Aff Transaction
+createTransaction authoringRole sharing =
   do
     n <- liftEffect $ now
     pure $ Transaction
@@ -212,10 +211,10 @@ createTransaction authoringRole =
       , publicKeys: ENCMAP.empty
       , postponedStateEvaluations: []
       , identityDocument: Nothing
-      , insertionPoint: Nothing
       , transactionNumber: 0
       , executedStateKeys: Set.empty
       , isExecutingIncomingDeltas: false
+      , isSharing: sharing
       }
 
 -- | We consider a Transaction to be 'empty' when it shows no difference to the clone of the original.

@@ -22,6 +22,9 @@
 
 module Perspectives.Assignment.SerialiseAsDeltas
   ( getPropertyValues
+  , newPeer
+  , noNewPeer
+  , perspectivePositionText
   , serialiseDependencies
   , serialiseRoleInstancesAndProperties
   , serialisedAsDeltasFor
@@ -32,57 +35,78 @@ module Perspectives.Assignment.SerialiseAsDeltas
 import Control.Monad.AvarMonadAsk (get) as AMA
 import Control.Monad.Error.Class (try)
 import Control.Monad.Reader (runReaderT)
-import Control.Monad.State (StateT, gets, runStateT)
+import Control.Monad.State (StateT, gets, runStateT, modify)
 import Control.Monad.Trans.Class (lift)
+import Effect.Aff.Class (liftAff)
 import Data.Array (cons, head) as ARR
-import Data.Array (elemIndex, nub)
+import Data.Array (elemIndex, filter, length, nub, null, snoc)
 import Data.Array.NonEmpty (NonEmptyArray, singleton) as NA
 import Data.Array.NonEmpty (toArray)
+import Data.Either (Either(..))
 import Data.Foldable (for_, traverse_)
+import Data.List (List(..))
 import Data.List.NonEmpty (NonEmptyList, foldM, head)
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (unwrap)
+import Data.Traversable (traverse)
+import Data.Tuple (Tuple(..))
 import Effect.Aff.AVar (new)
 import Effect.Class.Console (log)
+import Foreign.Object (empty)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, (###=), (##=))
+import Perspectives.CoreTypes (type (~~>), LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, (###=), (##=))
+import Perspectives.Data.EncodableMap (empty) as EM
 import Perspectives.Deltas (addDelta, addPublicKeysToTransaction)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
+import Perspectives.DomeinFile (defaultDomeinFileRecord)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
+import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
-import Perspectives.Instances.ObjectGetters (binding_, roleType_)
+import Perspectives.Instances.ObjectGetters (binding_, contextType_, roleType_)
+import Perspectives.Logging (debugSync, errorDelta, logWhen)
 import Perspectives.ModelDependencies (perspectivesUsersPublicKey, sysUser)
 import Perspectives.Names (getMySystem, getUserIdentifier)
+import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwoState, runPhaseTwo_')
+import Perspectives.Parsing.Arc.Position (ArcPosition)
+import Perspectives.Parsing.Messages (MultiplePerspectivesErrors)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (getPerspectContext, getPerspectRol)
 import Perspectives.PerspectivesState (getPerspectivesUser, transactionLevel)
+import Perspectives.Query.ExpressionCompiler (makeRoleGetter)
 import Perspectives.Query.Interpreter (interpret)
 import Perspectives.Query.Interpreter.Dependencies (Dependency(..), DependencyPath, allPaths, consOnMainPath, singletonPath)
-import Perspectives.Query.QueryTypes (QueryFunctionDescription)
+import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription)
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.Property (getProperty, getCalculation) as PClass
 import Perspectives.Representation.Class.Property (propertyTypeIsAuthorOnly, propertyTypeIsSelfOnly)
 import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string, roletype2string)
 import Perspectives.ResourceIdentifiers (isInPublicScheme)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
-import Perspectives.Types.ObjectGetters (perspectivesClosure_, propertiesInPerspective)
-import Prelude (Unit, bind, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
+import Perspectives.Types.ObjectGetters (isEnumeratedRoleType, perspectivesClosure_, propertiesInPerspective)
+import Perspectives.Warning (PerspectivesWarning(..))
+import Prelude (Unit, bind, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||), (<), (*>), (&&))
 import Simple.JSON (unsafeStringify, write)
 
-serialisedAsDeltasFor :: ContextInstance -> RoleInstance -> MonadPerspectivesTransaction Unit
-serialisedAsDeltasFor cid userId = do
+noNewPeer :: Boolean
+noNewPeer = false
+
+newPeer :: Boolean
+newPeer = true
+
+serialisedAsDeltasFor :: ContextInstance -> RoleInstance -> Boolean -> MonadPerspectivesTransaction Unit
+serialisedAsDeltasFor cid userId isNewPeer = do
   userType <- lift $ roleType_ userId
-  serialisedAsDeltasFor_ cid userId (ENR userType)
+  serialisedAsDeltasFor_ cid userId (ENR userType) isNewPeer
 
 -- | Construct a Transaction that represents a context for a particular user role.
 -- | Serialise the Transaction as a string.
--- NOTE: this function is only called from `serialiseFor` (module Perspectives.Instances.SerialiseAsJson), which is itself never called. This function might therefore be dead code.
 serialisedAsDeltasForUserType :: ContextInstance -> RoleType -> MonadPerspectives Value
 serialisedAsDeltasForUserType cid userType = do
   me <- getUserIdentifier
@@ -94,7 +118,7 @@ serialisedAsDeltasForUserType cid userType = do
         -- NOTE: we provide serialisedAsDeltasFor_ with the fictive PerspectivesUser we created for this purpose, as
         -- the user for whom we serialise. As we don't know the real
         -- user identifier (we serialise for a type!) we use it as a stand in.
-        (serialisedAsDeltasFor_ cid (RoleInstance "def:#serializationuser") userType)
+        (serialisedAsDeltasFor_ cid (RoleInstance "def:#serializationuser") userType noNewPeer)
     ) >>= addPublicKeysToTransaction
   author <- getPerspectivesUser
   perspectivesSystem <- ContextInstance <$> getMySystem
@@ -114,8 +138,8 @@ serialisedAsDeltasForUserType cid userType = do
     -> MonadPerspectivesTransaction o
     -> MonadPerspectives Transaction
   execMonadPerspectivesTransaction authoringRole a =
-    (lift $ createTransaction authoringRole)
-      >>= lift <<< new
+    (liftAff $ createTransaction authoringRole false)
+      >>= liftAff <<< new
       >>= runReaderT run
     where
     run :: MonadPerspectivesTransaction Transaction
@@ -128,10 +152,48 @@ liftToMPT = lift
 
 -- | The `userId` must be an instance of the `userType`, otherwise we cannot establish whether
 -- | a perspective is a self-perspective.
-serialisedAsDeltasFor_ :: ContextInstance -> RoleInstance -> RoleType -> MonadPerspectivesTransaction Unit
-serialisedAsDeltasFor_ cid userId userType =
+serialisedAsDeltasFor_ :: ContextInstance -> RoleInstance -> RoleType -> Boolean -> MonadPerspectivesTransaction Unit
+serialisedAsDeltasFor_ cid userId userType isNewPeer = do
   -- All Roletypes the user may see in this context, expressed as Perspectives.
-  (liftToMPT (userType ###= perspectivesClosure_) >>= traverse_ (serialisePerspectiveForUser cid (NA.singleton userId) userType))
+  perspectives <- liftToMPT (userType ###= perspectivesClosure_)
+  if isNewPeer && (null $ filter isPerspectiveOnSelf perspectives) then do
+    -- Always make sure that the user receives the deltas that describe his own role.
+    selfPerspective <- lift $ minimalSelfPerspective
+    case selfPerspective of
+      Just sp -> serialisePerspectiveForUser cid (NA.singleton userId) userType sp
+      Nothing -> pure unit
+  else pure unit
+  -- Now serialise all modelled perspectives for the user. This will include the self-perspective if it is modelled.
+  traverse_ (serialisePerspectiveForUser cid (NA.singleton userId) userType) perspectives
+  where
+  isPerspectiveOnSelf :: Perspective -> Boolean
+  isPerspectiveOnSelf (Perspective { roleTypes }) = isJust $ elemIndex userType roleTypes
+
+  minimalSelfPerspective :: MonadPerspectives (Maybe Perspective)
+  minimalSelfPerspective = do
+    ctype <- contextType_ cid
+    (Tuple result state :: Tuple (Either MultiplePerspectivesErrors QueryFunctionDescription) PhaseTwoState) <-
+      runPhaseTwo_' (unsafePartial makeRoleGetter (CDOM $ ST ctype) userType) defaultDomeinFileRecord empty empty Nil
+    case result of
+      Left _ -> logWhen Warn SYNC (show <$> (humanizePerspectivesWarning $ CannotConstructMinimalSelfPerspective ctype userType)) *> pure Nothing
+      Right object -> do
+        logWhen Trace SYNC (show <$> (humanizePerspectivesWarning $ ConstructedMinimalSelfPerspective ctype userType))
+        pure $ Just $ Perspective
+          { id: "igored"
+          , object
+          , "displayName": "automatic self perspective"
+          , roleTypes: [ userType ]
+          , isEnumerated: isEnumeratedRoleType userType
+          , roleVerbs: EM.empty
+          -- Because we have isSelfPerspective = true, in the call tree below we add the property `perspectivesUsersPublicKey`/
+          , propertyVerbs: EM.empty
+          , actions: EM.empty
+          , selfOnly: true
+          , authorOnly: false
+          , isSelfPerspective: true
+          , automaticStates: []
+          , perspectiveStartPosition: Nothing
+          }
 
 -- | Add Deltas to the transaction of the peers ultimately filling the given user roles, to provide
 -- | them with a complete account of the perspective on the context instance.
@@ -141,10 +203,25 @@ serialisePerspectiveForUser
   -> RoleType
   -> Perspective
   -> MonadPerspectivesTransaction Unit
-serialisePerspectiveForUser cid users userRoleType p@(Perspective { object, propertyVerbs, selfOnly, authorOnly, isSelfPerspective }) =
+serialisePerspectiveForUser cid users userRoleType p@(Perspective { object, propertyVerbs, selfOnly, authorOnly, isSelfPerspective, perspectiveStartPosition, roleTypes }) =
   if authorOnly then pure unit
   else do
-    (visiblePropertyTypes :: Array PropertyType) <- liftToMPT $ propertiesInPerspective p
+    (visiblePropertyTypes :: Array PropertyType) <- liftToMPT (propertiesInPerspective p)
+    readableVisiblePropertyTypes <- liftToMPT (traverse toReadable visiblePropertyTypes)
+    readableUserRoleType <- liftToMPT (toReadable userRoleType)
+    readableRoleTypes <- liftToMPT (traverse toReadable roleTypes)
+    lift $ debugSync $
+      "Serialising perspective for users "
+        <> show (unwrap <$> toArray users)
+        <> " of type "
+        <> roletype2string readableUserRoleType
+        <> "(based on perspective starting at "
+        <> perspectivePositionText perspectiveStartPosition
+        <> " on role types "
+        <> show (roletype2string <$> readableRoleTypes)
+        <> ") with properties "
+        <> show (propertytype2string <$> readableVisiblePropertyTypes)
+        <> "."
     serialiseRoleInstancesAndProperties cid users object (nub visiblePropertyTypes) selfOnly isSelfPerspective
 
 -- | MODEL DEPENDENCY IN THIS FUNCTION. The correct operation of this function depends on
@@ -165,6 +242,10 @@ serialiseRoleInstancesAndProperties
   -> -- true iff the object of the perspective equals its subject.
   MonadPerspectivesTransaction Unit
 serialiseRoleInstancesAndProperties cid users object properties selfOnly isPerspectiveOnSelf = do
+  -- TODO. Pas traceSync hier toe en gebruik:
+  --   - Perspective.roleTypes (waar het perspectief op is)
+  --   - userRoleType (wie het perspectief heeft)
+  --   - positie van het perspectief in de brontekst.
   -- We know that object has a role range.
   properties' <-
     if isPerspectiveOnSelf
@@ -206,6 +287,10 @@ serialiseRoleInstancesAndProperties cid users object properties selfOnly isPersp
                   )
               )
             else for_ (join (allPaths <$> vals)) (serialiseDependencies (toArray users))
+
+perspectivePositionText :: Maybe ArcPosition -> String
+perspectivePositionText Nothing = ""
+perspectivePositionText (Just position) = "Perspective source position: " <> show position
 
 getPropertyValues :: PropertyType -> DependencyPath ~~> DependencyPath
 getPropertyValues pt dep = (lift $ lift $ propertyTypeIsAuthorOnly pt) >>=
@@ -264,7 +349,9 @@ serialiseDependency users mpreviousDependency currentDependency = do
       else do
         seenBefore <- gets \depsSeenBefore -> isJust $ elemIndex currentDependency depsSeenBefore
         if seenBefore then pure unit
-        else lift $ addDeltasForRole roleId
+        else do
+          void $ modify \depsSeenBefore -> snoc depsSeenBefore currentDependency
+          lift $ addDeltasForRole roleId
     otherwise -> pure unit
 
   case mpreviousDependency, currentDependency of
@@ -316,18 +403,19 @@ serialiseDependency users mpreviousDependency currentDependency = do
           (liftToMPT $ try $ getPerspectContext context) >>=
             handlePerspectContextError "addDeltasForRole"
               \(PerspectContext { buitenRol }) -> do
-                -- ORDER IS OF THE ESSENCE, HERE!!
                 -- Get creation deltas for external role.
                 extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
-                for_ extRoleDeltas \(DeltaStoreRecord { signedDelta }) ->
-                  addDelta $ DeltaInTransaction { users, delta: signedDelta }
+                -- We expect at least two deltas for the external role: the ConstructExternalRole delta and the ContextDelta that links it to the context. If there are less than two, something is wrong.
+                if length extRoleDeltas < 2 then lift $ errorDelta ("No deltas found for external role " <> show buitenRol) else pure unit
                 -- Get creation deltas for context.
                 contextDeltas <- lift $ getDeltasForResource (unwrap context)
-                for_ contextDeltas \(DeltaStoreRecord { signedDelta }) ->
-                  addDelta $ DeltaInTransaction { users, delta: signedDelta }
+                -- We expect at least one delta for the context: the ConstructEmptyContext delta. If there are none, something is wrong.
+                if null contextDeltas then lift $ errorDelta ("No deltas found for context " <> show context) else pure unit
                 -- Get creation deltas for this role.
                 roleDeltas <- lift $ getDeltasForResource (unwrap roleId)
-                for_ roleDeltas \(DeltaStoreRecord { signedDelta }) ->
+                -- We expect at least one delta for the role: the ConstructEmptyRole delta. If there are none, something is wrong.
+                if null roleDeltas then lift $ errorDelta ("No deltas found for role " <> show roleId) else pure unit
+                for_ (extRoleDeltas <> contextDeltas <> roleDeltas) \(DeltaStoreRecord { signedDelta }) ->
                   addDelta $ DeltaInTransaction { users, delta: signedDelta }
 
   withContext :: Boolean

@@ -31,13 +31,13 @@ import Data.DateTime.Instant (Instant, instant, unInstant)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Function.Uncurried (Fn2, runFn2)
-import Data.Map (insert)
+import Data.Map (delete, insert)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Nullable (Nullable, toMaybe, toNullable)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Effect.Aff (Aff, Error, Fiber, Milliseconds(..), catchError, delay, error, forkAff, joinFiber, launchAff_, runAff, throwError, try)
+import Effect.Aff (Aff, Error, Fiber, Milliseconds(..), catchError, delay, error, forkAff, joinFiber, killFiber, launchAff_, runAff, throwError, try)
 import Effect.Aff.AVar (AVar, empty, new, put, take, read)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -67,6 +67,7 @@ import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (context, externalRole)
+import Perspectives.Logging (debugInstall)
 import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, onStartUp, sysUser, userWithCredentialsAuthorizedDomain, userWithCredentialsPassword, userWithCredentialsUsername)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.ModelUpgrade (runModelUpgrades)
@@ -137,7 +138,18 @@ main = pure unit
 -- | Execute the Perspectives Distributed Runtime by creating a listener to the internal channel.
 -- | Implementation note: the PouchdbUser should have a couchdbUrl that terminates on a forward slash.
 runPDR :: UserName -> Foreign -> RuntimeOptions -> (Boolean -> Effect Unit) -> Effect Unit
-runPDR usr rawPouchdbUser options callback = void $ runAff handler do
+runPDR usr rawPouchdbUser options callback = void $ runAff handler (runPDR_ usr rawPouchdbUser options callback)
+  where
+  handler :: Either Error Unit -> Effect Unit
+  handler (Left e) = do
+    logPerspectivesError $ Custom $ "An error condition in runPDR: " <> (show e)
+    callback false
+  handler (Right _) = do
+    logPerspectivesError $ Custom $ "Started the PDR for: " <> usr
+    callback true
+
+runPDR_ :: UserName -> Foreign -> RuntimeOptions -> (Boolean -> Effect Unit) -> Aff Unit
+runPDR_ usr rawPouchdbUser options callback = do
   case decodePouchdbUser' rawPouchdbUser of
     Left _ -> throwError (error "Wrong format for parameter 'rawPouchdbUser' in runPDR")
     Right (pouchdbUser :: PouchdbUser) -> do
@@ -230,7 +242,7 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
       -- Compact the entities database 5 seconds after the PDR has started.
       void $ forkAff $ runPerspectivesWithState
         ( do
-            mraw :: Maybe Foreign <- lift $ idbGet "minimizeDatabasesOnStartup"
+            mraw :: Maybe Foreign <- liftAff $ idbGet "minimizeDatabasesOnStartup"
             case mraw of
               Nothing -> compactDatabases
               Just raw -> case JSON.read raw of
@@ -246,8 +258,8 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
   compactDatabases :: MonadPerspectives Unit
   compactDatabases = do
     currentDateTime :: DateTime <- liftEffect nowDateTime
-    lift $ idbSet "minimizeDatabasesOnStartup" (JSON.write (SerializableDateTime currentDateTime))
-    lift $ delay (Milliseconds 5000.0)
+    liftAff $ idbSet "minimizeDatabasesOnStartup" (JSON.write (SerializableDateTime currentDateTime))
+    liftAff $ delay (Milliseconds 5000.0)
     entities <- entitiesDatabaseName
     models <- modelsDatabaseName
     inverted <- invertedQueryDatabaseName
@@ -301,108 +313,107 @@ runPDR usr rawPouchdbUser options callback = void $ runAff handler do
       logPerspectivesError $ Custom $ "API stopped because: " <> show e
       resumeRun state
 
-  forkTimedTransactions :: AVar RepeatingTransaction -> AVar PerspectivesState -> Aff Unit
-  forkTimedTransactions repeatingTransactionAVar state = do
-    repeatingTransaction <- take repeatingTransactionAVar
-    case repeatingTransaction of
-      (PostponedTransaction t@{ transaction, instanceId, stateId, authoringRole, startMoment }) -> do
-        f <- forkAff
-          ( do
-              delay (fromDuration startMoment)
-              _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
-              pure unit
-          )
-        registerTransactionFiber f instanceId stateId state
-      (TransactionWithTiming t@{ instanceId, stateId, startMoment, endMoment }) -> do
-        f <- forkAff
-          ( do
-              case startMoment of
-                Nothing -> pure unit
-                Just d -> delay (fromDuration d)
-              -- Calculate the end moment on the clock and pass on to repeatUnlimited
-              mendMoment <- computeEndMoment endMoment
-              repeatUnlimited t mendMoment
-          )
-        registerTransactionFiber f instanceId stateId state
-        forkTimedTransactions repeatingTransactionAVar state
-      RepeatNtimes t@{ instanceId, stateId, nrOfTimes, startMoment, endMoment } -> do
-        f <- forkAff
-          ( do
-              case startMoment of
-                Nothing -> pure unit
-                Just d -> delay (fromDuration d)
-              -- Calculate the end moment on the clock and pass on to repeatN
-              mendMoment <- computeEndMoment endMoment
-              repeatN t nrOfTimes mendMoment
-          )
-        registerTransactionFiber f instanceId stateId state
-        forkTimedTransactions repeatingTransactionAVar state
-    where
-    repeatUnlimited
-      :: forall f
-       . { transaction :: MonadPerspectivesTransaction Unit, authoringRole :: RoleType, interval :: Duration | f }
-      -> Maybe Instant
-      -> Aff Unit
-    repeatUnlimited t@{ transaction, authoringRole, interval } mendMoment = do
-      delay (fromDuration interval)
-      case mendMoment of
-        Nothing -> do
+forkTimedTransactions :: AVar RepeatingTransaction -> AVar PerspectivesState -> Aff Unit
+forkTimedTransactions repeatingTransactionAVar state = do
+  repeatingTransaction <- take repeatingTransactionAVar
+  case repeatingTransaction of
+    (PostponedTransaction t@{ transaction, instanceId, stateId, authoringRole, startMoment }) -> do
+      f <- forkAff
+        ( do
+            delay (fromDuration startMoment)
+            unregisterTransactionFiber instanceId stateId state
+            _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
+            pure unit
+        )
+      registerTransactionFiber f instanceId stateId state
+      forkTimedTransactions repeatingTransactionAVar state
+    (TransactionWithTiming t@{ instanceId, stateId, startMoment, endMoment }) -> do
+      f <- forkAff
+        ( do
+            case startMoment of
+              Nothing -> pure unit
+              Just d -> delay (fromDuration d)
+            -- Calculate the end moment on the clock and pass on to repeatUnlimited
+            mendMoment <- computeEndMoment endMoment
+            repeatUnlimited t mendMoment
+        )
+      registerTransactionFiber f instanceId stateId state
+      forkTimedTransactions repeatingTransactionAVar state
+    RepeatNtimes t@{ instanceId, stateId, nrOfTimes, startMoment, endMoment } -> do
+      f <- forkAff
+        ( do
+            case startMoment of
+              Nothing -> pure unit
+              Just d -> delay (fromDuration d)
+            -- Calculate the end moment on the clock and pass on to repeatN
+            mendMoment <- computeEndMoment endMoment
+            repeatN t nrOfTimes mendMoment
+        )
+      registerTransactionFiber f instanceId stateId state
+      forkTimedTransactions repeatingTransactionAVar state
+  where
+  repeatUnlimited
+    :: forall f
+     . { transaction :: MonadPerspectivesTransaction Unit, authoringRole :: RoleType, interval :: Duration | f }
+    -> Maybe Instant
+    -> Aff Unit
+  repeatUnlimited t@{ transaction, authoringRole, interval } mendMoment = do
+    delay (fromDuration interval)
+    case mendMoment of
+      Nothing -> do
+        _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
+        repeatUnlimited t mendMoment
+      Just endMoment -> do
+        n <- liftEffect $ now
+        -- If not past the endMoment:
+        if n < endMoment then do
           _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
           repeatUnlimited t mendMoment
-        Just endMoment -> do
-          n <- liftEffect $ now
-          -- If not past the endMoment:
-          if n < endMoment then do
-            _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
-            repeatUnlimited t mendMoment
-          else pure unit
+        else pure unit
 
-    repeatN
-      :: forall f
-       . { transaction :: MonadPerspectivesTransaction Unit, authoringRole :: RoleType, interval :: Duration | f }
-      -> Int
-      -> Maybe Instant
-      -> Aff Unit
-    repeatN t@{ transaction, authoringRole, interval } counter mendMoment = do
-      delay (fromDuration interval)
-      case mendMoment of
-        Nothing -> do
+  repeatN
+    :: forall f
+     . { transaction :: MonadPerspectivesTransaction Unit, authoringRole :: RoleType, interval :: Duration | f }
+    -> Int
+    -> Maybe Instant
+    -> Aff Unit
+  repeatN t@{ transaction, authoringRole, interval } counter mendMoment = do
+    delay (fromDuration interval)
+    case mendMoment of
+      Nothing -> do
+        if counter > 0 then do
+          -- If not past the endMoment:
+          _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
+          repeatN t (counter - 1) mendMoment
+        else pure unit
+      Just endMoment -> do
+        n <- liftEffect $ now
+        -- If not past the endMoment:
+        if n < endMoment then do
           if counter > 0 then do
             -- If not past the endMoment:
             _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
             repeatN t (counter - 1) mendMoment
           else pure unit
-        Just endMoment -> do
-          n <- liftEffect $ now
-          -- If not past the endMoment:
-          if n < endMoment then do
-            if counter > 0 then do
-              -- If not past the endMoment:
-              _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
-              repeatN t (counter - 1) mendMoment
-            else pure unit
-          else pure unit
+        else pure unit
 
-    computeEndMoment :: Maybe Duration -> Aff (Maybe Instant)
-    computeEndMoment Nothing = pure Nothing
-    computeEndMoment (Just d) = do
-      (Milliseconds start) <- liftEffect $ unInstant <$> now
-      (Milliseconds interval) <- pure $ fromDuration d
-      pure $ instant $ Milliseconds (start + interval)
+  computeEndMoment :: Maybe Duration -> Aff (Maybe Instant)
+  computeEndMoment Nothing = pure Nothing
+  computeEndMoment (Just d) = do
+    (Milliseconds start) <- liftEffect $ unInstant <$> now
+    (Milliseconds interval) <- pure $ fromDuration d
+    pure $ instant $ Milliseconds (start + interval)
 
-  -- Register the fiber so it can be stopped if the instance exits the state.
-  registerTransactionFiber :: Fiber Unit -> String -> StateIdentifier -> AVar PerspectivesState -> Aff Unit
-  registerTransactionFiber f instanceId stateId stateAVar = do
-    s@{ transactionFibers } <- take stateAVar
-    put s { transactionFibers = insert (Tuple instanceId stateId) f transactionFibers } stateAVar
+-- Register the fiber so it can be stopped if the instance exits the state.
+registerTransactionFiber :: Fiber Unit -> String -> StateIdentifier -> AVar PerspectivesState -> Aff Unit
+registerTransactionFiber f instanceId stateId stateAVar = do
+  s@{ transactionFibers } <- take stateAVar
+  put s { transactionFibers = insert (Tuple instanceId stateId) f transactionFibers } stateAVar
 
-  handler :: Either Error Unit -> Effect Unit
-  handler (Left e) = do
-    logPerspectivesError $ Custom $ "An error condition in runPDR: " <> (show e)
-    callback false
-  handler (Right _) = do
-    logPerspectivesError $ Custom $ "Started the PDR for: " <> usr
-    callback true
+unregisterTransactionFiber :: String -> StateIdentifier -> AVar PerspectivesState -> Aff Unit
+unregisterTransactionFiber instanceId stateId stateAVar = do
+  s@{ transactionFibers } <- take stateAVar
+  put s { transactionFibers = delete (Tuple instanceId stateId) transactionFibers } stateAVar
 
 forkDatabasePersistence :: AVar PerspectivesState -> Aff Unit
 forkDatabasePersistence state = do
@@ -474,7 +485,7 @@ forkJustInTimeModelLoader modelToLoadAVar state = run
                 doNotShareWithPeers
                 (ENR $ EnumeratedRoleType sysUser)
                 ( do
-                    log ("Will just-in-time load " <> show dfId)
+                    lift $ debugInstall $ "Will just-in-time load " <> show dfId
                     void $ addModelToLocalStore dfId isInitialLoad
                 )
             )
@@ -535,57 +546,8 @@ createAccount :: UserName -> Foreign -> RuntimeOptions -> Nullable Foreign -> ({
 createAccount perspectivesUser rawPouchdbUser runtimeOptions nullableIdentityDocument callback = void $ runAff handler
   case decodePouchdbUser' rawPouchdbUser of
     Left e -> throwError (error $ "Wrong format for parameter 'rawPouchdbUser' in createAccount: " <> (show e))
-    Right (pouchdbUser :: PouchdbUser) -> do
-      -- Set the current PDR version.
-      idbSet "CurrentPDRVersion" (unsafeCoerce pdrVersion)
+    Right (pouchdbUser :: PouchdbUser) -> createAccount_ pouchdbUser runtimeOptions (toMaybe nullableIdentityDocument)
 
-      transactionFlag <- new true
-      brokerService <- empty
-      transactionWithTiming <- empty
-      modelToLoad <- empty
-      indexedResourceToCreate <- empty
-      missingResource <- empty
-      typeToBeFixed <- empty
-      userIntegrityChoice <- empty
-      state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
-        pouchdbUser
-        transactionFlag
-        transactionWithTiming
-        modelToLoad
-        runtimeOptions
-        brokerService
-        indexedResourceToCreate
-        missingResource
-        typeToBeFixed
-        userIntegrityChoice
-
-      -- Fork aff to load models just in time.
-      void $ forkAff $ forkJustInTimeModelLoader modelToLoad state
-      -- Fork aff to save to the database
-      -- TODO: beeindig database persistence.
-      void $ forkAff $ forkDatabasePersistence state
-      -- Fork aff to create indexed roles and contexts.
-      void $ forkAff $ forkCreateIndexedResources indexedResourceToCreate state
-      -- Fork aff to restore referential integrity
-      void $ forkAff $ forkReferentialIntegrityFixer missingResource state
-      -- Register the function that delivers user integrity choices from the frontend.
-      liftEffect $ Proxy.registerPutUserIntegrityChoice \choice -> launchAff_ do
-        s <- read state
-        put choice s.userIntegrityChoice
-
-      -- Set up.
-      runPerspectivesWithState
-        ( do
-            addAllExternalFunctions
-            key <- getPrivateKey
-            modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce key } }
-            getSystemIdentifier >>= createUserDatabases
-            setupUser (UninterpretedTransactionForPeer <$> (toMaybe nullableIdentityDocument))
-            saveMarkedResources
-        )
-        state
-      -- and stop
-      put Stop modelToLoad
   where
   handler :: Either Error Unit -> Effect Unit
   handler (Left e) = do
@@ -594,6 +556,64 @@ createAccount perspectivesUser rawPouchdbUser runtimeOptions nullableIdentityDoc
   handler (Right _) = do
     logPerspectivesError $ Custom $ "Created an account " <> perspectivesUser
     callback { success: true, reason: toNullable Nothing }
+
+createAccount_ :: PouchdbUser -> RuntimeOptions -> Maybe Foreign -> Aff Unit
+createAccount_ pouchdbUser runtimeOptions maybeIdentityDocument = do
+  -- Set the current PDR version.
+  idbSet "CurrentPDRVersion" (unsafeCoerce pdrVersion)
+
+  transactionFlag <- new true
+  brokerService <- empty
+  transactionWithTiming <- empty
+  modelToLoad <- empty
+  indexedResourceToCreate <- empty
+  missingResource <- empty
+  typeToBeFixed <- empty
+  userIntegrityChoice <- empty
+  state <- getCurrentLanguageFromIDB >>= new <<< newPerspectivesState
+    pouchdbUser
+    transactionFlag
+    transactionWithTiming
+    modelToLoad
+    runtimeOptions
+    brokerService
+    indexedResourceToCreate
+    missingResource
+    typeToBeFixed
+    userIntegrityChoice
+
+  -- Register the function that delivers user integrity choices from the frontend.
+  liftEffect $ Proxy.registerPutUserIntegrityChoice \choice -> launchAff_ do
+    s <- read state
+    put choice s.userIntegrityChoice
+
+  -- Fork aff to load models just in time.
+  void $ forkAff $ forkJustInTimeModelLoader modelToLoad state
+  -- Fork aff to restore referential integrity (captured so we can kill it when done).
+  integrityFiber <- forkAff $ forkReferentialIntegrityFixer missingResource state
+  -- Fork aff to save to the database (captured so we can kill it when done).
+  persistenceFiber <- forkAff $ forkDatabasePersistence state
+  -- Fork aff to create indexed roles and contexts (captured so we can kill it when done).
+  indexedResourceFiber <- forkAff $ forkCreateIndexedResources indexedResourceToCreate state
+
+  -- Set up.
+  runPerspectivesWithState
+    ( do
+        addAllExternalFunctions
+        key <- getPrivateKey
+        modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce key } }
+        getSystemIdentifier >>= createUserDatabases
+        setupUser (UninterpretedTransactionForPeer <$> maybeIdentityDocument)
+        saveMarkedResources
+    )
+    state
+  -- Stop the JIT model loader (it handles Stop gracefully).
+  put Stop modelToLoad
+  -- Kill the daemon fibers that have no stop signal of their own.
+  let done = error "createAccount_ complete"
+  killFiber done integrityFiber
+  killFiber done persistenceFiber
+  killFiber done indexedResourceFiber
 
 reCreateInstances :: Foreign -> RuntimeOptions -> (Boolean -> Effect Unit) -> Effect Unit
 reCreateInstances rawPouchdbUser options callback = void $ runAff handler

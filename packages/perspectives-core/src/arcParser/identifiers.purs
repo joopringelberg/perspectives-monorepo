@@ -130,6 +130,13 @@ lowerCaseName = try do
   void token.whiteSpace
   pure $ fromCharArray (cons f r)
 
+lowerCaseAlphaNumName :: IP String
+lowerCaseAlphaNumName = try do
+  f <- lower
+  r <- many (lower <|> alphaNum)
+  void token.whiteSpace
+  pure $ fromCharArray (cons f r)
+
 lower :: IP Char
 lower = satisfy (isLower <<< codePointFromChar) <?> "lowercase letter, "
 
@@ -148,11 +155,11 @@ email = try do
 
 -- | Produces a resource identifier in the pub: scheme:
 -- | pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains
--- | Only passes strings of this form: https://{authority}/cw_{databasename}/{SegmentedIdentifier}.
+-- | or, for local testing, pub:cw_{databaseName}#{SegmentedIdentifier}.
 pubParser :: IP String
 pubParser = try do
   chars <- many (satisfy (not <<< isSpace <<< codePointFromChar))
   void whiteSpace
   s <- pure (fromCharArray chars)
   if hasPublicResourceShape s then pure s
-  else fail "Not a valid public resource url. "
+  else fail "Not a valid public resource identifier. "

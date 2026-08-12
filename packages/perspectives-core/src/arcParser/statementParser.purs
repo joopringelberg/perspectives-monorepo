@@ -30,16 +30,16 @@ import Data.String.Regex (Regex, match)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Tuple (Tuple(..))
-import Perspectives.Parsing.Arc.Expression (step)
+import Parsing (fail)
+import Parsing.Combinators (lookAhead, manyTill, option, optionMaybe, (<?>))
+import Parsing.Indent.Monadic (indented', withPos)
+import Perspectives.Parsing.Arc.Expression (parseLetVariableName, step)
 import Perspectives.Parsing.Arc.Expression.AST (VarBinding(..))
-import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, lowerCaseName, reserved)
+import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, reserved)
 import Perspectives.Parsing.Arc.IndentParser (IP, getPosition, outdented', sameOrOutdented')
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..))
 import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
 import Prelude (bind, discard, pure, ($), (*>), (<$>), (<*), (<*>), (<>), (>>=))
-import Parsing.Indent.Monadic (indented', withPos)
-import Parsing (fail)
-import Parsing.Combinators (lookAhead, manyTill, option, optionMaybe, (<?>))
 
 assignment :: IP Assignment
 assignment = isPropertyAssignment >>=
@@ -48,19 +48,19 @@ assignment = isPropertyAssignment >>=
 
 roleAssignment :: IP Assignment
 roleAssignment = do
-  keyword <- lookAhead reservedIdentifier <?> "Expected remove, create, create_, move, bind, bind_, unbind, unbind_, delete, callEffect or callDestructiveEffect. "
+  keyword <- lookAhead reservedIdentifier <?> "Expected remove, create, create_, move, bind, bind_, delete, callEffect or callDestructiveEffect. "
   case keyword of
     "remove" -> do
       (Tuple first second) <- twoReservedWords
       case first, second of
         "remove", "role" -> roleRemoval
         "remove", "context" -> contextRemoval
-        _, _ -> fail ("Expected 'role' or 'context' after 'remove'. ")
+        "remove", "filler" -> removeFiller
+        "remove", "as" -> removeAsFiller
+        _, _ -> fail ("Expected 'role', 'context', 'filler', or 'as' after 'remove'. ")
     "move" -> move
     "bind" -> bind'
     "bind_" -> bind_
-    "unbind" -> unbind
-    "unbind_" -> unbind_
     "delete" -> do
       (Tuple first second) <- twoReservedWords
       case first, second of
@@ -80,7 +80,7 @@ roleAssignment = do
       case first, second of
         "create_", "context" -> createContext_
         _, _ -> fail ("Expected 'context' after 'create_'.")
-    s -> fail ("Expected remove, create, create_, move, bind, bind_, unbind, unbind_, delete, callDestructiveEffect or callEffect but found '" <> s <> "'. ")
+    s -> fail ("Expected remove, create, create_, move, bind, bind_, delete, callDestructiveEffect or callEffect but found '" <> s <> "'. ")
 
 roleRemoval :: IP Assignment
 roleRemoval = do
@@ -157,21 +157,42 @@ bind_ = do
   end <- getPosition
   pure $ Bind_ { start, end, bindingExpression, binderExpression }
 
-unbind :: IP Assignment
-unbind = do
+-- remove filler of <filled-role-expression>  →  RemoveFiller (UQD)
+-- remove filler <filler-role-expression> from <filled-role-expression>  →  RemoveFillerWith (BQD)
+removeFiller :: IP Assignment
+removeFiller = do
   start <- getPosition
-  bindingExpression <- (reserved "unbind" *> step)
-  roleIdentifier <- optionMaybe (reserved "from" *> arcIdentifier)
-  end <- getPosition
-  pure $ Unbind { start, end, bindingExpression, roleIdentifier }
+  reserved "remove"
+  reserved "filler"
+  hasOf <- isJust <$> optionMaybe (reserved "of")
+  if hasOf then do
+    filledExpression <- step
+    end <- getPosition
+    pure $ RemoveFiller { start, end, filledExpression }
+  else do
+    fillerExpression <- step
+    filledExpression <- reserved "from" *> step
+    end <- getPosition
+    pure $ RemoveFillerWith { start, end, fillerExpression, filledExpression }
 
-unbind_ :: IP Assignment
-unbind_ = do
+-- remove as filler of <RoleType> <filler-role-expression>  →  RemoveAsFillerOfType (UQD)
+-- remove as filler <filler-role-expression>  →  RemoveAsFiller (UQD)
+removeAsFiller :: IP Assignment
+removeAsFiller = do
   start <- getPosition
-  bindingExpression <- (reserved "unbind_" *> step)
-  binderExpression <- reserved "from" *> step
-  end <- getPosition
-  pure $ Unbind_ { start, end, bindingExpression, binderExpression }
+  reserved "remove"
+  reserved "as"
+  reserved "filler"
+  hasOf <- isJust <$> optionMaybe (reserved "of")
+  if hasOf then do
+    roleIdentifier <- arcIdentifier
+    fillerExpression <- step
+    end <- getPosition
+    pure $ RemoveAsFillerOfType { start, end, roleIdentifier, fillerExpression }
+  else do
+    fillerExpression <- step
+    end <- getPosition
+    pure $ RemoveAsFiller { start, end, fillerExpression }
 
 isPropertyAssignment :: IP Boolean
 isPropertyAssignment = do
@@ -330,7 +351,8 @@ letWithAssignment = withPos do
 
 letABinding :: IP LetABinding
 letABinding = do
-  varName <- (lowerCaseName <* token.reservedOp "<-") <?> "lower case name followed by <-, "
+  varName <- parseLetVariableName
+  _ <- token.reservedOp "<-" <?> "Expected '<-' after letA variable name. "
   (Tuple first second) <- twoReservedWords
   case first, second of
     "create", "role" -> Stat <$> pure varName <*> roleCreation

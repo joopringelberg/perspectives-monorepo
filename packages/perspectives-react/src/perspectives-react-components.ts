@@ -1,4 +1,4 @@
-import "./types/globals.ts";
+import "./types/globals";
 
 // No items are included from the folder notinuse.
 export { ViewOnExternalRole } from "./views";
@@ -52,3 +52,5 @@ export {getPreact} from "./getLanguage";
 
 // We export this instance so the consumer of this library can use it. This prevents double instances of i18next.
 export { default as i18next } from 'i18next';
+export { default as RoleTypeAheadFiller } from "./roletypeaheadfiller";
+export { default as RoleTypeAheadForm } from "./roletypeaheadform";

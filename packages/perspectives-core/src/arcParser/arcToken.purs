@@ -27,14 +27,15 @@ import Prelude
 import Control.Alt ((<|>))
 import Control.Monad.State (StateT)
 import Data.Array (uncons, sort, many) as Array
+import Data.CodePoint.Unicode as Data.CodePoint.Unicode
 import Data.Maybe (Maybe(..))
-import Data.String (toLower)
+import Data.String (CodePoint, toLower)
 import Data.String.CodeUnits as SCU
-import Perspectives.Parsing.Arc.IndentParser (ArcParser)
 import Parsing (ParserT, fail, Position)
 import Parsing.Combinators (try, (<?>))
-import Parsing.String.Basic (oneOf)
+import Parsing.String.Basic (oneOf, takeWhile1)
 import Parsing.Token (GenLanguageDef(..), GenTokenParser, alphaNum, makeTokenParser, upper)
+import Perspectives.Parsing.Arc.IndentParser (ArcParser)
 
 type IndentTokenParser = GenTokenParser String (StateT Position ArcParser)
 
@@ -179,6 +180,8 @@ perspectDef = LanguageDef
 
       -- Queries
       , "filter"
+      , "selectFrom"
+      , "just"
 
       -- Expressions
       , "remove"
@@ -189,8 +192,8 @@ perspectDef = LanguageDef
       , "move"
       , "bind"
       , "bind_"
-      , "unbind"
-      , "unbind_"
+      , "filler"
+      , "as"
       , "delete"
       , "callEffect"
       , "callDestructiveEffect"
@@ -238,6 +241,9 @@ perspectDef = LanguageDef
       , "when"
       , "table"
       , "chat"
+      , "typeaheadfiller"
+      , "typeaheadform"
+      , "typeaheadfillfrom"
       , "messages"
       , "media"
       , "who"
@@ -247,6 +253,7 @@ perspectDef = LanguageDef
       , "detail"
       , "without"
       , "fillfrom"
+      , "fillproperty"
       , "fields"
       , "minLines"
       , "maxLines"
@@ -309,3 +316,14 @@ theReservedNames :: forall m. Monad m => GenLanguageDef String m -> Array String
 theReservedNames (LanguageDef languageDef)
   | languageDef.caseSensitive = Array.sort languageDef.reservedNames
   | otherwise = Array.sort $ map toLower languageDef.reservedNames
+
+-- | Match zero or more whitespace characters satisfying
+-- | `Data.CodePoint.Unicode.isSpace`.
+-- |
+-- | Always succeeds. Will consume only when matched whitespace string
+-- | is non-empty.
+mandatoryWhiteSpace :: forall m. ParserT String m String
+mandatoryWhiteSpace = takeWhile1 isSpace <?> "whitespace, "
+  where
+  isSpace :: CodePoint -> Boolean
+  isSpace = Data.CodePoint.Unicode.isSpace

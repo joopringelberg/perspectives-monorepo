@@ -26,6 +26,7 @@ import Prelude
 import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Trans.Class (lift)
 import Data.Maybe (Maybe(..))
+import Effect.Aff.Class (liftAff)
 import Effect.AVar (AVar)
 import Effect.Aff (Fiber)
 import Effect.Aff.AVar (put)
@@ -43,8 +44,8 @@ addTimeFacets updater { startMoment, endMoment, repeats } authoringRole stateId 
   repeat Never u = case startMoment of
     Nothing -> u
     Just s -> \a -> do
-      (av :: AVar RepeatingTransaction) <- lift $ gets _.transactionWithTiming
-      lift $ lift $ put
+      (av :: AVar RepeatingTransaction) <- lift (gets _.transactionWithTiming :: MP (AVar RepeatingTransaction))
+      liftAff $ put
         ( PostponedTransaction
             { transaction: u a
             , instanceId: unsafeUnwrapResource a
@@ -55,8 +56,8 @@ addTimeFacets updater { startMoment, endMoment, repeats } authoringRole stateId 
         )
         av
   repeat (Forever duration) u = \a -> do
-    (av :: AVar RepeatingTransaction) <- lift $ gets _.transactionWithTiming
-    lift $ lift $ put
+    (av :: AVar RepeatingTransaction) <- lift (gets _.transactionWithTiming :: MP (AVar RepeatingTransaction))
+    liftAff $ put
       ( TransactionWithTiming
           { transaction: u a
           , interval: duration
@@ -69,8 +70,8 @@ addTimeFacets updater { startMoment, endMoment, repeats } authoringRole stateId 
       )
       av
   repeat (RepeatFor nrOfTimes duration) u = \a -> do
-    (av :: AVar RepeatingTransaction) <- lift $ gets _.transactionWithTiming
-    lift $ lift $ put
+    (av :: AVar RepeatingTransaction) <- lift (gets _.transactionWithTiming :: MP (AVar RepeatingTransaction))
+    liftAff $ put
       ( RepeatNtimes
           { transaction: u a
           , interval: duration

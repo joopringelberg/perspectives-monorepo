@@ -1,4 +1,5 @@
 import typescript from '@rollup/plugin-typescript';
+import { babel } from '@rollup/plugin-babel';
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import replace from '@rollup/plugin-replace';
@@ -50,6 +51,15 @@ export default [
         declaration: true,
         declarationDir: 'dist/types',
         rootDir: 'src'
+      }),
+
+      // 5b. Transform preserved JSX to JS while keeping sourcemap chaining.
+      babel({
+        babelHelpers: 'bundled',
+        extensions: ['.js', '.jsx', '.ts', '.tsx'],
+        exclude: 'node_modules/**',
+        presets: [['@babel/preset-react', { runtime: 'classic' }]],
+        sourceMaps: true,
       }),
 
       // 6. Asset processing

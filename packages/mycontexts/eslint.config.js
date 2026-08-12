@@ -11,6 +11,26 @@ export default [
   },
   { files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"] },
   { languageOptions: { globals: globals.browser } },
+  {
+    files: ["src/buildMeta.js", "src/generateManifest.js", "src/syncPublicAssets.js"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        console: "readonly",
+      },
+    },
+  },
+  {
+    files: ["src/perspectives-serviceworker.js"],
+    languageOptions: {
+      globals: {
+        ...globals.serviceworker,
+        clients: "readonly",
+        BroadcastChannel: "readonly",
+        console: "readonly",
+      },
+    },
+  },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
   pluginReact.configs.flat.recommended,

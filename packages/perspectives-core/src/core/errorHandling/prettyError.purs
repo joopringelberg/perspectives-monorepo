@@ -21,6 +21,7 @@ import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives)
 import Perspectives.Identifiers (typeUri2ModelUri, typeUri2LocalName_)
 import Perspectives.Logging (pdrLog)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.Query.QueryTypes (Domain(..))
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Warning (PerspectivesWarning(..))
@@ -113,6 +114,13 @@ humanizePerspectivesError e = case e of
     -- compilation failed and this error will be in terms of Readable ids.
     adt' <- traverse toReadable adt
     pure (RoleHasNoProperty adt' pt start end)
+  IncompatibleDomainsForJunction dom1 dom2 -> do
+    dom1' <- humanizeDomain dom1
+    dom2' <- humanizeDomain dom2
+    pure (IncompatibleDomainsForJunction dom1' dom2')
+  ContextHasNoRole contextADT roleType start end -> do
+    contextADT' <- traverse toReadable contextADT
+    pure (ContextHasNoRole contextADT' roleType start end)
 
   -- Default: leave unchanged.
   _ -> pure e
@@ -128,6 +136,15 @@ swapPropertyType :: PropertyType -> MonadPerspectives PropertyType
 swapPropertyType pt = case pt of
   ENP ept -> ENP <$> toReadable ept
   CP cpt -> CP <$> toReadable cpt
+
+humanizeDomain :: Domain -> MonadPerspectives Domain
+humanizeDomain dom = case dom of
+  RDOM adt -> RDOM <$> traverse toReadable adt
+  CDOM adt -> CDOM <$> traverse toReadable adt
+  VDOM ran mprop -> VDOM ran <$> traverse swapPropertyType mprop
+  ContextKind -> pure ContextKind
+  RoleKind -> pure RoleKind
+  AnyRoleType -> pure AnyRoleType
 
 -- If the string looks like a type URI, return the local name; otherwise unchanged.
 humanizeString :: String -> MonadPerspectives String
@@ -156,6 +173,80 @@ humanizePerspectivesWarning w = case w of
     pure (RoleBindingSynchronizationIncomplete role' source' destinations')
   NotificationError sid -> NotificationError <$> toReadable sid
   AutomaticActionError sid -> AutomaticActionError <$> toReadable sid
+  ExecutingRolePropertyDelta deltaType roleId property -> do
+    property' <- toReadable property
+    pure (ExecutingRolePropertyDelta deltaType roleId property')
+  ExecutingUniverseContextDelta deltaType contextId contextType -> do
+    contextType' <- toReadable contextType
+    pure (ExecutingUniverseContextDelta deltaType contextId contextType')
+  ExecutingUniverseRoleDelta deltaType contextId roleInstance roleType subject -> do
+    roleType' <- toReadable roleType
+    subject' <- toReadable subject
+    pure (ExecutingUniverseRoleDelta deltaType contextId roleInstance roleType' subject')
+  ConstructContext contextType mAuthorizedRole contextInstance -> do
+    contextType' <- toReadable contextType
+    mRoleType' <- traverse toReadable mAuthorizedRole
+    pure (ConstructContext contextType' mRoleType' contextInstance)
+  FilledRoleInstance filled filledType filler fillerType -> do
+    filledType' <- toReadable filledType
+    fillerType' <- toReadable fillerType
+    pure (FilledRoleInstance filled filledType' filler fillerType')
+  ContextStateNotValid contextInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (ContextStateNotValid contextInstance stateId')
+  AlreadyInContextState contextInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (AlreadyInContextState contextInstance stateId')
+  RoleStateNotValid roleInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (RoleStateNotValid roleInstance stateId')
+  AlreadyInRoleState roleInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (AlreadyInRoleState roleInstance stateId')
+  NoContextToBindIn qualifiedRoleIdentifier contextId -> do
+    qualifiedRoleIdentifier' <- toReadable qualifiedRoleIdentifier
+    pure (NoContextToBindIn qualifiedRoleIdentifier' contextId)
+  NoBindings qualifiedRoleIdentifier contextId -> do
+    qualifiedRoleIdentifier' <- toReadable qualifiedRoleIdentifier
+    pure (NoBindings qualifiedRoleIdentifier' contextId)
+  NoRoleTypesToCreate eroleType ctxt userRoleType -> do
+    eroleType' <- toReadable eroleType
+    userRoleType' <- toReadable userRoleType
+    pure (NoRoleTypesToCreate eroleType' ctxt userRoleType')
+  CannotConstructMinimalSelfPerspective contextType roleType -> do
+    contextType' <- toReadable contextType
+    roleType' <- toReadable roleType
+    pure (CannotConstructMinimalSelfPerspective contextType' roleType')
+  ConstructedMinimalSelfPerspective contextType roleType -> do
+    contextType' <- toReadable contextType
+    roleType' <- toReadable roleType
+    pure (ConstructedMinimalSelfPerspective contextType' roleType')
+  NoRoleInstanceToSetProperty property value -> do
+    property' <- toReadable property
+    pure (NoRoleInstanceToSetProperty property' value)
+  RoleInstanceAlreadyHasPropertyValue roleInstance property value -> do
+    property' <- toReadable property
+    pure (RoleInstanceAlreadyHasPropertyValue roleInstance property' value)
+  NoUserForContextStateEvaluation contextInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (NoUserForContextStateEvaluation contextInstance stateId')
+  ContextStateHasBeenEvaluatedBefore contextInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (ContextStateHasBeenEvaluatedBefore contextInstance stateId')
+  RunContextStateAutomaticAction contextInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (RunContextStateAutomaticAction contextInstance stateId')
+  RunRoleStateAutomaticAction roleInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (RunRoleStateAutomaticAction roleInstance stateId')
+  RoleIsFunctional roleType contextInstance roleInstance -> do
+    roleType' <- toReadable roleType
+    pure (RoleIsFunctional roleType' contextInstance roleInstance)
+  RoleStateHasBeenEvaluatedBefore roleInstance stateId -> do
+    stateId' <- toReadable stateId
+    pure (RoleStateHasBeenEvaluatedBefore roleInstance stateId')
+
+  -- Default: leave unchanged.
   _ -> pure w
 
 -- | Convert a PerspectivesWarning to a human-friendly string.
@@ -176,6 +267,6 @@ warnModellerPretty warning = do
 warnModellerWithErrorPretty :: PerspectivesWarning -> String -> MonadPerspectives Unit
 warnModellerWithErrorPretty warning err = do
   humanized <- humanizePerspectivesWarning warning
-  let msg = show humanized
+  let msg = show humanized <> " Error: " <> err
   -- modify \(s@{ warnings }) -> s { warnings = cons ({ message: msg, error: err }) warnings }
-  pdrLog MODEL Warn (show warning)
+  pdrLog MODEL Warn msg
