@@ -57,7 +57,7 @@ import Control.Promise (Promise, toAffE)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
-import Data.Traversable (traverse, traverse_)
+import Data.Traversable (traverse_)
 import Effect (Effect)
 import Effect.Aff (Aff, Error, Milliseconds(..), attempt, bracket, delay, error, forkAff, killFiber)
 import Effect.Aff.AVar (AVar, empty, new, put)
@@ -103,7 +103,7 @@ import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer)
 import Simple.JSON (readJSON)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
-import Test.Test.PDRInstance.SubscribePDRtoAMQP (manageAMQPwithPDR, subscribePDRtoAMQP)
+import Test.Test.PDRInstance.SubscribePDRtoAMQP (manageAMQPwithPDR, subscribePDRtoAMQP, unsubscribePDRfromAMQP)
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -303,6 +303,7 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
       killFiber done persistenceFiber
       killFiber done indexedResourceFiber
       traverse_ (killFiber done) postFiber
+      log $ pouchdbUser.systemIdentifier <> " PDRInstance shutdown complete"
 
   pure { stateAVar: state, shutdown, name: pouchdbUser.systemIdentifier }
 
@@ -600,7 +601,7 @@ withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapsh
     runInPDR pdr1 do
       setTopicLogLevel TEST Trace
       -- setTopicLogLevel INSTALL Trace
-      setTopicLogLevel RESOURCE Trace
+      -- setTopicLogLevel RESOURCE Trace
       -- setTopicLogLevel STATE Trace
       -- setTopicLogLevel SYNC Trace
       setTopicLogLevel BROKER Trace
@@ -608,22 +609,40 @@ withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapsh
 
     -- Here, make pdr1 subscribe to the default AMQP/Stomp broker so that it can receive transactions from pdr2.
     publicBrokerServiceInstance <- manageAMQPwithPDR pdr1
-    -- subscribe the first instance.
-    subscribePDRtoAMQP publicBrokerServiceInstance pdr1
-    withPDRCached user2 opts2 color2 noBus snapshotDir2 \pdr2 -> do
+    -- Subscribe pdr1 first and always unsubscribe it in the outer finalizer.
+    bracket
+      (subscribePDRtoAMQP publicBrokerServiceInstance pdr1)
+      -- (\_ -> cleanupAMQPSubscription "pdr1" pdr1)
+      (\_ -> pure unit)
+      \_ ->
+        withPDRCached user2 opts2 color2 noBus snapshotDir2 \pdr2 -> do
 
-      runInPDR pdr2 do
-        setTopicLogLevel TEST Trace
-        -- setTopicLogLevel INSTALL Trace
-        setTopicLogLevel RESOURCE Trace
-        -- setTopicLogLevel STATE Trace
-        -- setTopicLogLevel SYNC Trace
-        setTopicLogLevel BROKER Trace
-        infoTest "withTwoPDRsCachedNoBus: Setting log levels for PDR2"
+          runInPDR pdr2 do
+            setTopicLogLevel TEST Trace
+            -- setTopicLogLevel INSTALL Trace
+            -- setTopicLogLevel RESOURCE Trace
+            -- setTopicLogLevel STATE Trace
+            -- setTopicLogLevel SYNC Trace
+            setTopicLogLevel BROKER Trace
+            infoTest "withTwoPDRsCachedNoBus: Setting log levels for PDR2"
 
-      subscribePDRtoAMQP publicBrokerServiceInstance pdr2
-      -- And here subscribe pdr2 to the default AMQP/Stomp broker so that it can receive transactions from pdr1.
-      f pdr1 pdr2
+          -- Subscribe pdr2 and always unsubscribe it before pdr1.
+          bracket
+            (subscribePDRtoAMQP publicBrokerServiceInstance pdr2)
+            (\_ -> cleanupAMQPSubscription "pdr2" pdr2)
+            \_ -> f pdr1 pdr2
+
+cleanupAMQPSubscription :: String -> PDRInstance -> Aff Unit
+cleanupAMQPSubscription label pdr = do
+  log $ "[withTwoPDRsCachedNoBus] Starting AMQP unsubscribe for " <> label
+  void $ forkAff do
+    attempt (unsubscribePDRfromAMQP pdr) >>= case _ of
+      Left err ->
+        log $ "[withTwoPDRsCachedNoBus] Warning: unsubscribe failed for " <> label <> ": " <> message err
+      Right _ ->
+        log $ "[withTwoPDRsCachedNoBus] AMQP unsubscribe completed for " <> label
+  -- Keep finalization bounded so a stuck unsubscribe cannot block PDR shutdown.
+  delay (Milliseconds 250.0)
 
 -----------------------------------------------------------
 -- CONNECT TWO PDR INSTANCES VIA INVITATION

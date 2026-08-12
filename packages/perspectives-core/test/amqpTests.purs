@@ -34,14 +34,14 @@ import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
-import Effect.Aff (Aff)
-import Effect.Aff (launchAff_)
+import Effect.Aff (Aff, launchAff_)
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, new, read, write)
 import Effect.Unsafe (unsafePerformEffect)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
 import Test.Layer3Scaffold (LogConfiguration, ModelTest, SynchronisationModelConfiguration, SynchronisationResults, emptyLogConfiguration)
 import Test.Layer3Scaffold (getSynchronisationResultsOverAMQP) as Layer3Scaffold
+import Test.Test.PDRInstance.SubscribePDRtoAMQP (unsubscribePDRfromAMQP)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -91,12 +91,14 @@ synchronisationTestModelConfiguration =
   , setupLogConfiguration:
       { pdrA:
           [ { topic: TEST, logLevel: Trace }
-          , { topic: INSTALL, logLevel: Trace }
-          , { topic: RESOURCE, logLevel: Trace }
-          , { topic: STATE, logLevel: Trace }
+          -- , { topic: INSTALL, logLevel: Trace }
+          -- , { topic: RESOURCE, logLevel: Trace }
+          -- , { topic: STATE, logLevel: Trace }
+          , { topic: BROKER, logLevel: Trace }
           ]
       , pdrB:
           [ { topic: TEST, logLevel: Trace }
+          , { topic: BROKER, logLevel: Trace }
           ]
       }
   , tests: allTests
@@ -107,6 +109,7 @@ synchronisationTestModelConfiguration =
 -------------------------------------------------------------------------------
 testModel :: String
 testModel = "model://joopringelberg.nl#xyyehk9bpc@1.0"
+
 -- testModel = "model://joopringelberg.nl#AMQPtestModel@1.0"
 
 indexedTestContext :: String
@@ -134,29 +137,27 @@ testNameProperty = "model://joopringelberg.nl#AMQPtestModel$Test$External$TestNa
 
 allTests :: Array ModelTest
 allTests =
-  [ 
-    { testContextTypeName: test_SetProperty, logConfiguration: emptyLogConfiguration }
+  [ { testContextTypeName: test_SetProperty, logConfiguration: emptyLogConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration
-debugConfiguration =       
+debugConfiguration =
   { pdrA:
-    [
-    { topic: TEST, logLevel: Trace }
-    , { topic: RESOURCE, logLevel: Trace }
-    -- , { topic: STATE, logLevel: Trace }
-    , { topic: SYNC, logLevel: Trace }
-    -- , { topic: INSTALL, logLevel: Trace }
-    ]
+      [ { topic: TEST, logLevel: Trace }
+      , { topic: RESOURCE, logLevel: Trace }
+      -- , { topic: STATE, logLevel: Trace }
+      , { topic: SYNC, logLevel: Trace }
+      -- , { topic: INSTALL, logLevel: Trace }
+      ]
   , pdrB:
-    [ { topic: TEST, logLevel: Trace }
-    , { topic: RESOURCE, logLevel: Trace }
-    , { topic: STATE, logLevel: Trace }
-    , { topic: SYNC, logLevel: Trace }
-    -- , { topic: BROKER, logLevel: Trace }
-    -- , { topic: INSTALL, logLevel: Trace }
-    ]
+      [ { topic: TEST, logLevel: Trace }
+      , { topic: RESOURCE, logLevel: Trace }
+      , { topic: STATE, logLevel: Trace }
+      , { topic: SYNC, logLevel: Trace }
+      -- , { topic: BROKER, logLevel: Trace }
+      -- , { topic: INSTALL, logLevel: Trace }
+      ]
   }
 
 test_SetProperty :: String
-test_SetProperty = "model://joopringelberg.nl#AMQPtestModel$Test_SetProperty" 
+test_SetProperty = "model://joopringelberg.nl#AMQPtestModel$Test_SetProperty"
