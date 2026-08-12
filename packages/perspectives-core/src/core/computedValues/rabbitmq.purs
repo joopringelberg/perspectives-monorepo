@@ -37,7 +37,9 @@ import Perspectives.CoreTypes (MonadPerspectivesTransaction, MonadPerspectivesQu
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
+import Perspectives.Logging (infoBroker)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.PerspectivesState (deleteBrokerService)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Prelude (Unit, bind, discard, pure, show, unit, ($), (<>), (>>=))
@@ -262,6 +264,19 @@ startListening :: RoleInstance -> MonadPerspectivesTransaction Unit
 startListening _ = try (lift retrieveBrokerService)
   >>= handleExternalStatementError "model://perspectives.domains#RabbitMQ$StartListening"
 
+stopReadingPost :: Array QueueName -> RoleInstance -> MonadPerspectivesTransaction Unit
+stopReadingPost queueName_ _ =
+  try
+    ( case
+        head queueName_
+        of
+        Just queueName -> do
+          lift $ deleteBrokerService queueName
+          infoBroker $ "Stopped reading post for queue " <> queueName
+        _ -> throwError $ error "Missing queue name argument in stopReadingPost."
+    )
+    >>= handleExternalStatementError "model://perspectives.domains#RabbitMQ$StopReadingPost"
+
 -- | An Array of External functions. Each External function is inserted into the ExternalFunctionCache and can be retrieved
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
@@ -274,4 +289,5 @@ externalFunctions =
   , Tuple "model://perspectives.domains#RabbitMQ$SetPermissionsForAMQPaccount" { func: unsafeCoerce setPermissionsForAMQPaccount, nArgs: 5, isFunctional: True, isEffect: true }
   , Tuple "model://perspectives.domains#RabbitMQ$StartListening" { func: unsafeCoerce startListening, nArgs: 0, isFunctional: True, isEffect: true }
   , Tuple "model://perspectives.domains#RabbitMQ$SelfRegisterWithRabbitMQ" { func: unsafeCoerce selfRegisterWithRabbitMQ, nArgs: 4, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#RabbitMQ$StopReadingPost" { func: unsafeCoerce stopReadingPost, nArgs: 1, isFunctional: True, isEffect: true }
   ]

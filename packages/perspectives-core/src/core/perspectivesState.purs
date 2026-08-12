@@ -28,11 +28,10 @@ import Data.Array (cons)
 import Data.List (elem)
 import Data.Map (Map, empty, insert, lookup, values) as Map
 import Data.Maybe (Maybe(..), isNothing)
-import Data.Newtype (wrap)
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
 import Effect (Effect)
-import Effect.Aff.AVar (AVar, put, read, tryRead)
+import Effect.Aff.AVar (AVar, put, read, take, tryRead)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Foreign.Object (empty, singleton)
@@ -49,7 +48,7 @@ import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
-import Prelude (Unit, bind, discard, pure, unit, void, ($), (+), (<<<), (>>=), (<>))
+import Prelude (Unit, bind, discard, pure, unit, void, ($), (+), (<<<), (>>=), (<>), (==))
 
 newPerspectivesState
   :: PouchdbUser
@@ -209,6 +208,15 @@ setBrokerService :: Maybe BrokerService -> MonadPerspectives Unit
 setBrokerService bs = case bs of
   Just bs' -> gets _.brokerService >>= liftAff <<< put bs'
   Nothing -> pure unit
+
+deleteBrokerService :: String -> MonadPerspectives Unit
+deleteBrokerService queueName = do
+  bs <- gets _.brokerService
+  { queueId } <- liftAff <<< read $ bs
+  if queueId == queueName then
+    void $ liftAff $ take bs
+  else
+    pure unit
 
 stompClient :: MonadPerspectives (Maybe StompClient)
 stompClient = gets _.stompClient
