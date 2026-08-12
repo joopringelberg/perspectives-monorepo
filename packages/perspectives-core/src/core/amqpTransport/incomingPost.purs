@@ -95,6 +95,7 @@ incomingPost = do
           ForeignError "noConnection" -> lift $ setConnectionState false
           ForeignError "connection" -> lift $ setConnectionState true *> sendOutgoingPost
           TypeMismatch "receipt" docId -> do
+            -- The broker has acknowledged that it has received and stored the message with id docId.
             lift $ debugBroker $ "Received receipt for message with id " <> show docId <> ", deleting from post database"
             void $ lift $ deleteDocument postDB docId Nothing
           _ -> lift $ warnBroker ("Perspectives.AMQP.IncomingPost.transactionConsumer: " <> show me)

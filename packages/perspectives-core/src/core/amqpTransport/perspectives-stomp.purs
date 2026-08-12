@@ -157,6 +157,21 @@ messageProducer stompClient params = (messageProducer' stompClient params) $~ (f
     Left e -> case body of
       "noConnection" -> Left $ singleton $ ForeignError "noConnection"
       "connection" -> Left $ singleton $ ForeignError "connection"
+      -- The STOMP spec is precise on this. From the RECEIPT section:
+
+      -- "A RECEIPT frame is an acknowledgment that the corresponding client frame has been processed by the server. 
+      -- Since STOMP is stream based, the receipt is also a cumulative acknowledgment that all the previous frames 
+      -- have been received by the server. However, these previous frames may not yet be fully processed."
+
+      -- So watchForReceipt fires when the broker has processed the SEND frame — meaning it has accepted the message. 
+      -- For RabbitMQ (which is what this code targets, given amq.topic), "processed" means the message has been 
+      -- accepted and enqueued by the broker. It does not mean:
+
+      -- The message has been delivered to a consumer
+      -- The consumer has acknowledged it
+      -- It is a publisher confirmation from the broker, not an end-to-end delivery guarantee. 
+      -- If the destination queue exists and the broker successfully stored the message, that's what the receipt confirms.
+
       -- NOTICE that we misuse / overload the TypeMismatch constructor here for our purposes.
       s | isAReceipt s -> Left $ singleton (TypeMismatch "receipt" (unsafePartial $ fromJust $ getReceipt s))
       otherwise -> Left $ cons (ForeignError body) e

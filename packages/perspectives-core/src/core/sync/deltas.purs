@@ -129,6 +129,9 @@ sendTransactieToUserUsingAMQP perspectivesUser t@(TransactionForPeer { timeStamp
     mstompClient <- stompClient
     case mstompClient of
       Just stompClient -> do
+        -- If sending fails, we will still save the transaction in the OutgoingTransactions post database, so that it can be retried later.
+        -- The transaction will be removed when incomingPost receives an acknowledgement from the RabbitMQ broker, meaning 
+        -- that the broker has accepted and stored the message.
         saveTransactionInOutgoingPost perspectivesUser messageId t
         -- Just send the message to the topic that is the addressees PerspectivesUser instance.
         -- Each system will listen to a queue that is bound to that topic upon subscription.
