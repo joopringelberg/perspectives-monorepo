@@ -130,6 +130,7 @@ allTests =
   , { testContextTypeName: test_Couchdb_ContextInstances_Step, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_Couchdb_RoleInstances_Step, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_UnlinkedRole_Step, logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: test_UnlinkedContext_Step, logConfiguration: emptyLogConfiguration }
   ]
 
 test_ContextState_RoleStep :: String
@@ -254,3 +255,6 @@ test_Couchdb_RoleInstances_Step = "model://joopringelberg.nl#StateTestModel$Test
 
 test_UnlinkedRole_Step :: String
 test_UnlinkedRole_Step = "model://joopringelberg.nl#StateTestModel$Test_UnlinkedRole_Step"
+
+test_UnlinkedContext_Step :: String
+test_UnlinkedContext_Step = "model://joopringelberg.nl#StateTestModel$Test_UnlinkedContext_Step"
