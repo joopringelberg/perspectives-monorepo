@@ -45,6 +45,7 @@ import Test.Layer3ScaffoldTests (scaffoldTests)
 import Test.ModelCompilationRegression (getCompilationResults, modelCompilationSuite)
 import Test.QueryStepTests (queryStepSuite, queryStepTestModelConfiguration)
 import Test.SinglePDRDestructiveTests (singlePDRDestructiveSuite, singlePDRDestructiveTestModelConfiguration)
+import Test.SpecialPerspectivesTest (getSpecialPerspectivesResults, specialPerspectivesSuite)
 import Test.TransactionExecutionTests (transactionExecutionSuite, transactionExecutionTestModelConfiguration)
 import Test.Unit.Main (runTest)
 
@@ -56,6 +57,7 @@ main = launchAff_ do
   queryStepResults <- getSinglePDRResults queryStepTestModelConfiguration
   destructiveResults <- getSinglePDRResults singlePDRDestructiveTestModelConfiguration
   transactionExecutionResults <- getSinglePDRResults transactionExecutionTestModelConfiguration
+  specialPerspectivesResults <- getSpecialPerspectivesResults
   liftEffect $ runTest do
     scaffoldTests
     synchronisationSuite constructiveSynchronisationResults
@@ -64,3 +66,4 @@ main = launchAff_ do
     queryStepSuite queryStepResults
     singlePDRDestructiveSuite destructiveResults
     transactionExecutionSuite transactionExecutionResults
+    specialPerspectivesSuite specialPerspectivesResults
