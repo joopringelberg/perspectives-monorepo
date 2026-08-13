@@ -42,16 +42,17 @@ getSafeViewOnDatabase_
   -> Keys key
   -> MonadPerspectives (Array result)
 getSafeViewOnDatabase_ f dbName viewname keys = do
-  (results :: Array result) <- getViewOnDatabase dbName viewname keys
-  -- Now try to put each instance in cache. 
+  (results :: Array result) <- catchError
+    (getViewOnDatabase dbName viewname keys)
+    ( \_ -> do
+        -- Reset the view if the query itself fails.
+        void $ resetViewIndex dbName viewname
+        getViewOnDatabase dbName viewname keys
+    )
+  -- Cache hydration must not prevent returning valid view rows.
   catchError
     ( do
         for_ (f <$> results) (getPerspectEntiteit false)
         pure results
     )
-    ( \_ -> do
-        -- Reset the view.
-        void $ resetViewIndex dbName viewname
-        -- Try again.
-        getViewOnDatabase dbName viewname keys
-    )
+    (\_ -> pure results)
