@@ -1056,3 +1056,27 @@ domain model://joopringelberg.nl#StateTestModel@1.0
         Finished = true for extern
     
     thing TestRole9
+
+  case Test_UnlinkedRole_Step
+    aspect mm:Test
+    external
+      -- We need Finished to trigger state evaluation.
+      property Finished (Boolean)
+      state TestState = Finished and context >> TestRole10 >>= count == 2
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestSucceeded, Finished) verbs (SetPropertyValue, Consult)
+      perspective on TestRole10
+        only (Create)
+      action RunTest
+        TestName = "(exists context >> TestRole10) - unlinked role instances test step" for extern
+        create role TestRole10
+        create role TestRole10
+        Finished = true for extern
+    
+    thing TestRole10 (relational, unlinked)
