@@ -139,3 +139,44 @@ domain model://joopringelberg.nl#AMQPtestModel@1.0
 
     thing TestRole1
       property P (Number)
+
+  ------------------------------------------------------------------------------
+  ---- Make Follower terminate the contract.
+  ------------------------------------------------------------------------------
+  case Test_Leader_Terminates_Contract
+    aspect mm:Test
+    external
+      -- This is to see if Leader has the required resources.
+      state ManagedBrokersRoleExists = exists bs:MyBrokers >> ManagedBrokers
+        state ManageBrokerExists = exists bs:MyBrokers >> ManagedBrokers >> binding
+          -- Deze toestand wordt nooit geldig. Hypothese: het lukt niet de rollen uit de database op te halen.
+          -- Wel als we Accounts niet unlinked maken.
+          state AccountsRolesExist = exists bs:MyBrokers >> ManagedBrokers >> binding >> context >> Accounts
+            state ContractsExist = exists bs:MyBrokers >> ManagedBrokers >> binding >> context >> Accounts >> binding
+      -- This is for Follower: it cannot be in terms of ManagedBrokers.
+      state TestSucceeded = (exists bs:MyBrokers >> ContractInUse) and not exists bs:MyBrokers >> ContractInUse >> context >> Queues
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on FollowerBrokerContract
+        props (ContractTerminated) verbs (Consult, SetPropertyValue)
+      action RunTest
+        ContractTerminated = true for FollowerBrokerContract
+        TestName = "BrokerService Administrator terminates contract of Follower" for extern
+    
+    -- context FollowerBrokerContract = (filter 
+    --   bs:MyBrokers >> PublicBrokers >> binding >> context >> Accounts >> binding 
+    --   with context >> AccountHolder filledBy (origin >> Follower >> binding)) >>= first
+
+    -- This role is for the Manager to see: it is in terms of ManagedBrokers.
+    context FollowerBrokerContract =  
+      bs:MyBrokers >> ManagedBrokers >> binding >> context >> Accounts >> binding 
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on FollowerBrokerContract
+        props (ContractTerminated) verbs (Consult)
+

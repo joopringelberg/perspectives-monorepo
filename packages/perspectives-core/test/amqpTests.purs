@@ -130,6 +130,9 @@ testSucceededProperty = "model://joopringelberg.nl#AMQPtestModel$Test$External$T
 testNameProperty :: String
 testNameProperty = "model://joopringelberg.nl#AMQPtestModel$Test$External$TestName"
 
+test_Leader_Terminates_Contract :: String
+test_Leader_Terminates_Contract = "model://joopringelberg.nl#AMQPtestModel$Test_Leader_Terminates_Contract"
+
 -------------------------------------------------------------------------------
 ---- THE TESTS
 ---- One entry for each test in model://joopringelberg.nl#AMQPtestModel
@@ -137,7 +140,9 @@ testNameProperty = "model://joopringelberg.nl#AMQPtestModel$Test$External$TestNa
 
 allTests :: Array ModelTest
 allTests =
-  [ { testContextTypeName: test_SetProperty, logConfiguration: emptyLogConfiguration }
+  [
+    -- { testContextTypeName: test_SetProperty, logConfiguration: emptyLogConfiguration }
+    { testContextTypeName: test_Leader_Terminates_Contract, logConfiguration: debugConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration
@@ -145,8 +150,9 @@ debugConfiguration =
   { pdrA:
       [ { topic: TEST, logLevel: Trace }
       , { topic: RESOURCE, logLevel: Trace }
-      -- , { topic: STATE, logLevel: Trace }
+      , { topic: STATE, logLevel: Trace }
       , { topic: SYNC, logLevel: Trace }
+      , { topic: PERSISTENCE, logLevel: Trace }
       -- , { topic: INSTALL, logLevel: Trace }
       ]
   , pdrB:
@@ -154,6 +160,7 @@ debugConfiguration =
       , { topic: RESOURCE, logLevel: Trace }
       , { topic: STATE, logLevel: Trace }
       , { topic: SYNC, logLevel: Trace }
+      , { topic: PERSISTENCE, logLevel: Trace }
       -- , { topic: BROKER, logLevel: Trace }
       -- , { topic: INSTALL, logLevel: Trace }
       ]
