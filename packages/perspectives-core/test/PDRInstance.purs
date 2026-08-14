@@ -577,6 +577,60 @@ withTwoPDRsCached user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir
     withPDRCached user2 opts2 color2 (Just bus) snapshotDir2 \pdr2 ->
       f pdr1 pdr2
 
+-- | Start three PDR instances, run `f`, then shut down all — even if `f` throws.
+-- |
+-- | All three instances share one in-process bus, just like `withTwoPDRs`.
+-- | The instances are started and shut down sequentially (innermost bracket first).
+withThreePDRs
+  :: forall a
+   . PouchdbUser
+  -> RuntimeOptions
+  -> Maybe String
+  -> PouchdbUser
+  -> RuntimeOptions
+  -> Maybe String
+  -> PouchdbUser
+  -> RuntimeOptions
+  -> Maybe String
+  -> (PDRInstance -> PDRInstance -> PDRInstance -> Aff a)
+  -> Aff a
+withThreePDRs user1 opts1 color1 user2 opts2 color2 user3 opts3 color3 f = do
+  bus <- liftEffect createInProcessBus
+  withPDR user1 opts1 color1 (Just bus) \pdr1 ->
+    withPDR user2 opts2 color2 (Just bus) \pdr2 ->
+      withPDR user3 opts3 color3 (Just bus) \pdr3 ->
+        f pdr1 pdr2 pdr3
+
+-- | Cached variant of `withThreePDRs`.
+-- |
+-- | Each instance uses `withPDRCached` and therefore restores from its own
+-- | snapshot directory when present, or creates and snapshots a clean base
+-- | state on first run.
+-- |
+-- | All three instances share one in-process bus, just like `withThreePDRs`.
+withThreePDRsCached
+  :: forall a
+   . PouchdbUser
+  -> RuntimeOptions
+  -> Maybe String
+  -> String
+  -> PouchdbUser
+  -> RuntimeOptions
+  -> Maybe String
+  -> String
+  -> PouchdbUser
+  -> RuntimeOptions
+  -> Maybe String
+  -> String
+  -> (PDRInstance -> PDRInstance -> PDRInstance -> Aff a)
+  -> Aff a
+withThreePDRsCached user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir2 user3 opts3 color3 snapshotDir3 f = do
+  bus <- liftEffect createInProcessBus
+  withPDRCached user1 opts1 color1 (Just bus) snapshotDir1 \pdr1 ->
+    withPDRCached user2 opts2 color2 (Just bus) snapshotDir2 \pdr2 ->
+      withPDRCached user3 opts3 color3 (Just bus) snapshotDir3 \pdr3 ->
+        f pdr1 pdr2 pdr3
+
 -- | Cached variant that uses the default AMQP/Stomp setup.
 -- |
 -- | Unlike `withTwoPDRsCached`, this does not install the in-process bus
