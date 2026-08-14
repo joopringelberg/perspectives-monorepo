@@ -670,7 +670,7 @@ domain model://perspectives.domains#System@6.3
 
     -- All context types that have been declared to be 'indexed' have an instance that fills this role.
     -- PDRDEPENDENCY
-    context IndexedContexts (mandatory) filledBy sys:RootContext
+    context IndexedContexts (mandatory, relational) filledBy sys:RootContext
       -- PDRDEPENDENCY
       property Name (mandatory, String)
         readableName
