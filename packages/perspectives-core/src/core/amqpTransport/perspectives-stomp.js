@@ -34,6 +34,18 @@ export function createStompClientImpl ( url )
   return client;
 }
 
+export function deactivateImpl (stompClient)
+{
+  try
+  {
+    stompClient.deactivate();
+  }
+  catch (_)
+  {
+    // Best effort shutdown; tests should not fail on already-closed clients.
+  }
+}
+
 // This function will be called to create a Producer of Messages.
 // emitStep will be bound to the constructor Emit, finishStep will be the constructor Finish.
 // login and passcode must be the RabbitMQ credentials.

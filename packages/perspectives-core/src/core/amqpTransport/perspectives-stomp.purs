@@ -30,6 +30,7 @@ module Perspectives.AMQP.Stomp
   ( messageProducer
   , StompClient
   , createStompClient
+  , deactivate
   , Message
   , AcknowledgeFunction
   , AcknowledgementHeaders
@@ -83,6 +84,11 @@ foreign import createStompClientImpl :: EffectFn1 StompUrl StompClient
 
 createStompClient :: StompUrl -> Effect StompClient
 createStompClient stompUrl = runEffectFn1 createStompClientImpl stompUrl
+
+foreign import deactivateImpl :: EffectFn1 StompClient Unit
+
+deactivate :: StompClient -> Effect Unit
+deactivate client = runEffectFn1 deactivateImpl client
 
 -----------------------------------------------------------
 -- CONNECTANDSUBSCRIBE
@@ -153,7 +159,7 @@ messageProducer :: forall t f p. ReadForeign t => StompClient -> ConnectAndSubsc
 messageProducer stompClient params = (messageProducer' stompClient params) $~ (forever (transform decodeMessage))
   where
   decodeMessage :: Message -> Either MultipleErrors (StructuredMessage t)
-  decodeMessage { body, ack, markHandled, pendingCount } = case runExcept $ readJSON' body of
+  decodeMessage { body, ack, markHandled: markHandledFn, pendingCount } = case runExcept $ readJSON' body of
     Left e -> case body of
       "noConnection" -> Left $ singleton $ ForeignError "noConnection"
       "connection" -> Left $ singleton $ ForeignError "connection"
@@ -175,7 +181,7 @@ messageProducer stompClient params = (messageProducer' stompClient params) $~ (f
       -- NOTICE that we misuse / overload the TypeMismatch constructor here for our purposes.
       s | isAReceipt s -> Left $ singleton (TypeMismatch "receipt" (unsafePartial $ fromJust $ getReceipt s))
       otherwise -> Left $ cons (ForeignError body) e
-    Right m -> Right { body: m, ack, markHandled, pendingCount }
+    Right m -> Right { body: m, ack, markHandled: markHandledFn, pendingCount }
 
   isAReceipt :: String -> Boolean
   isAReceipt = isJust <<< getReceipt
