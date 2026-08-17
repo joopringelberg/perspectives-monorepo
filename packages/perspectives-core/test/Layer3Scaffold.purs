@@ -47,7 +47,7 @@ import Data.Newtype (unwrap)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Traversable (for_, traverse)
 import Effect (Effect)
-import Effect.Aff (Aff, error, launchAff_)
+import Effect.Aff (Aff, bracket, error, launchAff_)
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, read, write)
 import Foreign.Object (empty) as OBJ
@@ -63,7 +63,7 @@ import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Names (lookupIndexedContext)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistent (tryGetPerspectContext)
-import Perspectives.PerspectivesState (defaultRuntimeOptions, disableAllLogging, getPerspectivesUser, setTopicLogLevel)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, getLogConfig, getPerspectivesUser, setLogConfig, setTopicLogLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser, RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
@@ -74,7 +74,6 @@ import Test.PDRInstance.Types (PDRInstance, runInPDR)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
-
 
 type TopicLogLevelPair =
   { topic :: LogTopic
@@ -94,7 +93,7 @@ emptyLogConfiguration =
 
 type ModelTest =
   { testContextTypeName :: String
-  , logConfiguration :: LogConfiguration
+  , logConfiguration :: Maybe LogConfiguration
   }
 
 type SynchronisationResults = Array SynchronisationResult
@@ -126,6 +125,25 @@ type WithTwoPDRsCachedLike =
   -> String
   -> (PDRInstance -> PDRInstance -> Aff a)
   -> Aff a
+
+withSavedPDRLogConfig :: forall a. PDRInstance -> Aff a -> Aff a
+withSavedPDRLogConfig pdr action =
+  bracket
+    (runInPDR pdr getLogConfig)
+    (\logConfig -> runInPDR pdr (setLogConfig logConfig))
+    (\_ -> action)
+
+withSavedTwoPDRLogConfigs :: forall a. PDRInstance -> PDRInstance -> Aff a -> Aff a
+withSavedTwoPDRLogConfigs pdrA pdrB action =
+  withSavedPDRLogConfig pdrA $ withSavedPDRLogConfig pdrB action
+
+applyLogConfigurationToPDRs :: PDRInstance -> PDRInstance -> LogConfiguration -> Aff Unit
+applyLogConfigurationToPDRs pdrA pdrB logConfiguration = do
+  runInPDR pdrA do
+    for_ logConfiguration.pdrA \{ topic, logLevel } -> setTopicLogLevel topic logLevel
+
+  runInPDR pdrB do
+    for_ logConfiguration.pdrB \{ topic, logLevel } -> setTopicLogLevel topic logLevel
 
 runSynchronisationSuite
   :: Ref (Maybe SynchronisationResults)
@@ -193,60 +211,56 @@ getSynchronisationResultsInternal withTwoPDRsFn cacheRef cfg = do
         (Just ansiMagenta)
         cfg.snapshotDirBob
         \pdrA pdrB -> do
+          withSavedTwoPDRLogConfigs pdrA pdrB do
+            applyLogConfigurationToPDRs pdrA pdrB cfg.setupLogConfiguration
 
-          runInPDR pdrA do
-            for_ cfg.setupLogConfiguration.pdrA \{ topic, logLevel } -> setTopicLogLevel topic logLevel
+            connectPDRs pdrA pdrB
 
-          runInPDR pdrB do
-            for_ cfg.setupLogConfiguration.pdrB \{ topic, logLevel } -> setTopicLogLevel topic logLevel
+            alice <- runInPDR pdrA getPerspectivesUser
+            bob <- runInPDR pdrB getPerspectivesUser
 
-          connectPDRs pdrA pdrB
+            runInPDR pdrA do
+              infoTest "Alice loads test model in PDRA"
+              runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+                $
+                  addModelToLocalStore_ [ cfg.testModel ] (RoleInstance "Ignored")
 
-          alice <- runInPDR pdrA getPerspectivesUser
-          bob <- runInPDR pdrB getPerspectivesUser
+            testAppContextA <- pollUntil 100 (Milliseconds 100.0)
+              "Indexed test context to appear in pdrA after loading test model"
+              ( runInPDR pdrA
+                  do
+                    IndexedContext indexedTestContext' <- toStable (IndexedContext cfg.indexedTestContext)
+                    lookupIndexedContext indexedTestContext'
+              )
 
-          runInPDR pdrA do
-            infoTest "Alice loads test model in PDRA"
-            runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
-              $
-                addModelToLocalStore_ [ cfg.testModel ] (RoleInstance "Ignored")
-
-          testAppContextA <- pollUntil 100 (Milliseconds 100.0)
-            "Indexed test context to appear in pdrA after loading test model"
-            ( runInPDR pdrA
+            runInPDR pdrA do
+              infoTest "Alice gives Bob the role Follower in the App in PDRA"
+              testAppManager' <- toStable (CalculatedRoleType cfg.testAppManager)
+              testAppFollowerType' <- toStable (EnumeratedRoleType cfg.testAppFollowerType)
+              runMonadPerspectivesTransaction' shareWithPeers (CR testAppManager')
                 do
-                  IndexedContext indexedTestContext' <- toStable (IndexedContext cfg.indexedTestContext)
-                  lookupIndexedContext indexedTestContext'
-            )
+                  void $ createAndAddRoleInstance
+                    testAppFollowerType'
+                    (unwrap testAppContextA)
+                    ( RolSerialization
+                        { id: Nothing
+                        , properties: PropertySerialization OBJ.empty
+                        , binding: Just (unwrap bob)
+                        }
+                    )
 
-          runInPDR pdrA do
-            infoTest "Alice gives Bob the role Follower in the App in PDRA"
-            testAppManager' <- toStable (CalculatedRoleType cfg.testAppManager)
-            testAppFollowerType' <- toStable (EnumeratedRoleType cfg.testAppFollowerType)
-            runMonadPerspectivesTransaction' shareWithPeers (CR testAppManager')
-              do
-                void $ createAndAddRoleInstance
-                  testAppFollowerType'
-                  (unwrap testAppContextA)
-                  ( RolSerialization
-                      { id: Nothing
-                      , properties: PropertySerialization OBJ.empty
-                      , binding: Just (unwrap bob)
-                      }
-                  )
+            void $ pollUntil 100 (Milliseconds 100.0)
+              "Alice checks that the Follower role has been constructed in pdrA"
+              ( runInPDR pdrA do
+                  infoTest "Alice checks that the Follower role has been constructed and filled in pdrA"
+                  testAppFollowerType' <- toStable (EnumeratedRoleType cfg.testAppFollowerType)
+                  roles <- testAppContextA ##= getEnumeratedRoleInstances testAppFollowerType' >=> binding
+                  if null roles then pure Nothing
+                  else pure (Just roles)
+              )
 
-          void $ pollUntil 100 (Milliseconds 100.0)
-            "Alice checks that the Follower role has been constructed in pdrA"
-            ( runInPDR pdrA do
-                infoTest "Alice checks that the Follower role has been constructed and filled in pdrA"
-                testAppFollowerType' <- toStable (EnumeratedRoleType cfg.testAppFollowerType)
-                roles <- testAppContextA ##= getEnumeratedRoleInstances testAppFollowerType' >=> binding
-                if null roles then pure Nothing
-                else pure (Just roles)
-            )
-
-          let runATest = \{ testContextTypeName, logConfiguration } -> executeModelTest cfg pdrA pdrB testAppContextA alice bob testContextTypeName logConfiguration
-          traverse runATest cfg.tests
+            let runATest = \{ testContextTypeName, logConfiguration } -> executeModelTest cfg pdrA pdrB testAppContextA alice bob testContextTypeName logConfiguration
+            traverse runATest cfg.tests
 
       liftEffect $ write (Just results) cacheRef
       pure results
@@ -259,103 +273,87 @@ executeModelTest
   -> PerspectivesUser
   -> PerspectivesUser
   -> String
-  -> LogConfiguration
+  -> Maybe LogConfiguration
   -> Aff SynchronisationResult
-executeModelTest cfg pdrA pdrB testAppContextA _alice _bob testContextTypeR logConfiguration = do
+executeModelTest cfg pdrA pdrB testAppContextA _alice _bob testContextTypeR mLogConfiguration =
+  withSavedTwoPDRLogConfigs pdrA pdrB do
+    case mLogConfiguration of
+      Just logConfiguration -> applyLogConfigurationToPDRs pdrA pdrB logConfiguration
+      Nothing -> pure unit
 
-  runInPDR pdrA do
-    for_ logConfiguration.pdrA \{ topic, logLevel } -> setTopicLogLevel topic logLevel
+    testContextType <- runInPDR pdrA
+      (toStable (ContextType testContextTypeR))
+    testFollowerType <- runInPDR pdrA
+      (toStable (EnumeratedRoleType $ testContextTypeR <> "$Follower"))
+    testLeaderType <- runInPDR pdrA
+      (toStable (EnumeratedRoleType $ testContextTypeR <> "$Leader"))
 
-  runInPDR pdrB do
-    for_ logConfiguration.pdrB \{ topic, logLevel } -> setTopicLogLevel topic logLevel
+    theTest <- runInPDR pdrA do
+      infoTest "Alice creates a test in PDRA"
+      testAppManager' <- toStable (CalculatedRoleType cfg.testAppManager)
+      testsType' <- toStable (EnumeratedRoleType cfg.testsType)
+      runMonadPerspectivesTransaction' shareWithPeers (CR testAppManager')
+        do
+          result <- runExceptT $ constructContext (Just (ENR testsType'))
+            $ ContextSerialization
+                { id: Nothing
+                , ctype: unwrap testContextType
+                , prototype: Nothing
+                , rollen: OBJ.empty
+                , externeProperties: PropertySerialization OBJ.empty
+                }
+          case result of
+            Left err -> throwError $ error ("Failed to create test context: " <> show err)
+            Right testCtx -> do
+              void $ createAndAddRoleInstance testsType' (unwrap testAppContextA)
+                ( RolSerialization
+                    { id: Nothing
+                    , properties: PropertySerialization OBJ.empty
+                    , binding: Just $ buitenRol (unwrap testCtx)
+                    }
+                )
+              pure testCtx
 
-  testContextType <- runInPDR pdrA
-    (toStable (ContextType testContextTypeR))
-  testFollowerType <- runInPDR pdrA
-    (toStable (EnumeratedRoleType $ testContextTypeR <> "$Follower"))
-  testLeaderType <- runInPDR pdrA
-    (toStable (EnumeratedRoleType $ testContextTypeR <> "$Leader"))
+    let testExternalRole = RoleInstance $ buitenRol (unwrap theTest)
 
-  theTest <- runInPDR pdrA do
-    infoTest "Alice creates a test in PDRA"
-    testAppManager' <- toStable (CalculatedRoleType cfg.testAppManager)
-    testsType' <- toStable (EnumeratedRoleType cfg.testsType)
-    runMonadPerspectivesTransaction' shareWithPeers (CR testAppManager')
+    void $ pollUntil 100 (Milliseconds 100.0)
+      "Bob to have the test and the Follower role in it in pdrB"
+      ( runInPDR pdrB do
+          mtheTest <- tryGetPerspectContext theTest
+          case mtheTest of
+            Nothing -> pure Nothing
+            Just _ -> do
+              infoTest "Bob has verified that he has the test context in PDRB"
+              roles <- theTest ##= getEnumeratedRoleInstances testFollowerType
+              if null roles then pure Nothing
+              else do
+                infoTest "Bob has verified that he has the Follower role in the test in PDRB"
+                pure (Just roles)
+      )
+
+    runInPDR pdrA
       do
-        result <- runExceptT $ constructContext (Just (ENR testsType'))
-          $ ContextSerialization
-              { id: Nothing
-              , ctype: unwrap testContextType
-              , prototype: Nothing
-              , rollen: OBJ.empty
-              , externeProperties: PropertySerialization OBJ.empty
-              }
-        case result of
-          Left err -> throwError $ error ("Failed to create test context: " <> show err)
-          Right testCtx -> do
-            void $ createAndAddRoleInstance testsType' (unwrap testAppContextA)
-              ( RolSerialization
-                  { id: Nothing
-                  , properties: PropertySerialization OBJ.empty
-                  , binding: Just $ buitenRol (unwrap testCtx)
-                  }
-              )
-            pure testCtx
+        runMonadPerspectivesTransaction' shareWithPeers (ENR testLeaderType)
+          ( do
+              lift $ infoTest "Alice executes a test in PDRA"
+              runContextAction (unwrap testLeaderType) "RunTest" (unwrap theTest)
+          )
 
-  let testExternalRole = RoleInstance $ buitenRol (unwrap theTest)
-
-  void $ pollUntil 100 (Milliseconds 100.0)
-    "Bob to have the test and the Follower role in it in pdrB"
-    ( runInPDR pdrB do
-        mtheTest <- tryGetPerspectContext theTest
-        case mtheTest of
-          Nothing -> pure Nothing
-          Just _ -> do
-            infoTest "Bob has verified that he has the test context in PDRB"
-            roles <- theTest ##= getEnumeratedRoleInstances testFollowerType
-            if null roles then pure Nothing
-            else do
-              infoTest "Bob has verified that he has the Follower role in the test in PDRB"
-              pure (Just roles)
-    )
-
-  runInPDR pdrA
-    do
-      runMonadPerspectivesTransaction' shareWithPeers (ENR testLeaderType)
-        ( do
-            lift $ infoTest "Alice executes a test in PDRA"
-            runContextAction (unwrap testLeaderType) "RunTest" (unwrap theTest)
-        )
-
-  r <-
-    ( pollUntilTestFinishes 100 (Milliseconds 100.0)
-        "Bob to have a value for the test to succeed in pdrB"
-        ( runInPDR pdrB do
-            testNameProperty' <- toStable (EnumeratedPropertyType cfg.testNameProperty)
-            mtestName <- testExternalRole ##> getPropertyValues (ENP testNameProperty')
-            case mtestName of
-              Just (Value testName) -> do
-                infoTest ("Bob sees that the test has a name: " <> show testName)
-                testSucceededProperty' <- toStable (EnumeratedPropertyType cfg.testSucceededProperty)
-                mtestSucceeded <- testExternalRole ##> getPropertyValues (ENP testSucceededProperty')
-                case mtestSucceeded of
-                  Just (Value testSucceeded) -> pure (Right { testName, testSucceeded: testSucceeded == "true" })
-                  Nothing -> pure (Left { testName, err: error "TestSucceeded property not found" })
-              Nothing -> pure (Left { testName: "unknown testname", err: error "TestName property not found" })
-        )
-    )
-
-  runInPDR pdrA
-    ( do
-        disableAllLogging
-        setTopicLogLevel TEST Debug
-    )
-  runInPDR pdrB
-    ( do
-        disableAllLogging
-        setTopicLogLevel TEST Debug
-    )
-  pure r
+    pollUntilTestFinishes 100 (Milliseconds 100.0)
+      "Bob to have a value for the test to succeed in pdrB"
+      ( runInPDR pdrB do
+          testNameProperty' <- toStable (EnumeratedPropertyType cfg.testNameProperty)
+          mtestName <- testExternalRole ##> getPropertyValues (ENP testNameProperty')
+          case mtestName of
+            Just (Value testName) -> do
+              infoTest ("Bob sees that the test has a name: " <> show testName)
+              testSucceededProperty' <- toStable (EnumeratedPropertyType cfg.testSucceededProperty)
+              mtestSucceeded <- testExternalRole ##> getPropertyValues (ENP testSucceededProperty')
+              case mtestSucceeded of
+                Just (Value testSucceeded) -> pure (Right { testName, testSucceeded: testSucceeded == "true" })
+                Nothing -> pure (Left { testName, err: error "TestSucceeded property not found" })
+            Nothing -> pure (Left { testName: "unknown testname", err: error "TestName property not found" })
+      )
 
 -- allOn :: Array TopicLogLevelPair
 -- allOn =

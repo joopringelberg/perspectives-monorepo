@@ -26,8 +26,7 @@ module Test.DestructiveSynchronisationTests
   , main
   , synchronisationSuite
   , synchronisationTestModelConfiguration
-  )
-  where
+  ) where
 
 import Prelude
 
@@ -40,7 +39,7 @@ import Effect.Class (liftEffect)
 import Effect.Ref (Ref, new, read, write)
 import Effect.Unsafe (unsafePerformEffect)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
-import Test.Layer3Scaffold (ModelTest, SynchronisationModelConfiguration, SynchronisationResults, emptyLogConfiguration, LogConfiguration)
+import Test.Layer3Scaffold (LogConfiguration, ModelTest, SynchronisationModelConfiguration, SynchronisationResults)
 import Test.Layer3Scaffold (getSynchronisationResults) as Layer3Scaffold
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
@@ -104,6 +103,7 @@ synchronisationTestModelConfiguration =
 -------------------------------------------------------------------------------
 testModel :: String
 testModel = "model://joopringelberg.nl#jdqywnil7h@1.0"
+
 -- testModel = "model://joopringelberg.nl#TwoPDRDestructiveTests@1.0"
 
 indexedTestContext :: String
@@ -130,42 +130,39 @@ testNameProperty = "model://joopringelberg.nl#TwoPDRDestructiveTests$Test$Extern
 -------------------------------------------------------------------------------
 
 destructiveTests :: Array ModelTest
-destructiveTests = 
-  [ 
-    { testContextTypeName: test_RemoveRole, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RemoveOneRoleInstance, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_DeleteTwoRoles, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_DeleteProperty, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RemoveProperty, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RemoveOnePropertyValue, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RemoveFiller, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RemoveRoleFiller, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RemoveRoleFiller_SpecificRoleTypes, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_UnBindRoleFiller_SpecificRoleTypes, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RemoveContextWithoutRoles, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RemoveContextWithUnfilledRole, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RemoveContextWithFilledRole, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_RemoveContextWithFilledRoleThatShouldRemain, logConfiguration: emptyLogConfiguration }
+destructiveTests =
+  [ { testContextTypeName: test_RemoveRole, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveOneRoleInstance, logConfiguration: Nothing }
+  , { testContextTypeName: test_DeleteTwoRoles, logConfiguration: Nothing }
+  , { testContextTypeName: test_DeleteProperty, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveProperty, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveOnePropertyValue, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveFiller, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveRoleFiller, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveRoleFiller_SpecificRoleTypes, logConfiguration: Nothing }
+  , { testContextTypeName: test_UnBindRoleFiller_SpecificRoleTypes, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveContextWithoutRoles, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveContextWithUnfilledRole, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveContextWithFilledRole, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveContextWithFilledRoleThatShouldRemain, logConfiguration: Nothing }
   ]
 
 debugConfiguration :: LogConfiguration
-debugConfiguration =       
+debugConfiguration =
   { pdrA:
-    [
-    { topic: TEST, logLevel: Trace }
-    , { topic: RESOURCE, logLevel: Trace }
-    , { topic: STATE, logLevel: Trace }
-    , { topic: INSTALL, logLevel: Trace }
-    ]
+      [ { topic: TEST, logLevel: Trace }
+      , { topic: RESOURCE, logLevel: Trace }
+      , { topic: STATE, logLevel: Trace }
+      , { topic: INSTALL, logLevel: Trace }
+      ]
   , pdrB:
-    [ { topic: TEST, logLevel: Trace }
-    , { topic: RESOURCE, logLevel: Trace }
-    , { topic: STATE, logLevel: Trace }
-    , { topic: SYNC, logLevel: Trace }
-    , { topic: BROKER, logLevel: Trace }
-    ]
+      [ { topic: TEST, logLevel: Trace }
+      , { topic: RESOURCE, logLevel: Trace }
+      , { topic: STATE, logLevel: Trace }
+      , { topic: SYNC, logLevel: Trace }
+      , { topic: BROKER, logLevel: Trace }
+      ]
   }
-
 
 test_RemoveRole :: String
 test_RemoveRole = "model://joopringelberg.nl#TwoPDRDestructiveTests$Test_RemoveRole"

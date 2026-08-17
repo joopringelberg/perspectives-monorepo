@@ -39,9 +39,8 @@ import Effect.Class (liftEffect)
 import Effect.Ref (Ref, new, read, write)
 import Effect.Unsafe (unsafePerformEffect)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
-import Test.Layer3Scaffold (LogConfiguration, ModelTest, SynchronisationModelConfiguration, SynchronisationResults, emptyLogConfiguration)
+import Test.Layer3Scaffold (LogConfiguration, ModelTest, SynchronisationModelConfiguration, SynchronisationResults)
 import Test.Layer3Scaffold (getSynchronisationResultsOverAMQP) as Layer3Scaffold
-import Test.Test.PDRInstance.SubscribePDRtoAMQP (unsubscribePDRfromAMQP)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -88,12 +87,13 @@ synchronisationTestModelConfiguration =
   , testsType
   , testSucceededProperty
   , testNameProperty
+  -- suite level log configuration, which is used for all tests in this suite, unless a test has its own log configuration.
   , setupLogConfiguration:
       { pdrA:
           [ { topic: TEST, logLevel: Trace }
-          -- , { topic: INSTALL, logLevel: Trace }
-          -- , { topic: RESOURCE, logLevel: Trace }
-          -- , { topic: STATE, logLevel: Trace }
+          , { topic: INSTALL, logLevel: Trace }
+          , { topic: RESOURCE, logLevel: Trace }
+          , { topic: STATE, logLevel: Trace }
           , { topic: BROKER, logLevel: Trace }
           ]
       , pdrB:
@@ -141,8 +141,8 @@ test_Leader_Terminates_Contract = "model://joopringelberg.nl#AMQPtestModel$Test_
 allTests :: Array ModelTest
 allTests =
   [
-    -- { testContextTypeName: test_SetProperty, logConfiguration: emptyLogConfiguration }
-    { testContextTypeName: test_Leader_Terminates_Contract, logConfiguration: debugConfiguration }
+    -- { testContextTypeName: test_SetProperty, logConfiguration: Nothing }
+    { testContextTypeName: test_Leader_Terminates_Contract, logConfiguration: Just debugConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration

@@ -37,7 +37,7 @@ import Effect.Class (liftEffect)
 import Effect.Ref (Ref, new, read, write)
 import Effect.Unsafe (unsafePerformEffect)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
-import Test.Layer3Scaffold (LogConfiguration, ModelTest, SynchronisationModelConfiguration, SynchronisationResults, emptyLogConfiguration)
+import Test.Layer3Scaffold (LogConfiguration, ModelTest, SynchronisationModelConfiguration, SynchronisationResults)
 import Test.Layer3Scaffold (getSynchronisationResults) as Layer3Scaffold
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
@@ -94,6 +94,7 @@ synchronisationTestModelConfiguration =
 -------------------------------------------------------------------------------
 testModel :: String
 testModel = "model://joopringelberg.nl#hj1bh3wydo@2.0"
+
 -- testModel = "model://joopringelberg.nl#SynchronisationTestModel@2.0"
 
 indexedTestContext :: String
@@ -121,42 +122,40 @@ testNameProperty = "model://joopringelberg.nl#SynchronisationTestModel$Test$Exte
 
 allTests :: Array ModelTest
 allTests =
-  [ 
-    { testContextTypeName: test_CreateRole, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_SetProperty, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_SetProperty_on_Filler, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_Binding_Step, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_SetProperty_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_Binding_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_Binder_in_CalculatedProperty, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_Binding_in_CalculatedRole, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BindingStep, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BinderStep, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_CreateRole_in_CalculatedRole_ContextStep, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_CreateRole_in_CalculatedRole_RoleStep, logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: "model://joopringelberg.nl#SynchronisationTestModel$T24", logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: "model://joopringelberg.nl#SynchronisationTestModel$T25", logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: test_InheritedPerspectivesSync, logConfiguration: emptyLogConfiguration }
+  [ { testContextTypeName: test_CreateRole, logConfiguration: Nothing }
+  , { testContextTypeName: test_SetProperty, logConfiguration: Nothing }
+  , { testContextTypeName: test_SetProperty_on_Filler, logConfiguration: Nothing }
+  , { testContextTypeName: test_Binding_Step, logConfiguration: Nothing }
+  , { testContextTypeName: test_SetProperty_in_CalculatedProperty, logConfiguration: Nothing }
+  , { testContextTypeName: test_Binding_in_CalculatedProperty, logConfiguration: Nothing }
+  , { testContextTypeName: test_Binder_in_CalculatedProperty, logConfiguration: Nothing }
+  , { testContextTypeName: test_Binding_in_CalculatedRole, logConfiguration: Nothing }
+  , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BindingStep, logConfiguration: Nothing }
+  , { testContextTypeName: test_SetProperty_in_CalculatedProperty_BinderStep, logConfiguration: Nothing }
+  , { testContextTypeName: test_CreateRole_in_CalculatedRole_ContextStep, logConfiguration: Nothing }
+  , { testContextTypeName: test_CreateRole_in_CalculatedRole_RoleStep, logConfiguration: Nothing }
+  , { testContextTypeName: "model://joopringelberg.nl#SynchronisationTestModel$T24", logConfiguration: Nothing }
+  , { testContextTypeName: "model://joopringelberg.nl#SynchronisationTestModel$T25", logConfiguration: Nothing }
+  , { testContextTypeName: test_InheritedPerspectivesSync, logConfiguration: Nothing }
   ]
 
 debugConfiguration :: LogConfiguration
-debugConfiguration =       
+debugConfiguration =
   { pdrA:
-    [
-    { topic: TEST, logLevel: Trace }
-    , { topic: RESOURCE, logLevel: Trace }
-    -- , { topic: STATE, logLevel: Trace }
-    , { topic: SYNC, logLevel: Trace }
-    -- , { topic: INSTALL, logLevel: Trace }
-    ]
+      [ { topic: TEST, logLevel: Trace }
+      , { topic: RESOURCE, logLevel: Trace }
+      -- , { topic: STATE, logLevel: Trace }
+      , { topic: SYNC, logLevel: Trace }
+      -- , { topic: INSTALL, logLevel: Trace }
+      ]
   , pdrB:
-    [ { topic: TEST, logLevel: Trace }
-    , { topic: RESOURCE, logLevel: Trace }
-    , { topic: STATE, logLevel: Trace }
-    , { topic: SYNC, logLevel: Trace }
-    -- , { topic: BROKER, logLevel: Trace }
-    -- , { topic: INSTALL, logLevel: Trace }
-    ]
+      [ { topic: TEST, logLevel: Trace }
+      , { topic: RESOURCE, logLevel: Trace }
+      , { topic: STATE, logLevel: Trace }
+      , { topic: SYNC, logLevel: Trace }
+      -- , { topic: BROKER, logLevel: Trace }
+      -- , { topic: INSTALL, logLevel: Trace }
+      ]
   }
 
 test_CreateRole :: String
