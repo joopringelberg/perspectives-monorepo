@@ -66,7 +66,7 @@
  * of PDR-B is delivered directly to PDR-B's coroutine producer.
  */
 export function createInProcessBus() {
-  // Map<topic, Array<{queueId, emitter}>>
+  // Map<topic, Array<{queueId, emitter, pendingIncomingMessageCount}>>
   const subscribers = new Map();
 
   return {
@@ -74,7 +74,7 @@ export function createInProcessBus() {
       if (!subscribers.has(topic)) {
         subscribers.set(topic, []);
       }
-      subscribers.get(topic).push({ queueId, emitter });
+      subscribers.get(topic).push({ queueId, emitter, pendingIncomingMessageCount: 0 });
     },
 
     unsubscribe(queueId) {
@@ -89,12 +89,24 @@ export function createInProcessBus() {
      * `receiptId` is echoed back as a receipt to the publishing client so that
      * `stompClient.emitToPurescript({body: "receipt:" + receiptId})` fires and
      * the pending OutgoingTransaction document is deleted from the post DB.
+     *
+     * The emitted message matches the contract expected by
+     * `Perspectives.AMQP.IncomingPost` in the real AMQP implementation:
+     * `{ body, ack, markHandled, pendingCount }`.
      */
     publish(publishingClient, topic, receiptId, body) {
       const subs = subscribers.get(topic) || [];
-      for (const { emitter } of subs) {
-        // Deliver the message to the subscriber's coroutine emitter.
-        emitter({ body, ack: noop });
+      for (const sub of subs) {
+        sub.pendingIncomingMessageCount += 1;
+        sub.emitter({
+          body,
+          ack: noop,
+          markHandled: function() {
+            sub.pendingIncomingMessageCount = Math.max(0, sub.pendingIncomingMessageCount - 1);
+            return sub.pendingIncomingMessageCount;
+          },
+          pendingCount: sub.pendingIncomingMessageCount,
+        });
       }
       // Echo back the receipt to the publishing client so that the
       // `watchForReceipt` callback fires and the post-DB doc is cleaned up.
