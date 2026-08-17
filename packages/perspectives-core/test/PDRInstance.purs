@@ -68,6 +68,7 @@ import Foreign.Object (empty) as OBJ
 import Main (forkCreateIndexedResources, forkDatabasePersistence, forkJustInTimeModelLoader, forkReferentialIntegrityFixer, forkTimedTransactions)
 import Main.RecompileBasicModels (addIndexedNames)
 import Perspectives.AMQP.IncomingPost (incomingPost)
+import Perspectives.AMQP.Stomp (deactivate)
 import Perspectives.AMQP.Stomp.Stub (InProcessBus, createInProcessBus, makeStompClientFactory)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
@@ -88,7 +89,7 @@ import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (saveMarkedResources, tryGetPerspectContext)
-import Perspectives.PerspectivesState (newPerspectivesState, noTransactionIsRunning, setBrokerService, setModelUris, setStompClientFactory, setTopicLogLevel)
+import Perspectives.PerspectivesState (newPerspectivesState, noTransactionIsRunning, setBrokerService, setModelUris, setStompClientFactory, setTopicLogLevel, stompClient)
 import Perspectives.Representation.Class.PersistentType (EnumeratedPropertyType(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
@@ -296,6 +297,10 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
 
     shutdown :: Aff Unit
     shutdown = do
+      -- Explicitly deactivate STOMP so websocket/timers cannot keep Node alive.
+      runPerspectivesWithState
+        (stompClient >>= traverse_ (liftEffect <<< deactivate))
+        state
       -- Signal the JIT loader to stop gracefully.
       put Stop modelToLoad
       -- Kill the remaining daemon fibers.
@@ -406,6 +411,10 @@ startPDRInstanceFromSnapshot pouchdbUser runtimeOptions mLogColor bus snapshotDi
 
     shutdown :: Aff Unit
     shutdown = do
+      -- Explicitly deactivate STOMP so websocket/timers cannot keep Node alive.
+      runPerspectivesWithState
+        (stompClient >>= traverse_ (liftEffect <<< deactivate))
+        state
       put Stop modelToLoad
       killFiber done integrityFiber
       killFiber done persistenceFiber
@@ -442,15 +451,26 @@ withPDRCached pouchdbUser opts mLogColor mbus snapshotDir f = do
   exists <- snapshotExists snapshotDir
   if exists then bracket
     (startPDRInstanceFromSnapshot pouchdbUser opts mLogColor mbus snapshotDir)
-    _.shutdown
+    ( \pdr ->
+        do
+          log $ "shutting down " <> pdr.name
+          pdr.shutdown
+    )
     f
-  else bracket (startPDRInstance pouchdbUser opts mLogColor mbus) _.shutdown \pdr -> do
-    -- Snapshot immediately after setup, before f runs, so the captured state
-    -- is the clean base PDR state without any compilation artefacts from f.
-    attempt (snapshotPDR pouchdbUser.systemIdentifier pouchdbUser.perspectivesUser snapshotDir) >>= case _ of
-      Left err -> log $ "[withPDRCached] Warning: snapshot creation failed: " <> message err
-      Right _ -> log $ "[withPDRCached] Snapshot saved to: " <> snapshotDir
-    f pdr
+  else bracket
+    (startPDRInstance pouchdbUser opts mLogColor mbus)
+    ( \pdr ->
+        do
+          log $ "shutting down " <> pdr.name
+          pdr.shutdown
+    )
+    \pdr -> do
+      -- Snapshot immediately after setup, before f runs, so the captured state
+      -- is the clean base PDR state without any compilation artefacts from f.
+      attempt (snapshotPDR pouchdbUser.systemIdentifier pouchdbUser.perspectivesUser snapshotDir) >>= case _ of
+        Left err -> log $ "[withPDRCached] Warning: snapshot creation failed: " <> message err
+        Right _ -> log $ "[withPDRCached] Snapshot saved to: " <> snapshotDir
+      f pdr
 
 noBus :: Maybe InProcessBus
 noBus = Nothing
@@ -612,8 +632,7 @@ withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapsh
     -- Subscribe pdr1 first and always unsubscribe it in the outer finalizer.
     bracket
       (subscribePDRtoAMQP publicBrokerServiceInstance pdr1)
-      -- (\_ -> cleanupAMQPSubscription "pdr1" pdr1)
-      (\_ -> pure unit)
+      (\_ -> cleanupAMQPSubscription "pdr1" pdr1)
       \_ ->
         withPDRCached user2 opts2 color2 noBus snapshotDir2 \pdr2 -> do
 
@@ -635,14 +654,11 @@ withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapsh
 cleanupAMQPSubscription :: String -> PDRInstance -> Aff Unit
 cleanupAMQPSubscription label pdr = do
   log $ "[withTwoPDRsCachedNoBus] Starting AMQP unsubscribe for " <> label
-  void $ forkAff do
-    attempt (unsubscribePDRfromAMQP pdr) >>= case _ of
-      Left err ->
-        log $ "[withTwoPDRsCachedNoBus] Warning: unsubscribe failed for " <> label <> ": " <> message err
-      Right _ ->
-        log $ "[withTwoPDRsCachedNoBus] AMQP unsubscribe completed for " <> label
-  -- Keep finalization bounded so a stuck unsubscribe cannot block PDR shutdown.
-  delay (Milliseconds 250.0)
+  attempt (unsubscribePDRfromAMQP pdr) >>= case _ of
+    Left err ->
+      log $ "[withTwoPDRsCachedNoBus] Warning: unsubscribe failed for " <> label <> ": " <> message err
+    Right _ ->
+      log $ "[withTwoPDRsCachedNoBus] AMQP unsubscribe completed for " <> label
 
 -----------------------------------------------------------
 -- CONNECT TWO PDR INSTANCES VIA INVITATION
