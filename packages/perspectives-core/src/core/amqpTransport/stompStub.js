@@ -172,6 +172,7 @@ export function makeStompClientFactory(bus) {
           }
         },
 
+        connected: true,  // Always connected in the stub
         onConnect: null,
         onStompError: null,
         onDisconnect: null,
