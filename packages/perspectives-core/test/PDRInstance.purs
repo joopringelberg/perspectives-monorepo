@@ -828,16 +828,17 @@ connectPDRs pdr1 pdr2 = do
           Nothing -> pure Nothing
     )
 
-  -- Wait until PDR1 can observe the invitation context itself after PDR2 joins.
+  -- Wait until PDR1 can observe the the filled Invitee.
   -- This confirms cross-peer propagation without requiring full system quiescence.
   void $ pollUntil 100 (Milliseconds 100.0)
-    "Invitation context to remain accessible in PDR1 after Invitee creation"
+    "Filled Invitee to be accessible in PDR1 after creation"
     ( runInPDR pdr1 do
-        m <- tryGetPerspectContext invCtx
-        case m of
-          Just c -> pure (Just c)
+        r <- (invCtx ##> getEnumeratedRoleInstances (EnumeratedRoleType inviteeType) >=> binding)
+        case r of
+          Just x -> pure (Just x)
           Nothing -> pure Nothing
     )
+
   log "connectPDRs: Connection process completed."
 
 -- | Wait until all transactions have completed and the PDR instance is
