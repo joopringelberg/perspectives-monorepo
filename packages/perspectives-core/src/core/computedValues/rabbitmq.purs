@@ -160,7 +160,7 @@ setPassword
   MonadPerspectivesTransaction Unit
 setPassword url_ adminUserName_ adminPassword_ accountName_ accountPassword_ _ = pure unit
 
--- | Deletes the users queue and his account at the BrokerService
+-- | Deletes the users' account at the BrokerService
 deleteAMQPaccount
   :: Array BrokerServiceUrl
   -> Array AdminUserName

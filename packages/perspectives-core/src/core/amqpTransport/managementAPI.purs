@@ -31,6 +31,7 @@ import Affjax.RequestHeader (RequestHeader(..))
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.StatusCode (StatusCode(..))
 import Affjax.Web (Request, Response, printError, request)
+import Control.Monad.Cont (lift)
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.State (StateT, evalStateT, gets)
 import Data.Argonaut (Json)
@@ -47,6 +48,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Couchdb (Password, onAccepted_, toJson)
 import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (traceBroker)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.Types (UserName)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
@@ -176,7 +178,7 @@ deleteUser userName = do
   case res of
     Left e -> throwError $ error ("Perspectives.AMQP.RabbitMQManagement.deleteUser: error in call: " <> printError e)
     Right (response :: Response String) ->
-      if response.status == StatusCode 204 then pure unit
+      if response.status == StatusCode 204 then lift $ traceBroker ("deleteUser: deleted user " <> userName)
       else throwError $ error ("Perspectives.AMQP.RabbitMQManagement.deleteUser: unexpected statuscode " <> show response.status)
 
 createQueue :: QueueName -> WithRabbitState Unit
@@ -217,7 +219,7 @@ deleteQueue queueName = do
   case res of
     Left e -> throwError $ error ("Perspectives.AMQP.RabbitMQManagement.deleteQueue: error in call: " <> printError e)
     Right (response :: Response String) ->
-      if response.status == StatusCode 204 then pure unit
+      if response.status == StatusCode 204 then lift $ traceBroker ("deleteQueue: deleted queue " <> queueName)
       else throwError $ error ("Perspectives.AMQP.RabbitMQManagement.deleteQueue: unexpected statuscode " <> show response.status <> ", status text is: " <> response.statusText)
 
 -- { "configure": "^$"                         // No configuring rights for an ordinary Perspectives user.
