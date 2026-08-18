@@ -139,7 +139,9 @@ addRoleInstanceToContext contextId rolName (Tuple roleId receivedDelta) = do
             -- Do not add a roleinstance a second time.
             -- For linked roles, check if the role is already in the context.
             -- For unlinked roles, always process (idempotent operations).
-            if unlinked then f role pe unlinked
+            if unlinked then do
+              void $ lift $ saveEntiteit_ roleId role
+              f role pe unlinked
             else (lift $ context_rolInContext pe rolName) >>= \(Tuple _ roles) ->
               if isJust $ elemIndex roleId roles then void $ lift $ saveEntiteit_ roleId role
               else f role pe unlinked
