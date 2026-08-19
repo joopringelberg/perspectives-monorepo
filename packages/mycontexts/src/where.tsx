@@ -1,12 +1,13 @@
 import * as React from "react";
 const { Component } = React;
-import { RoleInstanceT, ContextInstanceT, WhereTo } from "perspectives-proxy";
+import { ContextType, RoleInstanceT, ContextInstanceT, WhereTo, WhoWhatWhereScreenDef } from "perspectives-proxy";
 import { TableForms } from "./tableForms";
 import { PinnedContexts } from "./pinnedContexts";
 import { RecentContexts } from "./recentContexts";
 import { Accordion } from "react-bootstrap";
 import { buildMarkDown, PSContext } from "perspectives-react";
 import { WiderContexts } from "./widerContexts";
+import { NavigationGraphView } from "./NavigationGraphView";
 
 interface WhereProps {
   screenelements: WhereTo;
@@ -14,6 +15,12 @@ interface WhereProps {
   systemUser: RoleInstanceT;
   systemIdentifier: ContextInstanceT;
   openContext: RoleInstanceT | undefined;
+  /** Full screen definition used to populate the navigation graph. */
+  whoWhatWhereScreen?: WhoWhatWhereScreenDef;
+  /** The context type currently open (graph highlight). */
+  currentContextType?: ContextType;
+  /** Human-readable label for the current context type. */
+  currentContextLabel?: string;
 }
 
 interface WhereState {
@@ -54,14 +61,15 @@ export class Where extends Component<WhereProps, WhereState> {
 
   render() {
     const component = this;
+    const { whoWhatWhereScreen, currentContextType, currentContextLabel } = this.props;
     return (<PSContext.Consumer>{ value => 
-    (<div className="content-top-aligned px-0">
+    (<div className="content-top-aligned px-0" ref={this.ref}>
       {this.props.screenelements.markdown.map((markdown, index) => 
           <div key={index} className="markdown">{ buildMarkDown(value.contextinstance, value.myroletype, markdown) }</div>
         )}
       <div className="markdown">
         <WiderContexts externalrole={component.props.openContext}/>
-        <Accordion ref={this.ref} activeKey={this.state.accordionOpen} flush className="pb-3">
+        <Accordion activeKey={this.state.accordionOpen} flush className="pb-3">
           <PinnedContexts systemuser={this.props.systemUser} />
           <RecentContexts systemuser={this.props.systemUser} openContext={this.props.openContext} systemIdentifier={this.props.systemIdentifier}/>
         </Accordion>
@@ -73,6 +81,14 @@ export class Where extends Component<WhereProps, WhereState> {
         </div>
         : null
       }
+      { whoWhatWhereScreen && currentContextType ? (
+        <NavigationGraphView
+          currentContextType={currentContextType}
+          currentContextLabel={currentContextLabel ?? ""}
+          currentScreen={whoWhatWhereScreen}
+          hostRef={this.ref}
+        />
+      ) : null }
     </div>)
     }</PSContext.Consumer>);
   }

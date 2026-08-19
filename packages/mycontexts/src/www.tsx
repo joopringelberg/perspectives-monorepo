@@ -694,9 +694,6 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   <Who 
                     screenelements={ this.state.screen.whoWhatWhereScreen.who } 
                     showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "who"}
-                    whoWhatWhereScreen={this.state.screen.whoWhatWhereScreen}
-                    currentContextType={this.state.openContextType}
-                    currentContextLabel={this.state.title}
                   />
                   : 
                   <p className='bg-light-subtle'>Ga ergens heen</p>
@@ -717,6 +714,9 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   systemUser={component.state.systemUser}
                   systemIdentifier={component.state.systemIdentifier}
                   openContext={component.state.openContext}
+                  whoWhatWhereScreen={this.state.screen.whoWhatWhereScreen}
+                  currentContextType={this.state.openContextType}
+                  currentContextLabel={this.state.title}
                   />
                 : 
                   <div>Ga ergens heen.</div>
@@ -1157,9 +1157,6 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   { this.state.screen?.whoWhatWhereScreen ?
                     <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } 
                       showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "who"}
-                      whoWhatWhereScreen={this.state.screen.whoWhatWhereScreen}
-                      currentContextType={this.state.openContextType}
-                      currentContextLabel={this.state.title}
                     />
                     :
                     <p className='bg-light-subtle'>Ga ergens heen</p>
@@ -1208,6 +1205,9 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                       systemUser={component.state.systemUser}
                       systemIdentifier={component.state.systemIdentifier}
                       openContext={component.state.openContext}
+                      whoWhatWhereScreen={this.state.screen.whoWhatWhereScreen}
+                      currentContextType={this.state.openContextType}
+                      currentContextLabel={this.state.title}
                     />
                     : 
                     <div>Ga ergens heen.</div>

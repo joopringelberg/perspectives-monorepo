@@ -136,7 +136,7 @@ export function mergeScreenIntoGraph(
     if (!nodes.has(edge.to as string)) {
       nodes.set(edge.to as string, {
         contextType: edge.to,
-        label: edge.label || localName(edge.to as string),
+        label: localName(edge.to as string),
       });
     }
     // Avoid duplicate edges (directed).
