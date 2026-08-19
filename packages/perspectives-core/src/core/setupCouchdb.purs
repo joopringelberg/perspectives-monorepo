@@ -110,9 +110,6 @@ setRoleFromContextView dbname = void $ addViewToDatabase dbname "defaultViews" "
 -- | Import the view definition as a String.
 foreign import roleFromContextView :: String
 
-roleFromContextFilter :: EnumeratedRoleType -> ContextInstance -> PerspectRol -> Boolean
-roleFromContextFilter eRoleType cinstance role = rol_context role == cinstance && isJust (elemIndex eRoleType (rol_allTypes role))
-
 -- OBSOLETE. Remove if testing shows the current definitioin of pendingInvitations works.
 -----------------------------------------------------------
 -- THE VIEW 'PENDINGINVITATIONS'

@@ -304,16 +304,16 @@ rol_gevuldeRol (PerspectRol { filledRoles, roleAliases, contextAliases }) cType 
 -- | They are respectively its context type and its role type.
 -- | This operation is idempotent.
 addRol_gevuldeRollen :: PerspectRol -> ContextType -> EnumeratedRoleType -> RoleInstance -> MonadPerspectives PerspectRol
-addRol_gevuldeRollen filler cType rolName filled = do
-  cIndex <- pure $ NT.unwrap cType
-  rIndex <- pure $ NT.unwrap rolName
-  roleAspects <- rolName ###= roleAspectsClosure
-  contextAspects <- cType ###= contextAspectsClosure
+addRol_gevuldeRollen filler filledContextType filledRoleType filled = do
+  cIndex <- pure $ NT.unwrap filledContextType
+  rIndex <- pure $ NT.unwrap filledRoleType
+  filledRoleAspects <- filledRoleType ###= roleAspectsClosure
+  filledContextAspects <- filledContextType ###= contextAspectsClosure
   f <- pure $ NT.over PerspectRol
     ( \cr ->
         let
-          roleAliases' = foldl (\als alias -> insert alias rIndex als) cr.roleAliases (NT.unwrap <$> roleAspects)
-          contextAliases' = foldl (\als alias -> insert alias cIndex als) cr.contextAliases (NT.unwrap <$> contextAspects)
+          roleAliases' = foldl (\als filledRoleAspect -> insert filledRoleAspect rIndex als) cr.roleAliases (NT.unwrap <$> filledRoleAspects)
+          contextAliases' = foldl (\als filledContextAspect -> insert filledContextAspect cIndex als) cr.contextAliases (NT.unwrap <$> filledContextAspects)
         in
           case lookup cIndex cr.filledRoles of
             Nothing -> cr

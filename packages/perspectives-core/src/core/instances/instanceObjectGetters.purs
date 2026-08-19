@@ -111,6 +111,10 @@ getUnlinkedRoleInstances rn c = ArrayT $
     >>=
       handlePerspectRolError' "getUnlinkedRoleInstances" []
         \(roles :: Array RoleInstance) -> (tell $ ArrayWithoutDoubles [ RoleAssumption c rn ]) *> pure roles
+  where
+  -- As in the view, we abstract from the storage scheme over the context identifiers.
+  roleFromContextFilter :: EnumeratedRoleType -> ContextInstance -> PerspectRol -> Boolean
+  roleFromContextFilter eRoleType cinstance role = takeGuid (unwrap $ rol_context role) == takeGuid (unwrap cinstance) && isJust (elemIndex eRoleType (rol_allTypes role))
 
 -- | Because we never change the type of a Context, we have no real need
 -- | to track it as a dependency.
