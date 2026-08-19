@@ -116,13 +116,13 @@ runMonadPerspectivesTransaction' share authoringRole a = (liftAff $ createTransa
         -- Execute the value that accumulates Deltas in a Transaction.
         r <- a >>= phase1 share authoringRole
         -- 5. Raise the flag
-        lift $ debugState (padding <> "Ending transaction " <> show transactionNumber)
         _ <- lift $ liftAff $ put true t
+        lift $ debugState (padding <> "Ending transaction " <> show transactionNumber)
         pure r
       \e -> do
         -- 5. Raise the flag
-        lift $ debugState (padding <> "Ending transaction " <> show transactionNumber)
         _ <- lift $ liftAff $ put true t
+        lift $ debugState (padding <> "Ending transaction " <> show transactionNumber)
         throwError e
 
 -- | In phase1 we handle:
@@ -584,14 +584,14 @@ runEmbeddedTransaction share authoringRole a = do
         -- In other words, it is guaranteed to be up again when it is finished. But it may throw!
         result <- runMonadPerspectivesTransaction' share authoringRole a
         -- 2. Lower it again.
-        debugState $ padding <> "Ending embedded transaction."
         decreaseTransactionLevel
         _ <- liftAff $ take t
+        debugState $ padding <> "Ending embedded transaction."
         pure result
       \e -> do
-        debugState (padding <> "Ending embedded transaction in failure: " <> show e)
         decreaseTransactionLevel
         _ <- liftAff $ take t
+        debugState (padding <> "Ending embedded transaction in failure: " <> show e)
         throwError e
   else throwError (error "runEmbeddedTransaction is not run inside another transaction.")
 
@@ -618,14 +618,14 @@ runEmbeddedIfNecessary share authoringRole a = do
       do
         result <- runMonadPerspectivesTransaction' share authoringRole a
         -- 2. Lower it again.
-        debugState $ padding <> "Ending transaction that needed to be embedded."
         decreaseTransactionLevel
         _ <- liftAff $ take t
+        debugState $ padding <> "Ending transaction that needed to be embedded."
         pure result
       \e -> do
-        debugState $ padding <> ("Ending transaction that needed to be embedded in failure. " <> show e)
         decreaseTransactionLevel
         _ <- liftAff $ take t
+        debugState $ padding <> ("Ending transaction that needed to be embedded in failure. " <> show e)
         throwError e
   -- Otherwise, since a transaction is already running, we queue up behind it.
   else runMonadPerspectivesTransaction' share authoringRole a

@@ -142,7 +142,7 @@ import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, throwError)
-import Effect.Aff.AVar (AVar, empty, put, read)
+import Effect.Aff.AVar (AVar, empty, put, read, take)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Exception (Error, error)
@@ -726,7 +726,7 @@ modifyPS
   -> m Unit
 modifyPS f = do
   st <- perspectivesState
-  s <- liftAff $ read st
+  s <- liftAff $ take st
   liftAff $ put (f s) st
 
 -----------------------------------------------------------

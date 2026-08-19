@@ -24,6 +24,7 @@ module Perspectives.PerspectivesState where
 
 import Control.Alt (map)
 import Control.Monad.AvarMonadAsk (gets, modify)
+import Control.Monad.Error.Class (catchError, throwError)
 import Data.Array (cons)
 import Data.List (elem)
 import Data.Map (Map, empty, insert, lookup, values) as Map
@@ -206,17 +207,23 @@ getBrokerService = gets _.brokerService >>= liftAff <<< read
 
 setBrokerService :: Maybe BrokerService -> MonadPerspectives Unit
 setBrokerService bs = case bs of
-  Just bs' -> gets _.brokerService >>= liftAff <<< put bs'
+  Just bs' -> do
+    broker <- gets _.brokerService
+    mCurrent <- liftAff $ tryRead broker
+    case mCurrent of
+      Nothing -> liftAff $ put bs' broker
+      Just _ -> do
+        _ <- liftAff $ take broker
+        liftAff $ put bs' broker
   Nothing -> pure unit
 
 deleteBrokerService :: String -> MonadPerspectives Unit
 deleteBrokerService queueName = do
   bs <- gets _.brokerService
-  { queueId } <- liftAff <<< read $ bs
-  if queueId == queueName then
-    void $ liftAff $ take bs
-  else
-    pure unit
+  mCurrent <- liftAff $ tryRead bs
+  case mCurrent of
+    Just { queueId } | queueId == queueName -> void $ liftAff $ take bs
+    _ -> pure unit
 
 stompClient :: MonadPerspectives (Maybe StompClient)
 stompClient = gets _.stompClient
@@ -371,9 +378,16 @@ withFrame :: forall a. MonadPerspectives a -> MonadPerspectives a
 withFrame computation = do
   old <- getVariableBindings
   void $ modify \s -> s { variableBindings = (ENV._pushFrame old) }
-  r <- computation
-  void $ modify \s -> s { variableBindings = old }
-  pure r
+  catchError
+    ( do
+        r <- computation
+        void $ modify \s -> s { variableBindings = old }
+        pure r
+    )
+    ( \e -> do
+        void $ modify \s -> s { variableBindings = old }
+        throwError e
+    )
 
 pushFrame :: MonadPerspectives (ENV.Environment (Array String))
 pushFrame = do
