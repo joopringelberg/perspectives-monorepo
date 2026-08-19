@@ -118,10 +118,10 @@ type RolRecord = PouchbdDocumentFields
   , isMe :: Boolean
   , states :: Array StateIdentifier
   -- Instance-level alias map for `filledRoles`.
-  -- `roleAliases` translates a role-aspect name (an aspect type) to the canonical key under which that role's
+  -- `roleAliases` translates a filled-role-aspect name (an aspect type of the filled role) to the canonical key under which that role's
   -- instances are stored in the nested object for the current context alias.
   , roleAliases :: F.Object String
-  -- Likewise for contexts: `contextAliases` translates an aspect-closure context name (aspect type) to the
+  -- Likewise for contexts: `contextAliases` translates an aspect-closure filled context name (aspect type of filled context) to the
   -- canonical context key used in `filledRoles`.
   , contextAliases :: F.Object String
   , _attachments :: Maybe Attachments
