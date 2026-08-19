@@ -68,7 +68,13 @@ type ContextRecord =
 
   , roleInvertedQueries :: Object (Array InvertedQuery) -- OBSOLETE!
 
-  -- Keys are role type names.
+  -- Type-level alias map for a ContextType.
+  -- A role can be visible under more than one name when its aspect closure is considered.
+  -- (in other words, a role can have multiple types).
+  -- This map records the aliasing used by the model, so `rolInContext` can be looked up by
+  -- either the concrete role name or one of its aspect types. In `ContextAndRole`, we do:
+  --   lookup rn roleAliases
+  -- then continue with the canonical role key stored in `rolInContext`.
   , roleAliases :: Object (EnumeratedRoleType)
 
   , pos :: ArcPosition

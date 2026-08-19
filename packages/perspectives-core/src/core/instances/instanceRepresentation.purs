@@ -109,13 +109,20 @@ type RolRecord = PouchbdDocumentFields
   , binding :: Filler
   -- The index is the propertytype.
   , properties :: F.Object (Array Value)
-  -- The first index is the String representation of the type of the context of the filled role, 
-  -- the second is the string representation of the type of the filled role.
+  -- Inverse links: the first index is the context type of the filled role,
+  -- the second is the role type of the filled role.
+  -- These are indexed by the names in the aspect closure (all types of the role), so that a role instance can be found
+  -- regardless of which alias of the context/role type happened to be used while constructing it.
   , filledRoles :: F.Object (F.Object (Array RoleInstance))
   , occurrence :: Int
   , isMe :: Boolean
   , states :: Array StateIdentifier
+  -- Instance-level alias map for `filledRoles`.
+  -- `roleAliases` translates a role-aspect name (an aspect type) to the canonical key under which that role's
+  -- instances are stored in the nested object for the current context alias.
   , roleAliases :: F.Object String
+  -- Likewise for contexts: `contextAliases` translates an aspect-closure context name (aspect type) to the
+  -- canonical context key used in `filledRoles`.
   , contextAliases :: F.Object String
   , _attachments :: Maybe Attachments
   )
