@@ -47,8 +47,9 @@ import Data.Newtype (unwrap)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Traversable (for_, traverse)
 import Effect (Effect)
-import Effect.Aff (Aff, bracket, error, launchAff_)
+import Effect.Aff (Aff, attempt, bracket, error, launchAff_, message)
 import Effect.Class (liftEffect)
+import Effect.Class.Console (log)
 import Effect.Ref (Ref, read, write)
 import Foreign.Object (empty) as OBJ
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
@@ -69,7 +70,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, Perspec
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
 import Perspectives.Sidecar.ToStable (toStable)
-import Test.PDRInstance (SynchronisationResult, connectPDRs, pollUntil, pollUntilTestFinishes, testPouchdbUser, withTwoPDRsCached, withTwoPDRsCachedNoBus)
+import Test.PDRInstance (SynchronisationResult, connectPDRs, pollUntil, pollUntilTestFinishes, snapshotPDR, testPouchdbUser, withTwoPDRsCached, withTwoPDRsCachedNoBus)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
@@ -183,20 +184,21 @@ getSynchronisationResults
   :: Ref (Maybe SynchronisationResults)
   -> SynchronisationModelConfiguration
   -> Aff SynchronisationResults
-getSynchronisationResults = getSynchronisationResultsInternal withTwoPDRsCached
+getSynchronisationResults = getSynchronisationResultsInternal withTwoPDRsCached true
 
 getSynchronisationResultsOverAMQP
   :: Ref (Maybe SynchronisationResults)
   -> SynchronisationModelConfiguration
   -> Aff SynchronisationResults
-getSynchronisationResultsOverAMQP = getSynchronisationResultsInternal withTwoPDRsCachedNoBus
+getSynchronisationResultsOverAMQP = getSynchronisationResultsInternal withTwoPDRsCachedNoBus false
 
 getSynchronisationResultsInternal
   :: WithTwoPDRsCachedLike
+  -> Boolean
   -> Ref (Maybe SynchronisationResults)
   -> SynchronisationModelConfiguration
   -> Aff SynchronisationResults
-getSynchronisationResultsInternal withTwoPDRsFn cacheRef cfg = do
+getSynchronisationResultsInternal withTwoPDRsFn connectPeers cacheRef cfg = do
   cached <- liftEffect $ read cacheRef
   case cached of
     Just results -> pure results
@@ -214,7 +216,7 @@ getSynchronisationResultsInternal withTwoPDRsFn cacheRef cfg = do
           withSavedTwoPDRLogConfigs pdrA pdrB do
             applyLogConfigurationToPDRs pdrA pdrB cfg.setupLogConfiguration
 
-            connectPDRs pdrA pdrB
+            when connectPeers (connectPDRs pdrA pdrB)
 
             alice <- runInPDR pdrA getPerspectivesUser
             bob <- runInPDR pdrB getPerspectivesUser
@@ -263,6 +265,14 @@ getSynchronisationResultsInternal withTwoPDRsFn cacheRef cfg = do
             traverse runATest cfg.tests
 
       liftEffect $ write (Just results) cacheRef
+      --- Temporary: snapshot Alices' databases.
+      let
+        alice = testPouchdbUser "alice"
+        snapshotDirAlice = cfg.snapshotDirAlice <> "/snapshot-after-tests"
+      attempt (snapshotPDR alice.systemIdentifier alice.perspectivesUser snapshotDirAlice) >>= case _ of
+        Left err -> log $ "[withPDRCached] Warning: snapshot creation failed: " <> message err
+        Right _ -> log $ "[withPDRCached] Snapshot saved to: " <> snapshotDirAlice
+
       pure results
 
 executeModelTest

@@ -95,6 +95,7 @@ synchronisationTestModelConfiguration =
           , { topic: RESOURCE, logLevel: Trace }
           , { topic: STATE, logLevel: Trace }
           , { topic: BROKER, logLevel: Trace }
+          , { topic: SYNC, logLevel: Trace }
           ]
       , pdrB:
           [ { topic: TEST, logLevel: Trace }

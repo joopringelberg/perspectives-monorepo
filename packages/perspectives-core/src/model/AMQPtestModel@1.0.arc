@@ -148,9 +148,9 @@ domain model://joopringelberg.nl#AMQPtestModel@1.0
     external
       -- This is to see if Leader has the required resources.
       state ManagedBrokersRoleExists = exists bs:MyBrokers >> ManagedBrokers
-        state ManageBrokerExists = exists bs:MyBrokers >> ManagedBrokers >> binding
-          -- Deze toestand wordt nooit geldig. Hypothese: het lukt niet de rollen uit de database op te halen.
-          -- Wel als we Accounts niet unlinked maken.
+        state ManagedBrokerExists = exists bs:MyBrokers >> ManagedBrokers >> binding
+        -- Deze toestand wordt nooit geldig. Hypothese: het lukt niet de rollen uit de database op te halen.
+        -- Wel als we Accounts niet unlinked maken.
           state AccountsRolesExist = exists bs:MyBrokers >> ManagedBrokers >> binding >> context >> Accounts
             state ContractsExist = exists bs:MyBrokers >> ManagedBrokers >> binding >> context >> Accounts >> binding
       -- This is for Follower: it cannot be in terms of ManagedBrokers.

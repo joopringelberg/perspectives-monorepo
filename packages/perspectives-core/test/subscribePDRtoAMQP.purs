@@ -156,7 +156,7 @@ testSetupManager = "model://joopringelberg.nl#AMQPtestSetup$TestSetupApp$Manager
 -------------------------------------------------------------------------------
 subscribePDRtoAMQP :: ContextInstance -> PDRInstance -> Aff Unit
 subscribePDRtoAMQP publicBrokerServiceInstance pdr =
-  withBracketedTopicLogLevel pdr [ { topic: BROKER, logLevel: Trace } ] $ runInPDR pdr do
+  withBracketedTopicLogLevel pdr [ { topic: BROKER, logLevel: Trace }, { topic: RESOURCE, logLevel: Trace } ] $ runInPDR pdr do
     -- Load the Broker model
     runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
       $
@@ -182,7 +182,7 @@ subscribePDRtoAMQP publicBrokerServiceInstance pdr =
               runMonadPerspectivesTransaction' shareWithPeers (CR $ CalculatedRoleType brokerServicesManager)
                 $
                   runActionForObject (CR $ CalculatedRoleType brokerServicesManager) "SignUp" bApp (unwrap publicBrokerRoleInstance)
-              infoTest $ pdr.name <> " executed SignUp action to subscribe to AMQP using the public BrokerService instance"
+              infoTest $ pdr.name <> " executed SignUp action to subscribe to AMQP using the public BrokerService instance" <> show publicBrokerRoleInstance
             _ -> throwError $ error $ pdr.name <> " could not find any Public BrokerService instance in BrokerServicesApp"
 
 -------------------------------------------------------------------------------
