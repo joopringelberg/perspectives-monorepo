@@ -4,9 +4,9 @@
  * SVG-based renderer for the model-static navigation graph.
  *
  * Visual encoding:
- *  - Current context node: large, Bootstrap-primary fill.
- *  - Direct neighbours:    medium, Bootstrap-info fill.
- *  - All other nodes:      small, dimmed (low opacity).
+ *  - Current context node: large, Bootstrap-primary fill (top row).
+ *  - Direct neighbours:    medium, Bootstrap-info fill (middle row).
+ *  - All other nodes:      small, dimmed (bottom row).
  *
  * Interactions:
  *  - Pan: click-drag on the SVG background.
@@ -30,11 +30,12 @@ import {
 
 // ─── Layout constants ──────────────────────────────────────────────────────────
 
-const INNER_RADIUS = 140;   // neighbours
-const OUTER_RADIUS = 280;   // other nodes
-const R_CURRENT   = 34;
-const R_NEIGHBOR  = 26;
-const R_OTHER     = 20;
+// Vertical layout: rows spaced along the Y axis.
+const ROW_SPACING  = 140;   // vertical distance between rows
+const COL_SPACING  = 100;   // horizontal distance between nodes in the same row
+const R_CURRENT    = 34;
+const R_NEIGHBOR   = 26;
+const R_OTHER      = 20;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -73,31 +74,37 @@ function computeLayout(
 
   const positioned: PositionedNode[] = [];
 
-  // Current node at centre.
+  // Row 0 – current node centred at the top.
   const cur = graph.nodes.get(currentType as string);
   if (cur) {
     positioned.push({ ...cur, x: 0, y: 0, r: R_CURRENT, role: "current" });
   }
 
-  // Neighbours in inner ring.
+  // Row 1 – neighbours spread horizontally below the current node.
+  const nCount = neighborsArr.length;
   neighborsArr.forEach((n, i) => {
-    const angle = (2 * Math.PI * i) / Math.max(neighborsArr.length, 1);
+    const x = nCount === 1
+      ? 0
+      : Math.round((i - (nCount - 1) / 2) * COL_SPACING);
     positioned.push({
       ...n,
-      x: Math.round(Math.cos(angle) * INNER_RADIUS),
-      y: Math.round(Math.sin(angle) * INNER_RADIUS),
+      x,
+      y: ROW_SPACING,
       r: R_NEIGHBOR,
       role: "neighbor",
     });
   });
 
-  // Other nodes in outer ring.
+  // Row 2 – other nodes spread horizontally below the neighbours row.
+  const oCount = others.length;
   others.forEach((n, i) => {
-    const angle = (2 * Math.PI * i) / Math.max(others.length, 1);
+    const x = oCount === 1
+      ? 0
+      : Math.round((i - (oCount - 1) / 2) * COL_SPACING);
     positioned.push({
       ...n,
-      x: Math.round(Math.cos(angle) * OUTER_RADIUS),
-      y: Math.round(Math.sin(angle) * OUTER_RADIUS),
+      x,
+      y: ROW_SPACING * 2,
       r: R_OTHER,
       role: "other",
     });
@@ -209,10 +216,10 @@ export function NavigationGraphView({
   const margin = 60;
   const xs = visibleNodes.map((n) => n.x);
   const ys = visibleNodes.map((n) => n.y);
-  const minX = (xs.length ? Math.min(...xs) : -OUTER_RADIUS) - margin;
-  const maxX = (xs.length ? Math.max(...xs) : OUTER_RADIUS)  + margin;
-  const minY = (ys.length ? Math.min(...ys) : -OUTER_RADIUS) - margin;
-  const maxY = (ys.length ? Math.max(...ys) : OUTER_RADIUS)  + margin;
+  const minX = (xs.length ? Math.min(...xs) : -COL_SPACING * 2) - margin;
+  const maxX = (xs.length ? Math.max(...xs) : COL_SPACING * 2)  + margin;
+  const minY = (ys.length ? Math.min(...ys) : 0)                - margin;
+  const maxY = (ys.length ? Math.max(...ys) : ROW_SPACING * 2)  + margin;
   const vbW = maxX - minX;
   const vbH = maxY - minY;
 
@@ -239,7 +246,7 @@ export function NavigationGraphView({
 
       <svg
         viewBox={`${minX} ${minY} ${vbW} ${vbH}`}
-        style={{ width: "100%", height: "260px", cursor: "grab", display: "block" }}
+        style={{ width: "100%", height: "420px", cursor: "grab", display: "block" }}
         onWheel={onWheel}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
