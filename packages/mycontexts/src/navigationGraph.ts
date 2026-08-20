@@ -9,7 +9,7 @@
  * API call and is identical for all users of the same model.
  */
 
-import { ContextType } from "perspectives-proxy";
+import { ContextType, RoleInstanceT } from "perspectives-proxy";
 
 // ─── Re-export proxy types locally ───────────────────────────────────────────
 export type { ModelContextGraph, ModelGraphNode, ModelGraphEdge } from "perspectives-proxy";
@@ -22,7 +22,7 @@ export type { ModelContextGraph, ModelGraphNode, ModelGraphEdge } from "perspect
  */
 export interface ContextInstance {
   /** The role instance ID that can be used to open the context (via OpenContext event). */
-  roleId: string;
+  roleId: RoleInstanceT;
   /** Human-readable name of the context instance. */
   readableName: string;
 }
@@ -33,7 +33,7 @@ export interface ContextInstance {
  */
 export interface WiderContext {
   /** External role instance ID of the wider context. */
-  externalRole: string;
+  externalRole: RoleInstanceT;
   /** Human-readable name of the wider context. */
   readableName: string;
   /** Resolved context type for matching against DAG nodes. Set after type lookup. */

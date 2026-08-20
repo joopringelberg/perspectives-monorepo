@@ -10,6 +10,7 @@ export type ContextInstanceT = string & { readonly brand: unique symbol };
 export type ValueT = string & { readonly brand: unique symbol };
 export type PropertyValueReceiver = (value: ValueT[]) => void;
 export type RoleType = string & { readonly brand: unique symbol };
+export type EnumeratedRoleType = string & { readonly brand: unique symbol };
 export type UserRoleType = RoleType
 export type RoleTypeReceiver = (roleType: RoleType[]) => void;
 export type PerspectivesReceiver = (perspectives: Perspective[]) => void;
@@ -358,8 +359,13 @@ export type ContextAndName =
 ////////////////////////////////////////////
 //// MODEL CONTEXT GRAPH
 ////////////////////////////////////////////
-export type ModelGraphNode = { id: string; label: string };
-export type ModelGraphEdge = { from: string; to: string; roleId: string; roleLabel: string };
+export type ModelGraphNode = { id: ContextType; label: string };
+export type ModelGraphEdge = {
+  from: ContextType;
+  to: ContextType;
+  roleId: EnumeratedRoleType;
+  roleLabel: string;
+};
 export type ModelContextGraph = { nodes: ModelGraphNode[]; edges: ModelGraphEdge[] };
 export type ModelContextGraphReceiver = (graph: ModelContextGraph) => void;
 

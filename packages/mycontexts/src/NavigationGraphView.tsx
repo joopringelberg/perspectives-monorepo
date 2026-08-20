@@ -54,7 +54,7 @@ interface InstanceInfo {
 }
 
 interface PositionedNode {
-  id: string;
+  id: ContextType;
   label: string;
   x: number;
   y: number;
@@ -78,7 +78,7 @@ function truncate(s: string, maxLen: number): string {
 /** Compute a vertical radial layout. Returns positioned nodes. */
 function computeLayout(
   graph: ModelContextGraph,
-  currentType: string,
+  currentType: ContextType,
   downstreamInstances: Map<string, InstanceInfo[]>,
   upstreamInstances: Map<string, InstanceInfo[]>
 ): PositionedNode[] {
@@ -86,7 +86,7 @@ function computeLayout(
 
   const instancesForNode = (
     map: Map<string, InstanceInfo[]>,
-    node: { id: string; label: string }
+    node: { id: ContextType; label: string }
   ): InstanceInfo[] => map.get(node.id) ?? map.get(node.label) ?? [];
 
   const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -193,7 +193,9 @@ function buildDownstreamInstances(
 
     // contextTypesToCreate maps label → ContextType for the types reachable via this role.
     const typesToCreate = perspective.contextTypesToCreate ?? {};
-    const targetTypes = Object.values(typesToCreate).filter(Boolean) as string[];
+    const targetTypes = Object.values(typesToCreate).filter(
+      (value): value is ContextType => Boolean(value)
+    );
 
     // The existing role instances for this perspective.
     const roleInstances = perspective.roleInstances ?? {};
@@ -220,11 +222,10 @@ function buildUpstreamInstances(
   const result = new Map<string, InstanceInfo[]>();
   for (const wc of widerContexts) {
     if (!wc.contextType) continue;
-    const key = wc.contextType as string;
-    const existing = result.get(key) ?? [];
-    result.set(key, [
+    const existing = result.get(wc.contextType) ?? [];
+    result.set(wc.contextType, [
       ...existing,
-      { roleId: wc.externalRole as RoleInstanceT, readableName: wc.readableName },
+      { roleId: wc.externalRole, readableName: wc.readableName },
     ]);
   }
   return result;
@@ -259,8 +260,8 @@ export function NavigationGraphView({
   const dragStart = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
 
   // Popover state: which node is showing a multi-instance list.
-  const [popoverNode, setPopoverNode] = useState<string | null>(null);
-  const nodeRefs = useRef<Map<string, SVGGElement>>(new Map());
+  const [popoverNode, setPopoverNode] = useState<ContextType | null>(null);
+  const nodeRefs = useRef<Map<ContextType, SVGGElement>>(new Map());
 
   // Re-center when graph changes.
   useEffect(() => {
@@ -323,11 +324,11 @@ export function NavigationGraphView({
 
   if (!modelGraph || modelGraph.nodes.length === 0) return null;
 
-  const downstreamMap : Map<string, InstanceInfo[]> = buildDownstreamInstances(contextRoles);
+  const downstreamMap = buildDownstreamInstances(contextRoles);
   const upstreamMap = buildUpstreamInstances(widerContexts);
   const allPositioned = computeLayout(
     modelGraph,
-    currentContextType as string,
+    currentContextType,
     downstreamMap,
     upstreamMap
   );
@@ -514,7 +515,7 @@ export function NavigationGraphView({
                   key={inst.roleId}
                   action
                   className="small py-1 px-2"
-                  onClick={() => navigateTo(inst.roleId as RoleInstanceT)}
+                  onClick={() => navigateTo(inst.roleId)}
                 >
                   {inst.readableName}
                 </ListGroup.Item>
