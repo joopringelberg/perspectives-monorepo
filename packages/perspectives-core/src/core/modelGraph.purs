@@ -39,7 +39,7 @@ import Perspectives.Persistent (getDomeinFile)
 import Perspectives.Query.QueryTypes (RoleInContext(..))
 import Perspectives.Representation.ADT (allLeavesInADT)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), RoleKind(..)) as TI
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType, RoleKind(..)) as TI
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Simple.JSON (writeJSON)
 
@@ -47,9 +47,14 @@ import Simple.JSON (writeJSON)
 -- MODEL CONTEXT GRAPH
 -----------------------------------------------------------
 
-type GraphNode = { id :: String, label :: String }
+type GraphNode = { id :: TI.ContextType, label :: String }
 
-type GraphEdge = { from :: String, to :: String, roleId :: String, roleLabel :: String }
+type GraphEdge =
+  { from :: TI.ContextType
+  , to :: TI.ContextType
+  , roleId :: TI.EnumeratedRoleType
+  , roleLabel :: String
+  }
 
 type SerializedModelGraph = { nodes :: Array GraphNode, edges :: Array GraphEdge }
 
@@ -65,9 +70,9 @@ emptyGraph = { nodes: [], edges: [] }
 -- |
 -- | Returns an empty graph JSON if the model URI cannot be derived or if the
 -- | DomeinFile cannot be loaded.
-constructModelGraph :: String -> MonadPerspectives String
+constructModelGraph :: TI.ContextType -> MonadPerspectives String
 constructModelGraph contextTypeStr = do
-  let mModelUri = typeUri2ModelUri contextTypeStr
+  let mModelUri = typeUri2ModelUri (unwrap contextTypeStr)
   case mModelUri of
     Nothing -> pure $ writeJSON emptyGraph
     Just modelUriStr -> do
@@ -78,7 +83,7 @@ constructModelGraph contextTypeStr = do
           -- Build nodes from all context types in the DomeinFile, with translated labels.
           nodes <- for (Object.keys df.contexts) \ctKey -> do
             label <- translateType (TI.ContextType ctKey)
-            pure { id: ctKey, label }
+            pure { id: TI.ContextType ctKey, label }
           -- Build edges from ContextRole-kinded enumerated roles.
           edgeGroups <- for (Object.values df.enumeratedRoles) \(EnumeratedRole er) ->
             if er.kindOfRole == TI.ContextRole then case er.binding of
@@ -94,9 +99,9 @@ constructModelGraph contextTypeStr = do
                   roleLabel <- translateType er.id
                   pure $ map
                     ( \(RoleInContext { context: toCtx }) ->
-                        { from: unwrap er.context
-                        , to: unwrap toCtx
-                        , roleId: unwrap er.id
+                        { from: er.context
+                        , to: toCtx
+                        , roleId: er.id
                         , roleLabel
                         }
                     )
