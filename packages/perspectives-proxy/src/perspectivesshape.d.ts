@@ -356,6 +356,14 @@ export type ContextAndName =
 	  readableName : string }
 
 ////////////////////////////////////////////
+//// MODEL CONTEXT GRAPH
+////////////////////////////////////////////
+export type ModelGraphNode = { id: string; label: string };
+export type ModelGraphEdge = { from: string; to: string; roleId: string; roleLabel: string };
+export type ModelContextGraph = { nodes: ModelGraphNode[]; edges: ModelGraphEdge[] };
+export type ModelContextGraphReceiver = (graph: ModelContextGraph) => void;
+
+////////////////////////////////////////////
 //// FILLER TYPES
 ////////////////////////////////////////////
 export type FillerType = { roleType: RoleType, readableName: string }

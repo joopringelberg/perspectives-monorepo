@@ -714,9 +714,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   systemUser={component.state.systemUser}
                   systemIdentifier={component.state.systemIdentifier}
                   openContext={component.state.openContext}
-                  whoWhatWhereScreen={this.state.screen.whoWhatWhereScreen}
                   currentContextType={this.state.openContextType}
-                  currentContextLabel={this.state.title}
                   />
                 : 
                   <div>Ga ergens heen.</div>
@@ -1205,9 +1203,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                       systemUser={component.state.systemUser}
                       systemIdentifier={component.state.systemIdentifier}
                       openContext={component.state.openContext}
-                      whoWhatWhereScreen={this.state.screen.whoWhatWhereScreen}
                       currentContextType={this.state.openContextType}
-                      currentContextLabel={this.state.title}
                     />
                     : 
                     <div>Ga ergens heen.</div>

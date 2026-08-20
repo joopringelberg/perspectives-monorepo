@@ -60,6 +60,7 @@ import Perspectives.Fuzzysort (matchIndexedContextNames)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, isTypeUri, typeUri2ModelUri_, typeUri2couchdbFilename)
 import Perspectives.Inspector.Factories (makeInspectableContext, makeInspectableRole)
+import Perspectives.ModelGraph (constructModelGraph)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
 import Perspectives.Instances.Combinators (filter)
@@ -615,6 +616,11 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
         )
         (RoleInstance subject)
         onlyOnce
+
+    -- { request: "GetModelContextGraph", subject: ContextType }
+    Api.GetModelContextGraph -> do
+      graphJson <- constructModelGraph subject
+      sendResponse (Result corrId [graphJson]) setter
 
     Api.SubscribeSelectedRoleFromClipboard -> do
       -- Get the SelectedClipboardItem.
