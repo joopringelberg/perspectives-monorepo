@@ -84,6 +84,11 @@ function computeLayout(
 ): PositionedNode[] {
   if (graph.nodes.length === 0) return [];
 
+  const instancesForNode = (
+    map: Map<string, InstanceInfo[]>,
+    node: { id: string; label: string }
+  ): InstanceInfo[] => map.get(node.id) ?? map.get(node.label) ?? [];
+
   const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
 
   // Direct downstream neighbours (current → neighbour edges).
@@ -125,7 +130,7 @@ function computeLayout(
       y: -ROW_SPACING,
       r: R_NEIGHBOR,
       role: "upstream",
-      instances: upstreamInstances.get(n.id) ?? [],
+      instances: instancesForNode(upstreamInstances, n),
     });
   });
 
@@ -144,7 +149,7 @@ function computeLayout(
       y: ROW_SPACING,
       r: R_NEIGHBOR,
       role: "downstream",
-      instances: downstreamInstances.get(n.id) ?? [],
+      instances: instancesForNode(downstreamInstances, n),
     });
   });
 
@@ -318,7 +323,7 @@ export function NavigationGraphView({
 
   if (!modelGraph || modelGraph.nodes.length === 0) return null;
 
-  const downstreamMap = buildDownstreamInstances(contextRoles);
+  const downstreamMap : Map<string, InstanceInfo[]> = buildDownstreamInstances(contextRoles);
   const upstreamMap = buildUpstreamInstances(widerContexts);
   const allPositioned = computeLayout(
     modelGraph,
