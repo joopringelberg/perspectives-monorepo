@@ -273,7 +273,7 @@ export function NavigationGraphView({
     e.preventDefault();
     setTransform((t) => ({
       ...t,
-      scale: Math.min(4, Math.max(0.2, t.scale * (e.deltaY < 0 ? 1.1 : 0.9))),
+      scale: Math.min(4, Math.max(0.2, t.scale * (e.deltaY < 0 ? 1.02 : 0.98))),
     }));
   }, []);
 
@@ -443,6 +443,7 @@ export function NavigationGraphView({
             const opacity = isOther ? 0.35 : 1;
             const textFill = isCurrent || isUp ? "#fff" : isDown ? "var(--bs-dark, #212529)" : "#fff";
             const cursor = isCurrent || (!hasInstances && !isMulti) ? "default" : "pointer";
+            const multiStroke = "var(--bs-light, #f8f9fa)";
 
             // Display: instance name if single, type label otherwise.
             const displayLabel =
@@ -463,25 +464,25 @@ export function NavigationGraphView({
                 role={hasInstances ? "button" : undefined}
                 aria-label={node.label}
               >
-                <title>{`${node.label}\n${node.id}`}</title>
+                <title>{node.label}</title>
+                {/* Multi-instance indicator: two stacked disks with a slight southeast offset. */}
+                {isMulti && (
+                  <circle
+                    r={node.r}
+                    cx={node.r * 0.22}
+                    cy={node.r * 0.22}
+                    fill={fill}
+                    stroke={multiStroke}
+                    strokeWidth={1.5}
+                    strokeOpacity={1}
+                  />
+                )}
                 <circle
                   r={node.r}
                   fill={fill}
-                  stroke={isCurrent ? "var(--bs-primary-border-subtle, #9ec5fe)" : "none"}
-                  strokeWidth={isCurrent ? 3 : 0}
+                  stroke={isMulti ? multiStroke : isCurrent ? "var(--bs-primary-border-subtle, #9ec5fe)" : "none"}
+                  strokeWidth={isMulti ? 1.5 : isCurrent ? 3 : 0}
                 />
-                {/* Multi-instance indicator: second circle slightly offset */}
-                {isMulti && (
-                  <circle
-                    r={node.r * 0.55}
-                    cx={node.r * 0.35}
-                    cy={node.r * 0.35}
-                    fill="none"
-                    stroke="#fff"
-                    strokeWidth={1.5}
-                    strokeOpacity={0.8}
-                  />
-                )}
                 <text
                   textAnchor="middle"
                   dominantBaseline="middle"
@@ -498,30 +499,45 @@ export function NavigationGraphView({
         </g>
       </svg>
 
-      {/* Multi-instance popover (rendered outside SVG for correct Bootstrap positioning) */}
+      {/* Multi-instance popover anchored to the clicked node. */}
       {popoverNode && (() => {
         const node = allPositioned.find((n) => n.id === popoverNode);
-        if (!node || node.instances.length < 2) return null;
+        const target = nodeRefs.current.get(popoverNode) ?? null;
+        if (!node || node.instances.length < 2 || !target) return null;
         return (
-          <div
-            className="position-absolute bg-white border rounded shadow-sm p-1"
-            style={{ zIndex: 1050, minWidth: 160, top: "50%", left: "50%" }}
+          <Overlay
             key={popoverNode}
+            show
+            target={target}
+            placement="bottom"
+            rootClose
+            onHide={() => setPopoverNode(null)}
           >
-            <div className="fw-bold small px-2 pt-1 pb-1 border-bottom">{node.label}</div>
-            <ListGroup variant="flush">
-              {node.instances.map((inst) => (
-                <ListGroup.Item
-                  key={inst.roleId}
-                  action
-                  className="small py-1 px-2"
-                  onClick={() => navigateTo(inst.roleId)}
-                >
-                  {inst.readableName}
-                </ListGroup.Item>
-              ))}
-            </ListGroup>
-          </div>
+            {(props) => (
+              <Popover
+                id={`navigation-graph-popover-${String(popoverNode)}`}
+                {...props}
+              >
+                <Popover.Header as="h3" className="small">
+                  {node.label}
+                </Popover.Header>
+                <Popover.Body className="p-0">
+                  <ListGroup variant="flush">
+                    {node.instances.map((inst) => (
+                      <ListGroup.Item
+                        key={inst.roleId}
+                        action
+                        className="small py-1 px-2"
+                        onClick={() => navigateTo(inst.roleId)}
+                      >
+                        {inst.readableName}
+                      </ListGroup.Item>
+                    ))}
+                  </ListGroup>
+                </Popover.Body>
+              </Popover>
+            )}
+          </Overlay>
         );
       })()}
     </div>
