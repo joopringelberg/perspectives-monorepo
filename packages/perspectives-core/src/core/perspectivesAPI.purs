@@ -620,7 +620,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     -- { request: "GetModelContextGraph", subject: ContextType }
     Api.GetModelContextGraph -> do
       graphJson <- constructModelGraph subject
-      sendResponse (Result corrId [graphJson]) setter
+      sendResponse (Result corrId [ graphJson ]) setter
 
     Api.SubscribeSelectedRoleFromClipboard -> do
       -- Get the SelectedClipboardItem.

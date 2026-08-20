@@ -25,6 +25,7 @@ module Perspectives.ModelGraph where
 import Prelude
 
 import Data.Array (concat, filter, null)
+import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Traversable (for)
@@ -80,28 +81,26 @@ constructModelGraph contextTypeStr = do
             pure { id: ctKey, label }
           -- Build edges from ContextRole-kinded enumerated roles.
           edgeGroups <- for (Object.values df.enumeratedRoles) \(EnumeratedRole er) ->
-            if er.kindOfRole == TI.ContextRole
-              then case er.binding of
-                Nothing -> pure []
-                Just adtBinding -> do
-                  -- Collect all RoleInContext leaves from the ADT.
-                  let leaves = allLeavesInADT adtBinding
-                  -- Keep only external-role leaves; their .context field is the
-                  -- target context type of the edge.
-                  let externalRics = filter (\(RoleInContext { role }) -> isExternalRole (unwrap role)) leaves
-                  if null externalRics
-                    then pure []
-                    else do
-                      roleLabel <- translateType er.id
-                      pure $ map
-                        ( \(RoleInContext { context: toCtx }) ->
-                            { from: unwrap er.context
-                            , to: unwrap toCtx
-                            , roleId: unwrap er.id
-                            , roleLabel
-                            }
-                        )
-                        externalRics
-              else pure []
+            if er.kindOfRole == TI.ContextRole then case er.binding of
+              Nothing -> pure []
+              Just adtBinding -> do
+                -- Collect all RoleInContext leaves from the ADT.
+                let leaves = allLeavesInADT adtBinding
+                -- Keep only external-role leaves; their .context field is the
+                -- target context type of the edge.
+                let externalRics = filter (\(RoleInContext { role }) -> isExternalRole (unwrap role)) leaves
+                if null externalRics then pure []
+                else do
+                  roleLabel <- translateType er.id
+                  pure $ map
+                    ( \(RoleInContext { context: toCtx }) ->
+                        { from: unwrap er.context
+                        , to: unwrap toCtx
+                        , roleId: unwrap er.id
+                        , roleLabel
+                        }
+                    )
+                    externalRics
+            else pure []
           let edges = concat edgeGroups
           pure $ writeJSON { nodes, edges }
