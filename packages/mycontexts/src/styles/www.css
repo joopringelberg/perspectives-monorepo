@@ -1,6 +1,6 @@
 
 .full-height {
-  height: calc(100dvh - var(--bottom-navbar-height) - var(--top-navbar-height));
+  height: calc(100dvh - var(--bottom-navbar-height) - var(--top-navbar-height) - var(--who-header-height));
 }
 
 .full-mobile-height {
@@ -81,6 +81,10 @@ html body .dropdown-menu .dropdown-item {
   display: flex;
   flex-direction: row;
   overflow: hidden;
+}
+
+.www-columns > .scrollable-content {
+  box-sizing: border-box;
 }
 
 /* Draggable divider between columns */

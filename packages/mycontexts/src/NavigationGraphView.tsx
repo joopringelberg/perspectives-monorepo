@@ -419,6 +419,7 @@ export function NavigationGraphView({
   const visibleNodes = showFullGraph
     ? allPositioned
     : allPositioned.filter((n) => n.role !== "other");
+  const bottomChromeGap = hasOthers ? "3.5rem" : "0rem";
 
   // Compute viewBox.
   const margin = 70;
@@ -439,7 +440,7 @@ export function NavigationGraphView({
         display: "flex",
         flexDirection: "column",
         height:
-          "calc(100dvh - var(--bottom-navbar-height) - var(--top-navbar-height) - var(--who-header-height))",
+          `calc(100dvh - var(--bottom-navbar-height) - var(--top-navbar-height) - var(--who-header-height) - ${bottomChromeGap})`,
         overflowY: "auto",
       }}
     >
@@ -464,7 +465,7 @@ export function NavigationGraphView({
         viewBox={`${minX} ${minY} ${vbW} ${vbH}`}
         style={{
           width: "100%",
-          height: "100%",
+          height: "auto",
           minHeight: "630px",
           flex: "1 1 auto",
           cursor: "grab",
