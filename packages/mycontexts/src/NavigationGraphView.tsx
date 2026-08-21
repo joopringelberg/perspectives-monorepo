@@ -441,6 +441,7 @@ export function NavigationGraphView({
         flexDirection: "column",
         height:
           `calc(100dvh - var(--bottom-navbar-height) - var(--top-navbar-height) - var(--who-header-height) - ${bottomChromeGap})`,
+        minHeight: "630px",
         overflowY: "auto",
       }}
     >
@@ -467,7 +468,8 @@ export function NavigationGraphView({
           width: "100%",
           height: "auto",
           minHeight: "630px",
-          flex: "1 1 auto",
+          flex: "0 0 auto",
+          flexShrink: 0,
           cursor: "grab",
           display: "block",
         }}
