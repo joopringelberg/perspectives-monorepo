@@ -238,6 +238,25 @@ function buildUpstreamInstances(
   return result;
 }
 
+/**
+ * Collect role type ids represented in where.contextRoles perspectives.
+ * Edges whose roleId is not present here are considered invisible for the current user.
+ */
+function buildVisibleEdgeRoleTypes(contextRoles: TableFormDef[]): Set<string> {
+  const result = new Set<string>();
+
+  for (const def of contextRoles) {
+    const perspective =
+      def.table?.widgetCommonFields?.perspective ??
+      def.form?.widgetCommonFields?.perspective;
+    if (!perspective) continue;
+    if (perspective.roleKind !== "ContextRole") continue;
+    result.add(perspective.roleType);
+  }
+
+  return result;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export interface NavigationGraphViewProps {
@@ -336,6 +355,13 @@ export function NavigationGraphView({
 
   const downstreamMap = buildDownstreamInstances(contextRoles);
   const upstreamMap = buildUpstreamInstances(widerContexts);
+  const visibleEdgeRoleTypes = buildVisibleEdgeRoleTypes(contextRoles);
+  const widerContextTypes = new Set<string>(
+    widerContexts
+      .map((wc) => wc.contextType)
+      .filter((ct): ct is ContextType => Boolean(ct))
+      .map((ct) => String(ct))
+  );
   const allPositioned = computeLayout(
     modelGraph,
     currentContextType,
@@ -419,6 +445,55 @@ export function NavigationGraphView({
               const fromNode = visibleNodes.find((n) => n.id === edge.from);
               const toNode = visibleNodes.find((n) => n.id === edge.to);
               if (!fromNode || !toNode) return null;
+              const isSelfLoop = edge.from === edge.to;
+              const isVisibleByRole = visibleEdgeRoleTypes.has(String(edge.roleId));
+              const isVisibleByWiderContextEdge =
+                (edge.from === currentContextType &&
+                  widerContextTypes.has(String(edge.to))) ||
+                (edge.to === currentContextType &&
+                  widerContextTypes.has(String(edge.from)));
+              const isInvisibleEdge = !(isVisibleByRole || isVisibleByWiderContextEdge);
+              const strokeDasharray = isInvisibleEdge ? "4 3" : undefined;
+
+              if (isSelfLoop) {
+                const startX = fromNode.x + fromNode.r * 0.45;
+                const startY = fromNode.y - fromNode.r * 0.9;
+                const endX = fromNode.x - fromNode.r * 0.45;
+                const endY = fromNode.y - fromNode.r * 0.9;
+                const loopRadius = (fromNode.r + 18) * 0.5;
+                // Keep label near the pointed end (arrowhead) of the loop.
+                const labelX = endX - 7;
+                const labelY = endY - 9;
+
+                return (
+                  <React.Fragment key={i}>
+                    <path
+                      d={`M ${startX} ${startY} A ${loopRadius} ${loopRadius} 0 1 0 ${endX} ${endY}`}
+                      fill="none"
+                      stroke="var(--bs-secondary-color, #6c757d)"
+                      strokeWidth={1.5}
+                      strokeOpacity={0.5}
+                      strokeDasharray={strokeDasharray}
+                      markerEnd="url(#arrowhead)"
+                    />
+                    <text
+                      x={labelX}
+                      y={labelY}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize={8}
+                      fill="var(--bs-secondary-color, #6c757d)"
+                      stroke="var(--bs-body-bg, #fff)"
+                      strokeWidth={3}
+                      paintOrder="stroke"
+                      style={{ pointerEvents: "none", userSelect: "none" }}
+                    >
+                      {edge.roleLabel}
+                    </text>
+                  </React.Fragment>
+                );
+              }
+
               const midX = (fromNode.x + toNode.x) / 2;
               const midY = (fromNode.y + toNode.y) / 2 - 8;
               return (
@@ -431,6 +506,7 @@ export function NavigationGraphView({
                     stroke="var(--bs-secondary-color, #6c757d)"
                     strokeWidth={1.5}
                     strokeOpacity={0.5}
+                    strokeDasharray={strokeDasharray}
                     markerEnd="url(#arrowhead)"
                   />
                   <text
