@@ -18,6 +18,7 @@ interface WhereProps {
   systemIdentifier: ContextInstanceT;
   openContext: RoleInstanceT | undefined;
   currentContextType?: ContextType;
+  currentContextTitle?: string;
 }
 
 interface WhereState {
@@ -178,6 +179,7 @@ export class Where extends PerspectivesComponent<WhereProps, WhereState> {
               <NavigationGraphView
                 modelGraph={modelGraph}
                 currentContextType={this.props.currentContextType}
+                currentContextTitle={this.props.currentContextTitle}
                 contextRoles={this.props.screenelements.contextRoles}
                 widerContexts={widerContexts}
                 hostRef={this.ref}

@@ -1204,6 +1204,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                       systemIdentifier={component.state.systemIdentifier}
                       openContext={component.state.openContext}
                       currentContextType={this.state.openContextType}
+                      currentContextTitle={this.state.screen?.title}
                     />
                     : 
                     <div>Ga ergens heen.</div>

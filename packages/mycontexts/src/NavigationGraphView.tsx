@@ -79,6 +79,7 @@ function truncate(s: string, maxLen: number): string {
 function computeLayout(
   graph: ModelContextGraph,
   currentType: ContextType,
+  currentNodeTitle: string | undefined,
   downstreamInstances: Map<string, InstanceInfo[]>,
   upstreamInstances: Map<string, InstanceInfo[]>
 ): PositionedNode[] {
@@ -107,6 +108,7 @@ function computeLayout(
   if (curNode) {
     positioned.push({
       ...curNode,
+      label: currentNodeTitle?.trim() ? currentNodeTitle : curNode.label,
       x: 0,
       y: 0,
       r: R_CURRENT,
@@ -238,6 +240,8 @@ export interface NavigationGraphViewProps {
   modelGraph: ModelContextGraph | undefined;
   /** The context type of the currently open context (highlighted node). */
   currentContextType: ContextType;
+  /** Optional screen title to display as the current node label. */
+  currentContextTitle?: string;
   /** Context role instances from screenelements.contextRoles (downstream population). */
   contextRoles: TableFormDef[];
   /** Wider contexts (upstream) with resolved context types. */
@@ -249,6 +253,7 @@ export interface NavigationGraphViewProps {
 export function NavigationGraphView({
   modelGraph,
   currentContextType,
+  currentContextTitle,
   contextRoles,
   widerContexts,
   hostRef,
@@ -329,6 +334,7 @@ export function NavigationGraphView({
   const allPositioned = computeLayout(
     modelGraph,
     currentContextType,
+    currentContextTitle,
     downstreamMap,
     upstreamMap
   );
@@ -350,7 +356,17 @@ export function NavigationGraphView({
   const vbH = maxY - minY;
 
   return (
-    <div className="navigation-graph-container mt-2" style={{ width: "100%" }}>
+    <div
+      className="navigation-graph-container mt-2"
+      style={{
+        width: "100%",
+        display: "flex",
+        flexDirection: "column",
+        height:
+          "calc(100dvh - var(--bottom-navbar-height) - var(--top-navbar-height) - var(--who-header-height))",
+        overflowY: "auto",
+      }}
+    >
       {hasOthers && (
         <div className="d-flex justify-content-end px-2 mb-1">
           <button
@@ -370,7 +386,14 @@ export function NavigationGraphView({
 
       <svg
         viewBox={`${minX} ${minY} ${vbW} ${vbH}`}
-        style={{ width: "100%", height: "420px", cursor: "grab", display: "block" }}
+        style={{
+          width: "100%",
+          height: "100%",
+          minHeight: "630px",
+          flex: "1 1 auto",
+          cursor: "grab",
+          display: "block",
+        }}
         onWheel={onWheel}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
