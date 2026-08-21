@@ -14,7 +14,8 @@
  * the edge data supplied by graphNormalization.
  */
 
-import dagre from "@dagrejs/dagre";
+// @dagrejs/dagre uses `export =` — use namespace import for TS compatibility.
+import * as dagre from "@dagrejs/dagre";
 import type { LayoutAdapter, LayoutMap } from "./index";
 import type { NormalizedNode, NormalizedEdge } from "../graphNormalization";
 import type { NodeRole } from "../graphNormalization";
