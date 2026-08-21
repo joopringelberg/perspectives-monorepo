@@ -55,6 +55,7 @@ interface InstanceInfo {
 
 interface PositionedNode {
   id: ContextType;
+  typeLabel: string;
   label: string;
   x: number;
   y: number;
@@ -108,6 +109,7 @@ function computeLayout(
   if (curNode) {
     positioned.push({
       ...curNode,
+      typeLabel: curNode.label,
       label: currentNodeTitle?.trim() ? currentNodeTitle : curNode.label,
       x: 0,
       y: 0,
@@ -128,6 +130,7 @@ function computeLayout(
         : Math.round((i - (upArr.length - 1) / 2) * COL_SPACING);
     positioned.push({
       ...n,
+      typeLabel: n.label,
       x,
       y: -ROW_SPACING,
       r: R_NEIGHBOR,
@@ -147,6 +150,7 @@ function computeLayout(
         : Math.round((i - (downArr.length - 1) / 2) * COL_SPACING);
     positioned.push({
       ...n,
+      typeLabel: n.label,
       x,
       y: ROW_SPACING,
       r: R_NEIGHBOR,
@@ -166,6 +170,7 @@ function computeLayout(
         : Math.round((i - (oCount - 1) / 2) * COL_SPACING);
     positioned.push({
       ...n,
+      typeLabel: n.label,
       x,
       y: ROW_SPACING * 2,
       r: R_OTHER,
@@ -487,7 +492,7 @@ export function NavigationGraphView({
                 role={hasInstances ? "button" : undefined}
                 aria-label={node.label}
               >
-                <title>{node.label}</title>
+                <title>{node.typeLabel}</title>
                 {/* Multi-instance indicator: two stacked disks with a slight southeast offset. */}
                 {isMulti && (
                   <circle
@@ -532,7 +537,30 @@ export function NavigationGraphView({
             key={popoverNode}
             show
             target={target}
-            placement="bottom"
+            placement="auto"
+            popperConfig={{
+              strategy: "fixed",
+              modifiers: [
+                {
+                  name: "offset",
+                  options: { offset: [0, 8] },
+                },
+                {
+                  name: "flip",
+                  options: {
+                    fallbackPlacements: ["top", "right", "left", "bottom"],
+                    padding: 8,
+                  },
+                },
+                {
+                  name: "preventOverflow",
+                  options: {
+                    boundary: "viewport",
+                    padding: 8,
+                  },
+                },
+              ],
+            }}
             rootClose
             onHide={() => setPopoverNode(null)}
           >
