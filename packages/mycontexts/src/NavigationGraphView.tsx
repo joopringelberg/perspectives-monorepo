@@ -419,18 +419,35 @@ export function NavigationGraphView({
               const fromNode = visibleNodes.find((n) => n.id === edge.from);
               const toNode = visibleNodes.find((n) => n.id === edge.to);
               if (!fromNode || !toNode) return null;
+              const midX = (fromNode.x + toNode.x) / 2;
+              const midY = (fromNode.y + toNode.y) / 2 - 8;
               return (
-                <line
-                  key={i}
-                  x1={fromNode.x}
-                  y1={fromNode.y}
-                  x2={toNode.x}
-                  y2={toNode.y}
-                  stroke="var(--bs-secondary-color, #6c757d)"
-                  strokeWidth={1.5}
-                  strokeOpacity={0.5}
-                  markerEnd="url(#arrowhead)"
-                />
+                <React.Fragment key={i}>
+                  <line
+                    x1={fromNode.x}
+                    y1={fromNode.y}
+                    x2={toNode.x}
+                    y2={toNode.y}
+                    stroke="var(--bs-secondary-color, #6c757d)"
+                    strokeWidth={1.5}
+                    strokeOpacity={0.5}
+                    markerEnd="url(#arrowhead)"
+                  />
+                  <text
+                    x={midX}
+                    y={midY}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={8}
+                    fill="var(--bs-secondary-color, #6c757d)"
+                    stroke="var(--bs-body-bg, #fff)"
+                    strokeWidth={3}
+                    paintOrder="stroke"
+                    style={{ pointerEvents: "none", userSelect: "none" }}
+                  >
+                    {edge.roleLabel}
+                  </text>
+                </React.Fragment>
               );
             })}
 
