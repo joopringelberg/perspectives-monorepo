@@ -7,6 +7,7 @@
     "manifest": "node ./src/generateManifest.js",
     "sharedworker": "pnpm --filter perspectives-sharedworker run build && node ./src/syncPublicAssets.js",
     "dev": "BUILD_LABEL=dev pnpm run manifest && pnpm run sharedworker && node ../../node_modules/.pnpm/vite@6.3.5*/node_modules/vite/bin/vite.js --host",
+    "dev:noaxe": "BUILD_LABEL=dev pnpm run manifest && pnpm run sharedworker && VITE_DISABLE_AXE=true node ../../node_modules/.pnpm/vite@6.3.5*/node_modules/vite/bin/vite.js --host",
     "build": "BUILD_LABEL=build pnpm run manifest && pnpm run sharedworker && pnpm exec tsc -b && node ../../node_modules/.pnpm/vite@6.3.5*/node_modules/vite/bin/vite.js build",
     "build:root": "BUILD_LABEL=root pnpm run manifest && pnpm run sharedworker && pnpm exec tsc -b && BUILD_PATH=/ node ../../node_modules/.pnpm/vite@6.3.5*/node_modules/vite/bin/vite.js build",
     "build:www": "BUILD_LABEL=www pnpm run manifest && pnpm run sharedworker && pnpm exec tsc -b && BUILD_PATH=/www/ node ../../node_modules/.pnpm/vite@6.3.5*/node_modules/vite/bin/vite.js build",

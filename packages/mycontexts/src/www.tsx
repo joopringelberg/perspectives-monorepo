@@ -1237,7 +1237,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
   runAccessibilityScan(elementId: string = 'main-content') {
     // Only run in development
-    if (import.meta.env.DEV) {
+    if (import.meta.env.DEV && import.meta.env.VITE_DISABLE_AXE !== 'true') {
       // Wait for content to fully render
       setTimeout(() => {
         // Check if axe is available

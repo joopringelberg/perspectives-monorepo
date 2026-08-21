@@ -5,7 +5,7 @@ import * as ReactDOMClient from 'react-dom/client';
 import App from './App.tsx';
 
 // Add the axe-core integration in development mode only
-if (import.meta.env.DEV) {
+if (import.meta.env.DEV && import.meta.env.VITE_DISABLE_AXE !== 'true') {
   import('@axe-core/react').then(axeModule => {
     const { default: axe } = axeModule;
     axe(React, ReactDOM, 1000, {
