@@ -42,7 +42,6 @@ import Perspectives.Representation.ADT (allLeavesInADT)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType, RoleKind(..)) as TI
-import Perspectives.Representation.TypeIdentifiers (ContextType(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Types.ObjectGetters (indexedContextName)
 import Simple.JSON (writeJSON)
@@ -85,9 +84,9 @@ constructModelGraph contextTypeStr = do
         Left _ -> pure $ writeJSON emptyGraph
         Right (DomeinFile df) -> do
           -- Build nodes from all context types in the DomeinFile, with translated labels.
-          nodes <- for (Object.keys df.contexts) \ctKey -> do
+          nodes <- for (filter (\k -> not (k == modelUriStr)) (Object.keys df.contexts)) \ctKey -> do
             label <- translateType (TI.ContextType ctKey)
-            indexedName <- indexedContextName (ContextType ctKey)
+            indexedName <- indexedContextName (TI.ContextType ctKey)
             case indexedName of
               Nothing -> pure { id: TI.ContextType ctKey, label, indexedName: Nothing }
               Just (ContextInstance c) -> do
