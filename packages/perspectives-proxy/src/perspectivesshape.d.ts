@@ -10,6 +10,7 @@ export type ContextInstanceT = string & { readonly brand: unique symbol };
 export type ValueT = string & { readonly brand: unique symbol };
 export type PropertyValueReceiver = (value: ValueT[]) => void;
 export type RoleType = string & { readonly brand: unique symbol };
+export type EnumeratedRoleType = string & { readonly brand: unique symbol };
 export type UserRoleType = RoleType
 export type RoleTypeReceiver = (roleType: RoleType[]) => void;
 export type PerspectivesReceiver = (perspectives: Perspective[]) => void;
@@ -354,6 +355,19 @@ export type RoleOnClipboard =
 export type ContextAndName =
 	{ externalRole : RoleInstanceT
 	  readableName : string }
+
+////////////////////////////////////////////
+//// MODEL CONTEXT GRAPH
+////////////////////////////////////////////
+export type ModelGraphNode = { id: ContextType; label: string, indexedName?: ContextInstance };
+export type ModelGraphEdge = {
+  from: ContextType;
+  to: ContextType;
+  roleId: EnumeratedRoleType;
+  roleLabel: string;
+};
+export type ModelContextGraph = { nodes: ModelGraphNode[]; edges: ModelGraphEdge[] };
+export type ModelContextGraphReceiver = (graph: ModelContextGraph) => void;
 
 ////////////////////////////////////////////
 //// FILLER TYPES

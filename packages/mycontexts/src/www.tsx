@@ -714,6 +714,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   systemUser={component.state.systemUser}
                   systemIdentifier={component.state.systemIdentifier}
                   openContext={component.state.openContext}
+                  currentContextType={this.state.openContextType}
                   />
                 : 
                   <div>Ga ergens heen.</div>
@@ -1202,6 +1203,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                       systemUser={component.state.systemUser}
                       systemIdentifier={component.state.systemIdentifier}
                       openContext={component.state.openContext}
+                      currentContextType={this.state.openContextType}
+                      currentContextTitle={this.state.screen?.title}
                     />
                     : 
                     <div>Ga ergens heen.</div>
@@ -1234,7 +1237,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
   runAccessibilityScan(elementId: string = 'main-content') {
     // Only run in development
-    if (import.meta.env.DEV) {
+    if (import.meta.env.DEV && import.meta.env.VITE_DISABLE_AXE !== 'true') {
       // Wait for content to fully render
       setTimeout(() => {
         // Check if axe is available

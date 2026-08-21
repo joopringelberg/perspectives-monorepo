@@ -50,7 +50,8 @@ import type {
   InspectableContext,
   InspectableRole,
   FillerType,
-  FillMode
+  FillMode,
+  ModelContextGraphReceiver
 } from "./perspectivesshape.d.ts";
 
 export type * from "./perspectivesshape.d.ts";
@@ -1018,6 +1019,24 @@ export class PerspectivesProxy
       function (contextAndNameStrings)
       {
         return receiveValues(contextAndNameStrings.map( JSON.parse ));
+      },
+      errorHandler
+    );
+  }
+
+  // { request: "GetModelContextGraph", subject: ContextType }
+  // Returns the static type-level context navigation DAG for the model that defines
+  // the given context type. The result is a one-shot response.
+  getModelContextGraph( contextType : ContextType, receiveGraph : ModelContextGraphReceiver, errorHandler? : errorHandler)
+  {
+    return this.send(
+      {request: "GetModelContextGraph", subject: contextType, onlyOnce: true},
+      function (graphStrings)
+      {
+        if (graphStrings.length > 0)
+        {
+          receiveGraph(JSON.parse(graphStrings[0]));
+        }
       },
       errorHandler
     );
