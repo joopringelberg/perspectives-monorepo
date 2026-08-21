@@ -34,7 +34,9 @@
     "pouchdb-browser": "^9.0.0",
     "react": "^19.1.0",
     "react-bootstrap": "^2.10.10",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "@xyflow/react": "12.11.3",
+    "@dagrejs/dagre": "3.1.1"
   },
   "devDependencies": {
     "@4c/tsconfig": "^0.4.1",
