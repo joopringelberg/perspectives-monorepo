@@ -54,6 +54,7 @@ interface InstanceInfo {
 }
 
 interface PositionedNode {
+  nodeKey: string;
   id: ContextType;
   typeLabel: string;
   label: string;
@@ -104,10 +105,14 @@ function computeLayout(
 
   const positioned: PositionedNode[] = [];
 
+  const makeNodeKey = (role: PositionedNode["role"], id: ContextType, index: number) =>
+    `${role}:${String(id)}:${index}`;
+
   // Row 0 – current node.
   const curNode = nodeMap.get(currentType);
   if (curNode) {
     positioned.push({
+      nodeKey: makeNodeKey("current", curNode.id, 0),
       ...curNode,
       typeLabel: curNode.label,
       label: currentNodeTitle?.trim() ? currentNodeTitle : curNode.label,
@@ -121,6 +126,7 @@ function computeLayout(
 
   // Row –1 – upstream nodes (above current).
   const upArr = Array.from(upstreamIds)
+    .filter((id) => id !== currentType)
     .map((id) => nodeMap.get(id))
     .filter((n): n is (typeof n & NonNullable<typeof n>) => n !== undefined);
   upArr.forEach((n, i) => {
@@ -129,6 +135,7 @@ function computeLayout(
         ? 0
         : Math.round((i - (upArr.length - 1) / 2) * COL_SPACING);
     positioned.push({
+      nodeKey: makeNodeKey("upstream", n.id, i),
       ...n,
       typeLabel: n.label,
       x,
@@ -149,6 +156,7 @@ function computeLayout(
         ? 0
         : Math.round((i - (downArr.length - 1) / 2) * COL_SPACING);
     positioned.push({
+      nodeKey: makeNodeKey("downstream", n.id, i),
       ...n,
       typeLabel: n.label,
       x,
@@ -169,6 +177,7 @@ function computeLayout(
         ? 0
         : Math.round((i - (oCount - 1) / 2) * COL_SPACING);
     positioned.push({
+      nodeKey: makeNodeKey("other", n.id, i),
       ...n,
       typeLabel: n.label,
       x,
@@ -290,7 +299,7 @@ export function NavigationGraphView({
 
   // Popover state: which node is showing a multi-instance list.
   const [popoverNode, setPopoverNode] = useState<ContextType | null>(null);
-  const nodeRefs = useRef<Map<ContextType, SVGGElement>>(new Map());
+  const nodeRefs = useRef<Map<string, SVGGElement>>(new Map());
 
   // Re-center when graph changes.
   useEffect(() => {
@@ -442,8 +451,16 @@ export function NavigationGraphView({
               return fromV && toV;
             })
             .map((edge, i) => {
-              const fromNode = visibleNodes.find((n) => n.id === edge.from);
-              const toNode = visibleNodes.find((n) => n.id === edge.to);
+              const fromNode =
+                edge.from === currentContextType
+                  ? visibleNodes.find((n) => n.id === edge.from && n.role === "current") ??
+                    visibleNodes.find((n) => n.id === edge.from)
+                  : visibleNodes.find((n) => n.id === edge.from);
+              const toNode =
+                edge.from === currentContextType && edge.to === currentContextType
+                  ? visibleNodes.find((n) => n.id === edge.to && n.role === "downstream") ??
+                    visibleNodes.find((n) => n.id === edge.to)
+                  : visibleNodes.find((n) => n.id === edge.to);
               if (!fromNode || !toNode) return null;
               const isSelfLoop = edge.from === edge.to;
               const isVisibleByRole = visibleEdgeRoleTypes.has(String(edge.roleId));
@@ -456,20 +473,16 @@ export function NavigationGraphView({
               const strokeDasharray = isInvisibleEdge ? "4 3" : undefined;
 
               if (isSelfLoop) {
-                const startX = fromNode.x + fromNode.r * 0.45;
-                const startY = fromNode.y - fromNode.r * 0.9;
-                const endX = fromNode.x - fromNode.r * 0.45;
-                const endY = fromNode.y - fromNode.r * 0.9;
-                const loopRadius = (fromNode.r + 18) * 0.5;
-                // Keep label near the pointed end (arrowhead) of the loop.
-                const labelX = endX - 7;
-                const labelY = endY - 9;
+                const midX = (fromNode.x + toNode.x) / 2;
+                const midY = (fromNode.y + toNode.y) / 2 - 8;
 
                 return (
                   <React.Fragment key={i}>
-                    <path
-                      d={`M ${startX} ${startY} A ${loopRadius} ${loopRadius} 0 1 0 ${endX} ${endY}`}
-                      fill="none"
+                    <line
+                      x1={fromNode.x}
+                      y1={fromNode.y}
+                      x2={toNode.x}
+                      y2={toNode.y}
                       stroke="var(--bs-secondary-color, #6c757d)"
                       strokeWidth={1.5}
                       strokeOpacity={0.5}
@@ -477,8 +490,8 @@ export function NavigationGraphView({
                       markerEnd="url(#arrowhead)"
                     />
                     <text
-                      x={labelX}
-                      y={labelY}
+                      x={midX}
+                      y={midY}
                       textAnchor="middle"
                       dominantBaseline="middle"
                       fontSize={8}
@@ -574,10 +587,10 @@ export function NavigationGraphView({
 
             return (
               <g
-                key={node.id}
+                key={node.nodeKey}
                 ref={(el) => {
-                  if (el) nodeRefs.current.set(node.id, el);
-                  else nodeRefs.current.delete(node.id);
+                  if (el) nodeRefs.current.set(node.nodeKey, el);
+                  else nodeRefs.current.delete(node.nodeKey);
                 }}
                 transform={`translate(${node.x},${node.y})`}
                 style={{ opacity, cursor }}
@@ -623,7 +636,10 @@ export function NavigationGraphView({
       {/* Multi-instance popover anchored to the clicked node. */}
       {popoverNode && (() => {
         const node = allPositioned.find((n) => n.id === popoverNode);
-        const target = nodeRefs.current.get(popoverNode) ?? null;
+        const targetNode =
+          allPositioned.find((n) => n.id === popoverNode && n.role !== "current") ??
+          allPositioned.find((n) => n.id === popoverNode);
+        const target = targetNode ? nodeRefs.current.get(targetNode.nodeKey) ?? null : null;
         if (!node || node.instances.length < 2 || !target) return null;
         return (
           <Overlay
