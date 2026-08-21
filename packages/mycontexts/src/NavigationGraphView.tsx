@@ -29,8 +29,10 @@
 
 import * as React from "react";
 import { useEffect, useState, useRef, useCallback } from "react";
+import { externalRole } from "perspectives-react";
 import {
   ContextType,
+  ContextInstanceT,
   RoleInstanceT,
   TableFormDef,
 } from "perspectives-proxy";
@@ -54,6 +56,8 @@ interface InstanceInfo {
 }
 
 interface PositionedNode {
+  // Distinguishes multiple rendered nodes for the same context type id
+  // (notably self-referring types that can appear as current + downstream).
   nodeKey: string;
   id: ContextType;
   typeLabel: string;
@@ -63,6 +67,9 @@ interface PositionedNode {
   r: number;
   role: "current" | "downstream" | "upstream" | "other";
   instances: InstanceInfo[];
+  // Optional singleton context instance id supplied by ModelGraphNode.
+  // When present, this node is always navigable (even without role instances).
+  indexedName?: ContextInstanceT;
 }
 
 interface Transform {
@@ -75,6 +82,16 @@ interface Transform {
 
 function truncate(s: string, maxLen: number): string {
   return s.length > maxLen ? s.slice(0, maxLen - 1) + "…" : s;
+}
+
+/**
+ * Resolve the navigation identifier for indexed singleton nodes.
+ * indexedName is a context instance id; navigation requires its external role.
+ */
+function indexedRoleId(node: PositionedNode): RoleInstanceT | undefined {
+  if (!node.indexedName) return undefined;
+  // OpenContext expects the external role id of a context instance.
+  return externalRole(String(node.indexedName));
 }
 
 /** Compute a vertical radial layout. Returns positioned nodes. */
@@ -114,6 +131,7 @@ function computeLayout(
     positioned.push({
       nodeKey: makeNodeKey("current", curNode.id, 0),
       ...curNode,
+      indexedName: (curNode as { indexedName?: ContextInstanceT }).indexedName,
       typeLabel: curNode.label,
       label: currentNodeTitle?.trim() ? currentNodeTitle : curNode.label,
       x: 0,
@@ -126,6 +144,8 @@ function computeLayout(
 
   // Row –1 – upstream nodes (above current).
   const upArr = Array.from(upstreamIds)
+    // For self-referring context types, suppress the duplicate upstream clone.
+    // We keep the downstream clone as the visual target of the self-edge.
     .filter((id) => id !== currentType)
     .map((id) => nodeMap.get(id))
     .filter((n): n is (typeof n & NonNullable<typeof n>) => n !== undefined);
@@ -137,6 +157,7 @@ function computeLayout(
     positioned.push({
       nodeKey: makeNodeKey("upstream", n.id, i),
       ...n,
+      indexedName: (n as { indexedName?: ContextInstanceT }).indexedName,
       typeLabel: n.label,
       x,
       y: -ROW_SPACING,
@@ -158,6 +179,7 @@ function computeLayout(
     positioned.push({
       nodeKey: makeNodeKey("downstream", n.id, i),
       ...n,
+      indexedName: (n as { indexedName?: ContextInstanceT }).indexedName,
       typeLabel: n.label,
       x,
       y: ROW_SPACING,
@@ -179,6 +201,7 @@ function computeLayout(
     positioned.push({
       nodeKey: makeNodeKey("other", n.id, i),
       ...n,
+      indexedName: (n as { indexedName?: ContextInstanceT }).indexedName,
       typeLabel: n.label,
       x,
       y: ROW_SPACING * 2,
@@ -249,7 +272,10 @@ function buildUpstreamInstances(
 
 /**
  * Collect role type ids represented in where.contextRoles perspectives.
- * Edges whose roleId is not present here are considered invisible for the current user.
+ * Primary visibility rule for edges:
+ * if an edge.roleId is present here, we render that edge as visible (solid).
+ * Otherwise it may still be visible through the WiderContext fallback rule
+ * applied in the edge-rendering block below.
  */
 function buildVisibleEdgeRoleTypes(contextRoles: TableFormDef[]): Set<string> {
   const result = new Set<string>();
@@ -335,6 +361,16 @@ export function NavigationGraphView({
   const handleNodeClick = useCallback(
     (node: PositionedNode) => {
       if (node.role === "current") return;
+      const indexedId = indexedRoleId(node);
+      if (indexedId) {
+        // Indexed nodes are singleton by design and always navigable.
+        // They bypass instance/popover logic and navigate immediately.
+        setPopoverNode(null);
+        hostRef.current?.dispatchEvent(
+          new CustomEvent("OpenContext", { detail: indexedId, bubbles: true })
+        );
+        return;
+      }
       if (node.instances.length === 0) return;
       if (node.instances.length === 1) {
         // Navigate directly.
@@ -463,12 +499,18 @@ export function NavigationGraphView({
                   : visibleNodes.find((n) => n.id === edge.to);
               if (!fromNode || !toNode) return null;
               const isSelfLoop = edge.from === edge.to;
+              // Rule A (role-based): edge is visible when its role type appears in
+              // contextRoles perspectives for the current user.
               const isVisibleByRole = visibleEdgeRoleTypes.has(String(edge.roleId));
+              // Rule B (wider-context fallback): treat links between the current
+              // context type and a known WiderContext type as visible in either
+              // direction, even when role-based visibility is absent.
               const isVisibleByWiderContextEdge =
                 (edge.from === currentContextType &&
                   widerContextTypes.has(String(edge.to))) ||
                 (edge.to === currentContextType &&
                   widerContextTypes.has(String(edge.from)));
+              // Dotted rendering is the inverse of visibility.
               const isInvisibleEdge = !(isVisibleByRole || isVisibleByWiderContextEdge);
               const strokeDasharray = isInvisibleEdge ? "4 3" : undefined;
 
@@ -564,8 +606,12 @@ export function NavigationGraphView({
             const isDown = node.role === "downstream";
             const isUp = node.role === "upstream";
             const isOther = node.role === "other";
+            const indexedId = indexedRoleId(node);
+            const isIndexed = Boolean(indexedId);
             const hasInstances = node.instances.length > 0;
             const isMulti = node.instances.length > 1;
+            // Indexed nodes remain clickable even when no instance list is available.
+            const isNavigable = !isCurrent && (hasInstances || isIndexed);
 
             const fill = isCurrent
               ? "var(--bs-primary, #0d6efd)"
@@ -576,8 +622,11 @@ export function NavigationGraphView({
               : "var(--bs-secondary, #6c757d)";
             const opacity = isOther ? 0.35 : 1;
             const textFill = isCurrent || isUp ? "#fff" : isDown ? "var(--bs-dark, #212529)" : "#fff";
-            const cursor = isCurrent || (!hasInstances && !isMulti) ? "default" : "pointer";
+            const cursor = isNavigable ? "pointer" : "default";
             const multiStroke = "var(--bs-light, #f8f9fa)";
+            // Give indexed singleton nodes a dedicated ring to differentiate them from
+            // ordinary navigable nodes and multi-instance markers.
+            const indexedStroke = "var(--bs-warning, #ffc107)";
 
             // Display: instance name if single, type label otherwise.
             const displayLabel =
@@ -595,7 +644,7 @@ export function NavigationGraphView({
                 transform={`translate(${node.x},${node.y})`}
                 style={{ opacity, cursor }}
                 onClick={() => handleNodeClick(node)}
-                role={hasInstances ? "button" : undefined}
+                role={isNavigable ? "button" : undefined}
                 aria-label={node.label}
               >
                 <title>{node.typeLabel}</title>
@@ -614,8 +663,16 @@ export function NavigationGraphView({
                 <circle
                   r={node.r}
                   fill={fill}
-                  stroke={isMulti ? multiStroke : isCurrent ? "var(--bs-primary-border-subtle, #9ec5fe)" : "none"}
-                  strokeWidth={isMulti ? 1.5 : isCurrent ? 3 : 0}
+                  stroke={
+                    isIndexed
+                      ? indexedStroke
+                      : isMulti
+                      ? multiStroke
+                      : isCurrent
+                      ? "var(--bs-primary-border-subtle, #9ec5fe)"
+                      : "none"
+                  }
+                  strokeWidth={isIndexed ? 2.5 : isMulti ? 1.5 : isCurrent ? 3 : 0}
                 />
                 <text
                   textAnchor="middle"
@@ -636,6 +693,8 @@ export function NavigationGraphView({
       {/* Multi-instance popover anchored to the clicked node. */}
       {popoverNode && (() => {
         const node = allPositioned.find((n) => n.id === popoverNode);
+        // For self-referring context types, prefer a non-current clone as anchor
+        // so overlays are attached to the clicked neighbour representation.
         const targetNode =
           allPositioned.find((n) => n.id === popoverNode && n.role !== "current") ??
           allPositioned.find((n) => n.id === popoverNode);

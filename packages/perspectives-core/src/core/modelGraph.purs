@@ -35,19 +35,23 @@ import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isExternalRole, typeUri2ModelUri)
+import Perspectives.Names (lookupIndexedContext)
 import Perspectives.Persistent (getDomeinFile)
 import Perspectives.Query.QueryTypes (RoleInContext(..))
 import Perspectives.Representation.ADT (allLeavesInADT)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType, RoleKind(..)) as TI
+import Perspectives.Representation.TypeIdentifiers (ContextType(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
+import Perspectives.Types.ObjectGetters (indexedContextName)
 import Simple.JSON (writeJSON)
 
 -----------------------------------------------------------
 -- MODEL CONTEXT GRAPH
 -----------------------------------------------------------
 
-type GraphNode = { id :: TI.ContextType, label :: String }
+type GraphNode = { id :: TI.ContextType, label :: String, indexedName :: Maybe ContextInstance }
 
 type GraphEdge =
   { from :: TI.ContextType
@@ -83,7 +87,12 @@ constructModelGraph contextTypeStr = do
           -- Build nodes from all context types in the DomeinFile, with translated labels.
           nodes <- for (Object.keys df.contexts) \ctKey -> do
             label <- translateType (TI.ContextType ctKey)
-            pure { id: TI.ContextType ctKey, label }
+            indexedName <- indexedContextName (ContextType ctKey)
+            case indexedName of
+              Nothing -> pure { id: TI.ContextType ctKey, label, indexedName: Nothing }
+              Just (ContextInstance c) -> do
+                indexedIndividual <- lookupIndexedContext c
+                pure { id: TI.ContextType ctKey, label, indexedName: indexedIndividual }
           -- Build edges from ContextRole-kinded enumerated roles.
           edgeGroups <- for (Object.values df.enumeratedRoles) \(EnumeratedRole er) ->
             if er.kindOfRole == TI.ContextRole then case er.binding of

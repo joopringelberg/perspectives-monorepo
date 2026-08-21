@@ -359,7 +359,7 @@ export type ContextAndName =
 ////////////////////////////////////////////
 //// MODEL CONTEXT GRAPH
 ////////////////////////////////////////////
-export type ModelGraphNode = { id: ContextType; label: string };
+export type ModelGraphNode = { id: ContextType; label: string, indexedName?: ContextInstance };
 export type ModelGraphEdge = {
   from: ContextType;
   to: ContextType;
