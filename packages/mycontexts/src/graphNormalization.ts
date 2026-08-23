@@ -99,7 +99,7 @@ function buildDownstreamInstances(
       def.form?.widgetCommonFields?.perspective;
     if (!perspective || perspective.roleKind !== "ContextRole") continue;
     const typesToCreate = perspective.contextTypesToCreate ?? {};
-    const targetTypes = Object.values(typesToCreate).filter(
+    const targetTypes = Object.keys(typesToCreate).filter(
       (v): v is ContextType => Boolean(v)
     );
     const roleInstances = perspective.roleInstances ?? {};

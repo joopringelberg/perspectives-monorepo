@@ -33,7 +33,13 @@
  */
 
 import * as React from "react";
-import { useEffect, useState, useCallback } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useCallback,
+  useRef,
+} from "react";
 import {
   ReactFlow,
   Background,
@@ -85,13 +91,23 @@ const NODE_TEXT_COLOR: Record<NodeRole, string> = {
 
 interface ContextNodeData extends Record<string, unknown> {
   node: NormalizedNode;
-  onNodeClick: (n: NormalizedNode) => void;
+}
+
+interface PopoverAnchor {
+  centerX: number;
+  top: number;
+  bottom: number;
+}
+
+interface PopoverPosition {
+  left: number;
+  top: number;
 }
 
 // ─── Custom circular node component ──────────────────────────────────────────
 
 function ContextNode({ data }: NodeProps) {
-  const { node, onNodeClick } = data as ContextNodeData;
+  const { node } = data as ContextNodeData;
   const size = NODE_SIZE[node.role];
   const fill = NODE_FILL[node.role];
   const textColor = NODE_TEXT_COLOR[node.role];
@@ -127,6 +143,7 @@ function ContextNode({ data }: NodeProps) {
   return (
     <div
       title={node.typeLabel}
+      className="nopan"
       style={{
         width: size,
         height: size,
@@ -141,7 +158,6 @@ function ContextNode({ data }: NodeProps) {
         border,
         boxSizing: "border-box",
       }}
-      onClick={() => onNodeClick(node)}
     >
       {/* Multi-instance indicator: offset shadow disk */}
       {node.isMulti && (
@@ -239,56 +255,144 @@ export function NavigationGraphView({
 }: NavigationGraphViewProps) {
   const [showFullGraph, setShowFullGraph] = useState(false);
   const [popoverNode, setPopoverNode] = useState<NormalizedNode | null>(null);
+  const [popoverAnchor, setPopoverAnchor] = useState<PopoverAnchor | null>(null);
+  const [popoverPosition, setPopoverPosition] =
+    useState<PopoverPosition | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  const closePopover = useCallback(() => {
+    setPopoverNode(null);
+    setPopoverAnchor(null);
+  }, []);
+
+  const dispatchOpenContext = useCallback(
+    (roleId: RoleInstanceT) => {
+      const target: EventTarget | null = hostRef.current ?? document.body;
+      target?.dispatchEvent(
+        new CustomEvent("OpenContext", { detail: roleId, bubbles: true })
+      );
+    },
+    [hostRef]
+  );
 
   // Reset local UI state when navigating to a different context.
   useEffect(() => {
     setShowFullGraph(false);
     setPopoverNode(null);
+    setPopoverAnchor(null);
   }, [currentContextType, modelGraph]);
+
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    const popover = popoverRef.current;
+    if (!canvas || !popover || !popoverAnchor) {
+      setPopoverPosition(null);
+      return;
+    }
+
+    const canvasRect = canvas.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    const margin = 12;
+    const gap = 8;
+    const visibleTop = Math.max(margin, -canvasRect.top + margin);
+    const visibleBottom = Math.min(
+      canvasRect.height - margin,
+      window.innerHeight - canvasRect.top - margin
+    );
+    const below = popoverAnchor.bottom + gap;
+    const above = popoverAnchor.top - gap - popoverRect.height;
+    const top =
+      below + popoverRect.height <= visibleBottom
+        ? below
+        : Math.max(visibleTop, above);
+    const left = Math.min(
+      Math.max(margin, popoverAnchor.centerX - popoverRect.width / 2),
+      Math.max(margin, canvasRect.width - popoverRect.width - margin)
+    );
+
+    setPopoverPosition({ left, top });
+  }, [popoverAnchor, popoverNode]);
+
+  useEffect(() => {
+    if (!popoverNode) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (popoverRef.current?.contains(target)) return;
+      if (target.closest(".react-flow__node")) return;
+      closePopover();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closePopover();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closePopover, popoverNode]);
 
   // ─── Navigation callbacks ──────────────────────────────────────────────────
 
   const handleNodeClick = useCallback(
-    (node: NormalizedNode) => {
-      if (node.role === "current") return;
+    (node: NormalizedNode, anchor: PopoverAnchor | null) => {
+      if (node.role === "current" || !node.isNavigable) return;
+
+      if (node.instances.length > 1) {
+        // Multiple instances take precedence over indexed shortcuts.
+        const shouldClose = popoverNode?.nodeKey === node.nodeKey;
+        setPopoverNode(shouldClose ? null : node);
+        setPopoverAnchor(shouldClose ? null : anchor);
+        return;
+      }
+
       setPopoverNode(null);
+      setPopoverAnchor(null);
 
       // Indexed singleton: navigate immediately via the pre-bound context id.
       const rid = indexedRoleId(node);
-      if (rid) {
-        hostRef.current?.dispatchEvent(
-          new CustomEvent("OpenContext", { detail: rid, bubbles: true })
-        );
+      if (rid && node.instances.length === 0) {
+        dispatchOpenContext(rid);
         return;
       }
 
       if (node.instances.length === 0) return;
 
       if (node.instances.length === 1) {
-        hostRef.current?.dispatchEvent(
-          new CustomEvent("OpenContext", {
-            detail: node.instances[0].roleId,
-            bubbles: true,
-          })
-        );
-      } else {
-        // Multiple instances: show selection panel below the graph.
-        setPopoverNode((prev) =>
-          prev?.nodeKey === node.nodeKey ? null : node
-        );
+        dispatchOpenContext(node.instances[0].roleId);
       }
     },
-    [hostRef]
+    [dispatchOpenContext, popoverNode]
   );
 
   const navigateTo = useCallback(
     (roleId: RoleInstanceT) => {
-      setPopoverNode(null);
-      hostRef.current?.dispatchEvent(
-        new CustomEvent("OpenContext", { detail: roleId, bubbles: true })
-      );
+      closePopover();
+      dispatchOpenContext(roleId);
     },
-    [hostRef]
+    [closePopover, dispatchOpenContext]
+  );
+
+  const onFlowNodeClick = useCallback(
+    (event: React.MouseEvent, rfNode: Node<ContextNodeData>) => {
+      const clicked = rfNode.data?.node;
+      if (!clicked) return;
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      const nodeRect = event.currentTarget.getBoundingClientRect();
+      const anchor = canvasRect
+        ? {
+            centerX: nodeRect.left - canvasRect.left + nodeRect.width / 2,
+            top: nodeRect.top - canvasRect.top,
+            bottom: nodeRect.bottom - canvasRect.top,
+          }
+        : null;
+      handleNodeClick(clicked, anchor);
+    },
+    [handleNodeClick]
   );
 
   // ─── Early-exit guard ─────────────────────────────────────────────────────
@@ -325,7 +429,7 @@ export function NavigationGraphView({
     return {
       id: n.nodeKey,
       position: { x: pos.x, y: pos.y },
-      data: { node: n, onNodeClick: handleNodeClick },
+      data: { node: n },
       type: "contextNode",
       style: { width: pos.width, height: pos.height },
       draggable: false,
@@ -406,7 +510,10 @@ export function NavigationGraphView({
       )}
 
       {/* React Flow canvas */}
-      <div style={{ flex: 1, minHeight: 300 }}>
+      <div
+        ref={canvasRef}
+        style={{ flex: 1, minHeight: 300, position: "relative" }}
+      >
         <ReactFlow
           /* Re-mount (and re-run fitView) whenever the current context or
              layout policy changes. */
@@ -414,6 +521,7 @@ export function NavigationGraphView({
           nodes={rfNodes}
           edges={rfEdges}
           nodeTypes={NODE_TYPES}
+          onNodeClick={onFlowNodeClick}
           fitView
           fitViewOptions={{ padding: 0.3 }}
           nodesDraggable={false}
@@ -427,29 +535,43 @@ export function NavigationGraphView({
           <Background />
           <Controls showInteractive={false} />
         </ReactFlow>
-      </div>
 
-      {/* Multi-instance selection panel (rendered below the canvas) */}
-      {popoverNode && (
-        <div
-          className="mt-2 border rounded p-2 bg-body mx-2"
-          style={{ maxHeight: 200, overflowY: "auto" }}
-        >
-          <div className="fw-semibold small mb-1">{popoverNode.typeLabel}</div>
-          <ListGroup variant="flush">
-            {popoverNode.instances.map((inst) => (
-              <ListGroup.Item
-                key={inst.roleId}
-                action
-                className="small py-1 px-2"
-                onClick={() => navigateTo(inst.roleId)}
-              >
-                {inst.readableName}
-              </ListGroup.Item>
-            ))}
-          </ListGroup>
-        </div>
-      )}
+        {/* Multi-instance selection panel overlays the canvas so opening it
+            does not resize and redraw React Flow. */}
+        {popoverNode && (
+          <div
+            ref={popoverRef}
+            className="nowheel nopan border rounded p-2 bg-body shadow-sm"
+            style={{
+              position: "absolute",
+              top: popoverPosition?.top ?? 0,
+              left: popoverPosition?.left ?? 0,
+              zIndex: 10,
+              width: "min(320px, calc(100% - 24px))",
+              maxHeight:
+                "min(200px, calc(100dvh - var(--top-navbar-height) - 48px))",
+              overflowY: "auto",
+              visibility: popoverPosition ? "visible" : "hidden",
+            }}
+          >
+            <div className="fw-semibold small mb-1">
+              {popoverNode.typeLabel}
+            </div>
+            <ListGroup variant="flush">
+              {popoverNode.instances.map((inst) => (
+                <ListGroup.Item
+                  key={inst.roleId}
+                  action
+                  className="small py-1 px-2"
+                  onClick={() => navigateTo(inst.roleId)}
+                >
+                  {inst.readableName}
+                </ListGroup.Item>
+              ))}
+            </ListGroup>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
