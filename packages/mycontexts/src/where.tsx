@@ -29,6 +29,8 @@ interface WhereState {
 
 export class Where extends PerspectivesComponent<WhereProps, WhereState> {
   ref: React.RefObject<HTMLDivElement | null>;
+  private subscriptionGeneration = 0;
+  private subscriptionRestart: Promise<void> = Promise.resolve();
 
   constructor(props: WhereProps) {
     super(props);
@@ -62,7 +64,7 @@ export class Where extends PerspectivesComponent<WhereProps, WhereState> {
         false
       );
     }
-    this.subscribeAll();
+    this.restartSubscriptions();
   }
 
   componentDidUpdate(prevProps: Readonly<WhereProps>) {
@@ -70,49 +72,64 @@ export class Where extends PerspectivesComponent<WhereProps, WhereState> {
       this.props.currentContextType !== prevProps.currentContextType ||
       this.props.openContext !== prevProps.openContext
     ) {
-      this.unsubscribeAll();
-      this.subscribeAll();
+      this.restartSubscriptions();
     }
   }
 
   componentWillUnmount() {
+    this.subscriptionGeneration += 1;
     super.componentWillUnmount();
   }
 
-  subscribeAll() {
-    this.subscribeToGraph();
-    this.subscribeToWiderContexts();
+  restartSubscriptions() {
+    const generation = ++this.subscriptionGeneration;
+    this.setState({ modelGraph: undefined, widerContexts: [] });
+    this.subscriptionRestart = this.subscriptionRestart
+      .then(() => this.unsubscribeAll())
+      .then(() => {
+        if (!this.__mounted__ || generation !== this.subscriptionGeneration) {
+          return;
+        }
+        return this.subscribeAll(generation);
+      });
   }
 
-  subscribeToGraph() {
+  subscribeAll(generation: number): Promise<void> {
+    return Promise.all([
+      this.subscribeToGraph(generation),
+      this.subscribeToWiderContexts(generation),
+    ]).then(() => undefined);
+  }
+
+  subscribeToGraph(generation: number): Promise<void> {
     const component = this;
     if (!this.props.currentContextType) {
       this.setState({ modelGraph: undefined });
-      return;
+      return Promise.resolve();
     }
-    PDRproxy.then((pdr) => {
-      component.addUnsubscriber(
-        pdr.getModelContextGraph(
-          component.props.currentContextType!,
-          (graph) => {
-            component.setState({ modelGraph: graph });
-          }
-        )
-      );
-    });
+    const contextType = this.props.currentContextType;
+    return PDRproxy.then((pdr) =>
+      pdr.getModelContextGraph(contextType).then((graph) => {
+        if (generation === component.subscriptionGeneration) {
+          component.setState({ modelGraph: graph });
+        }
+      })
+    );
   }
 
-  subscribeToWiderContexts() {
+  subscribeToWiderContexts(generation: number): Promise<void> {
     const component = this;
     if (!this.props.openContext) {
       this.setState({ widerContexts: [] });
-      return;
+      return Promise.resolve();
     }
-    PDRproxy.then((pdr) => {
+    const openContext = this.props.openContext;
+    return PDRproxy.then((pdr) =>
       component.addUnsubscriber(
         pdr.getWiderContexts(
-          component.props.openContext!,
+          openContext,
           (contextAndNames: ContextAndName[]) => {
+            if (generation !== component.subscriptionGeneration) return;
             // Initialise with unresolved types, then resolve each asynchronously.
             const wcs: WiderContext[] = contextAndNames.map((ca) => ({
               externalRole: ca.externalRole,
@@ -124,6 +141,7 @@ export class Where extends PerspectivesComponent<WhereProps, WhereState> {
               // Derive context instance ID from external role instance ID.
               const contextId = (wc.externalRole as string).replace(/\$External$/, "");
               pdr.getContextType(contextId).then((ctxType) => {
+                if (generation !== component.subscriptionGeneration) return;
                 component.setState((prev) => {
                   const updated = [...prev.widerContexts];
                   if (
@@ -140,8 +158,8 @@ export class Where extends PerspectivesComponent<WhereProps, WhereState> {
             });
           }
         )
-      );
-    });
+      )
+    );
   }
 
   render() {

@@ -51,7 +51,7 @@ import type {
   InspectableRole,
   FillerType,
   FillMode,
-  ModelContextGraphReceiver
+  ModelContextGraph
 } from "./perspectivesshape.d.ts";
 
 export type * from "./perspectivesshape.d.ts";
@@ -1024,24 +1024,6 @@ export class PerspectivesProxy
     );
   }
 
-  // { request: "GetModelContextGraph", subject: ContextType }
-  // Returns the static type-level context navigation DAG for the model that defines
-  // the given context type. The result is a one-shot response.
-  getModelContextGraph( contextType : ContextType, receiveGraph : ModelContextGraphReceiver, errorHandler? : errorHandler)
-  {
-    return this.send(
-      {request: "GetModelContextGraph", subject: contextType, onlyOnce: true},
-      function (graphStrings)
-      {
-        if (graphStrings.length > 0)
-        {
-          receiveGraph(JSON.parse(graphStrings[0]));
-        }
-      },
-      errorHandler
-    );
-  }
-  
   ///////////////////////////////////////////////////////////////////////////////////////
   //// PROMISE RETURNING GETTERS.
   //// These getters, by their nature, return a result only once.
@@ -1444,6 +1426,32 @@ export class PerspectivesProxy
         );
       });
   }
+ 
+  // { request: "GetModelContextGraph", subject: ContextType }
+  // Returns the static type-level context navigation DAG for the model that defines
+  // the given context type. The result is a one-shot response.
+  getModelContextGraph( contextType : ContextType) : Promise<ModelContextGraph>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        return proxy.send(
+          {request: "GetModelContextGraph", subject: contextType, onlyOnce: true},
+          function (graphStrings)
+          {
+            if (graphStrings.length > 0)
+            {
+              resolver(JSON.parse(graphStrings[0]));
+            }
+            else
+            {
+              rejecter({});
+            }
+          },
+        );
+      });
+  }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////
   //// SETTERS.

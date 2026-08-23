@@ -367,7 +367,6 @@ export type ModelGraphEdge = {
   roleLabel: string;
 };
 export type ModelContextGraph = { nodes: ModelGraphNode[]; edges: ModelGraphEdge[] };
-export type ModelContextGraphReceiver = (graph: ModelContextGraph) => void;
 
 ////////////////////////////////////////////
 //// FILLER TYPES
