@@ -48,7 +48,12 @@ import {
   Position,
   MarkerType,
 } from "@xyflow/react";
-import type { Node, Edge, NodeProps } from "@xyflow/react";
+import type {
+  Node,
+  Edge,
+  NodeProps,
+  ReactFlowInstance,
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { ContextType, RoleInstanceT, TableFormDef } from "perspectives-proxy";
@@ -260,6 +265,8 @@ export function NavigationGraphView({
     useState<PopoverPosition | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const flowInstanceRef = useRef<ReactFlowInstance | null>(null);
+  const resizeFrameRef = useRef<number | null>(null);
 
   const closePopover = useCallback(() => {
     setPopoverNode(null);
@@ -335,6 +342,42 @@ export function NavigationGraphView({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [closePopover, popoverNode]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let previousWidth = canvas.clientWidth;
+    let previousHeight = canvas.clientHeight;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width === previousWidth && height === previousHeight) return;
+      previousWidth = width;
+      previousHeight = height;
+      closePopover();
+
+      if (resizeFrameRef.current !== null) {
+        cancelAnimationFrame(resizeFrameRef.current);
+      }
+      resizeFrameRef.current = requestAnimationFrame(() => {
+        resizeFrameRef.current = null;
+        void flowInstanceRef.current?.fitView({ padding: 0.3 });
+      });
+    });
+
+    observer.observe(canvas);
+    return () => {
+      observer.disconnect();
+      if (resizeFrameRef.current !== null) {
+        cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = null;
+      }
+    };
+  }, [closePopover]);
+
+  const onFlowInit = useCallback((instance: ReactFlowInstance) => {
+    flowInstanceRef.current = instance;
+  }, []);
 
   // ─── Navigation callbacks ──────────────────────────────────────────────────
 
@@ -521,6 +564,7 @@ export function NavigationGraphView({
           nodes={rfNodes}
           edges={rfEdges}
           nodeTypes={NODE_TYPES}
+          onInit={onFlowInit}
           onNodeClick={onFlowNodeClick}
           fitView
           fitViewOptions={{ padding: 0.3 }}
