@@ -1568,7 +1568,10 @@ export class PerspectivesProxy
         {
           return proxy.send(
             {request: "SaveFile", subject: JSON.stringify( perspectivesFile ), contextDescription: buf, authoringRole: myroletype, onlyOnce: true}
-            , fileInArray => resolver(fileInArray[0])
+            , fileInArray => {
+                const parsedFile = JSON.parse(fileInArray[0]) as PerspectivesFile;
+                resolver(parsedFile);
+              }
             , rejecter
             );
         });
