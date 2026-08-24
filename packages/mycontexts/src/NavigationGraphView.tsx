@@ -514,9 +514,9 @@ export function NavigationGraphView({
         width: 12,
         height: 12,
       },
-      // All edges use smoothstep routing; self-loop semantics are expressed
+      // All edges use curved Bezier routing; self-loop semantics are expressed
       // through separate current→downstream node pairs in the normalized model.
-      type: "smoothstep",
+      type: "default",
       selectable: false,
     }));
 
