@@ -59,6 +59,7 @@ import "@xyflow/react/dist/style.css";
 import { ContextType, RoleInstanceT, TableFormDef } from "perspectives-proxy";
 import type { ModelContextGraph, WiderContext } from "perspectives-proxy";
 import { ListGroup } from "react-bootstrap";
+import { i18next } from "perspectives-react";
 
 import {
   normalizeGraph,
@@ -561,8 +562,8 @@ export function NavigationGraphView({
               />
               <span className="ms-1 small">
                 {showUnavailableConnections
-                  ? "Hide unavailable"
-                  : "Show unavailable"}
+                  ? i18next.t("navigationGraph_hideUnavailable", { ns: "mycontexts" })
+                  : i18next.t("navigationGraph_showUnavailable", { ns: "mycontexts" })}
               </span>
             </button>
           )}
@@ -578,7 +579,9 @@ export function NavigationGraphView({
                 aria-hidden="true"
               />
               <span className="ms-1 small">
-                {showFullGraph ? "Neighbourhood" : "Full graph"}
+                {showFullGraph
+                  ? i18next.t("navigationGraph_neighbourhood", { ns: "mycontexts" })
+                  : i18next.t("navigationGraph_fullGraph", { ns: "mycontexts" })}
               </span>
             </button>
           )}
