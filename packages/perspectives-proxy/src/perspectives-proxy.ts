@@ -51,7 +51,8 @@ import type {
   InspectableRole,
   FillerType,
   FillMode,
-  ModelContextGraph
+  ModelContextGraph,
+  WiderContextReceiver
 } from "./perspectivesshape.d.ts";
 
 export type * from "./perspectivesshape.d.ts";
@@ -1012,13 +1013,13 @@ export class PerspectivesProxy
     );
   }
 
-  getWiderContexts( externalRoleInstance : RoleInstanceT, receiveValues : ContextAndNameReceiver, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
+  getWiderContexts( externalRoleInstance : RoleInstanceT, receiveValues : WiderContextReceiver, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
   {
     return this.send(
       {request: "GetWiderContexts", subject: externalRoleInstance, onlyOnce: fireAndForget},
-      function (contextAndNameStrings)
+      function (widerContextStrings)
       {
-        return receiveValues(contextAndNameStrings.map( JSON.parse ));
+        return receiveValues(widerContextStrings.map( JSON.parse ));
       },
       errorHandler
     );

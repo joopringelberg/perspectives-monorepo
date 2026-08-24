@@ -60,7 +60,6 @@ import Perspectives.Fuzzysort (matchIndexedContextNames)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, isTypeUri, typeUri2ModelUri_, typeUri2couchdbFilename)
 import Perspectives.Inspector.Factories (makeInspectableContext, makeInspectableRole)
-import Perspectives.ModelGraph (constructModelGraph)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
 import Perspectives.Instances.Combinators (filter)
@@ -69,6 +68,7 @@ import Perspectives.Instances.ObjectGetters (binding, context, contextType, cont
 import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.Logging (errorOther)
 import Perspectives.ModelDependencies (actualSharedFileServer, allSettings, fileShareCredentials, identifiableFirstName, identifiableLastName, itemOnClipboardClipboardData, itemsOnClipboard, mySharedFileServices, selectedClipboardItem, sharedFileServices, sysUser)
+import Perspectives.ModelGraph (constructModelGraph)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, getUserIdentifier, lookupIndexedContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (deleteDocument, getAttachment, toFile)
@@ -593,8 +593,9 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
             widerContextExternalRole <- ((getAllFilledRoles) >=> context >=> externalRole) erole
             guard ((widerContextExternalRole /= RoleInstance (buitenRol system)) && (widerContextExternalRole /= erole))
             widerContextRoleType <- roleType widerContextExternalRole
+            widerContextType <- contextType (ContextInstance $ deconstructBuitenRol $ unwrap widerContextExternalRole)
             readableName <- lift $ getReadableName widerContextRoleType widerContextExternalRole
-            pure $ Value $ writeJSON { externalRole: widerContextExternalRole, readableName }
+            pure $ Value $ writeJSON { externalRole: widerContextExternalRole, readableName, contextType: widerContextType }
         )
         (RoleInstance subject)
         onlyOnce
