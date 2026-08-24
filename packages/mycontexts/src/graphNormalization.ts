@@ -15,8 +15,7 @@ import {
   RoleInstanceT,
   TableFormDef,
 } from "perspectives-proxy";
-import type { ModelContextGraph } from "perspectives-proxy";
-import type { WiderContext } from "./navigationGraph";
+import type { ModelContextGraph, WiderContext } from "perspectives-proxy";
 
 // ─── View-model types ─────────────────────────────────────────────────────────
 

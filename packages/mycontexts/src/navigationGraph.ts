@@ -27,19 +27,6 @@ export interface ContextInstance {
   readableName: string;
 }
 
-/**
- * Wider-context record: a context that contains the current context as a role.
- * Returned by `getWiderContexts`; enriched with the resolved context type.
- */
-export interface WiderContext {
-  /** External role instance ID of the wider context. */
-  externalRole: RoleInstanceT;
-  /** Human-readable name of the wider context. */
-  readableName: string;
-  /** Resolved context type for matching against DAG nodes. Set after type lookup. */
-  contextType?: ContextType;
-}
-
 // ─── Utility ─────────────────────────────────────────────────────────────────
 
 /** Extracts the local name from a fully-qualified Perspectives identifier. */

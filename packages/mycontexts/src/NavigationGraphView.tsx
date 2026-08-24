@@ -57,7 +57,7 @@ import type {
 import "@xyflow/react/dist/style.css";
 
 import { ContextType, RoleInstanceT, TableFormDef } from "perspectives-proxy";
-import type { ModelContextGraph } from "perspectives-proxy";
+import type { ModelContextGraph, WiderContext } from "perspectives-proxy";
 import { ListGroup } from "react-bootstrap";
 
 import {
@@ -65,7 +65,6 @@ import {
   indexedRoleId,
 } from "./graphNormalization";
 import type { NormalizedNode, NodeRole } from "./graphNormalization";
-import type { WiderContext } from "./navigationGraph";
 import { selectLayout } from "./layoutSelector";
 import type { LayoutPolicy } from "./layoutSelector";
 
@@ -377,6 +376,9 @@ export function NavigationGraphView({
 
   const onFlowInit = useCallback((instance: ReactFlowInstance) => {
     flowInstanceRef.current = instance;
+    requestAnimationFrame(() => {
+      void instance.fitView({ padding: 0.3 });
+    });
   }, []);
 
   // ─── Navigation callbacks ──────────────────────────────────────────────────

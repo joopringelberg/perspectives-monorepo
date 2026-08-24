@@ -1,7 +1,7 @@
 import * as React from "react";
 const { Component } = React;
-import { ContextType, RoleInstanceT, ContextInstanceT, WhereTo, PDRproxy, ContextAndName } from "perspectives-proxy";
-import type { ModelContextGraph } from "perspectives-proxy";
+import { ContextType, RoleInstanceT, ContextInstanceT, WhereTo, PDRproxy } from "perspectives-proxy";
+import type { ModelContextGraph, WiderContext } from "perspectives-proxy";
 import { TableForms } from "./tableForms";
 import { PinnedContexts } from "./pinnedContexts";
 import { RecentContexts } from "./recentContexts";
@@ -9,7 +9,6 @@ import { Accordion } from "react-bootstrap";
 import { buildMarkDown, PSContext, PerspectivesComponent } from "perspectives-react";
 import { WiderContexts } from "./widerContexts";
 import { NavigationGraphView } from "./NavigationGraphView";
-import type { WiderContext } from "./navigationGraph";
 
 interface WhereProps {
   screenelements: WhereTo;
@@ -29,8 +28,9 @@ interface WhereState {
 
 export class Where extends PerspectivesComponent<WhereProps, WhereState> {
   ref: React.RefObject<HTMLDivElement | null>;
-  private subscriptionGeneration = 0;
-  private subscriptionRestart: Promise<void> = Promise.resolve();
+  private graphGeneration = 0;
+  private widerContextsGeneration = 0;
+  private widerContextsRestart: Promise<void> = Promise.resolve();
 
   constructor(props: WhereProps) {
     super(props);
@@ -64,53 +64,54 @@ export class Where extends PerspectivesComponent<WhereProps, WhereState> {
         false
       );
     }
-    this.restartSubscriptions();
+    this.refreshModelGraph();
+    this.restartWiderContextsSubscription();
   }
 
   componentDidUpdate(prevProps: Readonly<WhereProps>) {
-    if (
-      this.props.currentContextType !== prevProps.currentContextType ||
-      this.props.openContext !== prevProps.openContext
-    ) {
-      this.restartSubscriptions();
+    if (this.props.currentContextType !== prevProps.currentContextType) {
+      this.refreshModelGraph();
+    }
+    if (this.props.openContext !== prevProps.openContext) {
+      this.restartWiderContextsSubscription();
     }
   }
 
   componentWillUnmount() {
-    this.subscriptionGeneration += 1;
+    this.graphGeneration += 1;
+    this.widerContextsGeneration += 1;
     super.componentWillUnmount();
   }
 
-  restartSubscriptions() {
-    const generation = ++this.subscriptionGeneration;
-    this.setState({ modelGraph: undefined, widerContexts: [] });
-    this.subscriptionRestart = this.subscriptionRestart
+  restartWiderContextsSubscription() {
+    const generation = ++this.widerContextsGeneration;
+    this.widerContextsRestart = this.widerContextsRestart
+      .catch(() => undefined)
       .then(() => this.unsubscribeAll())
       .then(() => {
-        if (!this.__mounted__ || generation !== this.subscriptionGeneration) {
+        if (!this.__mounted__ || generation !== this.widerContextsGeneration) {
           return;
         }
-        return this.subscribeAll(generation);
-      });
+        return this.subscribeToWiderContexts(generation);
+      })
+      .catch(() => undefined);
   }
 
-  subscribeAll(generation: number): Promise<void> {
-    return Promise.all([
-      this.subscribeToGraph(generation),
-      this.subscribeToWiderContexts(generation),
-    ]).then(() => undefined);
-  }
-
-  subscribeToGraph(generation: number): Promise<void> {
+  refreshModelGraph(): Promise<void> {
+    const generation = ++this.graphGeneration;
     const component = this;
     if (!this.props.currentContextType) {
-      this.setState({ modelGraph: undefined });
+      this.setState((previousState) =>
+        previousState.modelGraph === undefined
+          ? null
+          : { modelGraph: undefined }
+      );
       return Promise.resolve();
     }
     const contextType = this.props.currentContextType;
     return PDRproxy.then((pdr) =>
       pdr.getModelContextGraph(contextType).then((graph) => {
-        if (generation === component.subscriptionGeneration) {
+        if (generation === component.graphGeneration) {
           component.setState({ modelGraph: graph });
         }
       })
@@ -120,7 +121,11 @@ export class Where extends PerspectivesComponent<WhereProps, WhereState> {
   subscribeToWiderContexts(generation: number): Promise<void> {
     const component = this;
     if (!this.props.openContext) {
-      this.setState({ widerContexts: [] });
+      this.setState((previousState) =>
+        previousState.widerContexts.length === 0
+          ? null
+          : { widerContexts: [] }
+      );
       return Promise.resolve();
     }
     const openContext = this.props.openContext;
@@ -128,33 +133,22 @@ export class Where extends PerspectivesComponent<WhereProps, WhereState> {
       component.addUnsubscriber(
         pdr.getWiderContexts(
           openContext,
-          (contextAndNames: ContextAndName[]) => {
-            if (generation !== component.subscriptionGeneration) return;
-            // Initialise with unresolved types, then resolve each asynchronously.
-            const wcs: WiderContext[] = contextAndNames.map((ca) => ({
-              externalRole: ca.externalRole,
-              readableName: ca.readableName,
-              contextType: undefined,
-            }));
-            component.setState({ widerContexts: wcs });
-            wcs.forEach((wc, idx) => {
-              // Derive context instance ID from external role instance ID.
-              const contextId = (wc.externalRole as string).replace(/\$External$/, "");
-              pdr.getContextType(contextId).then((ctxType) => {
-                if (generation !== component.subscriptionGeneration) return;
-                component.setState((prev) => {
-                  const updated = [...prev.widerContexts];
-                  if (
-                    updated[idx] &&
-                    updated[idx].externalRole === wc.externalRole
-                  ) {
-                    updated[idx] = { ...updated[idx], contextType: ctxType };
-                  }
-                  return { widerContexts: updated };
+          (contextAndNames: WiderContext[]) => {
+            if (generation !== component.widerContextsGeneration) {
+              return;
+            }
+            component.setState((previousState) => {
+              const unchanged =
+                previousState.widerContexts.length === contextAndNames.length &&
+                contextAndNames.every((widerContext, index) => {
+                  const previous = previousState.widerContexts[index];
+                  return (
+                    previous?.externalRole === widerContext.externalRole &&
+                    previous.readableName === widerContext.readableName &&
+                    previous.contextType === widerContext.contextType
+                  );
                 });
-              }).catch(() => {
-                // Leave contextType undefined if resolution fails.
-              });
+              return unchanged ? null : { widerContexts: contextAndNames };
             });
           }
         )
