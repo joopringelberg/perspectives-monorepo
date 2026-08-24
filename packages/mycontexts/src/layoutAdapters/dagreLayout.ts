@@ -22,6 +22,7 @@ const NODE_SIZE: Record<NodeRole, number> = {
   current: 68,
   upstream: 52,
   downstream: 52,
+  user: 44,
   other: 36,
 };
 
@@ -45,25 +46,34 @@ export class DagreLayout implements LayoutAdapter {
     g.setDefaultEdgeLabel(() => ({}));
     g.setGraph({
       rankdir: this.direction,
-      ranksep: 80,
-      nodesep: 60,
+      ranksep: 120,
+      nodesep: 130,
       marginx: 20,
       marginy: 20,
     });
 
-    for (const n of nodes) {
+    const structuralNodes = nodes.filter((node) => node.role !== "user");
+    const structuralNodeKeys = new Set(
+      structuralNodes.map((node) => node.nodeKey)
+    );
+    for (const n of structuralNodes) {
       const size = NODE_SIZE[n.role];
       g.setNode(n.nodeKey, { width: size, height: size });
     }
 
     for (const e of edges) {
-      g.setEdge(e.sourceKey, e.targetKey);
+      if (
+        structuralNodeKeys.has(e.sourceKey) &&
+        structuralNodeKeys.has(e.targetKey)
+      ) {
+        g.setEdge(e.sourceKey, e.targetKey);
+      }
     }
 
     dagre.layout(g);
 
     const result: LayoutMap = new Map();
-    for (const n of nodes) {
+    for (const n of structuralNodes) {
       const pos = g.node(n.nodeKey);
       const size = NODE_SIZE[n.role];
       // Dagre gives centre positions; convert to top-left for React Flow.
@@ -75,6 +85,23 @@ export class DagreLayout implements LayoutAdapter {
         height: size,
       });
     }
+
+    const userNodes = nodes.filter((node) => node.role === "user");
+    const bottom = Math.max(
+      0,
+      ...Array.from(result.values()).map((position) => position.y + position.height)
+    );
+    userNodes.forEach((node, index) => {
+      const size = NODE_SIZE.user;
+      const centreX = (index - (userNodes.length - 1) / 2) * 190;
+      result.set(node.nodeKey, {
+        nodeKey: node.nodeKey,
+        x: centreX - size / 2,
+        y: bottom + 130,
+        width: size,
+        height: size,
+      });
+    });
 
     return result;
   }

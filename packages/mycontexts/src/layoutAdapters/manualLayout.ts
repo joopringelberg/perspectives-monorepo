@@ -7,26 +7,28 @@
  *   Row -1  upstream nodes  (nodes that contain the current context as a role)
  *   Row  0  current node
  *   Row +1  downstream nodes (context types reachable from the current context)
- *   Row +2  other nodes      (not directly connected; shown dimmed)
+ *   Row +2  user nodes       (direct UserRole-only neighbors)
+ *   Row +3  other nodes      (not directly connected; shown dimmed)
  *
  * Within each row, nodes are evenly spaced horizontally and centred on x = 0.
  * All positions are returned as top-left coordinates (React Flow convention).
  */
 
 import type { LayoutAdapter, LayoutMap } from "./index";
-import type { NormalizedNode, NormalizedEdge } from "../graphNormalization";
+import type { NormalizedNode } from "../graphNormalization";
 import type { NodeRole } from "../graphNormalization";
 
 // ─── Spacing constants (pixels) ───────────────────────────────────────────────
 
-const ROW_SPACING = 150;
-const COL_SPACING = 110;
+const ROW_SPACING = 180;
+const COL_SPACING = 190;
 
 // Node diameter per role – must match the values in NavigationGraphView.tsx.
 const NODE_SIZE: Record<NodeRole, number> = {
   current: 68,
   upstream: 52,
   downstream: 52,
+  user: 44,
   other: 36,
 };
 
@@ -35,7 +37,7 @@ const NODE_SIZE: Record<NodeRole, number> = {
 export class ManualLayout implements LayoutAdapter {
   readonly name = "manual";
 
-  compute(nodes: NormalizedNode[], _edges: NormalizedEdge[]): LayoutMap {
+  compute(nodes: NormalizedNode[]): LayoutMap {
     const result: LayoutMap = new Map();
 
     const byRole = (role: NodeRole) => nodes.filter((n) => n.role === role);
@@ -62,7 +64,8 @@ export class ManualLayout implements LayoutAdapter {
     layoutRow(byRole("upstream"), -ROW_SPACING);
     layoutRow(byRole("current"), 0);
     layoutRow(byRole("downstream"), ROW_SPACING);
-    layoutRow(byRole("other"), ROW_SPACING * 2);
+    layoutRow(byRole("user"), ROW_SPACING * 2);
+    layoutRow(byRole("other"), ROW_SPACING * 3);
 
     return result;
   }

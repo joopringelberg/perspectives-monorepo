@@ -47,10 +47,13 @@ import {
   Handle,
   Position,
   MarkerType,
+  BaseEdge,
+  EdgeText,
 } from "@xyflow/react";
 import type {
   Node,
   Edge,
+  EdgeProps,
   NodeProps,
   ReactFlowInstance,
 } from "@xyflow/react";
@@ -75,6 +78,7 @@ const NODE_SIZE: Record<NodeRole, number> = {
   current: 68,
   upstream: 52,
   downstream: 52,
+  user: 44,
   other: 36,
 };
 
@@ -82,6 +86,7 @@ const NODE_FILL: Record<NodeRole, string> = {
   current: "var(--bs-primary, #0d6efd)",
   downstream: "var(--bs-info, #0dcaf0)",
   upstream: "var(--bs-success, #198754)",
+  user: "var(--bs-success-bg-subtle, #d1e7dd)",
   other: "var(--bs-secondary, #6c757d)",
 };
 
@@ -89,6 +94,7 @@ const NODE_TEXT_COLOR: Record<NodeRole, string> = {
   current: "#fff",
   downstream: "var(--bs-dark, #212529)",
   upstream: "#fff",
+  user: "var(--bs-dark, #212529)",
   other: "#fff",
 };
 
@@ -97,6 +103,12 @@ const NODE_TEXT_COLOR: Record<NodeRole, string> = {
 interface ContextNodeData extends Record<string, unknown> {
   node: NormalizedNode;
 }
+
+interface GraphEdgeData extends Record<string, unknown> {
+  laneOffset: number;
+}
+
+type CurvedGraphEdge = Edge<GraphEdgeData, "curvedGraph">;
 
 interface PopoverAnchor {
   centerX: number;
@@ -120,7 +132,8 @@ function ContextNode({ data }: NodeProps) {
   const cursor = node.isNavigable ? "pointer" : "default";
   const isIndexed = Boolean(node.indexedName);
 
-  // Invisible handles at top / bottom for edge routing; not interactive.
+  // Invisible handles on every side allow edges to follow the direct route
+  // between laid-out node centres.
   const handleStyle: React.CSSProperties = {
     opacity: 0,
     width: 0,
@@ -182,12 +195,26 @@ function ContextNode({ data }: NodeProps) {
         />
       )}
 
-      <Handle
-        type="target"
-        position={Position.Top}
-        style={handleStyle}
-        isConnectable={false}
-      />
+      {[Position.Top, Position.Right, Position.Bottom, Position.Left].map(
+        (position) => (
+          <React.Fragment key={position}>
+            <Handle
+              id={`target-${position}`}
+              type="target"
+              position={position}
+              style={handleStyle}
+              isConnectable={false}
+            />
+            <Handle
+              id={`source-${position}`}
+              type="source"
+              position={position}
+              style={handleStyle}
+              isConnectable={false}
+            />
+          </React.Fragment>
+        )
+      )}
 
       <span
         style={{
@@ -208,13 +235,6 @@ function ContextNode({ data }: NodeProps) {
       >
         {node.label}
       </span>
-
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        style={handleStyle}
-        isConnectable={false}
-      />
     </div>
   );
 }
@@ -222,6 +242,74 @@ function ContextNode({ data }: NodeProps) {
 // Declared outside the component to prevent unnecessary re-creation on each
 // render (React Flow warns if nodeTypes changes identity across renders).
 const NODE_TYPES = { contextNode: ContextNode };
+
+const positionVector: Record<Position, { x: number; y: number }> = {
+  [Position.Top]: { x: 0, y: -1 },
+  [Position.Right]: { x: 1, y: 0 },
+  [Position.Bottom]: { x: 0, y: 1 },
+  [Position.Left]: { x: -1, y: 0 },
+};
+
+function CurvedGraphEdge({
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetX,
+  targetY,
+  targetPosition,
+  markerEnd,
+  style,
+  label,
+  labelStyle,
+  labelShowBg,
+  labelBgStyle,
+  labelBgPadding,
+  labelBgBorderRadius,
+  data,
+}: EdgeProps<CurvedGraphEdge>) {
+  const deltaX = targetX - sourceX;
+  const deltaY = targetY - sourceY;
+  const distance = Math.hypot(deltaX, deltaY);
+  const controlDistance = Math.min(220, Math.max(90, distance * 0.55));
+  const perpendicularX = distance === 0 ? 0 : -deltaY / distance;
+  const perpendicularY = distance === 0 ? 0 : deltaX / distance;
+  const laneOffset = data?.laneOffset ?? 0;
+  const sourceVector = positionVector[sourcePosition];
+  const targetVector = positionVector[targetPosition];
+  const sourceControlX =
+    sourceX + sourceVector.x * controlDistance + perpendicularX * laneOffset;
+  const sourceControlY =
+    sourceY + sourceVector.y * controlDistance + perpendicularY * laneOffset;
+  const targetControlX =
+    targetX + targetVector.x * controlDistance + perpendicularX * laneOffset;
+  const targetControlY =
+    targetY + targetVector.y * controlDistance + perpendicularY * laneOffset;
+  const path = `M ${sourceX},${sourceY} C ${sourceControlX},${sourceControlY} ${targetControlX},${targetControlY} ${targetX},${targetY}`;
+  const labelX =
+    (sourceX + 3 * sourceControlX + 3 * targetControlX + targetX) / 8;
+  const labelY =
+    (sourceY + 3 * sourceControlY + 3 * targetControlY + targetY) / 8;
+
+  return (
+    <>
+      <BaseEdge path={path} markerEnd={markerEnd} style={style} />
+      {label && (
+        <EdgeText
+          x={labelX}
+          y={labelY}
+          label={label}
+          labelStyle={labelStyle}
+          labelShowBg={labelShowBg}
+          labelBgStyle={labelBgStyle}
+          labelBgPadding={labelBgPadding}
+          labelBgBorderRadius={labelBgBorderRadius}
+        />
+      )}
+    </>
+  );
+}
+
+const EDGE_TYPES = { curvedGraph: CurvedGraphEdge };
 
 // ─── Component props ──────────────────────────────────────────────────────────
 
@@ -461,7 +549,10 @@ export function NavigationGraphView({
   // ─── Layout computation ───────────────────────────────────────────────────
 
   const layoutAdapter = selectLayout(layoutPolicy);
-  const layoutMap = layoutAdapter.compute(normalized.nodes, normalized.edges);
+  const contextEdges = normalized.edges.filter(
+    (edge) => edge.roleKind === "ContextRole"
+  );
+  const layoutMap = layoutAdapter.compute(normalized.nodes, contextEdges);
 
   // ─── Neighbourhood / full-graph toggle ────────────────────────────────────
 
@@ -491,50 +582,93 @@ export function NavigationGraphView({
     };
   });
 
+  const edgeHandles = (sourceKey: string, targetKey: string) => {
+    const source = layoutMap.get(sourceKey);
+    const target = layoutMap.get(targetKey);
+    if (!source || !target) {
+      return {
+        sourceHandle: `source-${Position.Bottom}`,
+        targetHandle: `target-${Position.Top}`,
+      };
+    }
+
+    const deltaX = target.x + target.width / 2 - (source.x + source.width / 2);
+    const deltaY = target.y + target.height / 2 - (source.y + source.height / 2);
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+      const sourcePosition = deltaX > 0 ? Position.Right : Position.Left;
+      const targetPosition = deltaX > 0 ? Position.Left : Position.Right;
+      return {
+        sourceHandle: `source-${sourcePosition}`,
+        targetHandle: `target-${targetPosition}`,
+      };
+    }
+
+    const sourcePosition = deltaY > 0 ? Position.Bottom : Position.Top;
+    const targetPosition = deltaY > 0 ? Position.Top : Position.Bottom;
+    return {
+      sourceHandle: `source-${sourcePosition}`,
+      targetHandle: `target-${targetPosition}`,
+    };
+  };
+
   // ─── React Flow edges ─────────────────────────────────────────────────────
 
-  const rfEdges: Edge[] = normalized.edges
-    .filter(
-      (edge) =>
-        isEdgeInScope(edge) &&
-        (showUnavailableConnections || edge.isVisible)
-    )
-    .map((e) => {
-      const edgeColor =
-        e.roleKind === "UserRole"
-          ? "var(--bs-success, #198754)"
-          : "var(--bs-secondary-color, #6c757d)";
-      return {
-        id: e.edgeKey,
-        source: e.sourceKey,
-        target: e.targetKey,
-        // Only show role label when non-empty.
-        label: e.roleLabel || undefined,
-        style: {
-          stroke: edgeColor,
-          strokeWidth: 1.5,
-          strokeOpacity: 0.5,
-          strokeDasharray: e.isVisible ? undefined : "4 3",
-        },
-        labelStyle: {
-          fontSize: 8,
-          fill: edgeColor,
-        },
-        labelBgStyle: {
-          fill: "var(--bs-body-bg, #fff)",
-          fillOpacity: 0.8,
-        },
-        markerEnd: {
-          type: MarkerType.Arrow,
-          color: edgeColor,
-          width: 12,
-          height: 12,
-        },
-        // All edges use curved Bezier routing.
-        type: "default",
-        selectable: false,
-      };
-    });
+  const activeEdges = normalized.edges.filter(
+    (edge) =>
+      isEdgeInScope(edge) &&
+      (showUnavailableConnections || edge.isVisible)
+  );
+  const edgeGroups = new Map<string, typeof activeEdges>();
+  for (const edge of activeEdges) {
+    const pair = [edge.sourceKey, edge.targetKey].sort().join("|");
+    edgeGroups.set(pair, [...(edgeGroups.get(pair) ?? []), edge]);
+  }
+
+  const rfEdges: CurvedGraphEdge[] = activeEdges.map((e) => {
+    const pair = [e.sourceKey, e.targetKey].sort().join("|");
+    const parallelEdges = edgeGroups.get(pair) ?? [e];
+    const laneIndex = parallelEdges.findIndex(
+      (edge) => edge.edgeKey === e.edgeKey
+    );
+    const laneOffset = (laneIndex - (parallelEdges.length - 1) / 2) * 34;
+    const handles = edgeHandles(e.sourceKey, e.targetKey);
+    const edgeColor =
+      e.roleKind === "UserRole"
+        ? "var(--bs-success, #198754)"
+        : "var(--bs-secondary-color, #6c757d)";
+    return {
+      id: e.edgeKey,
+      source: e.sourceKey,
+      target: e.targetKey,
+      sourceHandle: handles.sourceHandle,
+      targetHandle: handles.targetHandle,
+      data: { laneOffset },
+      // Only show role label when non-empty.
+      label: e.roleLabel || undefined,
+      style: {
+        stroke: edgeColor,
+        strokeWidth: 1.5,
+        strokeOpacity: 0.5,
+        strokeDasharray: e.isVisible ? undefined : "4 3",
+      },
+      labelStyle: {
+        fontSize: 8,
+        fill: edgeColor,
+      },
+      labelBgStyle: {
+        fill: "var(--bs-body-bg, #fff)",
+        fillOpacity: 0.8,
+      },
+      markerEnd: {
+        type: MarkerType.Arrow,
+        color: edgeColor,
+        width: 12,
+        height: 12,
+      },
+      type: "curvedGraph",
+      selectable: false,
+    };
+  });
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -605,6 +739,7 @@ export function NavigationGraphView({
           nodes={rfNodes}
           edges={rfEdges}
           nodeTypes={NODE_TYPES}
+          edgeTypes={EDGE_TYPES}
           onInit={onFlowInit}
           onNodeClick={onFlowNodeClick}
           fitView

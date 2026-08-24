@@ -19,7 +19,7 @@ import type { ModelContextGraph, WiderContext } from "perspectives-proxy";
 
 // ─── View-model types ─────────────────────────────────────────────────────────
 
-export type NodeRole = "current" | "upstream" | "downstream" | "other";
+export type NodeRole = "current" | "upstream" | "downstream" | "user" | "other";
 
 export interface InstanceInfo {
   roleId: RoleInstanceT;
@@ -205,14 +205,28 @@ export function normalizeGraph(
   );
 
   const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
-
-  // Direct downstream neighbours: current → neighbour.
-  const downstreamIds = new Set(
-    graph.edges.filter((e) => e.from === currentType).map((e) => e.to)
+  const contextEdges = graph.edges.filter(
+    (edge) => edge.roleKind === "ContextRole"
   );
-  // Direct upstream neighbours: neighbour → current.
+  const userEdges = graph.edges.filter((edge) => edge.roleKind === "UserRole");
+
+  // ContextRole edges determine the structural neighbourhood. Direct
+  // UserRole-only neighbors are classified into a separate secondary tier.
+  const downstreamIds = new Set(
+    contextEdges.filter((edge) => edge.from === currentType).map((edge) => edge.to)
+  );
   const upstreamIds = new Set(
-    graph.edges.filter((e) => e.to === currentType).map((e) => e.from)
+    contextEdges.filter((edge) => edge.to === currentType).map((edge) => edge.from)
+  );
+  const contextNeighborIds = new Set([...downstreamIds, ...upstreamIds]);
+  const userNeighborIds = new Set(
+    userEdges
+      .flatMap((edge) => {
+        if (edge.from === currentType) return [edge.to];
+        if (edge.to === currentType) return [edge.from];
+        return [];
+      })
+      .filter((typeId) => !contextNeighborIds.has(typeId))
   );
 
   const instancesForType = (
@@ -287,8 +301,19 @@ export function normalizeGraph(
       pushNode("downstream", n.id, i, instancesForType(downstreamMap, n.id))
     );
 
-  // Row +2 – other nodes (not directly connected to current), dimmed.
-  const neighborIds = new Set([...downstreamIds, ...upstreamIds, currentType]);
+  // Row +2 – context types connected directly through a UserRole edge only.
+  Array.from(userNeighborIds)
+    .map((id) => nodeMap.get(id))
+    .filter((n): n is NonNullable<typeof n> => n !== undefined)
+    .forEach((n, i) => pushNode("user", n.id, i, []));
+
+  // Row +3 – other nodes (not directly connected to current), dimmed.
+  const neighborIds = new Set([
+    ...downstreamIds,
+    ...upstreamIds,
+    ...userNeighborIds,
+    currentType,
+  ]);
   graph.nodes
     .filter((n) => !neighborIds.has(n.id))
     .forEach((n, i) => pushNode("other", n.id, i, []));
