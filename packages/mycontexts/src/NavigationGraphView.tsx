@@ -258,6 +258,8 @@ export function NavigationGraphView({
   layoutPolicy = "manual",
 }: NavigationGraphViewProps) {
   const [showFullGraph, setShowFullGraph] = useState(false);
+  const [showUnavailableConnections, setShowUnavailableConnections] =
+    useState(true);
   const [popoverNode, setPopoverNode] = useState<NormalizedNode | null>(null);
   const [popoverAnchor, setPopoverAnchor] = useState<PopoverAnchor | null>(null);
   const [popoverPosition, setPopoverPosition] =
@@ -285,6 +287,7 @@ export function NavigationGraphView({
   // Reset local UI state when navigating to a different context.
   useEffect(() => {
     setShowFullGraph(false);
+    setShowUnavailableConnections(true);
     setPopoverNode(null);
     setPopoverAnchor(null);
   }, [currentContextType, modelGraph]);
@@ -466,6 +469,11 @@ export function NavigationGraphView({
     ? normalized.nodes
     : normalized.nodes.filter((n) => n.role !== "other");
   const visibleKeys = new Set(visibleNodes.map((n) => n.nodeKey));
+  const isEdgeInScope = (edge: (typeof normalized.edges)[number]) =>
+    visibleKeys.has(edge.sourceKey) && visibleKeys.has(edge.targetKey);
+  const hasUnavailableConnections = normalized.edges.some(
+    (edge) => isEdgeInScope(edge) && !edge.isVisible
+  );
 
   // ─── React Flow nodes ─────────────────────────────────────────────────────
 
@@ -486,7 +494,9 @@ export function NavigationGraphView({
 
   const rfEdges: Edge[] = normalized.edges
     .filter(
-      (e) => visibleKeys.has(e.sourceKey) && visibleKeys.has(e.targetKey)
+      (edge) =>
+        isEdgeInScope(edge) &&
+        (showUnavailableConnections || edge.isVisible)
     )
     .map((e) => ({
       id: e.edgeKey,
@@ -534,23 +544,44 @@ export function NavigationGraphView({
         minHeight: "400px",
       }}
     >
-      {/* Neighbourhood / full-graph toggle */}
-      {hasOthers && (
-        <div className="d-flex justify-content-end px-2 mb-1">
-          <button
-            className="btn btn-sm btn-outline-secondary"
-            onClick={() => setShowFullGraph((v) => !v)}
-          >
-            <i
-              className={`bi ${
-                showFullGraph ? "bi-arrows-collapse" : "bi-arrows-expand"
-              }`}
-              aria-hidden="true"
-            />
-            <span className="ms-1 small">
-              {showFullGraph ? "Neighbourhood" : "Full graph"}
-            </span>
-          </button>
+      {/* Graph visibility toggles */}
+      {(hasOthers || hasUnavailableConnections) && (
+        <div className="d-flex justify-content-end gap-2 px-2 mb-1">
+          {hasUnavailableConnections && (
+            <button
+              className="btn btn-sm btn-outline-secondary"
+              onClick={() => setShowUnavailableConnections((value) => !value)}
+              aria-pressed={showUnavailableConnections}
+            >
+              <i
+                className={`bi ${
+                  showUnavailableConnections ? "bi-eye-slash" : "bi-eye"
+                }`}
+                aria-hidden="true"
+              />
+              <span className="ms-1 small">
+                {showUnavailableConnections
+                  ? "Hide unavailable"
+                  : "Show unavailable"}
+              </span>
+            </button>
+          )}
+          {hasOthers && (
+            <button
+              className="btn btn-sm btn-outline-secondary"
+              onClick={() => setShowFullGraph((v) => !v)}
+            >
+              <i
+                className={`bi ${
+                  showFullGraph ? "bi-arrows-collapse" : "bi-arrows-expand"
+                }`}
+                aria-hidden="true"
+              />
+              <span className="ms-1 small">
+                {showFullGraph ? "Neighbourhood" : "Full graph"}
+              </span>
+            </button>
+          )}
         </div>
       )}
 
