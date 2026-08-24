@@ -24,7 +24,7 @@ module Perspectives.ModelGraph where
 
 import Prelude
 
-import Data.Array (concat, filter, null)
+import Data.Array (any, concat, filter)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -57,6 +57,7 @@ type GraphEdge =
   , to :: TI.ContextType
   , roleId :: TI.EnumeratedRoleType
   , roleLabel :: String
+  , roleKind :: TI.RoleKind
   }
 
 type SerializedModelGraph = { nodes :: Array GraphNode, edges :: Array GraphEdge }
@@ -68,8 +69,10 @@ emptyGraph = { nodes: [], edges: [] }
 -- | the given context type, and returns it as a JSON string.
 -- |
 -- | Nodes: all context types defined in the model.
--- | Edges: directed edges derived from ContextRole-kinded roles, pointing from the
--- | containing context type to the context type that the role binds to.
+-- | Edges: directed edges derived from ContextRole- and UserRole-kinded roles,
+-- | pointing from the containing context type to the context type that the role
+-- | binds to. Self-referential edges are omitted, and ContextRole edges take
+-- | precedence between the same context types.
 -- |
 -- | Returns an empty graph JSON if the model URI cannot be derived or if the
 -- | DomeinFile cannot be loaded.
@@ -92,28 +95,39 @@ constructModelGraph contextTypeStr = do
               Just (ContextInstance c) -> do
                 indexedIndividual <- lookupIndexedContext c
                 pure { id: TI.ContextType ctKey, label, indexedName: indexedIndividual }
-          -- Build edges from ContextRole-kinded enumerated roles.
+          -- Build edges from ContextRole- and UserRole-kinded enumerated roles.
           edgeGroups <- for (Object.values df.enumeratedRoles) \(EnumeratedRole er) ->
-            if er.kindOfRole == TI.ContextRole then case er.binding of
+            if er.kindOfRole == TI.ContextRole || er.kindOfRole == TI.UserRole then case er.binding of
               Nothing -> pure []
               Just adtBinding -> do
-                -- Collect all RoleInContext leaves from the ADT.
                 let leaves = allLeavesInADT adtBinding
-                -- Keep only external-role leaves; their .context field is the
-                -- target context type of the edge.
-                let externalRics = filter (\(RoleInContext { role }) -> isExternalRole (unwrap role)) leaves
-                if null externalRics then pure []
-                else do
-                  roleLabel <- translateType er.id
-                  pure $ map
-                    ( \(RoleInContext { context: toCtx }) ->
-                        { from: er.context
-                        , to: toCtx
-                        , roleId: er.id
-                        , roleLabel
-                        }
-                    )
-                    externalRics
+                let
+                  targetRoles =
+                    if er.kindOfRole == TI.ContextRole then
+                      filter (\(RoleInContext { role }) -> isExternalRole (unwrap role)) leaves
+                    else
+                      leaves
+                roleLabel <- translateType er.id
+                pure $ map
+                  ( \(RoleInContext { context: toCtx }) ->
+                      { from: er.context
+                      , to: toCtx
+                      , roleId: er.id
+                      , roleLabel
+                      , roleKind: er.kindOfRole
+                      }
+                  )
+                  targetRoles
             else pure []
-          let edges = concat edgeGroups
+          let allEdges = filter (\edge -> edge.from /= edge.to) (concat edgeGroups)
+          let contextRoleEdges = filter (\edge -> edge.roleKind == TI.ContextRole) allEdges
+          let userRoleEdges = filter (\edge -> edge.roleKind == TI.UserRole) allEdges
+          let
+            contextRoleConnects userEdge = any
+              ( \contextRoleEdge ->
+                  (contextRoleEdge.from == userEdge.from && contextRoleEdge.to == userEdge.to)
+                    || (contextRoleEdge.from == userEdge.to && contextRoleEdge.to == userEdge.from)
+              )
+              contextRoleEdges
+          let edges = contextRoleEdges <> filter (not <<< contextRoleConnects) userRoleEdges
           pure $ writeJSON { nodes, edges }

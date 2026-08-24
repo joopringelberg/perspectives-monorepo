@@ -60,8 +60,8 @@ export interface NormalizedEdge {
   roleLabel: string;
   /** Perspectives role type id (drives the visibility rule). */
   roleId?: string;
-  /** Whether the original type-level edge was a self-referencing type. */
-  isSelfLoop: boolean;
+  /** Kind of enumerated role from which the edge was derived. */
+  roleKind: "ContextRole" | "UserRole";
   /** Solid (true) vs dotted (false) rendering. */
   isVisible: boolean;
 }
@@ -271,10 +271,8 @@ export function normalizeGraph(
   // Row 0 – current node.
   pushNode("current", currentType, 0, []);
 
-  // Row -1 – upstream nodes (suppress self-referencing type clone here;
-  // it appears as a downstream clone instead).
+  // Row -1 – upstream nodes.
   Array.from(upstreamIds)
-    .filter((id) => id !== currentType)
     .map((id) => nodeMap.get(id))
     .filter((n): n is NonNullable<typeof n> => n !== undefined)
     .forEach((n, i) =>
@@ -313,17 +311,14 @@ export function normalizeGraph(
 
   const edges: NormalizedEdge[] = [];
   graph.edges.forEach((edge, i) => {
-    const isSelfLoop = edge.from === edge.to;
-
-    const sourceKey = isSelfLoop
-      ? resolveKey(edge.from, "current")
-      : resolveKey(
-          edge.from,
-          edge.from === currentType ? "current" : undefined
-        );
-    const targetKey = isSelfLoop
-      ? resolveKey(edge.to, "downstream")
-      : resolveKey(edge.to, edge.to === currentType ? "current" : undefined);
+    const sourceKey = resolveKey(
+      edge.from,
+      edge.from === currentType ? "current" : undefined
+    );
+    const targetKey = resolveKey(
+      edge.to,
+      edge.to === currentType ? "current" : undefined
+    );
 
     if (!sourceKey || !targetKey) return;
 
@@ -338,7 +333,7 @@ export function normalizeGraph(
       targetKey,
       roleLabel: edge.roleLabel ?? "",
       roleId: edge.roleId ? String(edge.roleId) : undefined,
-      isSelfLoop,
+      roleKind: edge.roleKind,
       isVisible: isVisibleByRole || isVisibleByWider,
     });
   });

@@ -499,37 +499,42 @@ export function NavigationGraphView({
         isEdgeInScope(edge) &&
         (showUnavailableConnections || edge.isVisible)
     )
-    .map((e) => ({
-      id: e.edgeKey,
-      source: e.sourceKey,
-      target: e.targetKey,
-      // Only show role label when non-empty.
-      label: e.roleLabel || undefined,
-      style: {
-        stroke: "var(--bs-secondary-color, #6c757d)",
-        strokeWidth: 1.5,
-        strokeOpacity: 0.5,
-        strokeDasharray: e.isVisible ? undefined : "4 3",
-      },
-      labelStyle: {
-        fontSize: 8,
-        fill: "var(--bs-secondary-color, #6c757d)",
-      },
-      labelBgStyle: {
-        fill: "var(--bs-body-bg, #fff)",
-        fillOpacity: 0.8,
-      },
-      markerEnd: {
-        type: MarkerType.Arrow,
-        color: "var(--bs-secondary-color, #6c757d)",
-        width: 12,
-        height: 12,
-      },
-      // All edges use curved Bezier routing; self-loop semantics are expressed
-      // through separate current→downstream node pairs in the normalized model.
-      type: "default",
-      selectable: false,
-    }));
+    .map((e) => {
+      const edgeColor =
+        e.roleKind === "UserRole"
+          ? "var(--bs-success, #198754)"
+          : "var(--bs-secondary-color, #6c757d)";
+      return {
+        id: e.edgeKey,
+        source: e.sourceKey,
+        target: e.targetKey,
+        // Only show role label when non-empty.
+        label: e.roleLabel || undefined,
+        style: {
+          stroke: edgeColor,
+          strokeWidth: 1.5,
+          strokeOpacity: 0.5,
+          strokeDasharray: e.isVisible ? undefined : "4 3",
+        },
+        labelStyle: {
+          fontSize: 8,
+          fill: edgeColor,
+        },
+        labelBgStyle: {
+          fill: "var(--bs-body-bg, #fff)",
+          fillOpacity: 0.8,
+        },
+        markerEnd: {
+          type: MarkerType.Arrow,
+          color: edgeColor,
+          width: 12,
+          height: 12,
+        },
+        // All edges use curved Bezier routing.
+        type: "default",
+        selectable: false,
+      };
+    });
 
   // ─── Render ───────────────────────────────────────────────────────────────
 

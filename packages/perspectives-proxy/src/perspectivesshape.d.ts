@@ -374,6 +374,7 @@ export type ModelGraphEdge = {
   to: ContextType;
   roleId: EnumeratedRoleType;
   roleLabel: string;
+  roleKind: "ContextRole" | "UserRole";
 };
 export type ModelContextGraph = { nodes: ModelGraphNode[]; edges: ModelGraphEdge[] };
 

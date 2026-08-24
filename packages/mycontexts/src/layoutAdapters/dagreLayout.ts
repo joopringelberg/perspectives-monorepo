@@ -8,10 +8,6 @@
  *
  * Dagre positions are centre-based; this adapter converts to top-left
  * coordinates as required by React Flow.
- *
- * Self-loop edges are skipped during layout computation (dagre does not
- * handle them reliably), but they are still rendered by React Flow via
- * the edge data supplied by graphNormalization.
  */
 
 // @dagrejs/dagre uses `export =` — use namespace import for TS compatibility.
@@ -61,11 +57,7 @@ export class DagreLayout implements LayoutAdapter {
     }
 
     for (const e of edges) {
-      // Skip true self-loops (same nodeKey for source and target) to avoid
-      // dagre layout instability; they are still rendered as edges.
-      if (e.sourceKey !== e.targetKey) {
-        g.setEdge(e.sourceKey, e.targetKey);
-      }
+      g.setEdge(e.sourceKey, e.targetKey);
     }
 
     dagre.layout(g);
