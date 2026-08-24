@@ -377,10 +377,9 @@ export class PerspectivesFile extends PerspectivesComponent<PerspectivesFileProp
           )
           .then( perspectivesFile => 
             {
-              const parsedFile = JSON.parse(perspectivesFile) as PerspectivesFileType;
               return component.setState(
-                { database: parsedFile.database || currentDatabase
-                , roleFileName: parsedFile.roleFileName || component.state.roleFileName
+                { database: perspectivesFile.database || currentDatabase
+                , roleFileName: perspectivesFile.roleFileName || component.state.roleFileName
                 });
             })
           .catch(e => UserMessagingPromise.then( um => 
