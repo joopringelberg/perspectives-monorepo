@@ -87,7 +87,7 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (UserName, Password)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (clearQueryCache, contextCache, getCurrentLanguage, getPerspectivesUser, isInstalledModel, lookupModelUri, modelsDatabaseName, removeTranslationTable, roleCache, setModelUri)
+import Perspectives.PerspectivesState (clearQueryCache, contextCache, conversationCacheDelete, getCurrentLanguage, getPerspectivesUser, isInstalledModel, lookupModelUri, modelsDatabaseName, removeTranslationTable, roleCache, setModelUri)
 import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, Value(..), perspectivesUser2RoleInstance)
@@ -301,6 +301,7 @@ updateModel withDependencies install dfid@(ModelUri modelName) domeinFileAndAtta
       -- The model is now decached, but the translations table is still in cache.
       -- It will be loaded when a new type lookup is performed.
       lift $ removeTranslationTable unversionedModelname
+      lift $ conversationCacheDelete unversionedModelname
       lift $ fetchTranslations dfid
       lift $ infoInstall $ "Model updated: " <> show namespace
 
@@ -665,6 +666,7 @@ removeModelFromLocalStore versionedModelURIA rid =
           let cid = createDefaultIdentifier ((unsafePartial modelUri2ManifestUrl unversionedURI).manifestName <> "_modelRootContext")
           scheduleContextRemoval Nothing [] (ContextInstance cid)
           scheduleDomeinFileRemoval (ModelUri unversionedURI)
+          lift $ conversationCacheDelete unversionedURI
         _ -> pure unit
     )
     >>= handleExternalStatementError "model://perspectives.domains#RemoveModelFromLocalStore"

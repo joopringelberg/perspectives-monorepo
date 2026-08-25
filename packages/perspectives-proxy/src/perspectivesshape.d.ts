@@ -16,10 +16,26 @@ export type PerspectivesReceiver = (perspectives: Perspective[]) => void;
 export type ContextAndNameReceiver = (contextAndName: ContextAndName[]) => void;
 export type ScreenReceiver = (screen: ScreenDefinition[]) => void;
 export type TableFormReceiver = (tableForm: TableFormDef[]) => void;
+export type ConversationReceiver = (conversation: ConversationBody[]) => void;
 export type PropertyType = string & { readonly brand: unique symbol };
 export type ContextType = string & { readonly brand: unique symbol };
 export type RoleKind = "RoleInContext" | "ContextRole" | "ExternalRole" | "UserRole" | "Public" | "PublicProxy"
 export type EnumeratedOrCalculatedProperty = {type: "ENP" | "CP", value: PropertyType}
+
+export type ConversationMessage = {
+  message: string;
+  fallback: string;
+};
+
+export type ConversationElement =
+  | { statement: ConversationMessage }
+  | { question: ConversationMessage }
+  | { answer: ConversationMessage; sequence?: ConversationElement[] }
+  | { sequence: ConversationElement[] };
+
+export type ConversationBody = {
+  conversation: ConversationElement[];
+};
 
 export type ContextActions = Record<ModeledActionName, TranslatedActionName>;
 

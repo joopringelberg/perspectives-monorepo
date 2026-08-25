@@ -2,7 +2,9 @@
 
 ## 1. Introduction
 
-This document specifies a YAML representation for **conversational structures**. A conversation is modelled as role-taking between two participants:
+This document specifies the grammar and YAML representation of one reusable **conversation body**. The model-level documents that store bodies and bind them to contexts, user roles, and perspectives are specified in [Model Conversation Documents - YAML Specification](model-conversation-documents-spec.md).
+
+A conversation is modelled as role-taking between two participants:
 
 - **Bot** — the participant who drives the conversation, asks questions, and may introduce branching.
 - **Human** — the participant who selects among available answers, but does not branch independently.
@@ -14,21 +16,21 @@ A typical use-case is a nested Frequently Asked Questions (FAQ) tree, where the 
 ## 2. Formal Syntax (BNF)
 
 ```bnf
-<document>    ::= <element>+
+<conversation-body>    ::= [<element-definitions>] <conversation>
 
-<element>     ::= <labeled-element> | <unlabeled-element>
+<element-definitions>  ::= "elements:" <labeled-element>+
+<conversation>         ::= "conversation:" <element>+
 
 <labeled-element>   ::= <label> ":" <unlabeled-element>
                       | <label> ":" <ref>
 
-<unlabeled-element> ::= <statement>
-                      | <question>
-                      | <answer>
-                      | <sequence>
+<element>     ::= <unlabeled-element> | <ref>
+
+<unlabeled-element> ::= <statement> | <question> | <answer> | <sequence>
 
 <statement>   ::= "statement:" <text>
 <question>    ::= "question:" <text>
-<answer>      ::= "answer:" (<text> | <sequence>)
+<answer>      ::= "answer:" <text> [<sequence>]
 
 <sequence>    ::= "sequence:" <element>+
 
@@ -57,18 +59,17 @@ A typical use-case is a nested Frequently Asked Questions (FAQ) tree, where the 
 |-------------|--------------|---------------------------------------|
 | Statement   | `statement`  | string (single- or multi-line)        |
 | Question    | `question`   | string (single- or multi-line)        |
-| Answer      | `answer`     | string **or** mapping with `sequence` |
+| Answer      | `answer`     | string, or mapping with required `text` and optional `sequence` |
 | Sequence    | `sequence`   | YAML list of elements                 |
 | Label       | top-level key name under `elements` (or as anchor `&label`) |
 | Reference   | `ref: <label>` |
 
 ### 3.2 Document structure
 
-A document is a YAML mapping with an optional `elements` map (for named/labeled elements) and a mandatory `conversation` entry that is the top-level sequence.
+A conversation body is a YAML mapping with an optional `elements` map for named elements and a mandatory `conversation` entry containing its top-level sequence. This mapping may be stored as a standalone document or embedded as a conversation definition in a context or library document.
 
 ```yaml
-# conversational-document.yaml
-elements:                   # optional section holding labeled/reusable elements
+elements:                   # optional, local reusable elements
   <label>:
     <element>
 
@@ -105,6 +106,7 @@ conversation:               # the root sequence of the document
 **Answer with a nested sequence (introduces branching)**
 ```yaml
 - answer:
+    text: "I would like to repeat a step."
     sequence:
       - statement: "Great choice!"
       - question: "Which step do you want to repeat?"
@@ -136,6 +138,8 @@ elements:
 ```yaml
 - ref: pasta-intro
 ```
+
+Labels and `ref` values are local to one conversation body. They do not resolve into other conversation bodies or model-level library documents.
 
 ---
 
@@ -172,6 +176,7 @@ elements:
       - question: "Which pasta dish would you like to prepare?"
       - answer: "Spaghetti Carbonara"
       - answer:
+          text: "Penne Arrabbiata"
           sequence:
             - statement: "Penne Arrabbiata is a spicy tomato-based pasta."
             - question: "How spicy would you like it?"
@@ -200,12 +205,15 @@ conversation:
   - statement: "I will help you find the right recipe."
   - question: "What would you like to cook today?"
   - answer:
+      text: "Pasta"
       sequence:
         - ref: pasta-guide
   - answer:
+      text: "Risotto"
       sequence:
         - ref: risotto-guide
   - answer:
+      text: "Soup"
       sequence:
         - ref: soup-guide
 ```
@@ -235,13 +243,16 @@ conversation:
   - statement: "Welcome to the Kitchen Fundamentals Guide."
   - question: "What fundamental skill would you like to learn about?"
   - answer:
+      text: "Knife skills"
       sequence:
         - statement: "Knife skills are essential in any kitchen."
         - ref: knife-safety
   - answer:
+      text: "Stock preparation"
       sequence:
         - ref: basic-stock
   - answer:
+      text: "Heat management"
       sequence:
         - statement: "Heat management is crucial: too high and food burns, too low and it steams."
         - question: "Which heat technique interests you?"
@@ -258,9 +269,9 @@ conversation:
 |-------------|--------------------------------------------------|------------|
 | `statement` | `statement: <text>`                              | Bot        |
 | `question`  | `question: <text>`                               | Bot        |
-| `answer`    | `answer: <text>` or `answer: sequence: [...]`    | Human      |
+| `answer`    | `answer: <text>` or `answer: { text: <text>, sequence: [...] }` | Human      |
 | `sequence`  | `sequence: [...]` (list of elements)             | Structural |
 | Label       | Named key under `elements:`                      | Both       |
 | Reference   | `ref: <label>`                                   | Both       |
 
-A `sequence` nested inside an `answer` introduces a **branch** in the conversation. Labels and `ref` allow conversation fragments to be defined once and reused in multiple places without repetition.
+Every `answer` starts with human-authored text. An optional nested `sequence` introduces a **branch** that continues the conversation after that answer. Labels and `ref` allow fragments to be reused within one conversation body. Sharing complete conversations and binding them to Perspectives model elements are covered by the [model conversation document specification](model-conversation-documents-spec.md).
