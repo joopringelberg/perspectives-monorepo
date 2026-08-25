@@ -861,13 +861,14 @@ export class PerspectivesProxy
   }
 
   /** Retrieve context or perspective help without exposing model attachments. */
-  getHelpConversation(contextInstance: ContextInstanceT, audienceRoleType: UserRoleType, targetRoleType: RoleType | undefined, receiveValues: ConversationReceiver, errorHandler?: errorHandler)
+  getHelpConversation(contextInstance: ContextInstanceT, audienceRoleType: UserRoleType, targetRoleType: RoleType | undefined, perspectiveId: string | undefined, receiveValues: ConversationReceiver, errorHandler?: errorHandler)
   {
     return this.send(
       { request: "GetHelpConversation"
       , subject: contextInstance
       , predicate: audienceRoleType
       , object: targetRoleType ?? ""
+      , contextDescription: { perspectiveId }
       , onlyOnce: true
       },
       function (conversationStrings)

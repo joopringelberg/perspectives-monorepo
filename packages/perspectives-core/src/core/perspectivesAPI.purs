@@ -517,18 +517,22 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
           onlyOnce
 
     -- { request: "GetHelpConversation", subject: ContextInstance,
-    --   predicate: AudienceRoleType, object: optional TargetRoleType }
+    --   predicate: AudienceRoleType, object: optional TargetRoleType,
+    --   contextDescription: { perspectiveId: optional stable Perspective.id } }
     Api.GetHelpConversation -> do
       audienceRoleType <- string2RoleType predicate
       targetRoleType <- if object == "" then pure Nothing else Just <$> string2RoleType object
-      ContextType stableContextType <- contextType_ (ContextInstance subject)
-      conversation <- getHelpConversation stableContextType audienceRoleType targetRoleType
-      sendResponse
-        ( Result corrId $ case conversation of
-            Nothing -> []
-            Just body -> [ body ]
-        )
-        setter
+      case read contextDescription of
+        Left err -> sendResponse (Error corrId $ "Incorrectly formed GetHelpConversation contextDescription: " <> show err) setter
+        Right ({ perspectiveId } :: { perspectiveId :: Maybe String }) -> do
+          ContextType stableContextType <- contextType_ (ContextInstance subject)
+          conversation <- getHelpConversation stableContextType audienceRoleType targetRoleType perspectiveId
+          sendResponse
+            ( Result corrId $ case conversation of
+                Nothing -> []
+                Just body -> [ body ]
+            )
+            setter
 
     -- { request: "GetScreen", subject: UserRoleType, predicate: ContextType, object: ContextInstance }
     Api.GetScreen -> do

@@ -29,6 +29,8 @@ import { InternetConnectivityCheck } from './internetConnectivityCheck';
 import { changeLanguage } from './i18next';
 import { About } from './about';
 import FlippingTitle from './flippingTitle';
+import ConversationViewer, { positionNearTarget, type HelpViewerContent } from './conversationViewer';
+import { HelpModeContext, type HelpActivation, type HelpTarget } from './helpTypes';
 
 const mycontextStartPage = __STARTPAGE__ as RoleInstanceT; 
 
@@ -68,11 +70,24 @@ interface WWWComponentState {
   invitationData?: { message: string; transaction: any; confirmation: string; };
   importConfirmationCode: string;
   importCodeInvalid: boolean;
+  helpModeActive: boolean;
+  helpViewer?: {
+    target: HelpTarget;
+    content: HelpViewerContent;
+    initialPosition: { left: number; top: number };
+    requestId: number;
+  };
 }
 
 class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponentState> {
   getScreenUnsubscriber: Unsubscriber | undefined;
   getMeForContextUnsubscriber: Unsubscriber | undefined;
+  // Every open or close advances this generation. Late proxy callbacks can
+  // therefore never replace the conversation selected most recently.
+  helpRequestId = 0;
+  // Kept outside React state because it is an imperative focus destination,
+  // not information that affects rendering.
+  helpTriggerElement?: HTMLElement;
 
   constructor(props:  WWWComponentProps) {
     super(props);
@@ -100,6 +115,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       , invitationData: undefined
       , importConfirmationCode: ''
       , importCodeInvalid: false
+      , helpModeActive: false
+      , helpViewer: undefined
     };
     this.checkScreenSize = this.checkScreenSize.bind(this);
     this.getScreenUnsubscriber = undefined;
@@ -280,6 +297,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     const component = this;
     const promises : Promise<any>[] = [];
     if (this.state.openContext !== prevState.openContext) {
+      this.closeHelpViewer();
       if (this.getMeForContextUnsubscriber) {
         promises.push( PDRproxy.then( pproxy => pproxy.send(component.getMeForContextUnsubscriber!, function(){})));
       }
@@ -293,11 +311,67 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   }
 
   componentWillUnmount() {
+    this.helpRequestId += 1;
     window.removeEventListener('resize', this.checkScreenSize);
     document.removeEventListener('keydown', this.handleKeyboardNavigation);
     window.removeEventListener('mousemove', this.onColumnDragMove);
     window.removeEventListener('mouseup', this.onColumnDragEnd);
   }
+
+  openHelp = (activation: HelpActivation) => {
+    const requestId = ++this.helpRequestId;
+    this.helpTriggerElement = activation.triggerElement;
+    this.setState({
+      helpViewer: {
+        target: activation.target,
+        content: { status: 'loading' },
+        initialPosition: positionNearTarget(activation.anchorRect),
+        requestId,
+      },
+    });
+
+    PDRproxy.then(pproxy => pproxy.getHelpConversation(
+      activation.target.contextInstance,
+      activation.target.userRoleType,
+      activation.target.kind === 'role' ? activation.target.roleType : undefined,
+      activation.target.kind === 'role' ? activation.target.perspectiveId : undefined,
+      conversations => {
+        if (requestId !== this.helpRequestId) return;
+        this.setState(state => state.helpViewer?.requestId === requestId
+          ? { helpViewer: { ...state.helpViewer, content: conversations[0] ? { status: 'open', conversation: conversations[0] } : { status: 'unavailable' } } }
+          : null);
+      },
+      () => {
+        if (requestId !== this.helpRequestId) return;
+        this.setState(state => state.helpViewer?.requestId === requestId
+          ? { helpViewer: { ...state.helpViewer, content: { status: 'error' } } }
+          : null);
+      }
+    )).catch(() => {
+      if (requestId !== this.helpRequestId) return;
+      this.setState(state => state.helpViewer?.requestId === requestId
+        ? { helpViewer: { ...state.helpViewer, content: { status: 'error' } } }
+        : null);
+    });
+  };
+
+  closeHelpViewer = () => {
+    if (!this.state.helpViewer) return;
+    this.helpRequestId += 1;
+    const triggerElement = this.helpTriggerElement;
+    this.helpTriggerElement = undefined;
+    this.setState({ helpViewer: undefined }, () => {
+      if (triggerElement?.isConnected) triggerElement.focus();
+    });
+  };
+
+  toggleHelpMode = () => {
+    if (this.state.helpModeActive) {
+      this.setState({ helpModeActive: false }, this.closeHelpViewer);
+      return;
+    }
+    this.setState({ helpModeActive: true });
+  };
 
   // Inspector helpers
   openInspectorForContext = (contextId: ContextInstanceT) => {
@@ -779,9 +853,31 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           title={this.state.title} 
           userRoleType={this.state.screen ? this.state.screen.userRole : (this.state.openContextUserType ? deconstructLocalName(this.state.openContextUserType) : '')} 
           showTitleClass="text-primary"
+          helpModeActive={this.state.helpModeActive}
+          onHelpTarget={this.state.openContextType && this.state.openContextUserType ? anchor => this.openHelp({
+            target: {
+              kind: 'context',
+              contextInstance: deconstructContext(this.state.openContext!) as ContextInstanceT,
+              contextType: this.state.openContextType!,
+              userRoleType: this.state.openContextUserType!,
+              label: this.state.title,
+            },
+            anchorRect: anchor.getBoundingClientRect(),
+            triggerElement: anchor,
+          }) : undefined}
         />
 
       </Navbar.Brand>
+      <Button
+        variant={this.state.helpModeActive ? 'primary' : 'link'}
+        className="help-mode-toggle"
+        onClick={this.toggleHelpMode}
+        aria-pressed={this.state.helpModeActive}
+        aria-label={i18next.t(this.state.helpModeActive ? 'help_mode_disable' : 'help_mode_enable', { ns: 'mycontexts' })}
+        title={i18next.t(this.state.helpModeActive ? 'help_mode_disable' : 'help_mode_enable', { ns: 'mycontexts' })}
+      >
+        <i className="bi bi-question-lg" aria-hidden="true" />
+      </Button>
       <InternetConnectivityCheck reportBack={ (isOnline : boolean) => component.state.isOnline !== isOnline ? component.setState({isOnline}) : null}/>
       {component.state.systemIdentifier ? <ConnectedToAMQP roleinstance={ externalRole( component.state.systemIdentifier )} isOnline={component.state.isOnline} /> : null}
     </Navbar>
@@ -1224,6 +1320,12 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
   // Add to WWWComponent class
   handleKeyboardNavigation = (e: KeyboardEvent) => {    
+    if (e.key === 'Escape' && this.state.helpViewer) {
+      this.closeHelpViewer();
+      e.preventDefault();
+      return;
+    }
+
     // Open inspector with Ctrl+I
     if (e.ctrlKey && (e.key === 'i' || e.key === 'I')) {
       if (this.state.openContext) {
@@ -1316,9 +1418,20 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               { i18next.t("skip_to_content", {ns: 'mycontexts'}) }
             </a>
             
-            { this.state.openContext ? this.state.isSmallScreen ? this.renderMobile() : this.renderDesktop() : null }
-            {this.notificationsAndClipboard()}
-            {this.leftPanel()}
+            <HelpModeContext.Provider value={{ active: this.state.helpModeActive, openHelp: this.openHelp }}>
+              { this.state.openContext ? this.state.isSmallScreen ? this.renderMobile() : this.renderDesktop() : null }
+              {this.notificationsAndClipboard()}
+              {this.leftPanel()}
+            </HelpModeContext.Provider>
+            {this.state.helpViewer ? (
+              <ConversationViewer
+                target={this.state.helpViewer.target}
+                content={this.state.helpViewer.content}
+                initialPosition={this.state.helpViewer.initialPosition}
+                requestId={this.state.helpViewer.requestId}
+                onClose={this.closeHelpViewer}
+              />
+            ) : null}
             <div className="keyboard-nav-instructions" id="keyboard-instructions">
               Press Tab to navigate between sections. Use arrow keys to navigate within a section. 
               Press Enter to select an item. Press Escape to return to the main navigation.

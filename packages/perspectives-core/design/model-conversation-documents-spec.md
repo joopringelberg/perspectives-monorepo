@@ -86,6 +86,11 @@ libraries:
   - document: "conversations/shared.yaml"
 ```
 
+The source `model` value is the readable, fully qualified, versioned model URI.
+Compilation validates its readable root through `stableIdMapping.json` and
+validates its version against the active stable versioned model URI. The two
+URIs identify the same model but must not be compared as literal strings.
+
 `libraries` is optional. Context entries normally contain a relative `document` path. Paths are resolved relative to the manifest.
 
 ### 4.2 Embedded context documents
@@ -229,7 +234,7 @@ A perspective is normally addressed by the tuple:
 (context, audience user role, target role)
 ```
 
-ARC perspectives are not generally named independently. If a model can contain more than one distinct perspective from the same user role to the same target role, the compiler must provide a stable `perspectiveId`, and the binding includes it:
+ARC perspectives are not generally named independently. If a model can contain more than one distinct perspective from the same user role to the same target role, the binding includes the stable compiled `Perspective.id` as `perspectiveId`:
 
 ```yaml
 - audiences:
@@ -450,7 +455,7 @@ perspective-level: (stable context type, stable audience user role type,
                     stable target role type [, stable perspective id])
 ```
 
-If distinct perspectives can share the same audience and target role, compilation must include a stable `perspectiveId`. A textual query or generated display name is not a stable substitute.
+If distinct perspectives can share the same audience and target role, compilation must include the stable compiled `Perspective.id` as `perspectiveId`. A textual query or generated display name is not a stable substitute. The serialized perspective exposed to clients carries the same identifier.
 
 ---
 
@@ -479,14 +484,14 @@ When help mode is active, MyContexts identifies the clicked object but delegates
 
 ```text
 ContextTarget
-RoleTarget stableRoleType
+RoleTarget stableRoleType stablePerspectiveId
 ```
 
 The PDR derives the stable context type and the active user's role type from the context instance. It then performs an indexed lookup in `conversations.json`:
 
 1. Select the stable context-type entry.
 2. Select the active audience user-role entry.
-3. For a role target, select the stable target-role entry.
+3. For a role target, select the entry keyed by the stable target role and serialized `Perspective.id`.
 4. Resolve the resulting conversation identifier in `conversations`.
 5. Return the conversation body to MyContexts.
 

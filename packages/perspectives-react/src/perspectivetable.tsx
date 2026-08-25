@@ -201,6 +201,8 @@ interface PerspectiveTableProps
   , sortOnHiddenProperty?: PropertyType
   , sortAscending?: boolean
   , typeAheadFillFromCandidates?: FilterValueEntry[]
+  , helpModeActive?: boolean
+  , onHelpTarget?: (perspective: Perspective, anchor: HTMLElement) => void
   }
 
 interface PerspectiveTableState
@@ -532,7 +534,15 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
         component.props.showAsAccordionItem ?
           <Accordion.Item eventKey={perspective.roleType} key={perspective.id}>
             <Accordion.Header
-              className="py-1"
+              className={`py-1 ${component.props.helpModeActive ? 'help-target-active' : ''}`}
+              onClickCapture={(event) => {
+                if (!component.props.helpModeActive || !component.props.onHelpTarget) return;
+                if ((event.target as HTMLElement).closest('.accordion-actions')) return;
+                event.preventDefault();
+                event.stopPropagation();
+                const anchor = (event.target as HTMLElement).closest('.accordion-button') as HTMLElement | null;
+                component.props.onHelpTarget(perspective, anchor ?? event.currentTarget);
+              }}
               onClick={() => component.eventDiv.current?.dispatchEvent(
                 new CustomEvent('OpenAccordionItem', { detail: perspective.roleType, bubbles: true })
               )}

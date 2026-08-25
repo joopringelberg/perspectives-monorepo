@@ -21,6 +21,7 @@ import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (head)
 import Data.Either (Either(..))
+import Data.Function.Uncurried (Fn5, runFn5)
 import Data.Maybe (Maybe(..))
 import Data.MediaType (MediaType(..))
 import Data.Nullable (Nullable, toMaybe)
@@ -51,11 +52,7 @@ foreign import compileConversationSourcesImpl
 foreign import parseConversationStoreImpl :: String -> Foreign
 
 foreign import resolveConversationImpl
-  :: Foreign
-  -> String
-  -> String
-  -> String
-  -> Nullable String
+  :: Fn5 Foreign String String String String (Nullable String)
 
 -- | Compile all YAML source files and replace conversations.json atomically.
 -- | Source role identifiers are passed instead of parallel property arrays. We
@@ -119,16 +116,21 @@ getHelpConversation
   :: String
   -> RoleType
   -> Maybe RoleType
+  -> Maybe String
   -> MonadPerspectives (Maybe String)
-getHelpConversation contextType audienceRoleType targetRoleType = do
+getHelpConversation contextType audienceRoleType targetRoleType perspectiveId = do
   store <- loadConversationStore contextType
-  pure $ toMaybe $ resolveConversationImpl
+  pure $ toMaybe $ runFn5 resolveConversationImpl
     store
     contextType
     (roletype2string audienceRoleType)
     ( case targetRoleType of
         Nothing -> ""
         Just target -> roletype2string target
+    )
+    ( case perspectiveId of
+        Nothing -> ""
+        Just identifier -> identifier
     )
 
 -- | Load and decode conversations.json once per model. The cached Foreign value

@@ -4,6 +4,31 @@ const CONTEXT_SCHEMA = "perspectives-context-conversations/v1";
 const LIBRARY_SCHEMA = "perspectives-conversation-library/v1";
 const RUNTIME_SCHEMA = "perspectives-help/v1";
 
+const splitVersionedModelUri = (uri) => {
+  const separator = uri.indexOf("@");
+  return separator < 0
+    ? { modelUri: uri, version: undefined }
+    : { modelUri: uri.slice(0, separator), version: uri.slice(separator + 1) };
+};
+
+const validateDocumentModel = (mapping, documentModel, versionedStableModelUri, documentName) => {
+  if (typeof documentModel !== "string") fail(documentName, "model must be a versioned readable model URI.");
+
+  const readable = splitVersionedModelUri(documentModel);
+  const stable = splitVersionedModelUri(versionedStableModelUri);
+  if (stable.modelUri !== mapping.modelIdentifier) {
+    fail(documentName, `stable model '${stable.modelUri}' does not match the loaded stable-ID mapping.`);
+  }
+
+  const stableModelCuid = stable.modelUri.slice(stable.modelUri.lastIndexOf("#") + 1);
+  if (mapping.contextCuids?.[readable.modelUri] !== stableModelCuid) {
+    fail(documentName, `readable model '${readable.modelUri}' does not match the loaded stable-ID mapping.`);
+  }
+  if (readable.version === undefined || readable.version !== stable.version) {
+    fail(documentName, `model version must be '${stable.version ?? "<missing>"}'.`);
+  }
+};
+
 const fail = (documentName, message) => {
   throw new Error(`Conversation source '${documentName}': ${message}`);
 };
@@ -117,7 +142,7 @@ export const compileConversationSourcesImpl = (documentNames, yamlSources, mappi
     if (document.schema !== CONTEXT_SCHEMA && document.schema !== LIBRARY_SCHEMA) {
       fail(documentName, `unsupported schema '${String(document.schema)}'.`);
     }
-    if (document.model !== versionedModelUri) fail(documentName, `model must be '${versionedModelUri}'.`);
+    validateDocumentModel(mapping, document.model, versionedModelUri, documentName);
     assertObject(document.conversations, documentName, "conversations");
     documents.set(documentName, document);
   });
@@ -186,11 +211,14 @@ export const parseConversationStoreImpl = (json) => {
   return store;
 };
 
-export const resolveConversationImpl = (store, contextType, audienceRoleType, targetRoleType) => {
+export const resolveConversationImpl = (store, contextType, audienceRoleType, targetRoleType, perspectiveId) => {
   const contextBindings = store.bindings[contextType];
   if (!contextBindings) return null;
+  const audienceBindings = contextBindings.perspectives?.[audienceRoleType];
   const conversationId = targetRoleType === ""
     ? contextBindings.context?.[audienceRoleType]
-    : contextBindings.perspectives?.[audienceRoleType]?.[targetRoleType];
+    : perspectiveId === ""
+      ? audienceBindings?.[targetRoleType]
+      : audienceBindings?.[`${targetRoleType}#${perspectiveId}`] ?? audienceBindings?.[targetRoleType];
   return conversationId === undefined ? null : JSON.stringify(store.conversations[conversationId]);
 };
