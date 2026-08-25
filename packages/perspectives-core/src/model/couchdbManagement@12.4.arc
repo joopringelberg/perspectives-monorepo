@@ -1,6 +1,6 @@
 -- CouchdbManagement - Copyright Joop Ringelberg and Cor Baars 2021 - 2024
 
-domain model://perspectives.domains#CouchdbManagement@12.3
+domain model://perspectives.domains#CouchdbManagement@12.4
   use sys for model://perspectives.domains#System
   use cm for model://perspectives.domains#CouchdbManagement
   use acc for model://perspectives.domains#BodiesWithAccounts
@@ -1393,6 +1393,17 @@ domain model://perspectives.domains#CouchdbManagement@12.3
             row
               form Translation
                 without props (ModelTranslation)
+          tab "Help conversations"
+            row
+              markdown <## Add help conversations to your model
+                        * You can add help conversations to your model. These conversations are available in the help system of MyContexts.
+                        * Each conversation is a YAML file that holds the help per context. It can provide help for each user and perspective.
+                        You can download it, edit it in a text editor, and upload it again.
+                        * Take care to preserve the indentation (only use 'soft tabs'. A tab should be two spaces).
+                        * To upload your augmented conversation, select the `Yaml conversation file` control and press enter. Then upload your file.
+                      >
+            row
+              table ConversationSources
           tab "TCP Configuration"
             row
               markdown <## Generate TCP configuration
