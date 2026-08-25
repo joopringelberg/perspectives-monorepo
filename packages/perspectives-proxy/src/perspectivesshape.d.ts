@@ -10,10 +10,12 @@ export type ContextInstanceT = string & { readonly brand: unique symbol };
 export type ValueT = string & { readonly brand: unique symbol };
 export type PropertyValueReceiver = (value: ValueT[]) => void;
 export type RoleType = string & { readonly brand: unique symbol };
+export type EnumeratedRoleType = string & { readonly brand: unique symbol };
 export type UserRoleType = RoleType
 export type RoleTypeReceiver = (roleType: RoleType[]) => void;
 export type PerspectivesReceiver = (perspectives: Perspective[]) => void;
 export type ContextAndNameReceiver = (contextAndName: ContextAndName[]) => void;
+export type WiderContextReceiver = (widerContexts: WiderContext[]) => void;
 export type ScreenReceiver = (screen: ScreenDefinition[]) => void;
 export type TableFormReceiver = (tableForm: TableFormDef[]) => void;
 export type ConversationReceiver = (conversation: ConversationBody[]) => void;
@@ -370,6 +372,27 @@ export type RoleOnClipboard =
 export type ContextAndName =
 	{ externalRole : RoleInstanceT
 	  readableName : string }
+
+////////////////////////////////////////////
+//// WIDERCONTEXT
+////////////////////////////////////////////
+export type WiderContext =
+	{ externalRole : RoleInstanceT
+	  readableName : string
+    contextType : ContextType }
+
+    ////////////////////////////////////////////
+//// MODEL CONTEXT GRAPH
+////////////////////////////////////////////
+export type ModelGraphNode = { id: ContextType; label: string, indexedName?: ContextInstance };
+export type ModelGraphEdge = {
+  from: ContextType;
+  to: ContextType;
+  roleId: EnumeratedRoleType;
+  roleLabel: string;
+  roleKind: "ContextRole" | "UserRole";
+};
+export type ModelContextGraph = { nodes: ModelGraphNode[]; edges: ModelGraphEdge[] };
 
 ////////////////////////////////////////////
 //// FILLER TYPES

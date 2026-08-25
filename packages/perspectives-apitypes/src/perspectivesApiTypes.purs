@@ -83,6 +83,7 @@ data RequestType
   | GetWiderContexts
   | GetInspectableContext
   | GetInspectableRole
+  | GetModelContextGraph
 
   | RemoveRoleFromClipboard
   | AddRoleToClipboard
@@ -153,6 +154,7 @@ instance decodeRequestType :: ReadForeign RequestType where
     "GetWiderContexts" -> GetWiderContexts
     "GetInspectableContext" -> GetInspectableContext
     "GetInspectableRole" -> GetInspectableRole
+    "GetModelContextGraph" -> GetModelContextGraph
     "RemoveRoleFromClipboard" -> RemoveRoleFromClipboard
     "AddRoleToClipboard" -> AddRoleToClipboard
 
