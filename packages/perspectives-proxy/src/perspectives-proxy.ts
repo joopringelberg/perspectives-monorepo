@@ -50,7 +50,9 @@ import type {
   InspectableContext,
   InspectableRole,
   FillerType,
-  FillMode
+  FillMode,
+  ModelContextGraph,
+  WiderContextReceiver
 } from "./perspectivesshape.d.ts";
 
 export type * from "./perspectivesshape.d.ts";
@@ -1011,18 +1013,18 @@ export class PerspectivesProxy
     );
   }
 
-  getWiderContexts( externalRoleInstance : RoleInstanceT, receiveValues : ContextAndNameReceiver, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
+  getWiderContexts( externalRoleInstance : RoleInstanceT, receiveValues : WiderContextReceiver, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
   {
     return this.send(
       {request: "GetWiderContexts", subject: externalRoleInstance, onlyOnce: fireAndForget},
-      function (contextAndNameStrings)
+      function (widerContextStrings)
       {
-        return receiveValues(contextAndNameStrings.map( JSON.parse ));
+        return receiveValues(widerContextStrings.map( JSON.parse ));
       },
       errorHandler
     );
   }
-  
+
   ///////////////////////////////////////////////////////////////////////////////////////
   //// PROMISE RETURNING GETTERS.
   //// These getters, by their nature, return a result only once.
@@ -1425,6 +1427,32 @@ export class PerspectivesProxy
         );
       });
   }
+ 
+  // { request: "GetModelContextGraph", subject: ContextType }
+  // Returns the static type-level context navigation DAG for the model that defines
+  // the given context type. The result is a one-shot response.
+  getModelContextGraph( contextType : ContextType) : Promise<ModelContextGraph>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        return proxy.send(
+          {request: "GetModelContextGraph", subject: contextType, onlyOnce: true},
+          function (graphStrings)
+          {
+            if (graphStrings.length > 0)
+            {
+              resolver(JSON.parse(graphStrings[0]));
+            }
+            else
+            {
+              rejecter({});
+            }
+          },
+        );
+      });
+  }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////
   //// SETTERS.
@@ -1549,7 +1577,10 @@ export class PerspectivesProxy
         {
           return proxy.send(
             {request: "SaveFile", subject: JSON.stringify( perspectivesFile ), contextDescription: buf, authoringRole: myroletype, onlyOnce: true}
-            , fileInArray => resolver(fileInArray[0])
+            , fileInArray => {
+                const parsedFile = JSON.parse(fileInArray[0]) as PerspectivesFile;
+                resolver(parsedFile);
+              }
             , rejecter
             );
         });

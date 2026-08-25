@@ -70,7 +70,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, Perspec
 import Perspectives.Representation.Perspective (StateSpec(..)) as SP
 import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleKind(..), RoleType, StateIdentifier)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, isInPublicScheme, takeGuid)
-import Perspectives.SetupCouchdb (FillerInfo, context2RoleFilter, filled2FillerInfo, filled2fillerFilter, filler2filledFilter, role2ContextFilter, roleFromContextFilter)
+import Perspectives.SetupCouchdb (FillerInfo, context2RoleFilter, filled2FillerInfo, filled2fillerFilter, filler2filledFilter, role2ContextFilter)
 import Prelude (class Show, Unit, append, bind, discard, eq, flip, identity, join, map, pure, show, ($), (&&), (*>), (<#>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>))
 
 -----------------------------------------------------------
