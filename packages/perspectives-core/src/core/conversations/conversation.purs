@@ -38,7 +38,7 @@ import Perspectives.Identifiers (modelUri2ModelUrl, typeUri2ModelUri_, unversion
 import Perspectives.Logging (warnModel)
 import Perspectives.ModelDependencies (conversationSourceDocumentName, conversationSourceYaml)
 import Perspectives.Persistence.API (addAttachment, fromBlob, getAttachment, retrieveDocumentVersion, toFile)
-import Perspectives.PerspectivesState (conversationCacheDelete, conversationCacheInsert, conversationCacheLookup)
+import Perspectives.PerspectivesState (addWarning, conversationCacheDelete, conversationCacheInsert, conversationCacheLookup)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), PropertyType(..), RoleType, roletype2string)
@@ -80,20 +80,24 @@ generateConversations sourceRoleIds modelUris _ = case head modelUris of
       sources
       mapping
       versionedModelUri
-    json <- case compiled of
-      Left compileError -> throwError compileError
-      Right result -> pure result
-
-    let { repositoryUrl, documentName } = unsafePartial modelUri2ModelUrl versionedModelUri
-    attachment <- liftEffect $ toFile "conversations.json" "application/json" (unsafeToForeign json)
-    revision <- lift $ retrieveDocumentVersion repositoryUrl documentName
-    void $ lift $ addAttachment
-      repositoryUrl
-      documentName
-      revision
-      "conversations.json"
-      attachment
-      (MediaType "application/json")
+    case compiled of
+      Left compileError -> lift $ addWarning
+        { message: "Error in conversation YAML."
+        , error: show compileError
+        , externalRoleId: ""
+        , contextName: ""
+        }
+      Right json -> do
+        let { repositoryUrl, documentName } = unsafePartial modelUri2ModelUrl versionedModelUri
+        attachment <- liftEffect $ toFile "conversations.json" "application/json" (unsafeToForeign json)
+        revision <- lift $ retrieveDocumentVersion repositoryUrl documentName
+        void $ lift $ addAttachment
+          repositoryUrl
+          documentName
+          revision
+          "conversations.json"
+          attachment
+          (MediaType "application/json")
   where
   readSource :: String -> MonadPerspectivesTransaction { documentName :: String, yaml :: String }
   readSource sourceRoleId = do

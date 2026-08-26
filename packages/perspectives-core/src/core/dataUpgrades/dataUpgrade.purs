@@ -441,7 +441,7 @@ runDataUpgrades = do
         runMonadPerspectivesTransaction'
           false
           (ENR $ EnumeratedRoleType sysUser)
-          (updateModelForUpgrade $ ModelUri "model://perspectives.domains#CouchdbManagement@12.3")
+          (updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.3")
     )
 
   log ("Data upgrades complete. Current version: " <> pdrVersion)
