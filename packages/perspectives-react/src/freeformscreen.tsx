@@ -386,7 +386,14 @@ export function buildMarkDown(contextinstance : ContextInstanceT, myroletype : R
   }
 }
 
-export function buildTable(table : TableElementDef, showControls : boolean = true, showAsAccordionItem : boolean = false, showDetails : boolean = false)
+export function buildTable(
+  table : TableElementDef,
+  showControls : boolean = true,
+  showAsAccordionItem : boolean = false,
+  showDetails : boolean = false,
+  helpModeActive : boolean = false,
+  onHelpTarget? : (perspective: Perspective, anchor: HTMLElement) => void
+)
 {
   const perspective = table.widgetCommonFields.perspective;
   return (
@@ -404,6 +411,8 @@ export function buildTable(table : TableElementDef, showControls : boolean = tru
         showcontrolsandcaption={showControls}
         showAsAccordionItem={showAsAccordionItem}
         showDetails={showDetails}
+        helpModeActive={helpModeActive}
+        onHelpTarget={onHelpTarget}
         typeAheadFillFromCandidates={table.widgetCommonFields.typeAheadFillFromCandidates}
         />
     </>);

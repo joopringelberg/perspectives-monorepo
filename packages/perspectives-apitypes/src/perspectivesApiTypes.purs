@@ -66,6 +66,7 @@ data RequestType
   | GetPerspectives
   | GetPerspective
   | GetPerspectiveForUser
+  | GetHelpConversation
   | GetScreen
   | GetTableForm
   | GetContextActions
@@ -165,6 +166,7 @@ instance decodeRequestType :: ReadForeign RequestType where
     "GetPerspectives" -> GetPerspectives
     "GetPerspective" -> GetPerspective
     "GetPerspectiveForUser" -> GetPerspectiveForUser
+    "GetHelpConversation" -> GetHelpConversation
     "GetScreen" -> GetScreen
     "GetTableForm" -> GetTableForm
     "GetContextActions" -> GetContextActions

@@ -35,7 +35,8 @@ import Effect (Effect)
 import Effect.Aff.AVar (AVar, put, read, take, tryRead)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
-import Foreign.Object (empty, singleton)
+import Foreign (Foreign)
+import Foreign.Object (Object, empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
 import Perspectives.AMQP.Stomp (StompClient, createStompClient)
@@ -105,6 +106,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , userIntegrityChoice: userIntegrityChoiceAVar
   , currentLanguage
   , translations: empty
+  , conversations: (empty :: Object Foreign)
   , setPDRStatus: \_ _ -> unit
   , typeToBeFixed
   , modelUnderCompilation: Nothing
@@ -272,6 +274,15 @@ setTranslationTable domain tt = modify \s -> s { translations = OBJ.insert domai
 
 removeTranslationTable :: String -> MonadPerspectives Unit
 removeTranslationTable domain = modify \s -> s { translations = OBJ.delete domain s.translations }
+
+conversationCacheLookup :: String -> MonadPerspectives (Maybe Foreign)
+conversationCacheLookup modelUri = gets _.conversations >>= pure <<< OBJ.lookup modelUri
+
+conversationCacheInsert :: String -> Foreign -> MonadPerspectives Unit
+conversationCacheInsert modelUri conversations = modify \s -> s { conversations = OBJ.insert modelUri conversations s.conversations }
+
+conversationCacheDelete :: String -> MonadPerspectives Unit
+conversationCacheDelete modelUri = modify \s -> s { conversations = OBJ.delete modelUri s.conversations }
 
 getCurrentLanguage :: MonadPerspectives String
 getCurrentLanguage = gets _.currentLanguage

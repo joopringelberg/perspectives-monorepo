@@ -52,6 +52,7 @@ import Perspectives.Assignment.RunAction (runAction, runContextAction)
 import Perspectives.Assignment.SerialiseAsDeltas (noNewPeer, serialisedAsDeltasFor_)
 import Perspectives.Assignment.Update (RoleProp(..), addProperty, deleteProperty, getPropertyBearingRoleInstance, saveFile, setPreferredUserRoleType, setProperty)
 import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
+import Perspectives.Conversation (getHelpConversation)
 import Perspectives.CoreTypes (MP, MonadPerspectives, MonadPerspectivesTransaction, PropertyValueGetter, RoleGetter, liftToInstanceLevel, (##=), (##>), (##>>), (###=))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DependencyTracking.Dependency (registerSupportedEffect, unregisterSupportedEffect)
@@ -514,6 +515,24 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
           (perspectiveForContextAndUser userRoleInstance userRoleType objectRoleType)
           contextInstance
           onlyOnce
+
+    -- { request: "GetHelpConversation", subject: ContextInstance,
+    --   predicate: AudienceRoleType, object: optional TargetRoleType,
+    --   contextDescription: { perspectiveId: optional stable Perspective.id } }
+    Api.GetHelpConversation -> do
+      audienceRoleType <- string2RoleType predicate
+      targetRoleType <- if object == "" then pure Nothing else Just <$> string2RoleType object
+      case read contextDescription of
+        Left err -> sendResponse (Error corrId $ "Incorrectly formed GetHelpConversation contextDescription: " <> show err) setter
+        Right ({ perspectiveId } :: { perspectiveId :: Maybe String }) -> do
+          ContextType stableContextType <- contextType_ (ContextInstance subject)
+          conversation <- getHelpConversation stableContextType audienceRoleType targetRoleType perspectiveId
+          sendResponse
+            ( Result corrId $ case conversation of
+                Nothing -> []
+                Just body -> [ body ]
+            )
+            setter
 
     -- { request: "GetScreen", subject: UserRoleType, predicate: ContextType, object: ContextInstance }
     Api.GetScreen -> do

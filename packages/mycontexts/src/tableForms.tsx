@@ -1,9 +1,10 @@
 import * as React from "react";
 const { Component } = React;
-import { FormElementDef, TableFormDef } from "perspectives-proxy";
+import { FormElementDef, Perspective, TableFormDef } from "perspectives-proxy";
 import { buildForm, buildMarkDown, buildTable } from "perspectives-react";
 import { Accordion } from "react-bootstrap";
 import MSComponent, { SlidingPanelContentProps } from "./mscomponent";
+import { HelpModeContext } from "./helpTypes";
 
 interface TableFormsProps {
   screenelements: TableFormDef[];
@@ -19,20 +20,35 @@ export class TableForms extends Component<TableFormsProps> {
           isMobile={!this.props.showTablesAndForm} 
           className='bg-light-subtle'
         >
-          <Accordion defaultActiveKey="0" flush>
-            {
-            this.props.screenelements.map(({markdown, table, form}, index) => {
-              const contextinstance = table.widgetCommonFields.perspective.contextInstance;
-              const myroletype = table.widgetCommonFields.perspective.userRoleType;
-              // No TableControls, show as Accordion item.
-              return (
-                <div key={index} className="markdown">
-                  { markdown.map( (md, index) => <div key={index}>{ buildMarkDown( contextinstance, myroletype, md) }</div>) }
-                  { buildTable(table, false, true, this.props.showTablesAndForm) }
-                </div>);
-              })
-            }
-          </Accordion>
+          <HelpModeContext.Consumer>
+            {help => (
+              <Accordion defaultActiveKey="0" flush>
+                {this.props.screenelements.map(({markdown, table}, index) => {
+                  const perspective = table.widgetCommonFields.perspective;
+                  const openRoleHelp = (targetPerspective: Perspective, anchor: HTMLElement) => help.openHelp({
+                    target: {
+                      kind: 'role',
+                      contextInstance: targetPerspective.contextInstance,
+                      contextType: targetPerspective.contextType,
+                      userRoleType: targetPerspective.userRoleType,
+                      roleType: targetPerspective.roleType,
+                      perspectiveId: targetPerspective.id,
+                      label: targetPerspective.displayName,
+                    },
+                    anchorRect: anchor.getBoundingClientRect(),
+                    triggerElement: anchor,
+                  });
+
+                  return (
+                    <div key={index} className="markdown">
+                      {markdown.map((md, markdownIndex) => <div key={markdownIndex}>{buildMarkDown(perspective.contextInstance, perspective.userRoleType, md)}</div>)}
+                      {buildTable(table, false, true, this.props.showTablesAndForm, help.active, openRoleHelp)}
+                    </div>
+                  );
+                })}
+              </Accordion>
+            )}
+          </HelpModeContext.Consumer>
           <SelectedForm forms={forms} />
       </MSComponent>)
     }

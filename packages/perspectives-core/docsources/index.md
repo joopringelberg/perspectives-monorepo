@@ -45,6 +45,7 @@ This index provides an overview of the technical documentation in `packages/pers
 
 | Document | Description |
 |---|---|
+| [Conversation Text Format, Parser and Renderer](conversation-text-format.md) | The compact indentation-based syntax for conversation bodies, including statements, `?` questions, `-` answers, nested continuations, named fragments and references. Describes the parser, context-YAML renderer, AST, diagnostics and complete food-preparation example. |
 | [Typeahead Screen Widgets](typeahead-screen-widgets.md) | The four ARC keywords for role-filling with large candidate lists: `typeaheadfillfrom`, `typeaheadfiller`, `typeaheadform`, and `fillfrom`. Explains the `filterValueView` PouchDB view, the full compilation pipeline from ARC parser to React components, and the shared helper functions `fetchCandidatesFromQfd` and `fetchFilterValueCandidates`. |
 
 ---
@@ -61,6 +62,8 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.CollectAffectedContexts` | [Query Inversion](query-inversion.md), [Role-Binding Query Analysis](role-binding-query-analysis.md) |
 | `Perspectives.ContextStateCompiler` | [Transaction Execution Process](transaction-execution.md) |
 | `Perspectives.CoreTypes` | [The Query Subsystem](query-subsystem.md), [Structured Logging](structured-logging.md) |
+| `Perspectives.Conversations.Parser` | [Conversation Text Format and Parser](conversation-text-format.md) |
+| `Perspectives.Conversations.Renderer` | [Conversation Text Format and Parser](conversation-text-format.md) |
 | `Perspectives.ErrorLogging` | [PDR → Frontend Messaging](pdr-messaging.md) |
 | `Perspectives.Logging` | [Structured Logging](structured-logging.md) |
 | `Perspectives.External.HiddenFunctionCache` | [The Query Subsystem](query-subsystem.md) |

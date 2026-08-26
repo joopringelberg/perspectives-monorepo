@@ -32,6 +32,7 @@ module Perspectives.CoreTypes
   , AssumptionRegister
   , AssumptionTracking
   , BrokerService
+  , ConversationCache
   , ContextInstances
   , ContextPropertyValueGetter
   , CryptoKey'
@@ -146,6 +147,7 @@ import Effect.Aff.AVar (AVar, empty, put, read, take)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Exception (Error, error)
+import Foreign (Foreign)
 import Foreign.Object (Object)
 import Foreign.Object as F
 import LRUCache (Cache, defaultGetOptions, delete, get, set)
@@ -194,6 +196,9 @@ type ResourceDeltasCache = Cache (Array DeltaStoreRecord)
 
 -- | In-memory cache for getDeltasForRoleInstance results, keyed by safe role instance ID.
 type RoleInstanceDeltasCache = Cache (Array DeltaStoreRecord)
+
+-- | Decoded conversations.json values, keyed by stable model URI.
+type ConversationCache = Object Foreign
 
 type BrokerService = ConnectAndSubscriptionParameters (url :: String)
 
@@ -285,6 +290,8 @@ type PerspectivesExtraState =
   , currentLanguage :: String
 
   , translations :: Object TranslationTable
+
+  , conversations :: ConversationCache
 
   , setPDRStatus :: String -> String -> Unit
 

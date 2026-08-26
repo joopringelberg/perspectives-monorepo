@@ -436,6 +436,14 @@ runDataUpgrades = do
         void $ recompileLocalModel (ModelUri "model://perspectives.domains#System")
     )
 
+  runUpgrade installedVersion "3.3.9"
+    ( \_ ->
+        runMonadPerspectivesTransaction'
+          false
+          (ENR $ EnumeratedRoleType sysUser)
+          (updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.3")
+    )
+
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 

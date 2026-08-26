@@ -259,6 +259,24 @@ modelURI = "model://perspectives.domains#CouchdbManagement$VersionedModelManifes
 versionedModelURI :: String
 versionedModelURI = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$VersionedModelURI"
 
+conversationSources :: String
+conversationSources = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources"
+
+conversationSourceDocumentName :: String
+conversationSourceDocumentName = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$DocumentName"
+
+conversationSourceDocumentKind :: String
+conversationSourceDocumentKind = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$DocumentKind"
+
+conversationSourceContextType :: String
+conversationSourceContextType = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$ContextType"
+
+conversationSourceYaml :: String
+conversationSourceYaml = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$ConversationYaml"
+
+conversationSourceLastYamlChangeDT :: String
+conversationSourceLastYamlChangeDT = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$LastYamlChangeDT"
+
 modelURIReadable :: String
 modelURIReadable = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelURIReadable"
 

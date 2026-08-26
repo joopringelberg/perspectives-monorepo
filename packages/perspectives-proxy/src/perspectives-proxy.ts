@@ -31,6 +31,7 @@ import type {
   UserRoleType,
   RoleTypeReceiver,
   PerspectivesReceiver,
+  ConversationReceiver,
   ScreenReceiver,
   TableFormReceiver,
   PropertyType,
@@ -854,6 +855,25 @@ export class PerspectivesProxy
       function (perspectiveStrings)
       {
         return receiveValues(perspectiveStrings.map( JSON.parse ));
+      },
+      errorHandler
+    );
+  }
+
+  /** Retrieve context or perspective help without exposing model attachments. */
+  getHelpConversation(contextInstance: ContextInstanceT, audienceRoleType: UserRoleType, targetRoleType: RoleType | undefined, perspectiveId: string | undefined, receiveValues: ConversationReceiver, errorHandler?: errorHandler)
+  {
+    return this.send(
+      { request: "GetHelpConversation"
+      , subject: contextInstance
+      , predicate: audienceRoleType
+      , object: targetRoleType ?? ""
+      , contextDescription: { perspectiveId }
+      , onlyOnce: true
+      },
+      function (conversationStrings)
+      {
+        return receiveValues(conversationStrings.map(JSON.parse));
       },
       errorHandler
     );
