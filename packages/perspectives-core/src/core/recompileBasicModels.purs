@@ -140,9 +140,19 @@ recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _
     lift $ lift $ debugUpgrade ("Recompiling " <> namespace)
     -- Load sidecar from local DB and compile with it
     mlocalMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id) fromLocalModels
+    -- If no local sidecar is found, fall back to fetching it from the repository.
+    mMapping <- case mlocalMapping of
+      Just _ -> pure mlocalMapping
+      Nothing -> case modelUriVersion _id of
+        Nothing -> do
+          lift $ lift $ infoUpgrade ("recompileModel: no local sidecar for '" <> namespace <> "' and no version in '" <> _id <> "', cannot fall back to repository.")
+          pure Nothing
+        Just version -> do
+          lift $ lift $ infoUpgrade ("recompileModel: no local sidecar for '" <> namespace <> "', falling back to repository sidecar.")
+          lift $ lift $ loadStableMapping (ModelUri $ unwrap id <> "@" <> version) fromRepository
     -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
     -- It should also be the local part of the id.
-    r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc true mlocalMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> (fromMaybe "" ((<>) "@" <$> (modelUriVersion _id)))) (modelUriVersion _id)
+    r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc true mMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> (fromMaybe "" ((<>) "@" <$> (modelUriVersion _id)))) (modelUriVersion _id)
     case r of
       Left m -> lift $ lift $ errorUpgrade ("recompileModel: " <> show m)
       Right (Tuple df@(DomeinFile drf@{ invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects }) (Tuple invertedQueries mapping')) -> lift $ lift do
