@@ -1275,7 +1275,8 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       property DocumentKind (mandatory, String)
         enumeration = ("Context", "Library")
       property ContextType (String)
-      property ConversationYaml (mandatory, File)
+      -- The YAML file is a collection of conversations, each with a name and a list of turns.
+      property ContextYaml (mandatory, File)
         pattern = "text/yaml" "Only YAML conversation files are allowed."
       property LastYamlChangeDT (DateTime)
 
@@ -1308,7 +1309,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
 
       perspective on ConversationSources
         only (Create, Remove, Delete)
-        props (DocumentName, DocumentKind, ContextType, ConversationYaml, LastYamlChangeDT) verbs (Consult, SetPropertyValue, DeleteProperty)
+        props (DocumentName, DocumentKind, ContextType, ContextYaml, LastYamlChangeDT) verbs (Consult, SetPropertyValue, DeleteProperty)
         action GenerateConversations
           callEffect p:GenerateConversations(
             context >> ConversationSources,
