@@ -328,6 +328,23 @@ foreign import replicateOnce
        String
 
 -----------------------------------------------------------
+-- REPLICATEDATABASE
+-----------------------------------------------------------
+-- | Replicates a database identified by sourceDbName to a database identified by targetDbName.
+-- | Both names may be local PouchDB names or full http(s) URLs for CouchDB.
+-- | Credentials may be embedded in the URL as ******host:port/dbname.
+-- | The target database is created if it does not yet exist.
+replicateDatabase :: forall f. DatabaseName -> DatabaseName -> MonadPouchdb f Unit
+replicateDatabase sourceDbName targetDbName =
+  liftAff $ fromEffectFnAff $ runEffectFnAff2 replicateDatabaseImpl sourceDbName targetDbName
+
+foreign import replicateDatabaseImpl
+  :: EffectFn2
+       DatabaseName
+       DatabaseName
+       Unit
+
+-----------------------------------------------------------
 -- RECOVERFROMRECOVERYPOINT
 -----------------------------------------------------------
 recoverFromRecoveryPoint :: forall f. DatabaseName -> MonadPouchdb f String
