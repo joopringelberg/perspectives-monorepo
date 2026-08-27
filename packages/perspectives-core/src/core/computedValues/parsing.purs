@@ -47,7 +47,6 @@ import Foreign.Object (Object, empty, insert)
 import Main.RecompileBasicModels (recompileModelsAtUrl)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc1, mkLibFunc2, mkLibFunc3, (##>))
-import Perspectives.Conversation (generateConversations)
 import Perspectives.Couchdb (DeleteCouchdbDocument(..), DocWithAttachmentInfo(..))
 import Perspectives.Couchdb.Revision (Revision_, changeRevision)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
@@ -499,7 +498,6 @@ externalFunctions =
   , mkLibFunc1 "model://perspectives.domains#Parsing$GetTranslationYaml" True getTranslationYaml
   , mkLibFunc1 "model://perspectives.domains#Parsing$ParseYamlTranslation" True parseYamlTranslation
   , mkLibEffect2 "model://perspectives.domains#Parsing$GenerateTranslationTable" True generateTranslationTable
-  , mkLibEffect2 "model://perspectives.domains#Parsing$GenerateConversations" True generateConversations
   , mkLibFunc2 "model://perspectives.domains#Parsing$AugmentModelTranslation" True augmentModelTranslation
   , mkLibFunc1 "model://perspectives.domains#Parsing$GenerateTCPConfiguration" True generateTCPConfiguration
   ]

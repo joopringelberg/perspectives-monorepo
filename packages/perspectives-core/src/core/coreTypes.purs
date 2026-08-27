@@ -102,9 +102,13 @@ module Perspectives.CoreTypes
   , mkLibEffect1
   , mkLibEffect2
   , mkLibEffect3
+  , mkLibEffect4
+  , mkLibEffect5
   , mkLibFunc1
   , mkLibFunc2
   , mkLibFunc3
+  , mkLibFunc4
+  , mkLibFunc5
   , modifyPS
   , perspectivesState
   , removeInternally
@@ -953,3 +957,23 @@ type LibFunc3 = Array String -> Array String -> Array String -> (RoleInstance ~~
 
 mkLibFunc3 :: String -> ThreeValuedLogic -> LibFunc3 -> Tuple String HiddenFunctionDescription
 mkLibFunc3 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 3, isFunctional, isEffect: false }
+
+type LibEffect4 = Array String -> Array String -> Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
+
+mkLibEffect4 :: String -> ThreeValuedLogic -> LibEffect4 -> Tuple String HiddenFunctionDescription
+mkLibEffect4 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 4, isFunctional, isEffect: true }
+
+type LibFunc4 = Array String -> Array String -> Array String -> Array String -> (RoleInstance ~~> Value)
+
+mkLibFunc4 :: String -> ThreeValuedLogic -> LibFunc4 -> Tuple String HiddenFunctionDescription
+mkLibFunc4 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 4, isFunctional, isEffect: false }
+
+type LibEffect5 = Array String -> Array String -> Array String -> Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
+
+mkLibEffect5 :: String -> ThreeValuedLogic -> LibEffect5 -> Tuple String HiddenFunctionDescription
+mkLibEffect5 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 5, isFunctional, isEffect: true }
+
+type LibFunc5 = Array String -> Array String -> Array String -> Array String -> Array String -> (RoleInstance ~~> Value)
+
+mkLibFunc5 :: String -> ThreeValuedLogic -> LibFunc5 -> Tuple String HiddenFunctionDescription
+mkLibFunc5 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 5, isFunctional, isEffect: false }

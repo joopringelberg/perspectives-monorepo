@@ -40,6 +40,7 @@ coreModules =
   , "model://perspectives.domains#Sensor"
   , "model://perspectives.domains#RabbitMQ"
   , "model://perspectives.domains#Files"
+  , "model://perspectives.domains#HelpLib"
   ]
 
 isExternalCoreModule :: String -> Boolean

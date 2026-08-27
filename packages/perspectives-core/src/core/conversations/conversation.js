@@ -1,4 +1,4 @@
-import { load } from "js-yaml";
+import { dump, load } from "js-yaml";
 
 const CONTEXT_SCHEMA = "perspectives-context-conversations/v1";
 const LIBRARY_SCHEMA = "perspectives-conversation-library/v1";
@@ -212,13 +212,38 @@ export const parseConversationStoreImpl = (json) => {
 };
 
 export const resolveConversationImpl = (store, contextType, audienceRoleType, targetRoleType, perspectiveId) => {
+  const conversationId = resolveConversationId(store, contextType, audienceRoleType, targetRoleType, perspectiveId);
+  return conversationId === undefined ? null : JSON.stringify(store.conversations[conversationId]);
+};
+
+const resolveConversationId = (store, contextType, audienceRoleType, targetRoleType, perspectiveId) => {
   const contextBindings = store.bindings[contextType];
-  if (!contextBindings) return null;
+  if (!contextBindings) return undefined;
   const audienceBindings = contextBindings.perspectives?.[audienceRoleType];
-  const conversationId = targetRoleType === ""
+  return targetRoleType === ""
     ? contextBindings.context?.[audienceRoleType]
     : perspectiveId === ""
       ? audienceBindings?.[targetRoleType]
       : audienceBindings?.[`${targetRoleType}#${perspectiveId}`] ?? audienceBindings?.[targetRoleType];
-  return conversationId === undefined ? null : JSON.stringify(store.conversations[conversationId]);
+};
+
+export const resolveConversationSourceImpl = (json, documentNames, contextType, audienceRoleType, targetRoleType, perspectiveId) => {
+  const conversationId = resolveConversationId(JSON.parse(json), contextType, audienceRoleType, targetRoleType, perspectiveId);
+  if (conversationId === undefined) return null;
+  const documentName = documentNames.find((name) => conversationId.startsWith(`${name}#`));
+  if (documentName === undefined) throw new Error(`Cannot locate the source for runtime conversation '${conversationId}'.`);
+  return {
+    documentName,
+    conversationId: conversationId.slice(documentName.length + 1),
+  };
+};
+
+export const augmentConversationSourceImpl = (sourceYaml, conversationId, conversationYaml) => {
+  const source = assertObject(load(sourceYaml), "source", "document");
+  const replacement = assertObject(load(conversationYaml), "replacement", "conversation body");
+  if (!Object.hasOwn(source.conversations ?? {}, conversationId)) {
+    throw new Error(`Conversation '${conversationId}' was not found in its source document.`);
+  }
+  source.conversations[conversationId] = replacement;
+  return dump(source, { lineWidth: -1, noRefs: true, noCompatMode: true });
 };

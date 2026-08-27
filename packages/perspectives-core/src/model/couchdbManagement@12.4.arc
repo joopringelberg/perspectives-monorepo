@@ -7,6 +7,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
   use cdb for model://perspectives.domains#Couchdb
   use util for model://perspectives.domains#Utilities
   use p for model://perspectives.domains#Parsing
+  use help for model://perspectives.domains#HelpLib
   use files for model://perspectives.domains#Files
   use sensor for model://perspectives.domains#Sensor
 
@@ -1311,7 +1312,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
         only (Create, Remove, Delete)
         props (DocumentName, DocumentKind, ContextType, ContextYaml, LastYamlChangeDT) verbs (Consult, SetPropertyValue, DeleteProperty)
         action GenerateConversations
-          callEffect p:GenerateConversations(
+          callEffect help:GenerateConversations(
             context >> ConversationSources,
             context >> extern >> VersionedModelURI)
           LastYamlChangeDT = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime for context >> ConversationSources

@@ -66,9 +66,9 @@ domain model://joopringelberg.nl#HelpProject@1.0
       perspective on ConversationBranches
         only (CreateAndFill, Remove)
       perspective on ContextYamls
-        props (DocumentName, DocumentKind, ContextType, ContextYaml) verbs (Consult)
+        props (DocumentName, DocumentKind, ContextType, cm:VersionedModelManifest$ConversationSources$ContextYaml) verbs (Consult)
 
-    context ContextYamls = Model >> binding >> context >> cm:VersionedModelManifest$ConversationSources
+    thing ContextYamls = Model >> binding >> context >> cm:VersionedModelManifest$ConversationSources
 
     context Model filledBy cm:VersionedModelManifest
 
@@ -98,5 +98,7 @@ domain model://joopringelberg.nl#HelpProject@1.0
     user Author filledBy (sys:TheWorld$PerspectivesUsers)
 
     user CoAuthor filledBy (sys:TheWorld$PerspectivesUsers)
+
+    thing ContextYamls = extern >> binder ConversationBranches >> context >> ContextYamls
 
     

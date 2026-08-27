@@ -6,6 +6,7 @@
 
 module Perspectives.Conversations.Renderer
   ( ConversationRenderError(..)
+  , conversationBodyToYaml
   , renderConversationBody
   , renderConversationFromContextYaml
   ) where
@@ -22,12 +23,34 @@ import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Exception (message)
-import Foreign (F, Foreign, ForeignError(..), fail, readString, tagOf)
+import Foreign (F, Foreign, ForeignError(..), fail, readString, tagOf, unsafeToForeign)
 import Foreign.Object (Object)
 import Foreign.Object as Object
 import Perspectives.Conversations.Parser (ConversationBody, ConversationElement(..), parseConversation)
 import Purescript.YAML as YAML
 import Simple.JSON (read')
+
+foreign import dumpConversationBodyImpl :: Foreign -> String
+
+conversationBodyToYaml :: ConversationBody -> String
+conversationBodyToYaml body = dumpConversationBodyImpl $ unsafeToForeign
+  { conversation: map encodeElement body.conversation
+  , elements: map encodeElement body.elements
+  }
+
+encodeElement :: ConversationElement -> Foreign
+encodeElement = case _ of
+  Statement text -> unsafeToForeign { statement: text }
+  Question text -> unsafeToForeign { question: text }
+  Answer { text, sequence: Nothing } -> unsafeToForeign { answer: text }
+  Answer { text, sequence: Just sequence } -> unsafeToForeign
+    { answer:
+        { text
+        , sequence: map encodeElement sequence
+        }
+    }
+  Sequence sequence -> unsafeToForeign { sequence: map encodeElement sequence }
+  Ref reference -> unsafeToForeign { ref: reference }
 
 data ConversationRenderError
   = YamlParseError String

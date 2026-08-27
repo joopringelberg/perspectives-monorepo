@@ -10,26 +10,36 @@
 -- | complete source collection into one stable-ID-indexed JSON attachment and
 -- | later resolves a conversation from the locally installed attachment.
 module Perspectives.Conversation
-  ( clearConversationCache
+  ( ConversationSource
+  , ConversationSourceLocation
+  , augmentConversationSource
+  , cacheConversationArtifact
+  , clearConversationCache
+  , compileConversationSources
   , generateConversations
   , getHelpConversation
+  , readConversationSources
+  , resolveConversationSource
+  , storeConversationArtifactInRepository
+  , storeConversationArtifactLocally
   ) where
 
 import Prelude
 
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (head)
+import Data.Array (find, head)
 import Data.Either (Either(..))
 import Data.Function.Uncurried (Fn5, runFn5)
 import Data.Maybe (Maybe(..))
 import Data.MediaType (MediaType(..))
 import Data.Nullable (Nullable, toMaybe)
 import Data.Traversable (traverse)
+import Effect (Effect)
 import Effect.Aff (error)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
-import Effect.Uncurried (EffectFn4, runEffectFn4)
+import Effect.Uncurried (EffectFn3, EffectFn4, EffectFn6, runEffectFn3, runEffectFn4, runEffectFn6)
 import Foreign (Foreign, unsafeToForeign)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, (##>))
@@ -54,6 +64,22 @@ foreign import parseConversationStoreImpl :: String -> Foreign
 foreign import resolveConversationImpl
   :: Fn5 Foreign String String String String (Nullable String)
 
+foreign import resolveConversationSourceImpl
+  :: EffectFn6 String (Array String) String String String String (Nullable { conversationId :: String, documentName :: String })
+
+foreign import augmentConversationSourceImpl :: EffectFn3 String String String String
+
+type ConversationSource =
+  { documentName :: String
+  , roleInstance :: RoleInstance
+  , yaml :: String
+  }
+
+type ConversationSourceLocation =
+  { conversationId :: String
+  , source :: ConversationSource
+  }
+
 -- | Compile all YAML source files and replace conversations.json atomically.
 -- | Source role identifiers are passed instead of parallel property arrays. We
 -- | read each name/file pair together so a missing value cannot misalign files.
@@ -65,21 +91,8 @@ generateConversations
 generateConversations sourceRoleIds modelUris _ = case head modelUris of
   Nothing -> throwError $ error "GenerateConversations requires a versioned model URI."
   Just versionedModelUri -> do
-    sourceDocuments <- traverse readSource sourceRoleIds
-    let documentNames = map _.documentName sourceDocuments
-    let sources = map _.yaml sourceDocuments
-    mapping <- lift $ loadStableMapping (ModelUri versionedModelUri :: ModelUri Stable) fromRepository >>= case _ of
-      Nothing -> throwError $ error "GenerateConversations could not load stableIdMapping.json."
-      Just stableMapping -> pure stableMapping
-
-    -- The FFI performs structural validation while it still has the complete
-    -- YAML object graph, then emits the compact runtime representation.
-    compiled <- liftEffect $ try $ runEffectFn4
-      compileConversationSourcesImpl
-      documentNames
-      sources
-      mapping
-      versionedModelUri
+    sourceDocuments <- lift $ readConversationSources sourceRoleIds
+    compiled <- lift $ try $ compileConversationSources sourceDocuments versionedModelUri
     case compiled of
       Left compileError -> lift $ addWarning
         { message: "Error in conversation YAML."
@@ -87,32 +100,88 @@ generateConversations sourceRoleIds modelUris _ = case head modelUris of
         , externalRoleId: ""
         , contextName: ""
         }
-      Right json -> do
-        let { repositoryUrl, documentName } = unsafePartial modelUri2ModelUrl versionedModelUri
-        attachment <- liftEffect $ toFile "conversations.json" "application/json" (unsafeToForeign json)
-        revision <- lift $ retrieveDocumentVersion repositoryUrl documentName
-        void $ lift $ addAttachment
-          repositoryUrl
-          documentName
-          revision
-          "conversations.json"
-          attachment
-          (MediaType "application/json")
+      Right json -> lift $ storeConversationArtifactInRepository versionedModelUri json
+
+readConversationSources :: Array String -> MonadPerspectives (Array ConversationSource)
+readConversationSources = traverse readSource
   where
-  readSource :: String -> MonadPerspectivesTransaction { documentName :: String, yaml :: String }
   readSource sourceRoleId = do
-    mDocumentName <- lift ((RoleInstance sourceRoleId) ##> getPropertyValues (ENP $ EnumeratedPropertyType conversationSourceDocumentName))
-    mFileValue <- lift ((RoleInstance sourceRoleId) ##> getPropertyValues (ENP $ EnumeratedPropertyType conversationSourceYaml))
+    mDocumentName <- (RoleInstance sourceRoleId) ##> getPropertyValues (ENP $ EnumeratedPropertyType conversationSourceDocumentName)
+    mFileValue <- (RoleInstance sourceRoleId) ##> getPropertyValues (ENP $ EnumeratedPropertyType conversationSourceYaml)
     documentName <- case mDocumentName of
       Nothing -> throwError $ error $ "Conversation source role '" <> sourceRoleId <> "' has no document name."
       Just (Value name) -> pure name
     fileValue <- case mFileValue of
       Nothing -> throwError $ error $ "Conversation source '" <> documentName <> "' has no YAML file."
       Just (Value value) -> pure value
-    contents <- lift $ getPFileTextValue fileValue
+    contents <- getPFileTextValue fileValue
     case contents of
       Nothing -> throwError $ error $ "Cannot read conversation source '" <> documentName <> "'."
-      Just source -> pure { documentName, yaml: source }
+      Just source -> pure { documentName, roleInstance: RoleInstance sourceRoleId, yaml: source }
+
+compileConversationSources :: Array ConversationSource -> String -> MonadPerspectives String
+compileConversationSources sourceDocuments versionedModelUri = do
+  mapping <- loadStableMapping (ModelUri versionedModelUri :: ModelUri Stable) fromRepository >>= case _ of
+    Nothing -> throwError $ error "Could not load stableIdMapping.json for conversation compilation."
+    Just stableMapping -> pure stableMapping
+  liftEffect $ runEffectFn4
+    compileConversationSourcesImpl
+    (map _.documentName sourceDocuments)
+    (map _.yaml sourceDocuments)
+    mapping
+    versionedModelUri
+
+resolveConversationSource
+  :: Array ConversationSource
+  -> String
+  -> String
+  -> String
+  -> Maybe String
+  -> Maybe String
+  -> MonadPerspectives (Maybe ConversationSourceLocation)
+resolveConversationSource sourceDocuments versionedModelUri contextType audienceRoleType targetRoleType perspectiveId = do
+  compiled <- compileConversationSources sourceDocuments versionedModelUri
+  location <- liftEffect $ runEffectFn6
+    resolveConversationSourceImpl
+    compiled
+    (map _.documentName sourceDocuments)
+    contextType
+    audienceRoleType
+    (maybeString targetRoleType)
+    (maybeString perspectiveId)
+  pure do
+    parsed <- toMaybe location
+    source <- find (\candidate -> candidate.documentName == parsed.documentName) sourceDocuments
+    pure { conversationId: parsed.conversationId, source }
+  where
+  maybeString = case _ of
+    Nothing -> ""
+    Just value -> value
+
+augmentConversationSource :: ConversationSourceLocation -> String -> Effect ConversationSource
+augmentConversationSource { conversationId, source } conversationYaml = do
+  yaml <- runEffectFn3 augmentConversationSourceImpl source.yaml conversationId conversationYaml
+  pure $ source { yaml = yaml }
+
+storeConversationArtifactLocally :: String -> String -> MonadPerspectives Unit
+storeConversationArtifactLocally versionedModelUri json = do
+  { database, documentName } <- resourceIdentifier2DocLocator $ unversionedModelUri versionedModelUri
+  storeConversationAttachment database documentName json
+
+storeConversationArtifactInRepository :: String -> String -> MonadPerspectives Unit
+storeConversationArtifactInRepository versionedModelUri json = do
+  let { repositoryUrl, documentName } = unsafePartial modelUri2ModelUrl versionedModelUri
+  storeConversationAttachment repositoryUrl documentName json
+
+storeConversationAttachment :: String -> String -> String -> MonadPerspectives Unit
+storeConversationAttachment database documentName json = do
+  attachment <- liftEffect $ toFile "conversations.json" "application/json" (unsafeToForeign json)
+  revision <- retrieveDocumentVersion database documentName
+  void $ addAttachment database documentName revision "conversations.json" attachment (MediaType "application/json")
+
+cacheConversationArtifact :: String -> String -> MonadPerspectives Unit
+cacheConversationArtifact versionedModelUri json =
+  conversationCacheInsert (unversionedModelUri versionedModelUri) (parseConversationStoreImpl json)
 
 -- | Resolve a conversation for a context and audience. An empty target role
 -- | denotes context-level help; otherwise the lookup is perspective-level.
