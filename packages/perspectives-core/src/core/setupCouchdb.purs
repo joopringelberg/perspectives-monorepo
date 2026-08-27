@@ -67,6 +67,8 @@ createUserDatabases user = do
   void $ databaseInfo $ user <> "_models"
   createDatabase $ user <> "_invertedqueries"
   void $ databaseInfo $ user <> "_invertedqueries"
+  createDatabase $ user <> "_deltastore"
+  void $ databaseInfo $ user <> "_deltastore"
   -- Now set the security document such that there is no role restriction for members.
   void $ withCouchdbUrl \url -> setSecurityDocument url (user <> "_models")
     (SecurityDocument { admins: { names: Just [], roles: [ "_admin" ] }, members: { names: Just [], roles: [] } })

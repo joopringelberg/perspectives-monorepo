@@ -1035,6 +1035,7 @@ moveDataToRemote urls userNames passwords _ =
           replicateDatabase (systemId <> "_post") (authenticatedUrl <> systemId <> "_post")
           replicateDatabase (systemId <> "_models") (authenticatedUrl <> systemId <> "_models")
           replicateDatabase (systemId <> "_invertedqueries") (authenticatedUrl <> systemId <> "_invertedqueries")
+          replicateDatabase (systemId <> "_deltastore") (authenticatedUrl <> systemId <> "_deltastore")
           modify \s -> s { couchdbUrl = Just url, couchdbCredentials = insert url (Credential userName password) s.couchdbCredentials }
           liftAff $ idbSet "couchdbUrl" (write url)
           liftAff $ idbSet "userName" (write userName)
@@ -1069,6 +1070,7 @@ moveDataToLocal _ =
                 replicateDatabase (authenticatedUrl <> systemId <> "_post") (systemId <> "_post")
                 replicateDatabase (authenticatedUrl <> systemId <> "_models") (systemId <> "_models")
                 replicateDatabase (authenticatedUrl <> systemId <> "_invertedqueries") (systemId <> "_invertedqueries")
+                replicateDatabase (authenticatedUrl <> systemId <> "_deltastore") (systemId <> "_deltastore")
                 modify \s -> s { couchdbUrl = Nothing }
                 liftAff $ idbDel "couchdbUrl"
                 liftAff $ idbDel "userName"
