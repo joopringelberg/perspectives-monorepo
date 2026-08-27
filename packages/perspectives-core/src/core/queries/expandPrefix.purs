@@ -290,6 +290,7 @@ instance expandPrefixPropertyE :: ScanSymbols PropertyVerbE where
 
 instance containsPrefixesPropsOrView :: ScanSymbols PropsOrView where
   scan (View s) = View <$> (f s)
+  scan (Properties s) = Properties <$> (traverse f s)
   scan x = pure x
 
 instance containsPrefixesRoleIdentification :: ScanSymbols RoleIdentification where
