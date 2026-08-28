@@ -224,6 +224,14 @@ model://perspectives.domains#tiodn6tcyc:
             en: User
             nl: Gebruiker
           properties:
+            StoreDataRemotely:
+              translations:
+                nl: Sla gegevens extern op
+                en: Store data remotely
+            BackupAutomatically:
+              translations:
+                nl: Maak automatisch een backup op de server
+                en: Backup automatically on the server
             Id:
               translations:
                 en: Identity
@@ -298,6 +306,25 @@ model://perspectives.domains#tiodn6tcyc:
                    If you want to store your data on a server, you need to provide the credentials for that server."
             2:
               translations:
+                orig: "### Remote data storage\n
+                  You have chosen to store your data on a remote server.\n
+                  If you want to store your data on your own device, use the action in the toolbar."
+                nl: "### Externe gegevensopslag\n
+                   Je hebt ervoor gekozen je gegevens op een externe server op te slaan.\n
+                   Als je je gegevens op je eigen apparaat wilt opslaan, gebruik dan de actie in de werkbalk."
+                en: "### Remote data storage\n
+                   You have chosen to store your data on a remote server.\n
+                   If you want to store your data on your own device, use the action in the toolbar."
+            3:
+              translations:
+                orig: "### Automatic remote backup\n
+                  you can enable automatic remote backup. Data will be backed up to the server you specified in the previous form."
+                nl: "### Automatische externe backup\n
+                   Je kunt automatische externe backup inschakelen. Gegevens worden geback-upt naar de server die je in het vorige formulier hebt opgegeven."
+                en: "### Automatic remote backup\n
+                   You can enable automatic remote backup. Data will be backed up to the server you specified in the previous form."
+            4:
+              translations:
                 orig: "#### Outgoing invitations\n
                   These are the invitations you have sent to other users.\n
                   Create a new invitation either in the main menu on the left, or by [[action: CreateInvitation|clicking here]]."
@@ -307,7 +334,7 @@ model://perspectives.domains#tiodn6tcyc:
                 en: "#### Outgoing invitations\n
                    These are the invitations you have sent to other users.\n
                    Create a new invitation either in the main menu on the left, or by [[action: CreateInvitation|clicking here]]."
-            3:
+            5:
               translations:
                 orig: "#### Base Repository\n
                   This is the base repository of Perspectives.\n
@@ -318,7 +345,7 @@ model://perspectives.domains#tiodn6tcyc:
                 en: "#### Base Repository\n
                    This is the base repository of Perspectives.\n
                    It contains the models that are used to run Perspectives."
-            4:
+            6:
               translations:
                 orig: "#### Repositories\n
                   These are the repositories that you have access to.\n

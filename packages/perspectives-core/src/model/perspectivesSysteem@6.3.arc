@@ -417,18 +417,22 @@ domain model://perspectives.domains#System@6.3
       -- property Id = callExternal util:RoleIdentifier() returns String
       -- PDRDEPENDENCY
       property BackupAutomatically (Boolean)
+      -- Whether data are stored in IndexedDB or on a remote CouchDB server.
+      property StoreDataRemotely (Boolean)
 
       -- PDRDEPENDENCY
       indexed sys:Me
       view VolledigeNaam (FirstName, LastName)
       perspective on User
         only (Create, Fill)
-        props (LastName, FirstName, PublicKey, SpecificUserName, Password, AuthorizedDomain, BackupAutomatically) verbs (SetPropertyValue)
-        props (Channel, UserName, SpecificUserName, Password, AuthorizedDomain, BackupAutomatically) verbs (Consult)
+        props (LastName, FirstName, PublicKey, SpecificUserName, Password, AuthorizedDomain, BackupAutomatically, StoreDataRemotely) verbs (SetPropertyValue)
+        props (Channel, UserName, SpecificUserName, Password, AuthorizedDomain, BackupAutomatically, StoreDataRemotely) verbs (Consult)
         action MoveDataToRemote
           callEffect cdb:MoveDataToRemote( AuthorizedDomain, UserName, Password )
+          StoreDataRemotely = true
         action MoveDataToLocal
           callEffect cdb:MoveDataToLocal( )
+          StoreDataRemotely = false
       perspective on StartContexts
         props (Name) verbs (Consult)
       perspective on PinnedContexts
@@ -548,6 +552,20 @@ domain model://perspectives.domains#System@6.3
             row 
               form GlobalUpgradeHook
           tab "Data storage"
+            when User >> StoreDataRemotely
+              row
+                markdown <### Remote data storage
+                          You have chosen to store your data on a remote server.
+                          If you want to store your data on your own device, use the action in the toolbar.
+                          >
+            row 
+            when not User >> StoreDataRemotely
+              row
+                markdown <### Local data storage
+                          You have chosen to store your data on your own device.
+                          If you want to store your data on a remote server, use the action in the toolbar.
+                          >
+            row -- zonder deze lege rij wordt de volgende expressie onder de vorige geschaard, maar zonder conditie.
             row
               markdown <### Where do you want to store your data?
                         You can store your data on your own device, or on a server that you control.
