@@ -1033,14 +1033,17 @@ moveDataToRemote urls userNames passwords _ =
           let remotePost = url <> systemId <> "_post"
           let remoteModels = url <> systemId <> "_models"
           let remoteInvertedQueries = url <> systemId <> "_invertedqueries"
+          let deltastore = url <> systemId <> "_deltastore"
           createDatabase remoteEntities
           createDatabase remotePost
           createDatabase remoteModels
           createDatabase remoteInvertedQueries
+          createDatabase deltastore
           replicateDatabase (systemId <> "_entities") remoteEntities
           replicateDatabase (systemId <> "_post") remotePost
           replicateDatabase (systemId <> "_models") remoteModels
           replicateDatabase (systemId <> "_invertedqueries") remoteInvertedQueries
+          replicateDatabase (systemId <> "_deltastore") deltastore
           modify \s -> s { couchdbUrl = Just url, databases = empty }
           liftAff $ idbSet "couchdbUrl" (write url)
           liftAff $ idbSet "userName" (write userName)
@@ -1074,6 +1077,7 @@ moveDataToLocal _ =
                 replicateDatabase (url <> systemId <> "_post") (systemId <> "_post")
                 replicateDatabase (url <> systemId <> "_models") (systemId <> "_models")
                 replicateDatabase (url <> systemId <> "_invertedqueries") (systemId <> "_invertedqueries")
+                replicateDatabase (url <> systemId <> "_deltastore") (systemId <> "_deltastore")
                 modify \s -> s { couchdbUrl = Nothing, databases = empty }
                 liftAff $ idbDel "couchdbUrl"
                 liftAff $ idbDel "userName"
