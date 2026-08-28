@@ -415,14 +415,16 @@ domain model://perspectives.domains#System@6.3
       -- PDRDEPENDENCY
       property Id (String)
       -- property Id = callExternal util:RoleIdentifier() returns String
+      -- PDRDEPENDENCY
+      property BackupAutomatically (Boolean)
 
       -- PDRDEPENDENCY
       indexed sys:Me
       view VolledigeNaam (FirstName, LastName)
       perspective on User
         only (Create, Fill)
-        props (LastName, FirstName, PublicKey, SpecificUserName, Password, AuthorizedDomain) verbs (SetPropertyValue)
-        props (Channel, UserName, SpecificUserName, Password, AuthorizedDomain) verbs (Consult)
+        props (LastName, FirstName, PublicKey, SpecificUserName, Password, AuthorizedDomain, BackupAutomatically) verbs (SetPropertyValue)
+        props (Channel, UserName, SpecificUserName, Password, AuthorizedDomain, BackupAutomatically) verbs (Consult)
         action MoveDataToRemote
           callEffect cdb:MoveDataToRemote( AuthorizedDomain, UserName, Password )
         action MoveDataToLocal
@@ -553,6 +555,13 @@ domain model://perspectives.domains#System@6.3
                         >
               form User
                 with props (AuthorizedDomain, SpecificUserName, Password)
+            when (exists User >> AuthorizedDomain) and (exists User >> Password)
+              row 
+                markdown <### Automatic remote backup
+                          you can enable automatic remote backup. Data will be backed up to the server you specified in the previous form.
+                          >
+                form User
+                  with props (BackupAutomatically)
         where
           OutgoingInvitations
             master

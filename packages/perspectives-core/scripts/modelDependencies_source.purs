@@ -77,6 +77,9 @@ theSystem = "model://perspectives.domains#System$PerspectivesSystem"
 sysUser :: String
 sysUser = "model://perspectives.domains#System$PerspectivesSystem$User"
 
+backupAutomatically :: String
+backupAutomatically = "model://perspectives.domains#System$PerspectivesSystem$User$BackupAutomatically"
+
 idProperty :: String
 idProperty = "model://perspectives.domains#System$PerspectivesSystem$User$Id"
 

@@ -77,6 +77,9 @@ theSystem = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c"
 sysUser :: String
 sysUser = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$auftu9ldl2"
 
+backupAutomatically :: String
+backupAutomatically = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$auftu9ldl2$ut7iyjcrnq"
+
 idProperty :: String
 idProperty = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$auftu9ldl2$hjk0vdu7pc"
 
