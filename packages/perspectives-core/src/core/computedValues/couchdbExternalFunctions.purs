@@ -70,7 +70,7 @@ import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslati
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError, handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
-import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
+import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri, url2Authority)
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance, createAndAddRoleInstance_)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.Instances.Me (computeMe_)
@@ -78,7 +78,7 @@ import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesD
 import Perspectives.Logging (debugInstall, errorInstall, infoInstall, traceInstall)
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Names (getMySystem, getUserIdentifier)
-import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addDocument_, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, replicateDatabase, splitRepositoryFileUrl, tryGetDocument_, withDatabase)
+import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addDocument_, createDatabase, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, replicateDatabase, splitRepositoryFileUrl, tryGetDocument_, withDatabase)
 import Perspectives.Persistence.API (deleteDocument, documentsInDatabase, excludeDocs) as Persistence
 import Perspectives.Persistence.Authentication (addCredentials) as Authentication
 import Perspectives.Persistence.CouchdbFunctions (addRoleToUser, concatenatePathSegments, removeRoleFromUser, user2couchdbuser)
@@ -1009,12 +1009,6 @@ recoverFromRecoveryPoint_ databaseNames _ =
     )
     >>= handleExternalStatementError "model://perspectives.domains#Couchdb$RecoverFromRecoveryPoint"
 
--- | Inserts user:password@ after the protocol part of a URL.
--- | E.g. "http://host:5984/" becomes "******host:5984/".
-addCredentialsToUrl :: String -> String -> String -> String
-addCredentialsToUrl url userName password =
-  replace (Pattern "://") (Replacement $ "://" <> userName <> ":" <> password <> "@") url
-
 -- | Moves all user data from local IndexedDB databases to a remote CouchDB server.
 -- | Arguments: an array with the CouchDB base URL, an array with the admin user name,
 -- | an array with the admin password.
@@ -1030,12 +1024,24 @@ moveDataToRemote urls userNames passwords _ =
         Just url, Just userName, Just password -> lift do
           saveMarkedResources
           systemId <- getSystemIdentifier
-          let authenticatedUrl = addCredentialsToUrl url userName password
-          replicateDatabase (systemId <> "_entities") (authenticatedUrl <> systemId <> "_entities")
-          replicateDatabase (systemId <> "_post") (authenticatedUrl <> systemId <> "_post")
-          replicateDatabase (systemId <> "_models") (authenticatedUrl <> systemId <> "_models")
-          replicateDatabase (systemId <> "_invertedqueries") (authenticatedUrl <> systemId <> "_invertedqueries")
-          modify \s -> s { couchdbUrl = Just url, couchdbCredentials = insert url (Credential userName password) s.couchdbCredentials }
+          authority <- case url2Authority url of
+            Just value -> pure value
+            Nothing -> throwError (error $ "MoveDataToRemote: invalid CouchDB URL " <> url)
+          let credential = Credential userName password
+          modify \s -> s { couchdbCredentials = insert authority credential (insert url credential s.couchdbCredentials) }
+          let remoteEntities = url <> systemId <> "_entities"
+          let remotePost = url <> systemId <> "_post"
+          let remoteModels = url <> systemId <> "_models"
+          let remoteInvertedQueries = url <> systemId <> "_invertedqueries"
+          createDatabase remoteEntities
+          createDatabase remotePost
+          createDatabase remoteModels
+          createDatabase remoteInvertedQueries
+          replicateDatabase (systemId <> "_entities") remoteEntities
+          replicateDatabase (systemId <> "_post") remotePost
+          replicateDatabase (systemId <> "_models") remoteModels
+          replicateDatabase (systemId <> "_invertedqueries") remoteInvertedQueries
+          modify \s -> s { couchdbUrl = Just url, databases = empty }
           liftAff $ idbSet "couchdbUrl" (write url)
           liftAff $ idbSet "userName" (write userName)
           liftAff $ idbSet "password" (write password)
@@ -1064,12 +1070,11 @@ moveDataToLocal _ =
             case mcred of
               Nothing -> pure unit
               Just (Credential userName password) -> do
-                let authenticatedUrl = addCredentialsToUrl url userName password
-                replicateDatabase (authenticatedUrl <> systemId <> "_entities") (systemId <> "_entities")
-                replicateDatabase (authenticatedUrl <> systemId <> "_post") (systemId <> "_post")
-                replicateDatabase (authenticatedUrl <> systemId <> "_models") (systemId <> "_models")
-                replicateDatabase (authenticatedUrl <> systemId <> "_invertedqueries") (systemId <> "_invertedqueries")
-                modify \s -> s { couchdbUrl = Nothing }
+                replicateDatabase (url <> systemId <> "_entities") (systemId <> "_entities")
+                replicateDatabase (url <> systemId <> "_post") (systemId <> "_post")
+                replicateDatabase (url <> systemId <> "_models") (systemId <> "_models")
+                replicateDatabase (url <> systemId <> "_invertedqueries") (systemId <> "_invertedqueries")
+                modify \s -> s { couchdbUrl = Nothing, databases = empty }
                 liftAff $ idbDel "couchdbUrl"
                 liftAff $ idbDel "userName"
                 liftAff $ idbDel "password"

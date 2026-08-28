@@ -77,7 +77,7 @@ import Simple.JSON (class ReadForeign, class WriteForeign, read, read', write)
 -- | Ensures authentication for non-pouchdb databases.
 -- | Database names must comply to rules given in https://docs.couchdb.org/en/stable/api/database/common.html#db
 createDatabase :: forall f. DatabaseName -> MonadPouchdb f Unit
-createDatabase dbname = createDatabaseConnector dbname
+createDatabase dbname = withDatabase dbname (pure <<< const unit)
 
 -- | Create a PouchDB connector and store it in state under the given name. No auth, no existence guarantee.
 createDatabaseConnector :: forall f. DatabaseName -> MonadPouchdb f Unit

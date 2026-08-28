@@ -405,6 +405,8 @@ domain model://perspectives.domains#System@6.3
     -- TODO. WHAT ABOUT SOCIALENVIRONMENT$ME?
     user User (mandatory) filledBy (Persons + PerspectivesUsers)
       aspect sys:ContextWithNotification$NotifiedUser
+      -- Credentials are used here to specify an optional remote store for the user's data. If the user has no credentials, the local store is used.
+      aspect sys:WithCredentials
 
       -- PDRDEPENDENCY
       property Channel = (binder Initiator union binder ConnectedPartner) >> context >> extern >> ChannelDatabaseName
@@ -419,8 +421,12 @@ domain model://perspectives.domains#System@6.3
       view VolledigeNaam (FirstName, LastName)
       perspective on User
         only (Create, Fill)
-        props (LastName, FirstName, PublicKey) verbs (SetPropertyValue)
-        props (Channel) verbs (Consult)
+        props (LastName, FirstName, PublicKey, SpecificUserName, Password, AuthorizedDomain) verbs (SetPropertyValue)
+        props (Channel, UserName, SpecificUserName, Password, AuthorizedDomain) verbs (Consult)
+        action MoveDataToRemote
+          callEffect cdb:MoveDataToRemote( AuthorizedDomain, UserName, Password )
+        action MoveDataToLocal
+          callEffect cdb:MoveDataToLocal( )
       perspective on StartContexts
         props (Name) verbs (Consult)
       perspective on PinnedContexts
@@ -523,21 +529,30 @@ domain model://perspectives.domains#System@6.3
             detail
               props (FirstName, LastName) verbs (Consult)
         what
-          row 
-            markdown <### Perspectives system
-                      This is the Perspectives system, representing your installation.
+          tab "General"
+            row 
+              markdown <### Perspectives system
+                        This is the Perspectives system, representing your installation.
 
-                      * Create and accept invitations to connect with other users.
-                      * Go to an App store to install a new App.
-                      * On the left, under **Who** you see your contacts.
-                      >
-          row  
-            form External
-              without props (ShowLibraries, CurrentLanguage, PreviousLanguage, MaxHistoryLength)
-          row
-            form RecoveryPoint
-          row 
-            form GlobalUpgradeHook
+                        * Create and accept invitations to connect with other users.
+                        * Go to an App store to install a new App.
+                        * On the left, under **Who** you see your contacts.
+                        >
+            row  
+              form External
+                without props (ShowLibraries, CurrentLanguage, PreviousLanguage, MaxHistoryLength)
+            row
+              form RecoveryPoint
+            row 
+              form GlobalUpgradeHook
+          tab "Data storage"
+            row
+              markdown <### Where do you want to store your data?
+                        You can store your data on your own device, or on a server that you control.
+                        If you want to store your data on a server, you need to provide the credentials for that server.
+                        >
+              form User
+                with props (AuthorizedDomain, SpecificUserName, Password)
         where
           OutgoingInvitations
             master
