@@ -24,7 +24,7 @@ module Main where
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Cont (lift)
 import Control.Promise (toAff)
-import Data.Array (cons, foldM)
+import Data.Array (cons, foldM, head)
 import Data.Date (Date)
 import Data.DateTime (DateTime, date)
 import Data.DateTime.Instant (Instant, instant, unInstant)
@@ -68,14 +68,16 @@ import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (context, externalRole)
 import Perspectives.Logging (debugInstall)
-import Perspectives.ModelDependencies (indexedContext, indexedContextName, indexedRole, indexedRoleName, onStartUp, sysUser, userWithCredentialsAuthorizedDomain, userWithCredentialsPassword, userWithCredentialsUsername)
+import Perspectives.ModelDependencies (backupAutomatically, indexedContext, indexedContextName, indexedRole, indexedRoleName, onStartUp, sysUser, userWithCredentialsAuthorizedDomain, userWithCredentialsPassword, userWithCredentialsUsername)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.ModelUpgrade (runModelUpgrades)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (DatabaseName, Keys(..), PouchdbUser, UserName, compactDatabase, databaseInfo, decodePouchdbUser', deleteDatabase)
+import Perspectives.Persistence.API (DatabaseName, Keys(..), PouchdbUser, UserName, compactDatabase, createDatabase, databaseInfo, decodePouchdbUser', deleteDatabase, replicateDatabase)
 import Perspectives.Persistence.API (recoverFromRecoveryPoint) as Persistence
 import Perspectives.Persistence.CouchdbFunctions (setSecurityDocument)
+import Perspectives.Persistence.DeltaStore (deltaStoreDatabaseName)
+import Perspectives.Persistence.ResourceVersionStore (resourceVersionDatabaseName)
 import Perspectives.Persistence.State (getSystemIdentifier, withCouchdbUrl)
 import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Persistent (entitiesDatabaseName, invertedQueryDatabaseName, postDatabaseName, saveMarkedResources)
@@ -219,6 +221,12 @@ runPDR_ usr rawPouchdbUser options callback = do
         )
         state
 
+      remoteBackupUrl <- try $ runPerspectivesWithState getRemoteBackupUrl state
+      case remoteBackupUrl of
+        Left e -> logPerspectivesError $ Custom $ "Could not determine whether automatic remote backup is enabled: " <> show e
+        Right Nothing -> pure unit
+        Right (Just url) -> void $ forkAff $ forkRemoteBackups url state
+
       -- Set up the API.
       void $ forkAff $ run state
       -- void $ forkAff $ forever do
@@ -254,6 +262,28 @@ runPDR_ usr rawPouchdbUser options callback = do
         state
 
   where
+
+  getRemoteBackupUrl :: MonadPerspectives (Maybe String)
+  getRemoteBackupUrl = do
+    primaryCouchdbUrl <- gets _.couchdbUrl
+    case primaryCouchdbUrl of
+      Just _ -> pure Nothing
+      Nothing -> do
+        mysystem <- getMySystem
+        getUser <- getRoleFunction sysUser
+        users <- (ContextInstance mysystem) ##= getUser
+        case head users of
+          Nothing -> pure Nothing
+          Just user -> do
+            backupValues <- user ##= getPropertyFromTelescope (EnumeratedPropertyType backupAutomatically)
+            case head backupValues of
+              Just (Value "true") -> do
+                authorizedDomains <- user ##= getPropertyFromTelescope (EnumeratedPropertyType userWithCredentialsAuthorizedDomain)
+                pure $ case head authorizedDomains of
+                  Just (Value "") -> Nothing
+                  Just (Value url) -> Just url
+                  Nothing -> Nothing
+              _ -> pure Nothing
 
   compactDatabases :: MonadPerspectives Unit
   compactDatabases = do
@@ -423,6 +453,36 @@ forkDatabasePersistence state = do
     Left e -> logPerspectivesError (Custom $ "Could not complete saving resources without an error: " <> show e)
     Right _ -> pure unit
   forkDatabasePersistence state
+
+remoteBackupInterval :: Milliseconds
+remoteBackupInterval = Milliseconds 900000.0
+
+forkRemoteBackups :: String -> AVar PerspectivesState -> Aff Unit
+forkRemoteBackups url state = do
+  result <- try $ runPerspectivesWithState (backupUserDatabases url) state
+  case result of
+    Left e -> logPerspectivesError $ Custom $ "Could not complete automatic remote backup: " <> show e
+    Right _ -> pure unit
+  delay remoteBackupInterval
+  forkRemoteBackups url state
+
+backupUserDatabases :: String -> MonadPerspectives Unit
+backupUserDatabases url = do
+  saveMarkedResources
+  entities <- entitiesDatabaseName
+  models <- modelsDatabaseName
+  invertedQueries <- invertedQueryDatabaseName
+  post <- postDatabaseName
+  resourceVersions <- resourceVersionDatabaseName
+  deltaStore <- deltaStoreDatabaseName
+  for_ [ models, entities, invertedQueries, post, resourceVersions, deltaStore ] \source ->
+    catchError
+      ( do
+          let target = url <> source
+          createDatabase target
+          replicateDatabase source target
+      )
+      \e -> logPerspectivesError $ Custom $ "Could not back up database " <> source <> ": " <> show e
 
 forkCreateIndexedResources :: AVar IndexedResource -> AVar PerspectivesState -> Aff Unit
 forkCreateIndexedResources av state = do
