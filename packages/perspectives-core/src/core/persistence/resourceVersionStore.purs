@@ -36,13 +36,13 @@ import Prelude
 
 import Control.Monad.AvarMonadAsk (gets)
 import Data.Maybe (Maybe(..))
-import Data.Newtype (wrap)
 import Effect.Class (liftEffect)
 import LRUCache (defaultGetOptions, get, set) as LRU
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Persistence.API (addDocument_, tryGetDocument_)
 import Perspectives.Persistence.DeltaStore (safeKey)
 import Perspectives.Persistence.State (getSystemIdentifier)
+import Perspectives.Persistence.Types (MonadPouchdb)
 import Simple.JSON (class ReadForeign, class WriteForeign)
 
 -----------------------------------------------------------
@@ -75,7 +75,7 @@ derive newtype instance ReadForeign ResourceVersionDoc
 
 -- | The name of the PouchDB database for resource versions.
 -- | Convention: {systemIdentifier}_resourceversions
-resourceVersionDatabaseName :: MonadPerspectives String
+resourceVersionDatabaseName :: forall f. MonadPouchdb f String
 resourceVersionDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_resourceversions")
 
 -----------------------------------------------------------

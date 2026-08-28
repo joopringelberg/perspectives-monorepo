@@ -34,12 +34,14 @@ import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
 import Perspectives.ModelDependencies (userWithCredentials)
 import Perspectives.Persistence.API (MonadPouchdb, addViewToDatabase, createDatabase, databaseInfo)
 import Perspectives.Persistence.CouchdbFunctions (setSecurityDocument)
+import Perspectives.Persistence.DeltaStore (deltaStoreDatabaseName)
+import Perspectives.Persistence.ResourceVersionStore (resourceVersionDatabaseName)
 import Perspectives.Persistence.State (withCouchdbUrl)
 import Perspectives.Representation.Class.Cacheable (ContextType(..), EnumeratedRoleType(..))
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType)
-import Prelude (Unit, discard, void, ($), (&&), (<>), (==))
+import Prelude (Unit, discard, void, ($), (&&), (<>), (==), (>>=), (=<<))
 
 -----------------------------------------------------------
 -- CREATESYSTEMDATABASES
@@ -67,8 +69,11 @@ createUserDatabases user = do
   void $ databaseInfo $ user <> "_models"
   createDatabase $ user <> "_invertedqueries"
   void $ databaseInfo $ user <> "_invertedqueries"
-  createDatabase $ user <> "_deltastore"
-  void $ databaseInfo $ user <> "_deltastore"
+  deltaStoreDatabaseName >>= createDatabase
+  void $ databaseInfo =<< deltaStoreDatabaseName
+  let rv = resourceVersionDatabaseName
+  resourceVersionDatabaseName >>= createDatabase
+  void $ databaseInfo =<< resourceVersionDatabaseName
   -- Now set the security document such that there is no role restriction for members.
   void $ withCouchdbUrl \url -> setSecurityDocument url (user <> "_models")
     (SecurityDocument { admins: { names: Just [], roles: [ "_admin" ] }, members: { names: Just [], roles: [] } })

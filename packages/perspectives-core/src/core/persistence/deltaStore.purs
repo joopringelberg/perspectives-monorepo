@@ -49,7 +49,7 @@ import Data.Array (catMaybes, elem, filter, head, last, length) as Arr
 import Data.Either (Either(..))
 import Data.Foldable (traverse_)
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Newtype (unwrap, wrap)
+import Data.Newtype (unwrap)
 import Data.String (Pattern(..), drop, indexOf, lastIndexOf, length, split, take) as Str
 import Effect.Class (liftEffect)
 import Foreign (Foreign)
@@ -58,6 +58,7 @@ import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Persistence.API (addDocument_, documentsInRange, tryGetDocument_)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.State (getSystemIdentifier)
+import Perspectives.Persistence.Types (MonadPouchdb)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser)
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
@@ -69,7 +70,7 @@ import Simple.JSON (read', readJSON')
 
 -- | The name of the PouchDB database for the delta-store.
 -- | Convention: {systemIdentifier}_deltastore
-deltaStoreDatabaseName :: MonadPerspectives String
+deltaStoreDatabaseName :: forall f. MonadPouchdb f String
 deltaStoreDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_deltastore")
 
 -----------------------------------------------------------
