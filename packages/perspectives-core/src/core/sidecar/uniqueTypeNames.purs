@@ -1194,6 +1194,8 @@ buildActionAliases
   -> OBJ.Object String
 buildActionAliases oldActions acc0 curActions roleAliases =
   let
+    curActionIndex = OBJ.fromFoldable (OBJ.keys curActions <#> \k -> Tuple k true)
+
     -- Index current actions by (roleFqn, qfdHash) and (roleFqn, localName)
     byRoleHash :: OBJ.Object (OBJ.Object String)
     byRoleHash =
@@ -1253,11 +1255,13 @@ buildActionAliases oldActions acc0 curActions roleAliases =
             Just fqn -> Just fqn
             Nothing -> Nothing
 
-    step acc oldFqn = case OBJ.lookup oldFqn oldActions of
-      Nothing -> acc
-      Just sOld -> case resolve sOld.declaringRoleFqn sOld of
-        Just newFqn -> OBJ.insert oldFqn newFqn acc
+    step acc oldFqn =
+      if OBJ.lookup oldFqn curActionIndex /= Nothing then acc
+      else case OBJ.lookup oldFqn oldActions of
         Nothing -> acc
+        Just sOld -> case resolve sOld.declaringRoleFqn sOld of
+          Just newFqn -> OBJ.insert oldFqn newFqn acc
+          Nothing -> acc
   in
     foldl step acc0 (OBJ.keys oldActions)
 
@@ -1679,4 +1683,3 @@ finalizeCuidAssignments mappingWithAliases newCuids =
       , stateCuids = stateCuids'
       , actionCuids = actionCuids'
       }
-
