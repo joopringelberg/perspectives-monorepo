@@ -251,6 +251,29 @@ export function replicateOnce (origin, recovery, last_seq) {
   };
 }
 
+// | Replicates a database identified by sourceDbName to a database identified by targetDbName.
+// | Both names may be local PouchDB names or full http(s) URLs (for CouchDB).
+// | Credentials may be embedded in the URL as ******host:port/dbname.
+export function replicateDatabaseImpl (sourceDbName, targetDbName) {
+  return function(onError, onSuccess) {
+    const sourceDb = new PouchDB(sourceDbName, { fetch: captureFetch });
+    const targetDb = new PouchDB(targetDbName, { fetch: captureFetch });
+    targetDb.replicate.from(sourceDb, { live: false })
+      .on('complete', function(info) {
+        console.log(`replicateDatabase: replicated ${sourceDbName} to ${targetDbName}.`);
+        onSuccess(undefined);
+      })
+      .on('error', function(err) {
+        console.error(`replicateDatabase: error replicating ${sourceDbName} to ${targetDbName}:`, err);
+        onError(convertPouchError(err));
+      });
+
+    return function(cancelError, cancelerError, cancelerSuccess) {
+      cancelerSuccess();
+    };
+  };
+}
+
 export function addDocumentImpl ( database, doc, force ) {
   return function (onError, onSuccess) {
     database.put(doc, {force: force}, function(err, response)

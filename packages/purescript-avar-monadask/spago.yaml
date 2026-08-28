@@ -1,5 +1,7 @@
 package:
   name: avar-monadask
+  build:
+    censorProjectWarnings: all
   dependencies:
     - aff
     - avar
@@ -7,6 +9,9 @@ package:
     - transformers
     - tuples
 workspace:
+  buildOpts:
+    censorLibraryWarnings: all
+    statVerbosity: no-stats
   packageSet:
     registry: 60.6.0
   extraPackages: {}

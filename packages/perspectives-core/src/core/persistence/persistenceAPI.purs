@@ -77,7 +77,7 @@ import Simple.JSON (class ReadForeign, class WriteForeign, read, read', write)
 -- | Ensures authentication for non-pouchdb databases.
 -- | Database names must comply to rules given in https://docs.couchdb.org/en/stable/api/database/common.html#db
 createDatabase :: forall f. DatabaseName -> MonadPouchdb f Unit
-createDatabase dbname = createDatabaseConnector dbname
+createDatabase dbname = withDatabase dbname (pure <<< const unit)
 
 -- | Create a PouchDB connector and store it in state under the given name. No auth, no existence guarantee.
 createDatabaseConnector :: forall f. DatabaseName -> MonadPouchdb f Unit
@@ -326,6 +326,23 @@ foreign import replicateOnce
        PouchdbDatabase
        String
        String
+
+-----------------------------------------------------------
+-- REPLICATEDATABASE
+-----------------------------------------------------------
+-- | Replicates a database identified by sourceDbName to a database identified by targetDbName.
+-- | Both names may be local PouchDB names or full http(s) URLs for CouchDB.
+-- | Credentials may be embedded in the URL as ******host:port/dbname.
+-- | The target database is created if it does not yet exist.
+replicateDatabase :: forall f. DatabaseName -> DatabaseName -> MonadPouchdb f Unit
+replicateDatabase sourceDbName targetDbName =
+  liftAff $ fromEffectFnAff $ runEffectFnAff2 replicateDatabaseImpl sourceDbName targetDbName
+
+foreign import replicateDatabaseImpl
+  :: EffectFn2
+       DatabaseName
+       DatabaseName
+       Unit
 
 -----------------------------------------------------------
 -- RECOVERFROMRECOVERYPOINT
