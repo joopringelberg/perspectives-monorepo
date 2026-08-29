@@ -1338,6 +1338,10 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       perspective on BasedOnVersion
         only (Create, Fill, Remove, CreateAndFill)
         props (VersionName, ModelURI) verbs (Consult)
+      
+      action GenerateFirstHelp
+        callEffect help:InitializeConversations( extern >> VersionedModelURI, extern )
+
       screen
         who
           Author
@@ -1403,6 +1407,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
                         You can download it, edit it in a text editor, and upload it again.
                         * Take care to preserve the indentation (only use 'soft tabs'. A tab should be two spaces).
                         * To upload your augmented conversation, select the `Yaml conversation file` control and press enter. Then upload your file.
+                        * Initialize the conversations for your model by selecting the `Generate first help` action from the **context menu**.
                       >
             row
               table ConversationSources

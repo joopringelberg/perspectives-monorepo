@@ -46,7 +46,7 @@ import Data.Array (head) as ARR
 import Data.Array.NonEmpty (NonEmptyArray, head, toArray)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
-import Data.Maybe (Maybe(..), isJust, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.MediaType (MediaType(..))
 import Data.Monoid.Disj (Disj(..))
 import Data.Newtype (ala, over, unwrap)
@@ -591,9 +591,11 @@ setProperty rids propertyName mdelta values =
 -- SAVEFILE
 -----------------------------------------------------------
 -- | From a Foreign value that represents an ArrayBuffer or String, create a File and save it with a role instance document.
+-- | An explicitly supplied filename overrides the name in existing file metadata. Without one, the existing name is retained,
+-- | falling back to the property's local name when no valid metadata exists. The selected name is used in both the metadata and the File.
 -- | Updates the revision of the role instance.
-saveFile :: RoleInstance -> EnumeratedPropertyType -> Foreign -> String -> MonadPerspectivesTransaction String
-saveFile r property arrayBuf mimeType = do
+saveFile :: RoleInstance -> EnumeratedPropertyType -> Foreign -> String -> Maybe String -> MonadPerspectivesTransaction String
+saveFile r property arrayBuf mimeType fileName = do
   -- Look for the contextualised property first: if we find a replacement for the requested property on a role instance,
   -- that is the instance we will work with - and the (replacing) local property we will work with!
   mrid <- lift $ getPropertyBearingRoleInstance property r
@@ -607,9 +609,10 @@ saveFile r property arrayBuf mimeType = do
   dbLoc <- lift $ databaseLocation $ unwrap rid
   { database, documentName } <- lift $ resourceIdentifier2DocLocator (unwrap rid)
   mval <- lift (rid ##> getProperty replacementProperty)
+  let defaultFileName = typeUri2LocalName_ $ unwrap replacementProperty
   usedVal <- case mval of
     Nothing -> pure $ writePerspectivesFile
-      { fileName: (typeUri2LocalName_ $ unwrap replacementProperty) -- As the property value is unavailable, we'll use the local prop name as client side name, too.
+      { fileName: fromMaybe defaultFileName fileName
       , propertyType: replacementProperty
       , mimeType
       , database: dbLoc
@@ -617,17 +620,17 @@ saveFile r property arrayBuf mimeType = do
       }
     Just val -> case parsePerspectivesFile $ unwrap val of
       Left e -> pure $ writePerspectivesFile
-        { fileName: (typeUri2LocalName_ $ unwrap replacementProperty) -- As the property value is unavailable, we'll use the local prop name as client side name, too.
+        { fileName: fromMaybe defaultFileName fileName
         , propertyType: replacementProperty
         , mimeType
         , database: dbLoc
         , roleFileName: documentName
         }
-      Right rec -> pure $ writePerspectivesFile $ rec { database = dbLoc, roleFileName = documentName }
+      Right rec -> pure $ writePerspectivesFile $ rec { fileName = fromMaybe rec.fileName fileName, database = dbLoc, roleFileName = documentName }
   case parsePerspectivesFile usedVal of
     Left e -> throwError $ error ("Could not parse '" <> usedVal <> "' trying to save file:" <> show e)
     Right rec -> do
-      theFile <- liftEffect $ toFile (typeUri2LocalName_ (unwrap replacementProperty)) rec.mimeType arrayBuf
+      theFile <- liftEffect $ toFile rec.fileName rec.mimeType arrayBuf
       success <- lift $ addAttachment r (typeUri2couchdbFilename (unwrap replacementProperty)) theFile (MediaType rec.mimeType)
       if success then do
         -- Add an UploadFile delta.

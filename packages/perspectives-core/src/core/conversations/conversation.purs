@@ -18,6 +18,7 @@ module Perspectives.Conversation
   , compileConversationSources
   , generateConversations
   , getHelpConversation
+  , initializeConversationSource
   , readConversationSources
   , resolveConversationSource
   , storeConversationArtifactInRepository
@@ -39,7 +40,7 @@ import Effect (Effect)
 import Effect.Aff (error)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
-import Effect.Uncurried (EffectFn3, EffectFn4, EffectFn6, runEffectFn3, runEffectFn4, runEffectFn6)
+import Effect.Uncurried (EffectFn2, EffectFn3, EffectFn4, EffectFn6, runEffectFn2, runEffectFn3, runEffectFn4, runEffectFn6)
 import Foreign (Foreign, unsafeToForeign)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, (##>))
@@ -69,6 +70,24 @@ foreign import resolveConversationSourceImpl
 
 foreign import augmentConversationSourceImpl :: EffectFn3 String String String String
 
+foreign import initializeConversationSourceImpl
+  :: EffectFn2 String ConversationContextDescriptor String
+
+type ConversationContextDescriptor =
+  { contextType :: String
+  , displayName :: String
+  , audienceRoles :: Array String
+  , perspectives :: Array ConversationPerspectiveDescriptor
+  }
+
+type ConversationPerspectiveDescriptor =
+  { index :: Int
+  , id :: String
+  , audienceRole :: String
+  , targetRoles :: Array String
+  , targetDisplayName :: String
+  }
+
 type ConversationSource =
   { documentName :: String
   , roleInstance :: RoleInstance
@@ -79,6 +98,9 @@ type ConversationSourceLocation =
   { conversationId :: String
   , source :: ConversationSource
   }
+
+initializeConversationSource :: String -> ConversationContextDescriptor -> Effect String
+initializeConversationSource = runEffectFn2 initializeConversationSourceImpl
 
 -- | Compile all YAML source files and replace conversations.json atomically.
 -- | Source role identifiers are passed instead of parallel property arrays. We

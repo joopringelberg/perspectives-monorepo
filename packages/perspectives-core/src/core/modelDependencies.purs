@@ -233,7 +233,7 @@ domeinFileNameWithVersion :: String
 domeinFileNameWithVersion = "model://perspectives.domains#tiodn6tcyc$mo66to1n9c$External$vm82xl40mj"
 
 versionedModelManifestModelCuid :: String
-versionedModelManifestModelCuid = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$k8068785f1"
+versionedModelManifestModelCuid = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelCuid"
 
 patch :: String
 patch = "model://perspectives.domains#tiodn6tcyc$mo66to1n9c$External$ijlb1ixfjo"
@@ -254,34 +254,34 @@ couchdbManagementModelName :: String
 couchdbManagementModelName = "model://perspectives.domains#xyfxpg3lzq" -- CouchdbManagement
 
 versionToInstall :: String
-versionToInstall = "model://perspectives.domains#xyfxpg3lzq$purp0vollf$External$elbyhcbqpi"
+versionToInstall = "model://perspectives.domains#CouchdbManagement$ModelManifest$External$VersionToInstall"
 
 modelURI :: String
-modelURI = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$lv7ca4f7ux"
+modelURI = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelURI"
 
 versionedModelURI :: String
-versionedModelURI = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$hp8fq71nqg"
+versionedModelURI = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$VersionedModelURI"
 
 conversationSources :: String
-conversationSources = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$nr8rh14r4j"
+conversationSources = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources"
 
 conversationSourceDocumentName :: String
-conversationSourceDocumentName = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$nr8rh14r4j$jzuoymbzvc"
+conversationSourceDocumentName = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$DocumentName"
 
 conversationSourceDocumentKind :: String
-conversationSourceDocumentKind = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$nr8rh14r4j$dsulxp03ps"
+conversationSourceDocumentKind = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$DocumentKind"
 
 conversationSourceContextType :: String
-conversationSourceContextType = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$nr8rh14r4j$bg8cueuf2x"
+conversationSourceContextType = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$ContextType"
 
 conversationSourceYaml :: String
-conversationSourceYaml = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$nr8rh14r4j$zj56qnle62"
+conversationSourceYaml = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$ConversationYaml"
 
 conversationSourceLastYamlChangeDT :: String
-conversationSourceLastYamlChangeDT = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$nr8rh14r4j$xmtvviq6vn"
+conversationSourceLastYamlChangeDT = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$LastYamlChangeDT"
 
 modelURIReadable :: String
-modelURIReadable = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$b8y8q4gqqz"
+modelURIReadable = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelURIReadable"
 
 ------------------------------------------------------------------------------------
 -- INVITATION

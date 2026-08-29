@@ -59,6 +59,9 @@ domain model://joopringelberg.nl#HelpProject@1.0
     user Author filledBy (sys:TheWorld$PerspectivesUsers)
       perspective on ConversationBranches
         only (CreateAndFill, Remove)
+        props (State) verbs (SetPropertyValue)
+      perspective on ConversationBranches >> binding >> context >> Author
+        only (Create, Fill, Remove)
       perspective on Model
         only (CreateAndFill, Remove)
 
@@ -73,6 +76,11 @@ domain model://joopringelberg.nl#HelpProject@1.0
     context Model filledBy cm:VersionedModelManifest
 
     context ConversationBranches filledBy ConversationBranch
+      state BranchExists = exists binding
+        on entry
+          do for Author
+            bind me to Author in binding >> context
+            State = "Draft" for binding
   
   -------------------------------------------------------------------------------
   ---- CONVERSATION BRANCH
@@ -94,10 +102,28 @@ domain model://joopringelberg.nl#HelpProject@1.0
       -- The string value of the ContextType of the context in which the conversation appears.
       -- It will be filled from the GUI the end user applies to edit a single conversation.
       property ContextType (String)
+      property State (String)
+       enumeration = ("Draft", "PullRequest", "Merged", "Rejected")
+    
+    state Draft = extern >> State == "Draft"
+    state PullRequest = extern >> State == "PullRequest"
+    state Merged = extern >> State == "Merged"
+    state Rejected = extern >> State == "Rejected"
+
+      state DraftUpdated = exists ConversationText
+        on entry
+          do for CoAuthor
+            callExternal ToConversationYaml( ConversationText, ContextType) >> ConversationYaml
 
     user Author filledBy (sys:TheWorld$PerspectivesUsers)
+      in context state PullRequest
+        perspective on extern
+          props (ConversationText) verbs (Consult, SetPropertyValue)
 
     user CoAuthor filledBy (sys:TheWorld$PerspectivesUsers)
+      in context state Draft
+        perspective on extern
+          props (ConversationText) verbs (Consult, SetPropertyValue)
 
     thing ContextYamls = extern >> binder ConversationBranches >> context >> ContextYamls
 
