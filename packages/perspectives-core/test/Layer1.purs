@@ -51,6 +51,7 @@ import Test.Parsing.Arc.Expression (theSuite) as TPAE
 import Test.ArrayT (theSuite) as ARRT
 import Test.AMQP.IncomingPost (theSuite) as AIP
 import Test.Query.ComparisonOperators (theSuite) as TQCO
+import Test.SidecarUniqueTypeNames (theSuite) as SUTN
 
 -- Comprehensive unit tests for ExpandedADT, CNF, and ADT (with real assertions)
 import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTTESTS
@@ -72,6 +73,7 @@ main = runTest do
   ARRT.theSuite -- ArrayT combinators
   AIP.theSuite -- Incoming-post status message formatting
   TQCO.theSuite -- Typed query comparison operators
+  SUTN.theSuite -- Stable ID mapping regression tests
 
   -- Read a file from the file-system, but otherwise pure (no MonadPerspectives / no HTTP)
   TPAM.theSuite -- ARC model parser (parses .arc files from the model/
@@ -79,11 +81,11 @@ main = runTest do
   -- ── Pure ADT algebra (runP wraps in-memory computations only) ──────────────
   ADTTESTS.theSuite -- ExpandedADT / CNF / ADT unit tests (with assertions)
 
--- ── ARC parsing phases 1–3 (in-memory; file-system for .arc fixtures) ──────
--- NOTE: this suite is not ready: it contains a large number of failing tests.
--- TPA.theSuite         -- Phase 1 — tokenise + parse
--- TPA2.theSuite        -- Phase 2 — name resolution / type inference
--- TPA3.theSuite        -- Phase 3 — inverted query indexing
+  -- ── ARC parsing phases 1–3 (in-memory; file-system for .arc fixtures) ──────
+  -- NOTE: this suite is not ready: it contains a large number of failing tests.
+  -- TPA.theSuite         -- Phase 1 — tokenise + parse
+  -- TPA2.theSuite        -- Phase 2 — name resolution / type inference
+  -- TPA3.theSuite        -- Phase 3 — inverted query indexing
   TPA3.completeTypeNormalisationSuite
   TPA3.recursiveFillerComparisonSuite
 
