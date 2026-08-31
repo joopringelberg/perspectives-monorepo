@@ -275,7 +275,7 @@ conversationSourceContextType :: String
 conversationSourceContextType = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc$t9oe0xjjbc"
 
 conversationSourceYaml :: String
-conversationSourceYaml = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$ConversationYaml"
+conversationSourceYaml = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc$s6ryax0sl4"
 
 conversationSourceLastYamlChangeDT :: String
 conversationSourceLastYamlChangeDT = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc$k399teudmc"

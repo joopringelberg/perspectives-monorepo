@@ -6,7 +6,7 @@ model://perspectives.domains#xyfxpg3lzq:
         nl: Repository en database beheer
         en: Repository and database management
       indexedName:
-        name: model://perspectives.domains#xyfxpg3lzq$v5y2or3xjm$kvc7g1j5o8
+        name: model://perspectives.domains#CouchdbManagement$MyCouchdbApp
         translations:
           nl: Mijn Couchdb App
           en: My Couchdb App
@@ -733,6 +733,10 @@ model://perspectives.domains#xyfxpg3lzq:
               nl: Versie $0 (build $1 ) is geüpload naar de repository voor $2 .
               en: Version $0 (build $1 ) has been uploaded to the repository for $2 .
         properties:
+          IsTheOnlyVersion:
+            translations:
+              nl: De enige versie
+              en: The only version
           ApplyInSession:
             translations:
               en: Apply in current session
@@ -825,6 +829,10 @@ model://perspectives.domains#xyfxpg3lzq:
                 translations:
                   nl: Genereer vertalingstabel
                   en: Generate translation table
+              GenerateFirstHelp:
+                translations:
+                  nl: Genereer lege hulpfiles
+                  en: Generate empty help files
           markdowns:
             0:
               translations:
@@ -904,6 +912,43 @@ model://perspectives.domains#xyfxpg3lzq:
                    Je kunt het downloaden, bewerken in een teksteditor en opnieuw uploaden.\n
                    * Zorg ervoor dat je de inspringing behoudt (gebruik alleen 'zachte tabs'. Een tab moet twee spaties zijn).\n
                    * Om je aangevulde vertaling te uploaden, selecteer je de `Yaml vertaalbestand` control en drukt op enter. Upload dan je bestand."
+            3:
+              translations:
+                orig: "## Add help conversations to your model\n
+                  * You can add help conversations to your model. These conversations are available in the help system of MyContexts.\n
+                  * Each conversation is a YAML file that holds the help per context. It can provide help for each user and perspective.\n
+                  You can download it, edit it in a text editor, and upload it again.\n
+                  * Take care to preserve the indentation (only use 'soft tabs'. A tab should be two spaces).\n
+                  * To upload your augmented conversation, select the `Yaml conversation file` control and press enter. Then upload your file.\n
+                  * Initialize the conversations for your model by selecting the `Generate first help` action from the **context menu**."
+                nl: "## Voeg hulpconversaties toe aan je model\n
+                   * Je kunt hulpconversaties toevoegen aan je model. Deze conversaties zijn beschikbaar in het hulpsysteem van MyContexts.\n
+                   * Elke conversatie is een YAML-bestand dat de hulp per context bevat. Het kan hulp bieden voor elke gebruiker en perspectief.\n
+                   Je kunt het downloaden, bewerken in een teksteditor en opnieuw uploaden.\n
+                   * Zorg ervoor dat je de inspringing behoudt (gebruik alleen 'zachte tabs'. Een tab moet twee spaties zijn).\n
+                   * Om je aangevulde conversatie te uploaden, selecteer je de `Yaml conversatiebestand` control en drukt op enter. Upload dan je bestand.\n
+                   * Initialiseer de conversaties voor je model door de actie `Genereer lege hulpfiles` te selecteren uit het **contextmenu**."
+                en: "## Add help conversations to your model\n
+                  * You can add help conversations to your model. These conversations are available in the help system of MyContexts.\n
+                  * Each conversation is a YAML file that holds the help per context. It can provide help for each user and perspective.\n
+                  You can download it, edit it in a text editor, and upload it again.\n
+                  * Take care to preserve the indentation (only use 'soft tabs'. A tab should be two spaces).\n
+                  * To upload your augmented conversation, select the `Yaml conversation file` control and press enter. Then upload your file.\n
+                  * Initialize the conversations for your model by selecting the `Generate first help` action from the **context menu**."
+            4:
+              translations:
+                orig: "## Generate TCP configuration\n
+                  You can generate a Transaction Collection Point (TCP) configuration file for your model. This file can be used to configure the TCP for your organisation.\n
+                  Create an instance of this role first, then generate a configuration file.\n
+                  The form controls have an action."
+                nl: "## Genereer TCP configuratie\n
+                   Je kunt een Transaction Collection Point (TCP) configuratiebestand genereren voor je model. Dit bestand kan worden gebruikt om de TCP voor je organisatie te configureren.\n
+                   Maak eerst een instantie van deze rol, genereer dan een configuratiebestand.\n
+                   De form controls hebben een actie."
+                en: "## Generate TCP configuration\n
+                  You can generate a Transaction Collection Point (TCP) configuration file for your model. This file can be used to configure the TCP for your organisation.\n
+                  Create an instance of this role first, then generate a configuration file.\n
+                  The form controls have an action."
           titles:
             0:
               translations:
@@ -920,11 +965,59 @@ model://perspectives.domains#xyfxpg3lzq:
                 orig: Translate
                 nl: Vertaal
                 en: Translate
+            3:
+              translations:
+                orig: Help conversations
+                nl: Hulpconversaties
+                en: Help conversations
+            4:
+              translations:
+                orig: TCP Configuration
+                nl: TCP Configuratie
+                en: TCP Configuration
         VisitorProxy:
           translations:
             nl: Visitor Proxy
             en: Visitor Proxy
       things:
+        TCPConfiguration:
+          translations:
+            nl: TCP Configuratie
+            en: TCP Configuration
+          properties:
+            TCPConfigFile:
+              translations:
+                nl: TCP Configuratiebestand
+                en: TCP Configuration File
+            FileName:
+              translations:
+                nl: Bestandsnaam
+                en: File name
+        ConversationSources:
+          translations:
+            nl: Conversatiebronnen
+            en: Conversation sources
+          properties:
+            LastYamlChangeDT:
+              translations:
+                nl: Datum en tijdstip van laatste yaml file verandering
+                en: Date time of last yaml file change
+            ContextYaml:
+              translations:
+                nl: Context yaml
+                en: Context yaml
+            ContextType:
+              translations:
+                nl: Context type
+                en: Context type
+            DocumentKind:
+              translations:
+                nl: Documentsoort
+                en: Document kind
+            DocumentName:
+              translations:
+                nl: Documentnaam
+                en: Document name
         Translation:
           translations:
             en: Translation
@@ -951,6 +1044,10 @@ model://perspectives.domains#xyfxpg3lzq:
                 nl: Bestandsnaam
                 en: File name
       contextroles:
+        BasedOnVersion:
+          translations:
+            nl: Gebaseerd op versie
+            en: Based on version
         Manifest:
           translations:
             en: Manifest
