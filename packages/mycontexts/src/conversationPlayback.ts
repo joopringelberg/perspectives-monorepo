@@ -3,6 +3,7 @@ import type { ConversationBody, ConversationElement, ConversationMessage } from 
 export interface Utterance {
   speaker: 'bot' | 'human';
   message: ConversationMessage;
+  answers?: RuntimeAnswer[];
 }
 
 export interface RuntimeAnswer {
@@ -43,7 +44,7 @@ function advance(sequence: ConversationElement[], history: Utterance[]): Advance
       }
 
       return {
-        history: [...history, { speaker: 'bot', message: element.question }],
+        history: [...history, { speaker: 'bot', message: element.question, answers }],
         answers,
         status: answers.length > 0 ? 'playing' : 'invalid',
       };
@@ -78,4 +79,17 @@ export function selectAnswer(run: ConversationRun, answerIndex: number): Convers
   const answer = run.answers[answerIndex];
   const history = [...run.history, { speaker: 'human' as const, message: answer.message }];
   return answer.sequence ? advance(answer.sequence, history) : { history, answers: [], status: 'complete' };
+}
+
+export function rewindToQuestion(run: ConversationRun, historyIndex: number): ConversationRun {
+  const question = run.history[historyIndex];
+  if (!question?.answers) {
+    return run;
+  }
+
+  return {
+    history: run.history.slice(0, historyIndex + 1),
+    answers: question.answers,
+    status: question.answers.length > 0 ? 'playing' : 'invalid',
+  };
 }

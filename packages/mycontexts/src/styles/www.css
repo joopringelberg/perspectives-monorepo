@@ -254,6 +254,21 @@ html body .dropdown-menu .dropdown-item {
   border-inline-start: 3px solid var(--bs-info);
 }
 
+.conversation-utterance-question {
+  display: block;
+  border-block: 0;
+  border-inline-end: 0;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.conversation-utterance-question:hover,
+.conversation-utterance-question:focus-visible {
+  box-shadow: 0 0 0 2px var(--bs-info-border-subtle);
+}
+
 .conversation-utterance-human {
   margin-inline-start: auto;
   background: var(--bs-primary-bg-subtle);

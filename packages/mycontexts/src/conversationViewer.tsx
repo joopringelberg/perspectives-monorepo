@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { ConversationBody, ConversationMessage } from 'perspectives-proxy';
 import { i18next } from 'perspectives-react';
-import { selectAnswer, startConversation, type ConversationRun } from './conversationPlayback';
+import { rewindToQuestion, selectAnswer, startConversation, type ConversationRun } from './conversationPlayback';
 import type { HelpTarget } from './helpTypes';
 
 export type HelpViewerContent =
@@ -145,12 +145,23 @@ const ConversationViewer: React.FC<ConversationViewerProps> = ({ target, content
         {content.status === 'loading' && <p className="conversation-viewer-status">{i18next.t('help_loading', { ns: 'mycontexts' })}</p>}
         {content.status === 'unavailable' && <p className="conversation-viewer-status">{i18next.t('help_unavailable', { ns: 'mycontexts' })}</p>}
         {content.status === 'error' && <p className="conversation-viewer-status text-danger">{i18next.t('help_error', { ns: 'mycontexts' })}</p>}
-        {run?.history.map((utterance, index) => (
-          <div key={`${utterance.message.message}-${index}`} className={`conversation-utterance conversation-utterance-${utterance.speaker}`}>
+        {run?.history.map((utterance, index) => {
+          const content = <>
             <span className="visually-hidden">{i18next.t(`help_speaker_${utterance.speaker}`, { ns: 'mycontexts' })}: </span>
             {translated(utterance.message)}
-          </div>
-        ))}
+          </>;
+          const className = `conversation-utterance conversation-utterance-${utterance.speaker}`;
+
+          return utterance.answers ? (
+            <button key={`${utterance.message.message}-${index}`} type="button" className={`${className} conversation-utterance-question`} onClick={() => setRun(current => current ? rewindToQuestion(current, index) : current)}>
+              {content}
+            </button>
+          ) : (
+            <div key={`${utterance.message.message}-${index}`} className={className}>
+              {content}
+            </div>
+          );
+        })}
         {run?.status === 'invalid' && <p className="conversation-viewer-status text-danger">{i18next.t('help_invalid', { ns: 'mycontexts' })}</p>}
         {run?.status === 'complete' && <p className="conversation-viewer-complete">{i18next.t('help_complete', { ns: 'mycontexts' })}</p>}
       </div>
