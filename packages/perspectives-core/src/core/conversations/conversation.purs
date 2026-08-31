@@ -81,8 +81,8 @@ type ConversationContextDescriptor =
   }
 
 type ConversationPerspectiveDescriptor =
-  { index :: Int
-  , id :: String
+  { id :: String
+  , signature :: String
   , audienceRole :: String
   , targetRoles :: Array String
   , targetDisplayName :: String

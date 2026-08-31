@@ -12,12 +12,17 @@ export const initializeConversationSourceImpl = (model, context) => {
     },
   };
   const perspectiveBindings = [];
+  const conversationsBySignature = new Map();
 
   for (const perspective of context.perspectives) {
-    const conversation = `perspective-${perspective.index}`;
-    conversations[conversation] = {
-      conversation: [{ statement: `There is no further help on ${perspective.targetDisplayName}` }],
-    };
+    let conversation = conversationsBySignature.get(perspective.signature);
+    if (conversation === undefined) {
+      conversation = `perspective-${conversationsBySignature.size}`;
+      conversationsBySignature.set(perspective.signature, conversation);
+      conversations[conversation] = {
+        conversation: [{ statement: `There is no further help on ${perspective.targetDisplayName}` }],
+      };
+    }
     for (const targetRole of perspective.targetRoles) {
       perspectiveBindings.push({
         audiences: [perspective.audienceRole],

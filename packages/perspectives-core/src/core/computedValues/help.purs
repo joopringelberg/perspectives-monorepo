@@ -10,7 +10,7 @@ import Prelude
 
 import Control.Monad.Error.Class (class MonadThrow, throwError, try)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, concat, elem, head, mapWithIndex, null, nub)
+import Data.Array (catMaybes, concat, elem, head, null, nub)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -29,10 +29,10 @@ import Perspectives.Conversations.Parser (parseConversation)
 import Perspectives.Conversations.Renderer (conversationBodyToYaml, renderConversationFromContextYaml)
 import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect5, mkLibFunc4, mkLibFunc5, (##=), (##>))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
-import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
+import Perspectives.Extern.Parsing (withRepositoryModel)
 import Perspectives.Identifiers (modelUriVersion)
 import Perspectives.InstanceRepresentation (PerspectContext(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
@@ -46,6 +46,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleIns
 import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType, roletype2string)
+import Perspectives.Sidecar.HashQFD (qfdSignature)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Perspectives.Sidecar.ToReadable (toReadable)
 
@@ -57,8 +58,8 @@ type InitialContextDescriptor =
   }
 
 type InitialPerspectiveDescriptor =
-  { index :: Int
-  , id :: String
+  { id :: String
+  , signature :: String
   , audienceRole :: String
   , targetRoles :: Array String
   , targetDisplayName :: String
@@ -77,13 +78,15 @@ initializeConversations modelUris manifestExternal =
     version <- case modelUriVersion versionedModelUri of
       Nothing -> throwError $ error "InitializeConversations requires a versioned stable model URI."
       Just value -> pure value
-    DomeinFile { namespace, contexts } <- lift $ retrieveDomeinFile (ModelUri versionedModelUri :: ModelUri Stable)
+    { namespace, descriptors } <- lift $ withRepositoryModel (ModelUri versionedModelUri :: ModelUri Stable)
+      \(DomeinFile { namespace, contexts }) -> do
+        descriptors <- traverse contextDescriptor (Object.values contexts)
+        pure { namespace, descriptors }
     manifest <- lift $ getPerspectRol manifestExternal
     let manifestContext = rol_context manifest
     sourceRoles <- lift $ (manifestContext ##= getEnumeratedRoleInstances (EnumeratedRoleType conversationSources))
     existingContextTypes <- lift $ catMaybes <$> traverse sourceContextType sourceRoles
     let readableVersionedModelUri = unwrap namespace <> "@" <> version
-    descriptors <- lift $ traverse contextDescriptor (Object.values contexts)
     createdRoles <- catMaybes <$> traverse
       (createMissingSource manifestContext readableVersionedModelUri existingContextTypes)
       descriptors
@@ -114,17 +117,17 @@ initializeConversations modelUris manifestExternal =
   perspectiveDescriptors audienceRole = do
     readableAudienceRole <- toReadable audienceRole
     perspectives <- perspectivesOfRoleType audienceRole
-    catMaybes <$> traverse (perspectiveDescriptor readableAudienceRole) (mapWithIndex Tuple perspectives)
+    catMaybes <$> traverse (perspectiveDescriptor readableAudienceRole) perspectives
 
-  perspectiveDescriptor :: RoleType -> Tuple Int Perspective -> MonadPerspectives (Maybe InitialPerspectiveDescriptor)
-  perspectiveDescriptor readableAudienceRole (Tuple index (Perspective { id, roleTypes })) = case head roleTypes of
+  perspectiveDescriptor :: RoleType -> Perspective -> MonadPerspectives (Maybe InitialPerspectiveDescriptor)
+  perspectiveDescriptor readableAudienceRole (Perspective { id, object, roleTypes }) = case head roleTypes of
     Nothing -> pure Nothing
     Just targetRole -> do
       readableTargets <- traverse toReadable roleTypes
       targetDisplayName <- displayNameOfRoleType targetRole
       pure $ Just
-        { index
-        , id
+        { id
+        , signature: qfdSignature object
         , audienceRole: roletype2string readableAudienceRole
         , targetRoles: map roletype2string readableTargets
         , targetDisplayName
